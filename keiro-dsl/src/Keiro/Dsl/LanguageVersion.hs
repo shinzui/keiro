@@ -18,6 +18,9 @@ module Keiro.Dsl.LanguageVersion
     languageRegistry,
     supportedLanguageVersions,
     lookupLanguageDefinition,
+    LanguageFeature (..),
+    languageFeatureMinimumVersion,
+    languageSupportsFeature,
     SourceLanguageErrorCode (..),
     sourceLanguageErrorCodeText,
     SourceLanguageDiagnostic (..),
@@ -114,6 +117,27 @@ supportedLanguageVersions = definitionVersion <$> languageRegistry
 lookupLanguageDefinition :: LanguageVersion -> Maybe LanguageDefinition
 lookupLanguageDefinition version =
   find ((== version) . definitionVersion) (NE.toList languageRegistry)
+
+-- | Grammar-owned syntax introduced after the frozen version-1 contract.
+-- Keeping these gates beside the released-language registry prevents the
+-- parser from growing an independent list of textual spellings.
+data LanguageFeature
+  = NominalBindingSyntax
+  | IntegerScalarSyntax
+  | TypedAggregateExpressionSyntax
+  | ExplicitTransitionImplementationSyntax
+  deriving stock (Eq, Ord, Show)
+
+-- | The first released contract that owns each grammar feature.
+languageFeatureMinimumVersion :: LanguageFeature -> LanguageVersion
+languageFeatureMinimumVersion = \case
+  NominalBindingSyntax -> version2
+  IntegerScalarSyntax -> version2
+  TypedAggregateExpressionSyntax -> version2
+  ExplicitTransitionImplementationSyntax -> version2
+
+languageSupportsFeature :: LanguageVersion -> LanguageFeature -> Bool
+languageSupportsFeature version feature = version >= languageFeatureMinimumVersion feature
 
 effectiveLanguageVersion :: SourceLanguage -> LanguageVersion
 effectiveLanguageVersion LegacyUnversioned = version1

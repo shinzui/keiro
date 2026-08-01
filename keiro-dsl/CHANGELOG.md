@@ -54,6 +54,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   fails incomplete or false evidence; `--fail-on-unverified` opts into a
   stricter proof policy.
 
+### Fixed
+
+- Parses the optional `language keiro-dsl N` preamble only after leading trivia
+  and before `context`. Nested `language` fields and declarations no longer look
+  like misplaced or duplicate preambles, and version-2 feature gates now arise
+  from their grammar productions instead of raw source substrings. Comments,
+  strings, wire keys, and legal identifiers containing `using`, `Integer`,
+  `implementation hole`, `reg.`, or `cmd.` remain inert.
+
 ## 0.6.0.0 — 2026-07-31
 
 ### Breaking Changes

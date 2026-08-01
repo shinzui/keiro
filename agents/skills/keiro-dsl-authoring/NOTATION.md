@@ -8,9 +8,12 @@ language keiro-dsl 1
 context hospital-capacity
 ```
 
-The preamble must be the first significant clause; comments and whitespace may precede it.
-Version 1 is frozen. Language version 2 adds consumer-owned nominal aggregate types; other
-version-1 notation remains unchanged. A missing preamble remains readable as
+The preamble is recognized only after leading comments and whitespace and immediately before
+`context`. Nested fields, declarations, wire keys, and strings named `language` remain domain
+data. Version 1 is frozen. Language version 2 adds consumer-owned nominal aggregate types; other
+version-1 notation remains unchanged. Its feature gates live at their grammar productions, so
+`using`, `Integer`, `implementation hole`, `reg.`, and `cmd.` are inert inside comments, strings,
+wire keys, and legal names. A missing preamble remains readable as
 `legacy-unversioned` with effective version 1, but parse/pretty never adds a declaration. Use
 `keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions. Upgrade
 and fleet-rewrite automation is deferred to

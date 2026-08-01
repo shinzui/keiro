@@ -16,8 +16,10 @@ language keiro-dsl 1
 context hospital-capacity
 ```
 
-The preamble is the first significant clause; comments and whitespace may come
-before it. Version 1 is frozen at this repository state. Language version 2
+The preamble is recognized only in that grammar position: after leading comments
+and whitespace and immediately before `context`. A nested field, declaration,
+wire key, or string named `language` remains ordinary domain data. Version 1 is
+frozen at this repository state. Language version 2
 registers consumer-owned bindings for direct IDs, direct enums, and nominal
 scalars, and adds authoritative typed scalar aggregate expressions with
 explicit generated-or-Hole transition ownership. Sources that do not use those
@@ -25,7 +27,10 @@ forms can remain on version 1. To adopt version 2, change the preamble,
 canonicalize the source with `pretty`, run `check --explain-bindings`,
 re-scaffold, and run the generated compiled harness. Version 1 and
 legacy-unversioned sources reject successor syntax at the language boundary;
-the tool never silently upgrades a file.
+the tool never silently upgrades a file. Those gates are attached to the owning
+grammar productions, so spellings such as `using`, `Integer`, `implementation
+hole`, `reg.`, and `cmd.` inside comments, strings, wire keys, or legal names do
+not select a feature by accident.
 
 Existing sources without a preamble remain readable as `legacy-unversioned` and
 select effective version 1. Parse and pretty-print preserve that source form:

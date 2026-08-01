@@ -1,3 +1,5 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 -- | Test driver for keiro-dsl. EP-1 milestone 1 tests: the @parse . pretty@
 -- round-trip property over generated specs, and a unit test pinning the shape
 -- of the canonical Reservation fixture.
@@ -104,6 +106,27 @@ main = hspec $ do
       failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
       failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
 
+    it "treats language and successor spellings as data in nested grammar positions" $ do
+      forM_ ["language-identifier-v1.keiro", "language-identifier-v2.keiro"] $ \fixture -> do
+        source <- readTestText ("test/fixtures/" <> fixture)
+        parsed <- parseRight fixture source
+        validateSpec (parsedSpec parsed) `shouldBe` []
+      v1 <- readTestText "test/fixtures/language-identifier-v1.keiro"
+      let manifest = "service language-collisions\nspec domain/collisions.keiro\n"
+          workspaceSource = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/collisions.keiro", v1)])
+      loaded <- loadWorkspace workspaceSource "service.keiro-workspace"
+      loaded `shouldSatisfy` isRight
+
+    it "keeps duplicate and misplaced preamble diagnostics on their grammar lines" $ do
+      let sourceFailureAt expectedCode expectedLine source =
+            case parseSource "located.keiro" source of
+              Left (SourceLanguageFailure diagnostic) -> do
+                sourceLanguageErrorCode diagnostic `shouldBe` expectedCode
+                unLoc (sourceLanguageLoc diagnostic) `shouldBe` expectedLine
+              other -> expectationFailure ("expected located source-language failure, got " <> show other)
+      sourceFailureAt DuplicateLanguagePreamble 2 "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext located\n"
+      sourceFailureAt MisplacedLanguagePreamble 3 "context located\nid language prefix=lang\nlanguage keiro-dsl 1\n"
+
     it "rejects a future version before parsing an invalid v1 body" $
       case parseSource "future.keiro" "language keiro-dsl 3\nthis is not a v2 body\n" of
         Left failure@(SourceLanguageFailure diagnostic) -> do
@@ -150,6 +173,31 @@ main = hspec $ do
       let body = "context orders\nmapped nominal AccountNumber : Text {}\n"
       failureCode ("language keiro-dsl 1\n" <> body) `shouldBe` Just LanguageFeatureRequiresVersion
       failureCode body `shouldBe` Just LanguageFeatureRequiresVersion
+
+    it "attributes every successor feature gate to its owning grammar production" $ do
+      let featureFailureAt expectedLine source =
+            case parseSource "feature.keiro" source of
+              Left (SourceLanguageFailure diagnostic) -> do
+                sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
+                unLoc (sourceLanguageLoc diagnostic) `shouldBe` expectedLine
+              other -> expectationFailure ("expected a located feature gate, got " <> show other)
+          aggregateWith clause =
+            T.unlines
+              [ "language keiro-dsl 1",
+                "context feature-gates",
+                "aggregate Account",
+                "  regs",
+                "    balance Text = \"0\"",
+                "  states Open",
+                "  command Adjust { amount:Text }",
+                "  event Adjusted = fields(Adjust)",
+                "  Open -- Adjust --> " <> clause <> " ; emit Adjusted ; goto Open"
+              ]
+      featureFailureAt 3 (T.unlines ["language keiro-dsl 1", "context feature-gates", "id AccountId prefix=acct using {"])
+      featureFailureAt 3 (T.unlines ["language keiro-dsl 1", "context feature-gates", "mapped nominal AccountNumber : Text {}"])
+      featureFailureAt 5 (T.unlines ["language keiro-dsl 1", "context feature-gates", "aggregate Account", "  regs", "    balance Integer = 0", "  states Open"])
+      featureFailureAt 9 (aggregateWith "guard reg.balance == cmd.amount")
+      featureFailureAt 9 (aggregateWith "implementation hole")
 
     it "reports a declaration-only rewrite without semantic, generated, fold, or replay impact" $ do
       fixture <- readTestText "test/fixtures/reservation.keiro"
@@ -211,6 +259,8 @@ main = hspec $ do
             "behavior-complete-workspace/journey.keiro",
             "behavior-complete.keiro",
             "language-future.keiro",
+            "language-identifier-v1.keiro",
+            "language-identifier-v2.keiro",
             "language-legacy.keiro",
             "language-malformed.keiro",
             "language-misplaced.keiro",
@@ -240,6 +290,18 @@ main = hspec $ do
       legacyOut `shouldContain` "\"sourceForm\":\"legacy-unversioned\""
       legacyOut `shouldContain` "\"declaredLanguageVersion\":null"
       legacyOut `shouldContain` "\"effectiveLanguageVersion\":1"
+
+    it "checks and scaffolds contextual language identifiers through the CLI" $ do
+      forM_ ["language-identifier-v1.keiro", "language-identifier-v2.keiro"] $ \fixture -> do
+        let sourcePath = "test/fixtures/" <> fixture
+        (checkCode, checkOut, checkErr) <- runKeiroDsl ["check", sourcePath]
+        checkCode `shouldBe` ExitSuccess
+        checkOut `shouldBe` "OK\n"
+        checkErr `shouldBe` ""
+        withTempDirectory ("keiro-dsl-" <> fixture) $ \out -> do
+          (scaffoldCode, _, scaffoldErr) <- runKeiroDsl ["scaffold", sourcePath, "--out", out]
+          scaffoldCode `shouldBe` ExitSuccess
+          scaffoldErr `shouldContain` "firewall: OK"
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"

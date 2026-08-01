@@ -76,7 +76,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | Not Started |
+| 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | In Progress |
 | 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Not Started |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
@@ -152,7 +152,7 @@ EP-169, while EP-167 remains independent.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-167: adversarial language collision corpus and grammar-positioned preamble parsing.
+- [x] EP-167: adversarial language collision corpus and grammar-positioned preamble parsing.
 - [ ] EP-167: parsed/token-aware feature gates and complete compatibility validation.
 - [x] EP-168: one planned nominal owner and use closure for single files and workspaces.
 - [x] EP-168: compiled two-aggregate identity proof and non-destructive adoption.

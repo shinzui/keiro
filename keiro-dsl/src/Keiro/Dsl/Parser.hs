@@ -18,11 +18,12 @@ where
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.Bifunctor (first)
 import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isUpper)
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (mapMaybe)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as TR
-import Data.Void (Void)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Numeric.Natural (Natural)
@@ -33,7 +34,16 @@ import Text.Megaparsec.Char.Lexer qualified as L
 -- | A rendered, line-numbered parse error, ready to print to the user.
 type ParseError = Text
 
-type P = Parsec Void Text
+data ContextualParseFailure = ContextualParseFailure
+  { contextualFailureCode :: !SourceLanguageErrorCode,
+    contextualFailureLine :: !Int
+  }
+  deriving stock (Eq, Ord, Show)
+
+instance ShowErrorComponent ContextualParseFailure where
+  showErrorComponent contextual = T.unpack (sourceLanguageErrorCodeText (contextualFailureCode contextual))
+
+type P = Parsec ContextualParseFailure Text
 
 -- | Parse a @.keiro@ source. The 'FilePath' is used only as the source name in
 -- diagnostics (megaparsec's line/column reporting); it need not exist on disk.
@@ -50,7 +60,6 @@ parseSpecText = parseSpec "<input>"
 parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSource src input = do
   sourceLanguage <- selectSourceLanguage src input
-  ensureBodyFeatures src sourceLanguage input
   definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
     Just value -> Right value
     Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
@@ -58,62 +67,101 @@ parseSource src input = do
   pure ParsedSource {parsedSourceLanguage = sourceLanguage, parsedSpec = spec}
   where
     parseSelectedBody definition sourceLanguage =
-      let parser = case definitionBodyParser definition of
+      let version = definitionVersion definition
+          laterPreambleCode = case sourceLanguage of
+            LegacyUnversioned -> MisplacedLanguagePreamble
+            DeclaredLanguage {} -> DuplicateLanguagePreamble
+          parser = case definitionBodyParser definition of
             LanguageBodyParserV1 ->
               sc
                 *> case sourceLanguage of
-                  LegacyUnversioned -> pSpec False <* eof
-                  DeclaredLanguage {} -> pDeclaredPreamble *> pSpec False <* eof
+                  LegacyUnversioned -> pSpec version laterPreambleCode <* eof
+                  DeclaredLanguage {} -> pDeclaredPreamble *> pSpec version laterPreambleCode <* eof
             LanguageBodyParserV2 ->
-              sc *> pDeclaredPreamble *> pSpec True <* eof
+              sc *> pDeclaredPreamble *> pSpec version laterPreambleCode <* eof
        in case runParser parser src input of
-            Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+            Left bundle -> case firstContextualFailure bundle of
+              Just contextual -> Left (SourceLanguageFailure (contextualDiagnostic src sourceLanguage contextual))
+              Nothing -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
             Right spec -> Right spec
 
--- | Consume a preamble already validated by 'selectSourceLanguage'.
+firstContextualFailure :: ParseErrorBundle Text ContextualParseFailure -> Maybe ContextualParseFailure
+firstContextualFailure bundle =
+  case [ contextual
+       | FancyError _ fancy <- NE.toList (bundleErrors bundle),
+         ErrorCustom contextual <- Set.toList fancy
+       ] of
+    contextual : _ -> Just contextual
+    [] -> Nothing
+
+contextualDiagnostic :: FilePath -> SourceLanguage -> ContextualParseFailure -> SourceLanguageDiagnostic
+contextualDiagnostic src sourceLanguage contextual =
+  SourceLanguageDiagnostic
+    { sourceLanguageErrorCode = code,
+      sourceLanguageSource = src,
+      sourceLanguageLoc = Loc (contextualFailureLine contextual),
+      sourceLanguageToken = case code of
+        LanguageFeatureRequiresVersion -> Just (languageVersionText effectiveVersion)
+        _ -> Nothing,
+      sourceLanguageDeclaredVersion = case code of
+        LanguageFeatureRequiresVersion -> Just effectiveVersion
+        _ -> Nothing,
+      sourceLanguageSupportedVersions = supportedLanguageVersions
+    }
+  where
+    code = contextualFailureCode contextual
+    effectiveVersion = effectiveLanguageVersion sourceLanguage
+
+contextualFailureAt :: Loc -> SourceLanguageErrorCode -> P a
+contextualFailureAt (Loc line) code = customFailure ContextualParseFailure {contextualFailureCode = code, contextualFailureLine = line}
+
+requireLanguageFeatureAt :: LanguageVersion -> LanguageFeature -> Loc -> P ()
+requireLanguageFeatureAt version feature loc
+  | languageSupportsFeature version feature = pure ()
+  | otherwise = contextualFailureAt loc LanguageFeatureRequiresVersion
+
+-- | Consume a preamble already validated by 'selectSourceLanguage'. This
+-- parser is also reused at grammar boundaries to recognize only complete
+-- preamble syntax, never a nested identifier whose spelling is @language@.
 pDeclaredPreamble :: P ()
 pDeclaredPreamble = do
   keyword "language"
   keyword "keiro-dsl"
-  _ <- lexeme (some digitChar)
+  _ <- lexeme (some asciiDigit)
   pure ()
 
-data SignificantLine = SignificantLine
-  { significantLineNumber :: !Int,
-    significantLineText :: !Text
+-- | The source-selection pass inspects only the first grammar clause after
+-- leading whitespace and comments. Body lines are left entirely to 'pSpec'.
+data InitialLanguageClause = InitialLanguageClause
+  { initialLanguageLine :: !Int,
+    initialLanguageText :: !Text
   }
 
 selectSourceLanguage :: FilePath -> Text -> Either ParseFailure SourceLanguage
-selectSourceLanguage src input =
-  case significantLines input of
-    [] -> Right LegacyUnversioned
-    firstLine : rest ->
-      case filter isLanguageLine (firstLine : rest) of
-        [] -> Right LegacyUnversioned
-        languageLine : laterLanguageLines
-          | significantLineNumber languageLine /= significantLineNumber firstLine ->
-              Left (sourceFailure MisplacedLanguagePreamble languageLine Nothing Nothing)
-          | otherwise -> do
-              version <- parsePreamble languageLine
-              case laterLanguageLines of
-                duplicateLine : _ ->
-                  Left (sourceFailure DuplicateLanguagePreamble duplicateLine Nothing Nothing)
-                [] -> case lookupLanguageDefinition version of
-                  Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageLine (Just (languageVersionText version)) (Just version))
-                  Just _ -> Right (DeclaredLanguage version (Loc (significantLineNumber languageLine)))
+selectSourceLanguage src input = do
+  initialClause <- case runParser pInitialLanguageClause src input of
+    Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+    Right value -> Right value
+  case initialClause of
+    Nothing -> Right LegacyUnversioned
+    Just languageClause -> do
+      version <- parsePreamble languageClause
+      case lookupLanguageDefinition version of
+        Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageClause (Just (languageVersionText version)) (Just version))
+        Just _ -> Right (DeclaredLanguage version (Loc (initialLanguageLine languageClause)))
   where
     sourceFailure code line tokenText declared =
       SourceLanguageFailure
         SourceLanguageDiagnostic
           { sourceLanguageErrorCode = code,
             sourceLanguageSource = src,
-            sourceLanguageLoc = Loc (significantLineNumber line),
+            sourceLanguageLoc = Loc (initialLanguageLine line),
             sourceLanguageToken = tokenText,
             sourceLanguageDeclaredVersion = declared,
             sourceLanguageSupportedVersions = supportedLanguageVersions
           }
 
-    parsePreamble line = case T.words (significantLineText line) of
+    parsePreamble line = case T.words (initialLanguageText line) of
       ["language", "keiro-dsl", tokenText]
         | T.all (\c -> isAscii c && isDigit c) tokenText && not (T.null tokenText) ->
             case TR.decimal tokenText :: Either String (Natural, Text) of
@@ -125,6 +173,16 @@ selectSourceLanguage src input =
 
     invalid line tokenText =
       Left (sourceFailure InvalidLanguageVersion line (Just tokenText) Nothing)
+
+pInitialLanguageClause :: P (Maybe InitialLanguageClause)
+pInitialLanguageClause = sc *> optional pLanguageClause
+  where
+    pLanguageClause = do
+      position <- getSourcePos
+      _ <- lookAhead (chunk "language" *> notFollowedBy (identChar <|> (char '-' *> identChar)))
+      rawLine <- takeWhileP (Just "language preamble") (\c -> c /= '\n' && c /= '\r')
+      let content = T.strip (T.takeWhile (/= '#') rawLine)
+      pure InitialLanguageClause {initialLanguageLine = unPos (sourceLine position), initialLanguageText = content}
 
 unsupportedDiagnostic :: FilePath -> SourceLanguage -> ParseFailure
 unsupportedDiagnostic src sourceLanguage =
@@ -139,54 +197,6 @@ unsupportedDiagnostic src sourceLanguage =
         sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage),
         sourceLanguageSupportedVersions = supportedLanguageVersions
       }
-
-significantLines :: Text -> [SignificantLine]
-significantLines =
-  mapMaybe significant . zip [1 ..] . T.lines
-  where
-    significant (lineNumber, line) =
-      let content = T.strip (T.takeWhile (/= '#') line)
-       in if T.null content
-            then Nothing
-            else Just SignificantLine {significantLineNumber = lineNumber, significantLineText = content}
-
-isLanguageLine :: SignificantLine -> Bool
-isLanguageLine line = case T.words (significantLineText line) of
-  "language" : _ -> True
-  _ -> False
-
--- | Reject syntax owned by a successor before the frozen predecessor grammar
--- can turn it into generic parser noise.
-ensureBodyFeatures :: FilePath -> SourceLanguage -> Text -> Either ParseFailure ()
-ensureBodyFeatures src sourceLanguage input =
-  case filter requiresSuccessorSyntax (significantLines input) of
-    marker : _
-      | languageVersionNumber (effectiveLanguageVersion sourceLanguage) < 2 ->
-          Left
-            ( SourceLanguageFailure
-                SourceLanguageDiagnostic
-                  { sourceLanguageErrorCode = LanguageFeatureRequiresVersion,
-                    sourceLanguageSource = src,
-                    sourceLanguageLoc = Loc (significantLineNumber marker),
-                    sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage)),
-                    sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage),
-                    sourceLanguageSupportedVersions = supportedLanguageVersions
-                  }
-            )
-    _ -> Right ()
-  where
-    requiresSuccessorSyntax line =
-      case wordsFound of
-        "mapped" : "nominal" : _ -> True
-        _ ->
-          "using" `elem` wordsFound
-            || "Integer" `elem` wordsFound
-            || "implementation hole" `T.isInfixOf` content
-            || "reg." `T.isInfixOf` content
-            || "cmd." `T.isInfixOf` content
-      where
-        content = significantLineText line
-        wordsFound = T.words content
 
 --------------------------------------------------------------------------------
 -- Lexer
@@ -379,13 +389,20 @@ data TopItem
   | TIMapped MappedDecl
   | TINode Node
 
-pSpec :: Bool -> P Spec
-pSpec nominalSyntax = do
+pContextualPreamble :: SourceLanguageErrorCode -> P a
+pContextualPreamble code = do
+  loc <- getLoc
+  _ <- try pDeclaredPreamble
+  contextualFailureAt loc code
+
+pSpec :: LanguageVersion -> SourceLanguageErrorCode -> P Spec
+pSpec version laterPreambleCode = do
+  pContextualPreamble laterPreambleCode <|> pure ()
   keyword "context"
   ctx <- wireWord
   mroot <- optional pModuleClause
   mlayout <- optional pLayoutClause
-  items <- many (pTopItem nominalSyntax)
+  items <- many (pTopItem version laterPreambleCode)
   pure
     Spec
       { specContext = ctx,
@@ -425,13 +442,14 @@ pModulePrefix = lexeme $ do
       cs <- many identChar
       pure (T.pack (c : cs))
 
-pTopItem :: Bool -> P TopItem
-pTopItem nominalSyntax =
+pTopItem :: LanguageVersion -> SourceLanguageErrorCode -> P TopItem
+pTopItem version laterPreambleCode =
   choice
-    ( [ TIId <$> pIdDecl nominalSyntax,
-        TIEnum <$> pEnumDecl nominalSyntax,
-        TIRule <$> pRuleDecl nominalSyntax,
-        pMappedTopItem nominalSyntax
+    ( [ pContextualPreamble laterPreambleCode,
+        TIId <$> pIdDecl version,
+        TIEnum <$> pEnumDecl version,
+        TIRule <$> pRuleDecl version,
+        pMappedTopItem version
       ]
         ++ [ TINode . NRouter <$> pRouter,
              TINode . NProcess <$> pProcess,
@@ -444,28 +462,28 @@ pTopItem nominalSyntax =
              TINode . NReadModel <$> pReadModel,
              TINode . NWorkflow <$> pWorkflow,
              TINode . NOperation <$> pOperation,
-             TINode . NAggregate <$> pAggregate nominalSyntax
+             TINode . NAggregate <$> pAggregate version
            ]
     )
 
-pIdDecl :: Bool -> P IdDecl
-pIdDecl nominalSyntax = do
+pIdDecl :: LanguageVersion -> P IdDecl
+pIdDecl version = do
   loc <- getLoc
   keyword "id"
   name <- ident
   _ <- symbol "prefix"
   _ <- symbol "="
   pfx <- wireWord
-  binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+  binding <- optionalLanguageFeature version NominalBindingSyntax "using" pUsingNominalBinding
   pure IdDecl {idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
 
-pEnumDecl :: Bool -> P EnumDecl
-pEnumDecl nominalSyntax = do
+pEnumDecl :: LanguageVersion -> P EnumDecl
+pEnumDecl version = do
   loc <- getLoc
   keyword "enum"
   name <- ident
   ctors <- braces (many pEnumCtor)
-  binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+  binding <- optionalLanguageFeature version NominalBindingSyntax "using" pUsingNominalBinding
   pure EnumDecl {enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
   where
     pEnumCtor = do
@@ -474,8 +492,8 @@ pEnumDecl nominalSyntax = do
       w <- wireWord
       pure (c, w)
 
-pRuleDecl :: Bool -> P RuleDecl
-pRuleDecl scalarSyntax = do
+pRuleDecl :: LanguageVersion -> P RuleDecl
+pRuleDecl version = do
   loc <- getLoc
   keyword "rule"
   name <- ident
@@ -497,8 +515,18 @@ pRuleDecl scalarSyntax = do
     pCase = do
       c <- ident
       _ <- symbol "=>"
-      e <- pExpr scalarSyntax
+      e <- pExpr version
       pure (c, e)
+
+optionalLanguageFeature :: LanguageVersion -> LanguageFeature -> Text -> P a -> P (Maybe a)
+optionalLanguageFeature version feature marker parser
+  | languageSupportsFeature version feature = optional parser
+  | otherwise = reject <|> pure Nothing
+  where
+    reject = do
+      loc <- getLoc
+      _ <- try (keyword marker)
+      contextualFailureAt loc LanguageFeatureRequiresVersion
 
 --------------------------------------------------------------------------------
 -- Consumer-owned mapped and nominal types
@@ -517,19 +545,22 @@ data MappedClause
   | MCCodecVersion Text
   | MCShape MappedShape
 
-pMappedTopItem :: Bool -> P TopItem
-pMappedTopItem nominalSyntax = do
+pMappedTopItem :: LanguageVersion -> P TopItem
+pMappedTopItem version = do
   loc <- getLoc
   keyword "mapped"
   choice
-    ( [TINominalScalar <$> pNominalScalarAfterMapped loc | nominalSyntax]
-        ++ [ TIMapped <$> pMappedStructural loc,
-             TIMapped <$> pMappedOpaque loc
-           ]
-    )
+    [ if languageSupportsFeature version NominalBindingSyntax
+        then TINominalScalar <$> pNominalScalarAfterMapped loc
+        else do
+          _ <- try (keyword "nominal")
+          contextualFailureAt loc LanguageFeatureRequiresVersion,
+      TIMapped <$> pMappedStructural version loc,
+      TIMapped <$> pMappedOpaque loc
+    ]
 
-pMappedStructural :: Loc -> P MappedDecl
-pMappedStructural loc = do
+pMappedStructural :: LanguageVersion -> Loc -> P MappedDecl
+pMappedStructural version loc = do
   keyword "structural"
   kind <-
     choice
@@ -538,7 +569,7 @@ pMappedStructural loc = do
         MappedUnion <$ keyword "union"
       ]
   name <- ident
-  clauses <- braces (many (pStructuralClause kind))
+  clauses <- braces (many (pStructuralClause version kind))
   hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
   binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
   bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
@@ -632,8 +663,8 @@ pNominalClause =
       MCInitial <$> pQuotedFact "initial"
     ]
 
-pStructuralClause :: MappedKind -> P MappedClause
-pStructuralClause kind =
+pStructuralClause :: LanguageVersion -> MappedKind -> P MappedClause
+pStructuralClause version kind =
   choice
     [ MCHaskell <$> pHaskellSource,
       MCBindingVersion <$> pQuotedFact "binding-version",
@@ -641,7 +672,7 @@ pStructuralClause kind =
       MCCanonical <$> pQuotedFact "canonical-type",
       MCFixtures <$> pQuotedFact "fixtures",
       MCInitial <$> pQuotedFact "initial",
-      MCShape <$> pMappedShape kind
+      MCShape <$> pMappedShape version kind
     ]
 
 pOpaqueClause :: P MappedClause
@@ -671,8 +702,8 @@ pHaskellSource = do
 pQuotedFact :: Text -> P Text
 pQuotedFact factName = keyword factName *> symbol "=" *> stringLit
 
-pMappedShape :: MappedKind -> P MappedShape
-pMappedShape kind = do
+pMappedShape :: LanguageVersion -> MappedKind -> P MappedShape
+pMappedShape version kind = do
   keyword "wire"
   case kind of
     MappedRecord -> do
@@ -681,7 +712,7 @@ pMappedShape kind = do
       _ <- symbol "="
       constructor <- ident
       unknownFields <- pUnknownFieldsFact
-      fields <- braces (many pWireField)
+      fields <- braces (many (pWireField version))
       pure (ShapeRecord constructor unknownFields fields)
     MappedEnum -> do
       keyword "string"
@@ -695,7 +726,7 @@ pMappedShape kind = do
       _ <- symbol "="
       contentsField <- stringLit
       unknownFields <- pUnknownFieldsFact
-      arms <- braces (many pWireArm)
+      arms <- braces (many (pWireArm version))
       pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
 
 pUnknownFieldsFact :: P UnknownFields
@@ -704,14 +735,14 @@ pUnknownFieldsFact = do
   _ <- symbol "="
   choice [RejectUnknown <$ keyword "reject", IgnoreUnknown <$ keyword "ignore"]
 
-pWireField :: P WireField
-pWireField = do
+pWireField :: LanguageVersion -> P WireField
+pWireField version = do
   loc <- getLoc
   haskellName <- ident
   keyword "as"
   wireKey <- stringLit
   _ <- symbol ":"
-  fieldType <- pMappedTypeExpr
+  fieldType <- pMappedTypeExpr version
   presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
   onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
   pure
@@ -732,24 +763,24 @@ pWireEnum = do
   wireTag <- stringLit
   pure WireEnum {weCtor = constructor, weTag = wireTag, weLoc = loc}
 
-pWireArm :: P WireArm
-pWireArm = do
+pWireArm :: LanguageVersion -> P WireArm
+pWireArm version = do
   loc <- getLoc
   constructor <- ident
   keyword "as"
   wireTag <- stringLit
-  payload <- optional (symbol ":" *> pMappedTypeExpr)
+  payload <- optional (symbol ":" *> pMappedTypeExpr version)
   pure WireArm {waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
 
-pMappedTypeExpr :: P TypeExpr
-pMappedTypeExpr =
+pMappedTypeExpr :: LanguageVersion -> P TypeExpr
+pMappedTypeExpr version =
   choice
     [ TOptional <$> (keyword "Optional" *> pTypeArgument),
       TList <$> (keyword "List" *> pTypeArgument),
       TMap <$> (keyword "Map" *> pTypeArgument),
       TText <$ keyword "Text",
       TInt <$ keyword "Int",
-      TInteger <$ keyword "Integer",
+      TInteger <$ languageFeatureKeyword version IntegerScalarSyntax "Integer",
       TBool <$ keyword "Bool",
       TNatural <$ keyword "Natural",
       TTime <$ (keyword "Time" <|> keyword "UTCTime"),
@@ -757,18 +788,24 @@ pMappedTypeExpr =
       TRef <$> ident
     ]
   where
-    pTypeArgument = parens pMappedTypeExpr <|> pTypeAtom
+    pTypeArgument = parens (pMappedTypeExpr version) <|> pTypeAtom
     pTypeAtom =
       choice
         [ TText <$ keyword "Text",
           TInt <$ keyword "Int",
-          TInteger <$ keyword "Integer",
+          TInteger <$ languageFeatureKeyword version IntegerScalarSyntax "Integer",
           TBool <$ keyword "Bool",
           TNatural <$ keyword "Natural",
           TTime <$ (keyword "Time" <|> keyword "UTCTime"),
           TJson <$ keyword "Json",
           TRef <$> ident
         ]
+
+languageFeatureKeyword :: LanguageVersion -> LanguageFeature -> Text -> P ()
+languageFeatureKeyword version feature spelling = do
+  loc <- getLoc
+  keyword spelling
+  requireLanguageFeatureAt version feature loc
 
 pOnMissing :: P OnMissing
 pOnMissing =
@@ -810,14 +847,14 @@ data BodyItem
   | BISnapshot SnapshotSpec
   | BITransition Transition
 
-pAggregate :: Bool -> P Aggregate
-pAggregate scalarSyntax = do
+pAggregate :: LanguageVersion -> P Aggregate
+pAggregate version = do
   loc <- getLoc
   keyword "aggregate"
   name <- ident
-  regs <- pRegsBlock
+  regs <- pRegsBlock version
   states <- pStatesLine
-  positionedItems <- many ((,) <$> getOffset <*> pBodyItem scalarSyntax)
+  positionedItems <- many ((,) <$> getOffset <*> pBodyItem version)
   let items = map snd positionedItems
       wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
       projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
@@ -850,16 +887,16 @@ pAggregate scalarSyntax = do
   where
     listToMaybe xs = case xs of (x : _) -> Just x; [] -> Nothing
 
-pRegsBlock :: P [RegDecl]
-pRegsBlock = do
+pRegsBlock :: LanguageVersion -> P [RegDecl]
+pRegsBlock version = do
   keyword "regs"
-  many pRegDecl
+  many (pRegDecl version)
 
-pRegDecl :: P RegDecl
-pRegDecl = do
+pRegDecl :: LanguageVersion -> P RegDecl
+pRegDecl version = do
   loc <- getLoc
   name <- ident
-  ty <- pMappedTypeExpr
+  ty <- pMappedTypeExpr version
   _ <- symbol "="
   initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
   pure RegDecl {regName = name, regType = ty, regInitial = initial, regLoc = loc}
@@ -886,15 +923,15 @@ pStatesLine = do
       notFollowedBy (symbol "--")
       pure StateDecl {stName = n, stTerminal = term, stLoc = loc}
 
-pBodyItem :: Bool -> P BodyItem
-pBodyItem scalarSyntax =
+pBodyItem :: LanguageVersion -> P BodyItem
+pBodyItem version =
   choice
-    [ BICommand <$> pCommand,
-      BIEvent <$> pEvent,
+    [ BICommand <$> pCommand version,
+      BIEvent <$> pEvent version,
       BIWire <$> pWire,
       BIProjection <$> pProjection,
       BISnapshot <$> pSnapshot,
-      BITransition <$> pTransition scalarSyntax
+      BITransition <$> pTransition version
     ]
 
 pSnapshot :: P SnapshotSpec
@@ -913,19 +950,19 @@ pSnapshot = do
   hash <- stringLit
   pure SnapshotSpec {snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
 
-pCommand :: P Command
-pCommand = do
+pCommand :: LanguageVersion -> P Command
+pCommand version = do
   loc <- getLoc
   keyword "command"
   name <- ident
-  fs <- braces (many pAggregateField)
+  fs <- braces (many (pAggregateField version))
   pure Command {cmdName = name, cmdFields = fs, cmdLoc = loc}
 
-pAggregateField :: P AggregateField
-pAggregateField = do
+pAggregateField :: LanguageVersion -> P AggregateField
+pAggregateField version = do
   loc <- getLoc
   n <- ident
-  mty <- optional (symbol ":" *> pMappedTypeExpr)
+  mty <- optional (symbol ":" *> pMappedTypeExpr version)
   pure AggregateField {aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
 
 pField :: P Field
@@ -934,8 +971,8 @@ pField = do
   mty <- optional (symbol ":" *> ident)
   pure Field {fieldName = n, fieldType = mty}
 
-pEvent :: P Event
-pEvent = do
+pEvent :: LanguageVersion -> P Event
+pEvent version = do
   loc <- getLoc
   (retiring, deprecated) <-
     option
@@ -951,7 +988,7 @@ pEvent = do
   body <-
     choice
       [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident),
-        EventFields <$> braces (many pAggregateField)
+        EventFields <$> braces (many (pAggregateField version))
       ]
   up <- optional pUpcast
   pure
@@ -1921,8 +1958,8 @@ data Clause
   | CGoto Name
   | CImplementationHole
 
-pTransition :: Bool -> P Transition
-pTransition scalarSyntax = do
+pTransition :: LanguageVersion -> P Transition
+pTransition version = do
   startOffset <- getOffset
   loc <- getLoc
   -- Plan 143: a @replay-only@ prefix marks the transition as serving
@@ -1932,7 +1969,7 @@ pTransition scalarSyntax = do
   _ <- symbol "--"
   cmd <- ident
   _ <- symbol "-->"
-  positionedClauses <- many ((,) <$> getOffset <*> (pClause scalarSyntax <* optional (symbol ";")))
+  positionedClauses <- many ((,) <$> getOffset <*> (pClause version <* optional (symbol ";")))
   let clauses = map snd positionedClauses
       gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
       holeOffsets = [offset | (offset, CImplementationHole) <- positionedClauses]
@@ -1954,7 +1991,7 @@ pTransition scalarSyntax = do
         tCommand = cmd,
         tImplementation = case holeOffsets of
           _ : _ -> HoleImplementation
-          [] | scalarSyntax -> GeneratedImplementation
+          [] | languageSupportsFeature version TypedAggregateExpressionSyntax -> GeneratedImplementation
           [] -> LegacyHoleImplementation,
         tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
         tWrites = [(r, e) | CWrite r e <- clauses],
@@ -1964,42 +2001,60 @@ pTransition scalarSyntax = do
         tLoc = loc
       }
 
-pClause :: Bool -> P Clause
-pClause scalarSyntax =
+pClause :: LanguageVersion -> P Clause
+pClause version =
   choice
-    ( [CImplementationHole <$ (keyword "implementation" *> keyword "hole") | scalarSyntax]
-        ++ [ CGuard <$> (keyword "guard" *> pExpr scalarSyntax),
-             (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr scalarSyntax),
-             try $ do
-               keyword "emit"
-               eventName <- ident
-               notFollowedBy (symbol "{")
-               pure (CEmit eventName),
-             CGoto <$> (keyword "goto" *> ident)
-           ]
-    )
+    [ do
+        loc <- getLoc
+        keyword "implementation"
+        keyword "hole"
+        requireLanguageFeatureAt version ExplicitTransitionImplementationSyntax loc
+        pure CImplementationHole,
+      CGuard <$> (keyword "guard" *> pExpr version),
+      (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr version),
+      try $ do
+        keyword "emit"
+        eventName <- ident
+        notFollowedBy (symbol "{")
+        pure (CEmit eventName),
+      CGoto <$> (keyword "goto" *> ident)
+    ]
 
 --------------------------------------------------------------------------------
 -- Expr sublanguage
 --------------------------------------------------------------------------------
 
-pExpr :: Bool -> P Expr
-pExpr scalarSyntax
-  | scalarSyntax = makeExprParser pScalarTerm scalarOperatorTable
-  | otherwise = makeExprParser pLegacyTerm legacyOperatorTable
+pExpr :: LanguageVersion -> P Expr
+pExpr version
+  | languageSupportsFeature version TypedAggregateExpressionSyntax = makeExprParser (pScalarTerm version) scalarOperatorTable
+  | otherwise = makeExprParser (pLegacyTerm version) (legacyOperatorTable version)
 
-pLegacyTerm :: P Expr
-pLegacyTerm =
+pLegacyTerm :: LanguageVersion -> P Expr
+pLegacyTerm version =
   choice
-    [ parens (pExpr False),
+    [ parens (pExpr version),
+      pUnsupportedScalarTerm version,
       EAtom . ABool <$> (True <$ keyword "true" <|> False <$ keyword "false"),
       EAtom . AName <$> ident
     ]
 
+pUnsupportedScalarTerm :: LanguageVersion -> P Expr
+pUnsupportedScalarTerm version = do
+  loc <- getLoc
+  _ <-
+    choice
+      [ () <$ try ((keyword "reg" <|> keyword "cmd") *> symbol "."),
+        () <$ try (ident *> parens stringLit),
+        () <$ try stringLit,
+        () <$ try integerLiteral
+      ]
+  requireLanguageFeatureAt version TypedAggregateExpressionSyntax loc
+  fail "unreachable supported scalar term in predecessor grammar"
+
 -- | Highest precedence first: relational comparisons bind tighter than @&&@,
 -- which binds tighter than @||@.
-legacyOperatorTable :: [[Operator P Expr]]
-legacyOperatorTable =
+legacyOperatorTable :: LanguageVersion -> [[Operator P Expr]]
+legacyOperatorTable version =
   [ [InfixL arithmeticUnsupported],
     [ InfixN (ECmp OpLe <$ op "<="),
       InfixN (ECmp OpGe <$ op ">="),
@@ -2014,14 +2069,15 @@ legacyOperatorTable =
   where
     op s = symbol s
     arithmeticUnsupported = do
-      offset <- getOffset
+      loc <- getLoc
       operator <- lexeme (oneOf ['+', '-', '*', '/'])
-      failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
+      requireLanguageFeatureAt version TypedAggregateExpressionSyntax loc
+      fail ("unexpected predecessor arithmetic operator '" <> [operator] <> "'")
 
-pScalarTerm :: P Expr
-pScalarTerm =
+pScalarTerm :: LanguageVersion -> P Expr
+pScalarTerm version =
   choice
-    [ parens (pExpr True),
+    [ parens (pExpr version),
       collectionTermUnsupported,
       try pIdLiteral,
       do

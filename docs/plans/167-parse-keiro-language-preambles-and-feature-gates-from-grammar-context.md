@@ -34,12 +34,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: add an adversarial lexical corpus that reproduces IR-11 through the library,
-  single-file CLI, and workspace loader.
-- [ ] Milestone 2: replace the file-wide preamble scan with grammar-positioned preamble dispatch
-  while preserving the public `ParsedSource` and `SourceLanguage` contracts.
-- [ ] Milestone 3: replace raw body-feature substring scans with parsed/token-aware feature
-  evidence and exact source locations.
+- [x] (2026-08-01 09:10 PDT) Milestone 1: added an adversarial lexical corpus that reproduces
+  IR-11 through the library, single-file CLI, and workspace loader.
+- [x] (2026-08-01 09:21 PDT) Milestone 2: replaced the file-wide preamble scan with
+  grammar-positioned preamble dispatch while preserving the public `ParsedSource` and
+  `SourceLanguage` contracts.
+- [x] (2026-08-01 09:21 PDT) Milestone 3: replaced raw body-feature substring scans with
+  grammar-owned feature evidence and exact source locations.
 - [ ] Milestone 4: run compatibility, scaffold, workspace, documentation, and release validation.
 
 
@@ -53,6 +54,15 @@ implementation. Provide concise evidence.
   preamble. `ensureBodyFeatures` independently searches raw line words and substrings. Existing
   tests cover true preambles and true successor syntax but not collisions in nested identifiers,
   quoted wire keys, comments, or strings.
+- 2026-08-01: the focused source-language suite reproduced the collision at the exact mapped field
+  line before implementation: `language-identifier-v1.keiro:16:1` was misclassified as
+  `MisplacedLanguagePreamble`, and both library and CLI assertions failed while all prior
+  source-language assertions remained green.
+- 2026-08-01: Megaparsec custom error components preserve the existing structured
+  `SourceLanguageFailure` boundary while allowing duplicate, misplaced, and successor-feature
+  failures to originate after the owning grammar has consumed a real syntax marker. The focused
+  suite now passes 16 examples, including exact-line assertions for nominal bindings, `Integer`,
+  typed paths, and explicit Hole ownership.
 
 
 ## Decision Log
@@ -75,6 +85,13 @@ Record every decision made while working on the plan.
   source language version.
   Rationale: the current behavior violates the already-declared grammar contract; correcting a
   false collision restores rather than changes the language.
+  Date: 2026-08-01
+
+- Decision: Keep the feature-to-minimum-version policy in `Keiro.Dsl.LanguageVersion` and use a
+  private Megaparsec custom error component to return the existing public diagnostic shape.
+  Rationale: the registry remains the one authority for released feature ownership, while parser
+  internals can attach precise source locations without exposing Megaparsec types or changing
+  `ParsedSource`, `SourceLanguage`, or `ParseFailure`.
   Date: 2026-08-01
 
 

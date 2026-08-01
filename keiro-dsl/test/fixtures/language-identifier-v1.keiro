@@ -1,0 +1,33 @@
+# `using Integer implementation hole reg. cmd.` are inert in comments.
+context language-collisions
+
+id UsingId prefix=use
+
+enum Integer { Present=present }
+
+mapped structural record LanguageEnvelope {
+  haskell package=language-domain module=Language.Domain type=LanguageEnvelope
+  binding = "Language.KeiroBindings.languageEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "language.envelope.v1"
+  fixtures = "Language.KeiroBindings.languageEnvelopeCases"
+  initial = "Language.KeiroBindings.emptyLanguageEnvelope"
+  wire object constructor=LanguageEnvelope unknown-fields=reject {
+    language       as "language"                                : Text required
+    using          as "using"                                   : Text required
+    integer        as "Integer"                                 : Text required
+    implementation as "implementation hole"                     : Text required
+    reg             as "reg."                                    : Text required
+    cmd             as "cmd. using Integer implementation hole" : Text required
+  }
+}
+
+aggregate LanguageAggregate
+  regs
+    language Text = "using Integer implementation hole reg. cmd."
+  states Open
+
+  command Implementation { language:Text using:Text integer:Text implementation:Text reg:Text cmd:Text }
+  event LanguageObserved = fields(Implementation)
+
+  Open -- Implementation --> emit LanguageObserved ; goto Open
