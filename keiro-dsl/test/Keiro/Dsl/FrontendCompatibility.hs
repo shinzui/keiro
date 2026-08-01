@@ -11,6 +11,8 @@ module Keiro.Dsl.FrontendCompatibility
     frontendCompatibilitySpec,
     observeSource,
     observeWorkspace,
+    readCompatibilityManifest,
+    readRepoText,
     releasedFrontendEntryPoints,
     sourceFixturePaths,
     workspaceFixturePaths,
@@ -264,6 +266,9 @@ readManifest = do
   case decoded of
     Left problem -> expectationFailure problem >> fail "invalid frontend compatibility manifest"
     Right manifest -> pure manifest
+
+readCompatibilityManifest :: IO CompatibilityManifest
+readCompatibilityManifest = readManifest
 
 sourceFixturePaths :: IO [FilePath]
 sourceFixturePaths = fixturePaths ".keiro"

@@ -42,6 +42,7 @@ library
     Keiro.Dsl.ExplainBindings
     Keiro.Dsl.Expression
     Keiro.Dsl.FoldFingerprint
+    Keiro.Dsl.Frontend
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
@@ -60,6 +61,8 @@ library
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.SemanticContract
     Keiro.Dsl.Skeleton
+    Keiro.Dsl.Source
+    Keiro.Dsl.Syntax
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
     Keiro.Dsl.Workspace
@@ -68,6 +71,7 @@ library
     Keiro.Dsl.WorkspaceRecord
     Keiro.Dsl.WorkspaceScaffold
 
+  other-modules:   Keiro.Dsl.Frontend.Internal
   build-depends:
     , aeson               >=2.2.1    && <2.3
     , base                >=4.21     && <5
@@ -106,6 +110,7 @@ test-suite keiro-dsl-test
   other-modules:
     Keiro.Dsl.FrontendCompatibility
     Keiro.Dsl.FrontendPublicApiProbe
+    Keiro.Dsl.FrontendSurface
 
   build-depends:
     , aeson       >=2.2  && <2.3

@@ -33,6 +33,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), Bind
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldFingerprintForService, aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
+import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -70,6 +71,7 @@ import Test.QuickCheck
 main :: IO ()
 main = hspec $ do
   frontendCompatibilitySpec
+  frontendSurfaceSpec
 
   describe "source language version" $ do
     let legacy = "context hospital-capacity\n"

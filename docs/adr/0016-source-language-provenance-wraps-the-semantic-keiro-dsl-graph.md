@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
-description: A .keiro document selects a released parser contract before grammar parsing; source provenance and one effective service semantic contract wrap the normalized Spec graph.
-timestamp: 2026-08-01T17:02:24Z
+description: A .keiro document selects a released parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
+timestamp: 2026-08-01T21:23:24Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -62,6 +62,21 @@ share the discriminator; a successor that can change runtime or fold behavior mu
 one. Compatibility entry points that accept only `Spec` remain documented legacy/version-1
 wrappers and are not used by CLI or workspace semantic routes.
 
+**Parsing and semantic graph construction are separated by located surface syntax.** After source
+selection, Megaparsec produces a non-lossless `SurfaceSource`. Its document clauses and ordered
+top-level items carry half-open `SourceSpan` values with the source name, `Text` token offset, and
+one-based line and column points. The end point immediately follows the last owned syntax token;
+trailing whitespace and comments are not part of the span. The surface tree preserves source order
+but deliberately does not preserve trivia.
+
+`lowerSurfaceSource` checks span ownership and source order, groups surface items into the existing
+`Spec` fields, and projects each top-level span's starting line into its compatibility `Loc`.
+`parseSource`, `parseSpec`, and `parseSpecText` route through this seam while retaining their
+released signatures and rendered failures. `Spec` equality, workspace composition, semantic
+validation, canonical rendering, generated output, fingerprints, diffs, and replay analysis remain
+location- and surface-independent. Advanced callers may inspect the surface representation without
+depending on Megaparsec types.
+
 **Workspace provenance is per member; the effective semantic contract is per service.** Each
 `WorkspaceMember` retains its own `SourceLanguage`; `wsMergedSpec` remains the composed semantic
 graph, and `wsLanguageContract` records the one effective service contract. Composition compares
@@ -98,6 +113,9 @@ fleet planning remain in
   declarations from compatibility fallback.
 - Workspace composition preserves truthful member provenance without contaminating the merged
   semantic graph, while exposing one checked contract to every semantic planner.
+- Exact source evidence is available before lowering without adding spans or trivia to `Spec`.
+  Consumers that operate on semantics continue to use `ParsedSource` or `CheckedService`; tooling
+  that needs syntax ownership may opt into `SurfaceSource`.
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
@@ -129,6 +147,10 @@ preserves compatibility without lying about what a source declared.
 **Have pretty printing add version 1 to legacy sources.** Rejected because ordinary parse/pretty
 would become an implicit migration and erase the provenance distinction. Only explicit upgrade
 tooling may rewrite the declaration.
+
+**Attach locations directly to every semantic AST value.** Rejected because it would spread source
+layout through workspace composition, fingerprints, diffs, replay, and generation. A separate
+surface representation makes location ownership explicit and discards it at one lowering boundary.
 
 
 ## Related decisions

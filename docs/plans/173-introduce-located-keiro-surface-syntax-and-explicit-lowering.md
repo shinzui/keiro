@@ -36,10 +36,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: define source points, spans, located values, and their invariants with focused tests.
-- [ ] Milestone 2: define the surface source/spec representation and total lowering contract.
-- [ ] Milestone 3: make the existing Megaparsec document parser produce and lower surface syntax.
-- [ ] Milestone 4: preserve the EP-172 oracle and record the frontend boundary in the relevant ADR.
+- [x] Milestone 1: defined source points, spans, located values, and their invariants with focused
+  tests (2026-08-01T21:35:07Z).
+- [x] Milestone 2: defined the source-ordered surface source/spec representation and checked
+  lowering contract (2026-08-01T21:35:07Z).
+- [x] Milestone 3: routed the existing Megaparsec document parser through surface syntax and
+  explicit lowering (2026-08-01T21:35:07Z).
+- [x] Milestone 4: preserved the EP-172 oracle and recorded the frontend boundary in ADR 16
+  (2026-08-01T21:35:07Z).
 
 
 ## Surprises & Discoveries
@@ -47,7 +51,20 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Observation: Every existing token parser consumes following whitespace and comments, so wrapping
+  a complete production around its final parser state would overstate the owned span.
+  Evidence: `lexeme = L.lexeme sc`, and the focused test places spaces, a comment, and blank lines
+  after a top-level declaration.
+  Impact: `withOwnedSpan` derives the owned end from the consumed `Text` slice with a string-aware
+  comment/trivia scan while leaving token consumption and diagnostics unchanged.
+
+- Observation: Source order and exact locations do not require duplicating the 1,200-line semantic
+  graph.
+  Evidence: `SurfaceSpec` retains ordered located top-level items plus located nested fields and
+  expressions, while its items reuse the existing declaration/node values and lowering groups them
+  into the unchanged `Spec` fields.
+  Impact: EP-174 can extract parser concerns around one stable surface type without making semantic
+  consumers source-aware.
 
 
 ## Decision Log
@@ -88,6 +105,12 @@ Record every decision made while working on the plan.
   `value`, `source`, `start`, and `end` safely without renaming existing production records.
   Date: 2026-08-01
 
+- Decision: Introduce a compatibility-preserving `FrontendFailure` wrapper now and leave structured
+  phase/code/span parser failures to EP-175.
+  Rationale: EP-173 needs a Megaparsec-free advanced entry point, but changing source-selection or
+  body-grammar rendering here would mix the surface refactor with the later diagnostic-policy plan.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -96,7 +119,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Delivered public `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`, and `Keiro.Dsl.Frontend` modules. The
+surface document retains the selected language, optional located preamble, located context/module/
+layout clauses, source-ordered top-level items, and exact nested aggregate-field and expression
+spans. `lowerSurfaceSource` validates span/source ownership and item ordering, projects top-level
+start lines into existing `Loc` fields, and constructs the unchanged `ParsedSource`/`Spec` graph.
+
+The compatibility facade now parses through that lowering seam. The 123 accepted manifest sources
+lower identically, all 256 source/workspace fixtures and 13 diagnostic goldens retain the released
+result, and the existing record selectors remain intact after EP-177's cancellation. Focused source
+span and lowering groups each pass 3 examples; the full suite passes 451 examples. `cabal build
+all`, strict validation of all 17 ADR concepts, and the native Nix treefmt/pre-commit checks pass.
+ADR 16 now owns the durable source-selection -> located-surface -> semantic-lowering boundary.
 
 
 ## Context and Orientation

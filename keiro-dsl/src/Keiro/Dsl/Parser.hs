@@ -8,6 +8,7 @@ module Keiro.Dsl.Parser
   ( ParseError,
     ParseFailure (..),
     ParsedSource (..),
+    parseSurfaceSource,
     parseSource,
     parseSpec,
     parseSpecText,
@@ -17,19 +18,27 @@ where
 
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.Bifunctor (first)
-import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isUpper)
+import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isSpace, isUpper)
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as TR
+import Keiro.Dsl.Frontend.Internal
+  ( FrontendFailure (..),
+    lowerSurfaceSource,
+    renderLoweringFailure,
+  )
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
+import Keiro.Dsl.Source
+import Keiro.Dsl.Syntax
 import Numeric.Natural (Natural)
 import Text.Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char (char, digitChar, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
+import Prelude hiding (span)
 
 -- | A rendered, line-numbered parse error, ready to print to the user.
 type ParseError = Text
@@ -59,12 +68,20 @@ parseSpecText = parseSpec "<input>"
 -- Source selection completes before the selected body grammar is run.
 parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSource src input = do
+  surface <- case parseSurfaceSource src input of
+    Left (FrontendParseFailure parseFailure) -> Left parseFailure
+    Right value -> Right value
+  first (BodyGrammarFailure . renderLoweringFailure) (lowerSurfaceSource surface)
+
+-- | Parse a source into located, source-ordered surface syntax without
+-- exposing Megaparsec through the public result.
+parseSurfaceSource :: FilePath -> Text -> Either FrontendFailure SurfaceSource
+parseSurfaceSource src input = first FrontendParseFailure $ do
   sourceLanguage <- selectSourceLanguage src input
   definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
     Just value -> Right value
     Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
-  spec <- parseSelectedBody definition sourceLanguage
-  pure ParsedSource {parsedSourceLanguage = sourceLanguage, parsedSpec = spec}
+  parseSelectedBody definition sourceLanguage
   where
     parseSelectedBody definition sourceLanguage =
       let version = definitionVersion definition
@@ -75,15 +92,19 @@ parseSource src input = do
             LanguageBodyParserV1 ->
               sc
                 *> case sourceLanguage of
-                  LegacyUnversioned -> pSpec version laterPreambleCode <* eof
-                  DeclaredLanguage {} -> pDeclaredPreamble *> pSpec version laterPreambleCode <* eof
+                  LegacyUnversioned -> pSurfaceDocument src sourceLanguage Nothing version laterPreambleCode <* eof
+                  DeclaredLanguage {} -> do
+                    locatedPreamble <- withOwnedSpan (sourceLanguage <$ pDeclaredPreamble)
+                    pSurfaceDocument src sourceLanguage (Just locatedPreamble) version laterPreambleCode <* eof
             LanguageBodyParserV2 ->
-              sc *> pDeclaredPreamble *> pSpec version laterPreambleCode <* eof
+              sc *> do
+                locatedPreamble <- withOwnedSpan (sourceLanguage <$ pDeclaredPreamble)
+                pSurfaceDocument src sourceLanguage (Just locatedPreamble) version laterPreambleCode <* eof
        in case runParser parser src input of
             Left bundle -> case firstContextualFailure bundle of
               Just contextual -> Left (SourceLanguageFailure (contextualDiagnostic src sourceLanguage contextual))
               Nothing -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
-            Right spec -> Right spec
+            Right surface -> Right surface
 
 firstContextualFailure :: ParseErrorBundle Text ContextualParseFailure -> Maybe ContextualParseFailure
 firstContextualFailure bundle =
@@ -131,7 +152,8 @@ pDeclaredPreamble = do
   pure ()
 
 -- | The source-selection pass inspects only the first grammar clause after
--- leading whitespace and comments. Body lines are left entirely to 'pSpec'.
+-- leading whitespace and comments. Body lines are left entirely to
+-- 'pSurfaceSpec'.
 data InitialLanguageClause = InitialLanguageClause
   { initialLanguageLine :: !Int,
     initialLanguageText :: !Text
@@ -377,17 +399,71 @@ patchIdWord = lexeme $ do
 getLoc :: P Loc
 getLoc = (Loc . unPos . sourceLine) <$> getSourcePos
 
+-- | Attach the exact syntax owned by a production. Existing token parsers
+-- consume following trivia, so the consumed slice is scanned to exclude final
+-- whitespace and @#@ comments from the half-open end point.
+withOwnedSpan :: P a -> P (Located a)
+withOwnedSpan parser = do
+  startOffset <- getOffset
+  startPosition <- getSourcePos
+  startState <- getParserState
+  inputBefore <- getInput
+  value <- parser
+  inputAfter <- getInput
+  let consumedLength = T.length inputBefore - T.length inputAfter
+      ownedLength = ownedSyntaxLength (T.take consumedLength inputBefore)
+      endOffset = startOffset + ownedLength
+      endPosition = pstateSourcePos (reachOffsetNoLine endOffset (statePosState startState))
+      span =
+        SourceSpan
+          { source = sourceName startPosition,
+            start = sourcePointAt startOffset startPosition,
+            end = sourcePointAt endOffset endPosition
+          }
+  pure Located {span, value}
+
+sourcePointAt :: Int -> SourcePos -> SourcePoint
+sourcePointAt offset position =
+  SourcePoint
+    { offset,
+      line = unPos (sourceLine position),
+      column = unPos (sourceColumn position)
+    }
+
+spanOf :: Located a -> SourceSpan
+spanOf Located {span} = span
+
+locatedValue :: Located a -> a
+locatedValue Located {value} = value
+
+data TriviaScan
+  = InSyntax
+  | InString !Bool
+  | InComment
+
+ownedSyntaxLength :: Text -> Int
+ownedSyntaxLength = go 0 InSyntax 0 . T.unpack
+  where
+    go _ _ lastOwned [] = lastOwned
+    go index mode lastOwned (character : rest) =
+      case mode of
+        InComment
+          | character == '\n' || character == '\r' -> go (index + 1) InSyntax lastOwned rest
+          | otherwise -> go (index + 1) InComment lastOwned rest
+        InString escaped
+          | escaped -> go (index + 1) (InString False) (index + 1) rest
+          | character == '\\' -> go (index + 1) (InString True) (index + 1) rest
+          | character == '"' -> go (index + 1) InSyntax (index + 1) rest
+          | otherwise -> go (index + 1) (InString False) (index + 1) rest
+        InSyntax
+          | character == '#' -> go (index + 1) InComment lastOwned rest
+          | character == '"' -> go (index + 1) (InString False) (index + 1) rest
+          | isSpace character -> go (index + 1) InSyntax lastOwned rest
+          | otherwise -> go (index + 1) InSyntax (index + 1) rest
+
 --------------------------------------------------------------------------------
 -- Top level
 --------------------------------------------------------------------------------
-
-data TopItem
-  = TIId IdDecl
-  | TIEnum EnumDecl
-  | TIRule RuleDecl
-  | TINominalScalar NominalScalarDecl
-  | TIMapped MappedDecl
-  | TINode Node
 
 pContextualPreamble :: SourceLanguageErrorCode -> P a
 pContextualPreamble code = do
@@ -395,26 +471,35 @@ pContextualPreamble code = do
   _ <- try pDeclaredPreamble
   contextualFailureAt loc code
 
-pSpec :: LanguageVersion -> SourceLanguageErrorCode -> P Spec
-pSpec version laterPreambleCode = do
+pSurfaceDocument :: FilePath -> SourceLanguage -> Maybe (Located SourceLanguage) -> LanguageVersion -> SourceLanguageErrorCode -> P SurfaceSource
+pSurfaceDocument sourceName sourceLanguage preamble version laterPreambleCode = do
+  spec <- pSurfaceSpec version laterPreambleCode
+  pure SurfaceSource {source = sourceName, language = sourceLanguage, preamble, spec}
+
+pSurfaceSpec :: LanguageVersion -> SourceLanguageErrorCode -> P (Located SurfaceSpec)
+pSurfaceSpec version laterPreambleCode = do
   pContextualPreamble laterPreambleCode <|> pure ()
-  keyword "context"
-  ctx <- wireWord
-  mroot <- optional pModuleClause
-  mlayout <- optional pLayoutClause
-  items <- many (pTopItem version laterPreambleCode)
+  context <- withOwnedSpan (keyword "context" *> wireWord)
+  moduleRoot <- optional (withOwnedSpan pModuleClause)
+  layout <- optional (withOwnedSpan pLayoutClause)
+  parsedItems <- many (withOwnedSpan (pTopItem version laterPreambleCode))
+  let items = map surfaceItem parsedItems
+      elements = concatMap surfaceElements parsedItems
+  let contextSpan@SourceSpan {source, start} = spanOf context
+      finalSpan = case reverse items of
+        item : _ -> spanOf item
+        [] -> case layout of
+          Just value -> spanOf value
+          Nothing -> maybe contextSpan spanOf moduleRoot
+      SourceSpan {end} = finalSpan
   pure
-    Spec
-      { specContext = ctx,
-        specModuleRoot = mroot,
-        specLayout = mlayout,
-        specIds = [d | TIId d <- items],
-        specEnums = [d | TIEnum d <- items],
-        specRules = [d | TIRule d <- items],
-        specNominalScalars = [d | TINominalScalar d <- items],
-        specMapped = [d | TIMapped d <- items],
-        specNodes = [n | TINode n <- items]
+    Located
+      { span = SourceSpan {source, start, end},
+        value = SurfaceSpec {context, moduleRoot, layout, items, elements}
       }
+  where
+    surfaceItem Located {span, value = ParsedTopItem item _} = Located {span, value = item}
+    surfaceElements Located {value = ParsedTopItem _ elements} = elements
 
 -- | @module Acme.Services@ — the optional namespace-prefix clause.
 pModuleClause :: P Text
@@ -442,29 +527,37 @@ pModulePrefix = lexeme $ do
       cs <- many identChar
       pure (T.pack (c : cs))
 
-pTopItem :: LanguageVersion -> SourceLanguageErrorCode -> P TopItem
+data ParsedTopItem = ParsedTopItem !SurfaceTopItem ![Located SurfaceElement]
+
+pTopItem :: LanguageVersion -> SourceLanguageErrorCode -> P ParsedTopItem
 pTopItem version laterPreambleCode =
   choice
     ( [ pContextualPreamble laterPreambleCode,
-        TIId <$> pIdDecl version,
-        TIEnum <$> pEnumDecl version,
-        TIRule <$> pRuleDecl version,
-        pMappedTopItem version
+        plain (SurfaceId <$> pIdDecl version),
+        plain (SurfaceEnum <$> pEnumDecl version),
+        do
+          (rule, elements) <- pRuleDecl version
+          pure (ParsedTopItem (SurfaceRule rule) elements),
+        plain (pMappedTopItem version)
       ]
-        ++ [ TINode . NRouter <$> pRouter,
-             TINode . NProcess <$> pProcess,
-             TINode . NContract <$> pContract,
-             TINode . NIntake <$> pIntake,
-             TINode . NEmit <$> pEmit,
-             TINode . NPublisher <$> pPublisher,
-             TINode . NWorkqueue <$> pWorkqueue,
-             TINode . NPgmqDispatch <$> pPgmqDispatch,
-             TINode . NReadModel <$> pReadModel,
-             TINode . NWorkflow <$> pWorkflow,
-             TINode . NOperation <$> pOperation,
-             TINode . NAggregate <$> pAggregate version
+        ++ [ plain (SurfaceNode . NRouter <$> pRouter),
+             plain (SurfaceNode . NProcess <$> pProcess),
+             plain (SurfaceNode . NContract <$> pContract),
+             plain (SurfaceNode . NIntake <$> pIntake),
+             plain (SurfaceNode . NEmit <$> pEmit),
+             plain (SurfaceNode . NPublisher <$> pPublisher),
+             plain (SurfaceNode . NWorkqueue <$> pWorkqueue),
+             plain (SurfaceNode . NPgmqDispatch <$> pPgmqDispatch),
+             plain (SurfaceNode . NReadModel <$> pReadModel),
+             plain (SurfaceNode . NWorkflow <$> pWorkflow),
+             plain (SurfaceNode . NOperation <$> pOperation),
+             do
+               (aggregate, elements) <- pAggregate version
+               pure (ParsedTopItem (SurfaceNode (NAggregate aggregate)) elements)
            ]
     )
+  where
+    plain parser = (`ParsedTopItem` []) <$> parser
 
 pIdDecl :: LanguageVersion -> P IdDecl
 pIdDecl version = do
@@ -492,7 +585,7 @@ pEnumDecl version = do
       w <- wireWord
       pure (c, w)
 
-pRuleDecl :: LanguageVersion -> P RuleDecl
+pRuleDecl :: LanguageVersion -> P (RuleDecl, [Located SurfaceElement])
 pRuleDecl version = do
   loc <- getLoc
   keyword "rule"
@@ -502,21 +595,25 @@ pRuleDecl version = do
   _ <- symbol "->"
   cod <- ident
   keyword "ex"
-  cases <- sepBy1 pCase (symbol ";")
+  parsedCases <- sepBy1 pCase (symbol ";")
+  let cases = map fst parsedCases
+      elements = map snd parsedCases
   pure
-    RuleDecl
-      { ruleName = name,
-        ruleDomain = dom,
-        ruleCodomain = cod,
-        ruleCases = cases,
-        ruleLoc = loc
-      }
+    ( RuleDecl
+        { ruleName = name,
+          ruleDomain = dom,
+          ruleCodomain = cod,
+          ruleCases = cases,
+          ruleLoc = loc
+        },
+      elements
+    )
   where
     pCase = do
       c <- ident
       _ <- symbol "=>"
-      e <- pExpr version
-      pure (c, e)
+      expression <- withOwnedSpan (pExpr version)
+      pure ((c, locatedValue expression), mapLocated SurfaceExpression expression)
 
 optionalLanguageFeature :: LanguageVersion -> LanguageFeature -> Text -> P a -> P (Maybe a)
 optionalLanguageFeature version feature marker parser
@@ -545,18 +642,18 @@ data MappedClause
   | MCCodecVersion Text
   | MCShape MappedShape
 
-pMappedTopItem :: LanguageVersion -> P TopItem
+pMappedTopItem :: LanguageVersion -> P SurfaceTopItem
 pMappedTopItem version = do
   loc <- getLoc
   keyword "mapped"
   choice
     [ if languageSupportsFeature version NominalBindingSyntax
-        then TINominalScalar <$> pNominalScalarAfterMapped loc
+        then SurfaceNominalScalar <$> pNominalScalarAfterMapped loc
         else do
           _ <- try (keyword "nominal")
           contextualFailureAt loc LanguageFeatureRequiresVersion,
-      TIMapped <$> pMappedStructural version loc,
-      TIMapped <$> pMappedOpaque loc
+      SurfaceMapped <$> pMappedStructural version loc,
+      SurfaceMapped <$> pMappedOpaque loc
     ]
 
 pMappedStructural :: LanguageVersion -> Loc -> P MappedDecl
@@ -840,14 +937,14 @@ requiredClause clauseName select clauses = do
 --------------------------------------------------------------------------------
 
 data BodyItem
-  = BICommand Command
-  | BIEvent Event
+  = BICommand Command [Located SurfaceElement]
+  | BIEvent Event [Located SurfaceElement]
   | BIWire WireSpec
   | BIProjection ProjectionSpec
   | BISnapshot SnapshotSpec
-  | BITransition Transition
+  | BITransition Transition [Located SurfaceElement]
 
-pAggregate :: LanguageVersion -> P Aggregate
+pAggregate :: LanguageVersion -> P (Aggregate, [Located SurfaceElement])
 pAggregate version = do
   loc <- getLoc
   keyword "aggregate"
@@ -872,20 +969,29 @@ pAggregate version = do
       failAt duplicateOffset ("duplicate snapshot block in aggregate " <> T.unpack name <> " (only one is allowed)")
     _ -> pure ()
   pure
-    Aggregate
-      { aggName = name,
-        aggRegs = regs,
-        aggStates = states,
-        aggCommands = [c | BICommand c <- items],
-        aggEvents = [e | BIEvent e <- items],
-        aggTransitions = [t | BITransition t <- items],
-        aggWire = listToMaybe [w | BIWire w <- items],
-        aggProjection = listToMaybe [p | BIProjection p <- items],
-        aggSnapshot = listToMaybe [s | BISnapshot s <- items],
-        aggLoc = loc
-      }
+    ( Aggregate
+        { aggName = name,
+          aggRegs = regs,
+          aggStates = states,
+          aggCommands = [c | BICommand c _ <- items],
+          aggEvents = [e | BIEvent e _ <- items],
+          aggTransitions = [t | BITransition t _ <- items],
+          aggWire = listToMaybe [w | BIWire w <- items],
+          aggProjection = listToMaybe [p | BIProjection p <- items],
+          aggSnapshot = listToMaybe [s | BISnapshot s <- items],
+          aggLoc = loc
+        },
+      concatMap bodyElements items
+    )
   where
     listToMaybe xs = case xs of (x : _) -> Just x; [] -> Nothing
+    bodyElements = \case
+      BICommand _ elements -> elements
+      BIEvent _ elements -> elements
+      BITransition _ elements -> elements
+      BIWire _ -> []
+      BIProjection _ -> []
+      BISnapshot _ -> []
 
 pRegsBlock :: LanguageVersion -> P [RegDecl]
 pRegsBlock version = do
@@ -926,12 +1032,12 @@ pStatesLine = do
 pBodyItem :: LanguageVersion -> P BodyItem
 pBodyItem version =
   choice
-    [ BICommand <$> pCommand version,
-      BIEvent <$> pEvent version,
+    [ uncurry BICommand <$> pCommand version,
+      uncurry BIEvent <$> pEvent version,
       BIWire <$> pWire,
       BIProjection <$> pProjection,
       BISnapshot <$> pSnapshot,
-      BITransition <$> pTransition version
+      uncurry BITransition <$> pTransition version
     ]
 
 pSnapshot :: P SnapshotSpec
@@ -950,13 +1056,16 @@ pSnapshot = do
   hash <- stringLit
   pure SnapshotSpec {snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
 
-pCommand :: LanguageVersion -> P Command
+pCommand :: LanguageVersion -> P (Command, [Located SurfaceElement])
 pCommand version = do
   loc <- getLoc
   keyword "command"
   name <- ident
-  fs <- braces (many (pAggregateField version))
-  pure Command {cmdName = name, cmdFields = fs, cmdLoc = loc}
+  fields <- braces (many (withOwnedSpan (pAggregateField version)))
+  pure
+    ( Command {cmdName = name, cmdFields = map locatedValue fields, cmdLoc = loc},
+      map (mapLocated (SurfaceField . aggregateFieldName)) fields
+    )
 
 pAggregateField :: LanguageVersion -> P AggregateField
 pAggregateField version = do
@@ -971,7 +1080,7 @@ pField = do
   mty <- optional (symbol ":" *> ident)
   pure Field {fieldName = n, fieldType = mty}
 
-pEvent :: LanguageVersion -> P Event
+pEvent :: LanguageVersion -> P (Event, [Located SurfaceElement])
 pEvent version = do
   loc <- getLoc
   (retiring, deprecated) <-
@@ -985,22 +1094,29 @@ pEvent version = do
   keyword "event"
   name <- ident
   ver <- option 1 pVersion
-  body <-
+  (body, elements) <-
     choice
-      [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident),
-        EventFields <$> braces (many (pAggregateField version))
+      [ (\commandName -> (EventFromCommand commandName, [])) <$> (symbol "=" *> keyword "fields" *> parens ident),
+        do
+          fields <- braces (many (withOwnedSpan (pAggregateField version)))
+          pure
+            ( EventFields (map locatedValue fields),
+              map (mapLocated (SurfaceField . aggregateFieldName)) fields
+            )
       ]
   up <- optional pUpcast
   pure
-    Event
-      { evName = name,
-        evBody = body,
-        evVersion = ver,
-        evUpcastFrom = up,
-        evRetiring = retiring,
-        evDeprecated = deprecated,
-        evLoc = loc
-      }
+    ( Event
+        { evName = name,
+          evBody = body,
+          evVersion = ver,
+          evUpcastFrom = up,
+          evRetiring = retiring,
+          evDeprecated = deprecated,
+          evLoc = loc
+        },
+      elements
+    )
   where
     pUpcast = do
       keyword "upcast"
@@ -1958,7 +2074,7 @@ data Clause
   | CGoto Name
   | CImplementationHole
 
-pTransition :: LanguageVersion -> P Transition
+pTransition :: LanguageVersion -> P (Transition, [Located SurfaceElement])
 pTransition version = do
   startOffset <- getOffset
   loc <- getLoc
@@ -1970,9 +2086,10 @@ pTransition version = do
   cmd <- ident
   _ <- symbol "-->"
   positionedClauses <- many ((,) <$> getOffset <*> (pClause version <* optional (symbol ";")))
-  let clauses = map snd positionedClauses
-      gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
-      holeOffsets = [offset | (offset, CImplementationHole) <- positionedClauses]
+  let clauses = map (fst . snd) positionedClauses
+      elements = concatMap (snd . snd) positionedClauses
+      gotos = [(offset, target) | (offset, (CGoto target, _)) <- positionedClauses]
+      holeOffsets = [offset | (offset, (CImplementationHole, _)) <- positionedClauses]
       transitionName = T.unpack src <> " -- " <> T.unpack cmd
   gt <- case gotos of
     [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
@@ -1986,22 +2103,24 @@ pTransition version = do
     _ -> pure ()
   let guards = [e | CGuard e <- clauses]
   pure
-    Transition
-      { tSource = src,
-        tCommand = cmd,
-        tImplementation = case holeOffsets of
-          _ : _ -> HoleImplementation
-          [] | languageSupportsFeature version TypedAggregateExpressionSyntax -> GeneratedImplementation
-          [] -> LegacyHoleImplementation,
-        tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
-        tWrites = [(r, e) | CWrite r e <- clauses],
-        tEmits = [n | CEmit n <- clauses],
-        tGoto = gt,
-        tMode = mode,
-        tLoc = loc
-      }
+    ( Transition
+        { tSource = src,
+          tCommand = cmd,
+          tImplementation = case holeOffsets of
+            _ : _ -> HoleImplementation
+            [] | languageSupportsFeature version TypedAggregateExpressionSyntax -> GeneratedImplementation
+            [] -> LegacyHoleImplementation,
+          tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
+          tWrites = [(r, e) | CWrite r e <- clauses],
+          tEmits = [n | CEmit n <- clauses],
+          tGoto = gt,
+          tMode = mode,
+          tLoc = loc
+        },
+      elements
+    )
 
-pClause :: LanguageVersion -> P Clause
+pClause :: LanguageVersion -> P (Clause, [Located SurfaceElement])
 pClause version =
   choice
     [ do
@@ -2009,15 +2128,22 @@ pClause version =
         keyword "implementation"
         keyword "hole"
         requireLanguageFeatureAt version ExplicitTransitionImplementationSyntax loc
-        pure CImplementationHole,
-      CGuard <$> (keyword "guard" *> pExpr version),
-      (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr version),
+        pure (CImplementationHole, []),
+      do
+        keyword "guard"
+        expression <- withOwnedSpan (pExpr version)
+        pure (CGuard (locatedValue expression), [mapLocated SurfaceExpression expression]),
+      do
+        register <- keyword "write" *> ident
+        _ <- symbol ":="
+        expression <- withOwnedSpan (pExpr version)
+        pure (CWrite register (locatedValue expression), [mapLocated SurfaceExpression expression]),
       try $ do
         keyword "emit"
         eventName <- ident
         notFollowedBy (symbol "{")
-        pure (CEmit eventName),
-      CGoto <$> (keyword "goto" *> ident)
+        pure (CEmit eventName, []),
+      (\target -> (CGoto target, [])) <$> (keyword "goto" *> ident)
     ]
 
 --------------------------------------------------------------------------------
