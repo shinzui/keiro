@@ -41,7 +41,8 @@ This section must always reflect the actual current state of the work.
   `SourceLanguage` contracts.
 - [x] (2026-08-01 09:21 PDT) Milestone 3: replaced raw body-feature substring scans with
   grammar-owned feature evidence and exact source locations.
-- [ ] Milestone 4: run compatibility, scaffold, workspace, documentation, and release validation.
+- [x] (2026-08-01 09:29 PDT) Milestone 4: ran compatibility, scaffold, workspace,
+  documentation, and release validation.
 
 
 ## Surprises & Discoveries
@@ -115,7 +116,23 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(Implementation not started.)
+Completed. The optional preamble is now selected only from the first grammar clause after leading
+trivia. Complete later preambles are classified by their top-level grammar position, while nested
+`language` names are ordinary domain identifiers. The released feature markers now fail from the
+productions that own nominal bindings, `Integer`, typed `reg.`/`cmd.` paths, and explicit Hole
+ownership; unrelated comments, strings, wire keys, names, and historical arithmetic diagnostics
+remain unchanged.
+
+The focused source-language suite passes 16 examples. The full `keiro-dsl-test` suite passes
+427 examples, both explicit fixture checks print `OK`, `cabal build all` succeeds, and
+`nix flake check` passes the native pre-commit and tree-format checks. CLI scaffolding was exercised
+for both effective version 1 and declared version 2 in temporary output directories.
+
+The ADR distillation pass found no new durable boundary to record. [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
+already requires source selection before body parsing, frozen released grammars, one version
+registry, and provenance outside `Spec`; this change makes that accepted boundary truthful without
+changing it. [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
+already owns the precise earliest-diagnostic rule. No EP-167 work remains.
 
 
 ## Context and Orientation
@@ -214,3 +231,8 @@ Keep `Keiro.Dsl.LanguageVersion.SourceLanguage`, `ParsedSource`, `parseSource`, 
 source-compatible. The implementation may introduce an internal located preamble type, but no raw
 line classifier should remain authoritative. `Keiro.Dsl.Workspace` continues comparing
 `effectiveLanguageVersion` from each parsed member. No dependency changes are required.
+
+
+Revision note (2026-08-01): Completed implementation, preserved the historical version-1
+arithmetic diagnostic discovered by the full compatibility suite, recorded validation evidence,
+and completed ADR distillation.

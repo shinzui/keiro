@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Implemented**: Close IR-11 after Plan 167 recognizes preambles only before `context`, moves
+released feature markers to their owning grammar productions, preserves version-1 diagnostics,
+and passes library, CLI, scaffold, workspace, full-suite, all-package, and Nix validation.
 * **Implemented**: Close IR-13 after Plan 159 makes total `fields(Command)` event outputs
 generated-owned, removes identity-copy Holes from runtime authority, and proves the boundary with
 compiled single-spec/workspace conformance and restoring mutations.

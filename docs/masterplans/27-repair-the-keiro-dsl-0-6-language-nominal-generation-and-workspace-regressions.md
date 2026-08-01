@@ -76,7 +76,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | In Progress |
+| 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | Complete |
 | 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Not Started |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
@@ -89,9 +89,8 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-167 and EP-169 do not depend on the completed children. EP-167 touches parser mechanics while
-preserving `ParsedSource`; EP-169 consumes that stable result and can proceed against the current
-parser, with a final integration rebase if both land concurrently. EP-168 and EP-159 are complete.
+EP-167, EP-168, and EP-159 are complete. EP-167 preserved `ParsedSource`, so EP-169's former soft
+parser dependency is satisfied and semantic-contract work can proceed against the stable result.
 
 EP-170 hard-depends on EP-168 because declaration-scoped projection tags and instances must be
 emitted by the one shared nominal owner, not by duplicate aggregate modules. The former external
@@ -109,7 +108,7 @@ generation, and on EP-168 because safe constructors/codecs must have one generat
 integrates with EP-170's exact textual ID domain but can implement admission/replay policy without
 waiting for nominal equality. The critical child-plan paths are EP-168 → EP-170 and
 EP-169 plus EP-168 → EP-171. The EP-168 → EP-170 edge is satisfied; EP-171 still waits for
-EP-169, while EP-167 remains independent.
+EP-169. EP-167 is complete and no longer contributes an integration rebase risk.
 
 
 ## Integration Points
@@ -153,7 +152,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [x] EP-167: adversarial language collision corpus and grammar-positioned preamble parsing.
-- [ ] EP-167: parsed/token-aware feature gates and complete compatibility validation.
+- [x] EP-167: parsed/token-aware feature gates and complete compatibility validation.
 - [x] EP-168: one planned nominal owner and use closure for single files and workspaces.
 - [x] EP-168: compiled two-aggregate identity proof and non-destructive adoption.
 - [ ] EP-169: checked effective semantic contract routed through all semantic consumers.
@@ -196,6 +195,10 @@ interactions between child plans. Provide concise evidence.
   13 verified rows and one conservatively unverified one-way projection. Concrete stepping and
   replay still pass; the default finite-completeness gate accepts the honest unverified row, while
   the opt-in strict gate rejects it until a consumer supplies an exact reverse witness.
+- 2026-08-01: EP-167 preserved `ParsedSource`, `SourceLanguage`, `ParseFailure`, and workspace
+  effective-version comparison while moving preamble and feature evidence into grammar context.
+  EP-169 may continue against the planned stable parser result. The complete 427-example DSL suite,
+  all-package Cabal build, and native Nix checks pass.
 
 
 ## Decision Log
@@ -249,10 +252,16 @@ Haskell owner, with compiled cross-aggregate identity/codec proof, deterministic
 single-file plans, explicit non-destructive 0.6 adoption, and ADR 14 documentation. Checked
 declarative output ownership now removes stale identity-copy Holes, and complete finite behavior
 obligations execute through Keiki's exact step/replay attribution with mutation-tested reporting.
-These results close IR-2 and IR-13 and unblock EP-170; four corrective workstreams remain open.
+These results close IR-2 and IR-13 and unblock EP-170.
+
+EP-167 is complete. Released preambles are recognized only before `context`; nested `language`
+identifiers and successor spellings in data no longer collide with dispatch; grammar-owned feature
+gates retain exact source lines and historical version-1 negative behavior. ADR 16 and ADR 4 already
+record the durable boundaries, so no ADR amendment was required. Three corrective workstreams
+remain open.
 
 
 Revision note: Updated the initiative for released Keiki `0.7.0.0`, verified on Hackage and through
-the matching `v0.7.0.0` tag. EP-159 and EP-168 are complete, EP-170 is unblocked, and EP-171 can
-adopt the released API after EP-169 satisfies its remaining repository-local hard dependency. No
-external Keiki release gate remains, 2026-08-01.
+the matching `v0.7.0.0` tag. EP-159, EP-167, and EP-168 are complete; EP-169 is next in registry
+order, EP-170 is unblocked, and EP-171 can adopt the released API after EP-169 satisfies its
+remaining repository-local hard dependency. No external Keiki release gate remains, 2026-08-01.

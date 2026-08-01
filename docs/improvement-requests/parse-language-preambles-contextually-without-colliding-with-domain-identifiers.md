@@ -4,9 +4,9 @@ title: Parse language preambles contextually without colliding with domain ident
 description: >-
   Recognize a Keiro language-version preamble only in its grammar position so legal nested fields,
   strings, and identifiers cannot be mistaken for file-level feature declarations.
-timestamp: 2026-08-01T00:14:56Z
+timestamp: 2026-08-01T16:29:14Z
 requestId: IR-11
-status: planned
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md
 reviews:
@@ -28,9 +28,12 @@ reviews:
 
 ## Status
 
-Planned as a Keiro 0.6 compatibility blocker under
-[Plan 167](../plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md)
-and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
+**Implemented.** [Plan 167](../plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md)
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md)
+now selects a preamble only from its grammar position before `context` and emits the existing
+structured feature diagnostics from their owning productions. The version-1 and version-2
+collision fixtures check and scaffold successfully, duplicate and misplaced real preambles retain
+their exact lines, and the complete 427-example DSL suite passes.
 
 ## Context
 
