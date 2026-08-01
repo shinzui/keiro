@@ -372,9 +372,12 @@ bound IDs also add `mmzk-typeid`.
 For each version-2 aggregate, generated ownership adds an `Expressions` module
 with stable typed guard/write functions and a `Transducer` module that assembles
 the declared command, predicate, ordered writes, emits, target, and transition
-mode. Generated ownership is the default; event-field constructors remain
-create-once hooks, but no hand-owned module can replace a generated guard or
-write.
+mode. Generated ownership is the default. An event declared as
+`fields(Command)` is also generated-owned: after checking that it names the
+transition's command and is a total type-identical copy, the transducer builds
+the event term directly. Wire aliases remain codec policy and do not create a
+runtime callback. Only events with explicit fields retain a create-once output
+hook because their value transformation is not expressed by the DSL.
 
 Use `implementation hole` on a transition whose predicate or updates cannot be
 expressed by the scalar language:
@@ -401,6 +404,47 @@ are checked through the conservative verifier from
 `UnverifiedOpaque` rather than being reported as verified. Version-1
 whole-transducer Holes are unchanged. Migration to version 2 is manual because
 the scaffolder never overwrites or claims to translate consumer behavior.
+
+Keiki 0.7 applies the same conservative rule when a predicate crosses a
+one-way generated projection. The machine still steps and replays with that
+projection; only the symbolic proof is downgraded to `UnverifiedOpaque`.
+Provide an exact projection with a reverse witness when a `Verified*` result is
+required, and never treat the downgrade as either a runtime failure or proof.
+
+## Complete finite behavior obligations
+
+For a validated spec or service workspace, inspect the finite witness inventory
+before compiling consumer code:
+
+```bash
+cabal run keiro-dsl -- behavior-obligations service.keiro --format=json
+```
+
+The `keiro-dsl/behavior-obligations/1` report includes every live transition
+from a live-reachable state, every reachable state/command rejection cell, and
+every replay-only transition. It includes terminal-state cells, owning workspace
+members, stable semantic keys, evidence ownership, and conservative guard
+coverage. It deliberately makes no claim about which Haskell witnesses are
+filled.
+
+Scaffolding generates an aggregate-specific `BehaviorContract` and creates a
+separate create-once `BehaviorHoles.hs`. Fill its typed `LiveWitness` and
+`ReplayWitness` rows with real histories, commands, exact events, or structured
+rejection expectations. Re-scaffolding never parses or overwrites that file; it
+reports newly required and removed keys and prints paste-ready `Pending` rows.
+
+The consumer-compiled `keiro/behavior-conformance/1` report reconciles required,
+filled, pending, missing, duplicate, stale, failed, verified, and unverified
+keys. It decodes witness history through the generated codec, checks exact
+forward edge attribution, and replays decoded emissions to compare the final
+vertex and every register. Replay-only witnesses must attribute the complete
+observed chunk to the declared replay-only edge. An accepted empty emission is
+a `NoOp` only when the vertex and all registers are unchanged.
+
+The default completeness gate fails pending, missing, duplicate, stale, or
+behaviorally false evidence while keeping honest Hole, guard-unknown, and
+one-way-projection surfaces under `unverified`. Use `--fail-on-unverified` only
+when that stronger proof policy is intentional.
 
 The scaffolder plans the complete write before touching disk. It refuses
 invalid specs, module-path/case-fold collisions, scaffold-unsafe identifiers,

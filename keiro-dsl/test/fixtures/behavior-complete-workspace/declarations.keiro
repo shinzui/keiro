@@ -1,0 +1,16 @@
+language keiro-dsl 2
+context behavior-complete
+
+id RequestId prefix=req
+
+mapped structural record StartPayload {
+  haskell package=keiro-dsl module=BehaviorComplete.Domain type=StartPayload
+  binding = "BehaviorComplete.Bindings.startPayloadBinding"
+  binding-version = "1"
+  canonical-type = "behavior-complete.StartPayload.v1"
+  fixtures = "BehaviorComplete.Bindings.startPayloadCases"
+  wire object constructor=StartPayload unknown-fields=reject {
+    label as "display_label" : Text required
+    note as "optional_note" : Optional Text optional on-missing=null
+  }
+}

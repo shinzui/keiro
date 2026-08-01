@@ -13,12 +13,12 @@ module Generated.AggregateScalarExpressions.ScalarAccount.Transducer
   ) where
 
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
-import AggregateScalarExpressions.ScalarAccount.Holes qualified as Holes
 import Data.Text (Text)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer)
 import Keiki.Core qualified as K
 import Keiki.Symbolic qualified as S
+import AggregateScalarExpressions.ScalarAccount.Holes qualified as Holes
 import Generated.AggregateScalarExpressions.ScalarAccount.Expressions qualified as Expressions
 import Data.Text qualified as T
 import Keiki.Builder ((=:))
@@ -45,12 +45,24 @@ scalarAccountTransducer =
         B.slot @"requestId" =: Expressions.transition1OpenAdjustWriteRequestId d
         B.slot @"openedAt" =: Expressions.transition1OpenAdjustWriteOpenedAt d
         B.slot @"limits" =: Expressions.transition1OpenAdjustWriteLimits d
-        B.emit wireAdjusted (Holes.transition1OpenAdjustOutput1Adjusted d)
+        B.emit wireAdjusted (AdjustedTermFields
+          { balance = d.balance
+          , requested = d.requested
+          , machine = d.machine
+          , label = d.label
+          , active = d.active
+          , mode = d.mode
+          , requestId = d.requestId
+          , observedAt = d.observedAt
+          , limits = d.limits
+          })
         B.goto ScalarAccountReviewed
     B.from ScalarAccountReviewed do
       B.onCmd inCtorClose $ \d -> B.do
         Holes.transition2ReviewedCloseHole d
-        B.emit wireClosedEvent (Holes.transition2ReviewedCloseOutput1ClosedEvent d)
+        B.emit wireClosedEvent (ClosedEventTermFields
+          { balance = d.balance
+          })
         B.goto ScalarAccountClosed
  where
   isTerminal = \case
@@ -58,7 +70,7 @@ scalarAccountTransducer =
     _ -> False
 
 scalarAccountFoldFingerprint :: Text
-scalarAccountFoldFingerprint = T.intercalate "|" ("dec0c7c5688740a8" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
+scalarAccountFoldFingerprint = T.intercalate "|" ("ba4b2860edd1844b" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

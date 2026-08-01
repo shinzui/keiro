@@ -16,6 +16,7 @@ import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
@@ -29,7 +30,8 @@ data ScaffoldRecord = ScaffoldRecord
     recSourceLanguage :: !SourceLanguage,
     recFiles :: ![(ModuleKind, FilePath)],
     recMappings :: ![MappingIdentity],
-    recBindingObligations :: ![BindingHole]
+    recBindingObligations :: ![BindingHole],
+    recBehaviorRequirements :: ![BehaviorRecordRow]
   }
   deriving stock (Eq, Show)
 
@@ -45,6 +47,7 @@ renderRecord record =
       <> map renderFile (recFiles record)
       <> map renderMapping (recMappings record)
       <> map renderBindingObligation (recBindingObligations record)
+      <> map renderBehaviorRequirement (recBehaviorRequirements record)
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
     renderFile (Generated, path) = "generated " <> T.pack path
@@ -53,6 +56,8 @@ renderRecord record =
       mappingRowPrefix mapping <> Text.decodeUtf8 (BL.toStrict (Aeson.encode mapping))
     renderBindingObligation obligation =
       "binding " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode obligation))
+    renderBehaviorRequirement requirement =
+      "behavior " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode requirement))
 
 -- | Parse a v1 record. The version header and the three required fields must
 -- be present exactly once. Unknown lines are ignored for forward compatibility;
@@ -70,7 +75,8 @@ parseRecord contents = case T.lines contents of
         nominalMappings <- traverse (parseMapping "nominal-mapping ") (filter ("nominal-mapping " `T.isPrefixOf`) rows)
         let mappings = ordinaryMappings <> nominalMappings
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
-        if hasDuplicateMappingNames mappings || hasDuplicateBindingObligations bindingEntries
+        behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
+        if hasDuplicateMappingNames mappings || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries
           then Nothing
           else
             pure
@@ -81,7 +87,8 @@ parseRecord contents = case T.lines contents of
                   recSourceLanguage = sourceLanguage,
                   recFiles = files,
                   recMappings = mappings,
-                  recBindingObligations = bindingEntries
+                  recBindingObligations = bindingEntries,
+                  recBehaviorRequirements = behaviorEntries
                 }
   _ -> Nothing
   where
@@ -104,6 +111,9 @@ parseRecord contents = case T.lines contents of
     parseBindingObligation row = do
       payload <- T.stripPrefix "binding " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseBehaviorRequirement row = do
+      payload <- T.stripPrefix "behavior " row
+      Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseSourceLanguage rows = case filter ("source-language " `T.isPrefixOf`) rows of
       [] -> Just LegacyUnversioned
       [row] -> do
@@ -123,6 +133,9 @@ parseRecord contents = case T.lines contents of
         holeKind hole,
         holePath hole
       )
+    hasDuplicateBehaviorRequirements requirements =
+      let keys = map behaviorRecordKey requirements
+       in length keys /= length (nub keys)
 
 recordFileName :: Text -> FilePath
 recordFileName context = "keiro-dsl-scaffold-record." <> T.unpack context <> ".txt"

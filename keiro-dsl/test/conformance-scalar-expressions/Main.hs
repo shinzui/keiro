@@ -9,6 +9,8 @@ import Control.Monad (forM, forM_, unless)
 import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), secondsToDiffTime)
+import AggregateScalarExpressions.ScalarAccount.BehaviorHoles (behaviorWitnesses)
+import Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract qualified as Behavior
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec)
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
 import Generated.AggregateScalarExpressions.ScalarAccount.EventStream (scalarAccountEventStreamDef)
@@ -30,13 +32,16 @@ main = do
   arithmeticAgreement <- scalarArithmeticAgreement
   repeatedPathAgreement <- repeatedPathUsesOneSymbol
   verificationReport <- scalarAccountPredicateVerifications
+  let behaviorReport = Behavior.behaviorCoverageReport behaviorWitnesses
   let checks =
         harnessAssertions
           <> [ ("finite scalar oracle agrees with generated execution", finiteOracleAgreement)
              , ("Natural 2 - 5 is total monus zero", naturalMonusExample)
              , ("Integer/Natural oracle, concrete terms, and symbolic formulas agree", arithmeticAgreement)
-             , ("repeated required scalar paths share one symbolic identity", repeatedPathAgreement)
-             , ("generated guard is verified and opaque Hole remains unverified", verificationReport == expectedVerificationReport)
+             , ("one-way projected scalar paths remain conservatively unverified", repeatedPathAgreement)
+             , ("one-way generated projection and opaque Hole remain unverified", verificationReport == expectedVerificationReport)
+             , ("Keiki 0.7 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
+             , ("generated behavior contract reconciles its create-once pending rows", length (Behavior.reportPending behaviorReport) == 6 && null (Behavior.reportMissing behaviorReport))
              , ("Hole envelope preserves declared event and target", holeEnvelopeAgreement)
              , ("encoded replay and full replay after snapshot invalidation agree", fullReplayAgreement)
              , ("Hole fold version participates in snapshot identity", snapshotFingerprintAgreement)
@@ -47,7 +52,7 @@ main = do
 
 expectedVerificationReport :: [(T.Text, BehaviorOwnership, S.PredicateVerification)]
 expectedVerificationReport =
-  [ ("transition1OpenAdjust", GeneratedOwned, S.VerifiedSatisfiable)
+  [ ("transition1OpenAdjust", GeneratedOwned, S.UnverifiedOpaque)
   , ("transition2ReviewedClose", HoleOwned, S.UnverifiedOpaque)
   ]
 
@@ -175,7 +180,7 @@ repeatedPathUsesOneSymbol = do
           (#limits :: K.Index (RegFieldsOf AdjustData) Domain.Limits)
       contradiction :: K.HsPred ScalarAccountRegs ScalarAccountCommand
       contradiction = K.PAnd (K.PCmp K.CmpGe projected (K.lit 1)) (K.PCmp K.CmpLt projected (K.lit 1))
-  (== S.VerifiedUnsatisfiable) <$> S.verifyPredicate contradiction
+  (== S.UnverifiedOpaque) <$> S.verifyPredicate contradiction
 
 holeEnvelopeAgreement :: Bool
 holeEnvelopeAgreement =
@@ -188,6 +193,33 @@ holeEnvelopeAgreement =
             && closedRegisters K.! #balance == registers K.! #balance
             && events == [ClosedEvent (ClosedEventData 77)]
         Nothing -> False
+
+detailedAttributionAgreement :: Bool
+detailedAttributionAgreement =
+  case K.stepDetailedEither scalarAccountTransducer initialPair adjustCommand of
+    Left _ -> False
+    Right success ->
+      K.stepSuccessEdge success == expectedEdge
+        && K.stepSuccessMode success == K.Live
+        && K.stepSuccessState success == ScalarAccountReviewed
+        && case K.applyEventsDetailedEither scalarAccountTransducer initialPair (K.stepSuccessOutputs success) of
+          Left _ -> False
+          Right replay ->
+            K.replaySuccessState replay == ScalarAccountReviewed
+              && K.replaySuccessTrace replay
+                == [ K.ReplayAttribution
+                       { K.replayAttributionEdge = expectedEdge
+                       , K.replayAttributionMode = K.Live
+                       , K.replayAttributionSource = ScalarAccountOpen
+                       , K.replayAttributionTarget = ScalarAccountReviewed
+                       , K.replayAttributionSpan = K.ReplayEventSpan 0 1
+                       , K.replayAttributionEventCount = 1
+                       }
+                   ]
+ where
+  initialPair = (ScalarAccountOpen, initialScalarAccountRegs)
+  adjustCommand = mkAdjust 3 2 False commandTime 1
+  expectedEdge = K.EdgeRef ScalarAccountOpen 0
 
 fullReplayAgreement :: Bool
 fullReplayAgreement =

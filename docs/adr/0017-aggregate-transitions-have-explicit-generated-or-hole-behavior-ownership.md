@@ -50,7 +50,20 @@ module and one generated `Transducer` module per version-2 aggregate.
 assembled machine, its fold fingerprint, `BehaviorOwnership`, and a labelled
 aggregate-specific `...PredicateVerifications` action. That action runs the
 conservative verifier from `mori://shinzui/keiki/packages/keiki` over each
-assembled edge; an opaque predicate reports `UnverifiedOpaque`.
+assembled edge; an opaque predicate reports `UnverifiedOpaque`. Keiki 0.7 also
+classifies predicates that cross a one-way projection as `UnverifiedOpaque`.
+This changes proof strength only: concrete stepping and replay still execute
+the same generated term. An exact projection with a reverse witness is required
+when policy needs a `Verified*` classification.
+
+Event output has the same single-authority rule. A version-2 event declared as
+`fields(Command)` is generated-owned only after checking that it names the
+transition command and is a total, selector-preserving, type-identical copy.
+The generated transducer constructs that event term directly, including
+nominal, optional, `Time`, `Natural`, and structurally projected fields; wire
+aliases remain codec policy. Explicit event fields retain a hand-owned output
+hook because their value transformation is not represented in the language.
+Cross-command identity declarations fail before scaffolding.
 
 The source may instead select `implementation hole` for one transition. A Hole-owned transition
 does not admit DSL `guard` or `write` clauses: two simultaneous behavior authorities are invalid.
@@ -71,11 +84,23 @@ allowed as escape-hatch behavior but are reported as opaque or unverified, never
 symbolic proof.
 
 The create-once Holes module exposes one stable function for each Hole-owned
-transition and a sibling `...HoleFoldVersion` value. Event-field output hooks
-remain hand-owned for both ownership modes, but the generated transducer calls
-them inside its declared emit envelope. A Hole function cannot return an
-alternative target or event kind because those choices are absent from its
-interface.
+transition and a sibling `...HoleFoldVersion` value. Explicit event-field output
+hooks remain hand-owned for both ownership modes, but the generated transducer
+calls them inside its declared emit envelope. Generated `fields(Command)`
+outputs expose no callback; a stale identity function is reported as obsolete
+and cannot affect execution. A Hole function cannot return an alternative
+target or event kind because those choices are absent from its interface.
+
+Each aggregate also has a generated behavior contract and a separate
+create-once `BehaviorHoles` witness list. Its finite inventory covers every
+live transition from a live-reachable state, every reachable state/command cell
+with no live transition, and every replay-only transition. Compiled witnesses
+must identify the exact detailed forward or replay edge, cross the generated
+codec, and agree on final vertex and all registers. Generated ownership is
+labelled source-conformant; Hole ownership remains finite witnessed evidence;
+version-1 whole-transducer Holes remain runtime-witness-only. Unknown guard or
+projection proof is retained as unverified and is only failing under the
+explicit stricter gate.
 
 Changing ownership is a semantic and replay-affecting change. Diff reports the old and new owner,
 the fold fingerprint changes, and snapshot compatibility misses. Migration from an existing
@@ -88,6 +113,8 @@ that behavior has been translated automatically.
 - Users can always implement a domain rule or update even when the public expression language
   rejects it.
 - A generated-owned expression is authoritative because no Hole seam can replace it.
+- A checked `fields(Command)` event copy is equally authoritative and has no
+  hand-owned identity callback.
 - Hole-owned behavior is honest about its cost: source-level type/capability checks, automatic
   semantic diffing, and symbolic proof are available only to the extent represented by its Keiki
   terms; manual fold versioning remains mandatory.
@@ -98,6 +125,9 @@ that behavior has been translated automatically.
   verification, reuse, or maintenance benefit to justify permanent language and dependency surface.
 - Released version 1 and its create-once whole-transducer Holes remain unchanged. The ownership
   contract lands only under a successor language version with explicit migration guidance.
+- Complete finite witness accounting closes initial-state-only conformance
+  gaps without claiming universal proof over command values, histories, or
+  register valuations.
 
 
 ## Alternatives considered

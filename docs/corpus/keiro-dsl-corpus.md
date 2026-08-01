@@ -4,7 +4,8 @@ Worked examples of the typed-spec toolchain: the curated `.keiro` fixtures below
 conformance component, and every mutation/gate script. Paths are relative to `keiro-dsl/` in the
 keiro repository. Start with the valid fixture for a surface, then use its negative or diff
 variants to see the exact guardrails. The test suite separately enforces that all ordinary
-fixtures declare `language keiro-dsl 1` and that only the named source-version fixtures differ.
+fixtures use the frozen version-1 contract unless they are explicitly listed as successor-language
+or source-version cases below.
 
 ## Source-language contract fixtures
 
@@ -26,12 +27,15 @@ automation remains deferred to
 ## Core fixture inventory
 
 This curated inventory covers the primary feature, negative, and evolution surfaces. Every path
-below resolves; the complete machine-checked fixture set contains 218 `.keiro` files as of
-2026-07-31.
+below resolves; the complete machine-checked fixture set contains 232 `.keiro` files as of
+2026-08-01. Successor-language fixtures are named explicitly and remain separate from the frozen
+version-1 corpus.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
 | `test/fixtures/aggregate-bad-refs.keiro` | negative aggregate register, command, and write references |
+| `test/fixtures/behavior-complete.keiro` | version-2 complete finite behavior inventory: later/terminal cells, guarded siblings, no-op, generated command identity, and replay-only twin |
+| `test/fixtures/behavior-complete-workspace/service.keiro-workspace` | the same behavior inventory split across attributable workspace members |
 | `test/fixtures/contract-bump-fieldadd.keiro` | additive contract field with schema-version bump |
 | `test/fixtures/contract-discriminator.keiro` | contract discriminator evolution |
 | `test/fixtures/contract-eventadd.keiro` | additive contract event evolution |
@@ -155,11 +159,12 @@ below resolves; the complete machine-checked fixture set contains 218 `.keiro` f
 
 ## Compiled conformance and harness components
 
-The 23 current `keiro-dsl-conformance*` Cabal components are all indexed here.
+The 24 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 
 | Component | Proves |
 | --- | --- |
 | `test/conformance/` (`keiro-dsl-conformance`) | canonical generated aggregate plus filled transducer, replay validation, codec round-trips, and behavior |
+| `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.7 attribution; 13 verify and one conservative guard surface remains unverified |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |
 | `test/conformance-skeletons/` (`keiro-dsl-conformance-skeletons`) | every distinct `new <kind>` starter scaffolds to compiling Haskell |
 | `test/conformance-coldstart/` (`keiro-dsl-conformance-coldstart`) | the original fresh-agent aggregate cold-start closes from skill to green harness |
@@ -187,6 +192,7 @@ The 23 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 
 | Script | Shows |
 | --- | --- |
+| `test/behavior-complete-mutation-test.sh` | twelve missing, dishonest, wrong-command, misattributed, codec, register, and generated-output mutations fail exact behavior obligations while an obsolete output hook stays unable to affect execution |
 | `test/mutation-test.sh` | flipping the filled aggregate guard reddens a specific behavior assertion |
 | `test/diff-test.sh` | unsafe evolution is BREAKING while versioned/upcast evolution is ADDITIVE |
 | `test/process-mutation-test.sh` | changing the timer rejection inversion reddens its process fact |
@@ -200,6 +206,8 @@ and are pinned byte-for-byte where the suite supports regeneration. Hand-owned m
 to those trees are the worked fills. The most useful starting points are:
 
 - `test/conformance/HospitalCapacity/Reservation/Holes.hs` for a keiki transducer.
+- `test/conformance-behavior-complete/BehaviorComplete/Journey/BehaviorHoles.hs` for a complete
+  typed behavior-witness list spanning later states, terminal rejections, and replay-only history.
 - `test/conformance-process-full/SurgeDemo/SurgeFlow/Manager.hs` for category-safe process
   streams and process-manager assembly.
 - `test/conformance-router-full/IncidentPaging/PagingRouter/RouterValue.hs` for a stable

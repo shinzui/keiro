@@ -31,6 +31,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType qualified as Nominal
@@ -321,6 +322,9 @@ data DiagnosticCode
   | NominalInitialChanged
   | NominalRepresentationChanged
   | NominalIdDecoderTightened
+  | -- ExecPlan 159 / IR-13: @fields(Command)@ output authority.
+    EventOutputCommandMismatch
+  | AggregateEventlessStateChange
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -2034,6 +2038,7 @@ validateAggregate spec agg =
     [ duplicateMembers,
       declaredRefs,
       eventBodyRefs,
+      outputMappingRules,
       registerInitialScope,
       reachability,
       terminalNoOutgoing,
@@ -2043,7 +2048,8 @@ validateAggregate spec agg =
       statusMapTotality,
       evolutionRules,
       snapshotRules,
-      replayOnlyRules
+      replayOnlyRules,
+      eventlessStateChangeRules
     ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -2085,6 +2091,22 @@ validateAggregate spec agg =
       | e <- aggEvents agg,
         EventFromCommand command <- [evBody e],
         command `Set.notMember` commandNames
+      ]
+
+    outputMappingRules =
+      [ mkErr (locLine (tLoc transition)) EventOutputCommandMismatch $
+          "transition '"
+            <> tSource transition
+            <> " -- "
+            <> consuming
+            <> "' emits event '"
+            <> eventName
+            <> "' declared as fields("
+            <> declared
+            <> "); generated identity output is legal only when the transition consumes that same command"
+      | transition <- aggTransitions agg,
+        (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
+        Left OutputCommandMismatch {declaredSourceCommand = declared, consumingTransitionCommand = consuming} <- [eventOutputMapping spec agg transition emitIndex eventName]
       ]
 
     registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)
@@ -2405,6 +2427,24 @@ validateAggregate spec agg =
                    }
                | not (any (\sibling -> tMode sibling == TmLive && tSource sibling == tSource t && tCommand sibling == tCommand t) (aggTransitions agg))
                ]
+
+    eventlessStateChangeRules =
+      [ mkErr (locLine (tLoc transition)) AggregateEventlessStateChange $
+          "transition '"
+            <> tSource transition
+            <> " -- "
+            <> tCommand transition
+            <> "' emits no event but changes "
+            <> changeDescription transition
+            <> "; event-sourced state changes require persisted evidence, while a no-op must keep both vertex and registers unchanged"
+      | transition <- aggTransitions agg,
+        null (tEmits transition),
+        tSource transition /= tGoto transition || not (null (tWrites transition))
+      ]
+    changeDescription transition
+      | tSource transition /= tGoto transition && not (null (tWrites transition)) = "the target vertex and registers"
+      | tSource transition /= tGoto transition = "the target vertex"
+      | otherwise = "registers"
 
 -- | The validator's re-derivation of the live
 -- 'Keiro.PGMQ.Runtime.queueRef' trio: physical queue, dead-letter queue, and

@@ -18,4 +18,5 @@ aggregate Holder
     current Thing = initial
   states Empty Done!
   command Compare { }
-  Empty -- Compare --> guard current == current ; goto Done
+  event Compared = fields(Compare)
+  Empty -- Compare --> guard current == current ; emit Compared ; goto Done

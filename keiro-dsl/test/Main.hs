@@ -19,10 +19,12 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
+import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
@@ -38,7 +40,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, obsoleteGeneratedOutputHooks, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -205,6 +207,9 @@ main = hspec $ do
           [ "language-duplicate.keiro",
             "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v2.keiro",
+            "behavior-complete-workspace/declarations.keiro",
+            "behavior-complete-workspace/journey.keiro",
+            "behavior-complete.keiro",
             "language-future.keiro",
             "language-legacy.keiro",
             "language-malformed.keiro",
@@ -292,12 +297,39 @@ main = hspec $ do
             transducer `shouldSatisfy` T.isInfixOf "B.slot @\"balance\" =: Expressions.transition1OpenAdjustWriteBalance d"
             transducer `shouldSatisfy` T.isInfixOf "scalarAccountPredicateVerifications"
             transducer `shouldSatisfy` T.isInfixOf "S.verifyPredicate predicate"
-            holes `shouldSatisfy` T.isInfixOf "transition1OpenAdjustOutput1Adjusted"
+            transducer `shouldSatisfy` T.isInfixOf "B.emit wireAdjusted (AdjustedTermFields"
+            transducer `shouldSatisfy` T.isInfixOf "balance = d.balance"
+            transducer `shouldSatisfy` (not . T.isInfixOf "transition1OpenAdjustOutput1Adjusted")
+            holes `shouldSatisfy` (not . T.isInfixOf "transition1OpenAdjustOutput1Adjusted")
+            holes `shouldSatisfy` (not . T.isInfixOf "transition2ReviewedCloseOutput1ClosedEvent")
             holes `shouldSatisfy` T.isInfixOf "transition2ReviewedCloseHoleFoldVersion"
             holes `shouldSatisfy` (not . T.isInfixOf "scalarAccountTransducer")
             firewallBreaches modules `shouldBe` []
           _ -> expectationFailure "expected one generated and one Hole scalar transition"
         _ -> expectationFailure "expected one scalar aggregate"
+
+    it "rejects cross-command fields(Command) output before scaffolding" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context output-command-mismatch",
+                "aggregate Account",
+                "  regs",
+                "  states Open Closed!",
+                "  command OpenAccount { accountId:Text }",
+                "  command CloseAccount { accountId:Text }",
+                "  event AccountOpened = fields(OpenAccount)",
+                "  Open -- CloseAccount --> emit AccountOpened ; goto Closed"
+              ]
+      spec <- parseInlineSpec "<output-command-mismatch>" source
+      errorCodes spec `shouldContain` [EventOutputCommandMismatch]
+      case [aggregate | NAggregate aggregate <- specNodes spec] of
+        [aggregate] -> case aggTransitions aggregate of
+          [transition] ->
+            eventOutputMapping spec aggregate transition 1 "AccountOpened"
+              `shouldBe` Left (OutputCommandMismatch "OpenAccount" "CloseAccount" "AccountOpened")
+          _ -> expectationFailure "expected one transition"
+        _ -> expectationFailure "expected one aggregate"
 
     it "rejects Int arithmetic and mixed numeric operands before scaffolding" $ do
       let source =
@@ -455,6 +487,161 @@ main = hspec $ do
         committed <- readTestText ("test/conformance-scalar-expressions/" <> modulePath generatedModule)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
 
+  describe "behavior obligations" $ do
+    it "inventories every live-reachable cell, guarded edge, terminal rejection, and replay edge" $ do
+      spec <- specOf "test/fixtures/behavior-complete.keiro"
+      requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
+      length requirements `shouldBe` 14
+      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.LiveTransition] `shouldBe` 5
+      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection] `shouldBe` 8
+      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.ReplayTransition] `shouldBe` 1
+      [Behavior.requirementSource requirement | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection]
+        `shouldContain` ["Active", "Closed"]
+      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardTotal] `shouldBe` 4
+      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardUnknown] `shouldBe` 1
+      let report = Behavior.BehaviorObligationsReport "behavior-complete.keiro" Nothing requirements
+          encoded = Behavior.encodeBehaviorObligationsJson report
+      encoded `shouldSatisfy` T.isInfixOf "\"schema\":\"keiro-dsl/behavior-obligations/1\""
+      encoded `shouldSatisfy` T.isInfixOf "\"source\":\"Closed\""
+      encoded `shouldSatisfy` T.isInfixOf "\"kind\":\"replay-transition\""
+      encoded `shouldSatisfy` (not . T.isInfixOf "\"filled\"")
+      encoded `shouldSatisfy` (not . T.isInfixOf "\"missing\"")
+
+    it "keeps semantic keys stable across line movement and canonical pretty printing" $ do
+      source <- readTestText "test/fixtures/behavior-complete.keiro"
+      parsed <- case parseSource "behavior-complete.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let original = parsedSpec parsed
+      moved <- parseInlineSpec "behavior-complete-moved.keiro" ("# line movement must not rename witnesses\n\n" <> source)
+      pretty <- parseInlineSpec "behavior-complete-pretty.keiro" (renderSource parsed)
+      let keys spec = fmap (map Behavior.requirementKey) (Behavior.deriveBehaviorRequirements spec)
+      keys moved `shouldBe` keys original
+      keys pretty `shouldBe` keys original
+
+    it "generates direct fields(Command) output and separate create-once pending witnesses" $ do
+      spec <- specOf "test/fixtures/behavior-complete.keiro"
+      aggregate <- case [value | NAggregate value <- specNodes spec] of
+        [value] -> pure value
+        _ -> expectationFailure "expected one behavior-complete aggregate" >> fail "unreachable"
+      let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+          transducer = generatedTextEndingIn "Transducer.hs" modules
+          codec = generatedTextEndingIn "Codec.hs" modules
+          contract = generatedTextEndingIn "BehaviorContract.hs" modules
+          behaviorHoles = case [moduleText value | value <- modules, T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value))] of
+            [value] -> value
+            values -> error ("expected one BehaviorHoles module, got " <> show (length values))
+          ordinaryHoles = case [moduleText value | value <- modules, T.isSuffixOf "/Holes.hs" (T.pack (modulePath value)), not (T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value)))] of
+            [value] -> value
+            values -> error ("expected one aggregate Holes module, got " <> show (length values))
+      transducer `shouldSatisfy` T.isInfixOf "requestId = d.requestId"
+      transducer `shouldSatisfy` T.isInfixOf "observedAt = d.observedAt"
+      transducer `shouldSatisfy` T.isInfixOf "amount = d.amount"
+      transducer `shouldSatisfy` T.isInfixOf "details = d.details"
+      codec `shouldSatisfy` T.isInfixOf "display_label"
+      codec `shouldSatisfy` T.isInfixOf "optional_note"
+      transducer `shouldSatisfy` (not . T.isInfixOf "Output")
+      ordinaryHoles `shouldSatisfy` (not . T.isInfixOf "Output")
+      obsoleteGeneratedOutputHooks spec `shouldContain` [("Journey", "transition1EmptyStartOutput1Started")]
+      contract `shouldSatisfy` T.isInfixOf "keiro/behavior-conformance/1"
+      contract `shouldSatisfy` T.isInfixOf "commandKind command == requirementCommandName requirement"
+      T.count "Pending (BehaviorKey " behaviorHoles `shouldBe` 14
+      behaviorHoles `shouldSatisfy` (not . T.isInfixOf "undefined")
+      behaviorHoles `shouldSatisfy` (not . T.isInfixOf "error")
+
+    it "rejects eventless state or register changes while accepting a true no-op" $ do
+      invalid <-
+        parseInlineSpec "<eventless-change>" $
+          T.unlines
+            [ "language keiro-dsl 2",
+              "context eventless-change",
+              "aggregate Counter",
+              "  regs",
+              "    count Natural = 0",
+              "  states Open Closed!",
+              "  command Tick { count:Natural }",
+              "  Open -- Tick --> write count := cmd.count ; goto Closed"
+            ]
+      errorCodes invalid `shouldContain` [AggregateEventlessStateChange]
+      valid <-
+        parseInlineSpec "<eventless-noop>" $
+          T.unlines
+            [ "language keiro-dsl 2",
+              "context eventless-noop",
+              "aggregate Counter",
+              "  regs",
+              "    count Natural = 0",
+              "  states Open",
+              "  command Tick { count:Natural }",
+              "  Open -- Tick --> goto Open"
+            ]
+      errorCodes valid `shouldBe` []
+
+    it "refuses duplicate semantic behavior identities before scaffolding" $ do
+      duplicate <-
+        parseInlineSpec "<duplicate-behavior>" $
+          T.unlines
+            [ "language keiro-dsl 2",
+              "context duplicate-behavior",
+              "aggregate Counter",
+              "  regs",
+              "  states Open",
+              "  command Tick { amount:Natural }",
+              "  event Ticked = fields(Tick)",
+              "  Open -- Tick --> emit Ticked ; goto Open",
+              "  Open -- Tick --> emit Ticked ; goto Open"
+            ]
+      let isBehaviorRefusal (BehaviorRefusal _) = True
+          isBehaviorRefusal _ = False
+      case planScaffold (defaultContext (specContext duplicate)) duplicate of
+        Left refusals -> refusals `shouldSatisfy` any isBehaviorRefusal
+        Right _ -> expectationFailure "duplicate behavior identity reached a scaffold write set"
+
+    it "round-trips additive single-file and workspace behavior rows with member ownership" $ do
+      spec <- specOf "test/fixtures/behavior-complete.keiro"
+      requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
+      version <- maybe (expectationFailure "language version 2 was not constructible" >> fail "unreachable") pure (languageVersion 2)
+      let rows = Behavior.behaviorRecordRows requirements
+          singleRecord =
+            ScaffoldRecord
+              { recSpecPath = "behavior-complete.keiro",
+                recModuleRoot = "",
+                recLayout = "prefixed",
+                recSourceLanguage = DeclaredLanguage version noLoc,
+                recFiles = [],
+                recMappings = [],
+                recBindingObligations = [],
+                recBehaviorRequirements = rows
+              }
+      T.count "behavior " (renderRecord singleRecord) `shouldBe` 14
+      parseRecord (renderRecord singleRecord) `shouldBe` Just singleRecord
+
+      workspace <- shouldComposeWorkspace "test/fixtures/behavior-complete-workspace/service.keiro-workspace"
+      workspaceRequirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements (wsMergedSpec workspace))
+      let ownedRequirements =
+            map
+              (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate"))
+              workspaceRequirements
+          ownedRows = Behavior.behaviorRecordRows ownedRequirements
+          workspaceRecord =
+            WorkspaceRecord
+              { wrService = wsService workspace,
+                wrManifest = "service.keiro-workspace",
+                wrContext = wsContext workspace,
+                wrModuleRoot = "",
+                wrLayout = "prefixed",
+                wrMembers = map wmPath (wsMembers workspace),
+                wrSourceLanguages = [WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member) | member <- wsMembers workspace],
+                wrModules = [],
+                wrMappings = [],
+                wrBindingObligations = [],
+                wrBehaviorRequirements = ownedRows,
+                wrAdopted = []
+              }
+      map Behavior.behaviorRecordOwner ownedRows `shouldSatisfy` all (== Just "journey.keiro")
+      T.count "behavior " (renderWorkspaceRecord workspaceRecord) `shouldBe` 14
+      parseWorkspaceRecord (renderWorkspaceRecord workspaceRecord) `shouldBe` Just workspaceRecord
+
   describe "nominal consumer types" $ do
     it "resolves every category through one checked registry and explains exact obligations" $ do
       spec <- specOf "test/fixtures/nominal-scalars.keiro"
@@ -543,7 +730,8 @@ main = hspec $ do
                 recSourceLanguage = LegacyUnversioned,
                 recFiles = [],
                 recMappings = consumerMappings plan,
-                recBindingObligations = []
+                recBindingObligations = [],
+                recBehaviorRequirements = []
               }
           encoded = renderRecord record
           workspaceRecord =
@@ -2862,6 +3050,7 @@ main = hspec $ do
         reportStale report `shouldBe` []
         renderScaffoldReport report `shouldSatisfy` all (not . T.isPrefixOf "stale:")
         contents <- TIO.readFile (out </> recordFileName (specContext spec))
+        requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
         let expected =
               ScaffoldRecord
                 { recSpecPath = "counter.keiro",
@@ -2870,7 +3059,8 @@ main = hspec $ do
                   recSourceLanguage = LegacyUnversioned,
                   recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report],
                   recMappings = [],
-                  recBindingObligations = []
+                  recBindingObligations = [],
+                  recBehaviorRequirements = Behavior.behaviorRecordRows requirements
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines contents))
@@ -4103,7 +4293,7 @@ generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m
   [] -> ""
 
 holeTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
-holeTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == HoleStub, suffix `T.isSuffixOf` T.pack (modulePath m)] of
+holeTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == HoleStub, suffix `T.isSuffixOf` T.pack (modulePath m), not ("BehaviorHoles.hs" `T.isSuffixOf` T.pack (modulePath m))] of
   contents : _ -> contents
   [] -> ""
 
@@ -4625,6 +4815,7 @@ sampleWorkspaceRecord workspace =
         ],
       wrMappings = consumerMappings (consumerPlan (wsMergedSpec workspace)),
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
+      wrBehaviorRequirements = [],
       wrAdopted =
         [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-scaffold-record.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing

@@ -1,0 +1,58 @@
+language keiro-dsl 2
+context behavior-complete
+
+aggregate Journey
+  regs
+    lastAmount Natural = 0
+  states Empty Active Closed!
+
+  command Start {
+    requestId:RequestId observedAt:Time amount:Natural
+    details:StartPayload
+  }
+  command Decide { amount:Natural }
+  command Ping { token:Bool }
+  command Retire { amount:Natural }
+
+  event Started = fields(Start)
+  event DecisionRecorded = fields(Decide)
+  event Retired = fields(Retire)
+  event RetirementAudited = fields(Retire)
+
+  Empty -- Start -->
+    write lastAmount := cmd.amount
+    emit Started
+    goto Active
+
+  Active -- Decide -->
+    guard cmd.amount <= 5
+    write lastAmount := cmd.amount
+    emit DecisionRecorded
+    goto Active
+
+  Active -- Decide -->
+    guard cmd.amount > 5
+    write lastAmount := cmd.amount
+    emit DecisionRecorded
+    goto Active
+
+  Active -- Ping -->
+    goto Active
+
+  Active -- Retire -->
+    guard cmd.amount > 0
+    write lastAmount := cmd.amount
+    emit Retired
+    emit RetirementAudited
+    goto Closed
+
+  replay-only Active -- Retire -->
+    guard cmd.amount <= 0
+    write lastAmount := cmd.amount
+    emit Retired
+    emit RetirementAudited
+    goto Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="behavior-complete-v1"

@@ -6,6 +6,47 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **keiro-core**, **keiro**, **keiro-dsl**: require Keiki 0.7
+  (`keiki >=0.7 && <0.8`, and `keiki-codec-json >=0.7 && <0.8` where used).
+  Keiki now classifies a predicate that crosses a one-way generated projection
+  conservatively: symbolic verification may return `UnverifiedOpaque` where an
+  earlier release reported a verified result. Runtime command execution and
+  replay behavior are unchanged. Consumers that require a proof-strength
+  `Verified*` result must provide an exact projection with its reverse witness;
+  conformance tooling must preserve the unverified classification instead of
+  relabelling it as source-proved.
+
+- **keiro-dsl**: `DiagnosticCode` gains the append-only
+  `EventOutputCommandMismatch` and `AggregateEventlessStateChange`
+  constructors. Exhaustive matches must be extended. Version-2 transitions
+  that change vertex or registers without emitting an event are now rejected;
+  an empty accepted edge is legal only as a true no-op.
+
+### New Features
+
+- **keiro-dsl**: generates version-2 `fields(Command)` event values directly
+  from a checked total identity mapping. Direct, aliased-wire, optional,
+  nominal, `Time`, `Natural`, and structural fields no longer pass through a
+  create-once identity-copy output hook. Explicit event fields remain
+  hand-owned, while obsolete generated-identity functions are reported and
+  cannot affect runtime execution.
+- **keiro-dsl**: adds complete finite aggregate behavior accounting.
+  `behavior-obligations FILE --format=text|json` inventories every live
+  transition from a live-reachable state, every reachable rejection cell, and
+  every replay-only transition for single specs and workspaces. Additive
+  scaffold records retain stable semantic keys and owning members without
+  claiming consumer fill status.
+- **keiro-dsl**: generates a typed `BehaviorContract` and create-once
+  `BehaviorHoles` witness list per version-2 aggregate. The compiled
+  `keiro/behavior-conformance/1` report reconciles required, filled, pending,
+  missing, duplicate, stale, failed, verified, and unverified keys; exact
+  Keiki 0.7 edge attribution, codec-crossing replay, event values, final vertex,
+  and every register are checked. Completeness fails by default, while honest
+  Hole/unknown proof surfaces are separately gateable with
+  `--fail-on-unverified`.
+
 ## 0.6.0.0 — 2026-07-31
 
 All published packages move to 0.6.0.0 together. The cycle is dominated by

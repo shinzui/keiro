@@ -53,6 +53,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
@@ -66,6 +67,7 @@ import Keiro.Dsl.ScaffoldRun
     Refusal (..),
     StaleModule (..),
     WriteDisposition (..),
+    behaviorDrift,
     constraintPlan,
     mappingDrift,
     missingGeneratedBanners,
@@ -304,6 +306,9 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrMappingDrift :: ![MappingDrift],
     wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift],
     wsrNewHoles :: ![BindingHole],
+    wsrAddedBehavior :: ![BehaviorRecordRow],
+    wsrRemovedBehavior :: ![BehaviorRecordRow],
+    wsrObsoleteOutputHooks :: ![(Text, Text)],
     -- | Present only on the run that adopted pre-workspace scaffold output.
     wsrMigration :: !(Maybe MigrationReport)
   }
@@ -348,6 +353,8 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
           languageDrift = workspaceSourceLanguageDrift workspace previous
           currentObligations = either (const []) id (bindingHoles merged)
           newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
+          currentBehavior = workspaceBehaviorRows workspace
+          (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . wrBehaviorRequirements) previous
       createDirectoryIfMissing True out
       dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
       TIO.writeFile buildManifestPath (renderManifest (T.pack manifestName) modules merged)
@@ -386,6 +393,9 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
               wsrMappingDrift = drift,
               wsrSourceLanguageDrift = languageDrift,
               wsrNewHoles = newHoles,
+              wsrAddedBehavior = addedBehavior,
+              wsrRemovedBehavior = removedBehavior,
+              wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
               wsrMigration = migration
             }
   where
@@ -429,12 +439,19 @@ currentWorkspaceRecord plan adopted =
         ],
       wrMappings = consumerMappings (consumerPlan merged),
       wrBindingObligations = either (const []) id (bindingHoles merged),
+      wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrAdopted = adopted
     }
   where
     workspace = wpWorkspace plan
     merged = wsMergedSpec workspace
     ctx = wpContext plan
+
+workspaceBehaviorRows :: WorkspaceSpec -> [BehaviorRecordRow]
+workspaceBehaviorRows workspace =
+  either (const []) (behaviorRecordRows . map attribute) (deriveBehaviorRequirements (wsMergedSpec workspace))
+  where
+    attribute = attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate")
 
 workspaceSourceLanguageDrift :: WorkspaceSpec -> Maybe WorkspaceRecord -> [WorkspaceSourceLanguageDrift]
 workspaceSourceLanguageDrift workspace previous =
@@ -532,6 +549,8 @@ renderWorkspaceScaffoldReport report =
     <> newHolesSection
     <> mappingDriftSection
     <> sourceLanguageDriftSection
+    <> behaviorDriftSection
+    <> obsoleteOutputSection
     <> ownershipSection
     <> staleSection
   where
@@ -612,6 +631,29 @@ renderWorkspaceScaffoldReport report =
                  <> sourceFormText (wsldCurrent drift)
              | drift <- drifts
              ]
+    behaviorDriftSection =
+      renderBehaviorRows "new behavior obligations" (wsrAddedBehavior report)
+        <> renderBehaviorRows "removed behavior obligations (consumer rows become stale)" (wsrRemovedBehavior report)
+    renderBehaviorRows _ [] = []
+    renderBehaviorRows label rows =
+      [label <> ": " <> tshow (length rows)] <> concatMap behaviorLines rows
+    behaviorLines row =
+      [ "  "
+          <> behaviorRecordAggregate row
+          <> ":"
+          <> behaviorRecordSource row
+          <> " -- "
+          <> behaviorRecordCommand row
+          <> "  "
+          <> unBehaviorKey (behaviorRecordKey row)
+          <> maybe "" (("  owner=" <>) . T.pack) (behaviorRecordOwner row),
+        "    Pending (BehaviorKey " <> tshow (unBehaviorKey (behaviorRecordKey row)) <> ")"
+      ]
+    obsoleteOutputSection = case wsrObsoleteOutputHooks report of
+      [] -> []
+      hooks ->
+        ["obsolete identity-copy output hooks (if still present, they are unused and may be removed):"]
+          <> ["  " <> aggregate <> ".Holes." <> hook | (aggregate, hook) <- hooks]
     ownershipSection = case wsrOwnershipMoves report of
       [] -> []
       moves ->

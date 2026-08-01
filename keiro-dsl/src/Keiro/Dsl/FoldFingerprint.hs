@@ -16,6 +16,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
@@ -39,7 +40,7 @@ aggregateFoldSurface spec aggregate =
         ++ map (registerSegment symbols) (aggRegs aggregate)
         ++ mappedRegisterSegments
         ++ nominalSegments
-        ++ map transitionSegment (aggTransitions aggregate)
+        ++ map (transitionSegment spec aggregate) (aggTransitions aggregate)
         ++ map ruleSegment referencedRules
     )
   where
@@ -161,8 +162,8 @@ escapeText = T.concatMap $ \case
   '\r' -> "\\r"
   character -> T.singleton character
 
-transitionSegment :: Transition -> Text
-transitionSegment transition =
+transitionSegment :: Spec -> Aggregate -> Transition -> Text
+transitionSegment spec aggregate transition =
   T.intercalate
     "|"
     ( [ "transition:" <> renderMode (tMode transition),
@@ -172,12 +173,20 @@ transitionSegment transition =
         ++ implementationSegment
         ++ [ "guard=" <> maybe "" renderExpr (tGuard transition),
              "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition)),
-             "emits=" <> T.intercalate "," (tEmits transition),
-             "goto=" <> tGoto transition
+             "emits=" <> T.intercalate "," (tEmits transition)
            ]
+        ++ outputOwnershipSegment
+        ++ ["goto=" <> tGoto transition]
     )
   where
     renderWrite (registerName, expression) = registerName <> ":=" <> renderExpr expression
+    outputSegment emitIndex eventName = case eventOutputMapping spec aggregate transition emitIndex eventName of
+      Right mapping -> eventName <> "=" <> eventOutputCanonical mapping
+      Left problem -> eventName <> "=invalid:" <> T.pack (show problem)
+    outputOwnershipSegment = case tImplementation transition of
+      LegacyHoleImplementation -> []
+      GeneratedImplementation -> ["outputs=" <> T.intercalate "," [outputSegment emitIndex eventName | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)]]
+      HoleImplementation -> ["outputs=" <> T.intercalate "," [outputSegment emitIndex eventName | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)]]
     implementationSegment = case tImplementation transition of
       LegacyHoleImplementation -> []
       GeneratedImplementation -> ["implementation=generated"]

@@ -62,18 +62,22 @@ and mutation tests prove that the generated mapping is the one executed.
   required detailed forward/replay attribution API and the local release tree is packaged as
   `0.7.0.0`; Hackage now publishes `0.7.0.0`, and `v0.7.0.0` resolves to release commit
   `7c5d433ef4455e9e626347f89cb3a416bad62e72` with the same API.
-- [ ] Milestone 1: add one checked event-output mapping model and generate total
+- [x] 2026-08-01: Milestone 1 added one checked event-output mapping model and generated total
   `fields(Command)` mappings without create-once output hooks; then verify the authoritative
   version-2 transducer seam from Plan 161, adopt released Keiki `0.7.0.0`, and integrate its
   detailed-step/detailed-replay attribution API.
-- [ ] Milestone 2: derive versioned live-cell, live-transition, rejection, replay-transition, and
+- [x] 2026-08-01: Milestone 2 derived versioned live-cell, live-transition, rejection, replay-transition, and
   unverified-evidence descriptors and persist them in single-spec and workspace records.
-- [ ] Milestone 3: generate the create-once typed witness surface and migration snippets without
+- [x] 2026-08-01: Milestone 3 generated the create-once typed witness surface and migration snippets without
   parsing, merging, or overwriting consumer Haskell.
-- [ ] Milestone 4: execute live and replay witnesses through the generated codec and authoritative
+- [x] 2026-08-01: Milestone 4 executed live and replay witnesses through the generated codec and authoritative
   transducer, reconcile the runtime report, and introduce the explicit enforcement gate.
-- [ ] Milestone 5: add compiled conformance, mutation, workspace, regeneration, documentation,
-  release, and full-repository validation.
+- [x] 2026-08-01: Milestone 5 added compiled conformance, twelve restoring mutations, workspace
+  and single-spec coverage, regenerated version-2 fixtures, release notes, user documentation,
+  and ADR distillation. The complete fixture reports 14 required and filled rows, 13 verified and
+  one conservatively unverified row, with no pending, missing, duplicate, stale, or failed rows.
+  The 420-example DSL suite, all compiled conformance targets, `cabal build all`, `nix flake
+  check`, and strict validation of all 17 ADRs pass; the opt-in unverified gate fails as intended.
 
 
 ## Surprises & Discoveries
@@ -119,6 +123,31 @@ and mutation tests prove that the generated mapping is the one executed.
   `ReplayEventSpan`, `ReplayAttribution`, `ReplaySuccess`, `applyEventsDetailedEither`, and
   `reconstituteDetailedEither`. Hackage `0.7.0.0` and the matching `v0.7.0.0` source now expose
   those APIs, clearing the former producer and release blocker.
+- 2026-08-01: Keiki 0.7 deliberately classifies a predicate crossing a one-way generated
+  projection as `UnverifiedOpaque`. Concrete stepping and replay are unchanged; only symbolic
+  proof strength is reduced. The generated report must therefore retain that row under
+  `unverified`, and a consumer that requires `Verified*` must provide an exact projection with a
+  reverse witness. This compatibility implication is recorded in both changelogs and user docs.
+- 2026-08-01: `Loc` equality intentionally ignores line numbers, so locating an expected Keiki
+  edge by ordinary equality collapsed same-envelope siblings. Comparing the underlying `unLoc`
+  source row preserves exact `EdgeRef` attribution while semantic obligation keys remain
+  line-independent.
+- 2026-08-01: the older aggregate-wide symbolic harness reports `InversionAmbiguity` for the
+  comprehensive fixture's same-event guarded siblings, while concrete Keiki 0.7 detailed
+  execution correctly attributes each supplied guard witness. The behavior contract consumes the
+  evaluator's concrete attribution instead of weakening the fixture or guessing by target/event.
+- 2026-08-01: adding a second executable to the `keiro-dsl` package made the established
+  `cabal run keiro-dsl` command ambiguous. Packaging the report executable in the fixture's own
+  local package preserves the public CLI command and keeps conformance evidence independently
+  runnable.
+- 2026-08-01: the new eventless-state-change diagnostic exposed four existing legacy fixtures
+  whose transitions changed a state or register without persisting an event. Giving those
+  fixtures explicit events retained their intended guard/deprecation coverage and made their
+  histories replayable instead of weakening the new invariant.
+- 2026-08-01: the tree formatter already excluded captured conformance trees, but the pre-commit
+  hook passed newly staged fixture paths directly and bypassed that exclusion. Mirroring the same
+  path filter in `nix/pre-commit.nix` keeps generated and create-once conformance evidence
+  byte-stable while ordinary source still passes the formatting gate.
 
 
 ## Decision Log
@@ -249,19 +278,42 @@ and mutation tests prove that the generated mapping is the one executed.
   changing bounds; never pin a sibling checkout.
   Date: 2026-08-01
 
+- Decision: Keep proof-strength downgrades from one-way projections visible as unverified while
+  leaving the default finite-completeness gate green.
+  Rationale: Keiki 0.7's conservative result correctly refuses a symbolic claim without changing
+  concrete behavior. Treating it as failure would conflate proof policy with runtime conformance;
+  relabelling it verified would be unsound. `--fail-on-unverified` is the explicit stronger policy.
+  Date: 2026-08-01
+
+- Decision: Place the compiled behavior-report executable in the comprehensive fixture package,
+  not as a second executable in `keiro-dsl`.
+  Rationale: this retains the unambiguous and documented `cabal run keiro-dsl -- ...` interface
+  while still exposing a first-class runnable JSON report for acceptance and mutation tests.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
-The 2026-07-31 audit changed planning only. It removed an impossible forward requirement for
-replay-only edges, replaced unverifiable rejection text with released structured outcomes, split
-static and compiled evidence at the correct boundary, and removed automatic `Holes.hs` merging.
-It also made the Plan 161 ownership dependency explicit and added the missing Keiki edge-
-attribution prerequisite.
+All five milestones are implemented. The checked output model removes generated
+`fields(Command)` identity callbacks, Keiki `0.7.0.0` supplies authoritative detailed attribution,
+and static obligations are derived and persisted without inspecting Haskell. The comprehensive
+fixture has 14 required and filled witnesses, with zero pending, missing, duplicate, stale, or
+failed keys. Thirteen rows are verified and one deliberately conservative guard surface remains
+unverified; the default gate passes and the explicit strict gate rejects it.
 
-Implementation remains pending. The Keiki `0.7.0.0` API prerequisite is authoritatively released.
-At each milestone, record released dependency evidence, required/filled/pending/stale counts for
-the fixture, evidence-level counts, and any remaining guard or Hole opacity. Before completion,
-distill durable decisions into the relevant ADRs.
+The compiled mutation matrix catches all twelve dishonest changes, including a missing
+later-state row, wrong-source history, wrong command constructor, swapped guarded siblings, false rejection/no-op, register
+mutation, omitted guard alternative, replay-only forward use, live-twin replay theft, truncated
+chunk, codec divergence, and generated selector mutation. A stale legacy identity function is
+reported as obsolete and cannot affect execution. The single-spec and workspace inventories,
+create-once witness preservation, regenerated scalar and nominal fixtures, full 420-example DSL
+suite, repository build, Nix checks, and strict 17-record ADR validation all pass.
+
+The conservative one-way projection classification is intentionally visible in the fixture and
+both changelogs: it lowers symbolic proof strength to `UnverifiedOpaque` without changing runtime
+stepping or replay. The default gate therefore proves finite witness completeness while retaining
+the unverified row; deployments that demand only `Verified*` evidence can opt into the stricter
+gate and must supply an exact reverse witness.
 
 
 ## Context and Orientation
@@ -686,3 +738,8 @@ than creating a duplicate, 2026-08-01.
 Revision note: Rebased the detailed-attribution prerequisite on released Keiki `0.7.0.0`, verified
 through Hackage and the matching `v0.7.0.0` tag. The producer/release blocker is cleared and this
 plan may adopt `>=0.7 && <0.8` as it starts, 2026-08-01.
+
+Revision note: Completed all implementation milestones, recorded the 14-row conformance result and
+twelve-mutation matrix, documented the conservative one-way projection compatibility implication,
+aligned the pre-commit formatter with the conformance-tree exclusion, and closed the plan after
+repository-wide build, test, Nix, and strict ADR validation, 2026-08-01.

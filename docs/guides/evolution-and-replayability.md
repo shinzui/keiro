@@ -416,6 +416,29 @@ opaque predicate is valid escape-hatch behavior but remains visibly
 `UnverifiedOpaque`. Changing Hole behavior without a version bump is a contract
 violation that `diff` cannot observe.
 
+An event declared as `fields(Command)` is different from an explicit output
+template: version 2 checks the total type-identical copy and generates it
+directly in the transducer. There is no identity-copy Hole to preserve or
+override. Existing create-once identity functions are reported as obsolete and
+are harmless because runtime assembly no longer imports them. Explicit event
+fields remain hand-owned until the language can describe their transformation.
+
+Use `keiro-dsl behavior-obligations FILE --format=json` to inventory the finite
+behavior review created by a decision change. The static report includes every
+live-reachable state/command cell and every replay-only edge but cannot inspect
+consumer Haskell. The generated, consumer-compiled behavior contract then
+executes typed `BehaviorHoles` witnesses through exact Keiki 0.7 forward and
+replay attribution. Pending, missing, duplicate, stale, or false witnesses fail
+the completeness gate; guard-unknown, Hole-owned, and one-way-projection proof
+surfaces remain explicitly unverified unless `--fail-on-unverified` is chosen.
+
+The one-way projection classification is intentionally conservative. Keiki 0.7
+may return `UnverifiedOpaque` for a predicate crossing such a projection even
+though runtime stepping and replay are unchanged. This is a loss of symbolic
+proof strength, not a behavior change. Add an exact reverse witness when policy
+requires a `Verified*` classification; otherwise retain the unverified result
+in review and reporting.
+
 **Reason two: redelivery windows.** Process-manager and router dispatch is
 made idempotent by deterministic event ids derived from
 `(dispatcher, key, source event id, target, occurrence)`

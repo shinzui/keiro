@@ -17,4 +17,5 @@ aggregate Holder
     marker Bool = False
   states Empty Done!
   command Compare { value:Natural }
-  Empty -- Compare --> guard value < value ; goto Done
+  event Compared = fields(Compare)
+  Empty -- Compare --> guard value < value ; emit Compared ; goto Done

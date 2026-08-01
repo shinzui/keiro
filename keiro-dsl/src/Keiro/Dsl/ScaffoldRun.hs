@@ -25,6 +25,7 @@ module Keiro.Dsl.ScaffoldRun
     staleAgainst,
     constraintPlan,
     mappingDrift,
+    behaviorDrift,
     newBindingObligations,
     obligationKindLabel,
     renderMappingIdentity,
@@ -37,6 +38,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
@@ -64,6 +66,7 @@ data Refusal
   | LoweringRefusal ![Text]
   | MissingGeneratedBanner ![FilePath]
   | ImportCycle ![Text]
+  | BehaviorRefusal ![BehaviorDerivationError]
   | -- | Golden payload fixtures found beside a workspace member that the one
     --       workspace golden root does not have. Raised only by the workspace path.
     GoldenRootDivergence !FilePath ![FilePath]
@@ -108,7 +111,10 @@ data ScaffoldReport = ScaffoldReport
     reportConstraintPlan :: ![Text],
     reportMappingDrift :: ![MappingDrift],
     reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift),
-    reportNewHoles :: ![BindingHole]
+    reportNewHoles :: ![BindingHole],
+    reportAddedBehavior :: ![BehaviorRecordRow],
+    reportRemovedBehavior :: ![BehaviorRecordRow],
+    reportObsoleteOutputHooks :: ![(Text, Text)]
   }
   deriving stock (Eq, Show)
 
@@ -164,6 +170,7 @@ pureRefusals ctx spec modules =
     <> dependencyRefusals ctx spec modules
     <> [FirewallBreach breaches | not (null breaches)]
     <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
+    <> [BehaviorRefusal errors | Left errors <- [deriveBehaviorRequirements spec]]
   where
     breaches = firewallBreaches modules
 
@@ -235,45 +242,53 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules =
 
 -- | Source-aware execution used by the CLI; semantic planning still receives only 'Spec'.
 executeScaffoldWithLanguage :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
-executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage ctx spec modules = do
-  bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
-  if not (null bannerless)
-    then pure (Left [MissingGeneratedBanner bannerless])
-    else do
-      let recordPath = out </> recordFileName (specContext spec)
-      previousRecord <- readRecord recordPath
-      stale <- maybe (pure []) (existingStale out modules) previousRecord
-      let currentConsumerPlan = consumerPlan spec
-          drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
-          languageDrift = do
-            previous <- previousRecord
-            if recSourceLanguage previous == sourceLanguage
-              then Nothing
-              else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
-          currentObligations = either (const []) id (bindingHoles spec)
-          newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
-      createDirectoryIfMissing True out
-      dispositions <- mapM (writeModule out) modules
-      let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
-      TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
-      TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx spec modules))
-      pure $
-        Right
-          ScaffoldReport
-            { reportSpecPath = specPath,
-              reportOutDir = out,
-              reportContext = ctx,
-              reportDispositions = dispositions,
-              reportManifestPath = manifestPath,
-              reportRecordPath = recordPath,
-              reportPreviousSpecPath = recSpecPath <$> previousRecord,
-              reportStale = stale,
-              reportConsumerPlan = currentConsumerPlan,
-              reportConstraintPlan = constraintPlan spec currentConsumerPlan,
-              reportMappingDrift = drift,
-              reportSourceLanguageDrift = languageDrift,
-              reportNewHoles = newHoles
-            }
+executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage ctx spec modules =
+  case deriveBehaviorRequirements spec of
+    Left errors -> pure (Left [BehaviorRefusal errors])
+    Right requirements -> do
+      bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
+      if not (null bannerless)
+        then pure (Left [MissingGeneratedBanner bannerless])
+        else do
+          let recordPath = out </> recordFileName (specContext spec)
+          previousRecord <- readRecord recordPath
+          stale <- maybe (pure []) (existingStale out modules) previousRecord
+          let currentConsumerPlan = consumerPlan spec
+              drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+              languageDrift = do
+                previous <- previousRecord
+                if recSourceLanguage previous == sourceLanguage
+                  then Nothing
+                  else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
+              currentObligations = either (const []) id (bindingHoles spec)
+              newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
+              currentBehavior = behaviorRecordRows requirements
+              (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
+          createDirectoryIfMissing True out
+          dispositions <- mapM (writeModule out) modules
+          let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
+          TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
+          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx spec modules currentBehavior))
+          pure $
+            Right
+              ScaffoldReport
+                { reportSpecPath = specPath,
+                  reportOutDir = out,
+                  reportContext = ctx,
+                  reportDispositions = dispositions,
+                  reportManifestPath = manifestPath,
+                  reportRecordPath = recordPath,
+                  reportPreviousSpecPath = recSpecPath <$> previousRecord,
+                  reportStale = stale,
+                  reportConsumerPlan = currentConsumerPlan,
+                  reportConstraintPlan = constraintPlan spec currentConsumerPlan,
+                  reportMappingDrift = drift,
+                  reportSourceLanguageDrift = languageDrift,
+                  reportNewHoles = newHoles,
+                  reportAddedBehavior = addedBehavior,
+                  reportRemovedBehavior = removedBehavior,
+                  reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec
+                }
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
 constraintPlan spec plan = case resolveTypeGraph spec of
@@ -318,6 +333,15 @@ newBindingObligations current previous =
   where
     previousSet = Set.fromList previous
 
+behaviorDrift :: [BehaviorRecordRow] -> [BehaviorRecordRow] -> ([BehaviorRecordRow], [BehaviorRecordRow])
+behaviorDrift current previous =
+  ( [row | row <- sortOn behaviorRecordKey current, behaviorRecordKey row `Set.notMember` previousKeys],
+    [row | row <- sortOn behaviorRecordKey previous, behaviorRecordKey row `Set.notMember` currentKeys]
+  )
+  where
+    currentKeys = Set.fromList (map behaviorRecordKey current)
+    previousKeys = Set.fromList (map behaviorRecordKey previous)
+
 readRecord :: FilePath -> IO (Maybe ScaffoldRecord)
 readRecord path = do
   exists <- doesFileExist path
@@ -338,8 +362,8 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
       exists <- doesFileExist (out </> path)
       pure [StaleModule fileKind path | exists]
 
-currentRecord :: FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> ScaffoldRecord
-currentRecord specPath sourceLanguage ctx spec modules =
+currentRecord :: FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> [BehaviorRecordRow] -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx spec modules currentBehavior =
   ScaffoldRecord
     { recSpecPath = T.pack specPath,
       recModuleRoot = moduleRoot ctx,
@@ -347,7 +371,8 @@ currentRecord specPath sourceLanguage ctx spec modules =
       recSourceLanguage = sourceLanguage,
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
-      recBindingObligations = either (const []) id (bindingHoles spec)
+      recBindingObligations = either (const []) id (bindingHoles spec),
+      recBehaviorRequirements = currentBehavior
     }
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
@@ -403,6 +428,9 @@ renderRefusals = concatMap render
         "  " <> T.intercalate " -> " path,
         "  keep bindings in a leaf module that imports only Structural.Shape.* and Keiro.Codec.Structural"
       ]
+    render (BehaviorRefusal errors) =
+      ["error: behavior obligations cannot be derived soundly -- refusing to scaffold; nothing was written"]
+        <> ["  " <> T.pack (show behaviorError) | behaviorError <- errors]
     render (GoldenRootDivergence root paths) =
       [ "error: golden payload fixtures live beside a workspace member instead of under the workspace golden root -- refusing to scaffold"
       ]
@@ -428,6 +456,8 @@ renderScaffoldReport report =
     <> newHolesSection
     <> mappingDriftSection
     <> sourceLanguageDriftSection
+    <> behaviorDriftSection
+    <> obsoleteOutputSection
     <> staleSection
   where
     ctx = reportContext report
@@ -499,6 +529,28 @@ renderScaffoldReport report =
             <> sourceFormText (languageDriftCurrent drift)
             <> " (generated module bytes are semantic and unaffected)"
         ]
+    behaviorDriftSection =
+      renderBehaviorRows "new behavior obligations" (reportAddedBehavior report)
+        <> renderBehaviorRows "removed behavior obligations (consumer rows become stale)" (reportRemovedBehavior report)
+    renderBehaviorRows _ [] = []
+    renderBehaviorRows label rows =
+      [label <> ": " <> tshow (length rows)] <> concatMap behaviorLines rows
+    behaviorLines row =
+      [ "  "
+          <> behaviorRecordAggregate row
+          <> ":"
+          <> behaviorRecordSource row
+          <> " -- "
+          <> behaviorRecordCommand row
+          <> "  "
+          <> unBehaviorKey (behaviorRecordKey row),
+        "    Pending (BehaviorKey " <> tshow (unBehaviorKey (behaviorRecordKey row)) <> ")"
+      ]
+    obsoleteOutputSection = case reportObsoleteOutputHooks report of
+      [] -> []
+      hooks ->
+        ["obsolete identity-copy output hooks (if still present, they are unused and may be removed):"]
+          <> ["  " <> aggregate <> ".Holes." <> hook | (aggregate, hook) <- hooks]
     staleSection = case reportStale report of
       [] -> []
       stale ->

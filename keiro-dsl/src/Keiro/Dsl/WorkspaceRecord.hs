@@ -64,6 +64,7 @@ import Data.List (nub, sort)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
@@ -187,6 +188,7 @@ data WorkspaceRecord = WorkspaceRecord
     wrModules :: ![WorkspaceModuleRow],
     wrMappings :: ![MappingIdentity],
     wrBindingObligations :: ![BindingHole],
+    wrBehaviorRequirements :: ![BehaviorRecordRow],
     wrAdopted :: ![AdoptedRow]
   }
   deriving stock (Eq, Show)
@@ -209,6 +211,7 @@ renderWorkspaceRecord record =
       <> ["module " <> encodeRow row | row <- wrModules record]
       <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- wrMappings record]
       <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
+      <> ["behavior " <> encodeRow requirement | requirement <- wrBehaviorRequirements record]
       <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
   where
     rootLabel = if T.null (wrModuleRoot record) then "(none)" else wrModuleRoot record
@@ -236,12 +239,14 @@ parseWorkspaceRecord contents = case T.lines contents of
         nominalMappings <- traverse (decodeRow "nominal-mapping ") (rowsWith "nominal-mapping " rows)
         let mappings = ordinaryMappings <> nominalMappings
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
+        behaviorRequirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
         adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
         checkedAdopted <- traverse checkedAdoption adopted
         if hasDuplicates members
           || hasDuplicates (map wrmPath checkedModules)
           || hasDuplicates (map mappingSpecName mappings)
           || hasDuplicates (map bindingKey obligations)
+          || hasDuplicates (map behaviorRecordKey behaviorRequirements)
           then Nothing
           else
             pure
@@ -256,6 +261,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrModules = checkedModules,
                   wrMappings = mappings,
                   wrBindingObligations = obligations,
+                  wrBehaviorRequirements = behaviorRequirements,
                   wrAdopted = checkedAdopted
                 }
   _ -> Nothing

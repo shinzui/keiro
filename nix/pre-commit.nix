@@ -10,6 +10,10 @@
       treefmt = {
         enable = true;
         package = config.treefmt.build.wrapper;
+        # Keep the hook aligned with nix/treefmt.nix. Pre-commit supplies the
+        # staged paths explicitly, so treefmt's own global excludes are not
+        # sufficient for create-once and generated conformance fixtures.
+        excludes = [ "^keiro-dsl/test/conformance" ];
       };
     };
   };

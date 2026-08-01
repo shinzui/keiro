@@ -37,7 +37,7 @@ executable keiro-dsl-codec-compare-artifact-info
     , deepseq     >=1.5
     , directory   >=1.3
     , filepath    >=1.4
-    , keiki       >=0.6   && <0.7
+    , keiki       >=0.7   && <0.8
     , keiro
     , keiro-dsl
     , text        >=2.1

@@ -25,14 +25,15 @@ aggregate Reservation
 
   event TransferReservationCreated   = fields(RequestTransferReservation)
   deprecated event TransferReservationConfirmed { reservationId hospitalId commandId }
+  event ReservationConfirmationRecorded = fields(ConfirmReservation)
 
   Unrequested -- RequestTransferReservation -->
     guard divertStatus != TotalDivert || lifeCriticalOverride
     write reservationState := Held
     emit  TransferReservationCreated
     goto  Held
-  Held -- ConfirmReservation --> write reservationState := Confirmed ; goto Confirmed
+  Held -- ConfirmReservation --> write reservationState := Confirmed ; emit ReservationConfirmationRecorded ; goto Confirmed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection transfer_decisions key=reservationId
-    status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }
+    status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed ReservationConfirmationRecorded=>confirmed }

@@ -6,6 +6,40 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Requires `keiki >=0.7 && <0.8`. Keiki 0.7 deliberately treats predicates
+  crossing a one-way generated projection as opaque to symbolic proof, so
+  verification may now return `UnverifiedOpaque` where an earlier release
+  reported `Verified*`. Runtime stepping and replay are unchanged. Supply an
+  exact projection with its reverse witness when proof-strength verification is
+  required; behavior-conformance reports retain this surface as unverified.
+
+- `DiagnosticCode` gains the append-only `EventOutputCommandMismatch` and
+  `AggregateEventlessStateChange` constructors. Exhaustive matches must be
+  extended. A version-2 transition that emits no event may no longer change
+  control state or registers; only an actual no-op is accepted.
+
+### New Features
+
+- Generates version-2 events declared as `fields(Command)` directly from one
+  checked total identity mapping. The runtime no longer imports a create-once
+  identity-copy function for direct, aliased-wire, optional, nominal, `Time`,
+  `Natural`, or structural command fields. Explicit event fields remain
+  hand-owned, and stale generated-identity hooks are reported as obsolete.
+- Adds `behavior-obligations FILE --format=text|json` for single specs and
+  workspaces. Schema `keiro-dsl/behavior-obligations/1` inventories stable
+  semantic keys for every live transition from a live-reachable state, every
+  reachable rejection cell, and every replay-only transition, with owner and
+  conservative evidence metadata but no consumer fill claims.
+- Generates an aggregate-specific `BehaviorContract` plus create-once
+  `BehaviorHoles`. Typed live and replay witnesses execute through the generated
+  codec and Keiki 0.7 detailed attribution. Schema
+  `keiro/behavior-conformance/1` reports required, filled, pending, missing,
+  duplicate, stale, failed, verified, and unverified keys. The default gate
+  fails incomplete or false evidence; `--fail-on-unverified` opts into a
+  stricter proof policy.
+
 ## 0.6.0.0 — 2026-07-31
 
 ### Breaking Changes

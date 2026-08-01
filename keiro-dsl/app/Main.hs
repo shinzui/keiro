@@ -12,6 +12,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy.IO qualified as TLIO
+import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
@@ -26,7 +27,7 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffoldWithLanguage, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
@@ -41,11 +42,14 @@ data Command
   | Pretty FilePath
   | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
   | Inspect FilePath InspectionFormat
+  | BehaviorObligations FilePath BehaviorFormat
   | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
   | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
   | New String
 
 data InspectionFormat = InspectionJson
+
+data BehaviorFormat = BehaviorText | BehaviorJson
 
 data CheckCoverageOptions = CheckCoverageOptions
   { checkCoveragePath :: !FilePath,
@@ -80,6 +84,9 @@ commands =
         <> command
           "inspect"
           (info (Inspect <$> fileArg <*> inspectionFormatOpt <**> helper) (progDesc "Inspect source-language provenance for a .keiro file or workspace as JSON"))
+        <> command
+          "behavior-obligations"
+          (info (BehaviorObligations <$> fileArg <*> behaviorFormatOpt <**> helper) (progDesc "List static aggregate behavior obligations for a .keiro file or workspace"))
         <> command
           "scaffold"
           (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
@@ -172,6 +179,16 @@ inspectionFormatOpt =
     parseFormat "json" = Right InspectionJson
     parseFormat other = Left ("unsupported inspection format: " <> other <> " (expected json)")
 
+behaviorFormatOpt :: Parser BehaviorFormat
+behaviorFormatOpt =
+  option
+    (eitherReader parseFormat)
+    (long "format" <> metavar "text|json" <> value BehaviorText <> help "Behavior obligation output format (text or json)")
+  where
+    parseFormat "text" = Right BehaviorText
+    parseFormat "json" = Right BehaviorJson
+    parseFormat other = Left ("unsupported behavior obligation format: " <> other <> " (expected text or json)")
+
 run :: Command -> IO ()
 run (Pretty fp) = run (Parse fp)
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
@@ -181,6 +198,8 @@ run (Check fp emit explainBindings coverageOptions)
   | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
 run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
+run (BehaviorObligations fp format)
+  | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
   | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
@@ -259,6 +278,19 @@ run (Inspect fp InspectionJson) = do
   case parseSource fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
     Right parsedSource -> TLIO.putStrLn (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource)))
+run (BehaviorObligations fp format) = do
+  input <- TIO.readFile fp
+  case parseSource fp input of
+    Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
+    Right parsedSource -> do
+      let spec = parsedSpec parsedSource
+          diagnostics = validateSpec spec
+      mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diagnostics
+      if any ((== Error) . severity) diagnostics
+        then exitFailure
+        else case Behavior.behaviorObligationsReport fp spec of
+          Left errors -> renderBehaviorErrors errors
+          Right report -> writeBehaviorReport format report
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions) = do
   -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
   let dir = takeDirectory fp
@@ -344,6 +376,43 @@ runWorkspaceInspect fp InspectionJson = do
         ]
       where
         sourceLanguage = wmSourceLanguage member
+
+runWorkspaceBehaviorObligations :: FilePath -> BehaviorFormat -> IO ()
+runWorkspaceBehaviorObligations fp format = do
+  loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+  case loaded of
+    Left failure -> mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure) >> exitFailure
+    Right workspace -> do
+      let diagnostics = checkWorkspace workspace
+      mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diagnostics
+      if any ((== Error) . wdSeverity) diagnostics
+        then exitFailure
+        else case workspaceBehaviorReport workspace of
+          Left errors -> renderBehaviorErrors errors
+          Right report -> writeBehaviorReport format report
+
+workspaceBehaviorReport :: WorkspaceSpec -> Either [Behavior.BehaviorDerivationError] Behavior.BehaviorObligationsReport
+workspaceBehaviorReport workspace = do
+  requirements <- Behavior.deriveBehaviorRequirements (wsMergedSpec workspace)
+  pure
+    Behavior.BehaviorObligationsReport
+      { Behavior.behaviorSubject = wsManifestPath workspace,
+        Behavior.behaviorWorkspaceService = Just (wsService workspace),
+        Behavior.behaviorRequirements =
+          map
+            (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate"))
+            requirements
+      }
+
+writeBehaviorReport :: BehaviorFormat -> Behavior.BehaviorObligationsReport -> IO ()
+writeBehaviorReport format report = case format of
+  BehaviorText -> TIO.putStr (Behavior.renderBehaviorObligationsText report)
+  BehaviorJson -> TIO.putStrLn (Behavior.encodeBehaviorObligationsJson report)
+
+renderBehaviorErrors :: [Behavior.BehaviorDerivationError] -> IO ()
+renderBehaviorErrors errors = do
+  mapM_ (hPutStrLn stderr . ("behavior obligation derivation failed: " <>) . show) errors
+  exitFailure
 
 -- | @check@ on a workspace manifest: compose the whole service from its member
 -- @.keiro@ files and validate it as one contract. Diagnostics are rendered
