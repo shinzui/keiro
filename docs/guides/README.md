@@ -21,6 +21,9 @@ are adopting:
   covers structural/opaque consumer mappings, binding authoring, the
   spec/check/scaffold loop, compatibility vectors, coverage reports, and
   historical comparison tooling.
+- [Choosing `keiro-dsl`](choosing-keiro-dsl.md) compares the benefits, costs,
+  escape hatches, and best-fit service shapes after the language, nominal,
+  workspace, behavioral-conformance, and ID-domain repairs in MasterPlan 27.
 - [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md) explains
   which guarantees every validated service gets below the DSL, which exist only
   with a spec, and what a hand-written service must supply for itself.

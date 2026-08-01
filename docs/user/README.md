@@ -21,6 +21,9 @@ pieces those modules import.
 - [Typed Specifications With `keiro-dsl`](typed-spec-toolchain.md): structural
   and opaque consumer mappings, check, scaffold, generated harnesses,
   compatibility vectors, and migration-evidence tooling.
+- [Choosing `keiro-dsl`](../guides/choosing-keiro-dsl.md): benefits, costs,
+  granular escape hatches, and the service shapes that favor a typed
+  specification, hybrid ownership, or hand-written Keiro.
 - [Choosing A Primitive](../guides/choosing-a-primitive.md): the routing map for
   deciding between an `EventStream`, Keiki composition, a projection, a process
   manager, or a router.
