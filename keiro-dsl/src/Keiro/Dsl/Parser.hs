@@ -2027,7 +2027,7 @@ pClause version =
 pExpr :: LanguageVersion -> P Expr
 pExpr version
   | languageSupportsFeature version TypedAggregateExpressionSyntax = makeExprParser (pScalarTerm version) scalarOperatorTable
-  | otherwise = makeExprParser (pLegacyTerm version) (legacyOperatorTable version)
+  | otherwise = makeExprParser (pLegacyTerm version) legacyOperatorTable
 
 pLegacyTerm :: LanguageVersion -> P Expr
 pLegacyTerm version =
@@ -2042,19 +2042,14 @@ pUnsupportedScalarTerm :: LanguageVersion -> P Expr
 pUnsupportedScalarTerm version = do
   loc <- getLoc
   _ <-
-    choice
-      [ () <$ try ((keyword "reg" <|> keyword "cmd") *> symbol "."),
-        () <$ try (ident *> parens stringLit),
-        () <$ try stringLit,
-        () <$ try integerLiteral
-      ]
+    try ((keyword "reg" <|> keyword "cmd") *> symbol ".")
   requireLanguageFeatureAt version TypedAggregateExpressionSyntax loc
   fail "unreachable supported scalar term in predecessor grammar"
 
 -- | Highest precedence first: relational comparisons bind tighter than @&&@,
 -- which binds tighter than @||@.
-legacyOperatorTable :: LanguageVersion -> [[Operator P Expr]]
-legacyOperatorTable version =
+legacyOperatorTable :: [[Operator P Expr]]
+legacyOperatorTable =
   [ [InfixL arithmeticUnsupported],
     [ InfixN (ECmp OpLe <$ op "<="),
       InfixN (ECmp OpGe <$ op ">="),
@@ -2069,10 +2064,9 @@ legacyOperatorTable version =
   where
     op s = symbol s
     arithmeticUnsupported = do
-      loc <- getLoc
+      offset <- getOffset
       operator <- lexeme (oneOf ['+', '-', '*', '/'])
-      requireLanguageFeatureAt version TypedAggregateExpressionSyntax loc
-      fail ("unexpected predecessor arithmetic operator '" <> [operator] <> "'")
+      failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
 
 pScalarTerm :: LanguageVersion -> P Expr
 pScalarTerm version =

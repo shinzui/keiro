@@ -63,6 +63,11 @@ implementation. Provide concise evidence.
   failures to originate after the owning grammar has consumed a real syntax marker. The focused
   suite now passes 16 examples, including exact-line assertions for nominal bindings, `Integer`,
   typed paths, and explicit Hole ownership.
+- 2026-08-01: the first full-suite run passed 426 of 427 examples and exposed one compatibility
+  boundary: version-1 bare-name arithmetic such as `revision + amount` historically reports the
+  operator-specific body-grammar error because `+` was never a source-language feature marker.
+  Restoring that diagnostic made both the four-example scalar diagnostic group and the
+  16-example source-language group pass.
 
 
 ## Decision Log
@@ -92,6 +97,14 @@ Record every decision made while working on the plan.
   Rationale: the registry remains the one authority for released feature ownership, while parser
   internals can attach precise source locations without exposing Megaparsec types or changing
   `ParsedSource`, `SourceLanguage`, or `ParseFailure`.
+  Date: 2026-08-01
+
+- Decision: Move only the released gate markers from `requiresSuccessorSyntax` into grammar
+  productions; do not broaden `LanguageFeatureRequiresVersion` to every token accepted by the
+  version-2 expression parser.
+  Rationale: EP-167 is a compatibility repair. Existing version-1 operator diagnostics are part of
+  the released negative corpus, while `using`, `Integer`, `implementation hole`, `reg.`, `cmd.`,
+  and `mapped nominal` are the markers that already selected the structured language diagnostic.
   Date: 2026-08-01
 
 
