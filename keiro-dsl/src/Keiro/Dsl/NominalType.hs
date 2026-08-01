@@ -10,12 +10,18 @@
 module Keiro.Dsl.NominalType
   ( NominalScalarRepresentation (..),
     NominalRepresentation (..),
+    NominalEqualityKey (..),
+    NominalEqualityDomain (..),
+    CheckedNominalEquality (..),
     NominalOwnership (..),
     ConsumerNominalBinding (..),
     ResolvedNominalType (..),
     NominalTypeRegistry,
     nominalTypes,
     lookupNominalType,
+    nominalEqualityContract,
+    nominalEqualityIdentity,
+    nominalEqualityIdentities,
     NominalTypeError (..),
     resolveNominalTypes,
   )
@@ -46,6 +52,31 @@ data NominalRepresentation
   = IdRepresentation !Text
   | EnumRepresentation !(NonEmpty (Name, Text))
   | ScalarRepresentation !NominalScalarRepresentation
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | The canonical carrier compared by generated nominal equality. IDs and
+-- enums deliberately share their stable textual wire key while remaining
+-- type-distinct in the checked expression tree.
+data NominalEqualityKey
+  = NominalTextEqualityKey
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | The exactness Keiro can honestly claim for a nominal equality projection.
+-- Released generated IDs still wrap arbitrary 'Text', so their projection is
+-- total but unconstrained until the enforcing language contract lands. A
+-- consumer-bound ID is backed by a checked @KindID prefix@ representation and
+-- therefore has the exact TypeID text image. Enums always have a finite image.
+data NominalEqualityDomain
+  = LegacyUnrestrictedTextDomain
+  | TypeIdTextDomain !Text
+  | FiniteTextDomain !(NonEmpty Text)
+  deriving stock (Eq, Ord, Show, Generic)
+
+data CheckedNominalEquality = CheckedNominalEquality
+  { equalityKeyRepresentation :: !NominalEqualityKey,
+    equalityDomain :: !NominalEqualityDomain,
+    equalityContractVersion :: !Text
+  }
   deriving stock (Eq, Ord, Show, Generic)
 
 data ConsumerNominalBinding = ConsumerNominalBinding
@@ -84,6 +115,70 @@ newtype NominalTypeRegistry = NominalTypeRegistry
 
 lookupNominalType :: Name -> NominalTypeRegistry -> Maybe ResolvedNominalType
 lookupNominalType name = Map.lookup name . nominalTypes
+
+-- | Resolve the declaration-scoped equality contract. Nominal scalar wrappers
+-- keep their existing scalar projection behavior; this contract is the new
+-- authority only for IDs and enums.
+nominalEqualityContract :: ResolvedNominalType -> Maybe CheckedNominalEquality
+nominalEqualityContract nominal = case resolvedNominalRepresentation nominal of
+  IdRepresentation prefix ->
+    Just
+      CheckedNominalEquality
+        { equalityKeyRepresentation = NominalTextEqualityKey,
+          equalityDomain = case resolvedNominalOwnership nominal of
+            GeneratedNominal -> LegacyUnrestrictedTextDomain
+            ConsumerNominal {} -> TypeIdTextDomain prefix,
+          equalityContractVersion = nominalEqualityContractVersion
+        }
+  EnumRepresentation constructors ->
+    Just
+      CheckedNominalEquality
+        { equalityKeyRepresentation = NominalTextEqualityKey,
+          equalityDomain = FiniteTextDomain (snd <$> constructors),
+          equalityContractVersion = nominalEqualityContractVersion
+        }
+  ScalarRepresentation {} -> Nothing
+
+-- | Stable, checked identity used by generated projection tags, fingerprints,
+-- scaffold history, and explain output. It includes the existing binding
+-- authority rather than introducing a second consumer equality function.
+nominalEqualityIdentity :: ResolvedNominalType -> Maybe Text
+nominalEqualityIdentity nominal = do
+  equality <- nominalEqualityContract nominal
+  pure . T.intercalate "|" $
+    [ "nominal-equality",
+      "name=" <> resolvedNominalName nominal,
+      "contract=" <> equalityContractVersion equality,
+      "key=" <> renderEqualityKey (equalityKeyRepresentation equality),
+      "domain=" <> renderEqualityDomain (equalityDomain equality),
+      renderOwnership (resolvedNominalOwnership nominal)
+    ]
+  where
+    renderEqualityKey NominalTextEqualityKey = "Text"
+    renderEqualityDomain LegacyUnrestrictedTextDomain = "legacy-unrestricted-text"
+    renderEqualityDomain (TypeIdTextDomain prefix) = "typeid-text:" <> prefix
+    renderEqualityDomain (FiniteTextDomain values) = "finite-text:" <> T.intercalate "," (NE.toList values)
+    renderOwnership GeneratedNominal = "owner=generated"
+    renderOwnership (ConsumerNominal binding) =
+      T.intercalate
+        ";"
+        [ "owner=consumer",
+          "canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding),
+          "binding=" <> unQualifiedValueName (consumerNominalBinding binding),
+          "binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding)
+        ]
+
+nominalEqualityIdentities :: Spec -> [Text]
+nominalEqualityIdentities spec = case resolveNominalTypes spec of
+  Left _ -> []
+  Right registry ->
+    [ identity
+    | nominal <- Map.elems (nominalTypes registry),
+      Just identity <- [nominalEqualityIdentity nominal]
+    ]
+
+nominalEqualityContractVersion :: Text
+nominalEqualityContractVersion = "keiro-dsl/nominal-equality/1"
 
 data NominalTypeError
   = NominalMissingIngredient !Name !Loc !Text

@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
@@ -8,6 +11,9 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Shape (CanonicalTypeName)
+import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)
+import Data.List.NonEmpty (NonEmpty (..))
+import Keiki.ProjectionDomain (finiteProjectionDomain)
 
 data AccountMode = Normal | Restricted
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
@@ -20,6 +26,25 @@ accountModeText = \case
   Normal -> "normal"
   Restricted -> "restricted"
 
+data AccountModeEqualityProjection
+
+instance FieldProjection AccountModeEqualityProjection where
+  type FieldName AccountModeEqualityProjection = "AccountMode"
+  type FieldOwner AccountModeEqualityProjection = AccountMode
+  type FieldResult AccountModeEqualityProjection = Text
+  fieldShapeId _ = "nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated"
+  projectFieldValue _ = accountModeText
+
+instance ExactFieldProjection AccountModeEqualityProjection where
+  fieldProjectionDomain _ = finiteProjectionDomain ("normal" :| ["restricted"])
+  reconstructFieldOwner _ = \case
+    "normal" -> Just Normal
+    "restricted" -> Just Restricted
+    _ -> Nothing
+
+accountModeEqualityWitness :: FieldWitness AccountModeEqualityProjection
+accountModeEqualityWitness = exactFieldWitness @AccountModeEqualityProjection
+
 newtype RequestId = RequestId Text
   deriving stock (Generic, Eq, Ord, Show)
   deriving anyclass (ToJSON, FromJSON)
@@ -28,3 +53,15 @@ instance CanonicalTypeName RequestId
 
 requestIdText :: RequestId -> Text
 requestIdText (RequestId value) = value
+
+data RequestIdEqualityProjection
+
+instance FieldProjection RequestIdEqualityProjection where
+  type FieldName RequestIdEqualityProjection = "RequestId"
+  type FieldOwner RequestIdEqualityProjection = RequestId
+  type FieldResult RequestIdEqualityProjection = Text
+  fieldShapeId _ = "nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated"
+  projectFieldValue _ = requestIdText
+
+requestIdEqualityWitness :: FieldWitness RequestIdEqualityProjection
+requestIdEqualityWitness = fieldWitness @RequestIdEqualityProjection

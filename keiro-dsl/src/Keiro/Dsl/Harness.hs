@@ -600,7 +600,7 @@ acceptDecl a t =
   ]
   where
     cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
-      (c : _) -> "(" <> ctorExpr a c <> ")"
+      (c : _) -> "(" <> commandCtorExpr a c <> ")"
       [] -> "(error \"no command\")"
 
 forwardReplayDecl :: Agg -> Transition -> [Text]
@@ -638,7 +638,7 @@ forwardReplayDecl a t =
     forwardRegsName = if null (aRegs a) then "_forwardRegs" else "forwardRegs"
     replayRegsName = if null (aRegs a) then "_replayRegs" else "replayRegs"
     cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
-      (c : _) -> "(" <> ctorExpr a c <> ")"
+      (c : _) -> "(" <> commandCtorExpr a c <> ")"
       [] -> "(error \"no command\")"
 
 -- | @(<Ctor> (<Ctor>Data v1 v2 …))@ with positional sample field values.
@@ -647,6 +647,27 @@ ctorExpr a rc =
   "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
   where
     args = T.concat [" " <> sampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
+
+-- | A transition command sample prefers the initial value of a same-named,
+-- same-typed register. This makes the generated acceptance/replay probes honest
+-- for declaration-exact @cmd.field == reg.field@ guards while retaining the
+-- field-distinct samples used by standalone event codec probes.
+commandCtorExpr :: Agg -> ResolvedCtor -> Text
+commandCtorExpr a rc =
+  "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
+  where
+    args = T.concat [" " <> commandSampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
+
+commandSampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
+commandSampleValue aggregate fieldName fieldType = case fieldType of
+  AggregateNominal nominal
+    | nominalEqualityUsedInGeneratedExpressions nominal aggregate -> case find matchesRegister (aRegs aggregate) of
+        Just register -> renderRegisterInitial (rrInitial register)
+        Nothing -> fallback
+  _ -> fallback
+  where
+    fallback = sampleValue aggregate fieldName fieldType
+    matchesRegister register = rrName register == fieldName && rrType register == fieldType
 
 sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
 sampleValue a fieldName ty = case fieldCat a ty of

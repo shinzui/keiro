@@ -10,7 +10,7 @@ import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), secondsToDiffTime)
 import AggregateScalarExpressions.ScalarAccount.BehaviorHoles (behaviorWitnesses)
-import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..))
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..), accountModeEqualityWitness, requestIdEqualityWitness)
 import Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract qualified as Behavior
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec)
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
@@ -33,6 +33,8 @@ main = do
   arithmeticAgreement <- scalarArithmeticAgreement
   repeatedPathAgreement <- repeatedPathUsesOneSymbol
   verificationReport <- scalarAccountPredicateVerifications
+  exactEnumProof <- exactEnumProjectionProof
+  conservativeIdProof <- conservativeGeneratedIdProjection
   let behaviorReport = Behavior.behaviorCoverageReport behaviorWitnesses
   let checks =
         harnessAssertions
@@ -41,6 +43,10 @@ main = do
              , ("Integer/Natural oracle, concrete terms, and symbolic formulas agree", arithmeticAgreement)
              , ("one-way projected scalar paths remain conservatively unverified", repeatedPathAgreement)
              , ("one-way generated projection and opaque Hole remain unverified", verificationReport == expectedVerificationReport)
+             , ("same-declaration nominal guards take both concrete branches", nominalGuardBranches)
+             , ("finite generated enum equality is exact symbolically", exactEnumProof)
+             , ("generated enum exactness laws hold and legacy ID claims no inverse", generatedNominalProjectionLaws)
+             , ("legacy Text-backed generated ID equality stays conservative symbolically", conservativeIdProof)
              , ("Keiki 0.7 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
              , ("generated behavior contract reconciles its create-once pending rows", length (Behavior.reportPending behaviorReport) == 6 && null (Behavior.reportMissing behaviorReport))
              , ("Hole envelope preserves declared event and target", holeEnvelopeAgreement)
@@ -76,7 +82,7 @@ mkAdjust balanceValue requestedValue activeValue observedAtValue minimumValue =
       , label = "input-label"
       , active = activeValue
       , mode = Normal
-      , requestId = RequestId "req_input"
+      , requestId = RequestId ""
       , observedAt = observedAtValue
       , limits = Domain.Limits minimumValue 13
       }
@@ -130,7 +136,7 @@ caseAgrees balanceValue requestedValue activeValue observedAtValue minimumValue 
           , label = "input-label"
           , active = activeValue
           , mode = Normal
-          , requestId = RequestId "req_input"
+          , requestId = RequestId ""
           , observedAt = observedAtValue
           , limits = Domain.Limits minimumValue 13
           }
@@ -146,6 +152,38 @@ naturalMonusExample =
   case K.step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) (mkAdjust 0 2 False commandTime 0) of
     Just (_, registers, _) -> registers K.! #reserved == 0
     Nothing -> False
+
+nominalGuardBranches :: Bool
+nominalGuardBranches =
+  accepts (mkAdjust 0 2 False commandTime 0)
+    && not (accepts (withMode Restricted (mkAdjust 0 2 False commandTime 0)))
+    && not (accepts (withRequestId (RequestId "req_other") (mkAdjust 0 2 False commandTime 0)))
+  where
+    accepts command = case K.step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) command of
+      Just {} -> True
+      Nothing -> False
+    withMode value (Adjust command) = Adjust command {mode = value}
+    withMode _ command = command
+    withRequestId value (Adjust command) = Adjust command {requestId = value}
+    withRequestId _ command = command
+
+exactEnumProjectionProof :: IO Bool
+exactEnumProjectionProof = do
+  let projected = K.regProj accountModeEqualityWitness (#mode :: K.Index ScalarAccountRegs AccountMode)
+      contradiction = K.PAnd (K.PEq projected (K.lit ("normal" :: T.Text))) (K.PEq projected (K.lit ("restricted" :: T.Text)))
+  (== S.VerifiedUnsatisfiable) <$> S.verifyPredicate contradiction
+
+conservativeGeneratedIdProjection :: IO Bool
+conservativeGeneratedIdProjection = do
+  let projected = K.regProj requestIdEqualityWitness (#requestId :: K.Index ScalarAccountRegs RequestId)
+      contradiction = K.PAnd (K.PEq projected (K.lit ("req_a" :: T.Text))) (K.PEq projected (K.lit ("req_b" :: T.Text)))
+  (== S.UnverifiedOpaque) <$> S.verifyPredicate contradiction
+
+generatedNominalProjectionLaws :: Bool
+generatedNominalProjectionLaws =
+  K.checkFieldProjectionOwner accountModeEqualityWitness Normal == Right ()
+    && K.checkFieldProjectionKey accountModeEqualityWitness "restricted" == Right Restricted
+    && K.checkFieldProjectionOwner requestIdEqualityWitness (RequestId "") == Left K.ProjectionWitnessIsUnconstrained
 
 scalarArithmeticAgreement :: IO Bool
 scalarArithmeticAgreement = do

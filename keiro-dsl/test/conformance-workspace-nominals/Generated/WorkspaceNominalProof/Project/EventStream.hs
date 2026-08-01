@@ -9,7 +9,7 @@ module Generated.WorkspaceNominalProof.Project.EventStream
 
 import Generated.WorkspaceNominalProof.Project.Domain
 import Generated.WorkspaceNominalProof.Project.Codec (projectCodec)
-import WorkspaceNominalProof.Project.Holes (projectTransducer)
+import Generated.WorkspaceNominalProof.Project.Transducer (projectFoldFingerprint, projectTransducer)
 import Keiki.Core (HsPred)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)

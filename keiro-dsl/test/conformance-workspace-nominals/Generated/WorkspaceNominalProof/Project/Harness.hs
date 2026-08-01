@@ -5,7 +5,7 @@ module Generated.WorkspaceNominalProof.Project.Harness (harnessAssertions) where
 
 import Generated.WorkspaceNominalProof.Project.Domain
 import Generated.WorkspaceNominalProof.Project.Codec (encodeProjectEvent, parseProjectEvent, projectCodec)
-import WorkspaceNominalProof.Project.Holes (projectTransducer)
+import Generated.WorkspaceNominalProof.Project.Transducer (projectTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Generated.WorkspaceNominalProof.Nominals (ProjectId (..), ProjectPhase (..))
@@ -19,6 +19,7 @@ harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions projectTransducer))
   , ("clock-free: spec samples no wall clock", True)
   , ("golden round-trip: ProjectRegistered", roundTrips sampleEventProjectRegistered)
+  , ("golden round-trip: ArchivalRecorded", roundTrips sampleEventArchivalRecorded)
   , ("accepts RegisterProject from ProjectEmpty", acceptRegisterProject)
   ]
   ++ forwardReplayRegisterProject
@@ -29,9 +30,12 @@ roundTrips e = parseProjectEvent (eventType projectCodec e) (encodeProjectEvent 
 sampleEventProjectRegistered :: ProjectEvent
 sampleEventProjectRegistered = (ProjectRegistered (ProjectRegisteredData (ProjectId "sample") Draft))
 
+sampleEventArchivalRecorded :: ProjectEvent
+sampleEventArchivalRecorded = (ArchivalRecorded (ArchivalRecordedData (ProjectId "sample") Draft))
+
 acceptRegisterProject :: Bool
 acceptRegisterProject =
-  case step projectTransducer (ProjectEmpty, initialProjectRegs) ((RegisterProject (RegisterProjectData (ProjectId "sample") Draft))) of
+  case step projectTransducer (ProjectEmpty, initialProjectRegs) ((RegisterProject (RegisterProjectData (ProjectId "") Draft))) of
     Just (v, _, _) -> v == ProjectLive
     Nothing -> False
 
@@ -39,7 +43,7 @@ acceptRegisterProject =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayRegisterProject :: [(String, Bool)]
 forwardReplayRegisterProject =
-  case step projectTransducer (ProjectEmpty, initialProjectRegs) ((RegisterProject (RegisterProjectData (ProjectId "sample") Draft))) of
+  case step projectTransducer (ProjectEmpty, initialProjectRegs) ((RegisterProject (RegisterProjectData (ProjectId "") Draft))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseProjectEvent (eventType projectCodec event) (encodeProjectEvent event)) emitted of

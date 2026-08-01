@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Implemented**: Close IR-12 after Plan 170 adds declaration-scoped ID and enum equality, exact consumer KindID and finite-enum domains, conservative legacy generated-ID verification, type-confusion diagnostics, replay/workspace conformance, and mutation evidence.
 * **Implemented**: Close IR-11 after Plan 167 recognizes preambles only before `context`, moves
 released feature markers to their owning grammar productions, preserves version-1 diagnostics,
 and passes library, CLI, scaffold, workspace, full-suite, all-package, and Nix validation.

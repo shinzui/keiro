@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
@@ -8,6 +11,9 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Shape (CanonicalTypeName)
+import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)
+import Data.List.NonEmpty (NonEmpty (..))
+import Keiki.ProjectionDomain (finiteProjectionDomain)
 
 newtype ProjectId = ProjectId Text
   deriving stock (Generic, Eq, Ord, Show)
@@ -17,6 +23,18 @@ instance CanonicalTypeName ProjectId
 
 projectIdText :: ProjectId -> Text
 projectIdText (ProjectId value) = value
+
+data ProjectIdEqualityProjection
+
+instance FieldProjection ProjectIdEqualityProjection where
+  type FieldName ProjectIdEqualityProjection = "ProjectId"
+  type FieldOwner ProjectIdEqualityProjection = ProjectId
+  type FieldResult ProjectIdEqualityProjection = Text
+  fieldShapeId _ = "nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated"
+  projectFieldValue _ = projectIdText
+
+projectIdEqualityWitness :: FieldWitness ProjectIdEqualityProjection
+projectIdEqualityWitness = fieldWitness @ProjectIdEqualityProjection
 
 data ProjectPhase = Draft | Active
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
@@ -28,6 +46,25 @@ projectPhaseText :: ProjectPhase -> Text
 projectPhaseText = \case
   Draft -> "draft"
   Active -> "active"
+
+data ProjectPhaseEqualityProjection
+
+instance FieldProjection ProjectPhaseEqualityProjection where
+  type FieldName ProjectPhaseEqualityProjection = "ProjectPhase"
+  type FieldOwner ProjectPhaseEqualityProjection = ProjectPhase
+  type FieldResult ProjectPhaseEqualityProjection = Text
+  fieldShapeId _ = "nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated"
+  projectFieldValue _ = projectPhaseText
+
+instance ExactFieldProjection ProjectPhaseEqualityProjection where
+  fieldProjectionDomain _ = finiteProjectionDomain ("draft" :| ["active"])
+  reconstructFieldOwner _ = \case
+    "draft" -> Just Draft
+    "active" -> Just Active
+    _ -> Nothing
+
+projectPhaseEqualityWitness :: FieldWitness ProjectPhaseEqualityProjection
+projectPhaseEqualityWitness = exactFieldWitness @ProjectPhaseEqualityProjection
 
 data UnusedNominal = Present | Absent
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)

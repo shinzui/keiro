@@ -61,6 +61,7 @@ import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessR
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.NominalType (nominalEqualityIdentities)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
@@ -444,6 +445,7 @@ currentWorkspaceRecord plan adopted =
         | (m, provenance) <- wpModules plan
         ],
       wrMappings = consumerMappings (consumerPlan merged),
+      wrNominalEqualities = nominalEqualityIdentities merged,
       wrBindingObligations = either (const []) id (bindingHoles merged),
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrAdopted = adopted

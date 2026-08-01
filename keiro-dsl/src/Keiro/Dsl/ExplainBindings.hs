@@ -47,6 +47,7 @@ data BindingObligation = BindingObligation
     obligationUseSites :: ![Text],
     obligationBindingVersion :: !(Maybe Text),
     obligationCanonicalType :: !(Maybe Text),
+    obligationEqualityContract :: !(Maybe Text),
     obligationCategory :: !Text
   }
   deriving stock (Eq, Ord, Show)
@@ -74,6 +75,7 @@ instance ToJSON BindingObligation where
         "useSites" .= obligationUseSites obligation,
         "bindingVersion" .= obligationBindingVersion obligation,
         "canonicalType" .= obligationCanonicalType obligation,
+        "equalityContract" .= obligationEqualityContract obligation,
         "category" .= obligationCategory obligation
       ]
 
@@ -95,6 +97,7 @@ instance FromJSON BindingObligation where
           <*> value .: "useSites"
           <*> value .:? "bindingVersion"
           <*> value .:? "canonicalType"
+          <*> value .:? "equalityContract"
           <*> (value .:? "category" >>= pure . maybe "structural" id)
 
 instance ToJSON BindingHole where
@@ -267,6 +270,7 @@ obligationFor declaration qualified kindValue signature paths version canonical 
       obligationUseSites = paths,
       obligationBindingVersion = version,
       obligationCanonicalType = canonical,
+      obligationEqualityContract = Nothing,
       obligationCategory = "structural"
     }
   where
@@ -295,17 +299,18 @@ nominalObligationsFor spec nominal = case resolvedNominalOwnership nominal of
         ScalarRepresentation NominalBool -> "Bool"
         ScalarRepresentation NominalTime -> "UTCTime"
       canonical = Just (unCanonicalTypeId (consumerNominalCanonical binding))
-      bindingEntry = nominalObligation name binding category (consumerNominalBinding binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion (consumerNominalBindingVersion binding))) canonical
-      fixtureEntry = nominalObligation name binding category (consumerNominalFixtures binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical
+      equalityContract = nominalEqualityIdentity nominal
+      bindingEntry = nominalObligation name binding category (consumerNominalBinding binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion (consumerNominalBindingVersion binding))) canonical equalityContract
+      fixtureEntry = nominalObligation name binding category (consumerNominalFixtures binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing
       initialEntries = case (registerPaths, consumerNominalInitial binding) of
         ([], _) -> []
         (_, Nothing) -> []
-        (_, Just initialValue) -> [nominalObligation name binding category initialValue InitialValue consumerType registerPaths Nothing canonical]
+        (_, Just initialValue) -> [nominalObligation name binding category initialValue InitialValue consumerType registerPaths Nothing canonical Nothing]
   where
     quoted value = T.pack (show value)
 
-nominalObligation :: Name -> ConsumerNominalBinding -> Text -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> BindingObligation
-nominalObligation name binding category qualified kindValue signature paths version canonical =
+nominalObligation :: Name -> ConsumerNominalBinding -> Text -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> Maybe Text -> BindingObligation
+nominalObligation name binding category qualified kindValue signature paths version canonical equalityContract =
   BindingObligation
     { obligationMappedName = name,
       obligationPackage = hsPackage (consumerNominalHaskell binding),
@@ -316,6 +321,7 @@ nominalObligation name binding category qualified kindValue signature paths vers
       obligationUseSites = paths,
       obligationBindingVersion = version,
       obligationCanonicalType = canonical,
+      obligationEqualityContract = equalityContract,
       obligationCategory = category
     }
   where
@@ -375,6 +381,7 @@ renderBindingObligations context obligations = case obligations of
       ]
         <> maybe [] (\version -> ["      provenance: binding-version " <> quoted version]) (obligationBindingVersion obligation)
         <> maybe [] (\canonical -> ["      canonical-type: " <> quoted canonical]) (obligationCanonicalType obligation)
+        <> maybe [] (\contract -> ["      equality-contract: " <> quoted contract]) (obligationEqualityContract obligation)
     renderPaths [] = " (not currently used by an aggregate root)"
     renderPaths paths = " (" <> T.intercalate "; " paths <> ")"
     quoted value = T.pack (show value)

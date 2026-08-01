@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-07-31T18:46:49Z
+timestamp: 2026-08-01T18:05:45Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -112,6 +112,17 @@ valid representation is total. A consumer constructor that rejects,
 normalizes, or quotients representation values is refined rather than nominal
 and remains behind `mapped opaque` until a separately designed refined contract
 makes that policy visible.
+
+ID and enum equality is derived from this same declaration and total binding;
+the consumer does not implement a second equality authority. The checked
+contract fixes a declaration-scoped textual key, its domain, its generated or
+consumer owner, and the binding provenance. Consumer `KindID` declarations use
+the released TypeID text domain with an exact reverse witness, and enums use
+their finite declared wire spellings. Generated language-2 enums are exact for
+the same reason. Legacy generated IDs remain public `newtype` wrappers over
+unrestricted `Text`, so their concrete equality is type-safe but their symbolic
+projection is deliberately one-way and conservatively unverified until a
+successor language contract restricts construction.
 
 Nominal declarations carry the same mandatory provenance inventory as
 structural bindings: consumer package/module/type, qualified binding symbol,
@@ -231,8 +242,11 @@ the totality and ownership requirements above.
   representation, not to `nominalFromRepresentation`; refined scalar
   constructors remain opaque.
 - Bound scalar whole-value projections reuse the declared total nominal binding
-  and canonical identity. IDs and enums remain symbolically opaque, and no
-  nominal arithmetic capability is inferred.
+  and canonical identity. Same-declaration IDs and enums also reuse that
+  authority for equality: consumer `KindID` IDs and all enums have exact
+  domains, while legacy generated IDs remain conservatively one-way. Cross-ID,
+  cross-enum, and nominal-to-`Text` comparisons are rejected, and no nominal
+  ordering or arithmetic capability is inferred.
 - Haskell does not prove the two laws for a hand-written binding. Declared fixture/shape cases
   and mutation tests are finite evidence; exact generic derivation can establish stronger
   representation correspondence. Documentation must not call a passing finite harness a proof
@@ -246,9 +260,10 @@ the totality and ownership requirements above.
   and mapped-snapshot invalidation; keeping the token unchanged is a contract violation.
 - Generated projection witnesses have auditable provenance and are reusable by
   consumers other than Mori, while staying within Keiki's validated fragment.
-- Keiki 0.6 is the coordinated dependency floor for exact `Integer`, total
-  `Natural` monus, projection terms, and conservative predicate verification;
-  downstream exhaustive matches must handle those structures and results.
+- Keiki 0.7 is the coordinated dependency floor for exact `Integer`, total
+  `Natural` monus, conservative one-way projection classification, exact
+  projection domains, and reconstructible models; downstream exhaustive
+  matches must handle those structures and results.
 - Snapshot compatibility is conservative and operationally honest: mapped
   schema changes invalidate and rebuild cached state rather than pretending the
   generated event codec decodes historical snapshots.

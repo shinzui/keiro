@@ -255,7 +255,6 @@ test-suite keiro-dsl-conformance-nominal-scalars
     NominalConformance.Bindings
     NominalConformance.Domain
     NominalScalars.NominalLedger.BehaviorHoles
-    NominalScalars.NominalLedger.Holes
 
   build-depends:
     , aeson        >=2.2  && <2.3
@@ -278,26 +277,33 @@ test-suite keiro-dsl-conformance-workspace-nominals
   main-is:        Main.hs
   other-modules:
     Generated.WorkspaceNominalProof.Nominals
+    Generated.WorkspaceNominalProof.Project.BehaviorContract
     Generated.WorkspaceNominalProof.Project.Codec
     Generated.WorkspaceNominalProof.Project.Domain
     Generated.WorkspaceNominalProof.Project.EventStream
+    Generated.WorkspaceNominalProof.Project.Expressions
     Generated.WorkspaceNominalProof.Project.Harness
     Generated.WorkspaceNominalProof.Project.Projection
+    Generated.WorkspaceNominalProof.Project.Transducer
+    Generated.WorkspaceNominalProof.ProjectArtifact.BehaviorContract
     Generated.WorkspaceNominalProof.ProjectArtifact.Codec
     Generated.WorkspaceNominalProof.ProjectArtifact.Domain
     Generated.WorkspaceNominalProof.ProjectArtifact.EventStream
+    Generated.WorkspaceNominalProof.ProjectArtifact.Expressions
     Generated.WorkspaceNominalProof.ProjectArtifact.Harness
     Generated.WorkspaceNominalProof.ProjectArtifact.Projection
+    Generated.WorkspaceNominalProof.ProjectArtifact.Transducer
     Generated.WorkspaceNominalProof.ReplayAudit
-    WorkspaceNominalProof.Project.Holes
-    WorkspaceNominalProof.ProjectArtifact.Holes
+    WorkspaceNominalProof.Project.BehaviorHoles
+    WorkspaceNominalProof.ProjectArtifact.BehaviorHoles
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.7  && <0.8
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , containers  >=0.6  && <0.8
+    , keiki       >=0.7  && <0.8
     , keiro
-    , text   >=2.1  && <2.2
+    , text        >=2.1  && <2.2
 
 -- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire
 -- codecs, generated projection witnesses, opaque boundaries, fixture branch

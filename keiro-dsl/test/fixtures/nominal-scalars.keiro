@@ -79,13 +79,17 @@ aggregate NominalLedger
     orderId:OrderId status:OrderStatus accountNumber:AccountNumber riskScore:RiskScore
     sequenceNumber:SequenceNumber featureFlag:FeatureFlag observedAt:ObservedAt
   }
-  event NominalsRecorded {
-    orderId:OrderId status:OrderStatus accountNumber:AccountNumber riskScore:RiskScore
-    sequenceNumber:SequenceNumber featureFlag:FeatureFlag observedAt:ObservedAt
-  }
+  event NominalsRecorded = fields(RecordNominals)
 
   Empty -- RecordNominals -->
-    implementation hole
+    guard cmd.orderId == reg.orderId && cmd.status == reg.status
+    write orderId := cmd.orderId
+    write status := cmd.status
+    write accountNumber := cmd.accountNumber
+    write riskScore := cmd.riskScore
+    write sequenceNumber := cmd.sequenceNumber
+    write featureFlag := cmd.featureFlag
+    write observedAt := cmd.observedAt
     emit NominalsRecorded
     goto Recorded
 

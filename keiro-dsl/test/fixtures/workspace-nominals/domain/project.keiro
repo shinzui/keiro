@@ -1,17 +1,27 @@
-language keiro-dsl 1
+language keiro-dsl 2
 context workspace-nominal-proof
 
 aggregate Project
   regs
     projectId ProjectId = placeholder
     phase ProjectPhase = Draft
-  states Empty Live!
+  states Empty Live Archived!
 
   command RegisterProject { projectId phase:ProjectPhase }
+  command ArchiveProject { projectId phase:ProjectPhase }
   event ProjectRegistered = fields(RegisterProject)
+  event ArchivalRecorded = fields(ArchiveProject)
 
   Empty -- RegisterProject -->
+    guard cmd.projectId == reg.projectId && cmd.phase == reg.phase
+    write projectId := cmd.projectId
+    write phase := cmd.phase
     emit ProjectRegistered
     goto Live
+
+  Live -- ArchiveProject -->
+    guard cmd.projectId == reg.projectId && cmd.phase == reg.phase
+    emit ArchivalRecorded
+    goto Archived
 
   wire kind=ctorName fields=camelCase schemaVersion=1

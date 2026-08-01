@@ -18,9 +18,8 @@ import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer)
 import Keiki.Core qualified as K
 import Keiki.Symbolic qualified as S
-import NominalScalars.NominalLedger.Holes qualified as Holes
-import Data.Text qualified as T
-import Keiro.Snapshot.Codec (FoldVersion (..))
+import Generated.NominalScalars.NominalLedger.Expressions qualified as Expressions
+import Keiki.Builder ((=:))
 
 nominalLedgerTransducer
   :: SymTransducer
@@ -33,8 +32,23 @@ nominalLedgerTransducer =
   B.buildTransducer NominalLedgerEmpty initialNominalLedgerRegs isTerminal do
     B.from NominalLedgerEmpty do
       B.onCmd inCtorRecordNominals $ \d -> B.do
-        Holes.transition1EmptyRecordNominalsHole d
-        B.emit wireNominalsRecorded (Holes.transition1EmptyRecordNominalsOutput1NominalsRecorded d)
+        B.requireGuard (Expressions.transition1EmptyRecordNominalsGuard d)
+        B.slot @"orderId" =: Expressions.transition1EmptyRecordNominalsWriteOrderId d
+        B.slot @"status" =: Expressions.transition1EmptyRecordNominalsWriteStatus d
+        B.slot @"accountNumber" =: Expressions.transition1EmptyRecordNominalsWriteAccountNumber d
+        B.slot @"riskScore" =: Expressions.transition1EmptyRecordNominalsWriteRiskScore d
+        B.slot @"sequenceNumber" =: Expressions.transition1EmptyRecordNominalsWriteSequenceNumber d
+        B.slot @"featureFlag" =: Expressions.transition1EmptyRecordNominalsWriteFeatureFlag d
+        B.slot @"observedAt" =: Expressions.transition1EmptyRecordNominalsWriteObservedAt d
+        B.emit wireNominalsRecorded (NominalsRecordedTermFields
+          { orderId = d.orderId
+          , status = d.status
+          , accountNumber = d.accountNumber
+          , riskScore = d.riskScore
+          , sequenceNumber = d.sequenceNumber
+          , featureFlag = d.featureFlag
+          , observedAt = d.observedAt
+          })
         B.goto NominalLedgerRecorded
  where
   isTerminal = \case
@@ -42,7 +56,7 @@ nominalLedgerTransducer =
     _ -> False
 
 nominalLedgerFoldFingerprint :: Text
-nominalLedgerFoldFingerprint = T.intercalate "|" ("0c03b51b36b12518" : [foldToken Holes.transition1EmptyRecordNominalsHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
+nominalLedgerFoldFingerprint = "d452ae7d73a3bf7f"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -51,7 +65,7 @@ data BehaviorOwnership = GeneratedOwned | HoleOwned
 -- symbolic verifier. Opaque Hole terms remain explicitly unverified.
 nominalLedgerPredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVerification)]
 nominalLedgerPredicateVerifications = sequence
-  [ verifyTransition "transition1EmptyRecordNominals" HoleOwned NominalLedgerEmpty 0
+  [ verifyTransition "transition1EmptyRecordNominals" GeneratedOwned NominalLedgerEmpty 0
   ]
  where
   verifyTransition label owner source edgeIndex =

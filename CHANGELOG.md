@@ -26,6 +26,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro-dsl**: supports type-safe same-declaration ID and enum equality in
+  generated aggregate guards. Consumer `KindID` IDs and finite enums use exact
+  Keiki 0.7 projection domains with reconstructible models; legacy generated
+  `Text`-backed IDs execute concretely but remain conservatively unverified
+  until their construction domain is enforced. Cross-declaration,
+  nominal-to-`Text`, and unqualified enum comparisons fail during checking.
 - **keiro-dsl**: generates version-2 `fields(Command)` event values directly
   from a checked total identity mapping. Direct, aliased-wire, optional,
   nominal, `Time`, `Natural`, and structural fields no longer pass through a

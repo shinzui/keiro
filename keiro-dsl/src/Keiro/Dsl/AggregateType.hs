@@ -152,6 +152,11 @@ aggregateCapability :: AggregateUseSite -> ResolvedAggregateType -> AggregateCap
 aggregateCapability useSite resolved = case useSite of
   EqualityGuardUse -> case resolved of
     AggregateMapped {} -> Unsupported
+    AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+      ScalarRepresentation {} -> SolverVisible
+      _ -> case nominalEqualityContract nominal of
+        Just _ -> SolverVisible
+        Nothing -> OpaqueOnly
     _ -> solverVisibility resolved
   OrderingGuardUse -> case resolved of
     AggregateInt -> SolverVisible

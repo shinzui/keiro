@@ -13,7 +13,7 @@ import Keiki.Core (RegFile (..))
 import Generated.WorkspaceNominalProof.Nominals (ProjectId (..), ProjectPhase (..))
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data ProjectVertex = ProjectEmpty | ProjectLive
+data ProjectVertex = ProjectEmpty | ProjectLive | ProjectArchived
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data RegisterProjectData = RegisterProjectData
@@ -22,7 +22,14 @@ data RegisterProjectData = RegisterProjectData
   }
   deriving stock (Generic, Eq, Show)
 
+data ArchiveProjectData = ArchiveProjectData
+  { projectId :: !ProjectId
+  , phase :: !ProjectPhase
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ProjectCommand = RegisterProject !RegisterProjectData
+  | ArchiveProject !ArchiveProjectData
   deriving stock (Generic, Eq, Show)
 
 data ProjectRegisteredData = ProjectRegisteredData
@@ -31,7 +38,14 @@ data ProjectRegisteredData = ProjectRegisteredData
   }
   deriving stock (Generic, Eq, Show)
 
+data ArchivalRecordedData = ArchivalRecordedData
+  { projectId :: !ProjectId
+  , phase :: !ProjectPhase
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ProjectEvent = ProjectRegistered !ProjectRegisteredData
+  | ArchivalRecorded !ArchivalRecordedData
   deriving stock (Generic, Eq, Show)
 
 type ProjectRegs =

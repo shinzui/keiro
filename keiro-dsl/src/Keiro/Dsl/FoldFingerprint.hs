@@ -19,6 +19,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.EventOutput
+import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
@@ -56,6 +57,7 @@ aggregateFoldSurfaceForService service aggregate =
         ++ map (registerSegment symbols) (aggRegs aggregate)
         ++ mappedRegisterSegments
         ++ nominalSegments
+        ++ nominalEqualitySegments
         ++ map (transitionSegment spec aggregate) (aggTransitions aggregate)
         ++ map ruleSegment referencedRules
     )
@@ -83,6 +85,49 @@ aggregateFoldSurfaceForService service aggregate =
           Just nominal <- [lookupNominalType typeName registry],
           ConsumerNominal binding <- [resolvedNominalOwnership nominal]
         ]
+    nominalEqualitySegments =
+      [ "nominal-equality-use:" <> identity
+      | identity <- Set.toAscList (nominalEqualityUses spec aggregate)
+      ]
+
+-- | Equality representation belongs in the fold identity only when a guard
+-- actually compares that declaration. This keeps unrelated binding metadata out
+-- of replay compatibility while ensuring a witness/domain change cannot silently
+-- retain the old fold fingerprint.
+nominalEqualityUses :: Spec -> Aggregate -> Set Text
+nominalEqualityUses spec aggregate =
+  Set.fromList
+    [ identity
+    | transition <- aggTransitions aggregate,
+      guardSyntax <- maybeToList (tGuard transition),
+      Right guardExpression <- [resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax],
+      identity <- equalityIdentities guardExpression
+    ]
+
+equalityIdentities :: TypedScalarExpr -> [Text]
+equalityIdentities expression =
+  current <> children
+  where
+    current = case typedScalarNode expression of
+      TypedEqual left _ -> equalityIdentity left
+      TypedNotEqual left _ -> equalityIdentity left
+      _ -> []
+    equalityIdentity operand = case typedScalarType operand of
+      AggregateNominal nominal -> maybeToList (nominalEqualityIdentity nominal)
+      _ -> []
+    children = case typedScalarNode expression of
+      TypedLiteral {} -> []
+      TypedRoot {} -> []
+      TypedProject {} -> []
+      TypedAdd _ left right -> recurse left right
+      TypedSubtract _ left right -> recurse left right
+      TypedMultiply _ left right -> recurse left right
+      TypedEqual left right -> recurse left right
+      TypedNotEqual left right -> recurse left right
+      TypedCompare _ left right -> recurse left right
+      TypedAnd left right -> recurse left right
+      TypedOr left right -> recurse left right
+    recurse left right = equalityIdentities left <> equalityIdentities right
 
 nominalUseNames :: Aggregate -> [(Text, Name)]
 nominalUseNames aggregate =

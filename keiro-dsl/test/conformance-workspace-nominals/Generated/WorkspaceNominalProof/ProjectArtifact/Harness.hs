@@ -5,7 +5,7 @@ module Generated.WorkspaceNominalProof.ProjectArtifact.Harness (harnessAssertion
 
 import Generated.WorkspaceNominalProof.ProjectArtifact.Domain
 import Generated.WorkspaceNominalProof.ProjectArtifact.Codec (encodeProjectArtifactEvent, parseProjectArtifactEvent, projectArtifactCodec)
-import WorkspaceNominalProof.ProjectArtifact.Holes (projectArtifactTransducer)
+import Generated.WorkspaceNominalProof.ProjectArtifact.Transducer (projectArtifactTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Generated.WorkspaceNominalProof.Nominals (ProjectId (..), ProjectPhase (..))
@@ -31,7 +31,7 @@ sampleEventArtifactRecorded = (ArtifactRecorded (ArtifactRecordedData (ProjectId
 
 acceptRecordArtifact :: Bool
 acceptRecordArtifact =
-  case step projectArtifactTransducer (ProjectArtifactEmpty, initialProjectArtifactRegs) ((RecordArtifact (RecordArtifactData (ProjectId "sample") Draft))) of
+  case step projectArtifactTransducer (ProjectArtifactEmpty, initialProjectArtifactRegs) ((RecordArtifact (RecordArtifactData (ProjectId "") Draft))) of
     Just (v, _, _) -> v == ProjectArtifactRecorded
     Nothing -> False
 
@@ -39,7 +39,7 @@ acceptRecordArtifact =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayRecordArtifact :: [(String, Bool)]
 forwardReplayRecordArtifact =
-  case step projectArtifactTransducer (ProjectArtifactEmpty, initialProjectArtifactRegs) ((RecordArtifact (RecordArtifactData (ProjectId "sample") Draft))) of
+  case step projectArtifactTransducer (ProjectArtifactEmpty, initialProjectArtifactRegs) ((RecordArtifact (RecordArtifactData (ProjectId "") Draft))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseProjectArtifactEvent (eventType projectArtifactCodec event) (encodeProjectArtifactEvent event)) emitted of

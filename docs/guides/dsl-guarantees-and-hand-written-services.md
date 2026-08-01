@@ -109,6 +109,15 @@ receive boundary checks only. Golden emission must happen while both shapes
 exist because the current spec cannot reconstruct an older payload, and
 generated goldens never overwrite hand-captured payloads.
 
+The checked nominal registry also makes same-declaration ID and enum equality a
+DSL-visible contract. Generated guards use one declaration-tagged textual key;
+the checker rejects cross-declaration and nominal-to-`Text` comparisons before
+Haskell generation. Consumer `KindID` IDs and finite enums carry exact symbolic
+domains and reconstructible models. Legacy generated IDs still admit arbitrary
+`Text`, so they retain correct concrete equality but are reported as a one-way,
+unverified projection until the successor construction contract closes that
+domain.
+
 These guarantees stop at the spec-visible surface, but language version 2
 moves scalar aggregate behavior onto that surface. Its generated `Expressions`
 and `Transducer` modules execute the checked guard/write Keiki tree directly;

@@ -51,6 +51,7 @@ import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessR
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
+import Keiro.Dsl.NominalType (nominalEqualityIdentities)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
@@ -413,6 +414,7 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recLanguageContract = checkedLanguageContract service,
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
+      recNominalEqualities = nominalEqualityIdentities spec,
       recBindingObligations = either (const []) id (bindingHoles spec),
       recBehaviorRequirements = currentBehavior
     }

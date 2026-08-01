@@ -79,7 +79,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 | 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | Complete |
 | 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Complete |
-| 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
+| 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Complete |
 | 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Complete |
 | 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | Not Started |
 
@@ -92,22 +92,20 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 EP-167, EP-168, EP-169, and EP-159 are complete. EP-169 now preserves one checked effective
 semantic contract from `ParsedSource` or workspace composition through every semantic planner.
 
-EP-170 hard-depends on EP-168 because declaration-scoped projection tags and instances must be
-emitted by the one shared nominal owner, not by duplicate aggregate modules. The former external
-implementation dependency is satisfied by released Keiki 0.7.0.0, so API inspection and
-Keiro-side implementation may proceed. EP-168 now provides the one shared nominal owner, so
-EP-170 has no remaining hard dependency.
+EP-170 is complete. Its declaration-scoped projection tags and instances extend EP-168's one
+shared nominal owner rather than duplicate aggregate modules, and consume released Keiki 0.7.0.0
+for conservative and exact domain-aware verification.
 
 EP-159 is complete: checked `fields(Command)` output ownership and the finite behavior-conformance
-contract consume released Keiki 0.7.0.0 detailed step/replay attribution. Its unmet soft dependency
-on EP-170 did not block completion. EP-170 owns the later nominal-equality integration and must
-refresh the affected generated fixture and conformance evidence when it lands.
+contract consume released Keiki 0.7.0.0 detailed step/replay attribution. Its former soft
+dependency is now integrated: EP-170 refreshed the affected generated fixtures and conformance
+evidence with nominal equality.
 
 EP-171's hard dependencies are satisfied: EP-169 routes successor runtime semantics to validation
 and generation, and EP-168 gives safe constructors/codecs one generated owner. It integrates with
-EP-170's exact textual ID domain but can implement admission/replay policy without waiting for
-nominal equality. The critical child-plan paths EP-168 → EP-170 and EP-169 plus EP-168 → EP-171
-are now unblocked. EP-170 remains next in registry order.
+EP-170's explicit textual equality domain and upgrades the deliberately conservative generated-ID
+witness after enforcing admission. The critical child-plan paths EP-168 → EP-170 and EP-169 plus
+EP-168 → EP-171 are now satisfied. EP-171 is next in registry order.
 
 
 ## Integration Points
@@ -156,8 +154,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-168: compiled two-aggregate identity proof and non-destructive adoption.
 - [x] EP-169: checked effective semantic contract routed through all semantic consumers.
 - [x] EP-169: paired-version/workspace proof and ADR 16 amendment.
-- [ ] EP-170: Keiki 0.7 exact-projection adoption and checked nominal equality model.
-- [ ] EP-170: generated/bound equality, finite-domain proof, mutations, and fleet adoption.
+- [x] EP-170: Keiki 0.7 exact-projection adoption and checked nominal equality model.
+- [x] EP-170: generated/bound equality, finite-domain proof, mutations, and fleet adoption.
 - [x] EP-159: checked declarative event-output mapping and removal of identity-copy Holes.
 - [x] EP-159: edge-attributed complete behavioral conformance and regeneration proof.
 - [ ] EP-171: successor ID-domain contract, safe constructors, and boundary-specific codecs.
@@ -204,6 +202,12 @@ interactions between child plans. Provide concise evidence.
   `wsLanguageContract` directly also preserves the contract for synthetic empty historical
   workspace baselines. The complete 430-example DSL suite, all-package Cabal build, strict ADR
   validation, and native Nix checks pass.
+- 2026-08-01: EP-170 found that generated language-2 IDs still expose `newtype Id = Id Text`, so
+  calling their projection exact would admit impossible domain claims. Consumer `KindID` IDs and
+  every finite enum now use exact Keiki witnesses; legacy generated IDs use the same typed key but
+  remain conservatively one-way until EP-171 restricts construction. The complete 431-example DSL
+  suite, three compiled nominal-expression rings, all-package build, strict ADR validation, native
+  Nix checks, and two restoring mutations pass their intended gates.
 
 
 ## Decision Log
@@ -251,6 +255,14 @@ plan.
   equivalent graph. This preserves current bytes and gives EP-171 one explicit policy mapping.
   Date: 2026-08-01
 
+- Decision: Split nominal ID equality proof strength at the checked construction boundary.
+  Consumer-bound `KindID` declarations are exact, while legacy generated `Text` wrappers remain
+  concrete and type-safe but symbolically one-way; all enum declarations are exact finite domains.
+  Rationale: this closes ordinary nominal equality without overstating the set of values current
+  generated constructors admit. EP-171 owns construction enforcement and the resulting exactness
+  upgrade.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -274,8 +286,16 @@ record the parser boundary, so no ADR amendment was required for EP-167.
 EP-169 is complete. `CheckedService` now carries one effective language contract and normalized
 graph through validation, scaffolding, harnesses, fold fingerprints, diff, replay-impact planning,
 inspection, and additive single/workspace history. Per-member declared/legacy provenance remains
-separate. ADR 16 and ADR 4 now record the corrected semantic boundary. EP-170 and EP-171 are both
-eligible; two corrective workstreams remain open.
+separate. ADR 16 and ADR 4 now record the corrected semantic boundary, which made EP-170 and
+EP-171 eligible.
+
+EP-170 is complete. Same-declaration generated and consumer-bound ID/enum guards now lower through
+declaration-tagged textual projections owned by the checked nominal registry and the one shared
+generated module. Cross-declaration, nominal-to-`Text`, and unqualified enum comparisons fail at
+source checking. Consumer `KindID` IDs and all enums verify over exact domains; legacy generated
+IDs remain honestly unverified until EP-171. Fold/scaffold/workspace identities, binding
+explanations, replay, behavior conformance, mutations, adopter guidance, IR-12, and ADRs 12/14/17
+all carry the same contract. Only EP-171 remains open.
 
 
 Revision note: Completed EP-169 with a checked effective semantic contract, contract-aware
@@ -283,3 +303,9 @@ planning/fingerprints, paired-version and workspace evidence, additive history, 
 amendments. EP-159, EP-167, EP-168, and EP-169 are complete. EP-170 is next in registry order, and
 EP-171's repository-local hard dependencies are now satisfied. No external Keiki release gate
 remains, 2026-08-01.
+
+Revision note: Completed EP-170 with checked declaration-scoped nominal equality, exact consumer
+ID and finite-enum domains, conservative legacy generated-ID verification, shared-owner witnesses,
+compatibility/scaffold identities, three compiled conformance rings, restoring mutations, and ADR
+12/14/17 amendments. EP-159, EP-167, EP-168, EP-169, and EP-170 are complete; EP-171 is next and is
+the only remaining child plan, 2026-08-01.

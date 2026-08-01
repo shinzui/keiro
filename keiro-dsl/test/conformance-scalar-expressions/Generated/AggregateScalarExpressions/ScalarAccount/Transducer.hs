@@ -70,7 +70,7 @@ scalarAccountTransducer =
     _ -> False
 
 scalarAccountFoldFingerprint :: Text
-scalarAccountFoldFingerprint = T.intercalate "|" ("ba4b2860edd1844b" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
+scalarAccountFoldFingerprint = T.intercalate "|" ("d0897c163c958108" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

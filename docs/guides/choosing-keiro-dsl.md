@@ -41,7 +41,7 @@ hand-written implementation.
 | Service contract | One checked graph drives types, codecs, behavior, fingerprints, and reports | Haskell modules and tests collectively define the contract |
 | Evolution | Spec diff classifies six compatibility surfaces and can emit migration evidence | The application must design and maintain equivalent comparisons |
 | Aggregate behavior | Supported versioned expressions and `fields(Command)` mappings are generated-owned | All predicates, updates, and event construction are application-owned |
-| Shared nominals | One service-level generated owner; exact same-declaration ID/enum equality | The application owns type placement, instances, and symbolic projections |
+| Shared nominals | One service-level generated owner; type-safe same-declaration ID/enum equality, exact for enums and bound `KindID` values | The application owns type placement, instances, and consumer bindings |
 | Flexibility | Limited to constructs the language can check and lower honestly | Full Haskell and Keiki API surface |
 | Escape hatches | Hand-own one transition, output, codec, upcaster, resolver, or worker body while retaining the surrounding contract | Hand-own the entire affected surface |
 | Ongoing cost | Specification, generated modules, bindings, fixtures, witnesses, and language upgrades | More hand-written implementation and compatibility tests |
@@ -157,12 +157,15 @@ transitive nominal uses, and two aggregates can exchange the same value without
 conversion. Moving or reordering workspace members does not change that type
 identity.
 
-Generated and consumer-bound IDs and enums can participate in exact
+Generated and consumer-bound IDs and enums can participate in type-safe,
 same-declaration equality in aggregate expressions. The checker still rejects
-cross-ID, cross-enum, and nominal-to-`Text` comparisons. Finite enum domains and
-validated textual ID domains reach symbolic verification, avoiding the false
-confidence of treating an unrestricted `Text` projection as an exact nominal
-domain.
+cross-ID, cross-enum, nominal-to-`Text`, and unqualified enum comparisons.
+Finite enum domains and consumer `KindID` domains reach exact symbolic
+verification. A legacy generated ID is still a public wrapper around
+unrestricted `Text`, so concrete equality works but symbolic verification stays
+conservatively `UnverifiedOpaque`; the enforcing successor ID contract below is
+what makes that domain exact. Keiro never treats an unrestricted `Text`
+projection as exact merely because its Haskell wrapper is nominal.
 
 ### ID prefixes become an evolution contract
 

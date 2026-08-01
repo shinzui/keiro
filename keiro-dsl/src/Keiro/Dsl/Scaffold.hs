@@ -62,6 +62,7 @@ module Keiro.Dsl.Scaffold
     StructuralProjection (..),
     resolveAggForService,
     resolveAgg,
+    nominalEqualityUsedInGeneratedExpressions,
     projectionSpecs,
     resolveProjectionModules,
     nominalProjectionModule,
@@ -149,7 +150,8 @@ data NominalUseSite = NominalUseSite
 data NominalGenerationOwner = NominalGenerationOwner
   { nominalDeclaration :: !ResolvedNominalType,
     nominalModule :: !Text,
-    nominalUseSites :: !(Set.Set NominalUseSite)
+    nominalUseSites :: !(Set.Set NominalUseSite),
+    nominalEqualityUsed :: !Bool
   }
   deriving stock (Eq, Show)
 
@@ -218,8 +220,10 @@ firewallSurface =
             [ "RegFile",
               "HsPred",
               "FieldProjection",
+              "ExactFieldProjection",
               "FieldWitness",
               "fieldWitness",
+              "exactFieldWitness",
               "fieldWitnessAgrees",
               "applyEventsEither",
               "defaultValidationOptions",
@@ -501,7 +505,8 @@ planNominalGeneration ctx spec = do
     [ NominalGenerationOwner
         { nominalDeclaration = nominal,
           nominalModule = generatedNominalModule ctx,
-          nominalUseSites = Set.fromList (concatMap (usesFor nominal) aggregates)
+          nominalUseSites = Set.fromList (concatMap (usesFor nominal) aggregates),
+          nominalEqualityUsed = any (nominalEqualityUsedInGeneratedExpressions nominal) aggregates
         }
     | nominal <- generated
     ]
@@ -510,6 +515,15 @@ planNominalGeneration ctx spec = do
       [ NominalUseSite (aName aggregate) useKind
       | useKind <- aggregateUseKinds nominal aggregate
       ]
+
+nominalEqualityUsedInGeneratedExpressions :: ResolvedNominalType -> Agg -> Bool
+nominalEqualityUsedInGeneratedExpressions nominal aggregate =
+  any (anyTypedExpression comparesNominal) (resolvedGeneratedExpressions aggregate)
+  where
+    comparesNominal expression = case typedScalarNode expression of
+      TypedEqual left _ -> typedScalarType left == AggregateNominal nominal
+      TypedNotEqual left _ -> typedScalarType left == AggregateNominal nominal
+      _ -> False
 
 aggregateUseKinds :: ResolvedNominalType -> Agg -> [AggregateUseSite]
 aggregateUseKinds nominal aggregate =
@@ -1038,24 +1052,46 @@ generatedNominalOwners ctx spec = case planNominalGeneration ctx spec of
 emitGeneratedNominals :: Context -> [NominalGenerationOwner] -> Text
 emitGeneratedNominals ctx owners =
   nl
-    [ "{-# LANGUAGE DeriveAnyClass #-}",
-      "{-# LANGUAGE DeriveGeneric #-}",
-      "{-# LANGUAGE LambdaCase #-}",
-      generatedBanner,
-      "module " <> generatedNominalModule ctx <> " where",
-      "",
-      "import Data.Aeson (FromJSON, ToJSON)",
-      "import Data.Text (Text)",
-      "import GHC.Generics (Generic)",
-      "import Keiki.Shape (CanonicalTypeName)",
-      "",
-      sectionsOf [map (emitGeneratedNominal . nominalDeclaration) owners]
-    ]
+    ( equalityPragmas
+        <> [ "{-# LANGUAGE DeriveAnyClass #-}",
+             "{-# LANGUAGE DeriveGeneric #-}",
+             "{-# LANGUAGE LambdaCase #-}",
+             generatedBanner,
+             "module " <> generatedNominalModule ctx <> " where",
+             "",
+             "import Data.Aeson (FromJSON, ToJSON)",
+             "import Data.Text (Text)",
+             "import GHC.Generics (Generic)",
+             "import Keiki.Shape (CanonicalTypeName)"
+           ]
+        <> equalityImports
+        <> [ "",
+             sectionsOf [map emitOwner owners]
+           ]
+    )
+  where
+    usesEquality = any nominalEqualityUsed owners
+    usesExactEquality = any (\owner -> nominalEqualityUsed owner && isEnum (nominalDeclaration owner)) owners
+    equalityPragmas =
+      if usesEquality
+        then
+          [ "{-# LANGUAGE DataKinds #-}",
+            "{-# LANGUAGE TypeApplications #-}",
+            "{-# LANGUAGE TypeFamilies #-}"
+          ]
+        else []
+    equalityImports =
+      ["import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)" | usesEquality]
+        <> if usesExactEquality
+          then ["import Data.List.NonEmpty (NonEmpty (..))", "import Keiki.ProjectionDomain (finiteProjectionDomain)"]
+          else []
+    emitOwner owner = emitGeneratedNominal (nominalEqualityUsed owner) (nominalDeclaration owner)
+    isEnum nominal = case resolvedNominalRepresentation nominal of EnumRepresentation {} -> True; _ -> False
 
-emitGeneratedNominal :: ResolvedNominalType -> Text
-emitGeneratedNominal nominal = case resolvedNominalRepresentation nominal of
+emitGeneratedNominal :: Bool -> ResolvedNominalType -> Text
+emitGeneratedNominal equalityUsed nominal = case resolvedNominalRepresentation nominal of
   IdRepresentation {} ->
-    nl
+    nl $
       [ "newtype " <> name <> " = " <> name <> " Text",
         "  deriving stock (Generic, Eq, Ord, Show)",
         "  deriving anyclass (ToJSON, FromJSON)",
@@ -1065,8 +1101,9 @@ emitGeneratedNominal nominal = case resolvedNominalRepresentation nominal of
         nominalTextName nominal <> " :: " <> name <> " -> Text",
         nominalTextName nominal <> " (" <> name <> " value) = value"
       ]
+        <> equalitySection
   EnumRepresentation constructors ->
-    nl
+    nl $
       [ "data " <> name <> " = " <> T.intercalate " | " (map fst (NE.toList constructors)),
         "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)",
         "  deriving anyclass (ToJSON, FromJSON)",
@@ -1077,10 +1114,59 @@ emitGeneratedNominal nominal = case resolvedNominalRepresentation nominal of
         nominalTextName nominal <> " = \\case",
         nl ["  " <> constructor <> " -> " <> tshow wire | (constructor, wire) <- NE.toList constructors]
       ]
+        <> equalitySection
   ScalarRepresentation {} ->
     error "generated nominal scalar reached generated declaration emission"
   where
     name = resolvedNominalName nominal
+    equalitySection = if equalityUsed then ["", emitGeneratedNominalEquality nominal] else []
+
+emitGeneratedNominalEquality :: ResolvedNominalType -> Text
+emitGeneratedNominalEquality nominal =
+  nl $
+    [ "data " <> tagName,
+      "",
+      "instance FieldProjection " <> tagName <> " where",
+      "  type FieldName " <> tagName <> " = " <> tshow name,
+      "  type FieldOwner " <> tagName <> " = " <> name,
+      "  type FieldResult " <> tagName <> " = Text",
+      "  fieldShapeId _ = " <> tshow equalityIdentity,
+      "  projectFieldValue _ = " <> nominalTextName nominal
+    ]
+      <> exactInstance
+      <> [ "",
+           witnessName <> " :: FieldWitness " <> tagName,
+           witnessName <> " = " <> witnessConstructor <> " @" <> tagName
+         ]
+  where
+    name = resolvedNominalName nominal
+    tagName = nominalEqualityTagName nominal
+    witnessName = nominalEqualityWitnessName nominal
+    equalityIdentity = fromMaybe (error "generated nominal equality contract missing") (nominalEqualityIdentity nominal)
+    (exactInstance, witnessConstructor) = case resolvedNominalRepresentation nominal of
+      IdRepresentation {} -> ([], "fieldWitness")
+      EnumRepresentation constructors ->
+        ( [ "",
+            "instance ExactFieldProjection " <> tagName <> " where",
+            "  fieldProjectionDomain _ = finiteProjectionDomain (" <> renderNonEmpty (map (tshow . snd) (NE.toList constructors)) <> ")",
+            "  reconstructFieldOwner _ = \\case"
+          ]
+            <> ["    " <> tshow wire <> " -> Just " <> constructor | (constructor, wire) <- NE.toList constructors]
+            <> ["    _ -> Nothing"],
+          "exactFieldWitness"
+        )
+      ScalarRepresentation {} -> error "generated nominal scalar equality emission"
+
+nominalEqualityTagName :: ResolvedNominalType -> Text
+nominalEqualityTagName nominal = resolvedNominalName nominal <> "EqualityProjection"
+
+nominalEqualityWitnessName :: ResolvedNominalType -> Text
+nominalEqualityWitnessName nominal = lowerFirst (resolvedNominalName nominal) <> "EqualityWitness"
+
+renderNonEmpty :: [Text] -> Text
+renderNonEmpty values = case values of
+  [] -> error "cannot render an empty exact projection domain"
+  firstValue : rest -> firstValue <> " :| [" <> T.intercalate ", " rest <> "]"
 
 nominalTextName :: ResolvedNominalType -> Text
 nominalTextName = (<> "Text") . lowerFirst . resolvedNominalName
@@ -1183,8 +1269,7 @@ nominalProjectionTypes spec =
     | aggregate <- [value | NAggregate value <- specNodes spec],
       resolved <- registerTypes aggregate <> commandTypes aggregate,
       AggregateNominal nominal <- [resolved],
-      ConsumerNominal {} <- [resolvedNominalOwnership nominal],
-      ScalarRepresentation {} <- [resolvedNominalRepresentation nominal]
+      ConsumerNominal {} <- [resolvedNominalOwnership nominal]
     ]
   where
     symbols = aggregateSymbols spec
@@ -1217,35 +1302,116 @@ emitNominalProjections ctx nominals =
     moduleName = nominalProjectionModule ctx
     imports =
       sort . nub $
-        [ "Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)",
-          "Keiro.Codec.Nominal (nominalToRepresentation)"
+        [ "Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)",
+          "Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)"
         ]
           <> [hsModule (consumerNominalHaskell binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
           <> [qualifiedModule (consumerNominalBinding binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
-          <> ["Data.Text (Text)" | any (hasScalar NominalText) nominals]
+          <> [nominalRepresentationModule ctx (resolvedNominalName nominal) <> " qualified" | nominal <- nominals, EnumRepresentation {} <- [resolvedNominalRepresentation nominal]]
+          <> ["Data.KindID qualified as KindID" | any hasId nominals]
+          <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasExactDomain nominals]
+          <> ["Data.Text (Text)" | any usesText nominals]
           <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
+          <> ["Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, matchesTextPattern, textCharSet, textConcat, textLiteral, textProjectionDomain, textRepeatBetween)" | any hasExactDomain nominals]
           <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
     hasScalar wanted nominal = resolvedNominalRepresentation nominal == ScalarRepresentation wanted
+    hasId nominal = case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False
+    hasExactDomain nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
+    usesText nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
     emitNominalProjection nominal = case resolvedNominalOwnership nominal of
       GeneratedNominal -> ""
-      ConsumerNominal binding ->
-        nl
-          [ "data " <> tagName,
-            "",
-            "instance FieldProjection " <> tagName <> " where",
-            "  type FieldName " <> tagName <> " = " <> tshow name,
-            "  type FieldOwner " <> tagName <> " = " <> renderHaskellSource (consumerNominalHaskell binding),
-            "  type FieldResult " <> tagName <> " = " <> scalarHaskellType (resolvedNominalRepresentation nominal),
-            "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (consumerNominalCanonical binding)),
-            "  projectFieldValue _ = nominalToRepresentation " <> unQualifiedValueName (consumerNominalBinding binding),
-            "",
-            witnessName <> " :: FieldWitness " <> tagName,
-            witnessName <> " = fieldWitness @" <> tagName
-          ]
-        where
-          name = resolvedNominalName nominal
-          tagName = name <> "NominalProjection"
-          witnessName = lowerFirst name <> "Witness"
+      ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+        ScalarRepresentation {} -> emitScalarProjection nominal binding
+        IdRepresentation prefix -> emitConsumerIdProjection nominal binding prefix
+        EnumRepresentation constructors -> emitConsumerEnumProjection nominal binding constructors
+    emitScalarProjection nominal binding =
+      nl
+        [ "data " <> tagName,
+          "",
+          "instance FieldProjection " <> tagName <> " where",
+          "  type FieldName " <> tagName <> " = " <> tshow name,
+          "  type FieldOwner " <> tagName <> " = " <> renderHaskellSource (consumerNominalHaskell binding),
+          "  type FieldResult " <> tagName <> " = " <> scalarHaskellType (resolvedNominalRepresentation nominal),
+          "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (consumerNominalCanonical binding)),
+          "  projectFieldValue _ = nominalToRepresentation " <> unQualifiedValueName (consumerNominalBinding binding),
+          "",
+          witnessName <> " :: FieldWitness " <> tagName,
+          witnessName <> " = fieldWitness @" <> tagName
+        ]
+      where
+        name = resolvedNominalName nominal
+        tagName = name <> "NominalProjection"
+        witnessName = lowerFirst name <> "Witness"
+    emitConsumerIdProjection nominal binding prefix =
+      nl
+        [ patternName <> " :: TextPattern",
+          patternName <> " = either (error . show) id $ do",
+          "  prefix <- textLiteral " <> tshow (prefix <> "_"),
+          "  leading <- textCharSet ('0' :| \"1234567\")",
+          "  crockford <- textCharSet ('0' :| \"123456789abcdefghjkmnpqrstvwxyz\")",
+          "  suffix <- textRepeatBetween 25 25 crockford",
+          "  pure (textConcat (prefix :| [leading, suffix]))",
+          "",
+          "data " <> tagName,
+          "",
+          "instance FieldProjection " <> tagName <> " where",
+          "  type FieldName " <> tagName <> " = " <> tshow name,
+          "  type FieldOwner " <> tagName <> " = " <> ownerType,
+          "  type FieldResult " <> tagName <> " = Text",
+          "  fieldShapeId _ = " <> tshow equalityIdentity,
+          "  projectFieldValue _ = KindID.toText . nominalToRepresentation " <> bindingName,
+          "",
+          "instance ExactFieldProjection " <> tagName <> " where",
+          "  fieldProjectionDomain _ = textProjectionDomain " <> patternName,
+          "  reconstructFieldOwner _ value",
+          "    | not (matchesTextPattern " <> patternName <> " value) = Nothing",
+          "    | otherwise = case KindID.parseText @" <> tshow prefix <> " value of",
+          "        Left _ -> Nothing",
+          "        Right representation -> Just (nominalFromRepresentation " <> bindingName <> " representation)",
+          "",
+          witnessName <> " :: FieldWitness " <> tagName,
+          witnessName <> " = exactFieldWitness @" <> tagName
+        ]
+      where
+        name = resolvedNominalName nominal
+        tagName = nominalEqualityTagName nominal
+        witnessName = nominalEqualityWitnessName nominal
+        patternName = lowerFirst name <> "EqualityPattern"
+        ownerType = renderHaskellSource (consumerNominalHaskell binding)
+        bindingName = unQualifiedValueName (consumerNominalBinding binding)
+        equalityIdentity = fromMaybe (error "consumer ID equality contract missing") (nominalEqualityIdentity nominal)
+    emitConsumerEnumProjection nominal binding constructors =
+      nl $
+        [ "data " <> tagName,
+          "",
+          "instance FieldProjection " <> tagName <> " where",
+          "  type FieldName " <> tagName <> " = " <> tshow name,
+          "  type FieldOwner " <> tagName <> " = " <> ownerType,
+          "  type FieldResult " <> tagName <> " = Text",
+          "  fieldShapeId _ = " <> tshow equalityIdentity,
+          "  projectFieldValue _ = " <> encoderName <> " . nominalToRepresentation " <> bindingName,
+          "",
+          "instance ExactFieldProjection " <> tagName <> " where",
+          "  fieldProjectionDomain _ = finiteProjectionDomain (" <> renderNonEmpty (map (tshow . snd) (NE.toList constructors)) <> ")",
+          "  reconstructFieldOwner _ = \\case"
+        ]
+          <> [ "    " <> tshow wire <> " -> Just (nominalFromRepresentation " <> bindingName <> " " <> representationModule <> "." <> constructor <> ")"
+             | (constructor, wire) <- NE.toList constructors
+             ]
+          <> [ "    _ -> Nothing",
+               "",
+               witnessName <> " :: FieldWitness " <> tagName,
+               witnessName <> " = exactFieldWitness @" <> tagName
+             ]
+      where
+        name = resolvedNominalName nominal
+        tagName = nominalEqualityTagName nominal
+        witnessName = nominalEqualityWitnessName nominal
+        ownerType = renderHaskellSource (consumerNominalHaskell binding)
+        bindingName = unQualifiedValueName (consumerNominalBinding binding)
+        representationModule = nominalRepresentationModule ctx name
+        encoderName = representationModule <> "." <> lowerFirst name <> "RepresentationText"
+        equalityIdentity = fromMaybe (error "consumer enum equality contract missing") (nominalEqualityIdentity nominal)
     scalarHaskellType representation = case representation of
       ScalarRepresentation NominalText -> "Text"
       ScalarRepresentation NominalInt -> "Int"
@@ -1573,11 +1739,16 @@ scaffoldAggregateForService ctx service agg =
            else []
        )
     ++ [ genModule a "EventStream" (emitEventStream a),
-         genModule a "Projection" (emitProjection a),
-         holeModule a (emitHoles a)
+         genModule a "Projection" (emitProjection a)
        ]
+    ++ [holeModule a (emitHoles a) | aggregateNeedsHoleModule a]
   where
     a = resolveAggForService ctx service agg
+
+aggregateNeedsHoleModule :: Agg -> Bool
+aggregateNeedsHoleModule aggregate
+  | hasVersion2Ownership aggregate = not (null (version2HoleExports aggregate))
+  | otherwise = True
 
 -- | The generated behavioral contract is deliberately separate from both the
 -- authoritative transducer and the create-once witness list.  Regeneration can
@@ -3917,14 +4088,15 @@ emitExpressions aggregate
                "import Keiki.Core qualified as K",
                "import Keiki.Generics (RegFieldsOf)"
              ]
-          ++ ["import Data.Text (Text)" | expressionUsesType AggregateText]
+          ++ ["import Data.Text (Text)" | expressionUsesType AggregateText || expressionUsesNominalEqualityKey]
           ++ ["import Data.Time.Clock (UTCTime)" | expressionUsesType AggregateTime && not expressionUsesTimeLiteral]
           ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
           ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
           ++ ["import Numeric.Natural (Natural)" | expressionUsesType AggregateNatural]
           ++ generatedNominalTypeImports (aContext aggregate) generatedExpressionNominals
           ++ structuralProjectionImport
-          ++ nominalProjectionImport
+          ++ generatedNominalProjectionImport
+          ++ consumerNominalProjectionImport
           ++ consumerImports
           ++ ["import Data.KindID qualified as KindID" | expressionUsesConsumerIdLiteral]
           ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation)" | expressionUsesConsumerNominalLiteral]
@@ -3944,9 +4116,13 @@ emitExpressions aggregate
       [ "import " <> structuralProjectionModule (aContext aggregate) <> " qualified as StructuralProjections"
       | maybe False (not . null . projectionSpecs) (aTypeGraph aggregate)
       ]
-    nominalProjectionImport =
+    generatedNominalProjectionImport =
+      [ "import " <> generatedNominalModule (aContext aggregate) <> " qualified as GeneratedNominals"
+      | any expressionUsesGeneratedNominalProjection resolvedExpressions
+      ]
+    consumerNominalProjectionImport =
       [ "import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections"
-      | any expressionUsesNominalProjection resolvedExpressions
+      | any expressionUsesConsumerNominalProjection resolvedExpressions
       ]
     consumerImports =
       map ("import " <>)
@@ -3972,6 +4148,7 @@ emitExpressions aggregate
     expressionUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) resolvedExpressions
     expressionUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
     expressionUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
+    expressionUsesNominalEqualityKey = any (anyTypedExpression isNominalEqualityOperand) resolvedExpressions
     consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
     generatedExpressionNominals =
       stableNominals
@@ -4024,11 +4201,28 @@ typedExpressionChildren expression = case typedScalarNode expression of
   TypedAnd left right -> [left, right]
   TypedOr left right -> [left, right]
 
-expressionUsesNominalProjection :: TypedScalarExpr -> Bool
-expressionUsesNominalProjection = anyTypedExpression $ \expression -> case (typedScalarType expression, typedScalarNode expression) of
+isNominalEqualityOperand :: TypedScalarExpr -> Bool
+isNominalEqualityOperand expression = case (typedScalarType expression, typedScalarNode expression) of
   (AggregateNominal nominal, TypedRoot {}) -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
     (ConsumerNominal {}, ScalarRepresentation {}) -> True
+    (_, IdRepresentation {}) -> True
+    (_, EnumRepresentation {}) -> True
     _ -> False
+  _ -> False
+
+expressionUsesGeneratedNominalProjection :: TypedScalarExpr -> Bool
+expressionUsesGeneratedNominalProjection = anyTypedExpression $ \expression -> case (typedScalarType expression, typedScalarNode expression) of
+  (AggregateNominal nominal, TypedRoot {}) -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
+    (GeneratedNominal, IdRepresentation {}) -> True
+    (GeneratedNominal, EnumRepresentation {}) -> True
+    _ -> False
+  _ -> False
+
+expressionUsesConsumerNominalProjection :: TypedScalarExpr -> Bool
+expressionUsesConsumerNominalProjection = anyTypedExpression $ \expression -> case (typedScalarType expression, typedScalarNode expression) of
+  (AggregateNominal nominal, TypedRoot {}) -> case resolvedNominalOwnership nominal of
+    ConsumerNominal {} -> True
+    GeneratedNominal -> False
   _ -> False
 
 typedConsumerLiteralNominals :: TypedScalarExpr -> [ResolvedNominalType]
@@ -4120,15 +4314,32 @@ renderKeikiCmp = \case
 renderComparisonTerm :: Agg -> Transition -> TypedScalarExpr -> Text
 renderComparisonTerm aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
   (AggregateNominal nominal, TypedRoot provenance)
-    | ConsumerNominal {} <- resolvedNominalOwnership nominal,
-      ScalarRepresentation {} <- resolvedNominalRepresentation nominal ->
-        renderNominalProjectionTerm aggregate transition nominal provenance
+    | nominalComparisonProjection nominal -> renderNominalProjectionTerm aggregate transition nominal provenance
+  (AggregateNominal nominal, TypedLiteral (ScalarEnumValue _ constructor)) ->
+    "K.lit (" <> tshow (enumWireFor nominal constructor) <> " :: Text)"
+  (AggregateNominal _, TypedLiteral (ScalarIdValue _ value)) ->
+    "K.lit (" <> tshow value <> " :: Text)"
   _ -> renderKeikiTerm aggregate transition expression
+
+nominalComparisonProjection :: ResolvedNominalType -> Bool
+nominalComparisonProjection nominal = case resolvedNominalRepresentation nominal of
+  IdRepresentation {} -> True
+  EnumRepresentation {} -> True
+  ScalarRepresentation {} -> case resolvedNominalOwnership nominal of
+    ConsumerNominal {} -> True
+    GeneratedNominal -> False
+
+enumWireFor :: ResolvedNominalType -> Name -> Text
+enumWireFor nominal constructor = case resolvedNominalRepresentation nominal of
+  EnumRepresentation constructors -> fromMaybe (error "validated enum literal lost its wire spelling") (lookup constructor (NE.toList constructors))
+  _ -> error "validated enum literal lost its enum representation"
 
 renderNominalProjectionTerm :: Agg -> Transition -> ResolvedNominalType -> ScalarRootProvenance -> Text
 renderNominalProjectionTerm aggregate transition nominal provenance = case provenance of
   ScalarRegisterRoot registerName ownerType ->
-    "K.regProj NominalProjections."
+    "K.regProj "
+      <> projectionQualifier
+      <> "."
       <> witness
       <> " (#"
       <> registerName
@@ -4138,7 +4349,9 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       <> renderDomainType aggregate ownerType
       <> ")"
   ScalarCommandRoot fieldName ownerType ->
-    "K.inpProj NominalProjections."
+    "K.inpProj "
+      <> projectionQualifier
+      <> "."
       <> witness
       <> " inCtor"
       <> tCommand transition
@@ -4150,7 +4363,13 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       <> renderDomainType aggregate ownerType
       <> ")"
   where
-    witness = lowerFirst (resolvedNominalName nominal) <> "Witness"
+    projectionQualifier = case resolvedNominalOwnership nominal of
+      GeneratedNominal -> "GeneratedNominals"
+      ConsumerNominal {} -> "NominalProjections"
+    witness = case resolvedNominalRepresentation nominal of
+      ScalarRepresentation {} -> lowerFirst (resolvedNominalName nominal) <> "Witness"
+      IdRepresentation {} -> nominalEqualityWitnessName nominal
+      EnumRepresentation {} -> nominalEqualityWitnessName nominal
 
 renderKeikiTerm :: Agg -> Transition -> TypedScalarExpr -> Text
 renderKeikiTerm aggregate transition expression = case typedScalarNode expression of

@@ -350,7 +350,10 @@ main = hspec $ do
             "nominal-missing-initial.keiro",
             "nominal-name-collision.keiro",
             "nominal-scalars.keiro",
-            "nominal-unsupported-representation.keiro"
+            "nominal-unsupported-representation.keiro",
+            "workspace-nominals/domain/project-artifact.keiro",
+            "workspace-nominals/domain/project.keiro",
+            "workspace-nominals/domain/shared.keiro"
           ]
 
     it "checks v1, rejects a future contract once, and inspects legacy explicitly" $ do
@@ -491,6 +494,37 @@ main = hspec $ do
               ]
       spec <- parseInlineSpec "<scalar-errors>" source
       errorCodes spec `shouldContain` [AggregateExpressionOperatorUnsupported, AggregateExpressionOperandTypeMismatch]
+
+    it "rejects nominal type confusion and unqualified enum values at source checking" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context nominal-type-confusion",
+                "id OrderId prefix=ord",
+                "id UserId prefix=usr",
+                "enum OrderStatus { Draft=draft Submitted=submitted }",
+                "enum UserStatus { Active=active Disabled=disabled }",
+                "aggregate Account",
+                "  regs",
+                "    orderId OrderId = placeholder",
+                "    status OrderStatus = Draft",
+                "  states Open Closed!",
+                "  command Compare { orderId:OrderId userId:UserId status:OrderStatus userStatus:UserStatus label:Text }",
+                "  event Compared = fields(Compare)",
+                "  Open -- Compare -->",
+                "    guard cmd.orderId == cmd.userId",
+                "      && cmd.status == cmd.userStatus",
+                "      && cmd.orderId == cmd.label",
+                "      && cmd.status == Draft",
+                "    emit Compared",
+                "    goto Closed"
+              ]
+      spec <- parseInlineSpec "<nominal-type-confusion>" source
+      let diagnostics = validateSpec spec
+      length [() | diagnostic <- diagnostics, code diagnostic == AggregateExpressionOperandTypeMismatch]
+        `shouldBe` 3
+      errorCodes spec `shouldContain` [AggregateExpressionRootUnknown]
+      T.unlines (map message diagnostics) `shouldSatisfy` T.isInfixOf "qualify"
 
     it "rejects machine-Int arithmetic at both platform bounds" $ do
       let source =
@@ -672,9 +706,7 @@ main = hspec $ do
           behaviorHoles = case [moduleText value | value <- modules, T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value))] of
             [value] -> value
             values -> error ("expected one BehaviorHoles module, got " <> show (length values))
-          ordinaryHoles = case [moduleText value | value <- modules, T.isSuffixOf "/Holes.hs" (T.pack (modulePath value)), not (T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value)))] of
-            [value] -> value
-            values -> error ("expected one aggregate Holes module, got " <> show (length values))
+          ordinaryHoles = [value | value <- modules, T.isSuffixOf "/Holes.hs" (T.pack (modulePath value)), not (T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value)))]
       transducer `shouldSatisfy` T.isInfixOf "requestId = d.requestId"
       transducer `shouldSatisfy` T.isInfixOf "observedAt = d.observedAt"
       transducer `shouldSatisfy` T.isInfixOf "amount = d.amount"
@@ -682,7 +714,7 @@ main = hspec $ do
       codec `shouldSatisfy` T.isInfixOf "display_label"
       codec `shouldSatisfy` T.isInfixOf "optional_note"
       transducer `shouldSatisfy` (not . T.isInfixOf "Output")
-      ordinaryHoles `shouldSatisfy` (not . T.isInfixOf "Output")
+      ordinaryHoles `shouldBe` []
       obsoleteGeneratedOutputHooks spec `shouldContain` [("Journey", "transition1EmptyStartOutput1Started")]
       contract `shouldSatisfy` T.isInfixOf "keiro/behavior-conformance/1"
       contract `shouldSatisfy` T.isInfixOf "commandKind command == requirementCommandName requirement"
@@ -752,6 +784,7 @@ main = hspec $ do
                 recLanguageContract = effectiveLanguageContract (DeclaredLanguage version noLoc),
                 recFiles = [],
                 recMappings = [],
+                recNominalEqualities = [],
                 recBindingObligations = [],
                 recBehaviorRequirements = rows
               }
@@ -777,6 +810,7 @@ main = hspec $ do
                 wrLanguageContract = wsLanguageContract workspace,
                 wrModules = [],
                 wrMappings = [],
+                wrNominalEqualities = [],
                 wrBindingObligations = [],
                 wrBehaviorRequirements = ownedRows,
                 wrAdopted = []
@@ -797,6 +831,8 @@ main = hspec $ do
       obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligations spec)
       length obligations `shouldBe` 21
       map obligationCategory obligations `shouldSatisfy` all (`elem` ["nominal-id", "nominal-enum", "nominal-scalar"])
+      length [() | obligation <- obligations, obligationEqualityContract obligation /= Nothing] `shouldBe` 2
+      renderBindingObligations (specContext spec) obligations `shouldSatisfy` T.isInfixOf "equality-contract:"
       let signatures = map obligationSignature obligations
       forM_
         [ "orderIdBinding :: NominalBinding NominalConformance.Domain.OrderId (KindID \"ord\")",
@@ -843,6 +879,7 @@ main = hspec $ do
       enumModule <- moduleAt "Generated/NominalScalars/Nominal/Shape/OrderStatus.hs"
       projectionModule <- moduleAt "Generated/NominalScalars/NominalProjections.hs"
       bindingModule <- moduleAt "NominalConformance/Bindings.hs"
+      map modulePath modules `shouldNotContain` ["NominalScalars/NominalLedger/Holes.hs"]
       moduleText domainModule `shouldSatisfy` T.isInfixOf "NominalConformance.Domain.OrderId"
       moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "newtype OrderId")
       moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "data OrderStatus =")
@@ -855,6 +892,10 @@ main = hspec $ do
       moduleText enumModule `shouldSatisfy` (not . T.isInfixOf "NominalConformance")
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "type FieldOwner AccountNumberNominalProjection = NominalConformance.Domain.AccountNumber"
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "projectFieldValue _ = nominalToRepresentation NominalConformance.Bindings.accountNumberBinding"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection OrderIdEqualityProjection"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "textProjectionDomain orderIdEqualityPattern"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection OrderStatusEqualityProjection"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "finiteProjectionDomain (\"draft\" :| [\"submitted\"])"
       kind bindingModule `shouldBe` HoleStub
       moduleText bindingModule `shouldSatisfy` T.isInfixOf "orderIdBinding :: NominalBinding NominalConformance.Domain.OrderId (KindID \"ord\")"
       firewallBreaches modules `shouldBe` []
@@ -874,6 +915,7 @@ main = hspec $ do
                 recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                 recFiles = [],
                 recMappings = consumerMappings plan,
+                recNominalEqualities = nominalEqualityIdentities spec,
                 recBindingObligations = [],
                 recBehaviorRequirements = []
               }
@@ -886,9 +928,11 @@ main = hspec $ do
       consumerPackages plan `shouldBe` ["nominal-conformance"]
       length [() | NominalMapping {} <- consumerMappings plan] `shouldBe` 7
       T.count "nominal-mapping " encoded `shouldBe` 7
+      T.count "nominal-equality " encoded `shouldBe` 2
       T.count "\nmapping " encoded `shouldBe` 0
       parseRecord encoded `shouldBe` Just record
       T.count "nominal-mapping " workspaceEncoded `shouldBe` 7
+      T.count "nominal-equality " workspaceEncoded `shouldSatisfy` (>= 2)
       T.count "\nmapping " workspaceEncoded `shouldBe` 0
       parseWorkspaceRecord workspaceEncoded `shouldBe` Just workspaceRecord
 
@@ -915,7 +959,9 @@ main = hspec $ do
           maybe False (\impact -> Set.member "NominalsRecorded" (ReplayImpact.eventTypes impact) && includeSnapshotStreams impact) (Map.lookup "NominalLedger" impacts)
         ReplayImpact.ReplayNeutral -> False
       case [aggregate | NAggregate aggregate <- specNodes current] of
-        aggregate : _ -> aggregateFoldSurface current aggregate `shouldNotBe` aggregateFoldSurface bumped aggregate
+        aggregate : _ -> do
+          aggregateFoldSurface current aggregate `shouldSatisfy` T.isInfixOf "nominal-equality-use:"
+          aggregateFoldSurface current aggregate `shouldNotBe` aggregateFoldSurface bumped aggregate
         [] -> expectationFailure "expected nominal aggregate"
 
   describe "historical codec comparison" $ do
@@ -1192,9 +1238,7 @@ main = hspec $ do
               _ -> Unsupported
             EqualityGuardUse -> case resolvedType of
               AggregateMapped {} -> Unsupported
-              AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
-                ScalarRepresentation {} -> SolverVisible
-                _ -> OpaqueOnly
+              AggregateNominal {} -> SolverVisible
               AggregateVertex {} -> OpaqueOnly
               _ -> SolverVisible
             _ -> case resolvedType of
@@ -3204,6 +3248,7 @@ main = hspec $ do
                   recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                   recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report],
                   recMappings = [],
+                  recNominalEqualities = [],
                   recBindingObligations = [],
                   recBehaviorRequirements = Behavior.behaviorRecordRows requirements
                 }
@@ -4072,8 +4117,8 @@ main = hspec $ do
           found -> expectationFailure ("expected one generated nominal owner, got " <> show (map modulePath found)) >> fail "unreachable"
         let nominalText = moduleText ownerModule
         T.count "newtype ProjectId" nominalText `shouldBe` 1
-        T.count "data ProjectPhase" nominalText `shouldBe` 1
-        T.count "data WorkspaceVisibility" nominalText `shouldBe` 1
+        T.count "data ProjectPhase =" nominalText `shouldBe` 1
+        T.count "data WorkspaceVisibility =" nominalText `shouldBe` 1
         projectDomain <- domainFor "Project/Generated/Domain.hs"
         artifactDomain <- domainFor "ProjectArtifact/Generated/Domain.hs"
         forM_ [projectDomain, artifactDomain] $ \domain -> do
@@ -4126,16 +4171,23 @@ main = hspec $ do
               [ "Generated/WorkspaceNominalProof/Nominals.hs",
                 "Generated/WorkspaceNominalProof/Project/Domain.hs",
                 "Generated/WorkspaceNominalProof/Project/Codec.hs",
+                "Generated/WorkspaceNominalProof/Project/Expressions.hs",
+                "Generated/WorkspaceNominalProof/Project/Transducer.hs",
+                "Generated/WorkspaceNominalProof/Project/BehaviorContract.hs",
                 "Generated/WorkspaceNominalProof/Project/EventStream.hs",
                 "Generated/WorkspaceNominalProof/Project/Harness.hs",
                 "Generated/WorkspaceNominalProof/Project/Projection.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Expressions.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Transducer.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/EventStream.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Harness.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Projection.hs",
                 "Generated/WorkspaceNominalProof/ReplayAudit.hs"
               ]
+        map fst (wpModules plan) `shouldSatisfy` all (not . isSuffixOfPath "/Holes.hs")
         forM_ compiledPaths $ \path ->
           case [m | (m, _) <- wpModules plan, modulePath m == path] of
             [generated] -> do
@@ -4417,7 +4469,7 @@ main = hspec $ do
           newDomain `shouldSatisfy` T.isInfixOf "Generated.Nominals (ProjectId (..), ProjectPhase (..))"
           newNominals <- TIO.readFile (out </> nominalPath)
           T.count "newtype ProjectId" newNominals `shouldBe` 1
-          T.count "data ProjectPhase" newNominals `shouldBe` 1
+          T.count "data ProjectPhase =" newNominals `shouldBe` 1
           TIO.readFile (out </> holePath) `shouldReturn` "-- hand-owned 0.6 implementation\n"
       it "adopts an overwritten same-context record pair by record and by banner" $
         withInlineWorkspace "keiro-dsl-workspace-adopt" adoptionMembers $ \_ out workspace -> do
@@ -5069,6 +5121,7 @@ sampleWorkspaceRecord workspace =
           WorkspaceModuleRow HoleStub "Demo/Project/Holes.hs" (Just "domain/shared.keiro")
         ],
       wrMappings = consumerMappings (consumerPlan (wsMergedSpec workspace)),
+      wrNominalEqualities = nominalEqualityIdentities (wsMergedSpec workspace),
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
       wrBehaviorRequirements = [],
       wrAdopted =

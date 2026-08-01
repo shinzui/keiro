@@ -54,7 +54,7 @@ sampleEventClosedEvent = (ClosedEvent (ClosedEventData 0))
 
 acceptAdjust :: Bool
 acceptAdjust =
-  case step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) ((Adjust (AdjustData 0 0 0 "sample-label" False Normal (RequestId "sample") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) (snd (NonEmpty.head (fixtureCases ScalarExpressions.Bindings.limitsCases)))))) of
+  case step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) ((Adjust (AdjustData 0 0 0 "sample-label" False Normal (RequestId "") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) (snd (NonEmpty.head (fixtureCases ScalarExpressions.Bindings.limitsCases)))))) of
     Just (v, _, _) -> v == ScalarAccountReviewed
     Nothing -> False
 
@@ -62,7 +62,7 @@ acceptAdjust =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayAdjust :: [(String, Bool)]
 forwardReplayAdjust =
-  case step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) ((Adjust (AdjustData 0 0 0 "sample-label" False Normal (RequestId "sample") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) (snd (NonEmpty.head (fixtureCases ScalarExpressions.Bindings.limitsCases)))))) of
+  case step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) ((Adjust (AdjustData 0 0 0 "sample-label" False Normal (RequestId "") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) (snd (NonEmpty.head (fixtureCases ScalarExpressions.Bindings.limitsCases)))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScalarAccountEvent (eventType scalarAccountCodec event) (encodeScalarAccountEvent event)) emitted of

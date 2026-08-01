@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main (main) where
 
@@ -13,12 +14,18 @@ import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.KindID as KindID
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy (Proxy (..))
+import Data.Text (Text)
 import qualified Generated.NominalScalars.Nominal.Shape.OrderStatus as Representation
 import Generated.NominalScalars.NominalLedger.Codec
 import Generated.NominalScalars.NominalLedger.Domain
+import Generated.NominalScalars.NominalLedger.Harness (harnessAssertions)
+import Generated.NominalScalars.NominalLedger.Transducer (nominalLedgerTransducer)
 import qualified Generated.NominalScalars.NominalProjections as Projections
-import Keiki.Core (Index, evalPred, fieldWitnessAgrees, lit, regProj, (!), (.==), (.>=))
+import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, Index, ProjectionLawFailure (..), checkFieldProjectionKey, checkFieldProjectionOwner, evalPred, exactFieldWitness, fieldWitnessAgrees, lit, regProj, (!), (.==), (.>=))
+import qualified Keiki.Core as K
+import Keiki.ProjectionDomain (finiteProjectionDomain)
 import Keiki.Shape (CanonicalTypeName (..))
+import qualified Keiki.Symbolic as Symbolic
 import Keiro.Codec (EventType (..), eventType)
 import Keiro.Codec.Nominal
 import qualified Keiro.EventStream as EventStream
@@ -32,8 +39,10 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
     mutation <- lookupEnv "KEIRO_NOMINAL_MUTATION"
+    exactProjectionProof <- nominalExactProjectionProof
     let checks =
-            bindingLawChecks
+            harnessAssertions
+                <> bindingLawChecks
                 <> [ ("expected wire parity: all nominal categories", expectedWireParity)
                    , ("enum representation covers every constructor and wire spelling exactly once", enumCoverage)
                    , ("event codec exact JSON bytes", exactEventJson)
@@ -45,7 +54,10 @@ main = do
                    , ("snapshot cache round-trip", snapshotRoundTrip)
                    , ("canonical nominal identities", canonicalIdentities)
                    , ("scalar projection witness agreement", projectionAgreement)
+                   , ("ID and enum equality projection witness agreement", nominalEqualityProjectionAgreement)
                    , ("scalar equality support", equalityChecks)
+                   , ("same-declaration ID and enum guards take both concrete branches", nominalGuardBranches)
+                   , ("validated ID and finite enum projections are exact symbolically", exactProjectionProof)
                    , ("Int Natural and Time ordering support", orderingChecks)
                    , ("forward execution equals decoded replay", forwardReplayAgreement)
                    ]
@@ -59,7 +71,30 @@ mutationChecks Nothing = []
 mutationChecks (Just "enum-transpose") = [("mutation gate: transposed enum representation preserves expected wire", transposedEnumWireParity)]
 mutationChecks (Just "scalar-wire") = [("mutation gate: changed scalar expected wire remains exact", changedScalarWireParity)]
 mutationChecks (Just "id-one-direction") = [("mutation gate: one-direction ID suffix preserves domain law", oneDirectionIdLaw)]
+mutationChecks (Just "dishonest-exact") = [("mutation gate: under-declared exact projection satisfies its owner law", dishonestExactProjectionLaw)]
 mutationChecks (Just other) = [("unknown mutation: " <> other, False)]
+
+data DishonestStatusProjection
+
+instance FieldProjection DishonestStatusProjection where
+    type FieldName DishonestStatusProjection = "dishonest-status"
+    type FieldOwner DishonestStatusProjection = OrderStatus
+    type FieldResult DishonestStatusProjection = Text
+    fieldShapeId _ = "mutation/dishonest-status"
+    projectFieldValue _ AwaitingApproval = "draft"
+    projectFieldValue _ Accepted = "accepted-outside-domain"
+
+instance ExactFieldProjection DishonestStatusProjection where
+    fieldProjectionDomain _ = finiteProjectionDomain (NE.fromList ["draft", "submitted"])
+    reconstructFieldOwner _ "draft" = Just AwaitingApproval
+    reconstructFieldOwner _ "submitted" = Just Accepted
+    reconstructFieldOwner _ _ = Nothing
+
+dishonestStatusWitness :: FieldWitness DishonestStatusProjection
+dishonestStatusWitness = exactFieldWitness @DishonestStatusProjection
+
+dishonestExactProjectionLaw :: Bool
+dishonestExactProjectionLaw = checkFieldProjectionOwner dishonestStatusWitness Accepted == Right ()
 
 transposedEnumWireParity :: Bool
 transposedEnumWireParity =
@@ -236,6 +271,19 @@ projectionAgreement =
         , fieldWitnessAgrees Projections.observedAtWitness (nominalToRepresentation Bindings.observedAtBinding) Bindings.initialObservedAt
         ]
 
+nominalEqualityProjectionAgreement :: Bool
+nominalEqualityProjectionAgreement =
+    and
+        [ fieldWitnessAgrees Projections.orderIdEqualityWitness (KindID.toText . nominalToRepresentation Bindings.orderIdBinding) Bindings.initialOrderId
+        , fieldWitnessAgrees Projections.orderStatusEqualityWitness (Representation.orderStatusRepresentationText . nominalToRepresentation Bindings.orderStatusBinding) Bindings.initialOrderStatus
+        , checkFieldProjectionOwner Projections.orderIdEqualityWitness Bindings.initialOrderId == Right ()
+        , checkFieldProjectionOwner Projections.orderStatusEqualityWitness Bindings.initialOrderStatus == Right ()
+        , checkFieldProjectionKey Projections.orderIdEqualityWitness Bindings.validOrderIdText == Right Bindings.initialOrderId
+        , checkFieldProjectionKey Projections.orderStatusEqualityWitness "draft" == Right Bindings.initialOrderStatus
+        , checkFieldProjectionKey Projections.orderStatusEqualityWitness "submitted" == Right Accepted
+        , checkFieldProjectionKey Projections.orderIdEqualityWitness "usr_00041061050r3gg28a1c60t3gf" == Left ProjectedKeyOutsideDeclaredDomain
+        ]
+
 equalityChecks :: Bool
 equalityChecks =
     and
@@ -265,17 +313,69 @@ featureIx = #featureFlag
 observedIx :: Index NominalLedgerRegs ObservedAt
 observedIx = #observedAt
 
-forwardReplayAgreement :: Bool
-forwardReplayAgreement = case parseNominalLedgerEvent (EventType "NominalsRecorded") (encodeNominalLedgerEvent sampleEvent) of
-    Left _ -> False
-    Right decoded -> applyEvent decoded == applyEvent sampleEvent
+orderIdIx :: Index NominalLedgerRegs OrderId
+orderIdIx = #orderId
+
+statusIx :: Index NominalLedgerRegs OrderStatus
+statusIx = #status
+
+matchingCommand :: NominalLedgerCommand
+matchingCommand =
+    RecordNominals
+        RecordNominalsData
+            { orderId = Bindings.initialOrderId
+            , status = Bindings.initialOrderStatus
+            , accountNumber = AccountNumber "acct-next"
+            , riskScore = RiskScore 4
+            , sequenceNumber = SequenceNumber 9
+            , featureFlag = FeatureFlag True
+            , observedAt = ObservedAt Bindings.sampleTime
+            }
+
+nominalGuardBranches :: Bool
+nominalGuardBranches =
+    accepts matchingCommand
+        && not (accepts (setOrderId alternateOrderId matchingCommand))
+        && not (accepts (setStatus Accepted matchingCommand))
   where
-    applyEvent (NominalsRecorded payload) =
-        ( payload.orderId
-        , payload.status
-        , payload.accountNumber
-        , payload.riskScore
-        , payload.sequenceNumber
-        , payload.featureFlag
-        , payload.observedAt
-        )
+    accepts command = case K.step nominalLedgerTransducer (NominalLedgerEmpty, initialNominalLedgerRegs) command of
+        Just {} -> True
+        Nothing -> False
+    setOrderId value (RecordNominals command) = RecordNominals command{orderId = value}
+    setStatus value (RecordNominals command) = RecordNominals command{status = value}
+
+alternateOrderId :: OrderId
+alternateOrderId = case KindID.parseText @"ord" "ord_00041061050r3gg28a1c60t3ge" of
+    Left reason -> error ("invalid alternate conformance TypeID: " <> show reason)
+    Right value -> OrderId value
+
+nominalExactProjectionProof :: IO Bool
+nominalExactProjectionProof = do
+    let idValue = regProj Projections.orderIdEqualityWitness orderIdIx
+        enumValue = regProj Projections.orderStatusEqualityWitness statusIx
+        idContradiction = K.PAnd (K.PEq idValue (lit Bindings.validOrderIdText)) (K.PEq idValue (lit (KindID.toText (unOrderId alternateOrderId))))
+        enumContradiction = K.PAnd (K.PEq enumValue (lit ("draft" :: Text))) (K.PEq enumValue (lit ("submitted" :: Text)))
+    idResult <- Symbolic.verifyPredicate idContradiction
+    enumResult <- Symbolic.verifyPredicate enumContradiction
+    pure (idResult == Symbolic.VerifiedUnsatisfiable && enumResult == Symbolic.VerifiedUnsatisfiable)
+
+forwardReplayAgreement :: Bool
+forwardReplayAgreement = case K.step nominalLedgerTransducer initialPair matchingCommand of
+    Nothing -> False
+    Just (forwardVertex, forwardRegisters, events) ->
+        case traverse decodeRoundTrip events of
+            Left _ -> False
+            Right decodedEvents -> case K.applyEventsEither nominalLedgerTransducer initialPair decodedEvents of
+                Left _ -> False
+                Right (replayVertex, replayRegisters) ->
+                    replayVertex == forwardVertex
+                        && replayRegisters ! #orderId == forwardRegisters ! #orderId
+                        && replayRegisters ! #status == forwardRegisters ! #status
+                        && replayRegisters ! #accountNumber == forwardRegisters ! #accountNumber
+                        && replayRegisters ! #riskScore == forwardRegisters ! #riskScore
+                        && replayRegisters ! #sequenceNumber == forwardRegisters ! #sequenceNumber
+                        && replayRegisters ! #featureFlag == forwardRegisters ! #featureFlag
+                        && replayRegisters ! #observedAt == forwardRegisters ! #observedAt
+  where
+    initialPair = (NominalLedgerEmpty, initialNominalLedgerRegs)
+    decodeRoundTrip event = parseNominalLedgerEvent (eventType nominalLedgerCodec event) (encodeNominalLedgerEvent event)

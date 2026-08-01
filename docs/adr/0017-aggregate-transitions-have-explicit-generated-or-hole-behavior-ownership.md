@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-07-31T17:38:52Z
+timestamp: 2026-08-01T18:05:45Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -56,6 +56,16 @@ This changes proof strength only: concrete stepping and replay still execute
 the same generated term. An exact projection with a reverse witness is required
 when policy needs a `Verified*` classification.
 
+Generated guards may compare IDs and enums only when both operands resolve to
+the same nominal declaration. Lowering projects both values through that
+declaration's canonical textual key. Finite enums and consumer-bound `KindID`
+values use exact domain/reconstruction witnesses; legacy generated IDs retain a
+one-way witness and therefore an honest `UnverifiedOpaque` symbolic result even
+though concrete stepping and replay execute the type-safe equality. Cross-
+declaration, nominal-to-`Text`, and unqualified enum comparisons fail before
+generation. The equality contract and binding provenance enter the fold
+fingerprint whenever such a guard uses them.
+
 Event output has the same single-authority rule. A version-2 event declared as
 `fields(Command)` is generated-owned only after checking that it names the
 transition command and is a total, selector-preserving, type-identical copy.
@@ -90,6 +100,9 @@ calls them inside its declared emit envelope. Generated `fields(Command)`
 outputs expose no callback; a stale identity function is reported as obsolete
 and cannot affect execution. A Hole function cannot return an alternative
 target or event kind because those choices are absent from its interface.
+When a version-2 aggregate has no Hole-owned transition and no explicit-event
+output hook, scaffolding omits the empty transition `Holes` module entirely;
+`BehaviorHoles` remains the separately owned finite conformance witness list.
 
 Each aggregate also has a generated behavior contract and a separate
 create-once `BehaviorHoles` witness list. Its finite inventory covers every
@@ -113,6 +126,9 @@ that behavior has been translated automatically.
 - Users can always implement a domain rule or update even when the public expression language
   rejects it.
 - A generated-owned expression is authoritative because no Hole seam can replace it.
+- Same-declaration nominal equality follows that rule: its checked projection
+  identity and domain drive the generated predicate, fold fingerprint, concrete
+  execution, replay, and symbolic classification.
 - A checked `fields(Command)` event copy is equally authoritative and has no
   hand-owned identity callback.
 - Hole-owned behavior is honest about its cost: source-level type/capability checks, automatic

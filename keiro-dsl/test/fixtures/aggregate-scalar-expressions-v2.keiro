@@ -45,6 +45,8 @@ aggregate ScalarAccount
       && cmd.observedAt >= reg.openedAt
       && cmd.limits.minimum >= reg.limits.minimum
       && cmd.active == false
+      && cmd.mode == reg.mode
+      && cmd.requestId == reg.requestId
     write balance := reg.balance + cmd.balance * 2
     write reserved := reg.reserved + (cmd.requested - reg.capacity)
     write machine := -7

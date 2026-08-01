@@ -362,7 +362,12 @@ resolveRoot environment loc root name = case root of
       failure
         loc
         ScalarRootUnknown
-        ("scalar root '" <> name <> "' resolves to no register or field of command '" <> tCommand transition <> "'")
+        ( "scalar root '"
+            <> name
+            <> "' resolves to no register or field of command '"
+            <> tCommand transition
+            <> "'; qualify enum values as Type.Constructor"
+        )
 
 resolveProjectionPath :: ExpressionEnvironment -> Loc -> ScalarRootProvenance -> [Name] -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
 resolveProjectionPath environment loc provenance fields = do

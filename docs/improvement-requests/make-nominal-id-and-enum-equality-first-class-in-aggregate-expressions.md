@@ -4,9 +4,9 @@ title: Make nominal ID and enum equality first-class in aggregate expressions
 description: >-
   Let generated and consumer-bound IDs and enums participate in type-safe equality guards without
   forcing Text shadow registers or hand-owned behavior holes.
-timestamp: 2026-08-01T13:11:24Z
+timestamp: 2026-08-01T18:05:45Z
 requestId: IR-12
-status: planned
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md
 reviews:
@@ -28,16 +28,15 @@ reviews:
 
 ## Status
 
-Planned under
+**Implemented.**
 [Plan 170](../plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md)
-and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md),
-targeting Keiki `0.7.0.0`. The producer capabilities tracked by
-`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-3` and
-`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4` are implemented on public `master` and
-packaged by the local `0.7.0.0` release tree, so the external technical blocker is cleared and API
-probes may begin. Plan 170 implementation still follows Plan 168's shared-owner hard dependency.
-Hackage and `v0.7.0.0` now publish the matching release, so Plan 170 can adopt `>=0.7 && <0.8` when
-that local hard dependency is satisfied.
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md)
+adds declaration-scoped ID/enum equality through Keiki `0.7.0.0`. Consumer `KindID` IDs and all
+enums have exact domains and reconstructible symbolic models; legacy generated IDs gain type-safe
+concrete equality while remaining conservatively one-way until Plan 171 restricts their public
+construction domain. Checked metadata drives capabilities, generated witnesses, fingerprints,
+scaffold/workspace records, binding explanations, and conformance. Type-confusion, solver-domain,
+replay, workspace, and dishonest-exact-projection mutations cover the boundary.
 
 ## Context
 

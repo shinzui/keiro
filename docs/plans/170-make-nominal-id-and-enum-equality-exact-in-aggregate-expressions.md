@@ -35,13 +35,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: reverify and adopt released Keiki `0.7.0.0` with `>=0.7 && <0.8` bounds, then add
+- [x] Milestone 1: reverify and adopt released Keiki `0.7.0.0` with `>=0.7 && <0.8` bounds, then add
   focused exact-projection integration probes.
-- [ ] Milestone 2: add checked declaration-scoped nominal equality capabilities, fingerprints,
+- [x] Milestone 2: add checked declaration-scoped nominal equality capabilities, fingerprints,
   diagnostics, and compatibility classification.
-- [ ] Milestone 3: generate exact ID/enum projection witnesses and lower same-declaration equality
-  through Keiki without exposing ordering or arithmetic.
-- [ ] Milestone 4: add positive, type-confusion, solver-domain, counterexample, replay, mutation,
+- [x] Milestone 3: generate declaration-scoped ID/enum projection witnesses, exact where the
+  construction domain is enforced, and lower same-declaration equality through Keiki without
+  exposing ordering or arithmetic.
+- [x] Milestone 4: add positive, type-confusion, solver-domain, counterexample, replay, mutation,
   workspace, and fleet-adoption proof plus documentation.
 
 
@@ -71,6 +72,25 @@ implementation. Provide concise evidence.
   `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4`. Hackage now publishes `0.7.0.0`,
   and `v0.7.0.0` resolves to release commit `7c5d433ef4455e9e626347f89cb3a416bad62e72`
   with the same exposed API.
+- 2026-08-01: The existing Keiki bound was already `>=0.7 && <0.8` after EP-159. Hackage still
+  publishes `0.7.0.0` as the current Keiki release and upstream tag `v0.7.0.0` still dereferences to
+  `7c5d433ef4455e9e626347f89cb3a416bad62e72`, so EP-170 required no dependency edit.
+- 2026-08-01: `mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid` resolves locally to an older
+  checkout, while Hackage and upstream tags publish `0.7.1.1`. The released `parseText` grammar is
+  exactly a fixed prefix, underscore, a leading Crockford character in `0..7`, and 25 more
+  lower-case Crockford characters; it does not itself enforce UUID version/variant bits.
+- 2026-08-01: Generated IDs are still public `newtype Id = Id Text` values under language 2. Their
+  equality key is concrete and type-safe, but an exact textual domain would be dishonest because
+  callers can construct arbitrary `Text`. Consumer-bound `KindID` IDs and all finite enums can use
+  `exactFieldWitness`; generated legacy IDs must retain conservative `fieldWitness` until EP-171
+  enforces construction domains.
+- 2026-08-01: A fully generated version-2 aggregate needs no transition `Holes` module. Omitting
+  that empty create-once surface exposed one stale unit expectation; the generated behavior
+  contract and separate `BehaviorHoles` witness inventory remain present and compiled.
+- 2026-08-01: Final acceptance passes 431 `keiro-dsl-test` examples, all three affected compiled
+  conformance rings, `cabal build all`, strict ADR validation, and native `nix flake check`. The
+  dishonest-exact-projection and transposed-enum mutation commands each fail at their named gate,
+  proving the baseline does not silently accept either corruption.
 
 
 ## Decision Log
@@ -105,6 +125,15 @@ Record every decision made while working on the plan.
   blockers are gone; Plan 168's shared-owner dependency still determines local execution order.
   Date: 2026-08-01
 
+- Decision: Split ID proof strength at the checked ownership boundary. Consumer-bound `KindID`
+  declarations receive exact textual projection domains and reconstruction; generated language-2
+  IDs receive the same declaration-scoped textual equality key through a conservative one-way
+  witness. Generated and consumer-bound enums remain exact finite domains.
+  Rationale: concrete equality stays correct for every admitted Haskell value, while symbolic
+  claims remain truthful. EP-171 is the already-planned place to close construction and then
+  upgrade generated ID witnesses to exactness under the successor contract.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -113,8 +142,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(Implementation not started. The Keiki `0.7.0.0` producer work is authoritatively released; Plan
-168 remains the only hard dependency.)
+All four milestones are complete. Checked declaration metadata now drives capability policy,
+fold/scaffold/workspace identities, binding explanations, shared-owner witnesses, and Keiki
+lowering. Generated and consumer enum equality is finite and exact; consumer `KindID` equality is
+exact over the released decoder grammar; legacy generated ID equality is concrete but
+symbolically conservative. The scalar, consumer-bound, and two-member workspace fixtures exercise
+both equality branches, replay, exact-domain verification, and shared witness ownership without a
+`Text` shadow register or transition Hole. Type-confusion tests reject cross-declaration,
+nominal-to-`Text`, and unqualified enum comparisons at source checking. Mutation gates reject a
+transposed enum binding and an under-declared exact projection. ADRs 12, 14, and 17 now preserve
+the authority, ownership, proof-strength, and empty-Holes decisions; IR-12 and adopter guidance are
+updated. EP-171 remains responsible for restricting generated-ID construction and upgrading that
+one intentionally conservative witness.
 
 
 ## Context and Orientation
@@ -194,15 +233,21 @@ mori registry docs shinzui/keiki
 curl -fsSL https://hackage.haskell.org/package/keiki/preferred.json
 git ls-remote --tags https://github.com/shinzui/keiki.git
 cabal test keiro-dsl-test --test-option=--match --test-option='aggregate expression'
-cabal test keiro-dsl-conformance-aggregate-scalars
+cabal test keiro-dsl-conformance-aggregate-scalar-expressions
+cabal test keiro-dsl-conformance-nominal-scalars
+cabal test keiro-dsl-conformance-workspace-nominals
+keiro-dsl/test/conformance-nominal-scalars/mutations/dishonest-exact.sh
+keiro-dsl/test/conformance-nominal-scalars/mutations/enum-transpose.sh
 cabal test keiro-dsl-test
 cabal build all
+okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 nix flake check
 ```
 
 Record the exact Keiki `0.7.0.0` tag/metadata evidence in Progress before changing bounds. Focused
-conformance must exercise both branches of every nominal equality guard, and all commands exit
-zero.
+conformance must exercise both branches of every nominal equality guard. Baseline and validation
+commands exit zero; each restoring mutation is accepted only when its named conformance gate exits
+non-zero.
 
 
 ## Validation and Acceptance
@@ -256,3 +301,9 @@ function. Keiki 0.7's released domain/reconstruction types are consumed rather t
 Revision note: Rebased the upstream integration contract on released Keiki `0.7.0.0`, verified
 through Hackage and the matching `v0.7.0.0` tag. Plan 170 can adopt `>=0.7 && <0.8` once Plan 168
 satisfies its repository-local hard dependency; no external Keiki blocker remains, 2026-08-01.
+
+Revision note: Completed all milestones with declaration-scoped equality metadata, shared-owner
+and consumer projection witnesses, exact finite-enum and consumer-`KindID` domains, conservative
+legacy generated-ID verification, compatibility/scaffold identities, three compiled conformance
+rings, restoring mutations, adopter documentation, and ADR 12/14/17 amendments. The final 431-
+example suite, all-package build, strict ADR validation, and native Nix checks pass, 2026-08-01.

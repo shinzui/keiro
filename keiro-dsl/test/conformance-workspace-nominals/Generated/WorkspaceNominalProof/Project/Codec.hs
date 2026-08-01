@@ -27,9 +27,10 @@ parseProjectPhase = \case
 projectCodec :: Codec ProjectEvent
 projectCodec =
   Codec
-    { eventTypes = EventType "ProjectRegistered" :| []
+    { eventTypes = EventType "ProjectRegistered" :| [EventType "ArchivalRecorded"]
     , eventType = \case
         ProjectRegistered{} -> EventType "ProjectRegistered"
+        ArchivalRecorded{} -> EventType "ArchivalRecorded"
     , schemaVersion = 1
     , encode = encodeProjectEvent
     , decode = parseProjectEvent
@@ -44,6 +45,12 @@ encodeProjectEvent = \case
       , "projectId" .= projectIdText payload.projectId
       , "phase" .= projectPhaseText payload.phase
       ]
+  ArchivalRecorded payload ->
+    object
+      [ "kind" .= ("ArchivalRecorded" :: Text)
+      , "projectId" .= projectIdText payload.projectId
+      , "phase" .= projectPhaseText payload.phase
+      ]
 
 parseProjectEvent :: EventType -> Value -> Either Text ProjectEvent
 parseProjectEvent (EventType tag) = mapLeftText . parseEither (withObject "ProjectEvent" go)
@@ -52,6 +59,8 @@ parseProjectEvent (EventType tag) = mapLeftText . parseEither (withObject "Proje
       case tag of
         "ProjectRegistered" ->
           ProjectRegistered <$> (ProjectRegisteredData <$> (ProjectId <$> o .: "projectId") <*> (o .: "phase" >>= parseProjectPhase))
+        "ArchivalRecorded" ->
+          ArchivalRecorded <$> (ArchivalRecordedData <$> (ProjectId <$> o .: "projectId") <*> (o .: "phase" >>= parseProjectPhase))
         _ -> fail "unknown event type"
 
 mapLeftText :: Either String b -> Either Text b

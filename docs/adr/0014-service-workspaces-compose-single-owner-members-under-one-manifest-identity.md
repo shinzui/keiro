@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service workspaces compose single-owner members under one manifest identity
 description: A keiro service may span several .keiro files, composed as one graph through a versioned manifest whose service name is the durable identity and whose members each own their declarations outright.
-timestamp: 2026-08-01T15:44:33Z
+timestamp: 2026-08-01T18:05:45Z
 docId: ADR-14
 status: Accepted
 date: 2026-07-29
@@ -83,6 +83,14 @@ generated representation, JSON instances, canonical identity, and textual
 wire helpers for the complete declaration set, including declarations with no
 current aggregate use.
 
+That same owner emits each generated nominal equality projection tag and
+witness. Declaration identity, equality key, and domain therefore cannot split
+across aggregate rings or workspace members. Witnesses are emitted only for
+declarations used by generated equality expressions, while the nominal
+declaration itself remains present even when unused. Consumer-bound nominals
+keep their application owner and receive equivalent projection facades derived
+from their checked binding rather than a copied generated type.
+
 Each aggregate ring imports only the generated nominals in its resolved use
 closure; codecs, expression lowering, and harnesses import their direct uses
 from the same authority. An aggregate `Domain` no longer redeclares or
@@ -157,6 +165,9 @@ bytes are unchanged by construction.
 - Cross-member generated-path collisions are refused at composition. A
   collision entirely inside one member stays scaffold-time behavior, because
   pulling it forward would change existing single-file behavior.
+- Generated equality expressions in different aggregate rings import the same
+  declaration-tagged witness from the context authority, so member moves and
+  reorderings cannot change nominal equality identity or proof domain.
 - Coverage stays reporting-first per ADR 0013: a whole-service report
   aggregates the merged graph's findings and invents no new gate.
 - Detecting one source file assigned to two *different* workspaces is out of

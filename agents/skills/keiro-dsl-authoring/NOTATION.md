@@ -91,8 +91,11 @@ The private event codec remains Keiro-owned: it checks the TypeID prefix before 
 consumer ID and maps enum JSON only through the generated closed representation. Snapshot caches
 still use the consumer's `ToJSON`, `FromJSON`, and `CanonicalTypeName` instances. Bound scalar
 registers also receive a context-level `NominalProjections` facade; equality is available for all
-five representations and ordering only for `Int`, `Natural`, and `Time`. IDs, enums, and nominal
-arithmetic remain opaque to Keiki.
+five representations and ordering only for `Int`, `Natural`, and `Time`. Bound IDs and enums also
+receive declaration-tagged textual equality projections. Consumer `KindID` IDs and finite enums
+are exact; a legacy generated `newtype Id = Id Text` remains conservatively one-way until the
+successor ID-domain contract restricts construction. Nominal ordering and arithmetic remain
+unavailable.
 
 Identifiers use ASCII letters, digits, and underscores. Aggregate, process, workflow,
 type, and constructor names use `PascalCase`; fields and registers begin with a lowercase
@@ -178,10 +181,14 @@ id newtype's empty-text placeholder).
 
 A bare aggregate field first inherits an exactly matching register type, then tries the
 PascalCase field name as a declared id, enum, aggregate vertex, or mapped type, and finally
-falls back to `Text`. Equality guards support the five direct scalars; id, enum, and vertex
-equality remains an opaque Keiki boundary. Ordered comparison is supported only for `Int`,
-`Time`, and `Natural`. Aggregate arithmetic is not part of the expression grammar: `+`,
-`-`, `*`, or `/` fails at the operator with a remedy to compare or copy whole values.
+falls back to `Text`. Equality guards support the five direct scalars and two values of the same
+declared id or enum. Enum literals must be qualified as `Type.Constructor`; cross-ID, cross-enum,
+nominal-to-`Text`, unqualified enum, and vertex equality are rejected. Consumer `KindID` IDs and
+all enums have exact symbolic domains. Legacy generated IDs execute concrete equality but remain
+symbolically `UnverifiedOpaque` because their public wrapper admits unrestricted `Text`. Ordered
+comparison is supported only for `Int`, `Time`, and `Natural`. Aggregate arithmetic is not part
+of the expression grammar: `+`, `-`, `*`, or `/` fails at the operator with a remedy to compare or
+copy whole values.
 
 Direct aggregate `Json`, `Optional`, `List`, and `Map` shapes are deliberately unsupported.
 Declare a `mapped structural` type when an aggregate payload needs one of those shapes.
