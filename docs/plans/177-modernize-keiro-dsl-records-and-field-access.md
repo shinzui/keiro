@@ -17,6 +17,10 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
+Status: Cancelled on 2026-08-01 at the maintainer's direction. No implementation from this plan is
+part of MasterPlan 28. The plan is retained as a historical record of the removed scope; existing
+production records and selectors remain unchanged by the frontend initiative.
+
 After this change, production records owned by `keiro-dsl` use the record-pattern conventions:
 `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`
 Field names express the field's meaning instead of repeating an abbreviated type name, fields are
@@ -36,6 +40,8 @@ bring generic-lens's orphan `IsLabel` instance into modules that also use Keiki 
 
 ## Progress
 
+- [x] Cancelled before implementation so MasterPlan 28 can focus on the source-aware frontend
+  (2026-08-01).
 - [ ] Milestone 1: inventory production records, selectors, serialization contracts, and import closures.
 - [ ] Milestone 2: modernize `Grammar`, language-contract, and parser-boundary records.
 - [ ] Milestone 3: modernize analysis, report, workspace, scaffold, and CLI records.
@@ -90,7 +96,10 @@ bring generic-lens's orphan `IsLabel` instance into modules that also use Keiki 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Cancelled before production changes. The proposed package-wide selector, strictness, deriving, and
+Generic migration was judged independently large and unnecessary for the frontend architecture.
+EP-173 now depends directly on EP-172. New frontend records may use concise semantic fields, but
+existing production records remain within the frozen 0.7 public-API contract.
 
 
 ## Context and Orientation
@@ -304,3 +313,9 @@ If isolated generic-lens access is used, its dependencies are:
 `mori://ekmett/lens/packages/lens`
 Add their verified bounds only to importing components. No dependency is required for `DuplicateRecordFields`, strict
 fields, explicit deriving strategies, `Generic`, record construction, or field puns.
+
+
+## Revision Note
+
+2026-08-01: Cancelled the plan before implementation at the maintainer's direction. Its work was
+removed from MasterPlan 28 and from EP-173 through EP-176 dependency assumptions.

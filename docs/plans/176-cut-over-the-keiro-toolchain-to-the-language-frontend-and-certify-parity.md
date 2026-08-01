@@ -80,9 +80,10 @@ The earlier child plans deliver the complete frontend. EP-172 at
 [docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md](172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md)
 owns the released oracle. EP-173 owns `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`,
 `Keiro.Dsl.Frontend`, and lowering. EP-174 owns internal grammar modules and the parser facade.
-EP-175 owns explicit released profiles and structured frontend failures. EP-177 owns the production
-record vocabulary, selector migration table, and Keiki-label isolation proof. This plan must inspect
-the working tree versions of all five plans and their living sections before implementation; their
+EP-175 owns explicit released profiles and structured frontend failures. EP-177 was cancelled, so
+the cutover instead preserves every existing selector and audits only new frontend-owned records.
+This plan must inspect the working tree versions of all active predecessor plans and their living
+sections before implementation; their
 delivered interfaces, not the initial sketches in this file, are authoritative.
 
 `keiro-dsl/app/Main.hs` owns CLI input routing. `keiro-dsl/src/Keiro/Dsl/Workspace.hs` reads each
@@ -215,11 +216,10 @@ curated diagnostic goldens, public type probe, surface spans, lowering parity, r
 matrix, canonical rendering, workspace attribution, generated-byte freshness, compatibility diffs,
 fold fingerprints, and replay impact all pass unchanged.
 
-EP-177's production-record manifest has no unaccounted row, later frontend records use the same
-strict unprefixed convention, and the next-major selector migration probe compiles. The original
-0.7 selector spellings are the one deliberate public-API difference; JSON keys, generated source,
-and all other observations remain pinned. The public Keiro DSL plus Keiki-label compile fixture
-proves that no generic-lens orphan instance leaked through the final import graph.
+Existing production-record selectors still compile through the EP-172 public-API probe, and new
+frontend records follow the EP-173 local convention. JSON keys, generated source, and all other
+observations remain pinned. No package-wide record migration or generic-lens dependency is part of
+this plan.
 
 The advanced API must demonstrate exact span inspection without exposing Megaparsec and must lower
 to the same `ParsedSource` as ordinary parsing. The CLI's existing text and JSON contracts remain
@@ -259,3 +259,9 @@ parseSpecText :: Text -> Either ParseError Spec
 semantic interfaces. Internal `Keiro.Dsl.Parser.*` modules are Cabal `other-modules`. Use the same
 Megaparsec and parser-combinators dependencies and bounds as 0.7; this plan performs no dependency
 selection or release publication.
+
+
+## Revision Note
+
+2026-08-01: Removed cancelled EP-177 from the cutover's dependency assumptions and acceptance
+exceptions. Final certification now requires the existing selector API to remain unchanged.

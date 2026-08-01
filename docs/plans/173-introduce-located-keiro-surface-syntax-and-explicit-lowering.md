@@ -81,11 +81,11 @@ Record every decision made while working on the plan.
   as version gating, locations, duplicate detection, and lowering require.
   Date: 2026-08-01
 
-- Decision: Define every new product record with strict, unprefixed semantic fields established by
-  EP-177.
+- Decision: Define every new frontend-owned product record with strict, concise semantic fields,
+  explicit deriving strategies, and `Generic` where appropriate.
   Rationale: `sourceOffset`, `spanStart`, and `locatedValue` would immediately recreate the record
-  convention this initiative has just removed. `DuplicateRecordFields` exists specifically so the
-  public types can share `span`, `value`, `source`, `start`, and `end` safely.
+  prefixes this frontend does not need. `DuplicateRecordFields` lets the public types share `span`,
+  `value`, `source`, `start`, and `end` safely without renaming existing production records.
   Date: 2026-08-01
 
 
@@ -124,10 +124,9 @@ comments.
 
 EP-172 at
 [docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md](172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md)
-supplies the compatibility oracle. EP-177 at
-[docs/plans/177-modernize-keiro-dsl-records-and-field-access.md](177-modernize-keiro-dsl-records-and-field-access.md)
-is the direct hard dependency and supplies the record naming, strictness, deriving, and Keiki-label
-isolation rules. [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
+is the direct hard dependency and supplies the compatibility oracle. EP-177 was cancelled; this
+plan must leave existing record selectors unchanged and applies its record conventions only to new
+frontend-owned types. [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
 requires source provenance to wrap `Spec` and is the record that must be amended with this new
 surface/lowering layer. [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
 requires location evidence to be used at the first sound boundary. [ADR 14](../adr/0014-service-workspaces-compose-single-owner-members-under-one-manifest-identity.md)
@@ -240,8 +239,9 @@ the repository's established workflow if an ADR timestamp changes.
 
 ## Interfaces and Dependencies
 
-The resulting interface must use the EP-177 record convention and express these types and
-directions without exposing Megaparsec:
+The resulting interface must use strict semantic fields and explicit derivations for its new types,
+while leaving existing records unchanged and expressing these directions without exposing
+Megaparsec:
 
 ```haskell
 data SourcePoint = SourcePoint
@@ -272,7 +272,13 @@ parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`, and the advanced portion of `Keiro.Dsl.Frontend` are public
 library modules. Parser implementation helpers remain internal. `Keiro.Dsl.Grammar.Spec`,
 `LanguageVersion.ParsedSource`, and the three 0.7 parser functions retain their types and behavior;
-record selectors follow the intentional EP-177 next-major migration rather than preserving their
-0.7 spellings.
+their existing record selectors retain their 0.7 spellings.
 Use only the already bounded Megaparsec and `parser-combinators` dependencies; do not change their
 bounds or add a lexer package.
+
+
+## Revision Note
+
+2026-08-01: Rebased the hard dependency from cancelled EP-177 to completed EP-172. Limited the
+semantic-field convention to new frontend-owned records and restored existing record selectors to
+the compatibility contract.

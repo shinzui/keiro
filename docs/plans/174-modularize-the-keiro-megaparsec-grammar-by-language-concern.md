@@ -93,9 +93,9 @@ whitespace; identifiers and contextual words must not be confused with language 
 EP-173 at
 [docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md](173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md)
 is a hard dependency. It supplies `SourceSpan`, `Located`, `SurfaceSource`, `SurfaceSpec`,
-`parseSurfaceSource`, and `lowerSurfaceSource`. EP-177 supplies the strict, unprefixed record
-convention and Keiki-label isolation rule that applies to any new parser context or helper record.
-EP-172 supplies the executable 0.7 oracle. Read all three
+`parseSurfaceSource`, and `lowerSurfaceSource`. EP-172 supplies the executable 0.7 oracle. EP-177
+was cancelled, so existing record APIs stay unchanged and any new parser-local record follows the
+frontend-local convention established by EP-173. Read both active predecessors
 plans' delivered interfaces in the working tree rather than reconstructing them from this plan.
 
 Megaparsec is registered as:
@@ -239,6 +239,12 @@ pExpression :: FrontendContext -> P SurfaceExpr
 Use the concrete surface types delivered by EP-173; do not create parallel lookalikes for individual
 modules. `FrontendContext` may still be the current language version during this mechanical plan;
 EP-175 owns the explicit syntax profile. New parser modules are `other-modules`, not exposed modules.
-Any new product record follows EP-177 and must not introduce concern- or datatype-prefixed fields.
+Any new product record follows EP-173's frontend-local convention; do not rename existing records.
 Continue using the existing Megaparsec and `parser-combinators` bounds from
 `keiro-dsl/keiro-dsl.cabal`.
+
+
+## Revision Note
+
+2026-08-01: Removed cancelled EP-177 from the plan's context. New parser-local records follow the
+EP-173 frontend convention, while existing production record APIs remain unchanged.

@@ -21,12 +21,11 @@ large parser module that constructs the normalized service graph directly. A sou
 parsed by Megaparsec into a located surface representation, lowered explicitly into the
 existing semantic `Keiro.Dsl.Grammar.Spec`, and then checked under the selected released
 language contract. Exact source spans, grammar ownership, version capabilities, lowering,
-and compatibility rendering have named modules and tests. Before those types are introduced,
-the package's production records are brought into conformance with the record-patterns guide:
-`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`
-Semantic field names replace datatype prefixes, fields are strict, derivations are explicit, and
-Keiki's overloaded labels remain isolated from generic-lens's orphan instance. `Keiro.Dsl.Parser` remains the small
-compatibility facade used by existing library callers, the CLI, and workspace loading.
+and compatibility rendering have named modules and tests. New frontend records use strict semantic
+field names and explicit derivations without requiring a
+package-wide record migration. Existing production records and their released selectors remain
+unchanged. `Keiro.Dsl.Parser` remains the small compatibility facade used by existing library
+callers, the CLI, and workspace loading.
 
 The observable language remains the Keiro DSL 0.7.0.0 language. Legacy-unversioned, language
 version 1, version 2, and version 3 sources retain their accepted syntax, rejected syntax,
@@ -41,17 +40,12 @@ complete. EP-172 records that released baseline before production parser code ch
 construct, language version, runtime semantic, generated module, or compatibility classification
 may land under this MasterPlan.
 
-Only the original DSL has downstream adopters at the start of this initiative. Language versions 2
-and 3 are already released contracts and remain fully regression-tested, but there is no v2/v3
-fleet requiring migration tooling. This is the narrow window to make the Haskell selector cleanup
-and advanced frontend API coherent before those dialects are adopted. The selector rename is an
-intentional PVP-breaking change for the release after 0.7.0.0; it does not change DSL behavior.
-
 In scope are `keiro-dsl/src/Keiro/Dsl/Parser.hs`, `Grammar.hs`, `LanguageVersion.hs`,
 `SemanticContract.hs`, `PrettyPrint.hs`, `Validate.hs`, `Workspace.hs`, the CLI read paths,
-the remaining production records under `keiro-dsl/src` and `keiro-dsl/app`, `keiro-dsl/test/`, the
-`keiro-dsl` Cabal module lists, the authoring notation, user documentation, and the ADRs that own
-the language boundary. Generated domain records are compatibility outputs, not rename targets.
+`keiro-dsl/test/`, the `keiro-dsl` Cabal module lists, the authoring notation, user documentation,
+and the ADRs that own the language boundary. Existing production-record selectors and a
+package-wide strictness/deriving cleanup are explicitly out of scope; EP-177 was cancelled to keep
+this initiative focused on the language frontend.
 The Megaparsec dependency remains:
 `mori://mrkkrp/megaparsec/packages/megaparsec`
 This initiative does not change its bounds.
@@ -68,10 +62,10 @@ frontend rather than changing `Spec` into a source-preservation type.
 
 ## Decomposition Strategy
 
-The initiative is decomposed into six behaviorally verifiable work streams. EP-172 freezes the
-released 0.7 input/output contract before any production refactor, providing the oracle every
-later plan must satisfy. EP-177 then modernizes existing production records and field access so
-later frontend records do not extend the prefixed-selector convention. EP-173 introduces source
+The initiative is decomposed into five active behaviorally verifiable work streams, plus EP-177 as
+a cancelled record of the deliberately removed package-wide cleanup. EP-172 freezes the released
+0.7 input/output contract before any production refactor, providing the oracle every later plan
+must satisfy. EP-173 introduces source
 points, source spans, a surface source type, and an explicit lowering seam while preserving `Spec`
 as the normalized graph. EP-174 then extracts the grammar by language concern behind the stable
 facade. EP-175 replaces implicit numeric
@@ -81,8 +75,7 @@ direct path, proves end-to-end parity, updates documentation and ADRs, and suppl
 release-quality validation.
 
 The ordering is intentional. Without EP-172, a large internal rewrite could silently bless its
-own changed behavior. Completing the record conversion before introducing the surface layer avoids
-constructing a new public API in a convention already scheduled for removal. Building the
+own changed behavior. Building the
 surface/lowering seam before splitting modules gives every extracted parser a stable result type.
 Extracting modules before changing the release registry
 keeps semantic policy edits out of the mechanical move. The final cutover waits until both the
@@ -110,11 +103,11 @@ line into the existing `Loc` compatibility field. A lossless tree was rejected f
 because canonical rendering, not edit preservation, is the existing contract and IR-5 owns source
 rewrites.
 
-Keeping prefixed selectors as deprecated aliases was rejected. The package has not yet acquired
-v2/v3 adopters, aliases would preserve two vocabularies throughout a public graph, and common target
-names would make aliases increasingly collision-prone. EP-177 instead supplies a complete selector
-migration table for the next PVP-breaking release while the 0.7 oracle protects every non-selector
-contract.
+The package-wide record modernization was removed from this initiative before implementation. New
+frontend-owned records still use concise semantic fields, strictness, explicit deriving strategies,
+and `Generic` where appropriate, but this local convention does not authorize renaming released
+selectors or sweeping unrelated modules. A future independently justified plan may revisit that
+cleanup without coupling it to the parser architecture.
 
 
 ## Exec-Plan Registry
@@ -122,11 +115,11 @@ contract.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 172 | Freeze the Keiro DSL 0.7 language frontend contract | docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md | None | None | Complete |
-| 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-172 | None | Not Started |
-| 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-177 | None | Not Started |
+| 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-172 | None | Cancelled |
+| 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-172 | None | Not Started |
 | 174 | Modularize the Keiro Megaparsec grammar by language concern | docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md | EP-173 | None | Not Started |
-| 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | EP-177 | Not Started |
-| 176 | Cut over the Keiro toolchain to the language frontend and certify parity | docs/plans/176-cut-over-the-keiro-toolchain-to-the-language-frontend-and-certify-parity.md | EP-175 | EP-172, EP-177, EP-173, EP-174 | Not Started |
+| 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | None | Not Started |
+| 176 | Cut over the Keiro toolchain to the language frontend and certify parity | docs/plans/176-cut-over-the-keiro-toolchain-to-the-language-frontend-and-certify-parity.md | EP-175 | EP-172, EP-173, EP-174 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -138,14 +131,12 @@ EP-172 starts only after the 0.7.0.0 release is complete. It has no child-plan d
 produces the compatibility manifest, curated diagnostic goldens, public-API compile probe, and
 corpus-wide parity harness used by every later plan.
 
-EP-177 hard-depends on EP-172 because it intentionally changes public Haskell field selectors while
-requiring all language, serialization, rendered, generated, and runtime behavior to stay pinned.
-It defines the unprefixed field vocabulary, migration manifest, strictness/deriving baseline, and
-the Keiki-label isolation guard consumed by all later plans.
+EP-177 is cancelled. Its package-wide selector migration, strictness sweep, and deriving cleanup are
+not prerequisites for the frontend and are not part of this initiative.
 
-EP-173 hard-depends on EP-177 because it changes the parser result path and introduces new public
-records. It defines `SourcePoint`, `SourceSpan`, the located surface-source boundary, the lowering
-result, and the
+EP-173 hard-depends directly on EP-172 because it changes the parser result path and introduces new
+public records while preserving the frozen contract. It defines `SourcePoint`, `SourceSpan`, the
+located surface-source boundary, the lowering result, and the
 projection back to the existing `Loc`/`Spec` representation. EP-174 hard-depends on those types:
 each extracted grammar module must construct the same surface representation rather than inventing
 a module-local AST.
@@ -158,8 +149,8 @@ it transitively.
 
 EP-176 hard-depends on EP-175 because it removes the legacy direct parser and routes every
 consumer through the final frontend interfaces. It then runs the complete compatibility and
-conformance matrix. The critical path is therefore EP-172 -> EP-177 -> EP-173 -> EP-174 -> EP-175
--> EP-176. This serialization is deliberate: all plans touch the parser boundary, and the dominant
+conformance matrix. The critical path is therefore EP-172 -> EP-173 -> EP-174 -> EP-175 -> EP-176.
+This serialization is deliberate: all plans touch the parser boundary, and the dominant
 risk is
 an undetected language change rather than contributor throughput. Documentation audits and test
 inventory work from EP-176 may be prepared earlier, but production cutover cannot.
@@ -170,16 +161,13 @@ inventory work from EP-176 may be prepared earlier, but production cutover canno
 1. **The 0.7 compatibility oracle (EP-172 defines; all later plans consume).** The oracle
    owns the fixture inventory, acceptance/rejection classification, exact curated diagnostics,
    canonical render expectations, public API probe, and generated-byte checks. Later plans may add
-   cases but may not rewrite an expectation merely to accommodate the refactor. EP-177's manifest
-   is the sole authorized exception for Haskell record selectors; any other intentional difference
-   is out of scope and must be proposed as a successor language change.
+   cases but may not rewrite an expectation merely to accommodate the refactor. Any intentional
+   difference is out of scope and must be proposed as a successor language change.
 
-2. **Production record conventions (EP-177 defines; EP-173 through EP-176 consume).** Product
-   records use strict, unprefixed semantic labels with explicit deriving strategies and `Generic`;
-   `unTypeName` remains valid for newtypes. JSON keys, rendered output, and generated source never
-   derive accidentally from selector spelling. `Data.Generics.Labels` is excluded from preludes,
-   definition modules, and Keiki-facing import closures. EP-177 owns the complete selector
-   migration table and downstream compile probes.
+2. **Frontend-local record conventions (EP-173 defines; EP-174 through EP-176 consume).** New
+   frontend product records use strict semantic labels with explicit deriving strategies and
+   `Generic` where appropriate. Existing record fields are left intact. JSON keys, rendered output,
+   and generated source must never drift because of a new internal representation.
 
 3. **`SourcePoint`, `SourceSpan`, and compatibility `Loc` (EP-173 defines; EP-174, EP-175, and
    EP-176 consume).** `SourceSpan` carries source name, start/end offsets, and one-based start/end
@@ -229,8 +217,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-172: verified the published/tagged 0.7.0.0 baseline and inventoried every source-consuming path (2026-08-01T20:48:58Z).
 - [x] EP-172: landed the compatibility oracle, curated goldens, and public API compile probe (2026-08-01T20:55:00Z).
-- [ ] EP-177: inventory every production record and publish the 0.7-to-next-major selector map.
-- [ ] EP-177: modernize records and field access while preserving wire/output and Keiki-label behavior.
+- [x] EP-177: cancelled the package-wide record modernization to focus the initiative on the
+  source-aware frontend (2026-08-01).
 - [ ] EP-173: define exact source spans and a non-lossless located surface representation.
 - [ ] EP-173: route parsing through explicit surface lowering while preserving all 0.7 behavior.
 - [ ] EP-174: extract lexer, document, declaration, expression, and node-family grammar modules.
@@ -249,8 +237,8 @@ interactions between child plans. Provide concise evidence.
 - Observation: Only the original DSL has downstream users; language versions 2 and 3 are not used
   anywhere yet.
   Evidence: Maintainer report on 2026-08-01.
-  Impact: Preserve v2/v3 as released test contracts, but perform the public record/API cleanup now
-  without building fleet migration machinery for nonexistent v2/v3 adopters.
+  Impact: Preserve v2/v3 as released test contracts without building fleet migration machinery for
+  nonexistent v2/v3 adopters.
 
 - Observation: The 0.7 compatibility renderer reports version 3, rather than the registry minimum
   version 2, in every `LanguageFeatureRequiresVersion` message.
@@ -258,6 +246,14 @@ interactions between child plans. Provide concise evidence.
   `languageFeatureMinimumVersion` returns version 2.
   Impact: EP-175 must distinguish corrected structured metadata from the pinned legacy renderer so
   diagnostic modernization does not accidentally change CLI compatibility output.
+
+- Observation: EP-177 is substantially larger than the source-aware frontend and is not a
+  technical prerequisite for EP-173 through EP-176.
+  Evidence: Its proposed scope spans every production record, public selector, serialization
+  boundary, and Keiki-facing import closure, while the remaining plans need only a convention for
+  the small set of new frontend-owned records.
+  Impact: EP-177 is cancelled, EP-173 now depends directly on EP-172, and existing record APIs stay
+  pinned by the compatibility oracle.
 
 
 ## Decision Log
@@ -304,19 +300,27 @@ plan.
   requested by IR-5.
   Date: 2026-08-01
 
-- Decision: Put a package-wide production-record modernization in EP-177 between the 0.7 oracle
-  and every newly introduced frontend record.
+- Decision: Superseded on 2026-08-01. Put a package-wide production-record modernization in EP-177
+  between the 0.7 oracle and every newly introduced frontend record.
   Rationale: Existing prefixes are not the desired record convention, and introducing
   `sourceOffset`, `locatedValue`, or `definitionVersion` would deepen the cleanup. Doing the
   breaking selector change immediately after 0.7 and before v2/v3 adoption minimizes migration
   cost while the oracle protects language behavior.
   Date: 2026-08-01
 
-- Decision: Apply `mori://shinzui/haskell-jitsurei/docs/core-record-patterns` without exposing
-  generic-lens's orphan labels to Keiki-facing import closures.
+- Decision: Superseded on 2026-08-01. Apply
+  `mori://shinzui/haskell-jitsurei/docs/core-record-patterns` without exposing generic-lens's orphan
+  labels to Keiki-facing import closures.
   Rationale: The record guide requires unprefixed strict Generic records and explicitly warns that
   transitive `Data.Generics.Labels` imports conflict with Keiki labels. Pattern construction and
   puns are the safe default wherever isolation cannot be proven.
+  Date: 2026-08-01
+
+- Decision: Cancel EP-177 and preserve existing production records while applying a concise,
+  strict record style only to newly introduced frontend-owned types.
+  Rationale: The package-wide migration is independently large and would delay the language
+  frontend without supplying a required capability. Keeping released selectors stable also makes
+  EP-172 a complete oracle with no planned public-API exception.
   Date: 2026-08-01
 
 
@@ -328,3 +332,11 @@ distill durable project context from this MasterPlan and its child ExecPlans int
 docs/adr/. Keep task-local execution and coordination details here.
 
 (To be filled during and after implementation.)
+
+
+## Revision Note
+
+2026-08-01: Cancelled EP-177 at the maintainer's direction, removed it from all downstream
+dependencies and integration assumptions, and shortened the critical path to EP-172 -> EP-173 ->
+EP-174 -> EP-175 -> EP-176. Existing production-record APIs are now preserved; only new
+frontend-owned records adopt the local semantic-field convention.

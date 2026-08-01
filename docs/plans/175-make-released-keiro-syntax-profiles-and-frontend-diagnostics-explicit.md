@@ -69,10 +69,10 @@ and CLI text remain compatibility wrappers and continue satisfying the EP-172 or
   establish the frontend boundary.
   Date: 2026-08-01
 
-- Decision: Use EP-177's unprefixed, strict record convention for the registry, context, and
-  frontend-failure records.
+- Decision: Use strict, concise semantic fields with explicit derivations for new registry,
+  context, and frontend-failure records.
   Rationale: Names such as `definitionVersion` and `frontendCode` repeat their owning types and
-  would undo the record modernization on newly introduced API.
+  add unnecessary prefixes to newly introduced API.
   Date: 2026-08-01
 
 
@@ -97,9 +97,9 @@ would inherit both decisions automatically before its author explicitly chose th
 EP-174 at
 [docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md](174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md)
 is a hard dependency. Its `Parser.Document` selects the body parser, and its concern modules
-currently receive a language version or provisional frontend context. EP-173 supplies exact spans
-and structured lowering failure data. EP-177 supplies the record naming, strictness, deriving, and
-Keiki-label isolation rules. EP-172 supplies exact compatibility rendering.
+currently receive a language version or provisional frontend context. EP-173 supplies exact spans,
+structured lowering failure data, and the frontend-local record convention. EP-172 supplies exact
+compatibility rendering. Cancelled EP-177 creates no selector-migration exception.
 
 A “syntax profile” is the immutable set of grammar capabilities explicitly assigned to one released
 language definition. A “runtime-semantics identity” is the stable text discriminator consumed by
@@ -255,6 +255,12 @@ data FrontendFailure = FrontendFailure
   deriving stock (Eq, Show, Generic)
 ```
 
-Reuse `SourceSpan` from EP-173 and existing `SourceLanguageErrorCode` values where applicable. All
-new product records follow EP-177 and must not introduce owner-prefixed selectors. Do not expose
-Megaparsec types. No dependency or bound change is required.
+Reuse `SourceSpan` from EP-173 and existing `SourceLanguageErrorCode` values where applicable. New
+frontend-owned product records use concise semantic fields; existing record selectors remain
+unchanged. Do not expose Megaparsec types. No dependency or bound change is required.
+
+
+## Revision Note
+
+2026-08-01: Removed cancelled EP-177 as a soft dependency and narrowed the record convention to
+new frontend-owned types. Existing selectors remain part of the EP-172 compatibility baseline.
