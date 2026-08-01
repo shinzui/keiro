@@ -16,7 +16,7 @@ import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
-import Keiro.Dsl.ExplainBindings (bindingObligations, renderBindingObligations)
+import Keiro.Dsl.ExplainBindings (bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
@@ -228,7 +228,7 @@ run (Check fp emit explainBindings coverageOptions) = do
         else do
           when emit (TIO.putStrLn (renderSource parsedSource))
           if explainBindings
-            then case bindingObligations spec of
+            then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated spec did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure
@@ -450,7 +450,7 @@ runWorkspaceCheck fp emit explainBindings coverageOptions = do
         else do
           when emit (TIO.putStrLn (renderSpec spec))
           if explainBindings
-            then case bindingObligations spec of
+            then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated workspace did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure

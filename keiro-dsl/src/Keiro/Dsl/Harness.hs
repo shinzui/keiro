@@ -42,6 +42,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
@@ -462,7 +463,7 @@ emitHarness goldens a =
     coreImports =
       ["applyEventsEither" | not (null replayTransitions)]
         ++ ["defaultValidationOptions", "step", "validateTransducer"]
-        ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a)) || not (null (nominalScalarHarnessTypes a))]
+        ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a)) || not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
         ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
     upcastAssertions =
       [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
@@ -707,10 +708,15 @@ nominalHarnessImports aggregate
       [ "import Data.List.NonEmpty qualified as NonEmpty",
         "import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)"
       ]
+        <> ( if null enforcedIds
+               then []
+               else ["import Data.KindID qualified as KindID", "import Data.Text qualified as T", "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)"]
+           )
         <> ["import " <> moduleName <> " qualified" | moduleName <- unique (fixtureModules <> bindingModules)]
-        <> ["import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate))]
+        <> ["import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
   where
     nominals = consumerNominalHarnessTypes aggregate
+    enforcedIds = enforcedConsumerNominalIdHarnessTypes aggregate
     bindings = [binding | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
     fixtureModules =
       [ fst (splitQualifiedHarness (unQualifiedValueName (consumerNominalFixtures binding)))
@@ -745,6 +751,14 @@ nominalScalarHarnessTypes aggregate =
     ScalarRepresentation {} <- [resolvedNominalRepresentation nominal]
   ]
 
+enforcedConsumerNominalIdHarnessTypes :: Agg -> [ResolvedNominalType]
+enforcedConsumerNominalIdHarnessTypes aggregate =
+  [ nominal
+  | nominal <- consumerNominalHarnessTypes aggregate,
+    IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+    idDomainContractFor (aLanguageContract aggregate) prefix /= Nothing
+  ]
+
 nominalHarnessDeclarations :: Agg -> [Text]
 nominalHarnessDeclarations aggregate
   | null nominals = []
@@ -777,11 +791,61 @@ nominalHarnessDeclarations aggregate
                )
              | ScalarRepresentation {} <- [resolvedNominalRepresentation nominal]
              ]
+          <> idDomainAssertions name bindingName fixtures nominal
         where
           name = resolvedNominalName nominal
           bindingName = unQualifiedValueName (consumerNominalBinding binding)
           fixtureName = unQualifiedValueName (consumerNominalFixtures binding)
           fixtures = "(NonEmpty.toList (nominalFixtureCases " <> fixtureName <> "))"
+    idDomainAssertions name bindingName fixtures nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix
+        | Just contract <- idDomainContractFor (aLanguageContract aggregate) prefix ->
+            let firstSample = idDomainSampleText contract
+                samples = [firstSample, T.dropEnd 1 firstSample <> "r"]
+                wrongPrefix = "wrong_" <> T.drop (T.length prefix + 1) firstSample
+             in [ ( "nominal ID projection agreement: " <> name,
+                    "all (\\fixture -> fieldWitnessAgrees NominalProjections."
+                      <> lowerFirst name
+                      <> "EqualityWitness (KindID.toText . nominalToRepresentation "
+                      <> bindingName
+                      <> ") (nominalFixtureDomain fixture)) "
+                      <> fixtures
+                  ),
+                  ( "nominal ID fixture domain agreement: " <> name,
+                    "all (\\fixture -> case validateIdDomainText (typeIdV7Domain "
+                      <> tshow prefix
+                      <> ") (KindID.toText (nominalToRepresentation "
+                      <> bindingName
+                      <> " (nominalFixtureDomain fixture))) of Right () -> True; Left _ -> False) "
+                      <> fixtures
+                  ),
+                  ( "nominal ID binding preserves canonical representations: " <> name,
+                    "all (nominalRepresentationRoundTrip "
+                      <> bindingName
+                      <> ") ["
+                      <> T.intercalate ", " (map (renderKindId prefix) samples)
+                      <> "]"
+                  ),
+                  ( "nominal ID boundary rejects wrong-prefix and normalized text: " <> name,
+                    "case (validateIdDomainText (typeIdV7Domain "
+                      <> tshow prefix
+                      <> ") "
+                      <> tshow wrongPrefix
+                      <> ", validateIdDomainText (typeIdV7Domain "
+                      <> tshow prefix
+                      <> ") (T.toUpper "
+                      <> tshow firstSample
+                      <> ")) of (Left _, Left _) -> True; _ -> False"
+                  )
+                ]
+      _ -> []
+      where
+        renderKindId prefix value =
+          "(case KindID.parseText @"
+            <> tshow prefix
+            <> " "
+            <> tshow value
+            <> " of Right parsed -> parsed; Left _ -> error \"generated canonical ID conformance probe failed to parse\")"
     renderList values =
       [ (if index == (0 :: Int) then "  [ " else "  , ") <> "(" <> tshow labelText <> ", " <> expression <> ")"
       | (index, (labelText, expression)) <- zip [0 ..] values

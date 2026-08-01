@@ -54,14 +54,15 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
-import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHoles)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
-import Keiro.Dsl.NominalType (nominalEqualityIdentities)
+import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
@@ -357,7 +358,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
       let currentPlan = consumerPlan merged
           drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
           languageDrift = workspaceSourceLanguageDrift workspace previous
-          currentObligations = either (const []) id (bindingHoles merged)
+          currentObligations = either (const []) id (bindingHolesForService (wpCheckedService plan))
           newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
           currentBehavior = workspaceBehaviorRows workspace
           (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . wrBehaviorRequirements) previous
@@ -445,14 +446,16 @@ currentWorkspaceRecord plan adopted =
         | (m, provenance) <- wpModules plan
         ],
       wrMappings = consumerMappings (consumerPlan merged),
-      wrNominalEqualities = nominalEqualityIdentities merged,
-      wrBindingObligations = either (const []) id (bindingHoles merged),
+      wrIdDomains = idDomainIdentitiesForService checkedService,
+      wrNominalEqualities = nominalEqualityIdentitiesForService checkedService,
+      wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrAdopted = adopted
     }
   where
     workspace = wpWorkspace plan
-    merged = checkedSpec (wpCheckedService plan)
+    checkedService = wpCheckedService plan
+    merged = checkedSpec checkedService
     ctx = wpContext plan
 
 workspaceBehaviorRows :: WorkspaceSpec -> [BehaviorRecordRow]

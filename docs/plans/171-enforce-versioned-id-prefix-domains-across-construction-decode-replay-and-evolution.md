@@ -51,13 +51,18 @@ This section must always reflect the actual current state of the work.
   generated `Nominals.Internal` module owns the raw constructor and explicitly named legacy replay
   function. Aggregate domain modules import the type abstractly and event codecs alone import the
   unsafe legacy seam.
-- [ ] Milestone 2 remaining: prove generated/consumer-bound admission parity, wrong-prefix and
-  normalization rejection, compiled hidden-constructor enforcement, and current/public codec
-  behavior.
-- [ ] Milestone 3: integrate legacy upcast/replay, snapshots, literals, fixtures, fingerprints,
-  diffs, upgrade reports, and scaffold adoption.
-- [ ] Milestone 4: add property, migration, mutation, workspace, documentation, ADR, and full
-  release validation.
+- [x] (2026-08-01 15:10Z) Milestone 2: proved generated/consumer-bound admission parity,
+  wrong-prefix and normalization rejection, generated binding injectivity probes, a compiled
+  public-constructor failure, and validating current/public JSON behavior. A compiled v3 scaffold
+  exposed and fixed a missing safe-parser import in generated register initializers.
+- [x] (2026-08-01 15:10Z) Milestone 3: isolated legacy event replay from current admission,
+  invalidated legacy snapshots through the successor fold discriminator, switched generated
+  literals and samples to safe parsing, and persisted the ID-domain version independently in
+  single-file/workspace records, service-aware equality identities, explain output, diffs, replay
+  impact, and upgrade remedies.
+- [ ] Milestone 4 in progress: property, migration, mutation, workspace single-owner, equality,
+  and codec proofs pass; documentation, ADR distillation, full suite/build, flake, and strict OKF
+  release validation remain.
 
 
 ## Surprises & Discoveries
@@ -81,6 +86,10 @@ implementation. Provide concise evidence.
   `parseText` validates canonical Crockford text and the declaration prefix, while `checkKindID`
   separately validates the UUIDv7 version and RFC variant. The successor Keiro contract must call
   both; `parseText` alone is insufficient for the frozen v7 domain.
+- 2026-08-01: compiling the first successor scaffold found that generated register initializers
+  had moved to `parseX` but the aggregate domain import still named only the abstract type. The
+  service-aware generated nominal import now carries the parser wherever enforced ID samples can
+  be emitted.
 
 
 ## Decision Log
@@ -130,8 +139,10 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(Implementation not started. The Keiki `0.7.0.0` symbolic-domain prerequisite is authoritatively
-released; Plans 168 and 169 remain the local hard dependencies.)
+Milestones 1-3 are implemented. The successor contract has one runtime/Keiki authority, a compiled
+safe-public/legacy-internal ownership split, migration conformance for identical malformed text,
+and boundary-specific evolution reporting. Remaining work is documentation, durable ADR updates,
+and the complete release validation matrix.
 
 
 ## Context and Orientation

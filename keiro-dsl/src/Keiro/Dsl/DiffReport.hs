@@ -182,6 +182,8 @@ remediationFor context code
   | code == WorkspaceAuthorityChanged = RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers]
   | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
   | code == AggFoldSurfaceChanged = RemedyStateCodecBump :| [RemedyRunConformance]
+  | code == IdDomainContractChanged =
+      RemedyDeploymentOrder RolloutProducerLast :| [RemedyStateCodecBump, RemedyRecompileConsumers, RemedyRunConformance]
   | code `elem` mappedWireCodes = mappedWireRemedy
   | code `elem` [MappedFieldAddedWithDefault, MappedArmAdded, MappedEnumValueAdded] = mappedAdditionRemedy
   | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged] =

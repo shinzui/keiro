@@ -1361,14 +1361,15 @@ generatedNominalTypeImportsForService service ctx nominals =
   [ "import "
       <> generatedNominalModule ctx
       <> " ("
-      <> T.intercalate ", " [typeImport nominal | nominal <- stableNominals nominals]
+      <> T.intercalate ", " (concatMap importsFor (stableNominals nominals))
       <> ")"
   ]
   where
-    typeImport nominal = case resolvedNominalRepresentation nominal of
+    importsFor nominal = case resolvedNominalRepresentation nominal of
       IdRepresentation prefix
-        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> resolvedNominalName nominal
-      _ -> resolvedNominalName nominal <> " (..)"
+        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix ->
+            [resolvedNominalName nominal, "parse" <> resolvedNominalName nominal]
+      _ -> [resolvedNominalName nominal <> " (..)"]
 
 generatedNominalCodecImports :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
 generatedNominalCodecImports _ _ [] = []

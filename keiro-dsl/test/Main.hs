@@ -29,13 +29,13 @@ import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffServices, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.EventOutput
-import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldFingerprintForService, aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
-import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor)
+import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
@@ -459,6 +459,175 @@ main = hspec $ do
         validateIdDomainText contract value `shouldSatisfy` isLeft
         matchesTextPattern patternValue value `shouldBe` False
 
+    it "agrees for generated canonical and malformed domain values" $ property $ do
+      let crockford = "0123456789abcdefghjkmnpqrstvwxyz"
+          segment count = vectorOf count (elements crockford)
+      leading <- elements "01234567"
+      beforeVersion <- segment 9
+      version <- elements "ef"
+      beforeVariant <- segment 2
+      variant <- elements "89abrstv"
+      afterVariant <- segment 12
+      let value = T.pack ("req_" <> [leading] <> beforeVersion <> [version] <> beforeVariant <> [variant] <> afterVariant)
+          contract = typeIdV7Domain "req"
+          patternValue = either (error . show) id (idDomainTextPattern contract)
+          invalidValues = [T.toUpper value, "other_" <> T.drop 4 value, T.dropEnd 1 value, value <> "0"]
+      pure $
+        conjoin
+          ( counterexample (T.unpack value) (validateIdDomainText contract value == Right () && matchesTextPattern patternValue value)
+              : [counterexample (T.unpack invalid) (isLeft (validateIdDomainText contract invalid) && not (matchesTextPattern patternValue invalid)) | invalid <- invalidValues]
+          )
+
+    it "enforces the same contract before consumer binding conversion and explains its version" $ do
+      v2Source <- readTestText "test/fixtures/nominal-scalars.keiro"
+      let v3Text = T.replace "language keiro-dsl 2" "language keiro-dsl 3" v2Source
+      parsed <- case parseSource "nominal-scalars-v3.keiro" v3Text of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          generatedText suffix = case [moduleText value | value <- modules, T.pack suffix `T.isSuffixOf` T.pack (modulePath value)] of
+            [value] -> value
+            values -> error ("expected one generated module ending in " <> suffix <> ", got " <> show (length values))
+          codecModule = generatedText "NominalLedger/Codec.hs"
+          projectionModule = generatedText "NominalProjections.hs"
+          harnessModule = generatedText "NominalLedger/Harness.hs"
+      validateService service `shouldBe` []
+      codecModule `shouldSatisfy` T.isInfixOf "case validateIdDomainText (typeIdV7Domain \"ord\") input of"
+      codecModule `shouldSatisfy` T.isInfixOf "Right () -> case KindID.parseText @\"ord\" input of"
+      projectionModule `shouldSatisfy` T.isInfixOf "idDomainTextPattern (typeIdV7Domain \"ord\")"
+      projectionModule `shouldSatisfy` T.isInfixOf "validateIdDomainText (typeIdV7Domain \"ord\") value"
+      harnessModule `shouldSatisfy` T.isInfixOf "nominal ID binding preserves canonical representations: OrderId"
+      harnessModule `shouldSatisfy` T.isInfixOf "nominal ID boundary rejects wrong-prefix and normalized text: OrderId"
+      obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligationsForService service)
+      let orderIdBindings = [obligation | obligation <- obligations, obligationMappedName obligation == "OrderId", obligationKind obligation == BindingValue]
+      map obligationIdDomainContract orderIdBindings `shouldBe` [Just "keiro-dsl/id-domain/typeid-v7/1"]
+      renderBindingObligations (specContext spec) obligations
+        `shouldSatisfy` T.isInfixOf "id-domain-contract: \"keiro-dsl/id-domain/typeid-v7/1\""
+
+    it "reports adoption by boundary, invalidates snapshots, and preserves replay compatibility" $ do
+      v2Text <- readTestText "test/fixtures/id-domain-migration-v3.keiro"
+      let oldText = T.replace "language keiro-dsl 3" "language keiro-dsl 2" v2Text
+      oldSource <- case parseSource "id-domain-migration-v2.keiro" oldText of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      newSource <- case parseSource "id-domain-migration-v3.keiro" v2Text of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let oldService = checkedSource oldSource
+          newService = checkedSource newSource
+          changes = diffSources oldSource newSource
+          findings = [kindOfChange change | change <- changes, changeCode change == IdDomainContractChanged]
+      length findings `shouldBe` 1
+      forM_ findings $ \finding -> do
+        verdictFor PrivateHistoryRead (ckVector finding) `shouldBe` VCompatible
+        verdictFor OldBinaryReadNewEvents (ckVector finding) `shouldBe` VCompatible
+        verdictFor SnapshotHydration (ckVector finding) `shouldBe` VAdvisory
+        verdictFor PublicConsumer (ckVector finding) `shouldBe` VBreaking
+        verdictFor PersistedIdentity (ckVector finding) `shouldBe` VCompatible
+        verdictFor ConsumerBuild (ckVector finding) `shouldBe` VAdvisory
+        ckDetail finding `shouldSatisfy` T.isInfixOf "historical event replay retains its legacy decoder"
+        remediationFor (ckContext finding) (ckCode finding)
+          `shouldBe` RemedyDeploymentOrder RolloutProducerLast :| [RemedyStateCodecBump, RemedyRecompileConsumers, RemedyRunConformance]
+      [ckDetail finding | change <- changes, changeCode change == SourceLanguageDeclarationChanged, let finding = kindOfChange change]
+        `shouldSatisfy` all (T.isInfixOf "effective runtime semantics changed")
+      idDomainIdentitiesForService oldService `shouldBe` []
+      idDomainIdentitiesForService newService
+        `shouldSatisfy` any (T.isInfixOf "contract=keiro-dsl/id-domain/typeid-v7/1")
+      ReplayImpact.replayImpactServices oldService newService `shouldSatisfy` \case
+        ReplayImpact.ReplayAffected impacts ->
+          maybe False includeSnapshotStreams (Map.lookup "OrderBook" impacts)
+        ReplayImpact.ReplayNeutral -> False
+
+    it "keeps the raw constructor outside the compiled public module surface" $
+      withTempDirectory "keiro-dsl-id-domain-hidden-constructor" $ \out -> do
+        sourceText <- readTestText "test/fixtures/id-domain-migration-v3.keiro"
+        parsed <- case parseSource "id-domain-migration-v3.keiro" sourceText of
+          Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+          Right value -> pure value
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            modules = scaffoldServiceModules ctx service
+            attempt = out </> "Attempt.hs"
+            ghcOutput = out </> ".ghc"
+        result <- executeServiceScaffold out False "id-domain-migration-v3.keiro" (parsedSourceLanguage parsed) ctx service modules
+        result `shouldSatisfy` isRight
+        recordContents <- TIO.readFile (out </> recordFileName (specContext spec))
+        record <- case parseRecord recordContents of
+          Nothing -> expectationFailure "generated ID-domain scaffold record did not parse" >> fail "unreachable"
+          Just value -> pure value
+        recIdDomains record `shouldBe` idDomainIdentitiesForService service
+        recNominalEqualities record
+          `shouldSatisfy` any (T.isInfixOf "keiro-dsl/id-domain/typeid-v7/1")
+        createDirectoryIfMissing True ghcOutput
+        TIO.writeFile
+          attempt
+          ( T.unlines
+              [ "module Attempt where",
+                "import Generated.IdDomainMigration.Nominals (OrderId (..))",
+                "bad :: OrderId",
+                "bad = OrderId \"ord_LEGACY-NOT-TYPEID\""
+              ]
+          )
+        (exitCode, standardOutput, standardError) <-
+          readProcessWithExitCode
+            "cabal"
+            [ "exec",
+              "--",
+              "ghc",
+              "-XGHC2024",
+              "-XOverloadedStrings",
+              "-fno-code",
+              "-fforce-recomp",
+              "-outputdir",
+              ghcOutput,
+              "-i" <> out,
+              attempt
+            ]
+            ""
+        exitCode `shouldSatisfy` (/= ExitSuccess)
+        (standardOutput <> standardError) `shouldContain` "OrderId"
+
+    it "emits one enforced nominal owner for a version-3 workspace" $ do
+      manifest <- readTestText "test/fixtures/workspace-nominals/service.keiro-workspace"
+      shared <- readTestText "test/fixtures/workspace-nominals/domain/shared.keiro"
+      project <- readTestText "test/fixtures/workspace-nominals/domain/project.keiro"
+      artifact <- readTestText "test/fixtures/workspace-nominals/domain/project-artifact.keiro"
+      let v3 = T.replace "language keiro-dsl 2" "language keiro-dsl 3"
+          source =
+            memoryContentSource
+              ( Map.fromList
+                  [ ("service.keiro-workspace", manifest),
+                    ("domain/shared.keiro", v3 shared),
+                    ("domain/project.keiro", v3 project),
+                    ("domain/project-artifact.keiro", v3 artifact)
+                  ]
+              )
+      loaded <- loadWorkspace source "service.keiro-workspace"
+      workspace <- case loaded of
+        Left failure -> expectationFailure (show failure) >> fail "unreachable"
+        Right value -> pure value
+      plan <- case planWorkspaceScaffold "goldens" (workspaceContext workspace) workspace of
+        Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+        Right value -> pure value
+      let paths = map (modulePath . fst) (wpModules plan)
+      length (filter (== "Generated/WorkspaceNominalProof/Nominals.hs") paths) `shouldBe` 1
+      length (filter (== "Generated/WorkspaceNominalProof/Nominals/Internal.hs") paths) `shouldBe` 1
+      forM_ [moduleText value | (value, _) <- wpModules plan, "/Domain.hs" `T.isSuffixOf` T.pack (modulePath value)] $ \domainText ->
+        domainText `shouldSatisfy` (not . T.isInfixOf "ProjectId (..)")
+      withTempDirectory "keiro-dsl-v3-workspace-record" $ \out -> do
+        emitted <- executeWorkspaceScaffold out False plan
+        emitted `shouldSatisfy` isRight
+        recordContents <- TIO.readFile (out </> workspaceRecordFileName (wsService workspace))
+        record <- case parseWorkspaceRecord recordContents of
+          Nothing -> expectationFailure "version-3 workspace record did not parse" >> fail "unreachable"
+          Just value -> pure value
+        wrIdDomains record `shouldBe` idDomainIdentitiesForService (wpCheckedService plan)
+        wrNominalEqualities record
+          `shouldSatisfy` any (T.isInfixOf "keiro-dsl/id-domain/typeid-v7/1")
+
     it "emits an abstract public ID, an internal legacy seam, and exact equality" $ do
       v2Source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
       let v3Source = T.replace "language keiro-dsl 2" "language keiro-dsl 3" v2Source
@@ -862,6 +1031,7 @@ main = hspec $ do
                 recLanguageContract = effectiveLanguageContract (DeclaredLanguage version noLoc),
                 recFiles = [],
                 recMappings = [],
+                recIdDomains = [],
                 recNominalEqualities = [],
                 recBindingObligations = [],
                 recBehaviorRequirements = rows
@@ -888,6 +1058,7 @@ main = hspec $ do
                 wrLanguageContract = wsLanguageContract workspace,
                 wrModules = [],
                 wrMappings = [],
+                wrIdDomains = [],
                 wrNominalEqualities = [],
                 wrBindingObligations = [],
                 wrBehaviorRequirements = ownedRows,
@@ -993,6 +1164,7 @@ main = hspec $ do
                 recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                 recFiles = [],
                 recMappings = consumerMappings plan,
+                recIdDomains = [],
                 recNominalEqualities = nominalEqualityIdentities spec,
                 recBindingObligations = [],
                 recBehaviorRequirements = []
@@ -3326,6 +3498,7 @@ main = hspec $ do
                   recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                   recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report],
                   recMappings = [],
+                  recIdDomains = [],
                   recNominalEqualities = [],
                   recBindingObligations = [],
                   recBehaviorRequirements = Behavior.behaviorRecordRows requirements
@@ -5199,6 +5372,7 @@ sampleWorkspaceRecord workspace =
           WorkspaceModuleRow HoleStub "Demo/Project/Holes.hs" (Just "domain/shared.keiro")
         ],
       wrMappings = consumerMappings (consumerPlan (wsMergedSpec workspace)),
+      wrIdDomains = [],
       wrNominalEqualities = nominalEqualityIdentities (wsMergedSpec workspace),
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
       wrBehaviorRequirements = [],

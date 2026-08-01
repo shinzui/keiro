@@ -64,6 +64,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
 import Keiro.Dsl.PrettyPrint
@@ -74,7 +75,7 @@ import Keiro.Dsl.PrettyPrint
     renderTransition,
   )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -278,6 +279,7 @@ classifyCompatibility context code
   | code == NominalRepresentationChanged = mappedWireBreakingVector context
   | code == NominalIdDecoderTightened =
       (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
+  | code == IdDomainContractChanged = idDomainContractVector
   | code == MappedDeclAdded = compatibleVector
   | code `elem` privateDecodeCodes = privateDecodeBreakingVector
   | code `elem` identityCodes = persistedIdentityBreakingVector
@@ -330,6 +332,7 @@ classifyCompatibility context code
         WorkflowPatchRemoved,
         WorkflowContinueSeedChanged
       ]
+
     identityCodes =
       [ DerivedIdentityChanged,
         IdPrefixChanged,
@@ -361,6 +364,18 @@ classifyCompatibility context code
         ContractTopicAdded,
         WorkflowEvolutionGuardAdded
       ]
+
+idDomainContractVector :: CompatibilityVector
+idDomainContractVector =
+  CompatibilityVector
+    { cvPrivateHistoryRead = VCompatible,
+      cvOldBinaryReadNewEvents = VCompatible,
+      cvSnapshotHydration = VAdvisory,
+      cvPublicConsumer = VBreaking,
+      cvPersistedIdentity = VCompatible,
+      cvConsumerBuild = VAdvisory,
+      cvRollout = Set.singleton RolloutProducerLast
+    }
 
 mappedWireBreakingCodes :: [DiagnosticCode]
 mappedWireBreakingCodes =
@@ -624,12 +639,30 @@ familyRegistry =
 -- teaching CLI callers to recover versions from provenance.
 diffServices :: CheckedService -> CheckedService -> [Change]
 diffServices oldService newService =
-  diffCheckedSpecs oldSpec newSpec <> semanticContractFoldChanges
+  diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> semanticContractFoldChanges
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
     oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes oldSpec]
     newAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes newSpec]
+    idDomainContractChanges =
+      [ breaking
+          (idName newDeclaration)
+          "id-domain-contract"
+          (idName newDeclaration)
+          IdDomainContractChanged
+          ( "ID admission contract changed "
+              <> renderIdDomainContract oldContract
+              <> " -> "
+              <> renderIdDomainContract newContract
+              <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots are invalidated and rebuilt"
+          )
+      | newDeclaration <- specIds newSpec,
+        Just oldDeclaration <- [find ((== idName newDeclaration) . idName) (specIds oldSpec)],
+        let oldContract = idDomainContractFor (checkedLanguageContract oldService) (idPrefix oldDeclaration),
+        let newContract = idDomainContractFor (checkedLanguageContract newService) (idPrefix newDeclaration),
+        oldContract /= newContract
+      ]
     semanticContractFoldChanges =
       [ advisory
           name
@@ -642,6 +675,11 @@ diffServices oldService newService =
         aggregateFoldSurface oldSpec oldAggregate == aggregateFoldSurface newSpec newAggregate,
         aggregateFoldSurfaceForService oldService oldAggregate /= aggregateFoldSurfaceForService newService newAggregate
       ]
+
+renderIdDomainContract :: Maybe IdDomainContract -> Text
+renderIdDomainContract Nothing = "legacy-unchecked"
+renderIdDomainContract (Just contract) =
+  idDomainVersion contract <> "(prefix=" <> idDomainPrefix contract <> ",json=" <> idDomainJsonRepresentation contract <> ")"
 
 -- | Compatibility wrapper for graph-only callers, explicitly using
 -- legacy/version-1 semantics on both sides.
@@ -682,10 +720,14 @@ sourceLanguageChange root subject old new
               <> renderSourceLanguage old
               <> " -> "
               <> renderSourceLanguage new
-              <> "; normalized runtime semantics are unchanged"
+              <> if oldRuntime == newRuntime
+                then "; normalized runtime semantics are unchanged"
+                else "; effective runtime semantics changed " <> oldRuntime <> " -> " <> newRuntime <> "; see the accompanying semantic-contract findings"
           )
       ]
   where
+    oldRuntime = effectiveRuntimeSemantics (effectiveLanguageContract old)
+    newRuntime = effectiveRuntimeSemantics (effectiveLanguageContract new)
     renderSourceLanguage sourceLanguage =
       sourceFormText sourceLanguage
         <> maybe "" ((" v" <>) . languageVersionText) (declaredLanguageVersionMaybe sourceLanguage)

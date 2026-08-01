@@ -9,7 +9,9 @@ module Keiro.Dsl.ExplainBindings
     BindingObligation (..),
     BindingHole (..),
     bindingObligations,
+    bindingObligationsForService,
     bindingHoles,
+    bindingHolesForService,
     renderBindingObligations,
   )
 where
@@ -23,7 +25,10 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveLanguageContract)
 import Keiro.Dsl.TypeGraph
 
 data BindingResolutionError
@@ -48,6 +53,7 @@ data BindingObligation = BindingObligation
     obligationBindingVersion :: !(Maybe Text),
     obligationCanonicalType :: !(Maybe Text),
     obligationEqualityContract :: !(Maybe Text),
+    obligationIdDomainContract :: !(Maybe Text),
     obligationCategory :: !Text
   }
   deriving stock (Eq, Ord, Show)
@@ -76,6 +82,7 @@ instance ToJSON BindingObligation where
         "bindingVersion" .= obligationBindingVersion obligation,
         "canonicalType" .= obligationCanonicalType obligation,
         "equalityContract" .= obligationEqualityContract obligation,
+        "idDomainContract" .= obligationIdDomainContract obligation,
         "category" .= obligationCategory obligation
       ]
 
@@ -98,6 +105,7 @@ instance FromJSON BindingObligation where
           <*> value .:? "bindingVersion"
           <*> value .:? "canonicalType"
           <*> value .:? "equalityContract"
+          <*> value .:? "idDomainContract"
           <*> (value .:? "category" >>= pure . maybe "structural" id)
 
 instance ToJSON BindingHole where
@@ -129,7 +137,10 @@ instance FromJSON BindingHole where
           <*> value .: "signature"
 
 bindingObligations :: Spec -> Either (NonEmpty BindingResolutionError) [BindingObligation]
-bindingObligations spec = do
+bindingObligations spec = bindingObligationsForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
+
+bindingObligationsForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingObligation]
+bindingObligationsForService service = do
   graph <- first (fmap BindingTypeGraphError) (resolveTypeGraph spec)
   nominalRegistry <- first (fmap BindingNominalTypeError) (resolveNominalTypes spec)
   pure . sortOn obligationSortKey $
@@ -137,12 +148,17 @@ bindingObligations spec = do
       [ obligationsFor graph declaration
       | ResolvedStructural declaration _ <- Map.elems (tgDeclarations graph)
       ]
-      <> concatMap (nominalObligationsFor spec) (Map.elems (nominalTypes nominalRegistry))
+      <> concatMap (nominalObligationsFor service) (Map.elems (nominalTypes nominalRegistry))
+  where
+    spec = checkedSpec service
 
 bindingHoles :: Spec -> Either (NonEmpty BindingResolutionError) [BindingHole]
-bindingHoles spec = do
+bindingHoles spec = bindingHolesForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
+
+bindingHolesForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingHole]
+bindingHolesForService service = do
   graph <- first (fmap BindingTypeGraphError) (resolveTypeGraph spec)
-  obligations <- bindingObligations spec
+  obligations <- bindingObligationsForService service
   pure . sortOn holeSortKey $
     concat
       [ holesFor graph declaration shape obligations
@@ -159,6 +175,8 @@ bindingHoles spec = do
          | obligation <- obligations,
            obligationCategory obligation /= "structural"
          ]
+  where
+    spec = checkedSpec service
 
 holesFor :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [BindingObligation] -> [BindingHole]
 holesFor _graph declaration shape obligations = bindingEntries <> auxiliaryEntries
@@ -271,13 +289,14 @@ obligationFor declaration qualified kindValue signature paths version canonical 
       obligationBindingVersion = version,
       obligationCanonicalType = canonical,
       obligationEqualityContract = Nothing,
+      obligationIdDomainContract = Nothing,
       obligationCategory = "structural"
     }
   where
     (ownerModule, symbol) = splitQualified (unQualifiedValueName qualified)
 
-nominalObligationsFor :: Spec -> ResolvedNominalType -> [BindingObligation]
-nominalObligationsFor spec nominal = case resolvedNominalOwnership nominal of
+nominalObligationsFor :: CheckedService -> ResolvedNominalType -> [BindingObligation]
+nominalObligationsFor service nominal = case resolvedNominalOwnership nominal of
   GeneratedNominal -> []
   ConsumerNominal binding -> bindingEntry : fixtureEntry : initialEntries
     where
@@ -299,18 +318,22 @@ nominalObligationsFor spec nominal = case resolvedNominalOwnership nominal of
         ScalarRepresentation NominalBool -> "Bool"
         ScalarRepresentation NominalTime -> "UTCTime"
       canonical = Just (unCanonicalTypeId (consumerNominalCanonical binding))
-      equalityContract = nominalEqualityIdentity nominal
-      bindingEntry = nominalObligation name binding category (consumerNominalBinding binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion (consumerNominalBindingVersion binding))) canonical equalityContract
-      fixtureEntry = nominalObligation name binding category (consumerNominalFixtures binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing
+      equalityContract = nominalEqualityIdentityForService (checkedLanguageContract service) nominal
+      idContract = case resolvedNominalRepresentation nominal of
+        IdRepresentation prefix -> idDomainVersion <$> idDomainContractFor (checkedLanguageContract service) prefix
+        _ -> Nothing
+      bindingEntry = nominalObligation name binding category (consumerNominalBinding binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion (consumerNominalBindingVersion binding))) canonical equalityContract idContract
+      fixtureEntry = nominalObligation name binding category (consumerNominalFixtures binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing Nothing
       initialEntries = case (registerPaths, consumerNominalInitial binding) of
         ([], _) -> []
         (_, Nothing) -> []
-        (_, Just initialValue) -> [nominalObligation name binding category initialValue InitialValue consumerType registerPaths Nothing canonical Nothing]
+        (_, Just initialValue) -> [nominalObligation name binding category initialValue InitialValue consumerType registerPaths Nothing canonical Nothing Nothing]
   where
+    spec = checkedSpec service
     quoted value = T.pack (show value)
 
-nominalObligation :: Name -> ConsumerNominalBinding -> Text -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> Maybe Text -> BindingObligation
-nominalObligation name binding category qualified kindValue signature paths version canonical equalityContract =
+nominalObligation :: Name -> ConsumerNominalBinding -> Text -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> Maybe Text -> Maybe Text -> BindingObligation
+nominalObligation name binding category qualified kindValue signature paths version canonical equalityContract idDomainContract =
   BindingObligation
     { obligationMappedName = name,
       obligationPackage = hsPackage (consumerNominalHaskell binding),
@@ -322,6 +345,7 @@ nominalObligation name binding category qualified kindValue signature paths vers
       obligationBindingVersion = version,
       obligationCanonicalType = canonical,
       obligationEqualityContract = equalityContract,
+      obligationIdDomainContract = idDomainContract,
       obligationCategory = category
     }
   where
@@ -382,6 +406,7 @@ renderBindingObligations context obligations = case obligations of
         <> maybe [] (\version -> ["      provenance: binding-version " <> quoted version]) (obligationBindingVersion obligation)
         <> maybe [] (\canonical -> ["      canonical-type: " <> quoted canonical]) (obligationCanonicalType obligation)
         <> maybe [] (\contract -> ["      equality-contract: " <> quoted contract]) (obligationEqualityContract obligation)
+        <> maybe [] (\contract -> ["      id-domain-contract: " <> quoted contract]) (obligationIdDomainContract obligation)
     renderPaths [] = " (not currently used by an aggregate root)"
     renderPaths paths = " (" <> T.intercalate "; " paths <> ")"
     quoted value = T.pack (show value)

@@ -44,10 +44,11 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
-import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHoles)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
@@ -302,7 +303,7 @@ executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx s
                     if recSourceLanguage previous == sourceLanguage
                       then Nothing
                       else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
-                  currentObligations = either (const []) id (bindingHoles spec)
+                  currentObligations = either (const []) id (bindingHolesForService service)
                   newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
                   currentBehavior = behaviorRecordRows requirements
                   (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
@@ -414,8 +415,9 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recLanguageContract = checkedLanguageContract service,
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
+      recIdDomains = idDomainIdentitiesForService service,
       recNominalEqualities = nominalEqualityIdentitiesForService service,
-      recBindingObligations = either (const []) id (bindingHoles spec),
+      recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior
     }
   where

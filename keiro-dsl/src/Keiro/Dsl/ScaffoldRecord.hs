@@ -32,6 +32,7 @@ data ScaffoldRecord = ScaffoldRecord
     recLanguageContract :: !EffectiveLanguageContract,
     recFiles :: ![(ModuleKind, FilePath)],
     recMappings :: ![MappingIdentity],
+    recIdDomains :: ![Text],
     recNominalEqualities :: ![Text],
     recBindingObligations :: ![BindingHole],
     recBehaviorRequirements :: ![BehaviorRecordRow]
@@ -50,6 +51,7 @@ renderRecord record =
     ]
       <> map renderFile (recFiles record)
       <> map renderMapping (recMappings record)
+      <> map ("id-domain " <>) (recIdDomains record)
       <> map ("nominal-equality " <>) (recNominalEqualities record)
       <> map renderBindingObligation (recBindingObligations record)
       <> map renderBehaviorRequirement (recBehaviorRequirements record)
@@ -80,10 +82,11 @@ parseRecord contents = case T.lines contents of
         ordinaryMappings <- traverse (parseMapping "mapping ") (filter ("mapping " `T.isPrefixOf`) rows)
         nominalMappings <- traverse (parseMapping "nominal-mapping ") (filter ("nominal-mapping " `T.isPrefixOf`) rows)
         let mappings = ordinaryMappings <> nominalMappings
+        let idDomains = [identity | row <- rows, Just identity <- [T.stripPrefix "id-domain " row]]
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
         behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
-        if hasDuplicateMappingNames mappings || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries
           then Nothing
           else
             pure
@@ -95,6 +98,7 @@ parseRecord contents = case T.lines contents of
                   recLanguageContract = languageContract,
                   recFiles = files,
                   recMappings = mappings,
+                  recIdDomains = idDomains,
                   recNominalEqualities = nominalEqualities,
                   recBindingObligations = bindingEntries,
                   recBehaviorRequirements = behaviorEntries

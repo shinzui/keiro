@@ -1,0 +1,21 @@
+language keiro-dsl 3
+context id-domain-migration
+
+id OrderId prefix=ord
+
+aggregate OrderBook
+  regs
+    orderId OrderId = placeholder
+  states Empty Recorded!
+
+  command Record { orderId:OrderId }
+  event OrderRecorded = fields(Record)
+
+  Empty -- Record -->
+    write orderId := cmd.orderId
+    emit OrderRecorded
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="id-domain-migration-v3"

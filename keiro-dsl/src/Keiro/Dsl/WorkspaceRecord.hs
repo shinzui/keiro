@@ -189,6 +189,7 @@ data WorkspaceRecord = WorkspaceRecord
     wrLanguageContract :: !EffectiveLanguageContract,
     wrModules :: ![WorkspaceModuleRow],
     wrMappings :: ![MappingIdentity],
+    wrIdDomains :: ![Text],
     wrNominalEqualities :: ![Text],
     wrBindingObligations :: ![BindingHole],
     wrBehaviorRequirements :: ![BehaviorRecordRow],
@@ -214,6 +215,7 @@ renderWorkspaceRecord record =
       <> ["semantic-contract " <> encodeRow (wrLanguageContract record)]
       <> ["module " <> encodeRow row | row <- wrModules record]
       <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- wrMappings record]
+      <> ["id-domain " <> identity | identity <- wrIdDomains record]
       <> ["nominal-equality " <> identity | identity <- wrNominalEqualities record]
       <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
       <> ["behavior " <> encodeRow requirement | requirement <- wrBehaviorRequirements record]
@@ -244,6 +246,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         ordinaryMappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
         nominalMappings <- traverse (decodeRow "nominal-mapping ") (rowsWith "nominal-mapping " rows)
         let mappings = ordinaryMappings <> nominalMappings
+        let idDomains = [identity | row <- rows, Just identity <- [T.stripPrefix "id-domain " row]]
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
         behaviorRequirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
@@ -252,6 +255,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         if hasDuplicates members
           || hasDuplicates (map wrmPath checkedModules)
           || hasDuplicates (map mappingSpecName mappings)
+          || hasDuplicates idDomains
           || hasDuplicates nominalEqualities
           || hasDuplicates (map bindingKey obligations)
           || hasDuplicates (map behaviorRecordKey behaviorRequirements)
@@ -269,6 +273,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrLanguageContract = languageContract,
                   wrModules = checkedModules,
                   wrMappings = mappings,
+                  wrIdDomains = idDomains,
                   wrNominalEqualities = nominalEqualities,
                   wrBindingObligations = obligations,
                   wrBehaviorRequirements = behaviorRequirements,

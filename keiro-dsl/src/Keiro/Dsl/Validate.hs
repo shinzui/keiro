@@ -326,6 +326,8 @@ data DiagnosticCode
   | NominalInitialChanged
   | NominalRepresentationChanged
   | NominalIdDecoderTightened
+  | -- ExecPlan 171 / IR-14: versioned prefix-bearing ID admission policy.
+    IdDomainContractChanged
   | -- ExecPlan 159 / IR-13: @fields(Command)@ output authority.
     EventOutputCommandMismatch
   | AggregateEventlessStateChange
