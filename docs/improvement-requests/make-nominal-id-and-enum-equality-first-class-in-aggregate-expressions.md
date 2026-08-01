@@ -4,10 +4,11 @@ title: Make nominal ID and enum equality first-class in aggregate expressions
 description: >-
   Let generated and consumer-bound IDs and enums participate in type-safe equality guards without
   forcing Text shadow registers or hand-owned behavior holes.
-timestamp: 2026-07-31T23:44:22Z
+timestamp: 2026-08-01T13:11:24Z
 requestId: IR-12
-status: proposed
+status: planned
 origin: mori://shinzui/mori
+plan: docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,7 +28,16 @@ reviews:
 
 ## Status
 
-Proposed for the next compatible aggregate-expression revision.
+Planned under
+[Plan 170](../plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md)
+and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md),
+targeting Keiki `0.7.0.0`. The producer capabilities tracked by
+`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-3` and
+`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4` are implemented on public `master` and
+packaged by the local `0.7.0.0` release tree, so the external technical blocker is cleared and API
+probes may begin. Plan 170 implementation still follows Plan 168's shared-owner hard dependency.
+Hackage and `v0.7.0.0` now publish the matching release, so Plan 170 can adopt `>=0.7 && <0.8` when
+that local hard dependency is satisfied.
 
 ## Context
 
@@ -74,7 +84,8 @@ if their runtime representation is the same. Ordering and arithmetic are outside
 ## Requested Deliverables
 
 - A nominal equality capability and checked expression representation.
-- Keiki integration for symbolic equality and counterexample attribution.
+- Released Keiki 0.7 integration for exact symbolic equality and reconstructible counterexample
+  attribution, using `>=0.7 && <0.8` after repeating Hackage/tag verification.
 - Binding/scaffold support for consumer-owned equality witnesses.
 - Positive, type-confusion, replay, mutation, and fleet-adoption tests.
 - Authoring guidance for generated and consumer-owned nominal types.

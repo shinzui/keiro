@@ -4,10 +4,11 @@ title: Make ID prefix declarations enforceable and evolution-safe
 description: >-
   Give id prefixes a truthful runtime contract for generated and consumer-bound IDs while keeping
   legacy persisted events readable through explicit language-version and migration policy.
-timestamp: 2026-07-31T23:44:22Z
+timestamp: 2026-08-01T13:11:24Z
 requestId: IR-14
-status: proposed
+status: planned
 origin: mori://shinzui/mori
+plan: docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,7 +28,14 @@ reviews:
 
 ## Status
 
-Proposed for a new declared language version; it must not silently tighten existing event decoders.
+Planned for a new declared language version under
+[Plan 171](../plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md)
+and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
+It uses the exact textual projection-domain capability implemented for Keiki `0.7.0.0` under
+`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4`. Keiro-side design and implementation
+may proceed once its local hard dependencies are satisfied. Hackage and `v0.7.0.0` now publish the
+matching release, so Plan 171 may adopt `>=0.7 && <0.8` at that point. It must not silently tighten
+existing event decoders.
 
 ## Context
 
@@ -51,7 +59,9 @@ behavior.
 
 The contract must specify prefix separators, non-empty suffixes, normalization, maximum length,
 JSON representation, Dhall/scaffold literals, error attribution, and whether internal replay can
-retain a legacy value that new commands may no longer introduce.
+retain a legacy value that new commands may no longer introduce. Its accepted textual set maps to
+Keiki 0.7's exact full-string projection domain for symbolic equality, while Keiro remains the
+authority for runtime admission and historical replay policy.
 
 ## Acceptance
 
@@ -72,5 +82,6 @@ retain a legacy value that new commands may no longer introduce.
 - A versioned ID-domain design and compatibility decision.
 - Validated generated constructors/codecs plus consumer-binding obligations.
 - Upgrade, upcast, diff, replay, and error-attribution support.
-- Property tests for accepted/rejected representations and cross-domain confusion.
+- Property tests for accepted/rejected representations, Keiki 0.7 exact-domain agreement, and
+  cross-domain confusion.
 - Migration and authoring documentation.

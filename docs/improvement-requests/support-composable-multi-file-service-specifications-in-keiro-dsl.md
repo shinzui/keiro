@@ -4,10 +4,11 @@ title: Support composable multi-file service specifications in keiro-dsl
 description: >-
   Let one Keiro service keep complete aggregates in separate .keiro files while resolving shared
   declarations, validating the whole service, and scaffolding context-level outputs atomically.
-timestamp: 2026-07-31T23:44:22Z
+timestamp: 2026-08-01T00:14:56Z
 requestId: IR-2
-status: proposed
+status: planned
 origin: mori://shinzui/mori
+plan: docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md
 reviews:
   - kind: model
     reviewer: codex
@@ -28,7 +29,10 @@ reviews:
 
 ## Status
 
-**Proposed, with a release-blocking acceptance failure in Keiro 0.6.0.0.** This request belongs to
+**Planned, with a release-blocking acceptance failure in Keiro 0.6.0.0.** The corrective work is
+owned by [Plan 168](../plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md)
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
+This request belongs to
 `shinzui/keiro` and originates from Mori MasterPlan 22. The workspace checker and atomic scaffold
 entrypoint have landed, but the generated Haskell does not yet satisfy the single nominal type
 requirement below. Mori must not adopt the workspace scaffold until that identity split is fixed.

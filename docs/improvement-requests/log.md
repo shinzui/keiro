@@ -1,5 +1,27 @@
 # Bundle Update Log
 
+## 2026-08-01
+* **Dependency baseline**: Keiki public `master` implements
+  `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`,
+  `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-3`, and
+  `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4`, and the local release tree packages
+  them as `0.7.0.0`. Keiro IR-12, IR-13, and IR-14 and their plans now treat that API as the
+  development baseline, so work can start without waiting on more producer implementation. Keiro
+  may also adopt `>=0.7 && <0.8`: Hackage now publishes `0.7.0.0`, and `v0.7.0.0` resolves to
+  release commit `7c5d433ef4455e9e626347f89cb3a416bad62e72` with the required APIs.
+* **Planning**: IR-11 is planned by Plan 167 under MasterPlan 27, covering grammar-positioned
+  preambles, parsed feature gates, lexical collision regressions, and released-version parity.
+* **Planning**: reopened IR-2 is planned by Plan 168 under MasterPlan 27, giving every shared
+  generated nominal declaration one Haskell owner and adding a compiled two-aggregate proof.
+* **Planning**: IR-12 is planned by Plan 170 under MasterPlan 27 and targets the Keiki `0.7.0.0`
+  implementations of `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-3` and
+  `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4` for conservative projection
+  exactness and exact domain-constrained reconstructible witnesses.
+* **Planning**: IR-13 reuses and updates unfinished Plan 159 under MasterPlan 27 instead of creating
+  a duplicate output/conformance plan.
+* **Planning**: IR-14 is planned by Plan 171 under MasterPlan 27, with Plan 169 supplying the
+  effective semantic language contract required for versioned enforcement and legacy replay.
+
 ## 2026-07-31
 * **Review finding**: IR-2 remains incomplete in Keiro 0.6.0.0 because workspace scaffolding emits
   separate nominal Haskell declarations for one shared logical `ProjectId` in each aggregate

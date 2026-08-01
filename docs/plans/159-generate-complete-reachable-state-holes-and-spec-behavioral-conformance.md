@@ -4,6 +4,8 @@ slug: generate-complete-reachable-state-holes-and-spec-behavioral-conformance
 title: "Generate complete reachable-state Holes and spec behavioral conformance"
 kind: exec-plan
 created_at: 2026-07-31T14:46:35Z
+intention: "intention_01kyxarnbbet3ajn0995gt65w9"
+master_plan: "docs/masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md"
 ---
 
 # Generate complete reachable-state Holes and spec behavioral conformance
@@ -40,6 +42,13 @@ Explicit Hole-owned transitions receive only finite witnessed-conformance status
 coverage remains visibly unverified. Released version-1 aggregate-wide transducer Holes are not
 silently upgraded to source-behavior conformance: their reports are labelled runtime-witness-only.
 
+The same generated-authority boundary also covers event construction. An event declared as
+`fields(Command)` is a complete identity mapping, so its checked output term is generated directly
+and no create-once output function can override or preserve a stale copy. Hand-owned output hooks
+remain only for explicit event fields whose transformation or external value is not described by
+the DSL. The behavior report identifies generated and hand-owned output obligations separately,
+and mutation tests prove that the generated mapping is the one executed.
+
 
 ## Progress
 
@@ -49,8 +58,14 @@ silently upgraded to source-behavior conformance: their reports are labelled run
 - [x] 2026-07-31: filed the missing detailed forward/replay attribution capability as
   `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`; current Mori resolution awaits a
   registry refresh, but the canonical producer-owned handle is fixed.
-- [ ] Milestone 1: land or verify the authoritative version-2 transducer seam from Plan 161 and a
-  released Keiki detailed-step/detailed-replay attribution API.
+- [x] 2026-08-01: revalidated the dependency baseline. Keiki public `master` implements the
+  required detailed forward/replay attribution API and the local release tree is packaged as
+  `0.7.0.0`; Hackage now publishes `0.7.0.0`, and `v0.7.0.0` resolves to release commit
+  `7c5d433ef4455e9e626347f89cb3a416bad62e72` with the same API.
+- [ ] Milestone 1: add one checked event-output mapping model and generate total
+  `fields(Command)` mappings without create-once output hooks; then verify the authoritative
+  version-2 transducer seam from Plan 161, adopt released Keiki `0.7.0.0`, and integrate its
+  detailed-step/detailed-replay attribution API.
 - [ ] Milestone 2: derive versioned live-cell, live-transition, rejection, replay-transition, and
   unverified-evidence descriptors and persist them in single-spec and workspace records.
 - [ ] Milestone 3: generate the create-once typed witness surface and migration snippets without
@@ -95,6 +110,15 @@ silently upgraded to source-behavior conformance: their reports are labelled run
 - 2026-07-31: Hackage preferred-version metadata and the upstream tag both identify Keiki
   `0.5.0.0` as the current release. The local Mori corpus located the source correctly but was not
   used as release authority.
+- 2026-08-01: Version-2 event declarations retain `EventFromCommand` in the source AST, but
+  resolution flattens it to fields and generated transducers call a create-once `Holes` output
+  function for every emitted event. The committed scalar-expression conformance service contains
+  identity-copy functions for `fields(Adjust)` and `fields(Close)`, so freshness tests currently
+  preserve the IR-13 regression rather than detect it.
+- 2026-08-01: Keiki public `master` exposes `StepSuccess`, `stepDetailedEither`,
+  `ReplayEventSpan`, `ReplayAttribution`, `ReplaySuccess`, `applyEventsDetailedEither`, and
+  `reconstituteDetailedEither`. Hackage `0.7.0.0` and the matching `v0.7.0.0` source now expose
+  those APIs, clearing the former producer and release blocker.
 
 
 ## Decision Log
@@ -195,11 +219,35 @@ silently upgraded to source-behavior conformance: their reports are labelled run
   without pretending that ADR 13's structural-coverage policy itself defines this new report.
   Date: 2026-07-31
 
-- Decision: Keep this follow-on as a standalone ExecPlan, with Plan 161 Milestone 3 as a hard
-  integration dependency rather than reopening the completed structural-consumer-type MasterPlan.
+- Decision: Keep this follow-on as a distinct ExecPlan, with Plan 161 Milestone 3 as a hard
+  integration dependency rather than reopening the completed structural-consumer-type MasterPlan;
+  coordinate its remaining implementation through MasterPlan 27.
   Rationale: static obligation derivation can proceed independently, but source-behavior execution
   must use the authoritative generated transducer rather than create a second implementation.
   Date: 2026-07-31
+
+- Decision: Reuse this unfinished plan for Keiro IR-13 and register it under MasterPlan 27 instead
+  of creating a second event-output plan.
+  Rationale: the checked generated-versus-hand-owned output boundary is consumed directly by this
+  plan's obligation inventory, generated transducer execution, mutation tests, and conformance
+  evidence. Separate plans would edit the same output-hook and harness seams with incompatible
+  ownership assumptions.
+  Date: 2026-08-01
+
+- Decision: Treat `fields(Command)` as generated-owned only when the emitted event names that same
+  transition command and the resolved mapping is total and type-identical; retain a named
+  hand-owned obligation for explicit or transformed output.
+  Rationale: declaration provenance, not coincidental same-name fields, is the authority for an
+  identity copy. Rejecting a cross-command or non-total mapping during checking prevents generated
+  code from guessing and prevents a stale Hole from remaining hidden behavior.
+  Date: 2026-08-01
+
+- Decision: Adopt released Keiki `0.7.0.0` as the detailed-attribution dependency and start
+  Keiro's output/conformance work immediately.
+  Rationale: Hackage and `v0.7.0.0` expose the implemented API with matching versioned source, so
+  edge attribution has no remaining producer or release blocker. Repeat the authority check when
+  changing bounds; never pin a sibling checkout.
+  Date: 2026-08-01
 
 
 ## Outcomes & Retrospective
@@ -210,15 +258,22 @@ static and compiled evidence at the correct boundary, and removed automatic `Hol
 It also made the Plan 161 ownership dependency explicit and added the missing Keiki edge-
 attribution prerequisite.
 
-Implementation remains pending. At each milestone, record the released Keiki version and tag,
-required/filled/pending/stale counts for the fixture, evidence-level counts, and any remaining
-guard or Hole opacity. Before completion, distill durable decisions into the relevant ADRs.
+Implementation remains pending. The Keiki `0.7.0.0` API prerequisite is authoritatively released.
+At each milestone, record released dependency evidence, required/filled/pending/stale counts for
+the fixture, evidence-level counts, and any remaining guard or Hole opacity. Before completion,
+distill durable decisions into the relevant ADRs.
 
 
 ## Context and Orientation
 
 `keiro-dsl/src/Keiro/Dsl/Grammar.hs` defines aggregate states, commands, transitions, guards,
 ordered writes, emitted event kinds, live/replay-only mode, and source locations.
+Its `EventBody` distinguishes explicit fields from `EventFromCommand`, but the current resolved
+constructor loses that provenance. `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` consequently emits every
+event through `Holes.<transition-output>`; `emitOutputHook` merely pre-fills same-name command or
+register terms in the create-once file. Introduce a checked `EventOutputMapping` before lowering so
+validation, fingerprints, scaffold records, generated transducers, and this plan's conformance
+inventory all observe the same ownership decision.
 `keiro-dsl/src/Keiro/Dsl/Validate.hs` validates declared references and computes structural
 reachability, but its current traversal follows both transition modes. Add the live-only traversal
 in a new `keiro-dsl/src/Keiro/Dsl/BehaviorCoverage.hs` module after normal validation succeeds;
@@ -241,15 +296,14 @@ aggregate descriptor, and keep the record keyed by the manifest service as requi
 [ADR 14](../adr/0014-service-workspaces-compose-single-owner-members-under-one-manifest-identity.md)
 and [ADR 15](../adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md).
 
-The runtime dependency is `mori://shinzui/keiki/packages/keiki`. Released Keiki `0.5.0.0` defines
-`stepEither`, `StepFailure`, `EdgeRef`, `applyEventsEither`, and replay failures in the canonical
-project `mori://shinzui/keiki`, project-relative file `src/Keiki/Core.hs`; a source-file artifact
-URI is pending. `stepEither` returns the final state, registers, and events on success but not the
-chosen edge. Replay returns the final state or a structured failure but not a successful edge
-trace. The dependency milestone must add those facts without exposing register values in
-diagnostics or introducing a second evaluator, release Keiki, and verify the chosen release
-against Hackage metadata and its upstream tag before changing Cabal bounds.
-Keiki owns this capability through
+The runtime dependency is `mori://shinzui/keiki/packages/keiki`. The current authoritative release
+is `0.7.0.0`. It adds `StepSuccess`, `stepDetailedEither`, `ReplayEventSpan`, `ReplayAttribution`,
+`ReplaySuccess`,
+`applyEventsDetailedEither`, and `reconstituteDetailedEither` in the canonical project
+`mori://shinzui/keiki`, project-relative file `src/Keiki/Core.hs`; a source-file artifact URI is
+pending. The compatibility functions retain their released signatures and share the evaluator.
+The dependency milestone repeats verification of the Hackage artifact and matching upstream tag,
+then raises Keiro's range to `>=0.7 && <0.8`. Keiki owns this capability through
 `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`.
 
 [Plan 147](147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md)
@@ -277,18 +331,27 @@ prove a wider property, not that the witness passed.
 
 ## Plan of Work
 
-Milestone 1 establishes the only sound edge-attribution seam. First verify that Plan 161's
+Milestone 1 establishes the generated output and edge-attribution seams. Add a checked
+`EventOutputMapping` representation derived while event declaration provenance is still present.
+For `EventFromCommand sourceCommand`, require that the transition consuming `sourceCommand` emits
+the event and that every resolved event field maps to the same checked command field. Generate the
+`...TermFields` value directly in `Keiro.Dsl.Scaffold.generatedOnCmdBlock`, remove its output hook
+from the create-once export surface, and include mapping ownership in fold fingerprints, diffs,
+scaffold records, and behavior requirements. Explicit `EventFields` continue to produce a clearly
+named hand-owned output obligation until a future expression form describes their values. A
+mapping mismatch or non-total mapping fails `check` before scaffolding.
+
+Then verify that Plan 161's
 generated version-2 assembly exists and exposes one authoritative transducer plus a stable mapping
-from transition obligation keys to generated edges. Implement or consume
-`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`: in the Keiki project, add an additive detailed
-forward function whose success includes `EdgeRef`, and a detailed strict replay function whose
-trace records the attributed `EdgeRef`, `EdgeMode`, and consumed event span for each completed
-edge, including multi-event chains. The compatibility `stepEither` and `applyEventsEither`
-functions remain unchanged. Tests must prove live-first selection over a replay-only twin,
-same-target guarded siblings, multi-event spans, ambiguity, and truncated replay. Release Keiki,
-verify Hackage preferred metadata and the matching tag, then select Keiro bounds from that released
-API. A small spike in this milestone should prove the generated mapping and detailed trace identify
-the same edge; do not proceed on target/event inference alone.
+from transition obligation keys to generated edges. Consume the Keiki 0.7 implementation of
+`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`: `stepDetailedEither` returns the
+selected `EdgeRef`, and detailed strict replay returns `EdgeRef`, `EdgeMode`, and the consumed event
+span for each completed edge, including multi-event chains. Confirm through focused probes that
+compatibility `stepEither` and `applyEventsEither` remain unchanged and that live-first selection,
+same-target guarded siblings, multi-event spans, ambiguity, and truncated replay behave as the
+release documents. Verify Hackage preferred metadata and the matching `v0.7.0.0` tag, then select
+the released `>=0.7 && <0.8` bounds. A small spike in this milestone should prove the generated
+mapping and detailed trace identify the same edge; do not proceed on target/event inference alone.
 
 Milestone 2 adds pure obligation derivation. `Keiro.Dsl.BehaviorCoverage` consumes only a validated
 semantic `Spec`. Traverse live edges from the first declared state, include terminal targets, and
@@ -364,6 +427,12 @@ alternative, expect a replay-only edge to fire forward, let the live twin steal 
 truncate a multi-event replay chunk, and make codec replay diverge. Each mutation must fail the
 named obligation and restore its target even after interruption.
 
+The fixture must also contain direct, aliased-wire, optional, nominal, `Time`, and `Natural`
+command fields copied by `fields(Command)`. Assert that generated transducer code constructs those
+event terms without importing an output function from `Holes`. Mutate a generated selector and
+prove forward/replay conformance fails; add a stale legacy identity-copy function to the
+create-once module and prove it is unused and reported as obsolete rather than silently executed.
+
 Regenerate every checked-in version-2 aggregate harness, add single-file and workspace record
 round trips, and prove re-scaffolding never changes a filled `BehaviorHoles.hs` file. Update
 `docs/user/typed-spec-toolchain.md`, `docs/guides/evolution-and-replayability.md`,
@@ -386,7 +455,8 @@ mori registry dependents shinzui/keiki --packages
 mori path mori://shinzui/keiki/packages/keiki
 ```
 
-Before changing dependency bounds, verify the current released API independently:
+Before changing dependency bounds, verify the authoritative release independently. Both commands
+must expose `0.7.0.0`:
 
 ```bash
 curl -fsSL https://hackage.haskell.org/package/keiki/preferred.json
@@ -436,6 +506,12 @@ completes.
 
 
 ## Validation and Acceptance
+
+Before evaluating the coverage assertions below, scaffold a transition that emits an event
+declared with `fields(Command)`. It must compile without an output Hole for direct, aliased-wire,
+optional, nominal, `Time`, and `Natural` fields. A cross-command or non-total mapping must fail
+`check`, and a stale identity-copy function left in a create-once module must be unused and reported
+as obsolete rather than becoming hidden runtime behavior.
 
 1. A fixture history reaches a later nonterminal state and exercises every command cell there; a
    reachable terminal state has rejection witnesses for every command. Removing one later-state
@@ -517,6 +593,23 @@ data BehaviorRequirement = BehaviorRequirement
 deriveBehaviorRequirements :: Spec -> Either [BehaviorDerivationError] [BehaviorRequirement]
 ```
 
+The checked aggregate model must also retain output provenance in a non-generic form equivalent to:
+
+```haskell
+data EventOutputMapping
+  = GeneratedCommandIdentity
+      { outputSourceCommand :: Name
+      , outputFields :: NonEmpty CheckedFieldCopy
+      }
+  | HandOwnedEventOutput
+      { outputObligation :: OutputObligationKey
+      }
+```
+
+Every downstream consumer must pattern-match this model rather than re-derive ownership from field
+names. `GeneratedCommandIdentity` is legal only for a transition consuming
+`outputSourceCommand`; `CheckedFieldCopy` retains selector, wire alias, and resolved nominal type.
+
 The generated aggregate contract should provide typed equivalents of:
 
 ```haskell
@@ -556,8 +649,8 @@ pending, missing, duplicate, stale, failed, verified, and unverified collections
 machine-readable failure codes and human-readable state, command, transition, and source-location
 detail. Report arrays are canonically sorted by `BehaviorKey`.
 
-The required Keiki dependency surface is additive: a successful detailed step returns the chosen
-`EdgeRef` with the existing target/register/event result, and strict detailed replay returns
+Keiki 0.7 provides the required additive dependency surface: a successful detailed step returns the
+chosen `EdgeRef` with the existing target/register/event result, and strict detailed replay returns
 successful edge attributions including mode and event spans while retaining existing structured
 failures. Compatibility entry points keep their released signatures. Use the one Keiki evaluator
 for guard selection, updates, emission, and replay; generated code must not implement an edge
@@ -565,9 +658,9 @@ selector. The producer-owned request is
 `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`.
 
 Plan 161's generated transducer and transition-to-edge mapping are hard dependencies for the
-source-conformance label. The current released dependency is
-`mori://shinzui/keiki/packages/keiki` version `0.5.0.0`, but implementation must repeat registry and
-upstream release verification and choose bounds only after the detailed API is released.
+source-conformance label. The development target is `mori://shinzui/keiki/packages/keiki` version
+`0.7.0.0`; implementation repeats registry and upstream release verification, then adopts
+`>=0.7 && <0.8`.
 
 
 Revision note: Detached this plan from the completed structural-consumer-type MasterPlan so it is
@@ -583,3 +676,13 @@ Revision note: Filed the missing successful edge-attribution capability in Keiki
 `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2` and linked the prerequisite from
 Progress, Decision Log, Context, Milestone 1, and Interfaces; local resolution is pending a Mori
 registry refresh, 2026-07-31.
+
+Revision note: Registered this unfinished plan under MasterPlan 27 and expanded it to implement
+Keiro IR-13 through a checked event-output mapping, direct generated lowering for
+`fields(Command)`, obsolete-Hole reporting, and runtime mutation evidence. This reuses the one
+existing unimplemented plan that already owns output obligations and behavioral conformance rather
+than creating a duplicate, 2026-08-01.
+
+Revision note: Rebased the detailed-attribution prerequisite on released Keiki `0.7.0.0`, verified
+through Hackage and the matching `v0.7.0.0` tag. The producer/release blocker is cleared and this
+plan may adopt `>=0.7 && <0.8` as it starts, 2026-08-01.

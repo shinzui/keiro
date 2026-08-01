@@ -4,10 +4,11 @@ title: Parse language preambles contextually without colliding with domain ident
 description: >-
   Recognize a Keiro language-version preamble only in its grammar position so legal nested fields,
   strings, and identifiers cannot be mistaken for file-level feature declarations.
-timestamp: 2026-07-31T23:44:22Z
+timestamp: 2026-08-01T00:14:56Z
 requestId: IR-11
-status: proposed
+status: planned
 origin: mori://shinzui/mori
+plan: docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,7 +28,9 @@ reviews:
 
 ## Status
 
-Proposed as a Keiro 0.6 patch-release blocker.
+Planned as a Keiro 0.6 compatibility blocker under
+[Plan 167](../plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md)
+and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
 
 ## Context
 

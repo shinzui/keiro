@@ -4,10 +4,11 @@ title: Generate declarative event output mappings from fields(Command)
 description: >-
   Keep identity event copies generated-owned when fields(Command) fully specifies their output,
   reserving hand-owned output holes for explicit transformations and external decisions.
-timestamp: 2026-07-31T23:44:22Z
+timestamp: 2026-08-01T13:11:24Z
 requestId: IR-13
-status: proposed
+status: planned
 origin: mori://shinzui/mori
+plan: docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,7 +28,13 @@ reviews:
 
 ## Status
 
-Proposed for the version-2 authoritative transducer surface.
+Planned as part of the existing unfinished
+[Plan 159](../plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md)
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
+The generated-output work can start immediately. Full edge-attributed forward/replay evidence
+targets Keiki `0.7.0.0`, whose implementation of
+`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2` is present on public `master` and
+published on Hackage with the matching `v0.7.0.0` tag. Plan 159 may adopt `>=0.7 && <0.8` and begin.
 
 ## Context
 
@@ -69,5 +76,6 @@ and conformance coverage so changing an event from declarative to custom output 
 - A checked event-output mapping model shared by validation, scaffold, diff, and harness code.
 - Generated transducer lowering for total declarative mappings.
 - An explicit grammar/binding path for genuinely custom outputs.
-- Compatibility, replay, scaffold-adoption, and mutation tests.
+- Compatibility, scaffold-adoption, and mutation tests, plus released Keiki 0.7 detailed
+  forward/replay attribution.
 - Documentation of the generated/hand-owned behavior boundary.
