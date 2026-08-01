@@ -24,6 +24,12 @@ module Keiro.Dsl.Scaffold
     defaultContext,
     genPrefixFor,
     holePrefixFor,
+    generatedNominalModule,
+    NominalUseSite (..),
+    NominalGenerationOwner (..),
+    planNominalGeneration,
+    generatedNominalsInTypes,
+    generatedNominalTypeImports,
     scaffoldReplayAudit,
     scaffoldStructural,
     scaffoldStructuralOwners,
@@ -125,6 +131,25 @@ data Context = Context
   }
   deriving stock (Eq, Show)
 
+-- | One aggregate-level reason a generated nominal declaration must be visible.
+-- The declaration itself is context-owned; these use sites determine the
+-- aggregate modules that import it.
+data NominalUseSite = NominalUseSite
+  { nominalUseAggregate :: !Name,
+    nominalUseKind :: !AggregateUseSite
+  }
+  deriving stock (Eq, Ord, Show)
+
+-- | The checked generation owner for one unbound ID or enum. Every owner in a
+-- service points at the same context-level module, while retaining its source
+-- location through 'ResolvedNominalType' and all aggregate use sites explicitly.
+data NominalGenerationOwner = NominalGenerationOwner
+  { nominalDeclaration :: !ResolvedNominalType,
+    nominalModule :: !Text,
+    nominalUseSites :: !(Set.Set NominalUseSite)
+  }
+  deriving stock (Eq, Show)
+
 -- | A context with today's default placement ('GeneratedPrefix', no root prefix)
 -- for the given @context@ name. Callers that do not care about placement (the
 -- @parse@ path, tests) build their context with this.
@@ -145,6 +170,12 @@ genPrefixFor ctx node = case placement ctx of
 -- the same for both placement styles (holes always sit beside the domain).
 holePrefixFor :: Context -> Text -> Text
 holePrefixFor ctx node = rootPrefix ctx <> ctxPascalOf ctx <> "." <> node
+
+-- | The one context-level Haskell owner for generated IDs and enums.
+generatedNominalModule :: Context -> Text
+generatedNominalModule ctx = case placement ctx of
+  GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Nominals"
+  CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.Nominals"
 
 -- | The root namespace prefix, dot-terminated, or @""@ when no root is set.
 rootPrefix :: Context -> Text
@@ -321,6 +352,8 @@ data Agg = Agg
     aStates :: ![StateDecl],
     aCommands :: ![ResolvedCtor],
     aEvents :: ![ResolvedCtor],
+    -- | Generated IDs and enums used by this aggregate, in stable name order.
+    aGeneratedNominals :: ![ResolvedNominalType],
     aTransitions :: ![Transition],
     aOutputMappings :: !(Map.Map (Int, Int) EventOutputMapping),
     aWire :: !WireSpec,
@@ -374,6 +407,7 @@ resolveAgg ctx spec agg =
       aStates = aggStates agg,
       aCommands = map resolveCommand (aggCommands agg),
       aEvents = map resolveEvent (aggEvents agg),
+      aGeneratedNominals = generatedNominalsInTypes aggregateResolvedTypes,
       aTransitions = aggTransitions agg,
       aOutputMappings =
         Map.fromList
@@ -416,6 +450,10 @@ resolveAgg ctx spec agg =
           rcVersion = 1,
           rcUpcastFrom = Nothing
         }
+    aggregateResolvedTypes =
+      map rrType (map resolveRegister (aggRegs agg))
+        <> map snd (concatMap rcFields (map resolveCommand (aggCommands agg)))
+        <> map snd (concatMap rcFields (map resolveEvent (aggEvents agg)))
     resolveRegister register =
       let resolvedType = orDie (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
           resolvedInitial = orDie (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
@@ -427,6 +465,58 @@ resolveAgg ctx spec agg =
             }
     orDie = either (error . ("validated aggregate resolution failed: " <>) . show) id
     orDieOutput = either (error . ("validated aggregate output resolution failed: " <>) . show) id
+
+-- | Keep only generated nominal IDs/enums from a resolved aggregate type list.
+-- The map both deduplicates and makes declaration/import order independent of
+-- member and field order.
+generatedNominalsInTypes :: [ResolvedAggregateType] -> [ResolvedNominalType]
+generatedNominalsInTypes resolvedTypes =
+  Map.elems . Map.fromList $
+    [ (resolvedNominalName nominal, nominal)
+    | AggregateNominal nominal <- resolvedTypes,
+      GeneratedNominal <- [resolvedNominalOwnership nominal]
+    ]
+
+-- | Plan declaration ownership and use closure without emitting text. Parsing
+-- and validation already reject malformed declarations; retaining the checked
+-- error here keeps this function total for direct library callers.
+planNominalGeneration :: Context -> Spec -> Either (NonEmpty NominalTypeError) [NominalGenerationOwner]
+planNominalGeneration ctx spec = do
+  registry <- resolveNominalTypes spec
+  let aggregates = [resolveAgg ctx spec aggregate | NAggregate aggregate <- specNodes spec]
+      generated =
+        [ nominal
+        | nominal <- Map.elems (nominalTypes registry),
+          GeneratedNominal <- [resolvedNominalOwnership nominal]
+        ]
+  pure
+    [ NominalGenerationOwner
+        { nominalDeclaration = nominal,
+          nominalModule = generatedNominalModule ctx,
+          nominalUseSites = Set.fromList (concatMap (usesFor nominal) aggregates)
+        }
+    | nominal <- generated
+    ]
+  where
+    usesFor nominal aggregate =
+      [ NominalUseSite (aName aggregate) useKind
+      | useKind <- aggregateUseKinds nominal aggregate
+      ]
+
+aggregateUseKinds :: ResolvedNominalType -> Agg -> [AggregateUseSite]
+aggregateUseKinds nominal aggregate =
+  nub $
+    [RegisterUse | nominal `elem` registerNominals]
+      <> [CommandFieldUse | nominal `elem` commandNominals]
+      <> [EventFieldUse | nominal `elem` eventNominals]
+      <> [CodecUse | nominal `elem` eventNominals]
+      <> [SnapshotUse | hasSnapshot aggregate && nominal `elem` registerNominals]
+      <> [HarnessSampleUse | nominal `elem` commandNominals || nominal `elem` eventNominals]
+      <> [HaskellLoweringUse | nominal `elem` aGeneratedNominals aggregate]
+  where
+    registerNominals = generatedNominalsInTypes (map rrType (aRegs aggregate))
+    commandNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aCommands aggregate)))
+    eventNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aEvents aggregate)))
 
 --------------------------------------------------------------------------------
 -- Entry point
@@ -454,6 +544,7 @@ scaffoldStructuralOwners ctx spec = case resolveTypeGraph spec of
   Right graph ->
     [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
       <> projectionModules
+      <> generatedNominalOwners ctx spec
       <> nominalRepresentationOwners ctx spec
       <> nominalProjectionOwners ctx spec
       <> bindingSkeletonOwners ctx spec graph
@@ -916,6 +1007,108 @@ nominalRepresentationModule :: Context -> Name -> Text
 nominalRepresentationModule ctx name = case placement ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Nominal.Shape." <> name
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Nominal.Shape." <> name <> ".Generated"
+
+-- | Emit the one generated nominal authority for the complete context. The
+-- empty declaration attribution is intentional: in a workspace this module is
+-- context-level even when all declarations currently happen to live in one
+-- member, so moving that member cannot move Haskell type ownership.
+generatedNominalOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
+generatedNominalOwners ctx spec = case planNominalGeneration ctx spec of
+  Left _ -> []
+  Right [] -> []
+  Right owners ->
+    [ ( ScaffoldModule
+          { modulePath = T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs"),
+            moduleText = emitGeneratedNominals ctx owners,
+            kind = Generated,
+            origin = "context " <> specContext spec <> " generated nominal declarations"
+          },
+        []
+      )
+    ]
+
+emitGeneratedNominals :: Context -> [NominalGenerationOwner] -> Text
+emitGeneratedNominals ctx owners =
+  nl
+    [ "{-# LANGUAGE DeriveAnyClass #-}",
+      "{-# LANGUAGE DeriveGeneric #-}",
+      "{-# LANGUAGE LambdaCase #-}",
+      generatedBanner,
+      "module " <> generatedNominalModule ctx <> " where",
+      "",
+      "import Data.Aeson (FromJSON, ToJSON)",
+      "import Data.Text (Text)",
+      "import GHC.Generics (Generic)",
+      "import Keiki.Shape (CanonicalTypeName)",
+      "",
+      sectionsOf [map (emitGeneratedNominal . nominalDeclaration) owners]
+    ]
+
+emitGeneratedNominal :: ResolvedNominalType -> Text
+emitGeneratedNominal nominal = case resolvedNominalRepresentation nominal of
+  IdRepresentation {} ->
+    nl
+      [ "newtype " <> name <> " = " <> name <> " Text",
+        "  deriving stock (Generic, Eq, Ord, Show)",
+        "  deriving anyclass (ToJSON, FromJSON)",
+        "",
+        "instance CanonicalTypeName " <> name,
+        "",
+        nominalTextName nominal <> " :: " <> name <> " -> Text",
+        nominalTextName nominal <> " (" <> name <> " value) = value"
+      ]
+  EnumRepresentation constructors ->
+    nl
+      [ "data " <> name <> " = " <> T.intercalate " | " (map fst (NE.toList constructors)),
+        "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)",
+        "  deriving anyclass (ToJSON, FromJSON)",
+        "",
+        "instance CanonicalTypeName " <> name,
+        "",
+        nominalTextName nominal <> " :: " <> name <> " -> Text",
+        nominalTextName nominal <> " = \\case",
+        nl ["  " <> constructor <> " -> " <> tshow wire | (constructor, wire) <- NE.toList constructors]
+      ]
+  ScalarRepresentation {} ->
+    error "generated nominal scalar reached generated declaration emission"
+  where
+    name = resolvedNominalName nominal
+
+nominalTextName :: ResolvedNominalType -> Text
+nominalTextName = (<> "Text") . lowerFirst . resolvedNominalName
+
+-- | Explicit type/constructor imports for exactly the generated declarations a
+-- generated aggregate module uses. Keeping an import list avoids making every
+-- aggregate depend on every service declaration merely because they share the
+-- one owner module.
+generatedNominalTypeImports :: Context -> [ResolvedNominalType] -> [Text]
+generatedNominalTypeImports _ [] = []
+generatedNominalTypeImports ctx nominals =
+  [ "import "
+      <> generatedNominalModule ctx
+      <> " ("
+      <> T.intercalate ", " [resolvedNominalName nominal <> " (..)" | nominal <- stableNominals nominals]
+      <> ")"
+  ]
+
+generatedNominalCodecImports :: Context -> [ResolvedNominalType] -> [Text]
+generatedNominalCodecImports _ [] = []
+generatedNominalCodecImports ctx nominals =
+  [ "import "
+      <> generatedNominalModule ctx
+      <> " ("
+      <> T.intercalate
+        ", "
+        ( concat
+            [ [resolvedNominalName nominal <> " (..)", nominalTextName nominal]
+            | nominal <- stableNominals nominals
+            ]
+        )
+      <> ")"
+  ]
+
+stableNominals :: [ResolvedNominalType] -> [ResolvedNominalType]
+stableNominals = Map.elems . Map.fromList . map (\nominal -> (resolvedNominalName nominal, nominal))
 
 nominalRepresentationOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
 nominalRepresentationOwners ctx spec = case resolveNominalTypes spec of
@@ -2837,13 +3030,12 @@ emitDomain a =
            "import Keiki.Core (RegFile (..))"
          ]
       ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
+      ++ generatedNominalTypeImports (aContext a) (aGeneratedNominals a)
       ++ map ("import " <>) (domainConsumerImports a)
       ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)",
            "",
            sectionsOf
-             [ map (emitId a) [declaration | declaration <- aIds a, idBinding declaration == Nothing],
-               map (emitEnum a) [declaration | declaration <- aEnums a, enumBinding declaration == Nothing],
-               [emitVertex a],
+             [ [emitVertex a],
                map (emitRecord a) (aCommands a),
                [emitSum (aName a <> "Command") (aCommands a)],
                map (emitRecord a) (aEvents a),
@@ -2858,33 +3050,6 @@ emitDomain a =
 
 hasSnapshot :: Agg -> Bool
 hasSnapshot = maybe False (const True) . aSnapshot
-
-emitId :: Agg -> IdDecl -> Text
-emitId a d =
-  nl $
-    [ "newtype " <> idName d <> " = " <> idName d <> " Text",
-      "  deriving stock (Generic, Eq, Ord, Show)"
-    ]
-      ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
-      ++ ["instance CanonicalTypeName " <> idName d | hasSnapshot a]
-      ++ [ "",
-           lowerFirst (idName d) <> "Text :: " <> idName d <> " -> Text",
-           lowerFirst (idName d) <> "Text (" <> idName d <> " t) = t"
-         ]
-
-emitEnum :: Agg -> EnumDecl -> Text
-emitEnum a d =
-  nl $
-    [ "data " <> enumName d <> " = " <> T.intercalate " | " (map fst (enumCtors d)),
-      "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)"
-    ]
-      ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
-      ++ ["instance CanonicalTypeName " <> enumName d | hasSnapshot a]
-      ++ [ "",
-           lowerFirst (enumName d) <> "Text :: " <> enumName d <> " -> Text",
-           lowerFirst (enumName d) <> "Text = \\case",
-           nl ["  " <> c <> " -> " <> tshow w | (c, w) <- enumCtors d]
-         ]
 
 emitVertex :: Agg -> Text
 emitVertex a =
@@ -3027,7 +3192,7 @@ emitCodec a =
   nl $
     ["{-# LANGUAGE DataKinds #-}" | hasConsumerNominalIdCodec a]
       ++ ["{-# LANGUAGE TypeApplications #-}" | hasConsumerNominalIdCodec a]
-      ++ ["{-# LANGUAGE LambdaCase #-}" | hasConsumerNominalCodec a]
+      ++ ["{-# LANGUAGE LambdaCase #-}" | hasConsumerNominalCodec a || hasGeneratedNominalEnumCodec a]
       ++ [ "{-# LANGUAGE OverloadedRecordDot #-}",
            generatedBanner,
            "module " <> aGenPrefix a <> ".Codec (",
@@ -3040,6 +3205,7 @@ emitCodec a =
            "",
            "import " <> aGenPrefix a <> ".Domain"
          ]
+      ++ generatedNominalCodecImports (aContext a) (codecGeneratedNominals a)
       ++ ( if hasMappedCodec a
              then
                [ "import Control.Monad (unless)",
@@ -3112,17 +3278,30 @@ hasConsumerNominalIdCodec aggregate =
     (\nominal -> case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False)
     (codecConsumerNominals aggregate)
 
-emitEnumParsers :: Agg -> Text
-emitEnumParsers a = sectionsOf [[emitEnumParser declaration | declaration <- aEnums a, enumBinding declaration == Nothing]]
+hasGeneratedNominalEnumCodec :: Agg -> Bool
+hasGeneratedNominalEnumCodec aggregate =
+  any
+    (\nominal -> case resolvedNominalRepresentation nominal of EnumRepresentation {} -> True; _ -> False)
+    (codecGeneratedNominals aggregate)
 
-emitEnumParser :: EnumDecl -> Text
-emitEnumParser d =
-  nl $
-    [ "parse" <> enumName d <> " :: Text -> Parser " <> enumName d,
-      "parse" <> enumName d <> " = \\case"
+emitEnumParsers :: Agg -> Text
+emitEnumParsers a =
+  sectionsOf
+    [ [emitEnumParser nominal | nominal <- codecGeneratedNominals a, EnumRepresentation {} <- [resolvedNominalRepresentation nominal]]
     ]
-      ++ ["  " <> tshow w <> " -> pure " <> c | (c, w) <- enumCtors d]
-      ++ ["  _ -> fail " <> tshow ("unknown " <> enumName d)]
+
+emitEnumParser :: ResolvedNominalType -> Text
+emitEnumParser nominal = case resolvedNominalRepresentation nominal of
+  EnumRepresentation constructors ->
+    nl $
+      [ "parse" <> name <> " :: Text -> Parser " <> name,
+        "parse" <> name <> " = \\case"
+      ]
+        ++ ["  " <> tshow wire <> " -> pure " <> constructor | (constructor, wire) <- NE.toList constructors]
+        ++ ["  _ -> fail " <> tshow ("unknown " <> name)]
+  _ -> error "non-enum reached generated enum parser emission"
+  where
+    name = resolvedNominalName nominal
 
 emitConsumerNominalParsers :: Agg -> Text
 emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumerNominals aggregate)]
@@ -3319,6 +3498,14 @@ codecConsumerNominals aggregate =
     | event <- aEvents aggregate,
       (_, AggregateNominal nominal) <- rcFields event,
       ConsumerNominal {} <- [resolvedNominalOwnership nominal]
+    ]
+
+codecGeneratedNominals :: Agg -> [ResolvedNominalType]
+codecGeneratedNominals aggregate =
+  generatedNominalsInTypes
+    [ resolvedType
+    | event <- aEvents aggregate,
+      (_, resolvedType) <- rcFields event
     ]
 
 codecNominalImports :: Agg -> [Text]
@@ -3722,6 +3909,7 @@ emitExpressions aggregate
           ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
           ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
           ++ ["import Numeric.Natural (Natural)" | expressionUsesType AggregateNatural]
+          ++ generatedNominalTypeImports (aContext aggregate) generatedExpressionNominals
           ++ structuralProjectionImport
           ++ nominalProjectionImport
           ++ consumerImports
@@ -3772,6 +3960,12 @@ emitExpressions aggregate
     expressionUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
     expressionUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
     consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
+    generatedExpressionNominals =
+      stableNominals
+        [ nominal
+        | expression <- resolvedExpressions,
+          nominal <- typedGeneratedNominals expression
+        ]
     isTimeLiteral expression = case typedScalarNode expression of
       TypedLiteral ScalarTimeValue {} -> True
       _ -> False
@@ -3832,6 +4026,14 @@ typedConsumerLiteralNominals expression = own <> concatMap typedConsumerLiteralN
         | ConsumerNominal {} <- resolvedNominalOwnership nominal -> [nominal]
       (AggregateNominal nominal, TypedLiteral ScalarIdValue {})
         | ConsumerNominal {} <- resolvedNominalOwnership nominal -> [nominal]
+      _ -> []
+
+typedGeneratedNominals :: TypedScalarExpr -> [ResolvedNominalType]
+typedGeneratedNominals expression = own <> concatMap typedGeneratedNominals (typedExpressionChildren expression)
+  where
+    own = case typedScalarType expression of
+      AggregateNominal nominal
+        | GeneratedNominal <- resolvedNominalOwnership nominal -> [nominal]
       _ -> []
 
 emitTransitionExpressions :: Agg -> Int -> Transition -> [Text]

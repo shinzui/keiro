@@ -384,6 +384,7 @@ emitHarness goldens a =
            "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
            codecDecodeRawImport
          ]
+      ++ generatedNominalTypeImports (aContext a) (generatedNominalHarnessTypes a)
       ++ mappedHarnessImports a
       ++ nominalHarnessImports a
       ++ aggregateHarnessImports a
@@ -681,6 +682,11 @@ consumerNominalHarnessTypes aggregate =
       AggregateNominal nominal <- [resolvedType],
       ConsumerNominal {} <- [resolvedNominalOwnership nominal]
     ]
+
+generatedNominalHarnessTypes :: Agg -> [ResolvedNominalType]
+generatedNominalHarnessTypes aggregate =
+  generatedNominalsInTypes
+    (map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)))
 
 nominalScalarHarnessTypes :: Agg -> [ResolvedNominalType]
 nominalScalarHarnessTypes aggregate =

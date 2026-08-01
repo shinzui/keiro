@@ -1,0 +1,8 @@
+language keiro-dsl 1
+context workspace-nominal-proof
+
+id ProjectId prefix=proj
+
+enum ProjectPhase { Draft=draft Active=active }
+
+enum UnusedNominal { Present=present Absent=absent }

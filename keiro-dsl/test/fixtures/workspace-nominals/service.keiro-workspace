@@ -1,0 +1,4 @@
+service workspace-nominal-proof
+spec domain/shared.keiro
+spec domain/project.keiro
+spec domain/project-artifact.keiro

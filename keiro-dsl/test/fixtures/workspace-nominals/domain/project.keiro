@@ -1,0 +1,17 @@
+language keiro-dsl 1
+context workspace-nominal-proof
+
+aggregate Project
+  regs
+    projectId ProjectId = placeholder
+    phase ProjectPhase = Draft
+  states Empty Live!
+
+  command RegisterProject { projectId phase:ProjectPhase }
+  event ProjectRegistered = fields(RegisterProject)
+
+  Empty -- RegisterProject -->
+    emit ProjectRegistered
+    goto Live
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

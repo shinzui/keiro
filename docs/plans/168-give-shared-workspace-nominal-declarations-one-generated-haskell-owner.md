@@ -34,14 +34,15 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: define checked nominal declaration ownership and stable context-level module
-  placement for single-file and workspace inputs.
-- [ ] Milestone 2: emit each generated ID/enum once, import only used nominals into aggregate
-  domains, and preserve consumer-bound ownership.
-- [ ] Milestone 3: compile and execute a two-aggregate workspace conformance target with cross-ring
-  nominal values and generated instances.
+- [x] (2026-08-01T15:37:09Z) Milestone 1: defined checked nominal declaration ownership and stable
+  context-level module placement for single-file and workspace inputs.
+- [x] (2026-08-01T15:37:09Z) Milestone 2: emit each generated ID/enum once, import only used nominals
+  into aggregate domains and their generated consumers, and preserve consumer-bound ownership.
+- [x] (2026-08-01T15:37:09Z) Milestone 3: compiled and executed a two-aggregate workspace conformance
+  target with cross-ring nominal values and generated instances.
 - [ ] Milestone 4: add adoption/diff/freshness coverage, update ADR 14 and workspace documentation,
-  and run full validation.
+  and run full validation. Freshness and member-order coverage are complete; durable documentation
+  and full validation remain.
 
 
 ## Surprises & Discoveries
@@ -55,6 +56,16 @@ implementation. Provide concise evidence.
   produces two incompatible `ProjectId` and `ProjectPhase` Haskell types while all 0.6 workspace
   tests remain green because they inspect ownership metadata and paths but never compile the whole
   generated workspace.
+
+- 2026-08-01: Moving constructors out of an aggregate `Domain` module means hand-owned modules that
+  previously obtained generated enum/ID constructors from that module need an explicit import from
+  the new `Nominals` module. The adoption remains non-destructive: scaffold writes only generated
+  modules, while checked-in hand-owned conformance modules demonstrate the one-line import change.
+
+- 2026-08-01: The established `demo-project` workspace fixture contains an intentionally external
+  consumer-owned `ProjectSummary`, so it is suitable for ownership and deterministic-plan tests but
+  not a self-contained compile target. The fixture was extended with an unused enum, while a minimal
+  companion workspace supplies the executable cross-ring type-identity proof.
 
 
 ## Decision Log
@@ -80,6 +91,13 @@ Record every decision made while working on the plan.
   event mappings, snapshots, codecs, and harnesses rather than importing all declarations.
   Rationale: the reopened IR-2 explicitly reports unused enum emission, and future equality/prefix
   instances must not appear in aggregates that do not use their owner type.
+  Date: 2026-08-01
+
+- Decision: Emit the complete service declaration set in the context `Nominals` module, but import
+  only each aggregate ring's transitive generated uses.
+  Rationale: one service-level declaration must remain available even before an aggregate uses it;
+  keeping it out of unrelated aggregate imports closes the unused-emission regression without
+  making declaration existence depend on current consumers.
   Date: 2026-08-01
 
 

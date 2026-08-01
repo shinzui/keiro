@@ -10,6 +10,7 @@ import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), secondsToDiffTime)
 import AggregateScalarExpressions.ScalarAccount.BehaviorHoles (behaviorWitnesses)
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..))
 import Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract qualified as Behavior
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec)
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain

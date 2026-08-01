@@ -24,6 +24,7 @@ import Data.Text (Text)
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 import Numeric.Natural (Natural)
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..))
 import Generated.AggregateScalarExpressions.StructuralProjections qualified as StructuralProjections
 import ScalarExpressions.Domain qualified
 

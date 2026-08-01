@@ -40,7 +40,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, obsoleteGeneratedOutputHooks, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -3896,6 +3896,44 @@ main = hspec $ do
         forM_ audits $ \audit -> do
           moduleText audit `shouldSatisfy` T.isInfixOf "Project.projectEventStream"
           moduleText audit `shouldSatisfy` T.isInfixOf "ProjectArtifact.projectArtifactEventStream"
+      it "gives every generated ID and enum one context owner and imports only aggregate uses" $ do
+        plan <- shouldPlanWorkspace canonicalWorkspacePath
+        let ctx = wpContext plan
+            modules = map fst (wpModules plan)
+            nominalModules = [m | m <- modules, modulePath m == T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs")]
+            domainFor suffix = case [m | m <- modules, suffix `isSuffixOfPath` m] of
+              [m] -> pure m
+              found -> expectationFailure ("expected one domain ending in " <> suffix <> ", got " <> show (map modulePath found)) >> fail "unreachable"
+        ownerModule <- case nominalModules of
+          [m] -> pure m
+          found -> expectationFailure ("expected one generated nominal owner, got " <> show (map modulePath found)) >> fail "unreachable"
+        let nominalText = moduleText ownerModule
+        T.count "newtype ProjectId" nominalText `shouldBe` 1
+        T.count "data ProjectPhase" nominalText `shouldBe` 1
+        T.count "data WorkspaceVisibility" nominalText `shouldBe` 1
+        projectDomain <- domainFor "Project/Generated/Domain.hs"
+        artifactDomain <- domainFor "ProjectArtifact/Generated/Domain.hs"
+        forM_ [projectDomain, artifactDomain] $ \domain -> do
+          moduleText domain `shouldSatisfy` (not . T.isInfixOf "newtype ProjectId")
+          moduleText domain `shouldSatisfy` (not . T.isInfixOf "data ProjectPhase")
+          moduleText domain `shouldSatisfy` T.isInfixOf (generatedNominalModule ctx <> " (ProjectId (..), ProjectPhase (..))")
+          moduleText domain `shouldSatisfy` (not . T.isInfixOf "WorkspaceVisibility")
+        singleFileModules <- case planScaffold ctx (wsMergedSpec (wpWorkspace plan)) of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right values -> pure values
+        let withoutOrigin m = (modulePath m, moduleText m, kind m)
+        map withoutOrigin singleFileModules `shouldBe` map withoutOrigin modules
+        owners <- case planNominalGeneration ctx (wsMergedSpec (wpWorkspace plan)) of
+          Left errors -> expectationFailure (show errors) >> fail "unreachable"
+          Right values -> pure values
+        map (resolvedNominalName . nominalDeclaration) owners
+          `shouldBe` ["ProjectId", "ProjectPhase", "WorkspaceVisibility"]
+        case [owner | owner <- owners, resolvedNominalName (nominalDeclaration owner) == "ProjectId"] of
+          [owner] -> do
+            nominalModule owner `shouldBe` generatedNominalModule ctx
+            Set.fromList [NominalUseSite "Project" RegisterUse, NominalUseSite "ProjectArtifact" EventFieldUse]
+              `shouldSatisfy` (`Set.isSubsetOf` nominalUseSites owner)
+          found -> expectationFailure ("expected one ProjectId owner, got " <> show (length found))
       it "attributes every module to its owning member and leaves shared ones context-level" $ do
         plan <- shouldPlanWorkspace canonicalWorkspacePath
         let memberPaths = map wmPath (wsMembers (wpWorkspace plan))
@@ -3904,6 +3942,7 @@ main = hspec $ do
                 [provenance] -> Just provenance
                 _ -> Nothing
         ownerOf "StructuralProjections.hs" `shouldBe` Just ContextLevel
+        ownerOf "Generated/Nominals.hs" `shouldBe` Just ContextLevel
         ownerOf "ReplayAudit.hs" `shouldBe` Just ContextLevel
         ownerOf "Structural/Shape/ProjectSummary.hs"
           `shouldBe` Just (MemberOwned "domain/shared.keiro")
@@ -3917,6 +3956,29 @@ main = hspec $ do
         -- workspace: the record's owner column has to stay resolvable.
         map (provenanceOwner . snd) (wpModules plan)
           `shouldSatisfy` all (maybe True (`elem` memberPaths))
+      it "keeps the compiled workspace nominal conformance tree byte-current" $ do
+        workspace <- shouldComposeWorkspace "test/fixtures/workspace-nominals/service.keiro-workspace"
+        plan <- shouldPlanWorkspaceSpec workspace
+        let compiledPaths =
+              [ "Generated/WorkspaceNominalProof/Nominals.hs",
+                "Generated/WorkspaceNominalProof/Project/Domain.hs",
+                "Generated/WorkspaceNominalProof/Project/Codec.hs",
+                "Generated/WorkspaceNominalProof/Project/EventStream.hs",
+                "Generated/WorkspaceNominalProof/Project/Harness.hs",
+                "Generated/WorkspaceNominalProof/Project/Projection.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/EventStream.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Harness.hs",
+                "Generated/WorkspaceNominalProof/ProjectArtifact/Projection.hs",
+                "Generated/WorkspaceNominalProof/ReplayAudit.hs"
+              ]
+        forM_ compiledPaths $ \path ->
+          case [m | (m, _) <- wpModules plan, modulePath m == path] of
+            [generated] -> do
+              committed <- readTestText ("test/conformance-workspace-nominals/" <> path)
+              normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generated)
+            found -> expectationFailure ("expected one generated module at " <> path <> ", got " <> show (map modulePath found))
       it "plans a one-member workspace byte-identically to the single-file path" $ do
         let fixtures =
               [ "test/fixtures/reservation.keiro",
@@ -4009,8 +4071,9 @@ main = hspec $ do
               -- else names the member that produced it.
               [wrmPath row | row <- wrModules record, wrmOwner row == Nothing]
                 `shouldSatisfy` \ownerless ->
-                  length ownerless == 2
+                  length ownerless == 3
                     && any (T.isSuffixOf "StructuralProjections.hs" . T.pack) ownerless
+                    && any (T.isSuffixOf "Nominals.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "ReplayAudit.hs" . T.pack) ownerless
               [ wrmOwner row
                 | row <- wrModules record,

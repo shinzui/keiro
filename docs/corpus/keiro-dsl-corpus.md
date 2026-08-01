@@ -159,12 +159,13 @@ version-1 corpus.
 
 ## Compiled conformance and harness components
 
-The 24 current `keiro-dsl-conformance*` Cabal components are all indexed here.
+The 25 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 
 | Component | Proves |
 | --- | --- |
 | `test/conformance/` (`keiro-dsl-conformance`) | canonical generated aggregate plus filled transducer, replay validation, codec round-trips, and behavior |
 | `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.7 attribution; 13 verify and one conservative guard surface remains unverified |
+| `test/conformance-workspace-nominals/` (`keiro-dsl-conformance-workspace-nominals`) | two workspace aggregate domains import one generated ID/enum authority, exchange those exact types, and round-trip both event codecs |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |
 | `test/conformance-skeletons/` (`keiro-dsl-conformance-skeletons`) | every distinct `new <kind>` starter scaffolds to compiling Haskell |
 | `test/conformance-coldstart/` (`keiro-dsl-conformance-coldstart`) | the original fresh-agent aggregate cold-start closes from skill to green harness |

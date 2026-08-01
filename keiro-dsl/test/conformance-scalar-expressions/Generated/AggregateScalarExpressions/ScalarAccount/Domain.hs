@@ -13,30 +13,13 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..))
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
 import Numeric.Natural (Natural)
 import ScalarExpressions.Bindings qualified
 import ScalarExpressions.Domain qualified
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
-
-newtype RequestId = RequestId Text
-  deriving stock (Generic, Eq, Ord, Show)
-  deriving anyclass (ToJSON, FromJSON)
-instance CanonicalTypeName RequestId
-
-requestIdText :: RequestId -> Text
-requestIdText (RequestId t) = t
-
-data AccountMode = Normal | Restricted
-  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
-  deriving anyclass (ToJSON, FromJSON)
-instance CanonicalTypeName AccountMode
-
-accountModeText :: AccountMode -> Text
-accountModeText = \case
-  Normal -> "normal"
-  Restricted -> "restricted"
 
 data ScalarAccountVertex = ScalarAccountOpen | ScalarAccountReviewed | ScalarAccountClosed
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)

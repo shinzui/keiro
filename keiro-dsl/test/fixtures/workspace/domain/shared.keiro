@@ -5,6 +5,8 @@ id ProjectId prefix=proj
 
 enum ProjectPhase { Draft=draft Active=active Retired=retired }
 
+enum WorkspaceVisibility { Internal=internal External=external }
+
 rule phaseIsTerminal : ProjectPhase -> Bool
   ex Draft => false ; Active => false ; Retired => true
 

@@ -14,6 +14,7 @@ module HospitalCapacity.Reservation.Holes (
 ) where
 
 import Generated.HospitalCapacity.Reservation.Domain
+import Generated.HospitalCapacity.Nominals (DivertStatus (..))
 import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer, lit, (./=), (.==), (.||))

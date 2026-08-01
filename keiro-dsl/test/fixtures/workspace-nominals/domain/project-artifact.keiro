@@ -1,0 +1,17 @@
+language keiro-dsl 1
+context workspace-nominal-proof
+
+aggregate ProjectArtifact
+  regs
+    projectId ProjectId = placeholder
+    phase ProjectPhase = Draft
+  states Empty Recorded!
+
+  command RecordArtifact { projectId phase:ProjectPhase }
+  event ArtifactRecorded = fields(RecordArtifact)
+
+  Empty -- RecordArtifact -->
+    emit ArtifactRecorded
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

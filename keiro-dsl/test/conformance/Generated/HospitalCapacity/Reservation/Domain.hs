@@ -10,51 +10,8 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
+import Generated.HospitalCapacity.Nominals (CommandId (..), DivertStatus (..), HospitalId (..), PatientAcuity (..), TransferReservationId (..))
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
-
-newtype TransferReservationId = TransferReservationId Text
-  deriving stock (Generic, Eq, Ord, Show)
-
-transferReservationIdText :: TransferReservationId -> Text
-transferReservationIdText (TransferReservationId t) = t
-
-newtype HospitalId = HospitalId Text
-  deriving stock (Generic, Eq, Ord, Show)
-
-hospitalIdText :: HospitalId -> Text
-hospitalIdText (HospitalId t) = t
-
-newtype CommandId = CommandId Text
-  deriving stock (Generic, Eq, Ord, Show)
-
-commandIdText :: CommandId -> Text
-commandIdText (CommandId t) = t
-
-data PatientAcuity = RedTag | YellowTag | GreenTag
-  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
-
-patientAcuityText :: PatientAcuity -> Text
-patientAcuityText = \case
-  RedTag -> "red"
-  YellowTag -> "yellow"
-  GreenTag -> "green"
-
-data BedType = Icu | MedicalSurgical
-  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
-
-bedTypeText :: BedType -> Text
-bedTypeText = \case
-  Icu -> "icu"
-  MedicalSurgical -> "medical-surgical"
-
-data DivertStatus = Open | PartialDivert | TotalDivert
-  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
-
-divertStatusText :: DivertStatus -> Text
-divertStatusText = \case
-  Open -> "open"
-  PartialDivert -> "partial-divert"
-  TotalDivert -> "total-divert"
 
 data ReservationVertex = ReservationUnrequested | ReservationHeld | ReservationConfirmed | ReservationExpired | ReservationAdmitted | ReservationReleased
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)

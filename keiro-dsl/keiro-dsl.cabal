@@ -123,6 +123,7 @@ test-suite keiro-dsl-conformance
   hs-source-dirs: test/conformance
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
@@ -174,6 +175,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
   other-modules:
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
+    Generated.AggregateScalarExpressions.Nominals
     Generated.AggregateScalarExpressions.ReplayAudit
     Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract
     Generated.AggregateScalarExpressions.ScalarAccount.Codec
@@ -263,6 +265,38 @@ test-suite keiro-dsl-conformance-nominal-scalars
     , mmzk-typeid  >=0.7  && <0.8
     , text         >=2.1  && <2.2
     , time         >=1.12 && <1.15
+
+-- EP-168 / IR-2: one workspace-level generated ID/enum authority is imported
+-- by two aggregate rings. The driver passes values between both domain modules
+-- and round-trips both generated event codecs, so duplicate nominal types fail
+-- at compile time rather than escaping a path-only scaffold assertion.
+test-suite keiro-dsl-conformance-workspace-nominals
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-workspace-nominals
+  main-is:        Main.hs
+  other-modules:
+    Generated.WorkspaceNominalProof.Nominals
+    Generated.WorkspaceNominalProof.Project.Codec
+    Generated.WorkspaceNominalProof.Project.Domain
+    Generated.WorkspaceNominalProof.Project.EventStream
+    Generated.WorkspaceNominalProof.Project.Harness
+    Generated.WorkspaceNominalProof.Project.Projection
+    Generated.WorkspaceNominalProof.ProjectArtifact.Codec
+    Generated.WorkspaceNominalProof.ProjectArtifact.Domain
+    Generated.WorkspaceNominalProof.ProjectArtifact.EventStream
+    Generated.WorkspaceNominalProof.ProjectArtifact.Harness
+    Generated.WorkspaceNominalProof.ProjectArtifact.Projection
+    Generated.WorkspaceNominalProof.ReplayAudit
+    WorkspaceNominalProof.Project.Holes
+    WorkspaceNominalProof.ProjectArtifact.Holes
+
+  build-depends:
+    , aeson  >=2.2  && <2.3
+    , base   >=4.21 && <5
+    , keiki  >=0.7  && <0.8
+    , keiro
+    , text   >=2.1  && <2.2
 
 -- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire
 -- codecs, generated projection witnesses, opaque boundaries, fixture branch
@@ -415,6 +449,7 @@ test-suite keiro-dsl-conformance-skeletons
   hs-source-dirs: test/conformance-skeletons
   main-is:        Main.hs
   other-modules:
+    SkelAggregate.Generated.MyService.Nominals
     SkelAggregate.Generated.MyService.ReplayAudit
     SkelAggregate.Generated.MyService.Thing.Codec
     SkelAggregate.Generated.MyService.Thing.Domain

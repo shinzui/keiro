@@ -9,6 +9,7 @@ import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAcc
 import Generated.AggregateScalarExpressions.ScalarAccount.Transducer (scalarAccountTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
 import Keiro.Codec (eventType)
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
