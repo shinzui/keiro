@@ -60,10 +60,11 @@ This section must always reflect the actual current state of the work.
   literals and samples to safe parsing, and persisted the ID-domain version independently in
   single-file/workspace records, service-aware equality identities, explain output, diffs, replay
   impact, and upgrade remedies.
-- [ ] Milestone 4 in progress: property, migration, mutation, workspace single-owner, equality,
-  and codec proofs pass; language, authoring, migration, replay, changelog, IR-14, and ADR
-  documentation are updated, and strict OKF validation passes. The complete DSL suite, all-package
-  build, and flake validation remain.
+- [x] (2026-08-01 19:35Z) Milestone 4: property, migration, restoring mutation, workspace
+  single-owner, equality, and codec proofs pass. Language, authoring, migration, replay, changelog,
+  IR-14, and ADR documentation are updated. The complete 439-example DSL suite, migration
+  conformance executable, all-package Cabal build, native Nix flake checks, and strict validation
+  of all 17 ADR concepts pass.
 
 
 ## Surprises & Discoveries
@@ -96,6 +97,10 @@ implementation. Provide concise evidence.
   same invalid text is also rejected on the next hydration. That stream intentionally pays full
   replay until a later event overwrites the value or an explicit domain migration is designed;
   accepting the cache would silently reopen the current public decoder.
+- 2026-08-01: the first full-suite run found that v3-only `TextPattern` imports had leaked into the
+  otherwise byte-stable v2 nominal generator. Selecting those imports from the effective contract,
+  and naming the v3 migration fixture in the source-version compatibility allowlist, restored both
+  released golden trees without regenerating historical output.
 
 
 ## Decision Log
@@ -154,10 +159,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-Milestones 1-3 are implemented. The successor contract has one runtime/Keiki authority, a compiled
-safe-public/legacy-internal ownership split, migration conformance for identical malformed text,
-and boundary-specific evolution reporting. Remaining work is documentation, durable ADR updates,
-and the complete release validation matrix.
+The plan is complete. Language 3 now gives every prefix-bearing generated or consumer-bound ID one
+versioned TypeID-v7 admission domain and one exact Keiki textual image. Generated IDs expose only
+safe public construction/current JSON while the separate generated internal owner preserves an
+explicit legacy-event replay seam. Snapshots remain advisory current-state caches and therefore do
+not reopen that seam.
+
+The migration proof accepts one malformed historical value during event replay and rejects the
+identical text as new input at `$.orderId`; its restoring mutation turns red when replay is routed
+through the current parser. Diff, replay, scaffold, workspace, equality, explanation, changelog,
+guides, IR-14, and ADRs all name the same contract and boundary consequences. The complete
+439-example DSL suite, migration conformance target, all-package build, native flake checks, and
+strict 17-concept ADR validation pass. No known acceptance gap remains.
 
 
 ## Context and Orientation
@@ -300,3 +313,8 @@ instance may silently choose between public and historical policy.
 Revision note: Added released Keiki `0.7.0.0` as the exact textual-domain integration baseline,
 verified through Hackage and the matching `v0.7.0.0` tag. After Plans 168 and 169, this plan can
 adopt `>=0.7 && <0.8`; no external Keiki blocker remains, 2026-08-01.
+
+Revision note: Completed all four milestones with language-3 TypeID-v7 admission, abstract public
+and legacy-internal generated ownership, generated/consumer exact-domain parity, replay-preserving
+migration and mutation proofs, boundary-specific evolution reporting, durable documentation, and
+the complete release validation matrix, 2026-08-01.

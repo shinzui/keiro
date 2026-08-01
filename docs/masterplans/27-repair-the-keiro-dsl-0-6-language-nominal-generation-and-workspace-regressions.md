@@ -81,7 +81,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Complete |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Complete |
 | 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Complete |
-| 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | In Progress |
+| 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -101,11 +101,11 @@ contract consume released Keiki 0.7.0.0 detailed step/replay attribution. Its fo
 dependency is now integrated: EP-170 refreshed the affected generated fixtures and conformance
 evidence with nominal equality.
 
-EP-171's hard dependencies are satisfied: EP-169 routes successor runtime semantics to validation
-and generation, and EP-168 gives safe constructors/codecs one generated owner. It integrates with
-EP-170's explicit textual equality domain and upgrades the deliberately conservative generated-ID
-witness after enforcing admission. The critical child-plan paths EP-168 → EP-170 and EP-169 plus
-EP-168 → EP-171 are now satisfied. EP-171 is next in registry order.
+EP-171 is complete. EP-169 routes successor runtime semantics to validation and generation,
+EP-168 gives safe constructors/codecs one generated owner, and EP-170 supplies the exact textual
+equality seam. Language 3 now upgrades the deliberately conservative generated-ID witness only
+after construction is enforced, while historical event replay remains explicit and isolated. All
+critical child-plan paths are integrated and no registry work remains.
 
 
 ## Integration Points
@@ -158,8 +158,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-170: generated/bound equality, finite-domain proof, mutations, and fleet adoption.
 - [x] EP-159: checked declarative event-output mapping and removal of identity-copy Holes.
 - [x] EP-159: edge-attributed complete behavioral conformance and regeneration proof.
-- [ ] EP-171: successor ID-domain contract, safe constructors, and boundary-specific codecs.
-- [ ] EP-171: legacy replay migration, evolution classification, properties, and release proof.
+- [x] EP-171: successor ID-domain contract, safe constructors, and boundary-specific codecs.
+- [x] EP-171: legacy replay migration, evolution classification, properties, and release proof.
 
 
 ## Surprises & Discoveries
@@ -208,6 +208,15 @@ interactions between child plans. Provide concise evidence.
   remain conservatively one-way until EP-171 restricts construction. The complete 431-example DSL
   suite, three compiled nominal-expression rings, all-package build, strict ADR validation, native
   Nix checks, and two restoring mutations pass their intended gates.
+- 2026-08-01: EP-171 proved that TypeID parsing alone does not establish the frozen UUIDv7 domain;
+  Keiro must also check the version and RFC variant bits. Language 3 now derives runtime admission
+  and Keiki's exact full-string image from one contract, while v1/v2 generated output remains
+  byte-stable. The complete 439-example DSL suite, field-located replay migration proof, restoring
+  mutation, all-package build, strict ADR validation, and native Nix checks pass.
+- 2026-08-01: rebuilding a stream whose legacy events leave an invalid ID in current state cannot
+  make that state snapshot-admissible without reopening the public decoder. EP-171 deliberately
+  permits repeated event replay until a later event or explicit migration replaces the value;
+  ADR 3, evolution output, and migration guidance record that cache consequence.
 
 
 ## Decision Log
@@ -263,6 +272,14 @@ plan.
   upgrade.
   Date: 2026-08-01
 
+- Decision: Enforce prefix-bearing generated IDs only in language 3 and isolate historical event
+  replay behind a generated internal constructor; snapshots continue to use the current public
+  decoder.
+  Rationale: v1/v2 logs may contain previously accepted text, but command admission and advisory
+  caches must not manufacture or silently reaccept that historical debt. The explicit language
+  contract makes the runtime change observable while preserving deterministic replay.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -295,7 +312,23 @@ generated module. Cross-declaration, nominal-to-`Text`, and unqualified enum com
 source checking. Consumer `KindID` IDs and all enums verify over exact domains; legacy generated
 IDs remain honestly unverified until EP-171. Fold/scaffold/workspace identities, binding
 explanations, replay, behavior conformance, mutations, adopter guidance, IR-12, and ADRs 12/14/17
-all carry the same contract. Only EP-171 remains open.
+all carry the same contract. That truthful split supplied EP-171's final construction boundary.
+
+EP-171 is complete. Language 3 freezes a canonical lowercase TypeID-v7 domain, routes generated
+and consumer-bound admission through one Keiro authority, maps it to Keiki's exact textual domain,
+and emits an abstract public nominal owner plus a separate internal legacy replay seam. The same
+malformed value is replayable from historical events and rejected as current `$.orderId` input;
+snapshots miss rather than weaken current admission. Compatibility reports distinguish public,
+event, snapshot, replay, build, and rollout consequences. Properties, compiled ownership proofs,
+workspace identity, migration, mutation, documentation, and the full release matrix all pass.
+
+The MasterPlan is complete. All six child plans and all five improvement requests are closed: the
+language preamble is contextual, shared nominals have one generated owner, effective semantics are
+checked once, nominal equality is exact where construction makes that truthful, declarative event
+outputs are generated with complete behavior evidence, and ID prefixes are enforceable without
+breaking historical replay. The final release evidence is 439 passing DSL examples, a passing
+field-located migration target and restoring mutation, an all-package Cabal build, native Nix
+checks, and strict validation of all 17 ADR concepts. No known initiative gap remains.
 
 
 Revision note: Completed EP-169 with a checked effective semantic contract, contract-aware
@@ -309,3 +342,8 @@ ID and finite-enum domains, conservative legacy generated-ID verification, share
 compatibility/scaffold identities, three compiled conformance rings, restoring mutations, and ADR
 12/14/17 amendments. EP-159, EP-167, EP-168, EP-169, and EP-170 are complete; EP-171 is next and is
 the only remaining child plan, 2026-08-01.
+
+Revision note: Completed EP-171 and the MasterPlan with language-3 TypeID-v7 admission,
+safe-public/legacy-internal generated ownership, exact generated/consumer domains, replay migration
+and mutation proofs, boundary-specific evolution reporting, IR-14 and ADR distillation, and the
+complete release validation matrix. All registered child plans are complete, 2026-08-01.
