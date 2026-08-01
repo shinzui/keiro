@@ -655,7 +655,7 @@ diffServices oldService newService =
               <> renderIdDomainContract oldContract
               <> " -> "
               <> renderIdDomainContract newContract
-              <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots are invalidated and rebuilt"
+              <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots miss and rebuild from readable events, while rebuilt state that still contains legacy-invalid text remains intentionally uncacheable until overwritten or explicitly migrated"
           )
       | newDeclaration <- specIds newSpec,
         Just oldDeclaration <- [find ((== idName newDeclaration) . idName) (specIds oldSpec)],

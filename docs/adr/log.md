@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Update**: Record language-3 TypeID-v7 admission authority, safe-public and legacy-internal generated ownership, exact nominal domains, snapshot miss behavior, and boundary-specific evolution classification (plan 171).
 * **Update**: Record declaration-scoped nominal equality authority, shared-owner projection witnesses, exact consumer ID and enum domains, conservative legacy generated IDs, and generated-transition Hole omission (plan 170).
 * **Update**: Amend ADRs 0016 and 0004 with the checked service-level effective semantic contract, explicit legacy `Spec` wrappers, contract-aware planning/fingerprints, additive history, and refusal-before-write boundary (plan 169).
 * **Update**: Define the context-level generated Nominals authority, aggregate use-closure imports, and non-destructive Keiro 0.6 layout adoption (plan 168).

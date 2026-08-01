@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-08-01T18:05:45Z
+timestamp: 2026-08-01T19:21:22Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -59,9 +59,11 @@ when policy needs a `Verified*` classification.
 Generated guards may compare IDs and enums only when both operands resolve to
 the same nominal declaration. Lowering projects both values through that
 declaration's canonical textual key. Finite enums and consumer-bound `KindID`
-values use exact domain/reconstruction witnesses; legacy generated IDs retain a
-one-way witness and therefore an honest `UnverifiedOpaque` symbolic result even
-though concrete stepping and replay execute the type-safe equality. Cross-
+values use exact domain/reconstruction witnesses. Language-3 generated IDs do
+too because safe construction closes their TypeID-v7 domain; version-1/version-2
+and legacy-unversioned generated IDs retain a one-way witness and therefore an
+honest `UnverifiedOpaque` symbolic result even though concrete stepping and
+replay execute the type-safe equality. Cross-
 declaration, nominal-to-`Text`, and unqualified enum comparisons fail before
 generation. The equality contract and binding provenance enter the fold
 fingerprint whenever such a guard uses them.
@@ -128,7 +130,8 @@ that behavior has been translated automatically.
 - A generated-owned expression is authoritative because no Hole seam can replace it.
 - Same-declaration nominal equality follows that rule: its checked projection
   identity and domain drive the generated predicate, fold fingerprint, concrete
-  execution, replay, and symbolic classification.
+  execution, replay, and symbolic classification. Enforced language-3 IDs are
+  exact; earlier generated IDs remain conservatively one-way.
 - A checked `fields(Command)` event copy is equally authoritative and has no
   hand-owned identity callback.
 - Hole-owned behavior is honest about its cost: source-level type/capability checks, automatic

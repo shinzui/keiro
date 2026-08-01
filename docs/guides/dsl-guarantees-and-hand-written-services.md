@@ -113,10 +113,11 @@ The checked nominal registry also makes same-declaration ID and enum equality a
 DSL-visible contract. Generated guards use one declaration-tagged textual key;
 the checker rejects cross-declaration and nominal-to-`Text` comparisons before
 Haskell generation. Consumer `KindID` IDs and finite enums carry exact symbolic
-domains and reconstructible models. Legacy generated IDs still admit arbitrary
-`Text`, so they retain correct concrete equality but are reported as a one-way,
-unverified projection until the successor construction contract closes that
-domain.
+domains and reconstructible models. Version-3 generated IDs carry the same
+exact TypeID-v7 domain because their public constructors and current JSON
+decoder enforce it. Version-1/version-2 and legacy-unversioned generated IDs
+still admit arbitrary `Text`, so they retain correct concrete equality but are
+reported as a one-way, unverified projection.
 
 These guarantees stop at the spec-visible surface, but language version 2
 moves scalar aggregate behavior onto that surface. Its generated `Expressions`

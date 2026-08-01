@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-01T18:05:45Z
+timestamp: 2026-08-01T19:21:22Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -121,8 +121,20 @@ the released TypeID text domain with an exact reverse witness, and enums use
 their finite declared wire spellings. Generated language-2 enums are exact for
 the same reason. Legacy generated IDs remain public `newtype` wrappers over
 unrestricted `Text`, so their concrete equality is type-safe but their symbolic
-projection is deliberately one-way and conservatively unverified until a
-successor language contract restricts construction.
+projection is deliberately one-way and conservatively unverified. Language-3
+generated IDs restrict public construction and current JSON decoding through
+`keiro-dsl/id-domain/typeid-v7/1`, so they use the same exact full-string domain
+and reconstruction evidence as consumer-bound IDs.
+
+Keiro, not the consumer binding, owns that ID admission domain. The checked
+contract fixes the prefix, separator, canonical lowercase normalization,
+26-character Crockford suffix, maximum length, UUIDv7 version/variant bits, and
+JSON text representation. Consumer conversion runs only after this validation.
+Generated conformance checks fixture agreement and distinct canonical
+representations through both total binding directions, so a binding that
+normalizes or quotients valid representations turns the gate red. The stable
+domain version is persisted independently of equality in binding explanations
+and scaffold history.
 
 Nominal declarations carry the same mandatory provenance inventory as
 structural bindings: consumer package/module/type, qualified binding symbol,
@@ -241,6 +253,10 @@ the totality and ownership requirements above.
   Prefix and enum-wire rejection belongs to parsing into the typed/closed
   representation, not to `nominalFromRepresentation`; refined scalar
   constructors remain opaque.
+- Language-3 generated and consumer-bound IDs share one Keiro-owned runtime
+  and Keiki exact-domain contract. Binding mode cannot widen, normalize, or
+  redefine the declared prefix domain; versions 1 and 2 retain their released
+  generated-ID behavior.
 - Bound scalar whole-value projections reuse the declared total nominal binding
   and canonical identity. Same-declaration IDs and enums also reuse that
   authority for equality: consumer `KindID` IDs and all enums have exact

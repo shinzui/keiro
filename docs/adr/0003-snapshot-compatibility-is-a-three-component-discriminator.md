@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Snapshot compatibility is a three-component discriminator
 description: Snapshot compatibility is gated on state codec version, register-layout hash, and control-state/replay-fold hash together.
-timestamp: 2026-07-28T17:26:13Z
+timestamp: 2026-08-01T19:21:22Z
 docId: ADR-3
 status: Accepted
 date: 2026-07-23
@@ -77,6 +77,16 @@ seed-provenance flag would not detect the residual manual-contract violation,
 because an unbumped invisible fold change presents equal discriminators by
 construction.
 
+Language version 3's enforced ID admission is also part of the visible runtime
+fold/codec contract. Moving from legacy/version-2 unchecked generated IDs to
+`keiro-dsl/id-domain/typeid-v7/1` changes the runtime-semantics discriminator,
+so old snapshots miss rather than decoding legacy-invalid ID text through the
+new public instance. Full replay remains possible because generated historical
+event codecs alone retain the explicit internal legacy constructor. A replayed
+state that still contains legacy-invalid text is not promoted into an accepted
+current snapshot: a cache containing it will miss again until later history
+overwrites the value or an explicit domain migration changes the state.
+
 
 ## Consequences
 
@@ -89,6 +99,10 @@ construction.
   hand-written terms are not inspectable by `diff`.
 - Upgrading a migrated database incurs a one-time full replay per stream whose
   old snapshot is encountered; persisted events remain the source of truth.
+- Adopting the language-3 ID domain invalidates old snapshots automatically.
+  Streams whose reconstructed state is currently admissible repopulate the
+  cache; streams still carrying legacy-invalid IDs intentionally remain
+  uncacheable and pay full replay without losing event readability.
 - Invisible hand-written fold changes remain an explicit operational contract:
   bump the stream's `FoldVersion` through `defaultStateCodecWithFold`, or
   manually bump `stateCodecVersion` when using the lower-level codec API.

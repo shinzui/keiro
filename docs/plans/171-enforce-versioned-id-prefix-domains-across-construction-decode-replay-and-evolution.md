@@ -61,8 +61,9 @@ This section must always reflect the actual current state of the work.
   single-file/workspace records, service-aware equality identities, explain output, diffs, replay
   impact, and upgrade remedies.
 - [ ] Milestone 4 in progress: property, migration, mutation, workspace single-owner, equality,
-  and codec proofs pass; documentation, ADR distillation, full suite/build, flake, and strict OKF
-  release validation remain.
+  and codec proofs pass; language, authoring, migration, replay, changelog, IR-14, and ADR
+  documentation are updated, and strict OKF validation passes. The complete DSL suite, all-package
+  build, and flake validation remain.
 
 
 ## Surprises & Discoveries
@@ -90,6 +91,11 @@ implementation. Provide concise evidence.
   had moved to `parseX` but the aggregate domain import still named only the abstract type. The
   service-aware generated nominal import now carries the parser wherever enforced ID samples can
   be emitted.
+- 2026-08-01: a replayed legacy-invalid ID may remain in current aggregate state. Its old snapshot
+  is correctly rejected, and events remain replayable, but a newly written cache containing the
+  same invalid text is also rejected on the next hydration. That stream intentionally pays full
+  replay until a later event overwrites the value or an explicit domain migration is designed;
+  accepting the cache would silently reopen the current public decoder.
 
 
 ## Decision Log
@@ -129,6 +135,15 @@ Record every decision made while working on the plan.
   is new admission or historical replay. Hackage and `v0.7.0.0` now publish that API
   authoritatively, so this plan adopts `>=0.7 && <0.8` once Plans 168 and 169 satisfy its local hard
   dependencies.
+  Date: 2026-08-01
+
+- Decision: Reject legacy-invalid snapshot values under the current public decoder and rebuild
+  exclusively from readable historical events; do not give snapshots their own permissive legacy
+  decoder.
+  Rationale: snapshots are advisory caches, not a second admission authority. If replayed current
+  state still contains invalid legacy text, repeated full replay is preferable to silently
+  reaccepting that value through a cache; a later event or explicit migration can make the state
+  cacheable again.
   Date: 2026-08-01
 
 

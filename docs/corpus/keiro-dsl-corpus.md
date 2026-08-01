@@ -18,16 +18,19 @@ or source-version cases below.
 | `test/fixtures/language-zero.keiro` | invalid zero version |
 | `test/fixtures/language-duplicate.keiro` | duplicate preamble refusal |
 | `test/fixtures/language-misplaced.keiro` | preamble-after-context refusal |
+| `test/fixtures/id-domain-migration-v3.keiro` | language-3 enforced generated ID with split current admission and historical replay |
 
-Version 1 is frozen. A later syntax feature must add a successor registry entry and a fixture
-showing that the released v1 parser still rejects the new syntax. General source/workspace upgrade
-automation remains deferred to
+Version 1 is frozen. Version 2 adds nominal bindings and authoritative scalar expressions while
+retaining runtime semantics 1. Version 3 selects runtime semantics 2 and enforces prefix-bearing
+TypeID-v7 admission without tightening historical generated-event replay. A later syntax feature
+must add a successor registry entry and a fixture showing that the released v1 parser still rejects
+the new syntax. General source/workspace upgrade automation remains deferred to
 [IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).
 
 ## Core fixture inventory
 
 This curated inventory covers the primary feature, negative, and evolution surfaces. Every path
-below resolves; the complete machine-checked fixture set contains 232 `.keiro` files as of
+below resolves; the complete machine-checked fixture set contains 238 `.keiro` files as of
 2026-08-01. Successor-language fixtures are named explicitly and remain separate from the frozen
 version-1 corpus.
 
@@ -159,12 +162,19 @@ version-1 corpus.
 
 ## Compiled conformance and harness components
 
-The 25 current `keiro-dsl-conformance*` Cabal components are all indexed here.
+The 32 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 
 | Component | Proves |
 | --- | --- |
 | `test/conformance/` (`keiro-dsl-conformance`) | canonical generated aggregate plus filled transducer, replay validation, codec round-trips, and behavior |
 | `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.7 attribution; 13 verify and one conservative guard surface remains unverified |
+| `test/conformance-aggregate-scalars/` (`keiro-dsl-conformance-aggregate-scalars`) | generated direct scalar aggregate codecs, snapshots, and transition behavior compile and execute |
+| `test/conformance-scalar-expressions/` (`keiro-dsl-conformance-aggregate-scalar-expressions`) | generated version-2 scalar terms agree across concrete, symbolic, replay, and snapshot surfaces |
+| `test/conformance-nominal-scalars/` (`keiro-dsl-conformance-nominal-scalars`) | consumer nominal binding laws, ID/enum exact equality, wire rejection, snapshots, and forward/replay parity |
+| `test/conformance-structural/` (`keiro-dsl-conformance-structural`) | structural binding laws, branch coverage, generated codec bytes, projection witnesses, and mapped-register replay |
+| `test/conformance-codec-compare/` (`keiro-dsl-conformance-codec-compare`) | historical and generated structural codecs classify canonical JSON parity and migration differences |
+| `test/conformance-replay/` (`keiro-dsl-conformance-replay`) | generated replay audit targets and seeded/full replay divergence gates compile and execute |
+| `test/conformance-id-domain-migration/` (`keiro-dsl-conformance-id-domain-migration`) | identical malformed generated-ID text replays through the internal legacy event seam and fails current field-located admission |
 | `test/conformance-workspace-nominals/` (`keiro-dsl-conformance-workspace-nominals`) | two workspace aggregate domains import one generated ID/enum authority, exchange those exact types, and round-trip both event codecs |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |
 | `test/conformance-skeletons/` (`keiro-dsl-conformance-skeletons`) | every distinct `new <kind>` starter scaffolds to compiling Haskell |
@@ -199,6 +209,7 @@ The 25 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 | `test/process-mutation-test.sh` | changing the timer rejection inversion reddens its process fact |
 | `test/router-mutation-test.sh` | changing target-keyed router identity reddens its router fact |
 | `test/workflow-mutation-test.sh` | changing ordered workflow notation reddens its workflow fact |
+| `test/id-domain-migration-mutation-test.sh` | replacing the internal legacy replay seam with the current parser reddens the exact migration assertion and restores the generated codec |
 
 ## Reference fills
 

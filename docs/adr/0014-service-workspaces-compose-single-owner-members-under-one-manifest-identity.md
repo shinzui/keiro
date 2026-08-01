@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service workspaces compose single-owner members under one manifest identity
 description: A keiro service may span several .keiro files, composed as one graph through a versioned manifest whose service name is the durable identity and whose members each own their declarations outright.
-timestamp: 2026-08-01T18:05:45Z
+timestamp: 2026-08-01T19:21:22Z
 docId: ADR-14
 status: Accepted
 date: 2026-07-29
@@ -82,6 +82,16 @@ moving or reordering members cannot split or rename the type. It owns the
 generated representation, JSON instances, canonical identity, and textual
 wire helpers for the complete declaration set, including declarations with no
 current aggregate use.
+
+Under language version 3, that single Haskell authority has a deliberate
+two-module boundary rather than two competing type owners. `Nominals.Internal`
+owns the raw representation, validating instances, and explicitly named legacy
+event-replay constructor. The public `Nominals` facade reexports the abstract
+type, `parseX`, `mkX`, `xText`, canonical identity, and any exact equality
+witness; aggregate domains import the type and safe parser without the raw
+constructor. Both modules are generated once per service context, so workspace
+member order and source ownership still cannot split type identity or create a
+second admission policy.
 
 That same owner emits each generated nominal equality projection tag and
 witness. Declaration identity, equality key, and domain therefore cannot split
@@ -168,6 +178,10 @@ bytes are unchanged by construction.
 - Generated equality expressions in different aggregate rings import the same
   declaration-tagged witness from the context authority, so member moves and
   reorderings cannot change nominal equality identity or proof domain.
+- Version-3 workspaces emit exactly one public nominal facade and one internal
+  representation/replay module. The internal module is an explicit generated
+  unsafe seam, not a second declaration owner; application code uses the public
+  safe construction surface.
 - Coverage stays reporting-first per ADR 0013: a whole-service report
   aggregates the merged graph's findings and invents no new gate.
 - Detecting one source file assigned to two *different* workspaces is out of

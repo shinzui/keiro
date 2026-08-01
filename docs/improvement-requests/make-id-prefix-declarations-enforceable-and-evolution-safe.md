@@ -4,9 +4,9 @@ title: Make ID prefix declarations enforceable and evolution-safe
 description: >-
   Give id prefixes a truthful runtime contract for generated and consumer-bound IDs while keeping
   legacy persisted events readable through explicit language-version and migration policy.
-timestamp: 2026-08-01T13:11:24Z
+timestamp: 2026-08-01T19:21:22Z
 requestId: IR-14
-status: planned
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md
 reviews:
@@ -28,14 +28,14 @@ reviews:
 
 ## Status
 
-Planned for a new declared language version under
+Implemented in declared language version 3 under
 [Plan 171](../plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md)
 and [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
-It uses the exact textual projection-domain capability implemented for Keiki `0.7.0.0` under
+It uses the exact textual projection-domain capability released in Keiki `0.7.0.0` under
 `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-4`. Keiro-side design and implementation
-may proceed once its local hard dependencies are satisfied. Hackage and `v0.7.0.0` now publish the
-matching release, so Plan 171 may adopt `>=0.7 && <0.8` at that point. It must not silently tighten
-existing event decoders.
+keeps the `>=0.7 && <0.8` bound. Current `mmzk-typeid` 0.7.1.1 parsing and version checks are both
+part of the frozen runtime contract; existing version-1/version-2 generated-event decoders are not
+silently tightened.
 
 ## Context
 
@@ -85,3 +85,18 @@ authority for runtime admission and historical replay policy.
 - Property tests for accepted/rejected representations, Keiki 0.7 exact-domain agreement, and
   cross-domain confusion.
 - Migration and authoring documentation.
+
+## Outcome
+
+Language version 3 selects `keiro-dsl/runtime-semantics/2` and
+`keiro-dsl/id-domain/typeid-v7/1`. Generated IDs have an abstract public module with safe parsers
+and validating JSON; only the generated internal event codec receives the explicitly unsafe legacy
+constructor. Consumer bindings validate through the same contract before conversion and run exact
+domain/injectivity conformance probes.
+
+The ID-domain identity is independent of equality and is persisted in single-file/workspace
+scaffold records and binding explanations. `IdDomainContractChanged` reports history, rolling
+decode, snapshot, public-consumer, persisted-identity, and consumer-build verdicts separately. The
+compiled migration fixture accepts legacy malformed event text and rejects the identical current
+input at `$.orderId`; its restoring mutation test proves that substituting the current parser for
+the legacy replay seam turns the gate red.

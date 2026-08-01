@@ -169,17 +169,26 @@ projection as exact merely because its Haskell wrapper is nominal.
 
 ### ID prefixes become an evolution contract
 
-Under the enforcing language contract, a generated ID prefix is not merely
+`language keiro-dsl 3` is the first enforcing contract. Under it, a generated ID prefix is not merely
 documentation. Safe construction and current public decoding reject invalid
-prefixes, suffixes, separators, normalization, and lengths. The raw
-representation is hidden, while historical replay has an explicit internal
-legacy path so tightening new admission does not make old persisted events
-unreadable.
+prefixes, suffixes, separators, normalization, lengths, and non-v7 UUID bits.
+The exact text is lowercase `<prefix>_<26 Crockford characters>` with the
+TypeID/UUIDv7 version and variant positions. The raw representation is hidden;
+application code imports `parseX`, `mkX`, and `xText`. Historical generated-event
+replay alone imports the explicitly named internal `unsafeXFromLegacyText`, so
+tightening new admission does not make old persisted events unreadable. Version
+1, version 2, and legacy-unversioned sources retain their released unchecked
+generated-ID semantics.
 
 The same checked ID-domain contract feeds runtime validation, symbolic
-equality, fingerprints, scaffold records, diff, and replay impact. A prefix or
-domain change is therefore visible at the command, event, snapshot, replay,
-and public-codec surfaces it actually affects.
+equality, consumer binding conformance, fingerprints, scaffold records, explain
+output, diff, and replay impact. A prefix or domain change is therefore visible
+at the command, event, snapshot, replay, and public-codec surfaces it actually
+affects. On version-2 to version-3 adoption, historical reads stay compatible,
+public admission becomes breaking, consumers recompile, and snapshots miss.
+If replayed state still contains a legacy-invalid ID, that stream remains
+intentionally uncacheable until the value is overwritten or explicitly
+migrated; the events remain the source of truth.
 
 ### Workspaces scale the contract without merging source files
 

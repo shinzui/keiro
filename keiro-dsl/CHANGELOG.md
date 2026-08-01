@@ -8,6 +8,16 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Language version 3 makes each generated prefix-bearing ID abstract. Import
+  `parseX`, `mkX`, and `xText` from `Generated.<Context>.Nominals`; the raw
+  constructor and `unsafeXFromLegacyText` live only in the generated internal
+  replay module. Version 1, version 2, and legacy-unversioned generated output
+  retain their released constructor and decoder behavior.
+
+- `DiagnosticCode` gains the append-only `IdDomainContractChanged` constructor.
+  Exhaustive matches must classify the new command/public-codec, replay,
+  snapshot, persisted-identity, and consumer-build vector.
+
 - Generated service-level IDs and enums now live in one context-level
   `Generated.<Context>.Nominals` module instead of being redeclared in every
   aggregate `Domain`. Hand-owned modules that construct these values must import
@@ -28,6 +38,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   control state or registers; only an actual no-op is accepted.
 
 ### New Features
+
+- Adds `language keiro-dsl 3`, selecting
+  `keiro-dsl/runtime-semantics/2`. Prefix-bearing IDs now use the frozen
+  `keiro-dsl/id-domain/typeid-v7/1` contract: canonical lowercase TypeID-v7
+  text, the declared prefix and one underscore, a 26-character Crockford
+  suffix, UUIDv7 version/variant bits, and JSON strings. Runtime admission and
+  Keiki 0.7 exact textual projection domains derive from the same contract.
+- Generated and consumer-bound v3 IDs validate before binding conversion,
+  current JSON decoding, literals, and scaffold samples. Binding harnesses add
+  exact projection, fixture-domain, distinct-representation, wrong-prefix, and
+  normalization probes. Scaffold/workspace records and `--explain-bindings`
+  persist the ID-domain version independently of nominal equality.
+- Historical generated-event decoding retains an explicitly named internal
+  legacy constructor, while the same malformed text is rejected at current
+  command/public decoding with its JSON field path. Domain adoption emits
+  `IdDomainContractChanged`: old history remains readable, old snapshots miss,
+  public consumers break, consumer builds are advisory, and rollout is
+  producer-last. The compiled `keiro-dsl-conformance-id-domain-migration`
+  target and restoring mutation script pin this split.
 
 - Adds the public `CheckedService`/`EffectiveLanguageContract` semantic boundary.
   Single-source and workspace CLI routes now retain the selected contract through

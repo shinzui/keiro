@@ -208,6 +208,45 @@ codec comparison workflow in
 then use versions/upcasters and the real-log replay audit for the distinct
 questions of decode migration and stored-history replay.
 
+### Migrating generated IDs to the enforced version-3 domain
+
+Changing only the preamble from `language keiro-dsl 2` to version 3 is a
+runtime-semantic migration when the service declares an ID. Re-scaffold before
+deployment: version 3 hides generated raw constructors, exposes `parseX`/`mkX`,
+validates current JSON and literals, and gives generated and consumer-bound IDs
+the same canonical TypeID-v7 domain.
+
+Run the boundary-specific evidence together:
+
+```bash
+cabal run keiro-dsl -- diff service.keiro --since HEAD^ --explain \
+  --replay-impact-out build/id-domain-replay.json \
+  --report-out build/id-domain-diff.json
+cabal run keiro-dsl -- scaffold service.keiro --out generated
+cabal test keiro-dsl-conformance-id-domain-migration
+```
+
+`IdDomainContractChanged` deliberately does not collapse into one compatibility
+answer:
+
+| Surface | Version-2 to version-3 adoption |
+|---|---|
+| Private history read | Compatible: generated event codecs retain the explicitly internal legacy constructor |
+| Old binary reads new events | Compatible: newly emitted IDs are a subset of the old unchecked generated text domain |
+| Snapshot hydration | Advisory: the successor fold discriminator makes old rows miss and replay |
+| Public consumer/current command decode | Breaking: formerly admitted malformed text is rejected at its field |
+| Persisted identity | Compatible when the declared prefix is unchanged |
+| Consumer build | Advisory: import the abstract type and safe parser instead of its raw constructor |
+
+Snapshots remain caches, not a second legacy-admission channel. If full replay
+leaves a legacy-invalid ID in current state, a newly encoded cache containing
+that text is rejected on its next hydration. The stream therefore keeps paying
+full replay until a later event overwrites the value or an explicit domain
+migration is designed. Do not weaken the public `FromJSON` instance to make the
+cache stick; that would silently reopen current command admission. Validate the
+real affected streams before producer-last cutover, using the replay-impact
+target emitted by the diff.
+
 ## Adding a new event type
 
 The one genuinely easy change. Old streams do not contain the new event, so
