@@ -7,10 +7,15 @@ module Keiro.Dsl.ScaffoldRun
     MappingDrift (..),
     SourceLanguageDrift (..),
     ScaffoldReport (..),
+    scaffoldServiceModules,
+    scaffoldServiceModulesWithGoldens,
     scaffoldModules,
     scaffoldModulesWithGoldens,
+    planServiceScaffold,
+    planServiceScaffoldWithGoldens,
     planScaffold,
     planScaffoldWithGoldens,
+    executeServiceScaffold,
     executeScaffold,
     executeScaffoldWithLanguage,
     renderRefusals,
@@ -42,12 +47,13 @@ import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), Be
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
-import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
-import Keiro.Dsl.LanguageVersion (SourceLanguage (..), sourceFormText)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
@@ -67,6 +73,9 @@ data Refusal
   | MissingGeneratedBanner ![FilePath]
   | ImportCycle ![Text]
   | BehaviorRefusal ![BehaviorDerivationError]
+  | -- | Source provenance and semantic planning selected different contracts.
+    --       This is an internal/API misuse refusal and is detected before writes.
+    SemanticContractMismatch !Text
   | -- | Golden payload fixtures found beside a workspace member that the one
     --       workspace golden root does not have. Raised only by the workspace path.
     GoldenRootDivergence !FilePath ![FilePath]
@@ -118,18 +127,19 @@ data ScaffoldReport = ScaffoldReport
   }
   deriving stock (Eq, Show)
 
--- | Produce the complete in-memory module set for a specification. Keeping
--- this registry in one place prevents the CLI and tests from drifting apart.
-scaffoldModules :: Context -> Spec -> [ScaffoldModule]
-scaffoldModules = scaffoldModulesWithGoldens []
+-- | Produce the complete in-memory module set under a checked semantic
+-- contract. Keeping this registry in one place prevents the CLI and tests from
+-- drifting apart.
+scaffoldServiceModules :: Context -> CheckedService -> [ScaffoldModule]
+scaffoldServiceModules = scaffoldServiceModulesWithGoldens []
 
-scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
-scaffoldModulesWithGoldens goldens ctx spec =
+scaffoldServiceModulesWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> [ScaffoldModule]
+scaffoldServiceModulesWithGoldens goldens ctx service =
   scaffoldStructural ctx spec
     <> scaffoldReplayAudit ctx spec
     <> concat
       [ case node of
-          NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessForWithGoldens goldens ctx spec agg
+          NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
           NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
           NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
           NContract contract -> scaffoldContract ctx contract
@@ -143,6 +153,31 @@ scaffoldModulesWithGoldens goldens ctx spec =
           NOperation _ -> []
       | node <- specNodes spec
       ]
+  where
+    spec = checkedSpec service
+
+-- | Compatibility wrapper that explicitly selects legacy/version-1 semantics.
+scaffoldModules :: Context -> Spec -> [ScaffoldModule]
+scaffoldModules = scaffoldModulesWithGoldens []
+
+scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
+scaffoldModulesWithGoldens goldens ctx = scaffoldServiceModulesWithGoldens goldens ctx . legacyCheckedService
+
+-- | Run every pure refusal gate under the effective semantic contract.
+planServiceScaffold :: Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planServiceScaffold = planServiceScaffoldWithGoldens []
+
+planServiceScaffoldWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planServiceScaffoldWithGoldens goldens ctx service =
+  case scaffoldRefusals spec of
+    lowering@(_ : _) -> Left [LoweringRefusal lowering]
+    [] ->
+      let modules = scaffoldServiceModulesWithGoldens goldens ctx service
+       in case pureRefusals ctx spec modules of
+            [] -> Right modules
+            refusals -> Left refusals
+  where
+    spec = checkedSpec service
 
 -- | Run every pure refusal gate. A successful result is the exact write set;
 -- a refusal has no write set and therefore cannot be accidentally executed.
@@ -150,14 +185,7 @@ planScaffold :: Context -> Spec -> Either [Refusal] [ScaffoldModule]
 planScaffold = planScaffoldWithGoldens []
 
 planScaffoldWithGoldens :: [GoldenPayload] -> Context -> Spec -> Either [Refusal] [ScaffoldModule]
-planScaffoldWithGoldens goldens ctx spec =
-  case scaffoldRefusals spec of
-    lowering@(_ : _) -> Left [LoweringRefusal lowering]
-    [] ->
-      let modules = scaffoldModulesWithGoldens goldens ctx spec
-       in case pureRefusals ctx spec modules of
-            [] -> Right modules
-            refusals -> Left refusals
+planScaffoldWithGoldens goldens ctx = planServiceScaffoldWithGoldens goldens ctx . legacyCheckedService
 
 -- | Every pure refusal gate, over an already-built module set: case-folded path
 -- collisions, generated\/consumer collisions and import cycles, firewall breaches,
@@ -243,52 +271,65 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules =
 -- | Source-aware execution used by the CLI; semantic planning still receives only 'Spec'.
 executeScaffoldWithLanguage :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
 executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage ctx spec modules =
-  case deriveBehaviorRequirements spec of
-    Left errors -> pure (Left [BehaviorRefusal errors])
-    Right requirements -> do
-      bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
-      if not (null bannerless)
-        then pure (Left [MissingGeneratedBanner bannerless])
-        else do
-          let recordPath = out </> recordFileName (specContext spec)
-          previousRecord <- readRecord recordPath
-          stale <- maybe (pure []) (existingStale out modules) previousRecord
-          let currentConsumerPlan = consumerPlan spec
-              drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
-              languageDrift = do
-                previous <- previousRecord
-                if recSourceLanguage previous == sourceLanguage
-                  then Nothing
-                  else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
-              currentObligations = either (const []) id (bindingHoles spec)
-              newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
-              currentBehavior = behaviorRecordRows requirements
-              (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
-          createDirectoryIfMissing True out
-          dispositions <- mapM (writeModule out) modules
-          let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
-          TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
-          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx spec modules currentBehavior))
-          pure $
-            Right
-              ScaffoldReport
-                { reportSpecPath = specPath,
-                  reportOutDir = out,
-                  reportContext = ctx,
-                  reportDispositions = dispositions,
-                  reportManifestPath = manifestPath,
-                  reportRecordPath = recordPath,
-                  reportPreviousSpecPath = recSpecPath <$> previousRecord,
-                  reportStale = stale,
-                  reportConsumerPlan = currentConsumerPlan,
-                  reportConstraintPlan = constraintPlan spec currentConsumerPlan,
-                  reportMappingDrift = drift,
-                  reportSourceLanguageDrift = languageDrift,
-                  reportNewHoles = newHoles,
-                  reportAddedBehavior = addedBehavior,
-                  reportRemovedBehavior = removedBehavior,
-                  reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec
-                }
+  executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx (checkedService sourceLanguage spec) modules
+
+-- | Execute a module plan while retaining both the effective semantic contract
+-- and the source declaration provenance written to history. A mismatch refuses
+-- before checking or creating any output path.
+executeServiceScaffold :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
+executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx service modules
+  | effectiveLanguageContract sourceLanguage /= checkedLanguageContract service =
+      pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
+  | otherwise = executeCheckedScaffold
+  where
+    spec = checkedSpec service
+    executeCheckedScaffold =
+      case deriveBehaviorRequirements spec of
+        Left errors -> pure (Left [BehaviorRefusal errors])
+        Right requirements -> do
+          bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
+          if not (null bannerless)
+            then pure (Left [MissingGeneratedBanner bannerless])
+            else do
+              let recordPath = out </> recordFileName (specContext spec)
+              previousRecord <- readRecord recordPath
+              stale <- maybe (pure []) (existingStale out modules) previousRecord
+              let currentConsumerPlan = consumerPlan spec
+                  drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                  languageDrift = do
+                    previous <- previousRecord
+                    if recSourceLanguage previous == sourceLanguage
+                      then Nothing
+                      else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
+                  currentObligations = either (const []) id (bindingHoles spec)
+                  newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
+                  currentBehavior = behaviorRecordRows requirements
+                  (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
+              createDirectoryIfMissing True out
+              dispositions <- mapM (writeModule out) modules
+              let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
+              TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
+              TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
+              pure $
+                Right
+                  ScaffoldReport
+                    { reportSpecPath = specPath,
+                      reportOutDir = out,
+                      reportContext = ctx,
+                      reportDispositions = dispositions,
+                      reportManifestPath = manifestPath,
+                      reportRecordPath = recordPath,
+                      reportPreviousSpecPath = recSpecPath <$> previousRecord,
+                      reportStale = stale,
+                      reportConsumerPlan = currentConsumerPlan,
+                      reportConstraintPlan = constraintPlan spec currentConsumerPlan,
+                      reportMappingDrift = drift,
+                      reportSourceLanguageDrift = languageDrift,
+                      reportNewHoles = newHoles,
+                      reportAddedBehavior = addedBehavior,
+                      reportRemovedBehavior = removedBehavior,
+                      reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec
+                    }
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
 constraintPlan spec plan = case resolveTypeGraph spec of
@@ -362,18 +403,21 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
       exists <- doesFileExist (out </> path)
       pure [StaleModule fileKind path | exists]
 
-currentRecord :: FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> [BehaviorRecordRow] -> ScaffoldRecord
-currentRecord specPath sourceLanguage ctx spec modules currentBehavior =
+currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> [BehaviorRecordRow] -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx service modules currentBehavior =
   ScaffoldRecord
     { recSpecPath = T.pack specPath,
       recModuleRoot = moduleRoot ctx,
       recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated",
       recSourceLanguage = sourceLanguage,
+      recLanguageContract = checkedLanguageContract service,
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
       recBindingObligations = either (const []) id (bindingHoles spec),
       recBehaviorRequirements = currentBehavior
     }
+  where
+    spec = checkedSpec service
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
 missingGeneratedBanners out modules = fmap concat $ mapM check generated
@@ -431,6 +475,10 @@ renderRefusals = concatMap render
     render (BehaviorRefusal errors) =
       ["error: behavior obligations cannot be derived soundly -- refusing to scaffold; nothing was written"]
         <> ["  " <> T.pack (show behaviorError) | behaviorError <- errors]
+    render (SemanticContractMismatch detail) =
+      [ "error: semantic language contract mismatch -- refusing to scaffold; nothing was written",
+        "  " <> detail
+      ]
     render (GoldenRootDivergence root paths) =
       [ "error: golden payload fixtures live beside a workspace member instead of under the workspace golden root -- refusing to scaffold"
       ]
@@ -524,9 +572,9 @@ renderScaffoldReport report =
       Nothing -> []
       Just drift ->
         [ "source-language drift: "
-            <> sourceFormText (languageDriftPrevious drift)
+            <> sourceLanguageLabel (languageDriftPrevious drift)
             <> " -> "
-            <> sourceFormText (languageDriftCurrent drift)
+            <> sourceLanguageLabel (languageDriftCurrent drift)
             <> " (generated module bytes are semantic and unaffected)"
         ]
     behaviorDriftSection =
@@ -561,6 +609,12 @@ renderScaffoldReport report =
     staleLine stale = case staleKind stale of
       Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
       HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+
+sourceLanguageLabel :: SourceLanguage -> Text
+sourceLanguageLabel sourceLanguage =
+  sourceFormText sourceLanguage
+    <> "/effective-v"
+    <> languageVersionText (effectiveLanguageVersion sourceLanguage)
 
 obligationKindLabel :: BindingObligationKind -> Text
 obligationKindLabel BindingValue = "binding"

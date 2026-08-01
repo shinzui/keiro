@@ -21,6 +21,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
+import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import System.FilePath (isAbsolute, splitDirectories)
 
 data ScaffoldRecord = ScaffoldRecord
@@ -28,6 +29,7 @@ data ScaffoldRecord = ScaffoldRecord
     recModuleRoot :: !Text,
     recLayout :: !Text,
     recSourceLanguage :: !SourceLanguage,
+    recLanguageContract :: !EffectiveLanguageContract,
     recFiles :: ![(ModuleKind, FilePath)],
     recMappings :: ![MappingIdentity],
     recBindingObligations :: ![BindingHole],
@@ -42,7 +44,8 @@ renderRecord record =
       "spec: " <> recSpecPath record,
       "module-root: " <> rootLabel,
       "layout: " <> recLayout record,
-      "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recSourceLanguage record)))
+      "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recSourceLanguage record))),
+      "semantic-contract " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recLanguageContract record)))
     ]
       <> map renderFile (recFiles record)
       <> map renderMapping (recMappings record)
@@ -70,6 +73,7 @@ parseRecord contents = case T.lines contents of
         rootLabel <- exactlyOne "module-root: " rows
         layout <- exactlyOne "layout: " rows
         sourceLanguage <- parseSourceLanguage rows
+        languageContract <- parseLanguageContract sourceLanguage rows
         files <- traverse parseFile (filter isFileRow rows)
         ordinaryMappings <- traverse (parseMapping "mapping ") (filter ("mapping " `T.isPrefixOf`) rows)
         nominalMappings <- traverse (parseMapping "nominal-mapping ") (filter ("nominal-mapping " `T.isPrefixOf`) rows)
@@ -85,6 +89,7 @@ parseRecord contents = case T.lines contents of
                   recModuleRoot = if rootLabel == "(none)" then "" else rootLabel,
                   recLayout = layout,
                   recSourceLanguage = sourceLanguage,
+                  recLanguageContract = languageContract,
                   recFiles = files,
                   recMappings = mappings,
                   recBindingObligations = bindingEntries,
@@ -119,6 +124,13 @@ parseRecord contents = case T.lines contents of
       [row] -> do
         payload <- T.stripPrefix "source-language " row
         Aeson.decodeStrict' (Text.encodeUtf8 payload)
+      _ -> Nothing
+    parseLanguageContract sourceLanguage rows = case filter ("semantic-contract " `T.isPrefixOf`) rows of
+      [] -> Just (effectiveLanguageContract sourceLanguage)
+      [row] -> do
+        payload <- T.stripPrefix "semantic-contract " row
+        contract <- Aeson.decodeStrict' (Text.encodeUtf8 payload)
+        if contract == effectiveLanguageContract sourceLanguage then Just contract else Nothing
       _ -> Nothing
     hasDuplicateMappingNames mappings =
       let names = map mappingSpecName mappings

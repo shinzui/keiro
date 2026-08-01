@@ -22,7 +22,9 @@
 -- to the replay check. Other sample kinds remain uniform until fixture bindings can
 -- supply a wider, consumer-owned corpus.
 module Keiro.Dsl.Harness
-  ( harnessFor,
+  ( harnessForService,
+    harnessForServiceWithGoldens,
+    harnessFor,
     harnessForWithGoldens,
     harnessProcess,
     harnessRouter,
@@ -42,10 +44,21 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
+-- | Emit the aggregate harness after selecting the service's effective
+-- semantic contract.
+harnessForService :: Context -> CheckedService -> Aggregate -> [ScaffoldModule]
+harnessForService = harnessForServiceWithGoldens []
+
+-- | Contract-aware aggregate harness planning with embedded golden payloads.
+harnessForServiceWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Aggregate -> [ScaffoldModule]
+harnessForServiceWithGoldens = harnessForCheckedWithGoldens
+
 -- | Emit the harness test module for one aggregate. Like 'scaffoldAggregate',
--- it takes the 'Spec' for the shared id\/enum declarations.
+-- it takes the 'Spec' for the shared id\/enum declarations. This compatibility
+-- wrapper selects legacy/version-1 runtime semantics.
 harnessFor :: Context -> Spec -> Aggregate -> [ScaffoldModule]
 harnessFor = harnessForWithGoldens []
 
@@ -53,7 +66,11 @@ harnessFor = harnessForWithGoldens []
 -- as string literals. Embedding keeps the generated test independent of runtime
 -- file paths while retaining the golden file as regeneration source of truth.
 harnessForWithGoldens :: [GoldenPayload] -> Context -> Spec -> Aggregate -> [ScaffoldModule]
-harnessForWithGoldens goldens ctx spec agg =
+harnessForWithGoldens goldens ctx spec =
+  harnessForServiceWithGoldens goldens ctx (legacyCheckedService spec)
+
+harnessForCheckedWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Aggregate -> [ScaffoldModule]
+harnessForCheckedWithGoldens goldens ctx service agg =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/Harness.hs"),
         moduleText = emitHarness relevantGoldens a,
@@ -62,7 +79,8 @@ harnessForWithGoldens goldens ctx spec agg =
       }
   ]
   where
-    a = resolveAgg ctx spec agg
+    spec = checkedSpec service
+    a = resolveAggForService ctx service agg
     relevantGoldens =
       [ golden
       | golden <- goldens,

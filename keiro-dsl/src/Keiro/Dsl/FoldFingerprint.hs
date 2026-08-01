@@ -3,7 +3,9 @@
 -- projections, snapshot policy, and source locations: those inputs do not change
 -- how an existing event log becomes aggregate state.
 module Keiro.Dsl.FoldFingerprint
-  ( aggregateFoldFingerprint,
+  ( aggregateFoldFingerprintForService,
+    aggregateFoldSurfaceForService,
+    aggregateFoldFingerprint,
     aggregateFoldSurface,
   )
 where
@@ -21,11 +23,18 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService, runtimeSemanticsFingerprintSegment)
 import Keiro.Dsl.TypeGraph
 
+-- | The sixteen-hex-digit identity of an aggregate's replay fold under the
+-- service's effective runtime semantics.
+aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> Text
+aggregateFoldFingerprintForService service = fnv1a64 . aggregateFoldSurfaceForService service
+
 -- | The sixteen-hex-digit identity of an aggregate's replay fold.
+-- This compatibility wrapper selects legacy/version-1 runtime semantics.
 aggregateFoldFingerprint :: Spec -> Aggregate -> Text
-aggregateFoldFingerprint spec = fnv1a64 . aggregateFoldSurface spec
+aggregateFoldFingerprint spec = aggregateFoldFingerprintForService (legacyCheckedService spec)
 
 -- | Canonical pre-hash text for an aggregate's replay fold.
 --
@@ -33,10 +42,17 @@ aggregateFoldFingerprint spec = fnv1a64 . aggregateFoldSurface spec
 -- spec is required. Only rules reached from transition guards and writes are
 -- included, transitively, in declaration order.
 aggregateFoldSurface :: Spec -> Aggregate -> Text
-aggregateFoldSurface spec aggregate =
+aggregateFoldSurface spec = aggregateFoldSurfaceForService (legacyCheckedService spec)
+
+-- | Canonical pre-hash text under a checked semantic contract. A runtime
+-- discriminator is included only for a contract that can change fold behavior;
+-- source declaration provenance and grammar-only versions never enter it.
+aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> Text
+aggregateFoldSurfaceForService service aggregate =
   T.intercalate
     "\n"
-    ( map stateSegment (aggStates aggregate)
+    ( maybe [] pure (runtimeSemanticsFingerprintSegment (checkedLanguageContract service))
+        ++ map stateSegment (aggStates aggregate)
         ++ map (registerSegment symbols) (aggRegs aggregate)
         ++ mappedRegisterSegments
         ++ nominalSegments
@@ -44,6 +60,7 @@ aggregateFoldSurface spec aggregate =
         ++ map ruleSegment referencedRules
     )
   where
+    spec = checkedSpec service
     symbols = aggregateSymbols spec
     referencedRules =
       [ rule

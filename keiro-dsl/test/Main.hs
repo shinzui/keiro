@@ -24,12 +24,12 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffServices, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
 import Keiro.Dsl.Expression
-import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldFingerprintForService, aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -44,10 +44,11 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
 import Keiro.Dsl.WorkspaceAdoption
 import Keiro.Dsl.WorkspaceDiff
@@ -90,6 +91,81 @@ main = hspec $ do
       declaredVersionOf (parsedSourceLanguage declaredSource) `shouldBe` languageVersion 1
       effectiveLanguageVersion (parsedSourceLanguage legacySource)
         `shouldBe` effectiveLanguageVersion (parsedSourceLanguage declaredSource)
+
+    it "threads paired released versions through one checked semantic boundary" $ do
+      let body = T.unlines ["context semantic-pair", "aggregate Counter", "  regs", "  states Open"]
+          v1Text = "language keiro-dsl 1\n" <> body
+          v2Text = "language keiro-dsl 2\n" <> body
+      v1Source <- parseRight "reservation-v1.keiro" v1Text
+      v2Source <- parseRight "reservation-v2.keiro" v2Text
+      let v1Service = checkedSource v1Source
+          v2Service = checkedSource v2Source
+          v1Spec = checkedSpec v1Service
+          v2Spec = checkedSpec v2Service
+          ctx = defaultContext (specContext v1Spec)
+          aggregates spec = [aggregate | NAggregate aggregate <- specNodes spec]
+      v1Spec `shouldBe` v2Spec
+      Just (effectiveContractLanguageVersion (checkedLanguageContract v1Service)) `shouldBe` languageVersion 1
+      Just (effectiveContractLanguageVersion (checkedLanguageContract v2Service)) `shouldBe` languageVersion 2
+      effectiveRuntimeSemantics (checkedLanguageContract v1Service)
+        `shouldBe` effectiveRuntimeSemantics (checkedLanguageContract v2Service)
+      validateService v1Service `shouldBe` validateService v2Service
+      scaffoldServiceModules ctx v1Service `shouldBe` scaffoldServiceModules ctx v2Service
+      case (aggregates v1Spec, aggregates v2Spec) of
+        ([v1Aggregate], [v2Aggregate]) -> do
+          aggregateFoldSurfaceForService v1Service v1Aggregate
+            `shouldBe` aggregateFoldSurfaceForService v2Service v2Aggregate
+          aggregateFoldFingerprintForService v1Service v1Aggregate
+            `shouldBe` aggregateFoldFingerprintForService v2Service v2Aggregate
+        other -> expectationFailure ("expected one aggregate per paired source, got " <> show (fmap length other))
+      diffServices v1Service v2Service `shouldBe` []
+      ReplayImpact.replayImpactServices v1Service v2Service `shouldBe` ReplayNeutral
+
+    it "retains one effective contract for same-version workspaces and refuses mixed versions" $ do
+      let manifest = "service semantic-workspace\nspec domain/a.keiro\nspec domain/b.keiro\n"
+          v1Body = "language keiro-dsl 1\ncontext semantic-workspace\n"
+          v2Body = "language keiro-dsl 2\ncontext semantic-workspace\n"
+          sourceWith b =
+            memoryContentSource
+              ( Map.fromList
+                  [ ("service.keiro-workspace", manifest),
+                    ("domain/a.keiro", b),
+                    ("domain/b.keiro", b)
+                  ]
+              )
+          mixedSource =
+            memoryContentSource
+              ( Map.fromList
+                  [ ("service.keiro-workspace", manifest),
+                    ("domain/a.keiro", v1Body),
+                    ("domain/b.keiro", v2Body)
+                  ]
+              )
+      sameVersion <- loadWorkspace (sourceWith v2Body) "service.keiro-workspace"
+      case sameVersion of
+        Right workspace -> do
+          Just (effectiveContractLanguageVersion (checkedLanguageContract (checkedWorkspace workspace))) `shouldBe` languageVersion 2
+          validateService (checkedWorkspace workspace) `shouldBe` []
+        Left failure -> expectationFailure (show failure)
+      mixed <- loadWorkspace mixedSource "service.keiro-workspace"
+      case mixed of
+        Left (WorkspaceRefused diagnostics) ->
+          map wdCode (NE.toList diagnostics) `shouldContain` [WorkspaceLanguageVersionMismatch]
+        other -> expectationFailure ("expected a mixed-version refusal, got " <> show other)
+
+    it "refuses a source/service contract mismatch before creating the output directory" $ do
+      v1Version <- maybe (expectationFailure "version 1 missing" >> fail "unreachable") pure (languageVersion 1)
+      parsed <- parseRight "semantic-v2.keiro" "language keiro-dsl 2\ncontext semantic-refusal\n"
+      let service = checkedSource parsed
+          ctx = defaultContext "semantic-refusal"
+      modules <- case planServiceScaffold ctx service of
+        Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+        Right planned -> pure planned
+      withTempDirectory "keiro-dsl-semantic-refusal" $ \root -> do
+        let out = root </> "not-created"
+        result <- executeServiceScaffold out False "semantic-v2.keiro" (DeclaredLanguage v1Version noLoc) ctx service modules
+        result `shouldBe` Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"]
+        doesDirectoryExist out `shouldReturn` False
 
     it "retains explicit declarations in source rendering and leaves legacy unversioned" $ do
       legacySource <- parseRight "legacy.keiro" legacy
@@ -234,11 +310,14 @@ main = hspec $ do
       sourceOut `shouldContain` "\"sourceForm\":\"declared\""
       sourceOut `shouldContain` "\"declaredLanguageVersion\":1"
       sourceOut `shouldContain` "\"effectiveLanguageVersion\":1"
+      sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
+      sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
+      workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
 
     it "keeps only the named source-version compatibility fixtures outside canonical v1" $ do
@@ -670,6 +749,7 @@ main = hspec $ do
                 recModuleRoot = "",
                 recLayout = "prefixed",
                 recSourceLanguage = DeclaredLanguage version noLoc,
+                recLanguageContract = effectiveLanguageContract (DeclaredLanguage version noLoc),
                 recFiles = [],
                 recMappings = [],
                 recBindingObligations = [],
@@ -694,6 +774,7 @@ main = hspec $ do
                 wrLayout = "prefixed",
                 wrMembers = map wmPath (wsMembers workspace),
                 wrSourceLanguages = [WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member) | member <- wsMembers workspace],
+                wrLanguageContract = wsLanguageContract workspace,
                 wrModules = [],
                 wrMappings = [],
                 wrBindingObligations = [],
@@ -790,6 +871,7 @@ main = hspec $ do
                 recModuleRoot = "",
                 recLayout = "prefixed",
                 recSourceLanguage = LegacyUnversioned,
+                recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                 recFiles = [],
                 recMappings = consumerMappings plan,
                 recBindingObligations = [],
@@ -3119,6 +3201,7 @@ main = hspec $ do
                   recModuleRoot = "",
                   recLayout = "prefixed",
                   recSourceLanguage = LegacyUnversioned,
+                  recLanguageContract = effectiveLanguageContract LegacyUnversioned,
                   recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report],
                   recMappings = [],
                   recBindingObligations = [],
@@ -3126,13 +3209,22 @@ main = hspec $ do
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines contents))
+            semanticRows = filter ("semantic-contract " `T.isPrefixOf`) (T.lines contents)
+            withoutSemanticRows = T.unlines (filter (not . T.isPrefixOf "semantic-contract ") (T.lines contents))
         parseRecord contents `shouldBe` Just expected
         parseRecord withoutSourceRows `shouldBe` Just expected
+        parseRecord withoutSemanticRows `shouldBe` Just expected
         case sourceRows of
           [sourceRow] -> do
             parseRecord (T.replace sourceRow (sourceRow <> "\n" <> sourceRow) contents) `shouldBe` Nothing
             parseRecord (T.replace sourceRow "source-language {malformed}" contents) `shouldBe` Nothing
           _ -> expectationFailure "expected exactly one source-language row"
+        case semanticRows of
+          [semanticRow] -> do
+            parseRecord (T.replace semanticRow (semanticRow <> "\n" <> semanticRow) contents) `shouldBe` Nothing
+            parseRecord (T.replace semanticRow "semantic-contract {malformed}" contents) `shouldBe` Nothing
+            parseRecord (T.replace "\"languageVersion\":1" "\"languageVersion\":2" contents) `shouldBe` Nothing
+          _ -> expectationFailure "expected exactly one semantic-contract row"
         parseRecord (T.replace "spec: " "future-field: retained\nspec: " contents) `shouldBe` parseRecord contents
         parseRecord (T.replace "record v1" "record v2" contents) `shouldBe` Nothing
     it "records declared provenance and reports a header-only scaffold drift" $
@@ -3902,12 +3994,14 @@ main = hspec $ do
           `shouldBe` Just record
         [row | row <- wrModules record, wrmOwner row == Nothing]
           `shouldSatisfy` (not . null)
-      it "treats absent source-language rows as legacy and rejects partial, duplicate, or malformed rows" $ do
+      it "derives absent language rows and rejects partial, duplicate, malformed, or inconsistent contracts" $ do
         workspace <- shouldComposeWorkspace canonicalWorkspacePath
         let record = sampleWorkspaceRecord workspace
             rendered = renderWorkspaceRecord record
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines rendered)
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines rendered))
+            semanticRows = filter ("semantic-contract " `T.isPrefixOf`) (T.lines rendered)
+            withoutSemanticRows = T.unlines (filter (not . T.isPrefixOf "semantic-contract ") (T.lines rendered))
             legacyRows = [WorkspaceSourceLanguageRow path LegacyUnversioned | path <- wrMembers record]
         parseWorkspaceRecord withoutSourceRows
           `shouldBe` Just record {wrSourceLanguages = legacyRows}
@@ -3917,6 +4011,13 @@ main = hspec $ do
             parseWorkspaceRecord (T.replace firstRow (firstRow <> "\n" <> firstRow) rendered) `shouldBe` Nothing
             parseWorkspaceRecord (T.replace firstRow "source-language {malformed}" rendered) `shouldBe` Nothing
           _ -> expectationFailure "expected multiple workspace source-language rows"
+        parseWorkspaceRecord withoutSemanticRows `shouldBe` Just record
+        case semanticRows of
+          [semanticRow] -> do
+            parseWorkspaceRecord (T.replace semanticRow (semanticRow <> "\n" <> semanticRow) rendered) `shouldBe` Nothing
+            parseWorkspaceRecord (T.replace semanticRow "semantic-contract {malformed}" rendered) `shouldBe` Nothing
+            parseWorkspaceRecord (T.replace "\"languageVersion\":1" "\"languageVersion\":2" rendered) `shouldBe` Nothing
+          _ -> expectationFailure "expected one workspace semantic-contract row"
       it "rejects unsafe module, owner, member, and adoption paths" $ do
         workspace <- shouldComposeWorkspace canonicalWorkspacePath
         let rendered = renderWorkspaceRecord (sampleWorkspaceRecord workspace)
@@ -4961,6 +5062,7 @@ sampleWorkspaceRecord workspace =
         [ WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member)
         | member <- wsMembers workspace
         ],
+      wrLanguageContract = wsLanguageContract workspace,
       wrModules =
         [ WorkspaceModuleRow Generated "Demo/Generated/StructuralProjections.hs" Nothing,
           WorkspaceModuleRow Generated "Demo/Project/Generated/Domain.hs" (Just "domain/project.keiro"),

@@ -37,6 +37,7 @@ module Keiro.Dsl.Scaffold
     codecComparisonBanner,
     bindingSkeletonModules,
     bindingSkeletonOwners,
+    scaffoldAggregateForService,
     scaffoldAggregate,
     obsoleteGeneratedOutputHooks,
     scaffoldProcess,
@@ -59,6 +60,7 @@ module Keiro.Dsl.Scaffold
     ResolvedRegister (..),
     ResolvedCtor (..),
     StructuralProjection (..),
+    resolveAggForService,
     resolveAgg,
     projectionSpecs,
     resolveProjectionModules,
@@ -91,11 +93,12 @@ import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (.
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.Expression
-import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
 import Numeric (showHex)
@@ -392,7 +395,11 @@ defaultWire :: WireSpec
 defaultWire = WireSpec {wireKind = "ctorName", wireFields = "camelCase", wireSchemaVersion = 1}
 
 resolveAgg :: Context -> Spec -> Aggregate -> Agg
-resolveAgg ctx spec agg =
+resolveAgg ctx spec = resolveAggForService ctx (legacyCheckedService spec)
+
+-- | Resolve one aggregate under the service's effective runtime semantics.
+resolveAggForService :: Context -> CheckedService -> Aggregate -> Agg
+resolveAggForService ctx service agg =
   Agg
     { aContext = ctx,
       aSpec = spec,
@@ -420,7 +427,7 @@ resolveAgg ctx spec agg =
       aWire = fromMaybe defaultWire (aggWire agg),
       aProjection = aggProjection agg,
       aSnapshot = aggSnapshot agg,
-      aFoldFingerprint = aggregateFoldFingerprint spec agg,
+      aFoldFingerprint = aggregateFoldFingerprintForService service agg,
       aReadModels = [readModel | NReadModel readModel <- specNodes spec],
       aTypeGraph = either (const Nothing) Just (resolveTypeGraph spec),
       aSymbols = symbols,
@@ -428,6 +435,7 @@ resolveAgg ctx spec agg =
       aHolePrefix = holePrefixFor ctx nm
     }
   where
+    spec = checkedSpec service
     nm = aggName agg
     symbols = aggregateSymbols spec
     ctxPascal = pascalFromKebab (contextName ctx)
@@ -1546,7 +1554,12 @@ lastSegment = snd . T.breakOnEnd "."
 -- | Emit all modules for one aggregate. The 'Spec' is needed for the shared
 -- id\/enum declarations.
 scaffoldAggregate :: Context -> Spec -> Aggregate -> [ScaffoldModule]
-scaffoldAggregate ctx spec agg =
+scaffoldAggregate ctx spec = scaffoldAggregateForService ctx (legacyCheckedService spec)
+
+-- | Emit all modules for one aggregate after selecting the effective semantic
+-- contract. This is the normal source/workspace generation entry point.
+scaffoldAggregateForService :: Context -> CheckedService -> Aggregate -> [ScaffoldModule]
+scaffoldAggregateForService ctx service agg =
   [ genModule a "Domain" (emitDomain a),
     genModule a "Codec" (emitCodec a)
   ]
@@ -1564,7 +1577,7 @@ scaffoldAggregate ctx spec agg =
          holeModule a (emitHoles a)
        ]
   where
-    a = resolveAgg ctx spec agg
+    a = resolveAggForService ctx service agg
 
 -- | The generated behavioral contract is deliberately separate from both the
 -- authoritative transducer and the create-once witness list.  Regeneration can

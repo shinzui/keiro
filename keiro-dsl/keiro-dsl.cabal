@@ -57,6 +57,7 @@ library
     Keiro.Dsl.Scaffold
     Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun
+    Keiro.Dsl.SemanticContract
     Keiro.Dsl.Skeleton
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate

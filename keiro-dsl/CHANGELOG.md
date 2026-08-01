@@ -29,6 +29,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Adds the public `CheckedService`/`EffectiveLanguageContract` semantic boundary.
+  Single-source and workspace CLI routes now retain the selected contract through
+  validation, scaffold and harness planning, generated fold fingerprints, diff,
+  replay-impact analysis, inspection JSON, and additive scaffold-record rows.
+  `Spec`-only APIs remain explicit legacy/version-1 compatibility wrappers.
+  Grammar-only v1/v2 differences preserve generated and fold bytes; a future
+  runtime-semantic generation receives its own fingerprint discriminator.
+
 - Plans one deterministic Haskell owner for every generated service-level ID and
   enum across single-file and multi-file services. Aggregate rings import only
   their resolved uses, unused declarations are not imported into unrelated

@@ -57,8 +57,8 @@ import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), att
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
-import Keiro.Dsl.LanguageVersion (SourceLanguage, sourceFormText)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Scaffold
@@ -77,8 +77,9 @@ import Keiro.Dsl.ScaffoldRun
     renderMappingIdentity,
     staleAgainst,
   )
+import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.Validate (nodeIdentity)
-import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), declarationOwner, nodeOwner)
+import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
 import Keiro.Dsl.WorkspaceRecord
 import System.Directory (createDirectoryIfMissing, doesFileExist)
@@ -106,6 +107,7 @@ provenanceOwner (MemberOwned path) = Just path
 -- each module's producing member attached.
 data WorkspacePlan = WorkspacePlan
   { wpWorkspace :: !WorkspaceSpec,
+    wpCheckedService :: !CheckedService,
     wpContext :: !Context,
     -- | The one golden-payload root for the whole workspace. Carried here so
     --     execution can refuse a member-adjacent fixture the root lacks before it
@@ -138,13 +140,15 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
       Right
         WorkspacePlan
           { wpWorkspace = workspace,
+            wpCheckedService = service,
             wpContext = ctx,
             wpGoldenRoot = goldenRoot,
             wpModules = tagged
           }
     refusals -> Left refusals
   where
-    merged = wsMergedSpec workspace
+    service = checkedWorkspace workspace
+    merged = checkedSpec service
     tagged = workspaceModules goldens ctx workspace
 
 -- | The tagged module set, in exactly the order
@@ -164,11 +168,12 @@ workspaceModules goldens ctx workspace =
       | node <- specNodes merged
       ]
   where
-    merged = wsMergedSpec workspace
+    service = checkedWorkspace workspace
+    merged = checkedSpec service
     ownership = wsOwnership workspace
 
     emittersFor node = case node of
-      NAggregate aggregate -> scaffoldAggregate ctx merged aggregate <> harnessForWithGoldens goldens ctx merged aggregate
+      NAggregate aggregate -> scaffoldAggregateForService ctx service aggregate <> harnessForServiceWithGoldens goldens ctx service aggregate
       NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
       NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
       NContract contract -> scaffoldContract ctx contract
@@ -400,7 +405,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
             }
   where
     workspace = wpWorkspace plan
-    merged = wsMergedSpec workspace
+    merged = checkedSpec (wpCheckedService plan)
     modules = map fst (wpModules plan)
     service = wsService workspace
     manifestName = takeFileName (wsManifestPath workspace)
@@ -429,6 +434,7 @@ currentWorkspaceRecord plan adopted =
         [ WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member)
         | member <- wsMembers workspace
         ],
+      wrLanguageContract = checkedLanguageContract (wpCheckedService plan),
       wrModules =
         [ WorkspaceModuleRow
             { wrmKind = kind m,
@@ -444,12 +450,12 @@ currentWorkspaceRecord plan adopted =
     }
   where
     workspace = wpWorkspace plan
-    merged = wsMergedSpec workspace
+    merged = checkedSpec (wpCheckedService plan)
     ctx = wpContext plan
 
 workspaceBehaviorRows :: WorkspaceSpec -> [BehaviorRecordRow]
 workspaceBehaviorRows workspace =
-  either (const []) (behaviorRecordRows . map attribute) (deriveBehaviorRequirements (wsMergedSpec workspace))
+  either (const []) (behaviorRecordRows . map attribute) (deriveBehaviorRequirements (checkedSpec (checkedWorkspace workspace)))
   where
     attribute = attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate")
 
@@ -626,9 +632,9 @@ renderWorkspaceScaffoldReport report =
           <> [ "  "
                  <> T.pack (wsldPath drift)
                  <> "  "
-                 <> sourceFormText (wsldPrevious drift)
+                 <> workspaceSourceLanguageLabel (wsldPrevious drift)
                  <> " -> "
-                 <> sourceFormText (wsldCurrent drift)
+                 <> workspaceSourceLanguageLabel (wsldCurrent drift)
              | drift <- drifts
              ]
     behaviorDriftSection =
@@ -676,6 +682,12 @@ renderWorkspaceScaffoldReport report =
     staleLine stale = case staleKind stale of
       Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
       HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+
+workspaceSourceLanguageLabel :: SourceLanguage -> Text
+workspaceSourceLanguageLabel sourceLanguage =
+  sourceFormText sourceLanguage
+    <> "/effective-v"
+    <> languageVersionText (effectiveLanguageVersion sourceLanguage)
 
 renderBracketed :: [Text] -> Text
 renderBracketed values = "[" <> T.intercalate ", " values <> "]"

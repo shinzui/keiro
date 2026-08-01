@@ -62,6 +62,7 @@ module Keiro.Dsl.Workspace
     composeWorkspace,
     oneMemberWorkspace,
     oneMemberParsedWorkspace,
+    checkedWorkspace,
     checkWorkspace,
 
     -- * Multi-file diagnostics
@@ -99,8 +100,9 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), SourceLanguageDiagnostic, effectiveLanguageVersion, languageVersionText)
 import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSource, renderParseFailure)
 import Keiro.Dsl.Scaffold (Context (..))
-import Keiro.Dsl.ScaffoldRun (Refusal (..), planScaffoldWithGoldens)
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateSpec)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), planServiceScaffoldWithGoldens)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateService)
 import System.Directory (doesFileExist)
 import System.FilePath (takeBaseName, takeDirectory, takeFileName, (</>))
 import Text.Megaparsec hiding (ParseError)
@@ -629,6 +631,9 @@ data WorkspaceSpec = WorkspaceSpec
   { -- | The stable workspace identity (the manifest's @service@ name).
     wsService :: !Text,
     wsManifestPath :: !FilePath,
+    -- | The unanimous effective contract selected before graph composition.
+    -- Member declared/legacy provenance remains in 'wsMembers'.
+    wsLanguageContract :: !EffectiveLanguageContract,
     -- | The members' unanimous @context@.
     wsContext :: !Name,
     wsModuleRoot :: !(Maybe Text),
@@ -668,6 +673,7 @@ oneMemberParsedWorkspace path parsedSource =
   WorkspaceSpec
     { wsService = T.pack (takeBaseName path),
       wsManifestPath = path,
+      wsLanguageContract = checkedLanguageContract service,
       wsContext = specContext spec,
       wsModuleRoot = specModuleRoot spec,
       wsLayout = specLayout spec,
@@ -685,8 +691,19 @@ oneMemberParsedWorkspace path parsedSource =
       wsOwnership = ownershipOf [(relative, spec)]
     }
   where
+    service = checkedSource parsedSource
     spec = parsedSpec parsedSource
     relative = takeFileName path
+
+-- | Recover the contract-preserving semantic input from a composed workspace.
+-- Composition has already proved that every member selects this one effective
+-- contract, so downstream consumers need not inspect member provenance.
+checkedWorkspace :: WorkspaceSpec -> CheckedService
+checkedWorkspace workspace =
+  CheckedService
+    { checkedLanguageContract = wsLanguageContract workspace,
+      checkedSpec = wsMergedSpec workspace
+    }
 
 -- | Validate a composed workspace. This runs the /existing/ whole-spec
 -- validator over the merged spec once and maps each diagnostic's line back
@@ -701,7 +718,7 @@ checkWorkspace workspace =
         wdSourceLanguageCause = Nothing,
         wdMessage = message diagnostic
       }
-  | diagnostic <- validateSpec (wsMergedSpec workspace)
+  | diagnostic <- validateService (checkedWorkspace workspace)
   ]
   where
     locationFor n = case resolveWorkspaceLine workspace n of
@@ -1012,8 +1029,8 @@ composeWorkspace manifestPath manifest supplied
       -- Only ask the scaffold planner about a spec that already validates.
       -- An invalid merged spec is 'checkWorkspace''s report to make, and the
       -- planner is only designed to see specs that passed validation.
-      | any ((== Error) . severity) (validateSpec mergedSpec) = []
-      | otherwise = case planScaffoldWithGoldens [] plannerContext mergedSpec of
+      | any ((== Error) . severity) (validateService (checkedWorkspace composed)) = []
+      | otherwise = case planServiceScaffoldWithGoldens [] plannerContext (checkedWorkspace composed) of
           Right _ -> []
           Left plannerRefusals -> concatMap crossMemberCollision plannerRefusals
     crossMemberCollision (PathCollision path origins) =
@@ -1056,6 +1073,7 @@ composeWorkspace manifestPath manifest supplied
       WorkspaceSpec
         { wsService = wmfService manifest,
           wsManifestPath = manifestPath,
+          wsLanguageContract = effectiveLanguageContract effectiveSourceLanguage,
           wsContext = effectiveContext,
           wsModuleRoot = effectiveModuleRoot,
           wsLayout = effectiveLayout,
@@ -1064,6 +1082,10 @@ composeWorkspace manifestPath manifest supplied
           wsLineMap = lineMap,
           wsOwnership = ownershipOf [(wmPath member, wmSpec member) | member <- members]
         }
+
+    effectiveSourceLanguage = case entries of
+      (_, _, sourceLanguage, _) : _ -> sourceLanguage
+      [] -> LegacyUnversioned
 
     manifestLocation loc role = WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc loc)) role
     memberLocation ref found role =

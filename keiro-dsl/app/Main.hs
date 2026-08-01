@@ -22,12 +22,13 @@ import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
-import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpact)
+import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (executeScaffoldWithLanguage, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (executeServiceScaffold, planServiceScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateService)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
@@ -218,8 +219,9 @@ run (Check fp emit explainBindings coverageOptions) = do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
     Right parsedSource -> do
-      let spec = parsedSpec parsedSource
-      let diags = validateSpec spec
+      let service = checkedSource parsedSource
+          spec = checkedSpec service
+          diags = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       if any ((== Error) . severity) diags
         then exitFailure
@@ -242,16 +244,17 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens com
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
     Right parsedSource -> do
-      let spec = parsedSpec parsedSource
+      let service = checkedSource parsedSource
+          spec = checkedSpec service
       -- Validation gate: never scaffold an invalid spec. Abort on any
       -- error-severity diagnostic before writing a single module.
-      let diags = validateSpec spec
+      let diags = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       when (any ((== Error) . severity) diags) exitFailure
       let ctx = mkContext cliRoot cliCollocate spec
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
-      case (planScaffoldWithGoldens goldens ctx spec, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
+      case (planServiceScaffoldWithGoldens goldens ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
         (Left refusals, _) -> do
           mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
           exitFailure
@@ -261,7 +264,7 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens com
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeScaffoldWithLanguage out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx spec modules
+              result <- executeServiceScaffold out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -277,14 +280,17 @@ run (Inspect fp InspectionJson) = do
   input <- TIO.readFile fp
   case parseSource fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right parsedSource -> TLIO.putStrLn (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource)))
+    Right parsedSource ->
+      TLIO.putStrLn
+        (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource) (checkedSource parsedSource)))
 run (BehaviorObligations fp format) = do
   input <- TIO.readFile fp
   case parseSource fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
     Right parsedSource -> do
-      let spec = parsedSpec parsedSource
-          diagnostics = validateSpec spec
+      let service = checkedSource parsedSource
+          spec = checkedSpec service
+          diagnostics = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diagnostics
       if any ((== Error) . severity) diagnostics
         then exitFailure
@@ -309,12 +315,14 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
           case (,) <$> parseSource (ref <> ":" <> relPath) (T.pack oldText) <*> parseSource fp newText of
             Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
             Right (oldSource, newSource) -> do
-              let oldSpec = parsedSpec oldSource
-                  newSpec = parsedSpec newSource
+              let oldService = checkedSource oldSource
+                  newService = checkedSource newSource
+                  oldSpec = checkedSpec oldService
+                  newSpec = checkedSpec newService
               written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
               mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
               let changes = diffSources oldSource newSource
-                  impact = replayImpact oldSpec newSpec
+                  impact = replayImpactServices oldService newService
                   effectiveGate = gateWith gatedSurfaces
               mapM_ (TIO.putStrLn . renderFinding) changes
               when explain $
@@ -336,15 +344,16 @@ runWorkspaceParse fp = do
       exitFailure
     Right manifest -> TIO.putStrLn (renderWorkspaceManifest manifest)
 
-sourceInspection :: FilePath -> SourceLanguage -> Aeson.Value
-sourceInspection path sourceLanguage =
+sourceInspection :: FilePath -> SourceLanguage -> CheckedService -> Aeson.Value
+sourceInspection path sourceLanguage service =
   Aeson.object
     [ "schema" .= ("keiro-dsl/source-inspection/1" :: T.Text),
       "kind" .= ("source" :: T.Text),
       "path" .= path,
       "sourceForm" .= sourceFormText sourceLanguage,
       "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage,
-      "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
+      "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage,
+      "effectiveSemanticContract" .= checkedLanguageContract service
     ]
 
 runWorkspaceInspect :: FilePath -> InspectionFormat -> IO ()
@@ -362,6 +371,7 @@ runWorkspaceInspect fp InspectionJson = do
                   "kind" .= ("workspace" :: T.Text),
                   "path" .= fp,
                   "service" .= wsService workspace,
+                  "effectiveSemanticContract" .= checkedLanguageContract (checkedWorkspace workspace),
                   "members" .= map memberInspection (wsMembers workspace)
                 ]
             )
@@ -393,7 +403,7 @@ runWorkspaceBehaviorObligations fp format = do
 
 workspaceBehaviorReport :: WorkspaceSpec -> Either [Behavior.BehaviorDerivationError] Behavior.BehaviorObligationsReport
 workspaceBehaviorReport workspace = do
-  requirements <- Behavior.deriveBehaviorRequirements (wsMergedSpec workspace)
+  requirements <- Behavior.deriveBehaviorRequirements (checkedSpec (checkedWorkspace workspace))
   pure
     Behavior.BehaviorObligationsReport
       { Behavior.behaviorSubject = wsManifestPath workspace,
@@ -431,8 +441,9 @@ runWorkspaceCheck fp emit explainBindings coverageOptions = do
       mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
       exitFailure
     Right workspace -> do
-      let diags = checkWorkspace workspace
-          spec = wsMergedSpec workspace
+      let service = checkedWorkspace workspace
+          diags = checkWorkspace workspace
+          spec = checkedSpec service
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
       if any ((== Error) . wdSeverity) diags
         then exitFailure
@@ -482,7 +493,7 @@ runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGold
       let diags = checkWorkspace workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
       when (any ((== Error) . wdSeverity) diags) exitFailure
-      let spec = wsMergedSpec workspace
+      let spec = checkedSpec (checkedWorkspace workspace)
           ctx = workspaceContext cliRoot cliCollocate workspace
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
@@ -573,14 +584,16 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                               <> "; composing the old service from the current members' blobs at "
                               <> ref
                           )
-                      let oldSpec = wsMergedSpec oldWorkspace
-                          newSpec = wsMergedSpec newWorkspace
+                      let oldService = checkedWorkspace oldWorkspace
+                          newService = checkedWorkspace newWorkspace
+                          oldSpec = checkedSpec oldService
+                          newSpec = checkedSpec newService
                           goldenRoot = fmap (workspaceGoldenRoot fp) emitGoldensRoot
                       written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) goldenRoot
                       mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
                       let workspaceChanges = diffWorkspaces oldWorkspace newWorkspace
                           changes = map wcChange workspaceChanges
-                          impact = replayImpact oldSpec newSpec
+                          impact = replayImpactServices oldService newService
                           effectiveGate = gateWith gatedSurfaces
                           reportMeta =
                             WorkspaceMeta

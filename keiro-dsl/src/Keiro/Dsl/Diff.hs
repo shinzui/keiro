@@ -40,6 +40,7 @@ module Keiro.Dsl.Diff
     isAdvisory,
     diffSources,
     sourceLanguageChange,
+    diffServices,
     diffSpecs,
     DiffEnv (..),
     NodeFamily (..),
@@ -61,7 +62,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
-import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
@@ -73,6 +74,7 @@ import Keiro.Dsl.PrettyPrint
     renderTransition,
   )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, legacyCheckedService)
 import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -616,8 +618,39 @@ familyRegistry =
     (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
   ]
 
+-- | Compare two graphs under their effective semantic contracts. Current
+-- released contracts share runtime semantics, so the selected policy delegates
+-- to the graph differ; successor semantics extend this boundary rather than
+-- teaching CLI callers to recover versions from provenance.
+diffServices :: CheckedService -> CheckedService -> [Change]
+diffServices oldService newService =
+  diffCheckedSpecs oldSpec newSpec <> semanticContractFoldChanges
+  where
+    oldSpec = checkedSpec oldService
+    newSpec = checkedSpec newService
+    oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes oldSpec]
+    newAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes newSpec]
+    semanticContractFoldChanges =
+      [ advisory
+          name
+          "semantic-contract"
+          name
+          AggFoldSurfaceChanged
+          "effective runtime semantics changed the aggregate fold surface even though the normalized graph is unchanged; re-scaffold, redeploy, and audit replay under the candidate contract"
+      | (name, oldAggregate) <- oldAggregates,
+        Just newAggregate <- [lookup name newAggregates],
+        aggregateFoldSurface oldSpec oldAggregate == aggregateFoldSurface newSpec newAggregate,
+        aggregateFoldSurfaceForService oldService oldAggregate /= aggregateFoldSurfaceForService newService newAggregate
+      ]
+
+-- | Compatibility wrapper for graph-only callers, explicitly using
+-- legacy/version-1 semantics on both sides.
 diffSpecs :: Spec -> Spec -> [Change]
 diffSpecs old new =
+  diffServices (legacyCheckedService old) (legacyCheckedService new)
+
+diffCheckedSpecs :: Spec -> Spec -> [Change]
+diffCheckedSpecs old new =
   sharedDeclarationDiff env
     ++ concatMap (runFamily env . snd) familyRegistry
   where
@@ -631,7 +664,7 @@ diffSources old new =
     "declaration"
     (parsedSourceLanguage old)
     (parsedSourceLanguage new)
-    <> diffSpecs (parsedSpec old) (parsedSpec new)
+    <> diffServices (checkedSource old) (checkedSource new)
 
 -- | One all-compatible source-provenance finding, reusable per workspace member.
 sourceLanguageChange :: Name -> Text -> SourceLanguage -> SourceLanguage -> [Change]
@@ -649,7 +682,7 @@ sourceLanguageChange root subject old new
               <> renderSourceLanguage old
               <> " -> "
               <> renderSourceLanguage new
-              <> "; the effective semantic contract is unchanged"
+              <> "; normalized runtime semantics are unchanged"
           )
       ]
   where

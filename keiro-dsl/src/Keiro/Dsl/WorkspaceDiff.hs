@@ -21,18 +21,18 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffSpecs, sourceLanguageChange)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffServices, sourceLanguageChange)
 import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport)
 import Keiro.Dsl.Grammar (Loc (..), Name, Placement (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
-import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceMember (..), WorkspaceSpec (..))
+import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace)
 
 -- | Diff two composed service graphs and cite every participant we can resolve.
 diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 diffWorkspaces old new =
   memberLanguageChanges old new
-    <> map annotate (diffSpecs (wsMergedSpec old) (wsMergedSpec new))
+    <> map annotate (diffServices (checkedWorkspace old) (checkedWorkspace new))
     <> ownershipMoveChanges old new
     <> authorityChanges old new
   where

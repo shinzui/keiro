@@ -12,6 +12,7 @@ module Keiro.Dsl.Validate
     DiagnosticCode (..),
     Diagnostic (..),
     renderDiagnostic,
+    validateService,
     validateSpec,
     derivedQueueTrio,
     sagaCategoryError,
@@ -36,6 +37,7 @@ import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
 
@@ -357,10 +359,20 @@ renderDiagnostic file d =
 clockAtoms :: Set Name
 clockAtoms = Set.fromList ["now", "currentTime", "wallClock", "today", "utcNow"]
 
--- | Validate a whole spec. An empty list means valid. Diagnostics are sorted by
--- line for stable, readable output.
+-- | Validate a whole service under its effective released semantic contract.
+-- An empty list means valid. Current released versions share this policy, but
+-- selecting it at this boundary prevents successor semantics from being lost.
+validateService :: CheckedService -> [Diagnostic]
+validateService service = validateCheckedSpec (checkedSpec service)
+
+-- | Compatibility wrapper for callers that have only a normalized graph. It
+-- explicitly selects legacy/version-1 semantics; production source/workspace
+-- routes use 'validateService'.
 validateSpec :: Spec -> [Diagnostic]
-validateSpec spec =
+validateSpec = validateService . legacyCheckedService
+
+validateCheckedSpec :: Spec -> [Diagnostic]
+validateCheckedSpec spec =
   sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
 
 validateNominal :: Spec -> [Diagnostic]

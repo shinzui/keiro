@@ -41,6 +41,22 @@ the distinction:
 cabal run keiro-dsl -- inspect service.keiro --format=json
 ```
 
+The library preserves two separate facts after parsing. `ParsedSource` (and each
+workspace member) retains declared-versus-legacy provenance. `CheckedService`
+pairs the normalized `Spec` with the one effective semantic contract used by
+validation, generation, harnesses, fold fingerprints, diff, and replay-impact
+planning. A workspace proves that all members select the same effective version
+before constructing that value. The older `Spec`-only library functions remain
+compatibility bridges and explicitly use legacy/version-1 runtime semantics; new
+source-aware integrations should call `checkedSource` or `checkedWorkspace` and
+then use the contract-aware entry points.
+
+Scaffold records persist both source provenance and the effective semantic
+contract as additive rows. Old records without the new row derive it from their
+historical source-language row (or legacy version 1 when that row is also absent).
+The parser rejects duplicate, malformed, unsupported, or provenance-inconsistent
+contract rows rather than accepting ambiguous history.
+
 A well-formed unsupported future version is rejected before its body is parsed.
 Automated sequential upgrades and Mori-aware fleet rewriting remain deferred to
 [IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).

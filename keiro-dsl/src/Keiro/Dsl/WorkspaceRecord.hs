@@ -69,6 +69,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
+import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import System.FilePath (isAbsolute, splitDirectories)
 
 -- | One emitted module: what kind it is, where it landed relative to the output
@@ -185,6 +186,7 @@ data WorkspaceRecord = WorkspaceRecord
     -- | Canonically ordered manifest-relative member paths.
     wrMembers :: ![FilePath],
     wrSourceLanguages :: ![WorkspaceSourceLanguageRow],
+    wrLanguageContract :: !EffectiveLanguageContract,
     wrModules :: ![WorkspaceModuleRow],
     wrMappings :: ![MappingIdentity],
     wrBindingObligations :: ![BindingHole],
@@ -208,6 +210,7 @@ renderWorkspaceRecord record =
     ]
       <> ["member " <> T.pack path | path <- wrMembers record]
       <> ["source-language " <> encodeRow row | row <- wrSourceLanguages record]
+      <> ["semantic-contract " <> encodeRow (wrLanguageContract record)]
       <> ["module " <> encodeRow row | row <- wrModules record]
       <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- wrMappings record]
       <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
@@ -233,6 +236,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         layout <- exactlyOne "layout: " rows
         members <- traverse safePath [path | row <- rows, Just path <- [T.stripPrefix "member " row]]
         sourceLanguages <- parseSourceLanguages members rows
+        languageContract <- parseLanguageContract sourceLanguages rows
         modules <- traverse (decodeRow "module ") (rowsWith "module " rows)
         checkedModules <- traverse checkedModule modules
         ordinaryMappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
@@ -258,6 +262,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrLayout = layout,
                   wrMembers = members,
                   wrSourceLanguages = sourceLanguages,
+                  wrLanguageContract = languageContract,
                   wrModules = checkedModules,
                   wrMappings = mappings,
                   wrBindingObligations = obligations,
@@ -288,6 +293,18 @@ parseWorkspaceRecord contents = case T.lines contents of
         if hasDuplicates (map wrslPath checked) || sort (map wrslPath checked) /= sort members
           then Nothing
           else Just checked
+    parseLanguageContract sourceLanguages rows = do
+      let inferred = nub [effectiveLanguageContract (wrslSourceLanguage row) | row <- sourceLanguages]
+      common <- case inferred of
+        [contract] -> Just contract
+        [] -> Just (effectiveLanguageContract LegacyUnversioned)
+        _ -> Nothing
+      case rowsWith "semantic-contract " rows of
+        [] -> Just common
+        [row] -> do
+          contract <- decodeRow "semantic-contract " row
+          if contract == common then Just contract else Nothing
+        _ -> Nothing
     checkedSourceLanguage row = do
       path <- safePath (T.pack (wrslPath row))
       pure row {wrslPath = path}
