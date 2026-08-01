@@ -130,6 +130,23 @@ frontendSurfaceSpec = do
         lowered <- lowerRight surface
         parseSource (sourcePath row) source `shouldBe` Right lowered
 
+  describe "parser module boundaries" $ do
+    it "keeps the public parser facade free of Megaparsec and grammar productions" $ do
+      facade <- readRepoText "keiro-dsl/src/Keiro/Dsl/Parser.hs"
+      facade `shouldNotSatisfy` T.isInfixOf "Text.Megaparsec"
+      facade `shouldNotSatisfy` T.isInfixOf "keyword ::"
+      facade `shouldNotSatisfy` T.isInfixOf "pAggregate ::"
+
+    it "keeps internal grammar modules from importing the public facade" $
+      forM_ parserModulePaths $ \path -> do
+        source <- readRepoText path
+        filter isFacadeImport (T.lines source) `shouldBe` []
+
+    it "keeps source, syntax, and semantic graph modules Megaparsec-free" $
+      forM_ semanticModulePaths $ \path -> do
+        source <- readRepoText path
+        source `shouldNotSatisfy` T.isInfixOf "Text.Megaparsec"
+
 parseSurfaceRight :: FilePath -> Text -> IO SurfaceSource
 parseSurfaceRight sourceName source =
   case parseSurfaceSource sourceName source of
@@ -173,3 +190,37 @@ topItemKind Located {value} = case value of
 spanText :: Text -> SourceSpan -> Text
 spanText source SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}} =
   T.take (endOffset - startOffset) (T.drop startOffset source)
+
+isFacadeImport :: Text -> Bool
+isFacadeImport line =
+  let stripped = T.strip line
+   in stripped == "import Keiro.Dsl.Parser"
+        || "import Keiro.Dsl.Parser " `T.isPrefixOf` stripped
+
+parserModulePaths :: [FilePath]
+parserModulePaths =
+  map
+    ("keiro-dsl/src/Keiro/Dsl/Parser/" <>)
+    [ "Aggregate.hs",
+      "Coordination.hs",
+      "Core.hs",
+      "Declaration.hs",
+      "Document.hs",
+      "Expression.hs",
+      "Integration.hs",
+      "Mapped.hs",
+      "Preamble.hs",
+      "Queue.hs",
+      "ReadModel.hs",
+      "Workflow.hs"
+    ]
+
+semanticModulePaths :: [FilePath]
+semanticModulePaths =
+  map
+    ("keiro-dsl/src/Keiro/Dsl/" <>)
+    [ "Source.hs",
+      "Syntax.hs",
+      "Grammar.hs",
+      "Validate.hs"
+    ]

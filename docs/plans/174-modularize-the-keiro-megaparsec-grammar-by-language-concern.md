@@ -35,10 +35,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: extract parser core, lexer, span, preamble, and document composition modules.
-- [ ] Milestone 2: extract shared declarations, mapped/nominal types, and expression grammar.
-- [ ] Milestone 3: extract aggregate and every non-aggregate node-family grammar.
-- [ ] Milestone 4: reduce the public facade, enforce module boundaries, and prove complete 0.7 parity.
+- [x] Milestone 1: extract parser core, lexer, span, preamble, and document composition modules
+  (2026-08-01T21:58:28Z).
+- [x] Milestone 2: extract shared declarations, mapped/nominal types, and expression grammar
+  (2026-08-01T21:58:28Z).
+- [x] Milestone 3: extract aggregate and every non-aggregate node-family grammar
+  (2026-08-01T21:58:28Z).
+- [x] Milestone 4: reduce the public facade, enforce module boundaries, and prove complete 0.7 parity
+  (2026-08-01T21:58:28Z).
 
 
 ## Surprises & Discoveries
@@ -46,7 +50,19 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Observation: The existing `Keiro.Dsl.Workspace` module imports Megaparsec for the independent
+  `.keiro-workspace` manifest grammar.
+  Evidence: The final import inventory contains frontend grammar imports only below
+  `Keiro/Dsl/Parser/`, plus the pre-existing imports at `Workspace.hs:108-110`.
+  Impact: The parser-boundary test permits this separate manifest parser while keeping source,
+  syntax, grammar, and validation modules free of Megaparsec.
+
+- Observation: Grammar-neutral primitives shared across nearly every production family form a
+  substantial core even after the concern split.
+  Evidence: `Parser.Core` is 416 lines; the eleven concern/composition modules range from 60 to 338
+  lines, and the public facade is 43 lines.
+  Impact: Keeping one acyclic core is clearer than duplicating lexer, bounded-literal, feature-gate,
+  and span logic merely to make every internal file the same size.
 
 
 ## Decision Log
@@ -70,6 +86,12 @@ Record every decision made while working on the plan.
   separate makes any drift attributable and reviewable.
   Date: 2026-08-01
 
+- Decision: Use twelve internal modules: `Core`, `Preamble`, `Document`, `Declaration`, `Mapped`,
+  `Expression`, `Aggregate`, `Coordination`, `Integration`, `Queue`, `ReadModel`, and `Workflow`.
+  Rationale: This gives each grammar concern an obvious owner, leaves shared primitives below all
+  families, and keeps document dispatch above them without an import cycle.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -78,7 +100,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The former monolithic parser is now twelve acyclic internal modules with `Core` at the bottom and
+`Document` at the top. `Keiro.Dsl.Parser` is a 43-line compatibility facade containing no
+Megaparsec import or grammar production. Import-boundary tests prohibit internal facade imports and
+Megaparsec leakage into the source, syntax, semantic graph, or validation layers.
+
+The complete suite passes with 454 examples and zero failures, including all 256 compatibility
+fixtures, 13 curated diagnostic goldens, exact accepted surface/lowering parity, generated-tree
+freshness checks, and the three new module-boundary examples. `cabal build all` and
+`nix flake check` also pass. No syntax, diagnostic, public facade signature, generated output, or
+dependency bound changed. The module topology is task-local organization rather than a new public
+architectural contract, so this plan required no ADR amendment.
 
 
 ## Context and Orientation
@@ -248,3 +280,7 @@ Continue using the existing Megaparsec and `parser-combinators` bounds from
 
 2026-08-01: Removed cancelled EP-177 from the plan's context. New parser-local records follow the
 EP-173 frontend convention, while existing production record APIs remain unchanged.
+
+2026-08-01: Completed the behavior-preserving extraction into twelve internal concern modules,
+reduced the public parser to a compatibility facade, added executable import-boundary checks, and
+certified the result with the complete 454-example suite, package build, and native flake checks.

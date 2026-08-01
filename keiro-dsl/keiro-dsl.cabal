@@ -71,7 +71,21 @@ library
     Keiro.Dsl.WorkspaceRecord
     Keiro.Dsl.WorkspaceScaffold
 
-  other-modules:   Keiro.Dsl.Frontend.Internal
+  other-modules:
+    Keiro.Dsl.Frontend.Internal
+    Keiro.Dsl.Parser.Aggregate
+    Keiro.Dsl.Parser.Coordination
+    Keiro.Dsl.Parser.Core
+    Keiro.Dsl.Parser.Declaration
+    Keiro.Dsl.Parser.Document
+    Keiro.Dsl.Parser.Expression
+    Keiro.Dsl.Parser.Integration
+    Keiro.Dsl.Parser.Mapped
+    Keiro.Dsl.Parser.Preamble
+    Keiro.Dsl.Parser.Queue
+    Keiro.Dsl.Parser.ReadModel
+    Keiro.Dsl.Parser.Workflow
+
   build-depends:
     , aeson               >=2.2.1    && <2.3
     , base                >=4.21     && <5
