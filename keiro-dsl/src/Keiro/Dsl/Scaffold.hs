@@ -1163,13 +1163,10 @@ emitGeneratedNominals languageContract ctx owners =
         else []
     equalityImports =
       ["import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)" | usesEquality]
-        <> if usesExactEquality
-          then
-            [ "import Data.List.NonEmpty (NonEmpty (..))",
-              "import Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, textProjectionDomain)",
-              "import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)"
-            ]
-          else []
+        <> ["import Data.List.NonEmpty (NonEmpty (..))" | usesExactEquality]
+        <> ["import Keiki.ProjectionDomain (finiteProjectionDomain)" | usesExactEquality && null enforcingIds]
+        <> ["import Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, textProjectionDomain)" | usesExactEquality && not (null enforcingIds)]
+        <> ["import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)" | not (null enforcingIds)]
     internalImports =
       [ "import "
           <> generatedNominalInternalModule ctx

@@ -340,6 +340,7 @@ main = hspec $ do
             "behavior-complete-workspace/declarations.keiro",
             "behavior-complete-workspace/journey.keiro",
             "behavior-complete.keiro",
+            "id-domain-migration-v3.keiro",
             "language-future.keiro",
             "language-identifier-v1.keiro",
             "language-identifier-v2.keiro",
