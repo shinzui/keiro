@@ -162,7 +162,7 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
 -- member file.
 workspaceModules :: [GoldenPayload] -> Context -> WorkspaceSpec -> [(ScaffoldModule, ModuleProvenance)]
 workspaceModules goldens ctx workspace =
-  [attributed (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwners ctx merged]
+  [attributed (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
     <> [attributed ContextLevel m | m <- scaffoldReplayAudit ctx merged]
     <> concat
       [ map (attributed (nodeProvenance node)) (emittersFor node)

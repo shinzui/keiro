@@ -80,7 +80,10 @@ effectiveLanguageContractForVersion version = do
   pure
     EffectiveLanguageContract
       { effectiveContractLanguageVersion = version,
-        effectiveRuntimeSemantics = "keiro-dsl/runtime-semantics/1"
+        effectiveRuntimeSemantics =
+          if languageVersionNumber version >= 3
+            then "keiro-dsl/runtime-semantics/2"
+            else "keiro-dsl/runtime-semantics/1"
       }
 
 -- | Fold/replay discriminator for runtime semantics newer than the historical

@@ -40,6 +40,7 @@ library
   import:          warnings, shared
   exposed-modules:
     Keiro.Codec
+    Keiro.Codec.IdDomain
     Keiro.Codec.Nominal
     Keiro.Codec.Structural
     Keiro.Codec.Structural.Generic
@@ -62,6 +63,7 @@ library
     , keiki         >=0.7  && <0.8
     , kiroku-store  >=0.3  && <0.4
     , lens          >=5.2  && <5.4
+    , mmzk-typeid   >=0.7  && <0.8
     , scientific    >=0.3  && <0.4
     , text          >=2.1  && <2.2
     , time          >=1.12 && <1.15

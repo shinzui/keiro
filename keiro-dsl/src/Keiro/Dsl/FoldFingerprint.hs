@@ -24,7 +24,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService, runtimeSemanticsFingerprintSegment)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService, runtimeSemanticsFingerprintSegment)
 import Keiro.Dsl.TypeGraph
 
 -- | The sixteen-hex-digit identity of an aggregate's replay fold under the
@@ -87,25 +87,27 @@ aggregateFoldSurfaceForService service aggregate =
         ]
     nominalEqualitySegments =
       [ "nominal-equality-use:" <> identity
-      | identity <- Set.toAscList (nominalEqualityUses spec aggregate)
+      | identity <- Set.toAscList (nominalEqualityUses service aggregate)
       ]
 
 -- | Equality representation belongs in the fold identity only when a guard
 -- actually compares that declaration. This keeps unrelated binding metadata out
 -- of replay compatibility while ensuring a witness/domain change cannot silently
 -- retain the old fold fingerprint.
-nominalEqualityUses :: Spec -> Aggregate -> Set Text
-nominalEqualityUses spec aggregate =
+nominalEqualityUses :: CheckedService -> Aggregate -> Set Text
+nominalEqualityUses service aggregate =
   Set.fromList
     [ identity
     | transition <- aggTransitions aggregate,
       guardSyntax <- maybeToList (tGuard transition),
       Right guardExpression <- [resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax],
-      identity <- equalityIdentities guardExpression
+      identity <- equalityIdentities (checkedLanguageContract service) guardExpression
     ]
+  where
+    spec = checkedSpec service
 
-equalityIdentities :: TypedScalarExpr -> [Text]
-equalityIdentities expression =
+equalityIdentities :: EffectiveLanguageContract -> TypedScalarExpr -> [Text]
+equalityIdentities languageContract expression =
   current <> children
   where
     current = case typedScalarNode expression of
@@ -113,7 +115,7 @@ equalityIdentities expression =
       TypedNotEqual left _ -> equalityIdentity left
       _ -> []
     equalityIdentity operand = case typedScalarType operand of
-      AggregateNominal nominal -> maybeToList (nominalEqualityIdentity nominal)
+      AggregateNominal nominal -> maybeToList (nominalEqualityIdentityForService languageContract nominal)
       _ -> []
     children = case typedScalarNode expression of
       TypedLiteral {} -> []
@@ -127,7 +129,7 @@ equalityIdentities expression =
       TypedCompare _ left right -> recurse left right
       TypedAnd left right -> recurse left right
       TypedOr left right -> recurse left right
-    recurse left right = equalityIdentities left <> equalityIdentities right
+    recurse left right = equalityIdentities languageContract left <> equalityIdentities languageContract right
 
 nominalUseNames :: Aggregate -> [(Text, Name)]
 nominalUseNames aggregate =

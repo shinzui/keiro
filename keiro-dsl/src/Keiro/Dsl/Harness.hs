@@ -35,6 +35,7 @@ where
 
 import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -402,7 +403,7 @@ emitHarness goldens a =
            "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
            codecDecodeRawImport
          ]
-      ++ generatedNominalTypeImports (aContext a) (generatedNominalHarnessTypes a)
+      ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (generatedNominalHarnessTypes a)
       ++ mappedHarnessImports a
       ++ nominalHarnessImports a
       ++ aggregateHarnessImports a
@@ -662,23 +663,33 @@ commandSampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
 commandSampleValue aggregate fieldName fieldType = case fieldType of
   AggregateNominal nominal
     | nominalEqualityUsedInGeneratedExpressions nominal aggregate -> case find matchesRegister (aRegs aggregate) of
-        Just register -> renderRegisterInitial (rrInitial register)
+        Just register -> regInitialValueForHarness aggregate register
         Nothing -> fallback
   _ -> fallback
   where
     fallback = sampleValue aggregate fieldName fieldType
     matchesRegister register = rrName register == fieldName && rrType register == fieldType
+    regInitialValueForHarness owner register = case rrType register of
+      AggregateNominal nominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
+      _ -> renderRegisterInitial (rrInitial register)
 
 sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
-sampleValue a fieldName ty = case fieldCat a ty of
-  IdCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
-  EnumCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
-  MappedStructuralCat declaration _ -> fixtureSample (sdFixtures declaration)
-  MappedOpaqueCat declaration -> fixtureSample (odFixtures declaration)
-  OtherCat -> case ty of
-    AggregateVertex vertexType
-      | vertexType == aVertexType a -> initialVertex a
-    _ -> aggregateSampleHaskell (aSymbols a) fieldName ty
+sampleValue a fieldName ty = case ty of
+  AggregateNominal nominal
+    | GeneratedNominal <- resolvedNominalOwnership nominal,
+      Just sample <- generatedIdSampleHaskell a nominal ->
+        sample
+  _ -> fallback
+  where
+    fallback = case fieldCat a ty of
+      IdCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
+      EnumCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
+      MappedStructuralCat declaration _ -> fixtureSample (sdFixtures declaration)
+      MappedOpaqueCat declaration -> fixtureSample (odFixtures declaration)
+      OtherCat -> case ty of
+        AggregateVertex vertexType
+          | vertexType == aVertexType a -> initialVertex a
+        _ -> aggregateSampleHaskell (aSymbols a) fieldName ty
 
 aggregateHarnessImports :: Agg -> [Text]
 aggregateHarnessImports aggregate =

@@ -36,11 +36,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: freeze the successor ID-domain contract from authoritative TypeID APIs, verify
-  its Keiki 0.7 exact textual projection, and register the new language semantic through Plan
-  169's checked service contract.
-- [ ] Milestone 2: generate hidden-representation IDs, safe constructors, and boundary-specific
-  public/current versus legacy replay codecs for generated and consumer-bound ownership.
+- [x] (2026-08-01 12:20Z) Reverified dependency authority before implementation: Hackage publishes
+  `mmzk-typeid` 0.7.1.1 at upstream tag `v0.7.1.1`
+  (`0624a652f671a1e7dc4e8d902fba0fe9a259d2e8`), while Keiki remains 0.7.0.0 at annotated tag
+  `v0.7.0.0` (`7c5d433ef4455e9e626347f89cb3a416bad62e72`); the existing `>=0.7 && <0.8`
+  bounds admit both authoritative releases.
+- [x] (2026-08-01 13:05Z) Milestone 1: froze `keiro-dsl/id-domain/typeid-v7/1` as canonical
+  lowercase text with the declared prefix, one underscore, a 26-character Crockford suffix,
+  26-or-prefix-plus-27 maximum length, UUIDv7 version/variant bits, and JSON string encoding;
+  registered language 3 as `keiro-dsl/runtime-semantics/2` and proved the runtime/Keiki boundary
+  vector with the focused `ID domain` tests.
+- [x] (2026-08-01 13:05Z) Milestone 2 generated-owner slice: language-3 generated IDs now have an
+  abstract public `Nominals` facade with safe `parseX`/`mkX` and validating JSON, while a distinct
+  generated `Nominals.Internal` module owns the raw constructor and explicitly named legacy replay
+  function. Aggregate domain modules import the type abstractly and event codecs alone import the
+  unsafe legacy seam.
+- [ ] Milestone 2 remaining: prove generated/consumer-bound admission parity, wrong-prefix and
+  normalization rejection, compiled hidden-constructor enforcement, and current/public codec
+  behavior.
 - [ ] Milestone 3: integrate legacy upcast/replay, snapshots, literals, fixtures, fingerprints,
   diffs, upgrade reports, and scaffold adoption.
 - [ ] Milestone 4: add property, migration, mutation, workspace, documentation, ADR, and full
@@ -64,6 +77,10 @@ implementation. Provide concise evidence.
   projection/reconstruction evidence. Hackage now publishes those APIs as `0.7.0.0`, and
   `v0.7.0.0` resolves to release commit `7c5d433ef4455e9e626347f89cb3a416bad62e72`.
   That is the authoritative symbolic domain surface required here and by Plan 170.
+- 2026-08-01: the current authoritative `mmzk-typeid` release is 0.7.1.1, not 0.7.0.0. Its public
+  `parseText` validates canonical Crockford text and the declaration prefix, while `checkKindID`
+  separately validates the UUIDv7 version and RFC variant. The successor Keiro contract must call
+  both; `parseText` alone is insufficient for the frozen v7 domain.
 
 
 ## Decision Log

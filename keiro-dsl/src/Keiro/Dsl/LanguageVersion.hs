@@ -104,11 +104,16 @@ version1 = LanguageVersion 1
 version2 :: LanguageVersion
 version2 = LanguageVersion 2
 
+version3 :: LanguageVersion
+version3 = LanguageVersion 3
+
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
   LanguageDefinition version1 Nothing LanguageBodyParserV1
-    :| [LanguageDefinition version2 (Just version1) LanguageBodyParserV2]
+    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2,
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2
+       ]
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion

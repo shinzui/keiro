@@ -30,14 +30,16 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (idDomainContractFor)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
 
@@ -363,7 +365,7 @@ clockAtoms = Set.fromList ["now", "currentTime", "wallClock", "today", "utcNow"]
 -- An empty list means valid. Current released versions share this policy, but
 -- selecting it at this boundary prevents successor semantics from being lost.
 validateService :: CheckedService -> [Diagnostic]
-validateService service = validateCheckedSpec (checkedSpec service)
+validateService service = validateCheckedSpec (checkedLanguageContract service) (checkedSpec service)
 
 -- | Compatibility wrapper for callers that have only a normalized graph. It
 -- explicitly selects legacy/version-1 semantics; production source/workspace
@@ -371,14 +373,23 @@ validateService service = validateCheckedSpec (checkedSpec service)
 validateSpec :: Spec -> [Diagnostic]
 validateSpec = validateService . legacyCheckedService
 
-validateCheckedSpec :: Spec -> [Diagnostic]
-validateCheckedSpec spec =
-  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
+validateCheckedSpec languageContract spec =
+  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
 
-validateNominal :: Spec -> [Diagnostic]
-validateNominal spec = case Nominal.resolveNominalTypes spec of
-  Right _ -> []
-  Left errors -> map nominalTypeDiagnostic (NE.toList errors)
+validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
+validateNominal languageContract spec = domainErrors <> resolutionErrors
+  where
+    domainErrors =
+      [ mkErr (locLine (idLoc declaration)) NominalInvalidIdPrefix $
+          "id '" <> idName declaration <> "' has invalid TypeID prefix '" <> idPrefix declaration <> "': " <> T.pack (show reason)
+      | declaration <- specIds spec,
+        Just _ <- [idDomainContractFor languageContract (idPrefix declaration)],
+        Just reason <- [TypeID.checkPrefix (idPrefix declaration)]
+      ]
+    resolutionErrors = case Nominal.resolveNominalTypes spec of
+      Right _ -> []
+      Left errors -> map nominalTypeDiagnostic (NE.toList errors)
 
 nominalTypeDiagnostic :: Nominal.NominalTypeError -> Diagnostic
 nominalTypeDiagnostic nominalError = case nominalError of
@@ -392,7 +403,7 @@ nominalTypeDiagnostic nominalError = case nominalError of
   Nominal.NominalInvalidIdentity name loc ingredient value ->
     problem loc NominalInvalidIdentity $ "nominal declaration '" <> name <> "' has invalid " <> ingredient <> " '" <> value <> "'"
   Nominal.NominalInvalidIdPrefix name loc prefix detail ->
-    problem loc NominalInvalidIdPrefix $ "bound id '" <> name <> "' has invalid TypeID prefix '" <> prefix <> "': " <> detail
+    problem loc NominalInvalidIdPrefix $ "id '" <> name <> "' has invalid TypeID prefix '" <> prefix <> "': " <> detail
   Nominal.NominalUnsupportedScalar name loc representation ->
     problem loc NominalUnsupportedRepresentation $
       "nominal scalar '" <> name <> "' uses unsupported representation '" <> representation <> "'; supported representations are Text, Int, Natural, Bool, and Time"

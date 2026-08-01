@@ -51,7 +51,7 @@ import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessR
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
-import Keiro.Dsl.NominalType (nominalEqualityIdentities)
+import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
@@ -136,7 +136,7 @@ scaffoldServiceModules = scaffoldServiceModulesWithGoldens []
 
 scaffoldServiceModulesWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> [ScaffoldModule]
 scaffoldServiceModulesWithGoldens goldens ctx service =
-  scaffoldStructural ctx spec
+  scaffoldStructuralForService ctx service
     <> scaffoldReplayAudit ctx spec
     <> concat
       [ case node of
@@ -414,7 +414,7 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recLanguageContract = checkedLanguageContract service,
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
-      recNominalEqualities = nominalEqualityIdentities spec,
+      recNominalEqualities = nominalEqualityIdentitiesForService service,
       recBindingObligations = either (const []) id (bindingHoles spec),
       recBehaviorRequirements = currentBehavior
     }

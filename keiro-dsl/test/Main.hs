@@ -19,7 +19,9 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
+import Keiro.Codec.IdDomain (idDomainSampleText, idDomainTextPattern, typeIdV7Domain, validateIdDomainText)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare
@@ -33,6 +35,7 @@ import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldFingerp
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
@@ -178,7 +181,7 @@ main = hspec $ do
       failureCode "language keiro-dsl 0\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl nope\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl -1\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
-      failureCode "language keiro-dsl 3\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
+      failureCode "language keiro-dsl 4\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
       failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
       failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
 
@@ -204,10 +207,10 @@ main = hspec $ do
       sourceFailureAt MisplacedLanguagePreamble 3 "context located\nid language prefix=lang\nlanguage keiro-dsl 1\n"
 
     it "rejects a future version before parsing an invalid v1 body" $
-      case parseSource "future.keiro" "language keiro-dsl 3\nthis is not a v2 body\n" of
+      case parseSource "future.keiro" "language keiro-dsl 4\nthis is not a v2 body\n" of
         Left failure@(SourceLanguageFailure diagnostic) -> do
           sourceLanguageErrorCode diagnostic `shouldBe` UnsupportedLanguageVersion
-          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2"
+          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2, 3"
           renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
         other -> expectationFailure ("expected source-language failure, got " <> show other)
 
@@ -364,7 +367,7 @@ main = hspec $ do
       (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
       futureCode `shouldBe` ExitFailure 1
       T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
-      futureErr `shouldContain` "supported versions: 1, 2"
+      futureErr `shouldContain` "supported versions: 1, 2, 3"
       futureErr `shouldNotContain` "expecting `context`"
       (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["inspect", "test/fixtures/language-legacy.keiro", "--format=json"]
       legacyCode `shouldBe` ExitSuccess
@@ -387,7 +390,7 @@ main = hspec $ do
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"
-          futureSource = "language keiro-dsl 3\nthis body must not parse\n"
+          futureSource = "language keiro-dsl 4\nthis body must not parse\n"
           source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/future.keiro", futureSource)])
       loaded <- loadWorkspace source "service.keiro-workspace"
       case loaded of
@@ -410,6 +413,81 @@ main = hspec $ do
           map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
           map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
         _ -> expectationFailure "canonical workspace had no member"
+
+  describe "ID domain" $ do
+    it "registers language 3 as the first enforced runtime contract" $ do
+      parsed <- case parseSource "id-domain-v3.keiro" "language keiro-dsl 3\ncontext id-domain\n" of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let contract = checkedLanguageContract (checkedSource parsed)
+      effectiveRuntimeSemantics contract `shouldBe` "keiro-dsl/runtime-semantics/2"
+      effectiveContractLanguageVersion contract `shouldBe` maybe (error "missing v3") id (languageVersion 3)
+      idDomainContractFor contract "req" `shouldSatisfy` (/= Nothing)
+
+    it "keeps runtime validation and the exact Keiki text image in agreement" $ do
+      let contract = typeIdV7Domain "req"
+          sample = idDomainSampleText contract
+          suffix = T.drop (T.length "req_") sample
+          replaceAt position replacement value =
+            T.take position value <> T.singleton replacement <> T.drop (position + 1) value
+          accepted =
+            [ sample,
+              replaceAt (T.length "req_" + 10) 'f' sample,
+              replaceAt (T.length "req_" + 13) 'v' sample
+            ]
+          rejected =
+            [ "",
+              "req_",
+              "other_" <> suffix,
+              "req__" <> suffix,
+              T.dropEnd 1 sample,
+              sample <> "0",
+              T.toUpper sample,
+              replaceAt (T.length "req_" + 0) '8' sample,
+              replaceAt (T.length "req_" + 10) 'd' sample,
+              replaceAt (T.length "req_" + 13) 'c' sample
+            ]
+          patternValue = either (error . show) id (idDomainTextPattern contract)
+      idDomainVersion contract `shouldBe` "keiro-dsl/id-domain/typeid-v7/1"
+      idDomainSeparator contract `shouldBe` '_'
+      idDomainSuffixLength contract `shouldBe` 26
+      idDomainMaxLength contract `shouldBe` T.length sample
+      forM_ accepted $ \value -> do
+        validateIdDomainText contract value `shouldBe` Right ()
+        matchesTextPattern patternValue value `shouldBe` True
+      forM_ rejected $ \value -> do
+        validateIdDomainText contract value `shouldSatisfy` isLeft
+        matchesTextPattern patternValue value `shouldBe` False
+
+    it "emits an abstract public ID, an internal legacy seam, and exact equality" $ do
+      v2Source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      let v3Source = T.replace "language keiro-dsl 2" "language keiro-dsl 3" v2Source
+      parsed <- case parseSource "aggregate-scalar-expressions-v3.keiro" v3Source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          moduleAt path = case [value | value <- modules, modulePath value == path] of
+            [value] -> pure value
+            values -> expectationFailure ("expected one module at " <> path <> ", got " <> show (map modulePath values)) >> fail "unreachable"
+      validateService service `shouldBe` []
+      publicNominals <- moduleAt "Generated/AggregateScalarExpressions/Nominals.hs"
+      internalNominals <- moduleAt "Generated/AggregateScalarExpressions/Nominals/Internal.hs"
+      domainModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs"
+      codecModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs"
+      expressionsModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Expressions.hs"
+      moduleText publicNominals `shouldSatisfy` T.isInfixOf "parseRequestId"
+      moduleText publicNominals `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection RequestIdEqualityProjection"
+      moduleText publicNominals `shouldSatisfy` T.isInfixOf "idDomainTextPattern (typeIdV7Domain \"req\")"
+      moduleText publicNominals `shouldSatisfy` (not . T.isInfixOf "unsafeRequestIdFromLegacyText")
+      moduleText publicNominals `shouldSatisfy` (not . T.isInfixOf "newtype RequestId")
+      moduleText internalNominals `shouldSatisfy` T.isInfixOf "newtype RequestId = RequestId Text"
+      moduleText internalNominals `shouldSatisfy` T.isInfixOf "unsafeRequestIdFromLegacyText"
+      moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "RequestId (..)")
+      moduleText codecModule `shouldSatisfy` T.isInfixOf "unsafeRequestIdFromLegacyText <$>"
+      moduleText expressionsModule `shouldSatisfy` T.isInfixOf "case parseRequestId"
+      firewallBreaches modules `shouldBe` []
 
   describe "scalar expressions" $ do
     it "parses, validates, and round-trips the authoritative v2 scalar fixture" $ do

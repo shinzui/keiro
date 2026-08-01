@@ -28,11 +28,16 @@ module Keiro.Dsl.Scaffold
     NominalUseSite (..),
     NominalGenerationOwner (..),
     planNominalGeneration,
+    planNominalGenerationForService,
     generatedNominalsInTypes,
     generatedNominalTypeImports,
+    generatedNominalTypeImportsForService,
+    generatedIdSampleHaskell,
     scaffoldReplayAudit,
     scaffoldStructural,
+    scaffoldStructuralForService,
     scaffoldStructuralOwners,
+    scaffoldStructuralOwnersForService,
     codecComparisonModule,
     codecComparisonBanner,
     bindingSkeletonModules,
@@ -57,6 +62,7 @@ module Keiro.Dsl.Scaffold
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
+    aggregateCheckedService,
     ResolvedRegister (..),
     ResolvedCtor (..),
     StructuralProjection (..),
@@ -84,7 +90,7 @@ import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -96,10 +102,11 @@ import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind 
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (IdDomainContract, idDomainContractFor, idDomainPrefix, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
 import Numeric (showHex)
@@ -347,6 +354,7 @@ hasAllowedExplicitImportList allowed line =
 -- | Resolved, denormalized view of an aggregate used by every emitter.
 data Agg = Agg
   { aContext :: !Context,
+    aLanguageContract :: !EffectiveLanguageContract,
     aSpec :: !Spec,
     aAggregate :: !Aggregate,
     aCtxPascal :: !Text,
@@ -375,6 +383,13 @@ data Agg = Agg
     -- | e.g. @HospitalCapacity.Reservation@
     aHolePrefix :: !Text
   }
+
+aggregateCheckedService :: Agg -> CheckedService
+aggregateCheckedService aggregate =
+  CheckedService
+    { checkedLanguageContract = aLanguageContract aggregate,
+      checkedSpec = aSpec aggregate
+    }
 
 data ResolvedRegister = ResolvedRegister
   { rrName :: !Name,
@@ -406,6 +421,7 @@ resolveAggForService :: Context -> CheckedService -> Aggregate -> Agg
 resolveAggForService ctx service agg =
   Agg
     { aContext = ctx,
+      aLanguageContract = checkedLanguageContract service,
       aSpec = spec,
       aAggregate = agg,
       aCtxPascal = ctxPascal,
@@ -493,9 +509,12 @@ generatedNominalsInTypes resolvedTypes =
 -- and validation already reject malformed declarations; retaining the checked
 -- error here keeps this function total for direct library callers.
 planNominalGeneration :: Context -> Spec -> Either (NonEmpty NominalTypeError) [NominalGenerationOwner]
-planNominalGeneration ctx spec = do
+planNominalGeneration ctx spec = planNominalGenerationForService ctx (legacyCheckedService spec)
+
+planNominalGenerationForService :: Context -> CheckedService -> Either (NonEmpty NominalTypeError) [NominalGenerationOwner]
+planNominalGenerationForService ctx service = do
   registry <- resolveNominalTypes spec
-  let aggregates = [resolveAgg ctx spec aggregate | NAggregate aggregate <- specNodes spec]
+  let aggregates = [resolveAggForService ctx service aggregate | NAggregate aggregate <- specNodes spec]
       generated =
         [ nominal
         | nominal <- Map.elems (nominalTypes registry),
@@ -511,6 +530,7 @@ planNominalGeneration ctx spec = do
     | nominal <- generated
     ]
   where
+    spec = checkedSpec service
     usesFor nominal aggregate =
       [ NominalUseSite (aName aggregate) useKind
       | useKind <- aggregateUseKinds nominal aggregate
@@ -548,7 +568,10 @@ aggregateUseKinds nominal aggregate =
 -- only generated wire representations. The projection facade contains only
 -- schema-derived Keiki field witnesses; neither layer owns consumer behavior.
 scaffoldStructural :: Context -> Spec -> [ScaffoldModule]
-scaffoldStructural ctx spec = map fst (scaffoldStructuralOwners ctx spec)
+scaffoldStructural ctx spec = scaffoldStructuralForService ctx (legacyCheckedService spec)
+
+scaffoldStructuralForService :: Context -> CheckedService -> [ScaffoldModule]
+scaffoldStructuralForService ctx service = map fst (scaffoldStructuralOwnersForService ctx service)
 
 -- | 'scaffoldStructural' paired with the mapped declarations each module was
 -- emitted for. A shape module names exactly one declaration; a binding skeleton
@@ -561,14 +584,17 @@ scaffoldStructural ctx spec = map fst (scaffoldStructuralOwners ctx spec)
 -- which member file — produced each structural module, without parsing the
 -- human-readable 'origin' string.
 scaffoldStructuralOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
-scaffoldStructuralOwners ctx spec = case resolveTypeGraph spec of
+scaffoldStructuralOwners ctx spec = scaffoldStructuralOwnersForService ctx (legacyCheckedService spec)
+
+scaffoldStructuralOwnersForService :: Context -> CheckedService -> [(ScaffoldModule, [Name])]
+scaffoldStructuralOwnersForService ctx service = case resolveTypeGraph (checkedSpec service) of
   Left _ -> []
   Right graph ->
     [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
       <> projectionModules
-      <> generatedNominalOwners ctx spec
+      <> generatedNominalOwners ctx service
       <> nominalRepresentationOwners ctx spec
-      <> nominalProjectionOwners ctx spec
+      <> nominalProjectionOwners ctx service
       <> bindingSkeletonOwners ctx spec graph
     where
       structural =
@@ -586,6 +612,7 @@ scaffoldStructuralOwners ctx spec = case resolveTypeGraph spec of
           )
         | not (null (projectionSpecs graph))
         ]
+      spec = checkedSpec service
 
 -- | Plan one opt-in, non-production historical-codec comparison module.
 --
@@ -1034,36 +1061,61 @@ nominalRepresentationModule ctx name = case placement ctx of
 -- empty declaration attribution is intentional: in a workspace this module is
 -- context-level even when all declarations currently happen to live in one
 -- member, so moving that member cannot move Haskell type ownership.
-generatedNominalOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
-generatedNominalOwners ctx spec = case planNominalGeneration ctx spec of
+generatedNominalOwners :: Context -> CheckedService -> [(ScaffoldModule, [Name])]
+generatedNominalOwners ctx service = case planNominalGenerationForService ctx service of
   Left _ -> []
   Right [] -> []
   Right owners ->
     [ ( ScaffoldModule
           { modulePath = T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs"),
-            moduleText = emitGeneratedNominals ctx owners,
+            moduleText = emitGeneratedNominals languageContract ctx owners,
             kind = Generated,
             origin = "context " <> specContext spec <> " generated nominal declarations"
           },
         []
       )
     ]
+      <> [ ( ScaffoldModule
+               { modulePath = T.unpack (T.replace "." "/" (generatedNominalInternalModule ctx) <> ".hs"),
+                 moduleText = emitGeneratedNominalInternals ctx enforcingIds,
+                 kind = Generated,
+                 origin = "context " <> specContext spec <> " generated nominal ID internals"
+               },
+             []
+           )
+         | not (null enforcingIds)
+         ]
+    where
+      enforcingIds =
+        [ (nominal, contract)
+        | owner <- owners,
+          let nominal = nominalDeclaration owner,
+          IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+          Just contract <- [idDomainContractFor languageContract prefix]
+        ]
+  where
+    spec = checkedSpec service
+    languageContract = checkedLanguageContract service
 
-emitGeneratedNominals :: Context -> [NominalGenerationOwner] -> Text
-emitGeneratedNominals ctx owners =
+generatedNominalInternalModule :: Context -> Text
+generatedNominalInternalModule ctx = generatedNominalModule ctx <> ".Internal"
+
+emitGeneratedNominals :: EffectiveLanguageContract -> Context -> [NominalGenerationOwner] -> Text
+emitGeneratedNominals languageContract ctx owners =
   nl
     ( equalityPragmas
         <> [ "{-# LANGUAGE DeriveAnyClass #-}",
              "{-# LANGUAGE DeriveGeneric #-}",
              "{-# LANGUAGE LambdaCase #-}",
              generatedBanner,
-             "module " <> generatedNominalModule ctx <> " where",
+             moduleHeader,
              "",
              "import Data.Aeson (FromJSON, ToJSON)",
              "import Data.Text (Text)",
              "import GHC.Generics (Generic)",
              "import Keiki.Shape (CanonicalTypeName)"
            ]
+        <> internalImports
         <> equalityImports
         <> [ "",
              sectionsOf [map emitOwner owners]
@@ -1071,7 +1123,36 @@ emitGeneratedNominals ctx owners =
     )
   where
     usesEquality = any nominalEqualityUsed owners
-    usesExactEquality = any (\owner -> nominalEqualityUsed owner && isEnum (nominalDeclaration owner)) owners
+    usesExactEquality = any (\owner -> nominalEqualityUsed owner && exactOwner (nominalDeclaration owner)) owners
+    enforcingIds =
+      [ nominal
+      | owner <- owners,
+        let nominal = nominalDeclaration owner,
+        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+        Just _ <- [idDomainContractFor languageContract prefix]
+      ]
+    moduleHeader
+      | null enforcingIds = "module " <> generatedNominalModule ctx <> " where"
+      | otherwise =
+          nl
+            [ "module " <> generatedNominalModule ctx,
+              "  ( " <> T.intercalate "\n  , " (concatMap ownerExports owners),
+              "  ) where"
+            ]
+    ownerExports owner =
+      baseExports <> equalityExports
+      where
+        nominal = nominalDeclaration owner
+        name = resolvedNominalName nominal
+        baseExports = case resolvedNominalRepresentation nominal of
+          IdRepresentation prefix
+            | Just _ <- idDomainContractFor languageContract prefix ->
+                [name, "parse" <> name, "mk" <> name, nominalTextName nominal]
+          _ -> [name <> " (..)", nominalTextName nominal]
+        equalityExports =
+          if nominalEqualityUsed owner
+            then [nominalEqualityTagName nominal, nominalEqualityWitnessName nominal]
+            else []
     equalityPragmas =
       if usesEquality
         then
@@ -1083,13 +1164,35 @@ emitGeneratedNominals ctx owners =
     equalityImports =
       ["import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)" | usesEquality]
         <> if usesExactEquality
-          then ["import Data.List.NonEmpty (NonEmpty (..))", "import Keiki.ProjectionDomain (finiteProjectionDomain)"]
+          then
+            [ "import Data.List.NonEmpty (NonEmpty (..))",
+              "import Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, textProjectionDomain)",
+              "import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)"
+            ]
           else []
-    emitOwner owner = emitGeneratedNominal (nominalEqualityUsed owner) (nominalDeclaration owner)
-    isEnum nominal = case resolvedNominalRepresentation nominal of EnumRepresentation {} -> True; _ -> False
+    internalImports =
+      [ "import "
+          <> generatedNominalInternalModule ctx
+          <> " ("
+          <> T.intercalate
+            ", "
+            (concatMap (\nominal -> [resolvedNominalName nominal, "mk" <> resolvedNominalName nominal, "parse" <> resolvedNominalName nominal, nominalTextName nominal]) enforcingIds)
+          <> ")"
+      | not (null enforcingIds)
+      ]
+    emitOwner owner = emitGeneratedNominal languageContract (nominalEqualityUsed owner) (nominalDeclaration owner)
+    exactOwner nominal = case resolvedNominalRepresentation nominal of
+      EnumRepresentation {} -> True
+      IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
+      ScalarRepresentation {} -> False
 
-emitGeneratedNominal :: Bool -> ResolvedNominalType -> Text
-emitGeneratedNominal equalityUsed nominal = case resolvedNominalRepresentation nominal of
+emitGeneratedNominal :: EffectiveLanguageContract -> Bool -> ResolvedNominalType -> Text
+emitGeneratedNominal languageContract equalityUsed nominal = case resolvedNominalRepresentation nominal of
+  IdRepresentation prefix
+    | Just _ <- idDomainContractFor languageContract prefix ->
+        nl $
+          ["instance CanonicalTypeName " <> name]
+            <> equalitySection
   IdRepresentation {} ->
     nl $
       [ "newtype " <> name <> " = " <> name <> " Text",
@@ -1119,10 +1222,10 @@ emitGeneratedNominal equalityUsed nominal = case resolvedNominalRepresentation n
     error "generated nominal scalar reached generated declaration emission"
   where
     name = resolvedNominalName nominal
-    equalitySection = if equalityUsed then ["", emitGeneratedNominalEquality nominal] else []
+    equalitySection = if equalityUsed then ["", emitGeneratedNominalEquality languageContract nominal] else []
 
-emitGeneratedNominalEquality :: ResolvedNominalType -> Text
-emitGeneratedNominalEquality nominal =
+emitGeneratedNominalEquality :: EffectiveLanguageContract -> ResolvedNominalType -> Text
+emitGeneratedNominalEquality languageContract nominal =
   nl $
     [ "data " <> tagName,
       "",
@@ -1142,9 +1245,21 @@ emitGeneratedNominalEquality nominal =
     name = resolvedNominalName nominal
     tagName = nominalEqualityTagName nominal
     witnessName = nominalEqualityWitnessName nominal
-    equalityIdentity = fromMaybe (error "generated nominal equality contract missing") (nominalEqualityIdentity nominal)
+    equalityIdentity = fromMaybe (error "generated nominal equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
     (exactInstance, witnessConstructor) = case resolvedNominalRepresentation nominal of
-      IdRepresentation {} -> ([], "fieldWitness")
+      IdRepresentation prefix -> case idDomainContractFor languageContract prefix of
+        Nothing -> ([], "fieldWitness")
+        Just _ ->
+          ( [ "",
+              patternName <> " :: TextPattern",
+              patternName <> " = either (error . show) id (idDomainTextPattern (typeIdV7Domain " <> tshow prefix <> "))",
+              "",
+              "instance ExactFieldProjection " <> tagName <> " where",
+              "  fieldProjectionDomain _ = textProjectionDomain " <> patternName,
+              "  reconstructFieldOwner _ = either (const Nothing) Just . parse" <> name
+            ],
+            "exactFieldWitness"
+          )
       EnumRepresentation constructors ->
         ( [ "",
             "instance ExactFieldProjection " <> tagName <> " where",
@@ -1156,6 +1271,61 @@ emitGeneratedNominalEquality nominal =
           "exactFieldWitness"
         )
       ScalarRepresentation {} -> error "generated nominal scalar equality emission"
+    patternName = lowerFirst name <> "IdDomainPattern"
+
+emitGeneratedNominalInternals :: Context -> [(ResolvedNominalType, IdDomainContract)] -> Text
+emitGeneratedNominalInternals ctx nominals =
+  nl
+    [ "{-# LANGUAGE DeriveGeneric #-}",
+      generatedBanner,
+      "module " <> generatedNominalInternalModule ctx,
+      "  ( " <> T.intercalate "\n  , " (concatMap exportsFor nominals),
+      "  ) where",
+      "",
+      "import Data.Aeson (FromJSON (..), ToJSON (..), withText)",
+      "import Data.Text (Text)",
+      "import Data.Text qualified as T",
+      "import GHC.Generics (Generic)",
+      "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)",
+      "",
+      sectionsOf [map emitInternal nominals]
+    ]
+  where
+    exportsFor (nominal, _) =
+      [ resolvedNominalName nominal,
+        "parse" <> resolvedNominalName nominal,
+        "mk" <> resolvedNominalName nominal,
+        nominalTextName nominal,
+        legacyNominalConstructorName nominal
+      ]
+    emitInternal (nominal, contract) =
+      nl
+        [ "newtype " <> name <> " = " <> name <> " Text",
+          "  deriving stock (Generic, Eq, Ord, Show)",
+          "",
+          "instance ToJSON " <> name <> " where",
+          "  toJSON = toJSON . " <> textName,
+          "",
+          "instance FromJSON " <> name <> " where",
+          "  parseJSON = withText " <> tshow name <> " (either (fail . T.unpack) pure . parse" <> name <> ")",
+          "",
+          "parse" <> name <> " :: Text -> Either Text " <> name,
+          "parse" <> name <> " input = case validateIdDomainText (typeIdV7Domain " <> tshow (idDomainPrefix contract) <> ") input of",
+          "  Left reason -> Left (T.pack (show reason))",
+          "  Right () -> Right (" <> name <> " input)",
+          "",
+          "mk" <> name <> " :: Text -> Either Text " <> name,
+          "mk" <> name <> " = parse" <> name,
+          "",
+          textName <> " :: " <> name <> " -> Text",
+          textName <> " (" <> name <> " value) = value",
+          "",
+          legacyNominalConstructorName nominal <> " :: Text -> " <> name,
+          legacyNominalConstructorName nominal <> " = " <> name
+        ]
+      where
+        name = resolvedNominalName nominal
+        textName = nominalTextName nominal
 
 nominalEqualityTagName :: ResolvedNominalType -> Text
 nominalEqualityTagName nominal = resolvedNominalName nominal <> "EqualityProjection"
@@ -1185,21 +1355,57 @@ generatedNominalTypeImports ctx nominals =
       <> ")"
   ]
 
-generatedNominalCodecImports :: Context -> [ResolvedNominalType] -> [Text]
-generatedNominalCodecImports _ [] = []
-generatedNominalCodecImports ctx nominals =
+generatedNominalTypeImportsForService :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
+generatedNominalTypeImportsForService _ _ [] = []
+generatedNominalTypeImportsForService service ctx nominals =
+  [ "import "
+      <> generatedNominalModule ctx
+      <> " ("
+      <> T.intercalate ", " [typeImport nominal | nominal <- stableNominals nominals]
+      <> ")"
+  ]
+  where
+    typeImport nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix
+        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> resolvedNominalName nominal
+      _ -> resolvedNominalName nominal <> " (..)"
+
+generatedNominalCodecImports :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
+generatedNominalCodecImports _ _ [] = []
+generatedNominalCodecImports service ctx nominals =
   [ "import "
       <> generatedNominalModule ctx
       <> " ("
       <> T.intercalate
         ", "
         ( concat
-            [ [resolvedNominalName nominal <> " (..)", nominalTextName nominal]
+            [ [typeImport nominal, nominalTextName nominal]
             | nominal <- stableNominals nominals
             ]
         )
       <> ")"
   ]
+    <> [ "import "
+           <> generatedNominalInternalModule ctx
+           <> " ("
+           <> T.intercalate ", " [legacyNominalConstructorName nominal | nominal <- enforcingIds]
+           <> ")"
+       | not (null enforcingIds)
+       ]
+  where
+    typeImport nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix
+        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> resolvedNominalName nominal
+      _ -> resolvedNominalName nominal <> " (..)"
+    enforcingIds =
+      [ nominal
+      | nominal <- stableNominals nominals,
+        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+        Just _ <- [idDomainContractFor (checkedLanguageContract service) prefix]
+      ]
+
+legacyNominalConstructorName :: ResolvedNominalType -> Text
+legacyNominalConstructorName nominal = "unsafe" <> resolvedNominalName nominal <> "FromLegacyText"
 
 stableNominals :: [ResolvedNominalType] -> [ResolvedNominalType]
 stableNominals = Map.elems . Map.fromList . map (\nominal -> (resolvedNominalName nominal, nominal))
@@ -1248,19 +1454,21 @@ nominalProjectionModule ctx = case placement ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".NominalProjections"
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.NominalProjections"
 
-nominalProjectionOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
-nominalProjectionOwners ctx spec = case nominalProjectionTypes spec of
+nominalProjectionOwners :: Context -> CheckedService -> [(ScaffoldModule, [Name])]
+nominalProjectionOwners ctx service = case nominalProjectionTypes spec of
   [] -> []
   nominals ->
     [ ( ScaffoldModule
           { modulePath = T.unpack (T.replace "." "/" (nominalProjectionModule ctx) <> ".hs"),
-            moduleText = emitNominalProjections ctx nominals,
+            moduleText = emitNominalProjections (checkedLanguageContract service) ctx nominals,
             kind = Generated,
             origin = "context " <> specContext spec <> " nominal scalar projection facade"
           },
         []
       )
     ]
+  where
+    spec = checkedSpec service
 
 nominalProjectionTypes :: Spec -> [ResolvedNominalType]
 nominalProjectionTypes spec =
@@ -1285,8 +1493,8 @@ nominalProjectionTypes spec =
         Right resolved <- [inferAggregateFieldType symbols aggregate CommandFieldUse field]
       ]
 
-emitNominalProjections :: Context -> [ResolvedNominalType] -> Text
-emitNominalProjections ctx nominals =
+emitNominalProjections :: EffectiveLanguageContract -> Context -> [ResolvedNominalType] -> Text
+emitNominalProjections languageContract ctx nominals =
   nl $
     [ "{-# LANGUAGE DataKinds #-}",
       "{-# LANGUAGE TypeApplications #-}",
@@ -1309,6 +1517,7 @@ emitNominalProjections ctx nominals =
           <> [qualifiedModule (consumerNominalBinding binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
           <> [nominalRepresentationModule ctx (resolvedNominalName nominal) <> " qualified" | nominal <- nominals, EnumRepresentation {} <- [resolvedNominalRepresentation nominal]]
           <> ["Data.KindID qualified as KindID" | any hasId nominals]
+          <> ["Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain, validateIdDomainText)" | any hasEnforcedId nominals]
           <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasExactDomain nominals]
           <> ["Data.Text (Text)" | any usesText nominals]
           <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
@@ -1316,6 +1525,9 @@ emitNominalProjections ctx nominals =
           <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
     hasScalar wanted nominal = resolvedNominalRepresentation nominal == ScalarRepresentation wanted
     hasId nominal = case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False
+    hasEnforcedId nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
+      _ -> False
     hasExactDomain nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
     usesText nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
     emitNominalProjection nominal = case resolvedNominalOwnership nominal of
@@ -1344,34 +1556,31 @@ emitNominalProjections ctx nominals =
         witnessName = lowerFirst name <> "Witness"
     emitConsumerIdProjection nominal binding prefix =
       nl
-        [ patternName <> " :: TextPattern",
-          patternName <> " = either (error . show) id $ do",
-          "  prefix <- textLiteral " <> tshow (prefix <> "_"),
-          "  leading <- textCharSet ('0' :| \"1234567\")",
-          "  crockford <- textCharSet ('0' :| \"123456789abcdefghjkmnpqrstvwxyz\")",
-          "  suffix <- textRepeatBetween 25 25 crockford",
-          "  pure (textConcat (prefix :| [leading, suffix]))",
-          "",
-          "data " <> tagName,
-          "",
-          "instance FieldProjection " <> tagName <> " where",
-          "  type FieldName " <> tagName <> " = " <> tshow name,
-          "  type FieldOwner " <> tagName <> " = " <> ownerType,
-          "  type FieldResult " <> tagName <> " = Text",
-          "  fieldShapeId _ = " <> tshow equalityIdentity,
-          "  projectFieldValue _ = KindID.toText . nominalToRepresentation " <> bindingName,
-          "",
-          "instance ExactFieldProjection " <> tagName <> " where",
-          "  fieldProjectionDomain _ = textProjectionDomain " <> patternName,
-          "  reconstructFieldOwner _ value",
-          "    | not (matchesTextPattern " <> patternName <> " value) = Nothing",
-          "    | otherwise = case KindID.parseText @" <> tshow prefix <> " value of",
-          "        Left _ -> Nothing",
-          "        Right representation -> Just (nominalFromRepresentation " <> bindingName <> " representation)",
-          "",
-          witnessName <> " :: FieldWitness " <> tagName,
-          witnessName <> " = exactFieldWitness @" <> tagName
-        ]
+        ( patternLines
+            <> [ "",
+                 "data " <> tagName,
+                 "",
+                 "instance FieldProjection " <> tagName <> " where",
+                 "  type FieldName " <> tagName <> " = " <> tshow name,
+                 "  type FieldOwner " <> tagName <> " = " <> ownerType,
+                 "  type FieldResult " <> tagName <> " = Text",
+                 "  fieldShapeId _ = " <> tshow equalityIdentity,
+                 "  projectFieldValue _ = KindID.toText . nominalToRepresentation " <> bindingName,
+                 "",
+                 "instance ExactFieldProjection " <> tagName <> " where",
+                 "  fieldProjectionDomain _ = textProjectionDomain " <> patternName,
+                 "  reconstructFieldOwner _ value"
+               ]
+            <> validationGuard
+            <> [ "    | not (matchesTextPattern " <> patternName <> " value) = Nothing",
+                 "    | otherwise = case KindID.parseText @" <> tshow prefix <> " value of",
+                 "        Left _ -> Nothing",
+                 "        Right representation -> Just (nominalFromRepresentation " <> bindingName <> " representation)",
+                 "",
+                 witnessName <> " :: FieldWitness " <> tagName,
+                 witnessName <> " = exactFieldWitness @" <> tagName
+               ]
+        )
       where
         name = resolvedNominalName nominal
         tagName = nominalEqualityTagName nominal
@@ -1379,7 +1588,26 @@ emitNominalProjections ctx nominals =
         patternName = lowerFirst name <> "EqualityPattern"
         ownerType = renderHaskellSource (consumerNominalHaskell binding)
         bindingName = unQualifiedValueName (consumerNominalBinding binding)
-        equalityIdentity = fromMaybe (error "consumer ID equality contract missing") (nominalEqualityIdentity nominal)
+        equalityIdentity = fromMaybe (error "consumer ID equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
+        enforced = isJust (idDomainContractFor languageContract prefix)
+        patternLines
+          | enforced =
+              [ patternName <> " :: TextPattern",
+                patternName <> " = either (error . show) id (idDomainTextPattern (typeIdV7Domain " <> tshow prefix <> "))"
+              ]
+          | otherwise =
+              [ patternName <> " :: TextPattern",
+                patternName <> " = either (error . show) id $ do",
+                "  prefix <- textLiteral " <> tshow (prefix <> "_"),
+                "  leading <- textCharSet ('0' :| \"1234567\")",
+                "  crockford <- textCharSet ('0' :| \"123456789abcdefghjkmnpqrstvwxyz\")",
+                "  suffix <- textRepeatBetween 25 25 crockford",
+                "  pure (textConcat (prefix :| [leading, suffix]))"
+              ]
+        validationGuard =
+          [ "    | Left _ <- validateIdDomainText (typeIdV7Domain " <> tshow prefix <> ") value = Nothing"
+          | enforced
+          ]
     emitConsumerEnumProjection nominal binding constructors =
       nl $
         [ "data " <> tagName,
@@ -1411,7 +1639,7 @@ emitNominalProjections ctx nominals =
         bindingName = unQualifiedValueName (consumerNominalBinding binding)
         representationModule = nominalRepresentationModule ctx name
         encoderName = representationModule <> "." <> lowerFirst name <> "RepresentationText"
-        equalityIdentity = fromMaybe (error "consumer enum equality contract missing") (nominalEqualityIdentity nominal)
+        equalityIdentity = fromMaybe (error "consumer enum equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
     scalarHaskellType representation = case representation of
       ScalarRepresentation NominalText -> "Text"
       ScalarRepresentation NominalInt -> "Int"
@@ -3214,7 +3442,7 @@ emitDomain a =
            "import Keiki.Core (RegFile (..))"
          ]
       ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
-      ++ generatedNominalTypeImports (aContext a) (aGeneratedNominals a)
+      ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (aGeneratedNominals a)
       ++ map ("import " <>) (domainConsumerImports a)
       ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)",
            "",
@@ -3312,16 +3540,20 @@ emitInitialRegs a =
   where
     chain [] = ["  RNil"]
     chain rs =
-      [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue r <> " $"
+      [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue a r <> " $"
       | r <- init rs
       ]
-        ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue lastR <> " RNil"]
+        ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue a lastR <> " RNil"]
       where
         lastR = last rs
 
 -- | The Haskell initial value for a register, by the category of its type.
-regInitialValue :: ResolvedRegister -> Text
-regInitialValue = renderRegisterInitial . rrInitial
+regInitialValue :: Agg -> ResolvedRegister -> Text
+regInitialValue aggregate register = case rrInitial register of
+  InitialId name -> case find ((== name) . resolvedNominalName) (aGeneratedNominals aggregate) >>= generatedIdSampleHaskell aggregate of
+    Just value -> value
+    Nothing -> renderRegisterInitial (rrInitial register)
+  _ -> renderRegisterInitial (rrInitial register)
 
 domainConsumerImports :: Agg -> [Text]
 domainConsumerImports a =
@@ -3389,7 +3621,7 @@ emitCodec a =
            "",
            "import " <> aGenPrefix a <> ".Domain"
          ]
-      ++ generatedNominalCodecImports (aContext a) (codecGeneratedNominals a)
+      ++ generatedNominalCodecImports (aggregateCheckedService a) (aContext a) (codecGeneratedNominals a)
       ++ ( if hasMappedCodec a
              then
                [ "import Control.Monad (unless)",
@@ -3410,6 +3642,7 @@ emitCodec a =
            "import qualified Data.Text as T"
          ]
       ++ ["import Data.KindID qualified as KindID" | hasConsumerNominalIdCodec a]
+      ++ ["import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)" | hasEnforcedConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | hasConsumerNominalCodec a]
       ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasMappedCodec a]
       ++ [ "import Keiro.Codec (Codec (..), EventType (..))",
@@ -3462,6 +3695,15 @@ hasConsumerNominalIdCodec aggregate =
     (\nominal -> case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False)
     (codecConsumerNominals aggregate)
 
+hasEnforcedConsumerNominalIdCodec :: Agg -> Bool
+hasEnforcedConsumerNominalIdCodec aggregate =
+  any
+    ( \nominal -> case resolvedNominalRepresentation nominal of
+        IdRepresentation prefix -> isJust (idDomainContractFor (aLanguageContract aggregate) prefix)
+        _ -> False
+    )
+    (codecConsumerNominals aggregate)
+
 hasGeneratedNominalEnumCodec :: Agg -> Bool
 hasGeneratedNominalEnumCodec aggregate =
   any
@@ -3494,7 +3736,7 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
       (IdRepresentation prefix, ConsumerNominal binding) ->
         nl
           [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding),
-            parserName nominal <> " input = case KindID.parseText @" <> tshow prefix <> " input of",
+            parserName nominal <> " input = " <> validationPrefix prefix <> "case KindID.parseText @" <> tshow prefix <> " input of",
             "  Left reason -> fail (show reason)",
             "  Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
           ]
@@ -3517,6 +3759,12 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
             <> ["  _ -> fail " <> tshow ("unknown " <> resolvedNominalName nominal <> " wire value")]
       _ -> ""
     parserName nominal = "parse" <> resolvedNominalName nominal <> "Nominal"
+    validationPrefix prefix = case idDomainContractFor (aLanguageContract aggregate) prefix of
+      Nothing -> ""
+      Just _ ->
+        "case validateIdDomainText (typeIdV7Domain "
+          <> tshow prefix
+          <> ") input of Left reason -> fail (show reason); Right () -> "
 
 emitCodecValue :: Agg -> Text
 emitCodecValue a =
@@ -3667,7 +3915,9 @@ emitDecode a =
         _ -> "o .: " <> tshow n
     decodeNominalField name nominal = case resolvedNominalOwnership nominal of
       GeneratedNominal -> case resolvedNominalRepresentation nominal of
-        IdRepresentation {} -> "(" <> resolvedNominalName nominal <> " <$> o .: " <> tshow name <> ")"
+        IdRepresentation prefix -> case idDomainContractFor (aLanguageContract a) prefix of
+          Nothing -> "(" <> resolvedNominalName nominal <> " <$> o .: " <> tshow name <> ")"
+          Just _ -> "(" <> legacyNominalConstructorName nominal <> " <$> o .: " <> tshow name <> ")"
         EnumRepresentation {} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> ")"
         ScalarRepresentation {} -> "o .: " <> tshow name
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
@@ -4093,7 +4343,7 @@ emitExpressions aggregate
           ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
           ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
           ++ ["import Numeric.Natural (Natural)" | expressionUsesType AggregateNatural]
-          ++ generatedNominalTypeImports (aContext aggregate) generatedExpressionNominals
+          ++ generatedNominalTypeImportsForService (aggregateCheckedService aggregate) (aContext aggregate) generatedExpressionNominals
           ++ structuralProjectionImport
           ++ generatedNominalProjectionImport
           ++ consumerNominalProjectionImport
@@ -4439,7 +4689,14 @@ renderKeikiLiteral aggregate scalarType = \case
     _ -> error "validated enum literal lost its nominal type"
   ScalarIdValue typeName value -> case scalarType of
     AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-      GeneratedNominal -> "K.lit (" <> typeName <> " " <> tshow value <> ")"
+      GeneratedNominal -> case idDomainContractFor (aLanguageContract aggregate) =<< idPrefixOf nominal of
+        Nothing -> "K.lit (" <> typeName <> " " <> tshow value <> ")"
+        Just _ ->
+          "K.lit (case parse"
+            <> typeName
+            <> " "
+            <> tshow value
+            <> " of Right parsed -> parsed; Left _ -> error \"validated ID literal failed to parse\")"
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
         IdRepresentation prefix ->
           "K.lit (nominalFromRepresentation "
@@ -4451,6 +4708,26 @@ renderKeikiLiteral aggregate scalarType = \case
             <> " of Right parsed -> parsed; Left _ -> error \"validated ID literal failed to parse\"))"
         _ -> error "validated ID literal lost its ID representation"
     _ -> error "validated ID literal lost its nominal type"
+  where
+    idPrefixOf nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> Just prefix
+      _ -> Nothing
+
+generatedIdSampleHaskell :: Agg -> ResolvedNominalType -> Maybe Text
+generatedIdSampleHaskell aggregate nominal = do
+  prefix <- case resolvedNominalRepresentation nominal of
+    IdRepresentation value -> Just value
+    _ -> Nothing
+  contract <- idDomainContractFor (aLanguageContract aggregate) prefix
+  let name = resolvedNominalName nominal
+      sample = idDomainSampleText contract
+  pure
+    ( "(case parse"
+        <> name
+        <> " "
+        <> tshow sample
+        <> " of Right parsed -> parsed; Left _ -> error \"generated valid ID sample failed to parse\")"
+    )
 
 emitGeneratedTransducer :: Agg -> Text
 emitGeneratedTransducer aggregate =

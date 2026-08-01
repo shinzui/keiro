@@ -81,7 +81,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Complete |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Complete |
 | 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Complete |
-| 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | Not Started |
+| 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).

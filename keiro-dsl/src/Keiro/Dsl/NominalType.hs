@@ -20,8 +20,11 @@ module Keiro.Dsl.NominalType
     nominalTypes,
     lookupNominalType,
     nominalEqualityContract,
+    nominalEqualityContractForService,
     nominalEqualityIdentity,
+    nominalEqualityIdentityForService,
     nominalEqualityIdentities,
+    nominalEqualityIdentitiesForService,
     NominalTypeError (..),
     resolveNominalTypes,
   )
@@ -38,6 +41,9 @@ import Data.Text qualified as T
 import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract)
 import Keiro.Dsl.TypeGraph
 
 data NominalScalarRepresentation
@@ -69,6 +75,7 @@ data NominalEqualityKey
 data NominalEqualityDomain
   = LegacyUnrestrictedTextDomain
   | TypeIdTextDomain !Text
+  | EnforcedTypeIdV7TextDomain !Text !Text
   | FiniteTextDomain !(NonEmpty Text)
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -120,15 +127,22 @@ lookupNominalType name = Map.lookup name . nominalTypes
 -- keep their existing scalar projection behavior; this contract is the new
 -- authority only for IDs and enums.
 nominalEqualityContract :: ResolvedNominalType -> Maybe CheckedNominalEquality
-nominalEqualityContract nominal = case resolvedNominalRepresentation nominal of
+nominalEqualityContract = nominalEqualityContractForService (effectiveLanguageContract LegacyUnversioned)
+
+nominalEqualityContractForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe CheckedNominalEquality
+nominalEqualityContractForService languageContract nominal = case resolvedNominalRepresentation nominal of
   IdRepresentation prefix ->
     Just
       CheckedNominalEquality
         { equalityKeyRepresentation = NominalTextEqualityKey,
-          equalityDomain = case resolvedNominalOwnership nominal of
-            GeneratedNominal -> LegacyUnrestrictedTextDomain
-            ConsumerNominal {} -> TypeIdTextDomain prefix,
-          equalityContractVersion = nominalEqualityContractVersion
+          equalityDomain = case idDomainContractFor languageContract prefix of
+            Just contract -> EnforcedTypeIdV7TextDomain prefix (idDomainVersion contract)
+            Nothing -> case resolvedNominalOwnership nominal of
+              GeneratedNominal -> LegacyUnrestrictedTextDomain
+              ConsumerNominal {} -> TypeIdTextDomain prefix,
+          equalityContractVersion = case idDomainContractFor languageContract prefix of
+            Just _ -> "keiro-dsl/nominal-equality/2"
+            Nothing -> nominalEqualityContractVersion
         }
   EnumRepresentation constructors ->
     Just
@@ -143,8 +157,11 @@ nominalEqualityContract nominal = case resolvedNominalRepresentation nominal of
 -- scaffold history, and explain output. It includes the existing binding
 -- authority rather than introducing a second consumer equality function.
 nominalEqualityIdentity :: ResolvedNominalType -> Maybe Text
-nominalEqualityIdentity nominal = do
-  equality <- nominalEqualityContract nominal
+nominalEqualityIdentity = nominalEqualityIdentityForService (effectiveLanguageContract LegacyUnversioned)
+
+nominalEqualityIdentityForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe Text
+nominalEqualityIdentityForService languageContract nominal = do
+  equality <- nominalEqualityContractForService languageContract nominal
   pure . T.intercalate "|" $
     [ "nominal-equality",
       "name=" <> resolvedNominalName nominal,
@@ -157,6 +174,8 @@ nominalEqualityIdentity nominal = do
     renderEqualityKey NominalTextEqualityKey = "Text"
     renderEqualityDomain LegacyUnrestrictedTextDomain = "legacy-unrestricted-text"
     renderEqualityDomain (TypeIdTextDomain prefix) = "typeid-text:" <> prefix
+    renderEqualityDomain (EnforcedTypeIdV7TextDomain prefix contractVersion) =
+      "typeid-v7-text:" <> prefix <> ":" <> contractVersion
     renderEqualityDomain (FiniteTextDomain values) = "finite-text:" <> T.intercalate "," (NE.toList values)
     renderOwnership GeneratedNominal = "owner=generated"
     renderOwnership (ConsumerNominal binding) =
@@ -169,13 +188,18 @@ nominalEqualityIdentity nominal = do
         ]
 
 nominalEqualityIdentities :: Spec -> [Text]
-nominalEqualityIdentities spec = case resolveNominalTypes spec of
+nominalEqualityIdentities spec = nominalEqualityIdentitiesForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
+
+nominalEqualityIdentitiesForService :: CheckedService -> [Text]
+nominalEqualityIdentitiesForService service = case resolveNominalTypes spec of
   Left _ -> []
   Right registry ->
     [ identity
     | nominal <- Map.elems (nominalTypes registry),
-      Just identity <- [nominalEqualityIdentity nominal]
+      Just identity <- [nominalEqualityIdentityForService (checkedLanguageContract service) nominal]
     ]
+  where
+    spec = checkedSpec service
 
 nominalEqualityContractVersion :: Text
 nominalEqualityContractVersion = "keiro-dsl/nominal-equality/1"
