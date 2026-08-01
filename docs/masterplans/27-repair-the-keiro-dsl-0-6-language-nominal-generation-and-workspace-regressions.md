@@ -80,7 +80,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 | 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Not Started |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
-| 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Not Started |
+| 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Complete |
 | 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -89,27 +89,27 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-167, EP-168, and EP-169 can begin immediately. EP-167 touches parser mechanics while preserving
-`ParsedSource`; EP-169 consumes that stable result and can proceed against the current parser, with
-a final integration rebase if both land concurrently. EP-168 owns generated nominal placement and
-is independent of language semantics.
+EP-167 and EP-169 do not depend on the completed children. EP-167 touches parser mechanics while
+preserving `ParsedSource`; EP-169 consumes that stable result and can proceed against the current
+parser, with a final integration rebase if both land concurrently. EP-168 and EP-159 are complete.
 
 EP-170 hard-depends on EP-168 because declaration-scoped projection tags and instances must be
 emitted by the one shared nominal owner, not by duplicate aggregate modules. The former external
 implementation dependency is satisfied by released Keiki 0.7.0.0, so API inspection and
-Keiro-side integration planning may proceed. EP-170 itself still begins after EP-168 provides the
-one shared nominal owner.
+Keiro-side implementation may proceed. EP-168 now provides the one shared nominal owner, so
+EP-170 has no remaining hard dependency.
 
-EP-159 can start checked `fields(Command)` output ownership, adopt released Keiki 0.7.0.0, and
-consume its detailed-step/detailed-replay contract immediately. Its soft dependency on EP-170
-means the final behavior fixture should include nominal equality, while neither workstream's core
-implementation blocks the other.
+EP-159 is complete: checked `fields(Command)` output ownership and the finite behavior-conformance
+contract consume released Keiki 0.7.0.0 detailed step/replay attribution. Its unmet soft dependency
+on EP-170 did not block completion. EP-170 owns the later nominal-equality integration and must
+refresh the affected generated fixture and conformance evidence when it lands.
 
 EP-171 hard-depends on EP-169 because successor runtime semantics must reach validation and
 generation, and on EP-168 because safe constructors/codecs must have one generated owner. It
 integrates with EP-170's exact textual ID domain but can implement admission/replay policy without
 waiting for nominal equality. The critical child-plan paths are EP-168 → EP-170 and
-EP-169 plus EP-168 → EP-171; EP-167 and EP-159 run alongside them.
+EP-169 plus EP-168 → EP-171. The EP-168 → EP-170 edge is satisfied; EP-171 still waits for
+EP-169, while EP-167 remains independent.
 
 
 ## Integration Points
@@ -160,8 +160,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-169: paired-version/workspace proof and ADR 16 amendment.
 - [ ] EP-170: Keiki 0.7 exact-projection adoption and checked nominal equality model.
 - [ ] EP-170: generated/bound equality, finite-domain proof, mutations, and fleet adoption.
-- [ ] EP-159: checked declarative event-output mapping and removal of identity-copy Holes.
-- [ ] EP-159: edge-attributed complete behavioral conformance and regeneration proof.
+- [x] EP-159: checked declarative event-output mapping and removal of identity-copy Holes.
+- [x] EP-159: edge-attributed complete behavioral conformance and regeneration proof.
 - [ ] EP-171: successor ID-domain contract, safe constructors, and boundary-specific codecs.
 - [ ] EP-171: legacy replay migration, evolution classification, properties, and release proof.
 
@@ -192,6 +192,10 @@ interactions between child plans. Provide concise evidence.
 - 2026-08-01: Keiro 0.6 nominal adoption is a generated content/layout rewrite, not stale-module
   cleanup: the old declarations were embedded in aggregate `Domain` modules. Focused adoption
   coverage proves those generated files are replaced while a hand-owned Hole is untouched.
+- 2026-08-01: EP-159's complete fixture reports 14 required and filled behavior obligations, with
+  13 verified rows and one conservatively unverified one-way projection. Concrete stepping and
+  replay still pass; the default finite-completeness gate accepts the honest unverified row, while
+  the opt-in strict gate rejects it until a consumer supplies an exact reverse witness.
 
 
 ## Decision Log
@@ -240,13 +244,15 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-EP-168 is complete. Shared generated IDs and enums now have one stable context-level Haskell owner,
-with compiled cross-aggregate identity/codec proof, deterministic workspace and single-file plans,
-explicit non-destructive 0.6 adoption, and ADR 14 documentation. This closes the remaining IR-2
-acceptance failure and unblocks EP-170; the other five corrective workstreams remain open.
+EP-168 and EP-159 are complete. Shared generated IDs and enums now have one stable context-level
+Haskell owner, with compiled cross-aggregate identity/codec proof, deterministic workspace and
+single-file plans, explicit non-destructive 0.6 adoption, and ADR 14 documentation. Checked
+declarative output ownership now removes stale identity-copy Holes, and complete finite behavior
+obligations execute through Keiki's exact step/replay attribution with mutation-tested reporting.
+These results close IR-2 and IR-13 and unblock EP-170; four corrective workstreams remain open.
 
 
 Revision note: Updated the initiative for released Keiki `0.7.0.0`, verified on Hackage and through
-the matching `v0.7.0.0` tag. EP-159 can begin now; EP-170/EP-171 can adopt the released API once
-their repository-local hard dependencies are satisfied. No external Keiki release gate remains,
-2026-08-01.
+the matching `v0.7.0.0` tag. EP-159 and EP-168 are complete, EP-170 is unblocked, and EP-171 can
+adopt the released API after EP-169 satisfies its remaining repository-local hard dependency. No
+external Keiki release gate remains, 2026-08-01.

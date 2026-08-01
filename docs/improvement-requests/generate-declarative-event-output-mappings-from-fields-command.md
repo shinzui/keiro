@@ -4,9 +4,9 @@ title: Generate declarative event output mappings from fields(Command)
 description: >-
   Keep identity event copies generated-owned when fields(Command) fully specifies their output,
   reserving hand-owned output holes for explicit transformations and external decisions.
-timestamp: 2026-08-01T13:11:24Z
+timestamp: 2026-08-01T15:58:47Z
 requestId: IR-13
-status: planned
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md
 reviews:
@@ -28,20 +28,21 @@ reviews:
 
 ## Status
 
-Planned as part of the existing unfinished
+**Implemented.**
 [Plan 159](../plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md)
-under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
-The generated-output work can start immediately. Full edge-attributed forward/replay evidence
-targets Keiki `0.7.0.0`, whose implementation of
-`mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2` is present on public `master` and
-published on Hackage with the matching `v0.7.0.0` tag. Plan 159 may adopt `>=0.7 && <0.8` and begin.
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md)
+now generates total `fields(Command)` event terms directly and reserves named hand-owned output
+obligations for behavior the DSL does not specify. The checked ownership model feeds validation,
+fingerprints, scaffold records, generated transducers, diffs, and behavior obligations. Compiled
+single-spec/workspace reports and restoring mutations prove that stale identity-copy functions are
+obsolete and cannot affect runtime execution.
 
 ## Context
 
 An event declared as `event Accepted = fields(Command)` completely specifies an identity mapping
-from the accepted command payload to the emitted event payload. Keiro 0.6 nevertheless scaffolds a
-create-once, hand-owned output function that copies every field from the command term into the
-event term. The generated transducer calls this hole.
+from the accepted command payload to the emitted event payload. Keiro 0.6 nevertheless scaffolded
+a create-once, hand-owned output function that copied every field from the command term into the
+event term. The generated transducer called this hole.
 
 That boilerplate is not a domain decision. Once generated, it can drift from the specification,
 survive field evolution incorrectly, or require manual edits merely to restate the schema. It

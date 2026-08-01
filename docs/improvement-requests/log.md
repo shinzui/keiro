@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Implemented**: Close IR-13 after Plan 159 makes total `fields(Command)` event outputs
+generated-owned, removes identity-copy Holes from runtime authority, and proves the boundary with
+compiled single-spec/workspace conformance and restoring mutations.
 * **Implemented**: Close IR-2 after Plan 168 gives shared generated IDs and enums one context-level Haskell owner with cross-aggregate compile, deterministic planning, and non-destructive 0.6 adoption evidence.
 * **Dependency baseline**: Keiki public `master` implements
 `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-2`,
