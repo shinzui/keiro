@@ -23,10 +23,11 @@ because downstream APIs receive a checked service value containing the normalize
 effective language version. Per-member declared-versus-legacy provenance remains separately
 attributable.
 
-The behavior is visible with paired version-2 and successor-version fixtures containing the same
-semantic declaration: the parser can normalize both to similar graph nodes, while validation,
-scaffolding, fingerprints, and compatibility reports deliberately choose the correct versioned
-runtime contract. This is the prerequisite for Plan 171's safe ID-prefix enforcement.
+The boundary is visible with paired released-version fixtures containing the same semantic
+declaration: the parser normalizes both to the same graph, history retains their distinct language
+versions, and validation, scaffolding, fingerprints, compatibility, and replay deliberately select
+their shared historical runtime contract. Plan 171 registers and mutation-tests the first
+behaviorally different successor policy through this boundary for safe ID-prefix enforcement.
 
 
 ## Progress
@@ -35,13 +36,15 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: define the semantic-contract wrapper and invariants for single sources and
+- [x] Milestone 1: define the semantic-contract wrapper and invariants for single sources and
   same-version workspaces.
-- [ ] Milestone 2: route check, scaffold, harness, fingerprint, replay-impact, and diff planning
+- [x] Milestone 2: route check, scaffold, harness, fingerprint, replay-impact, and diff planning
   through the wrapper without contaminating `Spec` with source provenance.
-- [ ] Milestone 3: add paired-version and workspace parity tests, compatibility serialization, and
+- [x] Milestone 3: add paired-version and workspace parity tests, compatibility serialization, and
   refusal-before-write evidence.
-- [ ] Milestone 4: amend ADR 16, update public API/documentation, and run repository validation.
+- [x] Milestone 4a: amend ADR 16/ADR 4 and update the public API, changelog, and authoring
+  documentation.
+- [x] Milestone 4b: run strict ADR validation and the complete repository test/build/Nix suite.
 
 
 ## Surprises & Discoveries
@@ -55,6 +58,21 @@ implementation. Provide concise evidence.
   planning still receives only `Spec`; source language is written to history after modules have
   already been planned. A new version can therefore select a different grammar but cannot select a
   different runtime semantic honestly.
+- 2026-08-01: language-version identity and runtime-semantics identity are not interchangeable.
+  Version 1 and version 2 can normalize a simple shared declaration to the same graph and runtime
+  behavior, while version-2-only expressions normalize to different graph nodes and ownership.
+  `EffectiveLanguageContract` therefore records both the selected language version and a separate
+  runtime discriminator; v1/v2 share `keiro-dsl/runtime-semantics/1`, and only a future contract
+  that can change fold behavior contributes a fingerprint segment.
+- 2026-08-01: the workspace adoption differ can construct an empty historical member baseline.
+  Deriving the effective contract later from the first member would therefore be partial even
+  though ordinary manifests are non-empty. Persisting `wsLanguageContract` on `WorkspaceSpec`
+  keeps that synthetic baseline honest and lets every downstream route recover `CheckedService`
+  without inspecting provenance.
+- 2026-08-01: scaffold records already had the forward-compatible row shape needed for semantic
+  history. A missing `semantic-contract` row can be derived from the source-language row (or the
+  historical legacy default), while duplicate, malformed, unsupported, or source-inconsistent
+  rows can be rejected without changing either v1 record header.
 
 
 ## Decision Log
@@ -80,6 +98,28 @@ Record every decision made while working on the plan.
   language version changes runtime semantics.
   Date: 2026-08-01
 
+- Decision: Give the effective contract separate language-version and runtime-semantics fields;
+  map both released versions to the historical runtime discriminator.
+  Rationale: grammar capabilities and normalized runtime meaning evolve on different axes. This
+  preserves v1/v2 generated and fold bytes for equivalent graphs while giving Plan 171 one explicit
+  registry mapping to change when enforced ID domains alter runtime behavior.
+  Date: 2026-08-01
+
+- Decision: Store the unanimous contract directly on `WorkspaceSpec` and persist it as one shared
+  workspace record row, while retaining `SourceLanguage` only per member.
+  Rationale: downstream consumers should not re-prove unanimity or guess from a first member, and
+  synthetic empty historical baselines still need the candidate service's checked contract.
+  Date: 2026-08-01
+
+- Decision: Do not expose a constructor or override that fabricates an unregistered test-only
+  runtime contract. Prove paired v1/v2 routing and the generic discriminator boundary here; let Plan
+  171 register and mutation-test the first actually different runtime policy.
+  Rationale: a public fake-contract seam would let library consumers bypass the released-language
+  registry, undermining the invariant this plan exists to create. The contract-aware fold, diff,
+  replay, scaffold, and record routes are in place, and Plan 171 already owns the successor version
+  plus its behaviorally different migration fixture.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -88,7 +128,28 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(Implementation not started.)
+Implementation is complete. `Keiro.Dsl.SemanticContract`
+defines the public `EffectiveLanguageContract` and `CheckedService` boundary. Single-source and
+workspace CLI routes now preserve it through validation, scaffold/lowering and harness planning,
+generated fold fingerprints, diff, replay impact, inspection JSON, and additive scaffold records.
+The graph-only APIs remain documented legacy/version-1 wrappers. Contract-aware fold surfaces add
+no bytes for the historical runtime discriminator, so declaration-only legacy-to-v1 rewrites and
+equivalent v1/v2 graphs remain fold- and replay-neutral.
+
+The focused/full DSL run passes 430 examples. New coverage proves paired released
+versions, same-version multi-member composition, mixed-version refusal, source/service mismatch
+refusal before output-directory creation, contract-aware inspection, record round trips, missing
+row compatibility, and malformed/duplicate/inconsistent row rejection. ADR 16 now distinguishes
+source provenance from service runtime semantics; ADR 4 records the earliest checked-service
+boundary.
+
+Final validation passed `cabal test keiro-dsl-test` (430 examples), `cabal build all`, native
+`nix flake check`, `git diff --check`, and strict profile/log-enforced ADR validation. The final
+signature inventory contains no CLI use of `validateSpec`, `planScaffoldWithGoldens`,
+`executeScaffoldWithLanguage`, or graph-only replay planning; their remaining source definitions
+are the documented compatibility bridges. Plan 171 can now register the first runtime-semantic
+successor by changing the one version-to-runtime mapping and extending the already-routed policy
+boundaries, without recovering source provenance from `Spec`.
 
 
 ## Context and Orientation
@@ -129,9 +190,11 @@ workspace routes. Change `ScaffoldRun` so source language reaches module plannin
 not merely the history record.
 
 Milestone 3 proves the boundary. Add paired parsed sources with equivalent declarations under two
-effective contracts and a test-only semantic policy whose output differs, demonstrating that every
-route preserves the version. Add one-member and multi-member workspace parity, mixed-version
-refusal, diff-from-revision, record round trips, and refusal-before-write tests. Fingerprints must
+released effective contracts, demonstrating that every route preserves the language selection
+without inventing a runtime difference. Keep the effective-contract constructor closed rather than
+adding a fake policy override; Plan 171 supplies the first differing registered policy. Add
+one-member and multi-member workspace parity, mixed-version refusal, diff-from-revision, record
+round trips, and refusal-before-write tests. Fingerprints must
 include a semantic contract discriminator only when runtime/fold behavior can differ; a purely
 declared legacy-to-v1 provenance rewrite remains compatible as ADR 16 requires.
 
@@ -164,8 +227,9 @@ exit zero.
 Acceptance requires every command that parses a source or workspace and then validates, scaffolds,
 diffs, fingerprints, or analyzes replay to preserve the effective contract. A mixed-version
 workspace still fails before merge or write. Legacy-unversioned and declared v1 remain provenance-
-distinct but semantically compatible. A test-only successor semantic produces different planned
-behavior through every route, proving the contract was not dropped.
+distinct but semantically compatible. Paired v1/v2 graphs prove contract routing and historical
+runtime parity without exposing a contract-forging API; Plan 171 must prove different planned
+behavior through every route when it registers the real successor semantic.
 
 
 ## Idempotence and Recovery
@@ -187,7 +251,7 @@ data CheckedService = CheckedService
   }
 
 checkedSource :: ParsedSource -> CheckedService
-checkedWorkspace :: WorkspaceSpec -> Either (NonEmpty WorkspaceDiagnostic) CheckedService
+checkedWorkspace :: WorkspaceSpec -> CheckedService
 
 validateService :: CheckedService -> [Diagnostic]
 scaffoldService :: Context -> CheckedService -> [ScaffoldModule]
@@ -196,3 +260,7 @@ scaffoldService :: Context -> CheckedService -> [ScaffoldModule]
 Exact names may follow repository conventions. Plan 171 consumes this interface and owns the first
 real successor runtime semantic. Plan 167 changes parser mechanics but must preserve the
 `ParsedSource` input to this contract.
+
+`checkedWorkspace` is total because `composeWorkspace` refuses mixed effective versions and stores
+the unanimous `wsLanguageContract` on the composed value. Compatibility constructors that accept a
+bare `Spec` select legacy/version-1 semantics explicitly.

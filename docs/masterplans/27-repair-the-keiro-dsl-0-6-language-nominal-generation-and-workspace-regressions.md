@@ -78,7 +78,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 |---|-------|------|-----------|-----------|--------|
 | 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | Complete |
 | 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
-| 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Not Started |
+| 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Complete |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
 | 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Complete |
 | 171 | Enforce versioned ID prefix domains across construction decode replay and evolution | docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md | EP-168, EP-169 | EP-170 | Not Started |
@@ -89,8 +89,8 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-167, EP-168, and EP-159 are complete. EP-167 preserved `ParsedSource`, so EP-169's former soft
-parser dependency is satisfied and semantic-contract work can proceed against the stable result.
+EP-167, EP-168, EP-169, and EP-159 are complete. EP-169 now preserves one checked effective
+semantic contract from `ParsedSource` or workspace composition through every semantic planner.
 
 EP-170 hard-depends on EP-168 because declaration-scoped projection tags and instances must be
 emitted by the one shared nominal owner, not by duplicate aggregate modules. The former external
@@ -103,12 +103,11 @@ contract consume released Keiki 0.7.0.0 detailed step/replay attribution. Its un
 on EP-170 did not block completion. EP-170 owns the later nominal-equality integration and must
 refresh the affected generated fixture and conformance evidence when it lands.
 
-EP-171 hard-depends on EP-169 because successor runtime semantics must reach validation and
-generation, and on EP-168 because safe constructors/codecs must have one generated owner. It
-integrates with EP-170's exact textual ID domain but can implement admission/replay policy without
-waiting for nominal equality. The critical child-plan paths are EP-168 → EP-170 and
-EP-169 plus EP-168 → EP-171. The EP-168 → EP-170 edge is satisfied; EP-171 still waits for
-EP-169. EP-167 is complete and no longer contributes an integration rebase risk.
+EP-171's hard dependencies are satisfied: EP-169 routes successor runtime semantics to validation
+and generation, and EP-168 gives safe constructors/codecs one generated owner. It integrates with
+EP-170's exact textual ID domain but can implement admission/replay policy without waiting for
+nominal equality. The critical child-plan paths EP-168 → EP-170 and EP-169 plus EP-168 → EP-171
+are now unblocked. EP-170 remains next in registry order.
 
 
 ## Integration Points
@@ -155,8 +154,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-167: parsed/token-aware feature gates and complete compatibility validation.
 - [x] EP-168: one planned nominal owner and use closure for single files and workspaces.
 - [x] EP-168: compiled two-aggregate identity proof and non-destructive adoption.
-- [ ] EP-169: checked effective semantic contract routed through all semantic consumers.
-- [ ] EP-169: paired-version/workspace proof and ADR 16 amendment.
+- [x] EP-169: checked effective semantic contract routed through all semantic consumers.
+- [x] EP-169: paired-version/workspace proof and ADR 16 amendment.
 - [ ] EP-170: Keiki 0.7 exact-projection adoption and checked nominal equality model.
 - [ ] EP-170: generated/bound equality, finite-domain proof, mutations, and fleet adoption.
 - [x] EP-159: checked declarative event-output mapping and removal of identity-copy Holes.
@@ -199,6 +198,12 @@ interactions between child plans. Provide concise evidence.
   effective-version comparison while moving preamble and feature evidence into grammar context.
   EP-169 may continue against the planned stable parser result. The complete 427-example DSL suite,
   all-package Cabal build, and native Nix checks pass.
+- 2026-08-01: EP-169 separated effective language-version identity from runtime-semantics identity.
+  Released v1/v2 share `keiro-dsl/runtime-semantics/1`, so equivalent graphs preserve generated and
+  fold bytes; a future runtime-changing contract alone adds a fingerprint discriminator. Storing
+  `wsLanguageContract` directly also preserves the contract for synthetic empty historical
+  workspace baselines. The complete 430-example DSL suite, all-package Cabal build, strict ADR
+  validation, and native Nix checks pass.
 
 
 ## Decision Log
@@ -239,6 +244,13 @@ plan.
   pinning a sibling checkout.
   Date: 2026-08-01
 
+- Decision: Separate effective language-version identity from runtime-semantics identity in the
+  checked service contract; released v1/v2 share the historical runtime discriminator.
+  Rationale: grammar capability changes already normalize into the semantic graph, while a future
+  runtime-only rule such as enforced ID admission must remain visible even for an otherwise
+  equivalent graph. This preserves current bytes and gives EP-171 one explicit policy mapping.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -257,11 +269,17 @@ These results close IR-2 and IR-13 and unblock EP-170.
 EP-167 is complete. Released preambles are recognized only before `context`; nested `language`
 identifiers and successor spellings in data no longer collide with dispatch; grammar-owned feature
 gates retain exact source lines and historical version-1 negative behavior. ADR 16 and ADR 4 already
-record the durable boundaries, so no ADR amendment was required. Three corrective workstreams
-remain open.
+record the parser boundary, so no ADR amendment was required for EP-167.
+
+EP-169 is complete. `CheckedService` now carries one effective language contract and normalized
+graph through validation, scaffolding, harnesses, fold fingerprints, diff, replay-impact planning,
+inspection, and additive single/workspace history. Per-member declared/legacy provenance remains
+separate. ADR 16 and ADR 4 now record the corrected semantic boundary. EP-170 and EP-171 are both
+eligible; two corrective workstreams remain open.
 
 
-Revision note: Updated the initiative for released Keiki `0.7.0.0`, verified on Hackage and through
-the matching `v0.7.0.0` tag. EP-159, EP-167, and EP-168 are complete; EP-169 is next in registry
-order, EP-170 is unblocked, and EP-171 can adopt the released API after EP-169 satisfies its
-remaining repository-local hard dependency. No external Keiki release gate remains, 2026-08-01.
+Revision note: Completed EP-169 with a checked effective semantic contract, contract-aware
+planning/fingerprints, paired-version and workspace evidence, additive history, and ADR 16/ADR 4
+amendments. EP-159, EP-167, EP-168, and EP-169 are complete. EP-170 is next in registry order, and
+EP-171's repository-local hard dependencies are now satisfied. No external Keiki release gate
+remains, 2026-08-01.

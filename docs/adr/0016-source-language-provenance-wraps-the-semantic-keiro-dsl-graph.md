@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
-description: A .keiro document selects a released parser contract before grammar parsing, while its declared/effective language provenance remains separate from the semantic Spec graph used by validation, composition, and replay analysis.
-timestamp: 2026-07-31T17:30:13Z
+description: A .keiro document selects a released parser contract before grammar parsing; source provenance and one effective service semantic contract wrap the normalized Spec graph.
+timestamp: 2026-08-01T17:02:24Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -52,15 +52,19 @@ transition ownership. Version 1 rejects the first such token before version-2
 semantic checking. Collection expression spellings are reserved but rejected
 under version 2; reserving a token is not an implicit language feature.
 
-**Source provenance wraps, rather than inhabits, the semantic graph.** Parsing the full contract
-produces a source value containing both `SourceLanguage` and the existing semantic `Spec`.
-`Spec`, `validateSpec`, aggregate fold fingerprints, and replay-impact analysis remain concerned
-only with the normalized semantic graph. Compatibility entry points that historically return
-only `Spec` may remain as documented wrappers, but CLI and workspace loading use the
-provenance-preserving entry point.
+**Source provenance and effective runtime semantics wrap, rather than inhabit, the semantic
+graph.** Parsing the full contract produces a source value containing both `SourceLanguage` and
+the existing semantic `Spec`. After parsing, `CheckedService` pairs that graph with one
+`EffectiveLanguageContract`; validation, lowering, scaffolding, harnesses, fold fingerprints,
+diff, and replay-impact planning use this checked service boundary. The effective contract records
+the selected language version and a runtime-semantics discriminator. Grammar-only versions may
+share the discriminator; a successor that can change runtime or fold behavior must receive a new
+one. Compatibility entry points that accept only `Spec` remain documented legacy/version-1
+wrappers and are not used by CLI or workspace semantic routes.
 
-**Workspace provenance is per member.** Each `WorkspaceMember` retains its own
-`SourceLanguage`; `wsMergedSpec` remains the composed semantic graph. Composition compares
+**Workspace provenance is per member; the effective semantic contract is per service.** Each
+`WorkspaceMember` retains its own `SourceLanguage`; `wsMergedSpec` remains the composed semantic
+graph, and `wsLanguageContract` records the one effective service contract. Composition compares
 effective versions before merging. Legacy-unversioned and declared version 1 may compose because
 both select version 1. Different effective versions are refused before graph merge, with member
 paths and source locations, so a service cannot accidentally combine two language contracts.
@@ -71,11 +75,13 @@ but it produces an all-compatible compatibility vector and remains replay-neutra
 enter an aggregate fold fingerprint or manufacture an event-codec, persisted-identity, or replay
 change.
 
-**Scaffold history records provenance additively.** The existing single-file and workspace record
-formats already ignore unknown row kinds. New source-language rows therefore extend their v1
-headers without replacing the schemas; older readers continue to see the file/module history,
-while new readers interpret a missing row as the historically accurate legacy-unversioned state.
-These records support provenance and drift reporting. They are not parser-result caches.
+**Scaffold history records provenance and the effective contract additively.** The existing
+single-file and workspace record formats already ignore unknown row kinds. Source-language and
+semantic-contract rows therefore extend their v1 headers without replacing the schemas; older
+readers continue to see file/module history. New readers interpret a missing source row as the
+historically accurate legacy-unversioned state and derive a missing semantic row from that source
+selection. Duplicate, malformed, unsupported, or inconsistent rows are rejected. These records
+support attribution and drift reporting. They are not parser-result caches.
 
 Language rewriting is a separate operation. The source-version contract supplies the dispatch
 boundary, but sequential `N -> N+1` transformations, atomic workspace rewrites, and Mori-aware
@@ -91,15 +97,16 @@ fleet planning remain in
 - Existing unversioned sources keep working, while inspection can distinguish intentional version
   declarations from compatibility fallback.
 - Workspace composition preserves truthful member provenance without contaminating the merged
-  semantic graph or changing existing validator and fingerprint APIs.
+  semantic graph, while exposing one checked contract to every semantic planner.
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
 - A version-2 expression is not accepted merely because its tokens parse. Its
   roots, paths, literals, operators, result type, and transition owner must all
   resolve before generated code is emitted.
-- Keeping compatibility wrappers that return `Spec` is safe only because parser dispatch has
-  already happened; callers needing provenance must use the source-level API.
+- `Spec`-only semantic functions are compatibility bridges with explicit legacy/version-1
+  semantics. Source-aware callers construct `CheckedService`; parser dispatch alone is not enough
+  once a successor contract can alter runtime behavior.
 - No external package dependency is introduced. `Natural`/`NonEmpty` come from existing base
   libraries, and JSON record/inspection encoding uses the already-declared `aeson` dependency.
 

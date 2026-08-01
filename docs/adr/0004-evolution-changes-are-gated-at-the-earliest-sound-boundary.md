@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-31T18:46:49Z
+timestamp: 2026-08-01T17:02:24Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -62,10 +62,19 @@ Keiki structure used for both concrete execution and symbolic translation;
 scaffolding cannot turn an invalid expression into a hand-written TODO or let a
 Hole replace generated behavior.
 
+Language dispatch is earlier than every semantic gate, but dispatch alone is
+not sufficient when a released successor changes runtime behavior. Parsing a
+source or composing a same-version workspace constructs `CheckedService`, which
+pairs the normalized graph with one effective runtime-semantics contract.
+Validation, scaffold/harness planning, fold fingerprints, diff, and replay
+impact receive that value. A mixed-version workspace or a mismatched
+source/service execution is refused before any output path is created.
+
 The landed inventory is:
 
 | Change class | Single-spec `check` | Cross-spec `diff` | Runtime boundary / CI |
 |---|---|---|---|
+| Effective language runtime semantics change | The parser selects a supported contract and workspace composition requires one effective version | Contract-aware fold/diff planning reports runtime-semantic changes independently of source provenance | Generated fold fingerprints add a discriminator only when runtime/fold behavior can differ; scaffold history persists the checked contract and replay impact consumes it |
 | Invalid schema version, duplicate event tags, out-of-range rung | Not all are expressible in the DSL | Not required | `mkCodec` fails validated stream construction |
 | Different event kinds change at the same source version | Allowed; chain continuity still applies | Version bumps remain Additive only with their declared upcasts | Scaffolder merges them into one unique rung that dispatches by `EventType`; `mkCodec` validates the resulting codec |
 | Upcaster accidentally rewrites another event kind at the same aggregate version | Not author-expressible in generated code | No separate classification needed | Generated rung dispatch passes foreign kinds through byte-for-byte; codec-level conformance invokes each owning upcaster |

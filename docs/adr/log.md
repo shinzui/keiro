@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Update**: Amend ADRs 0016 and 0004 with the checked service-level effective semantic contract, explicit legacy `Spec` wrappers, contract-aware planning/fingerprints, additive history, and refusal-before-write boundary (plan 169).
 * **Update**: Define the context-level generated Nominals authority, aggregate use-closure imports, and non-destructive Keiro 0.6 layout adoption (plan 168).
 
 ## 2026-07-31
