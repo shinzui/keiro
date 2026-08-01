@@ -119,7 +119,7 @@ cleanup without coupling it to the parser architecture.
 | 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-172 | None | Complete |
 | 174 | Modularize the Keiro Megaparsec grammar by language concern | docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md | EP-173 | None | Complete |
 | 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | None | Complete |
-| 176 | Cut over the Keiro toolchain to the language frontend and certify parity | docs/plans/176-cut-over-the-keiro-toolchain-to-the-language-frontend-and-certify-parity.md | EP-175 | EP-172, EP-173, EP-174 | Not Started |
+| 176 | Cut over the Keiro toolchain to the language frontend and certify parity | docs/plans/176-cut-over-the-keiro-toolchain-to-the-language-frontend-and-certify-parity.md | EP-175 | EP-172, EP-173, EP-174 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -231,8 +231,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   (2026-08-01T22:21:24Z).
 - [x] EP-175: exposed structured span-aware frontend failures with compatibility rendering
   (2026-08-01T22:21:24Z).
-- [ ] EP-176: route CLI, workspace, pretty, check, scaffold, diff, and replay paths through the frontend.
-- [ ] EP-176: remove the direct path, refresh docs/ADRs, and pass full release-quality validation.
+- [x] EP-176: routed CLI and workspace source loading through the frontend and proved pretty, check,
+  scaffold, diff, fingerprint, and replay consumers remain semantic-only (2026-08-01T22:33:43Z).
+- [x] EP-176: removed the transitional advanced re-export, refreshed documentation, and passed
+  full release-quality validation (2026-08-01T22:33:43Z).
 
 
 ## Surprises & Discoveries
@@ -282,6 +284,19 @@ interactions between child plans. Provide concise evidence.
   its compatibility projection retains the historical text naming version 3; all 13 goldens pass.
   Impact: New tooling consumes phase/code/span/profile data, while existing CLI and library callers
   retain byte-identical diagnostics.
+
+- Observation: The final consumer inventory found one `.keiro` document route and one intentionally
+  separate workspace-manifest grammar; downstream planning modules never need the surface tree.
+  Evidence: EP-176 boundary tests cover the facade, all internal parser modules, workspace loading,
+  and the semantic consumers; the complete 464-example DSL suite passes.
+  Impact: Future grammar work has one source owner, while normalized `Spec` remains the stable
+  interchange for checking, generation, diffing, fingerprints, and replay analysis.
+
+- Observation: Fourteen Mori-registered projects depend on Keiro, but none needs migration for this
+  initiative.
+  Evidence: The reverse-dependent inventory found only existing compatibility/API usage, and the
+  released public compile probe remains green.
+  Impact: The advanced frontend is additive, and cross-repository adoption can occur independently.
 
 
 ## Decision Log
@@ -354,12 +369,31 @@ plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original vision. Before marking the MasterPlan complete,
-distill durable project context from this MasterPlan and its child ExecPlans into
-docs/adr/. Keep task-local execution and coordination details here.
+The initiative delivered the intended modular, source-aware frontend without changing the 0.7
+language. `Keiro.Dsl.Frontend` now owns exact source spans, the located non-lossless surface tree,
+structured failures, and explicit lowering. Twelve internal parser modules own grammar concerns;
+one registry explicitly maps each released language to its syntax and runtime profiles; and
+`Keiro.Dsl.Parser` remains the small compatibility facade used by the CLI and workspace loader.
+Semantic checking, generation, diffing, fold fingerprints, and replay analysis continue to consume
+the unchanged normalized graph.
 
-(To be filled during and after implementation.)
+EP-172 froze 256 fixtures across 17 source-consuming paths, 13 diagnostic goldens, generated-byte
+and public-API probes, and a 445-example baseline. EP-173 through EP-176 grew that suite to 464
+examples while keeping every frozen observation unchanged. The final `cabal test all` run passed 37
+suites; `cabal build all`, native `nix flake check`, formatting, and strict validation of all 17 ADR
+concepts also passed. The only pending examples are two pre-existing `keiro-pgmq` environment/fault-
+injection cases documented by that suite; no suite was omitted.
+
+The principal lesson was that the package-wide record modernization in EP-177 was neither small nor
+necessary. Cancelling it kept the compatibility surface exact and allowed the architectural work to
+remain reviewable. The other key constraint was preserving a single semantic authority: exact
+surface evidence is useful for diagnostics and future tooling, but lowering it before validation,
+workspace composition, generation, diff, fingerprint, and replay work avoided a pervasive AST
+migration. ADRs 4 and 16 now carry the durable failure-boundary and source/surface/semantic model.
+
+No syntax, language version, runtime semantic, generated Haskell byte, dependency bound, or
+cross-repository source was changed. Lossless formatting, editor integration, and version-aware
+rewrite/fleet work remain intentionally deferred to separately scoped initiatives.
 
 
 ## Revision Note
@@ -381,3 +415,8 @@ package and native flake checks. EP-175 is now unblocked.
 threading one frontend context through profile-sensitive productions, exposing structured failures,
 amending ADRs 4 and 16, and passing the 462-example suite and release-quality checks. EP-176 is now
 unblocked.
+
+2026-08-01: Marked EP-176 and MasterPlan 28 complete after converging every source consumer on the
+frontend, documenting the public and authoring model, auditing registered dependents, and passing
+the 464-example DSL suite, complete 37-suite matrix, all-package build, native flake checks, and
+strict ADR validation.

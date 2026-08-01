@@ -3,7 +3,6 @@ module Keiro.Dsl.Parser
   ( ParseError,
     ParseFailure (..),
     ParsedSource (..),
-    parseSurfaceSource,
     parseSource,
     parseSpec,
     parseSpecText,
@@ -13,14 +12,13 @@ where
 
 import Data.Bifunctor (first)
 import Data.Text (Text)
+import Keiro.Dsl.Frontend (lowerSurfaceSource, parseSurfaceSource)
 import Keiro.Dsl.Frontend.Internal
   ( frontendCompatibilityFailure,
     frontendFailureFromLowering,
-    lowerSurfaceSource,
   )
 import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
-import Keiro.Dsl.Parser.Document (parseSurfaceSource)
 
 -- | A rendered, line-numbered parse error, ready to print to the user.
 type ParseError = Text

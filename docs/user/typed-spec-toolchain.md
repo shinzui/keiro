@@ -61,6 +61,31 @@ A well-formed unsupported future version is rejected before its body is parsed.
 Automated sequential upgrades and Mori-aware fleet rewriting remain deferred to
 [IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).
 
+### Frontend stages and library APIs
+
+Every released registry entry explicitly selects both a named syntax profile and a runtime-
+semantics identity. Version 1 selects syntax profile 1/runtime semantics 1; version 2 selects
+profile 2/runtime semantics 1; version 3 deliberately reuses profile 2 while selecting runtime
+semantics 2. Feature availability comes from exact profile membership, never from comparing
+version numbers, so registering a future version does not silently enable older features.
+
+The library source path has three explicit stages:
+
+```text
+.keiro Text -> located SurfaceSource -> lowerSurfaceSource -> ParsedSource/Spec -> semantic check
+```
+
+Ordinary integrations use `Keiro.Dsl.Parser.parseSource`, `parseSpec`, or `parseSpecText`. These
+compatibility functions retain the 0.7 signatures and rendered diagnostics. Source-aware tooling
+uses `Keiro.Dsl.Frontend.parseSurfaceSource`, inspects half-open `SourceSpan` values, and calls
+`lowerSurfaceSource` to obtain the same `ParsedSource`. Advanced failures carry a source-selection,
+body-parsing, or lowering phase; stable code; exact primary span; message; and optional expected-
+token or supported-version data. They expose no Megaparsec type.
+
+`SurfaceSource` preserves document order and syntax ownership, but deliberately discards comments
+and whitespace. `pretty` renders the canonical semantic spelling after lowering; it is not a
+lossless formatter and should not be used to preserve hand-formatted trivia.
+
 ## Supported node families
 
 A specification continues with `context <name>` and may declare shared ids, enums,

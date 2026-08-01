@@ -19,6 +19,12 @@ wire keys, and legal names. A missing preamble remains readable as
 and fleet-rewrite automation is deferred to
 `docs/improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md`.
 
+Released versions select immutable named syntax profiles explicitly; a larger version number does
+not inherit features by ordering. When extending the language, add the capability to a new/reused
+profile deliberately, implement the production in its single grammar concern, and keep rejection
+coverage for every released profile that does not own it. Never gate syntax with a raw numeric
+version comparison. Canonical parse/pretty output does not preserve comments or whitespace.
+
 `#` begins a line comment; whitespace/newlines are insignificant (structure comes from
 keywords). Every node family below is parsed, validated, and round-tripped by the toolchain.
 

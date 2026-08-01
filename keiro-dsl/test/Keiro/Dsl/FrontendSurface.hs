@@ -136,6 +136,7 @@ frontendSurfaceSpec = do
       facade `shouldNotSatisfy` T.isInfixOf "Text.Megaparsec"
       facade `shouldNotSatisfy` T.isInfixOf "keyword ::"
       facade `shouldNotSatisfy` T.isInfixOf "pAggregate ::"
+      facade `shouldNotSatisfy` T.isInfixOf "    parseSurfaceSource,"
 
     it "keeps internal grammar modules from importing the public facade" $
       forM_ parserModulePaths $ \path -> do
@@ -146,6 +147,20 @@ frontendSurfaceSpec = do
       forM_ semanticModulePaths $ \path -> do
         source <- readRepoText path
         source `shouldNotSatisfy` T.isInfixOf "Text.Megaparsec"
+
+    it "keeps semantic consumers independent of surface syntax and internal parsers" $
+      forM_ semanticConsumerPaths $ \path -> do
+        source <- readRepoText path
+        source `shouldNotSatisfy` T.isInfixOf "import Keiro.Dsl.Syntax"
+        source `shouldNotSatisfy` T.isInfixOf "import Keiro.Dsl.Parser."
+
+    it "keeps workspace loading and parser internals on opposite sides of the facade" $ do
+      workspace <- readRepoText "keiro-dsl/src/Keiro/Dsl/Workspace.hs"
+      workspace `shouldNotSatisfy` T.isInfixOf "import Keiro.Dsl.Parser."
+      forM_ parserModulePaths $ \path -> do
+        source <- readRepoText path
+        forM_ forbiddenParserDependencies $ \dependency ->
+          source `shouldNotSatisfy` T.isInfixOf ("import Keiro.Dsl." <> dependency)
 
 parseSurfaceRight :: FilePath -> Text -> IO SurfaceSource
 parseSurfaceRight sourceName source =
@@ -224,3 +239,26 @@ semanticModulePaths =
       "Grammar.hs",
       "Validate.hs"
     ]
+
+semanticConsumerPaths :: [FilePath]
+semanticConsumerPaths =
+  map
+    ("keiro-dsl/src/Keiro/Dsl/" <>)
+    [ "Grammar.hs",
+      "Validate.hs",
+      "SemanticContract.hs",
+      "Scaffold.hs",
+      "Diff.hs",
+      "FoldFingerprint.hs",
+      "ReplayImpact.hs"
+    ]
+
+forbiddenParserDependencies :: [Text]
+forbiddenParserDependencies =
+  [ "Workspace",
+    "Validate",
+    "Scaffold",
+    "Diff",
+    "FoldFingerprint",
+    "ReplayImpact"
+  ]

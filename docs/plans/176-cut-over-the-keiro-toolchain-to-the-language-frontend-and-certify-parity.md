@@ -32,15 +32,49 @@ package release.
 
 ## Progress
 
-- [ ] Milestone 1: inventory and route every source-consuming library, CLI, and workspace path.
-- [ ] Milestone 2: remove the transitional direct parser and enforce frontend dependency boundaries.
-- [ ] Milestone 3: refresh API, user, authoring, changelog, and architecture documentation.
-- [ ] Milestone 4: run complete parity, conformance, dependent-inventory, and repository validation.
+- [x] Milestone 1: inventoried and routed every source-consuming library, CLI, and workspace path
+  (2026-08-01T22:33:43Z).
+- [x] Milestone 2: removed the transitional public surface-parser re-export and enforced frontend
+  dependency boundaries (2026-08-01T22:33:43Z).
+- [x] Milestone 3: refreshed API, user, authoring, changelog, and architecture documentation
+  (2026-08-01T22:33:43Z).
+- [x] Milestone 4: passed complete parity, conformance, dependent-inventory, and repository
+  validation (2026-08-01T22:33:43Z).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: The source-consumer inventory was already highly converged after EP-174.
+  Evidence: `app/Main.hs` and `Workspace.hs` call the `Keiro.Dsl.Parser` compatibility facade;
+  the facade delegates to `Keiro.Dsl.Frontend`; `Frontend` reaches the one internal document
+  parser; pretty printing, checking, scaffolding, diffing, fold fingerprints, and replay impact
+  consume only lowered semantic values.
+  Impact: EP-176 required a boundary cutover and proof, not changes to CLI or workspace behavior.
+
+- Observation: `Workspace.hs` still contains a direct Megaparsec parser, but it parses only the
+  `.keiro-workspace` manifest grammar.
+  Evidence: The `.keiro` member text enters through `parseSource` exactly once per member, while
+  the direct `runParser` call owns manifest clauses and paths.
+  Impact: The manifest parser remains deliberately separate and is excluded from the single
+  `.keiro` document-parser rule.
+
+- Observation: EP-173 temporarily re-exported `parseSurfaceSource` from `Keiro.Dsl.Parser`, even
+  though the released 0.7 API probe did not contain that symbol.
+  Evidence: The final public compile probe imports the advanced parser from `Keiro.Dsl.Frontend`,
+  and a source-boundary test now prevents the compatibility facade from re-exporting it.
+  Impact: `Frontend` is the sole advanced public owner; `Parser` contains only the three released
+  compatibility entry points and their rendering.
+
+- Observation: Mori reports fourteen registered projects that depend on Keiro: `mori://shinzui/danwa`,
+  `mori://shinzui/kanmon`, `mori://shinzui/kawa`, `mori://shinzui/keiro-runtime-docs`,
+  `mori://shinzui/keiro-runtime-jitsurei`, `mori://shinzui/keiro-runtime-patterns`,
+  `mori://shinzui/keiro-syntax`, `mori://shinzui/kikan`, `mori://shinzui/kioku`,
+  `mori://shinzui/kizashi`, `mori://shinzui/kotei`, `mori://shinzui/meibo`,
+  `mori://shinzui/mori-app`, and `mori://shinzui/shikigami`.
+  Evidence: `mori registry dependents shinzui/keiro --packages`; only
+  `mori://shinzui/mori-app` exposed a package-level dependency in the current registry data.
+  Impact: No dependent repository needed migration because all released compatibility entry points
+  and selectors remain unchanged.
 
 
 ## Decision Log
@@ -68,10 +102,40 @@ package release.
   cross-repository source rewriting belongs to IR-5 and requires explicit operator scope.
   Date: 2026-08-01
 
+- Decision: Make `Keiro.Dsl.Frontend` the sole public advanced parse/lower API and keep
+  `Keiro.Dsl.Parser` limited to released compatibility functions.
+  Rationale: One owner makes the source -> located surface -> lowering direction explicit and
+  prevents ordinary callers from accidentally depending on an unreleased transitional re-export.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Every `.keiro` source now has one route: the CLI and workspace loader call the compatibility
+facade, the facade invokes the advanced frontend, the frontend invokes the internal modular
+document grammar, and lowering returns the unchanged `ParsedSource`. Boundary tests enforce that
+semantic consumers cannot import surface syntax or parser internals, internal grammar cannot
+depend on downstream consumers, and workspace source loading cannot bypass the facade. The
+separate workspace-manifest parser remains correctly isolated.
+
+The public documentation and Haddocks now describe exact spans, structured failures, explicit
+released profiles, and the source -> surface -> lowering -> semantic pipeline. They also state the
+important limitation that the surface tree omits comments and whitespace, so canonical pretty
+printing is not lossless. The changelog records the additive advanced interface and the deliberate
+absence of syntax, generated-output, or compatibility changes. ADRs 4 and 16 already contained the
+final durable design after EP-175, so this plan required no further ADR amendment.
+
+Validation completed without an omitted test suite: `cabal test all --test-show-details=direct`
+passed 37 suites, and the dedicated `keiro-dsl-test` run passed 464 examples with zero failures.
+The broader matrix retained two pre-existing, explicitly pending `keiro-pgmq` examples whose
+requirements are documented in their test output. `cabal build all`, the native aarch64-darwin
+`nix flake check`, `nix fmt`, strict OKF validation of all 17 ADR concepts, and `git diff --check`
+passed. Nix reported only its normal omission of checks for incompatible non-host systems.
+
+Compared with the 445-example EP-172 oracle, the completed suite adds nineteen architectural
+checks while preserving every frozen fixture, diagnostic golden, canonical rendering, generated
+byte, diff, fingerprint, replay, CLI, and workspace observation. No new language syntax, runtime
+semantics, dependency bound, or cross-repository edit was introduced.
 
 
 ## Context and Orientation
@@ -265,3 +329,7 @@ selection or release publication.
 
 2026-08-01: Removed cancelled EP-177 from the cutover's dependency assumptions and acceptance
 exceptions. Final certification now requires the existing selector API to remain unchanged.
+
+2026-08-01: Completed the consumer cutover, made `Keiro.Dsl.Frontend` the sole advanced public API,
+documented the delivered pipeline, audited fourteen Mori-registered dependents, and certified the
+0.7 contract with 464 DSL examples plus the complete 37-suite repository matrix.

@@ -6,6 +6,28 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Adds the public `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`, and `Keiro.Dsl.Frontend` advanced API.
+  Source-aware tooling can parse an ordered, located `SurfaceSource`, inspect exact half-open spans,
+  and lower explicitly to the existing `ParsedSource`/`Spec` semantic boundary.
+- Adds structured frontend failures with source-selection, body-parsing, and lowering phases;
+  stable codes; exact primary spans; messages; expected items; and supported-version metadata.
+  Megaparsec types remain internal.
+
+### Changed
+
+- Organizes the `.keiro` grammar into internal concern modules behind the stable
+  `Keiro.Dsl.Parser` compatibility facade. CLI and workspace members still parse once through that
+  facade; semantic checking, scaffolding, diffing, fingerprints, and replay consume only lowered
+  semantic values.
+- Makes every released registry entry explicitly select an immutable syntax profile and runtime-
+  semantics identity. Version 3 deliberately reuses version 2's syntax profile; adding a future
+  version no longer inherits syntax or runtime behavior from numeric ordering.
+- Keeps `parseSource`, `parseSpec`, `parseSpecText`, their rendered diagnostics, the complete 0.7
+  acceptance matrix, and generated Haskell bytes unchanged. Canonical pretty printing remains
+  non-lossless: the located surface layer does not retain comments or whitespace.
+
 ## 0.7.0.0 — 2026-08-01
 
 ### Breaking Changes

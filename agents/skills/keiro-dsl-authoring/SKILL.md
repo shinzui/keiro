@@ -26,6 +26,9 @@ edit a `-- @generated` module.
    `language keiro-dsl 1`, before `context`. Version 1 is frozen: do not add later syntax to its
    parser. Unversioned sources are accepted only as the explicit legacy form whose effective
    version is 1; ordinary parse/pretty preserves that distinction and does not migrate them.
+   Released syntax is owned by an explicit immutable profile, not numeric version ordering. A new
+   feature belongs to one grammar concern and must be deliberately listed in every profile that
+   accepts it, with predecessor rejection coverage.
 2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
    Fill only the create-if-absent `Holes.hs` / `ProcessHoles.hs` modules, against the
    signatures the generated layer exports.

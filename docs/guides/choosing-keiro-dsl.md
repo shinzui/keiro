@@ -12,6 +12,10 @@ contextual language parsing, version-aware semantic planning, one generated
 owner for shared nominals, exact nominal equality, generated
 `fields(Command)` outputs, complete finite behavior obligations, and
 evolution-safe ID-prefix enforcement.
+The source boundary delivered by
+[MasterPlan 28](../masterplans/28-build-a-modular-source-aware-keiro-dsl-language-frontend.md)
+adds exact source spans, explicit lowering, immutable released syntax profiles, and structured
+frontend failures without changing the 0.7 language.
 
 
 ## Short recommendation
@@ -133,6 +137,9 @@ key, comment, or string cannot accidentally select a language version or trip a
 feature gate. The selected effective language contract is retained through
 checking, generation, fingerprints, replay analysis, and diffing, so a
 versioned runtime rule cannot disappear after parsing.
+Each released registry entry chooses its syntax profile and runtime semantics explicitly. A future
+larger version number inherits neither policy accidentally, and source-aware tools receive a stable
+failure phase, code, and exact span instead of scraping rendered parser text.
 
 ### Generated behavior is authoritative where the DSL is expressive
 
@@ -222,6 +229,10 @@ Language contracts are deliberately frozen. Adopting a successor contract is
 an explicit migration rather than a silent upgrade, and older sources retain
 their released semantics. That protects history but adds fleet coordination
 when many specifications move together.
+
+Canonical pretty printing is not a lossless formatter. The frontend retains exact ownership spans
+but intentionally drops comments and whitespace before lowering; tools that need trivia-preserving
+rewrites require a separate concrete-syntax layer.
 
 ### The DSL is intentionally less expressive than Haskell
 

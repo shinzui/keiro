@@ -7,10 +7,18 @@ module Keiro.Dsl.FrontendPublicApiProbe
 where
 
 import Data.Text (Text)
+import Keiro.Dsl.Frontend (FrontendFailure, LoweringFailure, lowerSurfaceSource, parseSurfaceSource)
 import Keiro.Dsl.Grammar (Name, Node, Placement, Spec, specContext, specLayout, specModuleRoot, specNodes)
 import Keiro.Dsl.LanguageVersion (ParseFailure, ParsedSource, SourceLanguage, SourceLanguageDiagnostic, SourceLanguageErrorCode, parsedSourceLanguage, parsedSpec, sourceLanguageErrorCode)
 import Keiro.Dsl.Parser (ParseError, parseSource, parseSpec, parseSpecText)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
+import Keiro.Dsl.Syntax (SurfaceSource)
+
+parseSurfaceSourceProbe :: FilePath -> Text -> Either FrontendFailure SurfaceSource
+parseSurfaceSourceProbe = parseSurfaceSource
+
+lowerSurfaceSourceProbe :: SurfaceSource -> Either LoweringFailure ParsedSource
+lowerSurfaceSourceProbe = lowerSurfaceSource
 
 parseSourceProbe :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSourceProbe = parseSource
@@ -52,16 +60,18 @@ specNodesProbe = specNodes
 -- real compile probe instead of passive documentation.
 apiProbe :: ()
 apiProbe =
-  parseSourceProbe `seq`
-    parseSpecProbe `seq`
-      parseSpecTextProbe `seq`
-        renderSourceProbe `seq`
-          renderSpecProbe `seq`
-            parsedSourceLanguageProbe `seq`
-              parsedSpecProbe `seq`
-                sourceLanguageErrorCodeProbe `seq`
-                  specContextProbe `seq`
-                    specModuleRootProbe `seq`
-                      specLayoutProbe `seq`
-                        specNodesProbe `seq`
-                          ()
+  parseSurfaceSourceProbe `seq`
+    lowerSurfaceSourceProbe `seq`
+      parseSourceProbe `seq`
+        parseSpecProbe `seq`
+          parseSpecTextProbe `seq`
+            renderSourceProbe `seq`
+              renderSpecProbe `seq`
+                parsedSourceLanguageProbe `seq`
+                  parsedSpecProbe `seq`
+                    sourceLanguageErrorCodeProbe `seq`
+                      specContextProbe `seq`
+                        specModuleRootProbe `seq`
+                          specLayoutProbe `seq`
+                            specNodesProbe `seq`
+                              ()
