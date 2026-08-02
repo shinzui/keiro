@@ -32,6 +32,7 @@ common shared
 library
   import:          warnings, shared
   hs-source-dirs:  src
+  autogen-modules: Paths_keiro_dsl
   exposed-modules:
     Keiro.Dsl.AggregateType
     Keiro.Dsl.BehaviorCoverage
@@ -87,6 +88,7 @@ library
     Keiro.Dsl.Parser.Queue
     Keiro.Dsl.Parser.ReadModel
     Keiro.Dsl.Parser.Workflow
+    Paths_keiro_dsl
 
   build-depends:
     , aeson               >=2.2.1    && <2.3

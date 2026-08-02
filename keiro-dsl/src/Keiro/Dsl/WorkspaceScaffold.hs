@@ -167,16 +167,20 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
 -- member file.
 workspaceModules :: [GoldenPayload] -> Context -> WorkspaceSpec -> [(ScaffoldModule, ModuleProvenance)]
 workspaceModules goldens ctx workspace =
-  [attributed (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
-    <> [attributed ContextLevel m | m <- scaffoldReplayAudit ctx merged]
+  [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
+    <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
     <> concat
-      [ map (attributed (nodeProvenance node)) (emittersFor node)
+      [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
       | node <- specNodes merged
       ]
   where
     service = checkedWorkspace workspace
     merged = checkedSpec service
     ownership = wsOwnership workspace
+    stamp = stampGeneratedModule (checkedLanguageContract service)
+    attributedStamped provenance moduleValue =
+      let (annotated, attribution) = attributed provenance moduleValue
+       in (stamp annotated, attribution)
 
     emittersFor node = case node of
       NAggregate aggregate -> scaffoldAggregateForService ctx service aggregate <> harnessForServiceWithGoldens goldens ctx service aggregate

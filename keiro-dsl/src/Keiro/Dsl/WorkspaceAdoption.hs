@@ -47,7 +47,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.Scaffold (ModuleKind (..), ScaffoldModule (..))
+import Keiro.Dsl.Scaffold (ModuleKind (..), ScaffoldModule (..), isGeneratedBannerLine)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (StaleGeneratedEvidence (..), StaleModule (..), staleAgainst)
 import Keiro.Dsl.WorkspaceRecord (AdoptedRow (..), supersededByLine, workspaceMigrationReportFileName)
@@ -208,7 +208,7 @@ readLegacyRecord path = do
 hasGeneratedBanner :: FilePath -> IO Bool
 hasGeneratedBanner path = do
   contents <- TIO.readFile path
-  pure (any (T.isPrefixOf "-- @generated") (T.lines contents))
+  pure (any isGeneratedBannerLine (T.lines contents))
 
 -- | Render the report a human reviews. It is printed in the scaffold output and
 -- written to @keiro-dsl-migration-report.workspace.\<service\>.txt@.

@@ -186,7 +186,7 @@ planServiceScaffoldWithGoldens goldens ctx service =
     Right _ -> case scaffoldRefusals spec of
       lowering@(_ : _) -> Left [LoweringRefusal lowering]
       [] ->
-        let modules = scaffoldServiceModulesWithGoldens goldens ctx service
+        let modules = stampGeneratedModules (checkedLanguageContract service) (scaffoldServiceModulesWithGoldens goldens ctx service)
          in case pureRefusals ctx spec modules of
               [] -> Right modules
               refusals -> Left refusals
@@ -291,12 +291,13 @@ executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage 
 -- and the source declaration provenance written to history. A mismatch refuses
 -- before checking or creating any output path.
 executeServiceScaffold :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
-executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx service modules
+executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
   | effectiveLanguageContract sourceLanguage /= checkedLanguageContract service =
       pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
   | otherwise = executeCheckedScaffold
   where
     spec = checkedSpec service
+    modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
     executeCheckedScaffold =
       case deriveBehaviorRequirements spec of
         Left errors -> pure (Left [BehaviorRefusal errors])
@@ -424,7 +425,7 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
             Generated -> do
               contents <- TIO.readFile fullPath
               pure . Just $
-                if generatedBanner `elem` T.lines contents
+                if any isGeneratedBannerLine (T.lines contents)
                   then ExactGeneratedBannerPresent
                   else ExactGeneratedBannerMissing
           pure [StaleModule fileKind path evidence]
@@ -458,7 +459,7 @@ missingGeneratedBanners out modules = fmap concat $ mapM check generated
         then pure []
         else do
           contents <- TIO.readFile path
-          pure [modulePath m | not (any (T.isPrefixOf "-- @generated") (T.lines contents))]
+          pure [modulePath m | not (any isGeneratedBannerLine (T.lines contents))]
 
 writeModule :: FilePath -> ScaffoldModule -> IO (ScaffoldModule, WriteDisposition)
 writeModule out m = do
