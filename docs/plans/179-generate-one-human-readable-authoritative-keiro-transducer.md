@@ -72,8 +72,10 @@ This section must always reflect the actual current state of the work.
   `0.8`, regenerated the committed diagrams with guards, complete assignments,
   literal values, emissions, and targets, and passed the diagram, focused scalar,
   compiled scalar-conformance, and eight-mutation gates.
-- [ ] Milestone 4 remaining: run the complete repository validation matrix and
-  distill the final adoption outcome into this plan and any affected ADRs.
+- [x] 2026-08-02 15:24 PDT: Milestone 4 passed `cabal build all`, the complete
+  Cabal test matrix, diagram freshness, strict ADR validation, `nix flake check`,
+  `cabal sdist all`, and diff hygiene.  The adoption introduces no new local
+  architectural rule requiring an ADR amendment.
 - [ ] Milestone 5: prepare and, with explicit operator approval, publish the
   coordinated Keiro `0.9.0.0` breaking release and verify its tags and registry
   artifacts.
@@ -432,8 +434,13 @@ literals, complete register assignments, emitted event, and target.  Existing
 guide diagrams were regenerated from the same primary renderer, and the normal
 diagram check now combines Keiki structural validation with semantic-content
 assertions.  The focused 15-example unit suite, compiled scalar suite, and all
-eight mutation sentinels pass.  Complete repository validation and release
-preparation remain.
+eight mutation sentinels pass.  Complete validation also passes: `cabal build
+all`, all Cabal test suites (including 496 DSL and 378 Keiro examples), diagram
+freshness, strict validation of all 18 ADR concepts, both native Nix flake checks,
+`cabal sdist all`, and `git diff --check`.  No ADR changed because the durable
+readable-primary rendering policy is already owned by the canonical Keiki plan;
+Keiro only adopts that released API and enforces its documentation artifact.
+Release preparation remains.
 
 
 ## Context and Orientation
@@ -1053,5 +1060,5 @@ update explicit before changing code.
 updated the scalar pretty-tree pin for readable literal values, added and checked
 a semantic scalar Mermaid artifact, regenerated the guide diagrams, and hardened
 the scalar mutation harness to restore the complete generated fixture tree.  The
-focused adoption gates pass; the complete validation matrix remains before
-Milestone 4 is closed.
+focused and complete validation gates pass, closing Milestone 4 without a new
+local ADR.
