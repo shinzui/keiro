@@ -63,8 +63,12 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
   negative cases, and all 471 DSL examples pass. ADRs 4, 12, and 16 and both package changelogs
   record the boundary; the single bundle-log update was added and strict validation reports
   `OK: 17 concepts`.
-- [ ] Complete milestone 4: mutation-style compatibility evidence, repository-wide checks, and
-  final ADR distillation.
+- [x] (2026-08-02 04:55Z) Completed milestone 4. The combined final run passed the legacy and
+  typed contract targets, ID-domain migration, workspace nominals, and all 471 DSL examples;
+  `cabal build all`, native `nix flake check`, strict ADR validation (`OK: 17 concepts`), and
+  `git diff --check` passed. The language-1 generated contract has no diff from the pre-plan tree,
+  the new diagnostic and rollout constructors remain appended, and the focused assertions cover
+  every named mutation risk.
 
 
 ## Surprises & Discoveries
@@ -75,6 +79,11 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
   lowercase Crockford characters, while the plan requires a stable failure distinct from a
   structurally malformed value. `validateIdDomainText` now retries only the lowercase spelling
   for classification; acceptance remains unchanged.
+
+- Observation: the checked generated Haskell tree is formatter-controlled, while this plan
+  requires fresh language-4 scaffold output to be byte-identical to its committed module.
+  Evidence: the pre-commit formatter changed the first candidate; the language-4 emitter now
+  produces the formatter-stable layout directly, and a fresh CLI scaffold has an empty byte diff.
 
 
 ## Decision Log
@@ -125,7 +134,38 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Language 4 now makes the integration contract mean what its existing syntax says. A field such as
+`incidentId: typeid "inc"` scaffolds as `KindID "inc"`, encodes as the same canonical JSON string,
+and rejects malformed, wrong-prefix, non-canonical, and non-v7 input at `$.incidentId`. Invalid
+declared prefixes fail validation before generation. Language versions 1 through 3 retain their
+released `Text` DTOs, dependencies, permissive decoders, aggregate fold fingerprints, and replay
+classification.
+
+The semantic route is service-aware end to end: CLI and workspace scaffolding retain
+`CheckedService`, manifests add exactly `keiro-core` and `mmzk-typeid` when required, and existing
+record formats persist stable per-contract-field ID-domain identities. Compatibility wrappers
+remain explicitly legacy/version-1. The checked language-4 module is byte-identical to fresh CLI
+output, while the historical language-1 generated module is unchanged.
+
+The graph-identical language-3-to-4 change is operationally visible without masquerading as a
+source field edit. Its exact text transcript is:
+
+```text
+BREAKING: emergency contract-typeid-domain IncidentTransferNeedDeclared.incidentId: contract TypeID admission changed legacy-unchecked -> keiro-dsl/id-domain/typeid-v7/1(prefix=inc,json=canonical-json-text); generated Haskell changes from Text to KindID "inc" while valid JSON stays canonical text; newly generated consumers reject malformed, wrong-prefix, non-canonical, and non-v7 values [ContractTypeIdDomainChanged]
+    vector: public-consumer=breaking consumer-build=breaking rollout=drain-required,producer-first
+```
+
+The ordered remedy makes producers conform first, drains or remediates legacy-invalid in-flight
+messages, re-scaffolds and recompiles consumers, and then runs contract conformance. A real field
+type or prefix edit remains `ContractFieldChanged` and does not receive a duplicate finding.
+
+Final evidence comprises 471 passing `keiro-dsl-test` examples plus their property cases; two
+legacy contract passes; two typed round trips and four typed rejection passes; six ID-domain
+migration passes; the compiled workspace-nominals target; all-package Cabal build; native
+aarch64-darwin pre-commit and treefmt flake checks; and strict validation of all 17 ADR concepts.
+The main implementation lesson is that semantic profiles need capability-specific selectors:
+runtime semantics 3 can preserve the aggregate fold projection while tightening a public decoder,
+without numeric inheritance or a coarse fingerprint forcing unrelated compatibility churn.
 
 
 ## Context and Orientation
