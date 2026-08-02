@@ -2182,6 +2182,56 @@ main = hspec $ do
         serviceErrorCodes 3 candidate `shouldNotContain` [expected]
         serviceErrorCodes 4 candidate `shouldContain` [expected]
       serviceErrorCodes 4 acceptedEventBind `shouldNotContain` [IntakeBindUnresolved]
+    it "pins every emitted legacy single-spec diagnostic that lacked a direct negative test" $ do
+      reservation <- specOf "test/fixtures/reservation.keiro"
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      emitSpec <- specOf "test/fixtures/emit.keiro"
+      processSpec <- specOf "test/fixtures/surge-service.keiro"
+      queueSpec <- specOf "test/fixtures/reservation-work.keiro"
+      workflowSpec <- specOf "test/fixtures/workflow.keiro"
+      let updateFirstTransition update aggregate = aggregate {aggTransitions = updateFirst update (aggTransitions aggregate)}
+          undeclaredEvent = modifyAggregate "Reservation" (updateFirstTransition (\transition -> transition {tEmits = ["GhostEvent"]})) reservation
+          undeclaredState = modifyAggregate "Reservation" (updateFirstTransition (\transition -> transition {tGoto = "GhostState"})) reservation
+          terminalOutgoing = modifyAggregate "Reservation" (updateFirstTransition (\transition -> transition {tSource = "Expired"})) reservation
+          deprecatedEmitted = modifyAggregate "Reservation" (\aggregate -> aggregate {aggEvents = updateFirst (\event -> event {evDeprecated = True}) (aggEvents aggregate)}) reservation
+          wireVersionMismatch = modifyAggregate "Reservation" (\aggregate -> aggregate {aggWire = fmap (\wire -> wire {wireSchemaVersion = 2}) (aggWire aggregate)}) reservation
+          decodeRetry =
+            mapIntake
+              ( \intake ->
+                  intake
+                    { inkDisposition =
+                        [ if drOutcome row == "decodeFailed" then row {drAction = IRetry "5s"} else row
+                        | row <- inkDisposition intake
+                        ]
+                    }
+              )
+              intakeSpec
+          unresolvedPublisher = mapPublisher (\publisher -> publisher {pubEmit = "ghost"}) emitSpec
+          unresolvedIntake = mapIntake (\intake -> intake {inkContract = "ghost"}) intakeSpec
+          unboundedQueue = mapWorkqueue (\queue -> queue {wqMaxRetries = 0}) queueSpec
+          unresolvedEnqueue = mapDispatch (\dispatch -> dispatch {pdEnqueueTo = "ghost"}) queueSpec
+          unresolvedWorkflow =
+            mapOperation
+              ( \operation -> case opShape operation of
+                  RunOp _ input outcome -> operation {opShape = RunOp "GhostWorkflow" input outcome}
+                  _ -> operation
+              )
+              workflowSpec
+          cases =
+            [ (undeclaredEvent, UndeclaredEvent),
+              (undeclaredState, UndeclaredState),
+              (terminalOutgoing, TerminalHasOutgoing),
+              (deprecatedEmitted, DeprecatedEventStillEmitted),
+              (wireVersionMismatch, WireSchemaVersionMismatch),
+              (processSpec, ProcessBenignInversion),
+              (decodeRetry, DispositionDecodeUnboundedRetry),
+              (unresolvedPublisher, PublisherUnresolvedEmit),
+              (unresolvedIntake, IntakeUnresolvedContract),
+              (unboundedQueue, WqDlqWithoutCeiling),
+              (unresolvedEnqueue, DispatchEnqueueUnresolved),
+              (unresolvedWorkflow, RunWorkflowUnresolved)
+            ]
+      forM_ cases $ \(candidate, expected) -> diagnosticCodes candidate `shouldContain` [expected]
     it "rejects a missing status-map as StatusMapNotTotal" $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
       codes `shouldContain` [StatusMapNotTotal]
@@ -5708,6 +5758,39 @@ mapWorkflow update spec =
         ]
     }
 
+mapWorkqueue :: (WorkqueueNode -> WorkqueueNode) -> Spec -> Spec
+mapWorkqueue update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NWorkqueue queue -> NWorkqueue (update queue)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+mapDispatch :: (PgmqDispatchNode -> PgmqDispatchNode) -> Spec -> Spec
+mapDispatch update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NPgmqDispatch dispatch -> NPgmqDispatch (update dispatch)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+mapOperation :: (OperationNode -> OperationNode) -> Spec -> Spec
+mapOperation update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NOperation operation -> NOperation (update operation)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
 mapPublisher :: (PublisherNode -> PublisherNode) -> Spec -> Spec
 mapPublisher update spec =
   spec
@@ -5774,6 +5857,9 @@ processErrorCodes update = errorCodes . modifyProcess "HospitalSurge" update
 
 errorCodes :: Spec -> [DiagnosticCode]
 errorCodes spec = [code diagnostic | diagnostic <- validateSpec spec, severity diagnostic == Error]
+
+diagnosticCodes :: Spec -> [DiagnosticCode]
+diagnosticCodes = map code . validateSpec
 
 changeReadModelShape :: ReadModelNode -> ReadModelNode
 changeReadModelShape readModel =

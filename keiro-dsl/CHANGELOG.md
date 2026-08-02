@@ -8,16 +8,29 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
-- `DiagnosticCode` gains the append-only `ContractInvalidTypeIdPrefix` and
-  `ContractTypeIdDomainChanged` constructors, and `RolloutConstraint` gains
-  `RolloutProducerFirst`. Exhaustive matches over these exported types must be
-  extended.
+- `DiagnosticCode` gains append-only constructors for contract TypeID
+  admission and for closed policy, numeric, duplicate, identity, external-name,
+  intake-coupling, topic-alias, and wire-clause validation. Exhaustive matches
+  over `DiagnosticCode` must be extended. `RolloutConstraint` also gains
+  `RolloutProducerFirst`.
+- Removes the unreachable exported grammar types `Derivation`,
+  `DerivStrategy`, `Disposition`, `DispAction`, `EnvelopeBinding`, and
+  `EnvelopeLayer`. No parser, renderer, validator, or generator constructed
+  them; use the live node-specific derivation, disposition, and intake binding
+  types instead.
 
 ### New Features
 
 - Adds `language keiro-dsl 4`, selecting syntax profile 2 and
   `keiro-dsl/runtime-semantics/3`. Aggregate ID admission, fold fingerprints,
   replay classification, and versions 1 through 3 remain unchanged.
+- Closes accepted-but-unenforced service surfaces. Values that cannot lower to
+  working generated code are rejected under every language version; language 4
+  additionally enforces numeric floors, duplicate/shadowing rules, stable
+  runtime identity uniqueness, Kafka and PostgreSQL naming, intake envelope
+  and schema coupling, contract topic aliases, and the aggregate wire
+  convention. Emit source/key/discriminant names remain explicitly
+  descriptive-only.
 - Language-4 public contract fields declared as `typeid "inc"` now scaffold as
   `KindID "inc"`. Generated encoders keep canonical JSON strings, while
   field-path-aware decoders reject malformed text, the wrong prefix,

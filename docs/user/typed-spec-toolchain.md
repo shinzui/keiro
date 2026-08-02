@@ -86,6 +86,65 @@ token or supported-version data. They expose no Megaparsec type.
 and whitespace. `pretty` renders the canonical semantic spelling after lowering; it is not a
 lossless formatter and should not be used to preserve hand-formatted trivia.
 
+### Language 4 admission rules
+
+Language 4 selects `keiro-dsl/runtime-semantics/3`. It retains language 3's
+syntax and aggregate runtime behavior while making accepted service
+configuration honest before generation. Rules for values that cannot produce a
+working service also apply to released languages; rules that tighten a usable
+but ambiguous graph begin at language 4.
+
+For every language version, `check` now enforces these closed lowering and
+generation surfaces:
+
+- publisher `ordering` is one of `PerKeyHeadOfLine`, `PerSourceStream`,
+  `StopTheLine`, or `BestEffort`; backoff kind is `constant` or a complete,
+  internally valid `exponential` policy; intake dedupe policy is one of
+  `PreferIntegrationMessageId`, `PreferSourceEventIdentity`, or
+  `KafkaDeliveryIdentity`;
+- command, aggregate-event, and contract-event fields are unique; aggregate
+  states, contract events, and contract topic aliases are unique; and no two
+  live unguarded transitions share the same source state and command; and
+- a Kafka topic string is non-empty. Non-empty topic grammar is tightened by
+  language 4 as described below.
+
+Language 4 additionally requires:
+
+- publisher attempts, contract and intake schema versions, and read-model
+  versions to be at least one;
+- unique registers, same-category nominal declarations, emit-map values, and
+  read-model columns; a guarded transition cannot have an unguarded sibling for
+  the same source and command; and a contract field cannot shadow its event
+  discriminator;
+- workflow, process, and router stable identities to be non-empty, free of
+  the reserved name `$all`, whitespace/control characters, and `:`, and
+  unique across all three node families. Kebab case remains valid for these
+  stable names; saga categories still reject `-` because it is kiroku's
+  category/id boundary;
+- Kafka topics to be 1–249 ASCII characters from `[A-Za-z0-9._-]`, excluding
+  `.` and `..`; read-model schemas, tables, and columns to match PostgreSQL's
+  unquoted form `[a-z_][a-z0-9_]{0,62}`;
+- every contract event's topic alias to resolve; every intake bind and dedupe
+  key to resolve against the canonical `IntegrationEvent` envelope plus fields
+  of its accepted contract events; intake envelope policy to be exactly
+  `strict-required lenient-optional`; and intake decode schema version to equal
+  the referenced contract schema version; and
+- an explicit aggregate wire clause to say exactly `kind=ctorName
+  fields=camelCase`, the only convention current generation implements.
+
+The canonical intake envelope namespace is `messageId`, `source`,
+`destination`, `key`, `eventType`, `schemaVersion`, `contentType`,
+`schemaReference`, `sourceEventId`, `sourceGlobalPosition`, `payloadBytes`,
+`occurredAt`, `causationId`, `correlationId`, `traceContext`, `attributes`, plus
+the DSL extension `idempotencyKey`. An intake may also bind a field declared by
+any contract event in its `accept` list.
+
+An emit node's `source`, `key`, and map discriminant name remain descriptive:
+the current graph has no source read-model or typed field namespace against
+which to resolve them. `check` does resolve the contract, topic alias, mapped
+event targets, topic affinity, and duplicate map values. Treat the three
+descriptive words as documentation, not as a checked field-selection program.
+
 ## Supported node families
 
 A specification continues with `context <name>` and may declare shared ids, enums,

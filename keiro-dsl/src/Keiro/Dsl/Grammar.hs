@@ -30,14 +30,8 @@ module Keiro.Dsl.Grammar
     NominalScalarDecl (..),
     MappedDecl (..),
 
-    -- * The eight hole-kind types
-    Derivation (..),
-    DerivStrategy (..),
-    Disposition (..),
-    DispAction (..),
+    -- * Shared mapping type
     Mapping (..),
-    EnvelopeBinding (..),
-    EnvelopeLayer (..),
 
     -- * The Expr sublanguage
     Expr (..),
@@ -332,33 +326,6 @@ data MappedDecl
       }
   deriving stock (Eq, Show, Generic)
 
--- The eight hole-kind types. EP-1 only exercises hole-kinds 1–3 against the
--- aggregate vertical; the rest exist so EP-3…EP-6 reuse the same types.
-
--- | Hole-kind 1: a deterministic id/string derivation. Opaque strategies must
--- carry a captured @fixture@ (not a prose rule) so two agents re-derive them
--- identically.
-data Derivation = Derivation
-  { derivStrategy :: !DerivStrategy,
-    derivFixture :: !(Maybe Text)
-  }
-  deriving stock (Eq, Show, Generic)
-
-data DerivStrategy = UuidV5 | SuffixSplice
-  deriving stock (Eq, Show, Generic)
-
--- | Hole-kind 2: a failure→action table. Carries the two dangerous inversions a
--- @duplicate@/@rejected replay@ being treated as success and a
--- @previously-failed@ being dead-lettered rather than retried (enforced by
--- EP-4's validator rules).
-newtype Disposition = Disposition
-  { dispCases :: [(Name, DispAction)]
-  }
-  deriving stock (Eq, Show, Generic)
-
-data DispAction = AckOk | Retry !Int | DeadLetter !Text
-  deriving stock (Eq, Show, Generic)
-
 -- | Hole-kind 3: an explicit value→value table that is not an identity echo
 -- (e.g. an event name → projection status). @mapPartial@ records whether the
 -- spec author explicitly marked the table partial over its domain.
@@ -366,18 +333,6 @@ data Mapping = Mapping
   { mapPairs :: ![(Name, Name)],
     mapPartial :: !Bool
   }
-  deriving stock (Eq, Show, Generic)
-
--- | Hole-kind 4: which layer carries each envelope field, and whether the two
--- are cross-checked. Defined here for reuse; exercised by EP-4.
-data EnvelopeBinding = EnvelopeBinding
-  { envField :: !Name,
-    envLayer :: !EnvelopeLayer,
-    envCrossChecked :: !Bool
-  }
-  deriving stock (Eq, Show, Generic)
-
-data EnvelopeLayer = KafkaHeader | JsonBody
   deriving stock (Eq, Show, Generic)
 
 -- | The @Expr@ sublanguage used by @guard@ clauses and the right-hand side of
@@ -694,8 +649,7 @@ data Disp = DAckOk | DRetry | DDeadLetter !Text
   deriving stock (Eq, Show, Generic)
 
 -- | The complete dispatch disposition table (every arm mandatory; the
--- @on-duplicate AckOk@ benign inversion is explicit). Named to avoid clashing
--- with the hole-kind 'Disposition'.
+-- @on-duplicate AckOk@ benign inversion is explicit).
 data DispatchDisposition = DispatchDisposition
   { onAppended :: !Disp,
     onDuplicate :: !Disp,

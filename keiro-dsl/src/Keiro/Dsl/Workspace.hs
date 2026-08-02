@@ -1277,21 +1277,13 @@ instance HasLocs CorrelateDecl
 
 instance HasLocs DecodeSpec
 
-instance HasLocs DerivStrategy
-
-instance HasLocs Derivation
-
 instance HasLocs DeriveSpec
 
 instance HasLocs Disp
 
-instance HasLocs DispAction
-
 instance HasLocs DispatchDisposition
 
 instance HasLocs DispatchNode
-
-instance HasLocs Disposition
 
 instance HasLocs DispositionRow
 
@@ -1300,10 +1292,6 @@ instance HasLocs EmitMapRow
 instance HasLocs EmitNode
 
 instance HasLocs EnumDecl
-
-instance HasLocs EnvelopeBinding
-
-instance HasLocs EnvelopeLayer
 
 instance HasLocs Event
 
