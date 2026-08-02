@@ -112,7 +112,7 @@ journeyTransducer =
       _ -> False
 
 journeyFoldFingerprint :: Text
-journeyFoldFingerprint = "c5e44f6d33b3dd6f"
+journeyFoldFingerprint = "29be5148bc96430c92a20d1af1806e4f"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

@@ -26,7 +26,7 @@ main = do
                 hashDerived = shapeHash liveCodec == Shape.regFileShapeHash (Proxy @ReservationRegs)
                 stateShapeDerived =
                     stateShapeHash liveCodec
-                        == Shape.stateShapeHash (Proxy @ReservationVertex) <> ";fold=2367ef6fadf0e751"
+                        == Shape.stateShapeHash (Proxy @ReservationVertex) <> ";fold=22688643ff47ac19f59230f0be196521"
                 policyOk = case snapshotPolicy reservationEventStreamDef of
                     Every interval -> interval == 100
                     _ -> False

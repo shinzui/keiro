@@ -91,8 +91,12 @@ This section must always reflect the actual current state of the work.
   identity/evolution `Spec` wrappers are removed and both changelogs record the
   break; 490 focused examples, `cabal build all`, and both targeted conformance
   suites pass without identity-byte changes.
-- [ ] Milestone 5: widen the fingerprint hash beyond 64 bits in one
-  coordinated invalidation before the `0.9.0.0` release.
+- [x] 2026-08-02 11:13 PDT: Milestone 5 added the fold-only standard
+  FNV-1a-128 encoder, migrated every committed fold fingerprint and generated
+  consumer in one coordinated pre-release invalidation, updated ExecPlan 179,
+  amended ADR 0003 and added ADR 0018, and preserved all three unrelated 64-bit
+  identity families. All 491 focused DSL examples, the complete Cabal test
+  matrix, `cabal build all`, strict ADR validation, and `nix flake check` pass.
 - [x] 2026-08-02 09:57 PDT: reviewed the plan against the post-ExecPlan-180
   working tree, corrected the missing language-4 validation capability,
   order-dependent replay fallback, non-total API propagation, shared-hash
@@ -179,6 +183,26 @@ implementation. Provide concise evidence.
   therefore enforced from the `NominalEqualityV2` capability onward; the
   legacy profile retains that frozen best-effort collection so the encoder
   extraction does not retroactively reject or re-identify released fixtures.
+- Discovery (Milestone 5): the standard FNV-1a-128 empty-input vector is
+  `6c62272e07bb014262b821756295c58d`; the non-ASCII UTF-8 vector for `雪` is
+  `a68afaae758b5822836dbc787bb233bd`. The six representative aggregate pins are
+  now `11a9e61719371a436e984a2aeee1a2b0`,
+  `410b25715899c41de2218f613fc16937`,
+  `d169ad9824b76fafe43c6c86bb601ebd`,
+  `29be5148bc96430c92a20d1af1806e4f`,
+  `28dce1eb22b78bca3ec12ed48f5e242f`, and
+  `6018a4e430e608c0919a0f8d865d4d45`.
+- Discovery (Milestone 5): two older snapshot fixtures also embed aggregate
+  fold identity outside the six-family baseline. Regeneration changed the
+  aggregate-scalars pin to `9b1c6db00e4fff39f048359b6d98fb99`
+  and the reservation-snapshot pin to
+  `22688643ff47ac19f59230f0be196521`; its compiled discriminator assertion had
+  to move with the generated module.
+- Discovery (Milestone 5): broad direct scaffold regeneration changes formatting
+  in historical generated trees even when their semantics are current. The
+  committed migration therefore retains only the byte-verified fingerprint
+  literal changes; freshness tests prove those files still equal live scaffold
+  output modulo their established formatting normalization.
 
 
 ## Decision Log
@@ -345,6 +369,17 @@ paths accept only `CheckedService`.  The focused suite has 490 passing examples,
 including exhaustive independent permutations of the representative sibling
 transition group.
 
+Milestone 5 completes the intentional compatibility break before `0.9.0.0`.
+Aggregate fold identity now applies standard FNV-1a-128 to the same frozen UTF-8
+surface and emits exactly 32 lowercase hexadecimal characters. Every generated
+or compiled fingerprint consumer was migrated together, while the pinned
+read-model shape, mapped-wire, and behavior-key 64-bit values remained unchanged.
+ADR 0003 now records the widened snapshot discriminator and frozen encoder;
+ADR 0018 records the durable capability, totality, and canonical identity
+decisions. ExecPlan 179's living guarantee ledger retains its unchanged surface
+claim with the new hash pin. The full Cabal matrix, all-package build, strict ADR
+validation, tree formatting/pre-commit checks, and `nix flake check` pass.
+
 
 ## Context and Orientation
 
@@ -352,9 +387,10 @@ Definitions used throughout: the "fold surface" is the canonical text
 description of an aggregate's replay-relevant behavior computed by
 `aggregateFoldSurfaceForService` in
 `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs`; the "fold fingerprint" is its
-FNV-1a-64 hash (`fnv1a64` in `keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs`),
-embedded in generated transducers and in the snapshot-compatibility
-discriminator of ADR 0003.  "Replay impact" is the classification in
+digest embedded in generated transducers and in the snapshot-compatibility
+discriminator of ADR 0003. At plan start this was the shared FNV-1a-64 helper;
+the completed implementation uses the fold-only `foldFingerprint128` over the
+frozen canonical surface. "Replay impact" is the classification in
 `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` that tells an operator which event
 streams a spec change forces them to re-audit.  A "gate" is any code path that
 enables or disables semantic behavior based on the effective language
@@ -364,7 +400,7 @@ The language registry (`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`) holds
 four released versions.  Syntax capabilities are already per-feature: each
 registry row carries a `SyntaxProfile` with a `Set LanguageFeature` and a
 private constructor, so parser dispatch asks `syntaxProfileSupportsFeature`.
-Runtime semantics has no such structure: each row carries
+Before Milestone 1, runtime semantics had no such structure: each row carried
 `definitionRuntimeSemantics :: Text`, and the consumers are:
 
 - `keiro-dsl/src/Keiro/Dsl/IdDomain.hs` — `idDomainContractFor` (generated and
@@ -384,7 +420,7 @@ Runtime semantics has no such structure: each row carries
   fresh segment.  Its `FromJSON` instance also rejects a mismatched semantics
   string with a bare `guard` and no error message.
 
-`FoldFingerprint.hs` builds the fold surface from that segment plus state,
+Before Milestone 3, `FoldFingerprint.hs` built the fold surface from that segment plus state,
 register, nominal, transition, and rule segments.  Three properties matter
 here.  It renders expressions with the presentation pretty printer
 (`renderExpr` from `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).  It is not
@@ -404,33 +440,36 @@ without calling `validateService`.  Consequently, making only the leaf fold
 surface return `Either` would be incomplete; each consumer must propagate the
 error or refuse before rendering output.
 
-The current aggregate fold digest imports `fnv1a64` from
+Before Milestone 5, the aggregate fold digest imported `fnv1a64` from
 `keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs`.  That exported helper is also used
 for behavior-obligation keys, and `deriveShapeHash` uses it for read-model
 shape identities.  `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs` has a separate copy
 for mapped-wire identities.  None of those identities is the aggregate fold
-fingerprint governed by ADR 0003, so Milestone 5 introduces a dedicated
+fingerprint governed by ADR 0003, so Milestone 5 introduced a dedicated
 fold-only FNV-1a-128 encoder instead of altering either 64-bit helper.
 
 ExecPlan 179 (`docs/plans/179-generate-one-human-readable-authoritative-keiro-transducer.md`)
-depends on this machinery staying put: its guarantee ledger pins fingerprint
-`d0897c163c958108` for the canonical scalar fixture, and its Context section
-prohibits editing `renderExpr`/`renderTransition` precisely because this plan
-has not yet frozen the encoding.  ExecPlan 178 established the contract-ID
+depended on this machinery staying put through its guarantee ledger: it
+originally pinned `d0897c163c958108` for the canonical scalar fixture and
+prohibited edits to `renderExpr`/`renderTransition`. Its living sections now
+record the unchanged canonical surface, frozen encoder, and coordinated current
+pin `11a9e61719371a436e984a2aeee1a2b0`. ExecPlan 178 established the contract-ID
 gate, and ExecPlan 180
 (`docs/plans/180-close-accepted-but-unenforced-spec-surfaces-before-language-4-ships.md`)
 established the strict-validation gate that landed after this plan's original
 inventory.  Both are current version-4 behavior this plan rewrites.
 
 Relevant ADRs: ADR 0003 (the fingerprint is a snapshot-compatibility
-component and explicitly accepts the 64-bit risk — Milestone 5 amends it),
+component and now records the fold-only 128-bit migration and frozen encoder),
 [ADR 0004](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
 (the registry tests added here are earliest-boundary gates for
 version-registration mistakes), and
 [ADR 0016](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
 (the released-language registry this plan restructures internally without
-changing any released meaning).  No ADR yet documents the capability-profile
-or frozen-encoder decisions; the distillation pass must create one.
+changing any released meaning), and
+[ADR 0018](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md)
+(the capability-profile, totality, deterministic pairing, frozen encoder, and
+fold-only digest decisions distilled by this plan).
 
 
 ## Plan of Work

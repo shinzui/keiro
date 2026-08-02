@@ -8,6 +8,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Aggregate fold fingerprints widen from 16-hex-digit FNV-1a-64 to
+  32-lowercase-hex-digit FNV-1a-128. This intentionally invalidates snapshots
+  produced with the old fold discriminator; re-scaffold generated transducers
+  before deploying `0.9.0.0`. Read-model shape, mapped-wire, and behavior-key
+  64-bit identities are unchanged.
 - Aggregate fold, diff, replay-impact, and workspace-diff service APIs now
   return `Either FoldSurfaceError`; scaffold planning refuses the same error
   before module generation. Removes the misleading legacy/version-1
@@ -31,12 +36,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 - Runtime semantics now uses private monotone capability profiles rather than
   consumer-maintained identifier-string lists. Aggregate fold identity and
-  replay transition comparison use a frozen canonical encoder independent of
-  presentation pretty-printing, and replay pairing of guard-disambiguated
-  sibling transitions is declaration-order invariant.
+  replay transition comparison use a total frozen canonical encoder independent
+  of presentation pretty-printing, and replay pairing of guard-disambiguated
+  sibling transitions is declaration-order invariant. Fold identity applies the
+  standard FNV-1a-128 octet fold to that frozen UTF-8 surface.
 - Adds `language keiro-dsl 4`, selecting syntax profile 2 and
-  `keiro-dsl/runtime-semantics/3`. Aggregate ID admission, fold fingerprints,
-  replay classification, and versions 1 through 3 remain unchanged.
+  `keiro-dsl/runtime-semantics/3`. Relative to language 3, aggregate ID
+  admission, fold fingerprints, and replay classification remain unchanged;
+  versions 1 through 3 retain their released semantics.
 - Closes accepted-but-unenforced service surfaces. Values that cannot lower to
   working generated code are rejected under every language version; language 4
   additionally enforces numeric floors, duplicate/shadowing rules, stable

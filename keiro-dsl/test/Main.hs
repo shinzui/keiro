@@ -26,6 +26,7 @@ import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
+import Keiro.Dsl.CanonicalEncoding (foldFingerprint128)
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
@@ -115,6 +116,10 @@ main = hspec $ do
   frontendProfilesSpec
 
   describe "runtime capability and fold identity baseline (plan 181)" $ do
+    it "pins the fold-only FNV-1a-128 UTF-8 encoding" $ do
+      foldFingerprint128 "" `shouldBe` "6c62272e07bb014262b821756295c58d"
+      foldFingerprint128 "雪" `shouldBe` "a68afaae758b5822836dbc787bb233bd"
+
     it "pins complete fold surfaces and fingerprints across representative aggregates" $ do
       scalar <- checkedServiceOf "test/fixtures/aggregate-scalar-expressions-v2.keiro"
       nominal <- checkedServiceOf "test/fixtures/nominal-scalars.keiro"
@@ -953,7 +958,7 @@ main = hspec $ do
                 surface = aggregateFoldSurfaceForService service aggregate
                 manifest = renderManifestForService "aggregate-scalar-expressions-v2.keiro" modules service
                 readableTransducer = T.unwords (T.words transducer)
-            aggregateFoldFingerprintForService service aggregate `shouldBe` "d0897c163c958108"
+            aggregateFoldFingerprintForService service aggregate `shouldBe` "11a9e61719371a436e984a2aeee1a2b0"
             T.lines surface
               `shouldBe` [ "state:Open|terminal=false",
                            "state:Reviewed|terminal=false",

@@ -81,7 +81,7 @@ projectTransducer =
       _ -> False
 
 projectFoldFingerprint :: Text
-projectFoldFingerprint = "6ee6400f21b05845"
+projectFoldFingerprint = "6018a4e430e608c0919a0f8d865d4d45"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

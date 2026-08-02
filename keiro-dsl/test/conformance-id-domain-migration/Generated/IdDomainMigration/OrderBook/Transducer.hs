@@ -48,7 +48,7 @@ orderBookTransducer =
       _ -> False
 
 orderBookFoldFingerprint :: Text
-orderBookFoldFingerprint = "ce837676f16ed1a5"
+orderBookFoldFingerprint = "d169ad9824b76fafe43c6c86bb601ebd"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

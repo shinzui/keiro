@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-dsl**: aggregate fold fingerprints widen from 16-hex-digit
+  FNV-1a-64 to 32-lowercase-hex-digit FNV-1a-128, intentionally invalidating
+  snapshots created with the earlier discriminator before the coordinated
+  `0.9.0.0` release. Generated transducers must be refreshed; unrelated
+  read-model, mapped-wire, and behavior-key 64-bit identities do not move.
 - **keiro-dsl**: aggregate fold, diff, replay-impact, and workspace-diff
   service APIs now return `Either FoldSurfaceError`; scaffold planning refuses
   the same error before module generation. The misleading `Spec`-only
@@ -20,9 +25,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 ### Other Changes
 
 - **keiro-dsl**: runtime behavior is selected by monotone capability profiles,
-  and persisted fold/replay comparison bytes come from a frozen canonical
+  and persisted fold/replay comparison bytes come from a total frozen canonical
   encoder independent of presentation pretty-printing. Replay pairing of
-  guard-disambiguated sibling transitions is declaration-order invariant.
+  guard-disambiguated sibling transitions is declaration-order invariant; fold
+  identity hashes the frozen UTF-8 surface with standard FNV-1a-128.
 
 ## 0.8.0.0 — 2026-08-01
 

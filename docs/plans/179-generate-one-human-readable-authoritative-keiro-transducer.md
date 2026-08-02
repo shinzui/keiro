@@ -60,6 +60,10 @@ This section must always reflect the actual current state of the work.
   sentinels, the complete Cabal test matrix, `cabal build all`, `cabal sdist all`,
   strict ADR validation, and `nix flake check`; documentation and ADR amendments
   are complete.
+- [x] 2026-08-02 11:06 PDT: ExecPlan 181's coordinated pre-release identity
+  migration widened the independently pinned fold digest to FNV-1a-128. The
+  canonical scalar surface is unchanged and its current fingerprint pin is
+  `11a9e61719371a436e984a2aeee1a2b0`.
 - [ ] Milestone 4: adopt released Keiki `0.8`, make committed diagrams semantic,
   and refresh generated documentation.
 - [ ] Milestone 5: prepare and, with explicit operator approval, publish the
@@ -187,6 +191,12 @@ implementation. Provide concise evidence.
   assertion after broad formatting; regenerating the tree and formatting only its
   `Transducer` files made the corrected 475-example DSL suite and complete Cabal
   matrix pass.
+- Discovery: ExecPlan 181 separated canonical fold encoding from presentation
+  rendering and then widened only aggregate fold identity. The canonical scalar
+  surface proven here did not change, while its deliberate pre-release hash
+  migration changed `d0897c163c958108` to
+  `11a9e61719371a436e984a2aeee1a2b0`; read-model, mapped-wire, and behavior-key
+  64-bit identities stayed pinned.
 
 
 ## Decision Log
@@ -336,7 +346,7 @@ generated output has changed yet; later milestone outcomes belong below this
 planning-review note.
 
 Milestone 0 completed on 2026-08-02.  The focused unit suite now pins the full
-canonical fold surface, fingerprint `d0897c163c958108`, identity diff and replay
+canonical fold surface, fingerprint `11a9e61719371a436e984a2aeee1a2b0`, identity diff and replay
 classification, generated manifest/module shape, Hole-only module shape, stale
 report wording, and firewall boundary.  The compiled conformance suite pins
 Keiki `0.7`'s exact `prettyPred` and `prettyUpdate` output in addition to its
@@ -350,8 +360,9 @@ guards, register writes, emitted payloads, and target states together.  All six
 previously committed aggregate `Expressions.hs` files and their Cabal entries are
 gone, including Hole-only and workspace aggregates.  Single-file, workspace, and
 adoption stale reports distinguish an exact generated banner from a missing one
-and make no safe-deletion claim.  The canonical fingerprint remains
-`d0897c163c958108`; the exact Keiki `0.7` pretty predicate/update pins, forward and
+and make no safe-deletion claim.  The canonical surface remains unchanged and,
+after ExecPlan 181's coordinated digest widening, its current fingerprint is
+`11a9e61719371a436e984a2aeee1a2b0`; the exact Keiki `0.7` pretty predicate/update pins, forward and
 replay equality, symbolic classifications, nominal/structural witness laws,
 behavior ownership, and snapshot identity all pass.  Milestones 4 and 5 remain
 blocked by the external Keiki `0.8` release/tag and separate publication approval.
@@ -492,7 +503,8 @@ stale-report assertions in `keiro-dsl/test/Main.hs`; keep compiled
 forward/replay and symbolic assertions in
 `keiro-dsl/test/conformance-scalar-expressions/Main.hs`; and keep mutation
 sentinels in `keiro-dsl/test/aggregate-scalar-expression-mutation-test.sh`.
-Record the current canonical fingerprint (`d0897c163c958108` at plan creation) as
+Record the current canonical fingerprint (`11a9e61719371a436e984a2aeee1a2b0` after
+ExecPlan 181's coordinated digest widening) as
 fixture evidence, but compute semantic expectations from the checked spec rather
 than blessing arbitrary generated text.  Run this baseline on the unchanged
 generator.  No later milestone starts until it passes.
@@ -775,7 +787,7 @@ The guarantee ledger is accepted only when all of these proofs pass:
 - Symbolic verification returns the same verified/counterexample/unverified class
   for every canonical transition; readability must not make a proof gate more
   optimistic.
-- The unchanged fixture retains aggregate fingerprint `d0897c163c958108` and the
+- The unchanged fixture retains aggregate fingerprint `11a9e61719371a436e984a2aeee1a2b0` and the
   same fold-surface segments.  Guard/write mutations still alter the fingerprint,
   snapshot compatibility discriminator, diff vector, and replay-impact result.
 - Generated firewall and create-once Hole preservation retain their pre-change

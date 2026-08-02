@@ -72,7 +72,7 @@ nominalLedgerTransducer =
       _ -> False
 
 nominalLedgerFoldFingerprint :: Text
-nominalLedgerFoldFingerprint = "d452ae7d73a3bf7f"
+nominalLedgerFoldFingerprint = "410b25715899c41de2218f613fc16937"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

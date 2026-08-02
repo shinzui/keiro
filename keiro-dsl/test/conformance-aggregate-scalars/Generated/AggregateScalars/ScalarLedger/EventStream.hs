@@ -47,7 +47,7 @@ scalarLedgerEventStreamDef =
     -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes
     -- module are invisible here: bump `state-codec version=` manually or old
     -- snapshots will be served stale.
-    , stateCodec = Just (withFoldFingerprint "f1fd9ca5a924e6b9" (defaultStateCodec 1))
+    , stateCodec = Just (withFoldFingerprint "9b1c6db00e4fff39f048359b6d98fb99" (defaultStateCodec 1))
     }
 
 scalarLedgerSnapshotFixture :: (Int, Text)

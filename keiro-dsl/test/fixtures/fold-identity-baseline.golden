@@ -1,6 +1,6 @@
 fixture=aggregate-scalar-expressions-v2
 aggregate=ScalarAccount
-fingerprint=d0897c163c958108
+fingerprint=11a9e61719371a436e984a2aeee1a2b0
 surface-begin
 state:Open|terminal=false
 state:Reviewed|terminal=false
@@ -25,7 +25,7 @@ surface-end
 
 fixture=nominal-scalars
 aggregate=NominalLedger
-fingerprint=d452ae7d73a3bf7f
+fingerprint=410b25715899c41de2218f613fc16937
 surface-begin
 state:Empty|terminal=false
 state:Recorded|terminal=true
@@ -58,7 +58,7 @@ surface-end
 
 fixture=id-domain-migration-v3
 aggregate=OrderBook
-fingerprint=ce837676f16ed1a5
+fingerprint=d169ad9824b76fafe43c6c86bb601ebd
 surface-begin
 semantic-contract:keiro-dsl/runtime-semantics/2
 state:Empty|terminal=false
@@ -70,7 +70,7 @@ surface-end
 
 fixture=behavior-complete
 aggregate=Journey
-fingerprint=c5e44f6d33b3dd6f
+fingerprint=29be5148bc96430c92a20d1af1806e4f
 surface-begin
 state:Empty|terminal=false
 state:Active|terminal=false
@@ -87,7 +87,7 @@ surface-end
 
 fixture=workspace-nominals
 aggregate=ProjectArtifact
-fingerprint=f9264cc50ea1c28f
+fingerprint=28dce1eb22b78bca3ec12ed48f5e242f
 surface-begin
 state:Empty|terminal=false
 state:Recorded|terminal=true
@@ -101,7 +101,7 @@ surface-end
 
 fixture=workspace-nominals
 aggregate=Project
-fingerprint=6ee6400f21b05845
+fingerprint=6018a4e430e608c0919a0f8d865d4d45
 surface-begin
 state:Empty|terminal=false
 state:Live|terminal=false

@@ -8,12 +8,15 @@
 module Keiro.Dsl.CanonicalEncoding
   ( canonicalExpr,
     canonicalTransition,
+    foldFingerprint128,
   )
 where
 
+import Data.Bits (shiftR, xor, (.&.), (.|.))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Numeric (showHex)
 import Prettyprinter
 import Prettyprinter.Render.Text (renderStrict)
 
@@ -30,6 +33,51 @@ canonicalTransition =
   renderStrict
     . layoutPretty LayoutOptions {layoutPageWidth = Unbounded}
     . docTransition
+
+-- | A fixed-width FNV-1a-128 digest over the frozen fold surface's UTF-8
+-- bytes. The constants and octet fold are the standard values from RFC 9923;
+-- multiplication is reduced modulo 2^128 explicitly so the result does not
+-- depend on a machine integer width.
+foldFingerprint128 :: Text -> Text
+foldFingerprint128 input =
+  T.justifyRight 32 '0' (T.pack (showHex digest ""))
+  where
+    digest = foldl' step fnvOffsetBasis128 (concatMap utf8Bytes (T.unpack input))
+    step hash octet = ((hash `xor` octet) * fnvPrime128) `mod` fnvModulus128
+
+fnvOffsetBasis128 :: Integer
+fnvOffsetBasis128 = 0x6c62272e07bb014262b821756295c58d
+
+fnvPrime128 :: Integer
+fnvPrime128 = 0x0000000001000000000000000000013b
+
+fnvModulus128 :: Integer
+fnvModulus128 = 2 ^ (128 :: Int)
+
+-- | Encode one Unicode scalar value as UTF-8 octets without coupling the
+-- persisted identity implementation to a text or bytestring encoder version.
+utf8Bytes :: Char -> [Integer]
+utf8Bytes character
+  | codePoint <= 0x7f = [byte codePoint]
+  | codePoint <= 0x7ff =
+      [ byte (0xc0 .|. (codePoint `shiftR` 6)),
+        continuation codePoint
+      ]
+  | codePoint <= 0xffff =
+      [ byte (0xe0 .|. (codePoint `shiftR` 12)),
+        continuation (codePoint `shiftR` 6),
+        continuation codePoint
+      ]
+  | otherwise =
+      [ byte (0xf0 .|. (codePoint `shiftR` 18)),
+        continuation (codePoint `shiftR` 12),
+        continuation (codePoint `shiftR` 6),
+        continuation codePoint
+      ]
+  where
+    codePoint = fromEnum character
+    byte = toInteger
+    continuation value = byte (0x80 .|. (value .&. 0x3f))
 
 docTransition :: Transition -> Doc ann
 docTransition transition =

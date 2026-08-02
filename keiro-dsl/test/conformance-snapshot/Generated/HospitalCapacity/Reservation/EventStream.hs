@@ -47,7 +47,7 @@ reservationEventStreamDef =
           -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes
           -- module are invisible here: bump `state-codec version=` manually or old
           -- snapshots will be served stale.
-          stateCodec = Just (withFoldFingerprint "2367ef6fadf0e751" (defaultStateCodec 1))
+          stateCodec = Just (withFoldFingerprint "22688643ff47ac19f59230f0be196521" (defaultStateCodec 1))
         }
 
 reservationSnapshotFixture :: (Int, Text)

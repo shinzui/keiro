@@ -18,13 +18,12 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
-import Keiro.Dsl.CanonicalEncoding (canonicalExpr)
+import Keiro.Dsl.CanonicalEncoding (canonicalExpr, foldFingerprint128)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (NominalEqualityV2), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.ReadModelShape (fnv1a64)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
 
@@ -60,10 +59,10 @@ renderFoldSurfaceError = \case
       <> "': "
       <> detail
 
--- | The sixteen-hex-digit identity of an aggregate's replay fold under the
+-- | The thirty-two-hex-digit identity of an aggregate's replay fold under the
 -- service's effective runtime semantics.
 aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
-aggregateFoldFingerprintForService service = fmap fnv1a64 . aggregateFoldSurfaceForService service
+aggregateFoldFingerprintForService service = fmap foldFingerprint128 . aggregateFoldSurfaceForService service
 
 -- | Canonical pre-hash text under a checked semantic contract. A runtime
 -- discriminator is included only for a contract that can change fold behavior;

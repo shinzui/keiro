@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-02
+* **Update**: Record runtime capability profiles, the frozen canonical fingerprint encoder, and the widened snapshot hash (plan 181).
 * **Update**: Record check-time policy, duplicate, identity, and envelope gates (plan 180).
 * **Update**: Collapse version-2 checked guards and writes into one readable authoritative transducer and make stale generated cleanup depend on exact-banner provenance plus unchanged-byte evidence (plan 179).
 * **Update**: Record language-4 typed integration-contract TypeID admission and rollout semantics (plan 178).

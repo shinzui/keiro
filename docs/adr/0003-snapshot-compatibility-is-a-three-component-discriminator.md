@@ -45,9 +45,23 @@ misses once, full-replays, and may then be replaced with a current seed.
 
 Keiki's `CanonicalStateShape` derives the control-state portion from datatype
 and constructor structure. `defaultStateCodec` uses it automatically. The DSL
-also derives a sixteen-hex-digit FNV-1a fingerprint from the spec-visible replay
-surface: state order and terminality, register types and initials, transition
-mode/guards/writes/emits/targets, and transitively referenced rule bodies.
+also derives a thirty-two-lowercase-hex-digit FNV-1a-128 fingerprint from the
+spec-visible replay surface: state order and terminality, register types and
+initials, transition mode/guards/writes/emits/targets, and transitively
+referenced rule bodies. The FNV constants and UTF-8 octet fold follow
+[RFC 9923](https://www.rfc-editor.org/rfc/rfc9923.html), with multiplication
+reduced modulo 2^128.
+
+The exact pre-hash bytes belong to a dedicated frozen canonical encoder, not
+the presentation pretty printer. Changing those bytes or the digest algorithm
+is an explicit snapshot-identity migration that must update the complete fold
+surface goldens, generated fingerprints, and compatibility documentation
+together. The 2026-08-02 FNV-1a-64 to FNV-1a-128 migration intentionally made
+all earlier aggregate snapshots miss once before the coordinated `0.9.0.0`
+release; no production snapshots existed at that boundary. Read-model shape,
+mapped-wire, and behavior-key identities remain on their separately frozen
+64-bit contracts.
+
 Generated codecs compose it with `withFoldFingerprint` in the human-readable
 form:
 
@@ -106,6 +120,13 @@ overwrites the value or an explicit domain migration changes the state.
 - Invisible hand-written fold changes remain an explicit operational contract:
   bump the stream's `FoldVersion` through `defaultStateCodecWithFold`, or
   manually bump `stateCodecVersion` when using the lower-level codec API.
-- Fingerprint collisions retain the old stale-seed failure mode, but FNV-1a-64
-  is acceptable here as a deterministic change detector rather than a security
-  boundary.
+- Fingerprint collisions retain the old stale-seed failure mode, but the
+  fold-only FNV-1a-128 value is acceptable here as a deterministic change
+  detector rather than a security boundary. It is not used for authentication
+  or adversarial-input integrity.
+
+## Related decisions
+
+- [ADR 0018](0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md)
+  defines the capability metadata and canonical encoder that supply this
+  discriminator.
