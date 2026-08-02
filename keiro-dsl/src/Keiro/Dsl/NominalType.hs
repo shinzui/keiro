@@ -19,11 +19,8 @@ module Keiro.Dsl.NominalType
     NominalTypeRegistry,
     nominalTypes,
     lookupNominalType,
-    nominalEqualityContract,
     nominalEqualityContractForService,
-    nominalEqualityIdentity,
     nominalEqualityIdentityForService,
-    nominalEqualityIdentities,
     nominalEqualityIdentitiesForService,
     NominalTypeError (..),
     resolveNominalTypes,
@@ -42,8 +39,8 @@ import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
-import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), SourceLanguage (..), runtimeProfileHasCapability)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract, effectiveRuntimeProfile)
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile)
 import Keiro.Dsl.TypeGraph
 
 data NominalScalarRepresentation
@@ -123,12 +120,6 @@ newtype NominalTypeRegistry = NominalTypeRegistry
 lookupNominalType :: Name -> NominalTypeRegistry -> Maybe ResolvedNominalType
 lookupNominalType name = Map.lookup name . nominalTypes
 
--- | Resolve the declaration-scoped equality contract. Nominal scalar wrappers
--- keep their existing scalar projection behavior; this contract is the new
--- authority only for IDs and enums.
-nominalEqualityContract :: ResolvedNominalType -> Maybe CheckedNominalEquality
-nominalEqualityContract = nominalEqualityContractForService (effectiveLanguageContract LegacyUnversioned)
-
 nominalEqualityContractForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe CheckedNominalEquality
 nominalEqualityContractForService languageContract nominal = case resolvedNominalRepresentation nominal of
   IdRepresentation prefix ->
@@ -161,9 +152,6 @@ nominalEqualityContractForService languageContract nominal = case resolvedNomina
 -- | Stable, checked identity used by generated projection tags, fingerprints,
 -- scaffold history, and explain output. It includes the existing binding
 -- authority rather than introducing a second consumer equality function.
-nominalEqualityIdentity :: ResolvedNominalType -> Maybe Text
-nominalEqualityIdentity = nominalEqualityIdentityForService (effectiveLanguageContract LegacyUnversioned)
-
 nominalEqualityIdentityForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe Text
 nominalEqualityIdentityForService languageContract nominal = do
   equality <- nominalEqualityContractForService languageContract nominal
@@ -191,9 +179,6 @@ nominalEqualityIdentityForService languageContract nominal = do
           "binding=" <> unQualifiedValueName (consumerNominalBinding binding),
           "binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding)
         ]
-
-nominalEqualityIdentities :: Spec -> [Text]
-nominalEqualityIdentities spec = nominalEqualityIdentitiesForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
 
 nominalEqualityIdentitiesForService :: CheckedService -> [Text]
 nominalEqualityIdentitiesForService service = case resolveNominalTypes spec of

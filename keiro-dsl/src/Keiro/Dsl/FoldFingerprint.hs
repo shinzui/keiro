@@ -7,8 +7,6 @@ module Keiro.Dsl.FoldFingerprint
     renderFoldSurfaceError,
     aggregateFoldFingerprintForService,
     aggregateFoldSurfaceForService,
-    aggregateFoldFingerprint,
-    aggregateFoldSurface,
   )
 where
 
@@ -27,7 +25,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (NominalEqualityV2), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (fnv1a64)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService, runtimeSemanticsFingerprintSegments)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
 
 -- | A checked service can retain language provenance before semantic
@@ -66,19 +64,6 @@ renderFoldSurfaceError = \case
 -- service's effective runtime semantics.
 aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
 aggregateFoldFingerprintForService service = fmap fnv1a64 . aggregateFoldSurfaceForService service
-
--- | The sixteen-hex-digit identity of an aggregate's replay fold.
--- This compatibility wrapper selects legacy/version-1 runtime semantics.
-aggregateFoldFingerprint :: Spec -> Aggregate -> Either FoldSurfaceError Text
-aggregateFoldFingerprint spec = aggregateFoldFingerprintForService (legacyCheckedService spec)
-
--- | Canonical pre-hash text for an aggregate's replay fold.
---
--- Rules are declarations on 'Spec', not children of 'Aggregate', so the complete
--- spec is required. Only rules reached from transition guards and writes are
--- included, transitively, in declaration order.
-aggregateFoldSurface :: Spec -> Aggregate -> Either FoldSurfaceError Text
-aggregateFoldSurface spec = aggregateFoldSurfaceForService (legacyCheckedService spec)
 
 -- | Canonical pre-hash text under a checked semantic contract. A runtime
 -- discriminator is included only for a contract that can change fold behavior;

@@ -6,6 +6,24 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **keiro-dsl**: aggregate fold, diff, replay-impact, and workspace-diff
+  service APIs now return `Either FoldSurfaceError`; scaffold planning refuses
+  the same error before module generation. The misleading `Spec`-only
+  `aggregateFoldFingerprint`, `aggregateFoldSurface`, `diffSpecs`,
+  `replayImpact`, `nominalEqualityContract`, `nominalEqualityIdentity`, and
+  `nominalEqualityIdentities` legacy/version-1 wrappers are removed. Callers
+  must retain and pass a `CheckedService` (or explicitly construct one with
+  `legacyCheckedService`).
+
+### Other Changes
+
+- **keiro-dsl**: runtime behavior is selected by monotone capability profiles,
+  and persisted fold/replay comparison bytes come from a frozen canonical
+  encoder independent of presentation pretty-printing. Replay pairing of
+  guard-disambiguated sibling transitions is declaration-order invariant.
+
 ## 0.8.0.0 — 2026-08-01
 
 All published packages move to 0.8.0.0 together. The cycle is entirely `keiro-dsl`: the `.keiro`

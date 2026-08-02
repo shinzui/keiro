@@ -1,4 +1,4 @@
--- | The spec evolution differ. 'diffSpecs' compares an /old/ and a /new/ 'Spec'
+-- | The service evolution differ compares an /old/ and a /new/ checked graph
 -- and classifies changes over the persisted decode and identity surfaces.
 --
 -- Changes are __ADDITIVE__ when they preserve stored data, __WARNING__ when they
@@ -41,7 +41,6 @@ module Keiro.Dsl.Diff
     diffSources,
     sourceLanguageChange,
     diffServices,
-    diffSpecs,
     DiffEnv (..),
     NodeFamily (..),
     familyOf,
@@ -63,7 +62,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
-import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurface, aggregateFoldSurfaceForService)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
@@ -752,12 +751,6 @@ renderContractIdDomainChange fieldType oldContract newContract =
           <> "\" to Text and the generated decoder no longer enforces the frozen TypeID-v7 domain"
       _ -> "; generated contract admission changed while the source field type remained unchanged"
 
--- | Compatibility wrapper for graph-only callers, explicitly using
--- legacy/version-1 semantics on both sides.
-diffSpecs :: Spec -> Spec -> Either FoldSurfaceError [Change]
-diffSpecs old new =
-  diffServices (legacyCheckedService old) (legacyCheckedService new)
-
 diffCheckedSpecs :: Spec -> Spec -> [Change]
 diffCheckedSpecs old new =
   sharedDeclarationDiff env
@@ -765,7 +758,7 @@ diffCheckedSpecs old new =
   where
     env = DiffEnv old new
 
--- | Compare provenance first, then delegate semantic graphs to 'diffSpecs'.
+-- | Compare provenance first, then delegate semantic graphs to 'diffServices'.
 diffSources :: ParsedSource -> ParsedSource -> Either FoldSurfaceError [Change]
 diffSources old new = do
   semanticChanges <- diffServices (checkedSource old) (checkedSource new)
@@ -1091,7 +1084,7 @@ aggregatePairDiff oldSpec newSpec oldAgg newAgg =
 -- fingerprint and invalidates old snapshots, so this remains advisory.
 transitionSurfaceDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
 transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
-  | aggregateFoldSurface oldSpec oldAgg == aggregateFoldSurface newSpec newAgg = []
+  | aggregateFoldSurfaceForService (legacyCheckedService oldSpec) oldAgg == aggregateFoldSurfaceForService (legacyCheckedService newSpec) newAgg = []
   | otherwise =
       [ advisory
           (aggName newAgg)

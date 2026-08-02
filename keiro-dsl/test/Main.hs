@@ -12,7 +12,7 @@ import Data.Aeson.Types (parseEither)
 import Data.Either (isLeft, isRight)
 import Data.Foldable (toList)
 import Data.KindID qualified as KindID
-import Data.List (partition, sort, (\\))
+import Data.List (partition, permutations, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -100,6 +100,13 @@ diffSpecs old new = diffServices (legacyCheckedService old) (legacyCheckedServic
 
 diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 diffWorkspaces old new = resolvedFold (CheckedWorkspaceDiff.diffWorkspaces old new)
+
+replayImpactSpecs :: Spec -> Spec -> ReplayImpact
+replayImpactSpecs old new =
+  resolvedFold (ReplayImpact.replayImpactServices (legacyCheckedService old) (legacyCheckedService new))
+
+nominalEqualityIdentities :: Spec -> [T.Text]
+nominalEqualityIdentities = nominalEqualityIdentitiesForService . legacyCheckedService
 
 main :: IO ()
 main = hspec $ do
@@ -488,7 +495,7 @@ main = hspec $ do
       generatedSurface oldSpec `shouldBe` generatedSurface newSpec
       [aggregateFoldFingerprint oldSpec aggregate | NAggregate aggregate <- specNodes oldSpec]
         `shouldBe` [aggregateFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
-      resolvedFold (ReplayImpact.replayImpact oldSpec newSpec) `shouldBe` ReplayNeutral
+      replayImpactSpecs oldSpec newSpec `shouldBe` ReplayNeutral
 
     it "exposes stable JSON inspection for a source and canonically ordered workspace members" $ do
       (sourceCode, sourceOut, sourceErr) <- runKeiroDsl ["inspect", "test/fixtures/reservation.keiro", "--format=json"]
@@ -1643,7 +1650,7 @@ main = hspec $ do
               }
           bindingChanges = diffSpecs current bumped
       map changeCode bindingChanges `shouldContain` [NominalBindingChanged]
-      resolvedFold (ReplayImpact.replayImpact current bumped) `shouldSatisfy` \case
+      replayImpactSpecs current bumped `shouldSatisfy` \case
         ReplayImpact.ReplayAffected impacts ->
           maybe False (\impact -> Set.member "NominalsRecorded" (ReplayImpact.eventTypes impact) && includeSnapshotStreams impact) (Map.lookup "NominalLedger" impacts)
         ReplayImpact.ReplayNeutral -> False
@@ -3254,7 +3261,7 @@ main = hspec $ do
                         }
                   )
                   old
-          resolvedFold (ReplayImpact.replayImpact old new) `shouldBe` ReplayNeutral
+          replayImpactSpecs old new `shouldBe` ReplayNeutral
         _ -> expectationFailure "reservation fixture must contain an event and transition"
 
     it "narrows a guard edit to that transition's event types" $ do
@@ -3283,7 +3290,42 @@ main = hspec $ do
                     }
               )
               old
-      resolvedFold (ReplayImpact.replayImpact old loosened) `shouldBe` ReplayNeutral
+      replayImpactSpecs old loosened `shouldBe` ReplayNeutral
+
+    it "pairs guard-disambiguated siblings independently of both declaration orders" $ do
+      base <- specOf "test/fixtures/reservation.keiro"
+      let aggregate = onlyAggregate base
+      case (aggTransitions aggregate, aggEvents aggregate) of
+        (prototype : _, firstEvent : secondEvent : _) -> do
+          let sibling guardExpression eventName =
+                prototype
+                  { tGuard = guardExpression,
+                    tEmits = [eventName],
+                    tLoc = noLoc
+                  }
+              exact = sibling (Just (EAtom (ABool True))) (evName firstEvent)
+              loosenedOld = sibling (Just (EAtom (AName "legacyGuard"))) (evName firstEvent)
+              loosenedNew = sibling Nothing (evName firstEvent)
+              changedOld = sibling (Just (EAtom (AName "oldGuard"))) (evName secondEvent)
+              changedNew = sibling (Just (EAtom (AName "newGuard"))) (evName firstEvent)
+              oldSiblings = [exact, loosenedOld, changedOld]
+              newSiblings = [exact, loosenedNew, changedNew]
+              withTransitions transitions =
+                modifyAggregate
+                  (aggName aggregate)
+                  (\candidate -> candidate {aggTransitions = transitions})
+                  base
+              impacts =
+                [ replayImpactSpecs (withTransitions oldOrder) (withTransitions newOrder)
+                | oldOrder <- permutations oldSiblings,
+                  newOrder <- permutations newSiblings
+                ]
+          case impacts of
+            firstImpact : remainingImpacts -> do
+              remainingImpacts `shouldSatisfy` all (== firstImpact)
+              firstImpact `shouldSatisfy` (/= ReplayNeutral)
+            [] -> expectationFailure "permutations unexpectedly produced no replay comparisons"
+        _ -> expectationFailure "reservation fixture must contain one transition and two events"
 
     it "marks every existing event when the aggregate wire convention changes" $ do
       impact <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
@@ -3306,7 +3348,7 @@ main = hspec $ do
       changed `shouldSatisfy` (/= ReplayNeutral)
       old <- specOf "test/fixtures/reservation.keiro"
       formatted <- parseInlineSpec "<formatted>" (renderSpec old)
-      resolvedFold (ReplayImpact.replayImpact old formatted) `shouldBe` ReplayNeutral
+      replayImpactSpecs old formatted `shouldBe` ReplayNeutral
 
     it "names mapped nested event and snapshot roots while ignoring Haskell-only changes" $ do
       nested <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
@@ -4970,7 +5012,7 @@ main = hspec $ do
     it "computes one replay-impact value over both aggregates" $ do
       old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
       new <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
-      case resolvedFold (ReplayImpact.replayImpact (wsMergedSpec old) (wsMergedSpec new)) of
+      case replayImpactSpecs (wsMergedSpec old) (wsMergedSpec new) of
         ReplayAffected affected -> Map.keysSet affected `shouldBe` Set.fromList ["Order", "Shipment"]
         ReplayNeutral -> expectationFailure "shared mapped evolution unexpectedly reported replay-neutral"
 
@@ -5882,7 +5924,7 @@ replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact
 replayImpactFixtures oldPath newPath = do
   old <- specOf oldPath
   new <- specOf newPath
-  pure (resolvedFold (ReplayImpact.replayImpact old new))
+  pure (replayImpactSpecs old new)
 
 modifyAggregate :: Name -> (Aggregate -> Aggregate) -> Spec -> Spec
 modifyAggregate target update spec =

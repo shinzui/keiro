@@ -154,9 +154,8 @@ aggregateCapability useSite resolved = case useSite of
     AggregateMapped {} -> Unsupported
     AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
       ScalarRepresentation {} -> SolverVisible
-      _ -> case nominalEqualityContract nominal of
-        Just _ -> SolverVisible
-        Nothing -> OpaqueOnly
+      IdRepresentation {} -> SolverVisible
+      EnumRepresentation {} -> SolverVisible
     _ -> solverVisibility resolved
   OrderingGuardUse -> case resolved of
     AggregateInt -> SolverVisible

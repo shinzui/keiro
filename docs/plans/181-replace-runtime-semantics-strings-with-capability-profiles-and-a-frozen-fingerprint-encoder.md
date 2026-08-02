@@ -82,8 +82,15 @@ This section must always reflect the actual current state of the work.
   replay, workspace diff, CLI, and both scaffold planners propagate/refuse it;
   the 489-example focused suite and both targeted conformance suites pass with
   every pre-hash byte and 64-bit fingerprint unchanged.
-- [ ] Milestone 4: deterministic replay-impact transition pairing and removal
+- [x] Milestone 4: deterministic replay-impact transition pairing and removal
   of the `Spec`-only legacy entry points.
+- [x] 2026-08-02 10:57 PDT: Milestone 4 groups transitions by structural
+  identity, cancels exact and guard-loosening multisets deterministically, and
+  sorts remaining canonical surfaces before pairing. All 36 independent
+  permutations of a three-sibling old/new example agree. The seven
+  identity/evolution `Spec` wrappers are removed and both changelogs record the
+  break; 490 focused examples, `cabal build all`, and both targeted conformance
+  suites pass without identity-byte changes.
 - [ ] Milestone 5: widen the fingerprint hash beyond 64 bits in one
   coordinated invalidation before the `0.9.0.0` release.
 - [x] 2026-08-02 09:57 PDT: reviewed the plan against the post-ExecPlan-180
@@ -329,6 +336,14 @@ negative matrix covers type-graph, nominal, register-initial, guard, and event
 output failures, plus propagation through diff, replay, and scaffold planning.
 The focused suite now has 489 passing examples and both targeted conformance
 suites remain byte-current.
+
+Milestone 4 eliminates the remaining declaration-order input to replay-impact
+classification and deletes the graph-only APIs that could silently select the
+wrong runtime contract.  Internal graph fixtures now cross an explicit
+`legacyCheckedService` boundary in their test helpers; production evolution
+paths accept only `CheckedService`.  The focused suite has 490 passing examples,
+including exhaustive independent permutations of the representative sibling
+transition group.
 
 
 ## Context and Orientation

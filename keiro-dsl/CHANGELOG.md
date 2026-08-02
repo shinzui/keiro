@@ -8,6 +8,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Aggregate fold, diff, replay-impact, and workspace-diff service APIs now
+  return `Either FoldSurfaceError`; scaffold planning refuses the same error
+  before module generation. Removes the misleading legacy/version-1
+  `Spec`-only wrappers `aggregateFoldFingerprint`, `aggregateFoldSurface`,
+  `diffSpecs`, `replayImpact`, `nominalEqualityContract`,
+  `nominalEqualityIdentity`, and `nominalEqualityIdentities`. Retain and pass a
+  `CheckedService`, or explicitly use `legacyCheckedService` at a deliberate
+  compatibility boundary.
 - `DiagnosticCode` gains append-only constructors for contract TypeID
   admission and for closed policy, numeric, duplicate, identity, external-name,
   intake-coupling, topic-alias, and wire-clause validation. Exhaustive matches
@@ -21,6 +29,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Runtime semantics now uses private monotone capability profiles rather than
+  consumer-maintained identifier-string lists. Aggregate fold identity and
+  replay transition comparison use a frozen canonical encoder independent of
+  presentation pretty-printing, and replay pairing of guard-disambiguated
+  sibling transitions is declaration-order invariant.
 - Adds `language keiro-dsl 4`, selecting syntax profile 2 and
   `keiro-dsl/runtime-semantics/3`. Aggregate ID admission, fold fingerprints,
   replay classification, and versions 1 through 3 remain unchanged.
