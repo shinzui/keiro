@@ -57,6 +57,11 @@ This section must always reflect the actual current state of the work.
   contract topology, and wire clause.
 - [ ] Milestone 5: dead-grammar removal, negative-test coverage for previously
   untested diagnostics, documentation, and ADR amendments.
+- [x] (2026-08-02 06:42Z) Revalidated the plan against the post-ExecPlan-178
+  tree, the released-package registry and tags, the current runtime policy
+  constructors, validator helpers, generated-code paths, and relevant ADRs;
+  corrected tier assignments, filled the transition-code gap, and narrowed
+  dead-grammar cleanup to every companion type and workspace instance.
 
 
 ## Surprises & Discoveries
@@ -78,6 +83,40 @@ implementation. Provide concise evidence.
   (verified by repository search on 2026-08-01), confirming that publisher
   ordering, intake dedupe policy, and the three stable runtime identities are
   entirely unvalidated at `check` time.
+- Discovery (validation pass): the published release claim is current.  Hackage
+  `keiro-dsl/preferred.json` lists `0.8.0.0` as the newest normal version and
+  upstream tags stop at `keiro-dsl-0.8.0.0`; there is no `0.9.0.0` tag.  The
+  local `LanguageVersion.hs` registry contains version 4, so the unreleased-v4
+  window described by this plan is real.
+- Discovery (validation pass): `resolveAggForService` retains the declared
+  `WireSpec` in `aWire`, but no emitter reads `aWire`; `defaultWire` is only the
+  fallback when the clause is absent.  The defect is therefore ignored wire
+  words, not replacement of every supplied clause by `defaultWire`.
+- Discovery (validation pass): duplicate aggregate state names are Tier A, not
+  Tier B.  `emitVertex` renders every entry from `aStates` into one Haskell
+  declaration, so `states { Draft Draft! }` emits the same constructor twice
+  and cannot compile.  Conversely, a contract field that shadows the
+  discriminator can round-trip for a specially chosen field value and is not
+  universally non-working, so that rule belongs behind the version-4 gate.
+- Discovery (validation pass): the legacy duplicate helper already has the
+  incompatible shape `duplicatesBy :: Eq key => (a -> key) -> [a] -> [a]` and
+  intentionally returns only occurrences after the first.  New pair/group
+  diagnostics need a separate `duplicateGroupsBy` helper rather than silently
+  changing the semantics of existing diagnostics.
+- Discovery (validation pass): deleting the dead grammar declarations also
+  requires deleting their exported companion types (`DispAction` and
+  `EnvelopeLayer`) and their no-op `HasLocs` instances in
+  `keiro-dsl/src/Keiro/Dsl/Workspace.hs`; the original plan named only the
+  headline declarations.
+- Discovery (validation pass): the exact unreferenced single-spec diagnostic
+  inventory to pin in Milestone 5 is `UndeclaredEvent`, `UndeclaredState`,
+  `TerminalHasOutgoing`, `DeprecatedEventStillEmitted`,
+  `WireSchemaVersionMismatch`, `ProcessBenignInversion`,
+  `DispositionDecodeUnboundedRetry`, `PublisherUnresolvedEmit`,
+  `IntakeUnresolvedContract`, `WqDlqWithoutCeiling`,
+  `DispatchEnqueueUnresolved`, `RunWorkflowUnresolved`, and
+  `RouterReadModelUnverified`.  Diff-only and consumer-binding codes absent
+  from `keiro-dsl/test/` are outside this single-spec closure plan.
 
 
 ## Decision Log
@@ -117,6 +156,33 @@ Record every decision made while working on the plan.
   fails for a case, the honest response is to gate it on version 4, not to
   widen an ungated rejection of released-language specs.
   Date: 2026-08-01
+- Decision: Reassign duplicate aggregate states to Tier A and discriminator-
+  shadowing contract fields to Tier B before implementation.
+  Rationale: current scaffold source provides direct evidence that duplicate
+  state constructors cannot compile, while discriminator shadowing has a
+  working subset and therefore changes real acceptance rather than merely
+  moving an inevitable failure earlier.
+  Date: 2026-08-02
+- Decision: Add `TransitionUnguardedSibling` for a version-4 live-transition
+  group that shares source and command and mixes guarded and unguarded members;
+  retain `TransitionDuplicateUnguarded` for two or more unguarded members under
+  every version.
+  Rationale: the original plan required both checks but named only the Tier A
+  code.  Giving the Tier B case its own stable code keeps the enforcement tier
+  machine-visible and avoids describing a guarded edge as a duplicate
+  unguarded edge.
+  Date: 2026-08-02
+- Decision: Treat the canonical intake envelope field vocabulary as
+  `messageId`, `source`, `destination`, `key`, `eventType`, `schemaVersion`,
+  `contentType`, `schemaReference`, `sourceEventId`,
+  `sourceGlobalPosition`, `payloadBytes`, `occurredAt`, `causationId`,
+  `correlationId`, `traceContext`, `attributes`, and the existing DSL envelope
+  extension `idempotencyKey`.  Version-4 bind and dedupe resolution uses the
+  union of this vocabulary and fields of the intake's accepted contract events.
+  Rationale: this list is the current `IntegrationEvent` authority plus the
+  envelope extension already used by every intake fixture; making it explicit
+  prevents an invented field set and keeps valid existing spellings explainable.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -167,7 +233,8 @@ intake `decode schemaVersion == 0` (existing floors cover only timer
 max-attempts, snapshot interval/codec version, and the DLQ-on retry ceiling).
 
 Missing duplicate detection.  Duplicate states inside `states { ... }` collapse
-through `Set.fromList`, so `Draft Draft!` silently makes `Draft` terminal.
+through `Set.fromList` during validation, while generation emits the same
+Haskell vertex constructor twice.
 Duplicate registers, and duplicate fields within one command, event, or
 contract event, pass `check` and fail later at GHC (duplicate record fields) or
 produce a JSON object with a duplicated key (a contract field named like the
@@ -197,8 +264,10 @@ key naming no field, and `decode schemaVersion == 99` against a
 `schemaVersion 1` contract all pass.  Similarly, a contract
 `event <Name> on <alias>` never checks that the alias names a declared topic,
 and the aggregate `wire kind=... fields=...` words are parsed and ignored —
-`Scaffold.hs` always constructs `defaultWire`; only `wireSchemaVersion` is
-validated.  The `emit` block's `source "..."` is fully dead, and `emKey` /
+`resolveAggForService` retains the supplied clause as `aWire`, but no emitter
+reads `aWire`; an absent clause alone selects `defaultWire`.  Only
+`wireSchemaVersion` is validated.  The `emit` block's `source "..."` is fully
+dead, and `emKey` /
 `emDiscriminant` reach only diff identity.
 
 Dead grammar.  `EnvelopeBinding`/`envCrossChecked`, `Derivation`/
@@ -248,23 +317,26 @@ requiring the value be at least 1.  Every new code is appended to
 
 Milestone 2 adds duplicate and collision detection.  Tier A (the output cannot
 work): duplicate field names within one command, one event, or one contract
-event (`AggregateDuplicateFieldName`, `ContractDuplicateFieldName`); a contract
-field whose JSON key equals the event discriminator key
-(`ContractFieldShadowsDiscriminator`); two live unguarded transitions sharing
-source state and command (`TransitionDuplicateUnguarded` — the generated
-runtime answers every such command with `CommandAmbiguous`); duplicate contract
-event names and duplicate topic aliases within one contract
-(`ContractDuplicateEvent`, `ContractDuplicateTopicAlias`).  Tier B (the output
-runs but is not what the author wrote): duplicate state names in the `states`
-block (`AggregateDuplicateState`), duplicate register names
+event (`AggregateDuplicateFieldName`, `ContractDuplicateFieldName`); two live
+unguarded transitions sharing source state and command
+(`TransitionDuplicateUnguarded` — the generated runtime answers every such
+command with `CommandAmbiguous`); duplicate contract event names and duplicate
+topic aliases within one contract (`ContractDuplicateEvent`,
+`ContractDuplicateTopicAlias`); and duplicate state names in the `states`
+block (`AggregateDuplicateState`), because generation emits the same vertex
+constructor twice.  Tier B (the output can run but is not what the author
+wrote): a contract field whose JSON key equals the event discriminator key
+(`ContractFieldShadowsDiscriminator`), duplicate register names
 (`AggregateDuplicateRegister`), duplicate same-category nominal, id, and rule
 declarations (`NominalDuplicateDeclaration` — extend the existing
 cross-category collision logic in `NominalType.hs` so same-category duplicates
 are also fatal under version 4), duplicate `emit map` discriminant rows
 (`EmitMapDuplicateCase`), and guarded transition pairs that share source and
-command with at least one unguarded sibling (report the exact pair).  Implement
-these with one shared `duplicatesBy` helper reporting every duplicate with its
-source location, not only the first.
+command with at least one unguarded sibling (`TransitionUnguardedSibling`,
+reporting every member of the ambiguous group).  Retain the existing
+first-shadow `duplicatesBy` behavior for old diagnostics and add
+`duplicateGroupsBy` for rules that need every member and pair, anchoring at the
+most specific `Loc` the current AST retains.
 
 Milestone 3 constrains stable identities and external names, all Tier B under
 version 4.  Workflow `name`, process `name`, and router `name` must be
@@ -278,18 +350,21 @@ and column names must match PostgreSQL unquoted-identifier form
 (`[a-z_][a-z0-9_]{0,62}`), and duplicate column names are rejected
 (`ReadModelIdentifierInvalid`, `ReadModelDuplicateColumn`).
 
-Milestone 4 makes the declared-but-ignored surfaces mean something under
-version 4.  Resolve every intake `bind` row against the resolved contract's
-envelope and field set, and `dedupe key` against the same set
+Milestone 4 constrains the declared-but-ignored surfaces to statements that are
+internally meaningful under version 4.  Resolve every intake `bind` row against
+the explicit canonical-envelope vocabulary recorded in the Decision Log plus
+the union of fields on its accepted contract events, and resolve `dedupe key`
+against the same set
 (`IntakeBindUnresolved`, `IntakeDedupeKeyUnresolved`).  Give the `decode`
 envelope policy a closed vocabulary (`IntakeEnvelopePolicyUnknown`) and require
 `decBodySchemaVersion` to equal the resolved contract's `ctrSchemaVersion`
 (`IntakeDecodeSchemaVersionMismatch`).  Require a contract `event ... on alias`
 to name a declared topic alias (`ContractTopicAliasUnresolved`).  For the
 aggregate `wire` clause, validate `kind` and `fields` against the closed
-vocabulary the emitter actually honors; because the emitter today always uses
-`defaultWire`, the honest version-4 rule is: accept exactly the spellings that
-describe `defaultWire`'s behavior and reject everything else
+vocabulary the emitter actually honors; because the emitter today ignores
+`aWire`, the honest version-4 rule is: accept exactly `kind=ctorName` and
+`fields=camelCase`, the spellings that describe current emitted bytes, and
+reject everything else
 (`WireClauseUnsupported`), so the surface stops lying without changing wire
 bytes.  For the `emit` block, `source "..."` text remains accepted (it is
 descriptive), but this milestone must either wire `emKey`/`emDiscriminant`
@@ -300,10 +375,12 @@ unchanged; every rule in this milestone consults the effective contract and
 fires only for version 4.
 
 Milestone 5 cleans up and locks down.  Delete the unreachable
-`EnvelopeBinding`/`envCrossChecked`, `Derivation`/`DerivStrategy`, and
-hole-kind `Disposition` declarations from `Grammar.hs` (no parser constructs
-them; deleting them is invisible to every spec).  Add at least one negative
-test per previously untested diagnostic code from the audit list, so each
+`EnvelopeBinding`/`EnvelopeLayer`, `Derivation`/`DerivStrategy`, and
+`Disposition`/`DispAction` declarations and exports from `Grammar.hs`, plus
+their no-op `HasLocs` instances from `Workspace.hs` (no parser constructs them;
+deleting them is invisible to every spec).  Add at least one negative test for
+each of the thirteen exact single-spec diagnostic codes listed in Surprises &
+Discoveries, so each
 existing rejection is pinned against regression.  Add one positive and one
 negative fixture per new code from Milestones 1-4.  Update the language
 reference documentation for every newly enforced surface, amend ADR 0004's
@@ -316,18 +393,26 @@ the Tier A corrections.
 
 Run every command from `/Users/shinzui/Keikaku/bokuno/keiro`.
 
-Before editing, capture the defect evidence: write a scratch spec per hole
+Before editing, capture the defect evidence: stream a scratch spec per hole
 (publisher `ordering banana`, duplicate unguarded transitions, `bind` to a
-nonexistent field, two workflows named `"transfer"`, a `schemaVersion 0`
-contract) under a temporary directory and confirm each passes today:
+nonexistent field, two workflows with the same stable name, a `schemaVersion 0`
+contract) to the CLI through `/dev/stdin` and confirm each passes today:
 
 ```bash
-cabal run keiro-dsl:exe:keiro-dsl -- check /tmp/keiro-180/<case>.keiro
+cabal run keiro-dsl:exe:keiro-dsl -- check /dev/stdin
 ```
 
-Each such invocation must currently exit zero; record the transcript in this
-plan.  (If the CLI entry point differs, discover it with
-`cabal run keiro-dsl -- --help` and record the exact spelling here.)
+The exact entry point was confirmed with
+`cabal run keiro-dsl:exe:keiro-dsl -- --help`.  All five pre-change cases exited
+zero.  The concise transcript was:
+
+```text
+publisher ordering banana: OK
+duplicate Held -- ConfirmReservation transition: warning[RmProjectionWithoutNode], then OK
+bind ghost from header "keiro-source": OK
+contract schemaVersion 0: OK
+two workflows named "hospital-transfer-reservation": OK
+```
 
 After each milestone, run the focused validator suite and the full DSL suite:
 
@@ -374,8 +459,10 @@ minimal edit of that fixture that passes.  Specifically:
   with `RuntimeIdentityDuplicate`; `bind ghost from header "x"` fails with
   `IntakeBindUnresolved`; `decode { schemaVersion == 99 }` against a
   `schemaVersion 1` contract fails with `IntakeDecodeSchemaVersionMismatch`;
-  `states { Draft Draft! }` fails with `AggregateDuplicateState`.  The same
-  five specs under `language keiro-dsl 3` still pass `check`, proving the gate.
+  `states { Draft Draft! }` fails with `AggregateDuplicateState`.  The workflow,
+  bind, and decode specs under `language keiro-dsl 3` still pass `check`, proving
+  the Tier B gate; duplicate states fail under every version because their
+  generated Haskell cannot compile.
 - Every pre-existing fixture and conformance suite passes byte-unchanged, and
   `cabal build all` plus `nix flake check` succeed.
 
@@ -406,17 +493,29 @@ All work is inside `keiro-dsl` (canonical URI
 expected.  `keiro-dsl/src/Keiro/Dsl/Validate.hs` appends the new
 `DiagnosticCode` constructors named in the milestones and gains, for Tier B,
 rules that receive the `EffectiveLanguageContract` the same way
-`validateContract` does today.  The shared helper has the effective shape:
+`validateContract` does today.  The new group helper has the effective shape:
 
 ```haskell
-duplicatesBy :: Ord k => (a -> k) -> [a] -> [[a]]
+duplicateGroupsBy :: Ord k => (a -> k) -> [a] -> [[a]]
 ```
 
 returning every group of two or more declarations with the same key so each
-member's location can be reported.  Milestone 1 moves the backoff rules so
+member's location can be reported.  The existing `duplicatesBy` helper retains
+its first-shadow semantics.  Milestone 1 moves the backoff rules so
 `publisherRefusals` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` becomes a
 defensive re-check of what `check` already guaranteed.  Milestone 4's
 resolution rules consult the same resolved-contract lookup `intakeCoupling`
 uses today; they introduce no second resolution authority.  Versions 1-3
 behavior, all generated bytes, all fold fingerprints, and all wire formats are
 unchanged by this plan; it adds admission rules only.
+
+
+Revision note (2026-08-02): Revalidated the plan immediately before
+implementation.  Corrected the wire-path description, re-tiered duplicate
+states and discriminator shadowing from direct generator evidence, added the
+missing guarded/unguarded transition diagnostic, specified the intake field
+authority, enumerated the exact legacy diagnostic tests, preserved the existing
+duplicate-helper contract, and expanded dead-grammar cleanup to companion types
+and workspace instances.  Release status was confirmed against both Hackage and
+upstream tags, and the five representative accepted-hole cases were reproduced
+through the real CLI.
