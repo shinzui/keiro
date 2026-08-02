@@ -175,7 +175,12 @@ Record every decision made while working on the plan.
   constructors, literals, projections, and inspection APIs behind `K`.
   Rationale: generated expressions read naturally as infix Haskell without a broad
   unqualified import or the visually awkward syntax of qualified symbolic
-  operators.
+  operators.  Keiki `0.7`'s `Keiki.Builder` does not re-export the Core
+  operators (it re-exports only `(.=)`, `(=:)`, and `Cmp`), so the generator
+  must emit an explicit unqualified `Keiki.Core` operator import list itself;
+  that import is legal only because `/Transducer.hs` remains
+  generated-firewall-exempt, and the firewall unit test that currently pins the
+  `/Expressions.hs` exemption must be updated rather than deleted.
   Date: 2026-08-01
 - Decision: Preserve structural and nominal projection witnesses, but expose their
   use through deterministic business-path `let` bindings immediately inside the
@@ -224,6 +229,35 @@ Record every decision made while working on the plan.
   Rationale: the operator surface exists in `0.7`; separating the milestones keeps
   the root code fix independently deliverable while still completing the human
   diagram outcome.
+  Date: 2026-08-01
+- Decision: Capture the Milestone 0 baseline only after ExecPlan 178 (typed
+  contract TypeIDs, language version 4) has landed and its worktree is clean.
+  Rationale: `renderKeikiLiteral` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`
+  branches on the effective language contract for generated ID literals, and
+  `IdDomain.hs`, `LanguageVersion.hs`, and `Validate.hs` are being edited by
+  plan 178 right now.  A baseline recorded on a mixed tree would entangle the
+  two plans' evidence; this plan's expected outputs must be reproducible from
+  one committed predecessor state.
+  Date: 2026-08-01
+- Decision: Migrate every aggregate that currently receives an `Expressions`
+  module, including the degenerate empty one.  A version-2 aggregate whose
+  transitions are all Hole-owned today still emits
+  `module Generated.<Context>.<Aggregate>.Expressions () where` with an empty
+  export list; after this plan it emits no `Expressions` module at all.
+  Rationale: the empty module is generated API surface with no content; leaving
+  it out of the removal and migration story would strand a second artifact for
+  exactly the aggregates whose owners never look at generated expressions.
+  Date: 2026-08-01
+- Decision: The readable renderer's inventory includes the two non-obvious
+  predicate forms: the bare Boolean-term guard fallback, which the raw emitter
+  renders as `K.PEq term (K.lit True)` and the readable emitter renders as
+  `term .== K.lit True`, and nominal or enum comparisons whose literal operand
+  is the canonical wire spelling (for example `K.lit ("icu" :: Text)` compared
+  against an equality-key projection).
+  Rationale: neither form appears in the plan's illustrative transition, and a
+  renderer or test matrix built only from the illustration would miss them.
+  The wire-spelling literal is intentionally not source-shaped; acceptance
+  judges the surrounding business path names, not that literal's spelling.
   Date: 2026-08-01
 
 
@@ -308,7 +342,14 @@ The guarantee ledger in this plan uses these meanings:
   counterexample, and unverified outcomes do not become more optimistic.
 - Evolution identity: aggregate fold surface and fingerprint bytes, diff,
   compatibility vector, and replay-impact classification are unchanged by module
-  layout and formatting alone.
+  layout and formatting alone.  The readable renderer is new emission code in
+  `Keiro.Dsl.Scaffold`; it must not modify `Keiro.Dsl.PrettyPrint.renderExpr`
+  or `renderTransition`, because `Keiro.Dsl.FoldFingerprint` hashes
+  `renderExpr` output into the fold surface and `Keiro.Dsl.ReplayImpact`
+  compares transitions by `renderTransition` text.  A readability edit to those
+  two functions would silently move every expression-bearing aggregate's
+  fingerprint and reclassify replay impact, which is exactly what this plan
+  promises not to do.
 - Scaffold safety: generated files remain replaceable only through the generated
   firewall; create-once Hole files are not overwritten; obsolete generated output
   is never deleted by the scaffolder and is removed by an operator only after
@@ -350,6 +391,10 @@ literal-rendering dependency is
 ## Plan of Work
 
 Milestone 0 creates executable baseline evidence before editing the generator.
+It begins only after ExecPlan 178 has landed and the worktree is clean, because
+`renderKeikiLiteral` branches on the effective language contract and plan 178 is
+editing the modules that define it; every baseline byte recorded here must be
+reproducible from one committed predecessor state.
 Extend focused tests around the canonical scalar-expression fixture to pin the
 accepted/rejected expression matrix, generated-versus-Hole ownership, detailed
 forward result, emitted event payload, replayed state/registers, symbolic
@@ -389,13 +434,20 @@ same-precedence right child of left-associative arithmetic and a same-precedence
 left child of right-associative Boolean operators even when the operator is
 mathematically associative.  Render negation as `K.pnot (...)`.
 
-Import the infix operators through an explicit unqualified `Keiki.Core` import and
-continue to render literals and projection plumbing as `K.lit`, `K.regProj`, and
-`K.inpProj`.  Roots remain direct `d.field` and `B.reg @"field"` terms.  Add
-byte-pinned expected-output cases for every operator, both child positions at equal precedence,
-mixed precedence, negative literals, nominal comparisons, and nested paths.  The
-committed conformance modules are the compile test for representative output; do
-not add a second Haskell parser dependency merely to reparse strings.
+Import the infix operators through an explicit unqualified `Keiki.Core` import
+list such as
+`import Keiki.Core ((.+), (.-), (.*), (.==), (./=), (.<), (.<=), (.>), (.>=), (.&&), (.||))`
+— `Keiki.Builder` does not re-export them in `0.7` — and continue to render
+literals and projection plumbing as `K.lit`, `K.regProj`, and `K.inpProj`.
+Roots remain direct `d.field` and `B.reg @"field"` terms.  Render a guard whose
+checked form is a bare Boolean term as `term .== K.lit True`, matching the raw
+emitter's `K.PEq term (K.lit True)` fallback tree exactly.  Add byte-pinned
+expected-output cases for every operator, both child positions at equal
+precedence, mixed precedence, negative literals, the bare Boolean-term guard,
+nominal and enum comparisons including the wire-spelling literal operand, and
+nested paths.  The committed conformance modules are the compile test for
+representative output; do not add a second Haskell parser dependency merely to
+reparse strings.
 
 A normal generated transition should have this shape, adjusted to the actual
 fixture types and established formatter:
@@ -440,16 +492,29 @@ binding.  It must never contain a whole guard or register write.
 Remove `expressionFunctionNames`, `emitExpressions`, transition guard/write
 definition emission, the `Expressions` module from `scaffoldAggregateForService`,
 its import from `Transducer`, and the `/Expressions.hs` generated-firewall
-exception.  Leave `/Transducer.hs` generated and replaceable.  Regenerate all
-checked conformance trees, delete the repository-owned committed `Expressions.hs`
-fixtures after confirming their expected banner and clean Git provenance, and
-remove their Cabal module-list entries.  Update `keiro-dsl/test/Main.hs`, the
-mutation script, `docs/user/api-reference.md`,
-`docs/user/typed-spec-toolchain.md`, and
+exception.  This removal covers every version-2 aggregate, including Hole-only
+aggregates whose `Expressions` module is today the degenerate
+`module ... Expressions () where`; after this milestone no aggregate emits an
+`Expressions` module of any shape.  Leave `/Transducer.hs` generated and
+replaceable.  Regenerate every checked conformance tree that materializes an
+`Expressions.hs` — scalar-expressions, nominal-scalars, id-domain-migration,
+both workspace-nominals members, and behavior-complete — delete the
+repository-owned committed `Expressions.hs` fixtures after confirming their
+expected banner and clean Git provenance, and remove their Cabal module-list
+entries from both `keiro-dsl/keiro-dsl.cabal` and
+`keiro-dsl/test/conformance-behavior-complete/behavior-complete-report.cabal`.
+Update `keiro-dsl/test/Main.hs` — including the firewall-exemption assertion,
+the hard-coded generated-path lists, and the raw-constructor byte assertions
+that currently name `Expressions.hs` — plus the mutation script,
+`docs/user/api-reference.md`, `docs/user/typed-spec-toolchain.md`, and
 `docs/guides/dsl-guarantees-and-hand-written-services.md`.
 
 Existing consumer scaffolds need a safe migration because reconciliation does not
-delete stale files.  Keep reporting the obsolete `Expressions.hs`, but change the
+delete stale files.  Stale reporting also only runs when a previous scaffold
+record exists: a consumer tree scaffolded without a record receives no stale
+report at all, so the migration documentation must state that such consumers
+locate the obsolete module from the regenerated manifest, not from the report.
+Keep reporting the obsolete `Expressions.hs`, but change the
 general stale-generated messages in `renderScaffoldReport` and
 `renderWorkspaceScaffoldReport` so neither says record evidence alone makes
 deletion safe.  Extend `StaleModule` with exact-banner evidence populated by the
@@ -612,6 +677,13 @@ The guarantee ledger is accepted only when all of these proofs pass:
   projection types.  Operator sugar reconstructs the same Keiki constructor tree,
   including associativity, adds no opaque `TApp` fallback, and retains the pinned
   Keiki `0.7` `prettyPred`/`prettyUpdate` tree renderings through Milestone 3.
+  Every other regenerated conformance tree — nominal-scalars,
+  id-domain-migration, workspace-nominals, and behavior-complete — also
+  compiles, because inlining removes the per-function type signatures and slot-
+  and literal-driven inference must fully determine every term type in the
+  witness and literal forms those trees exercise beyond the scalar fixture.
+- A Hole-only version-2 aggregate scaffolds with no `Expressions` module at all,
+  where it previously received one with an empty export list.
 - Generated-owned transitions necessarily execute their checked guard and writes.
   Hole-owned transitions, Hole fold-version requirements, and
   `BehaviorOwnership`/verification labels are unchanged.
@@ -775,3 +847,27 @@ unsafe stale-file and Cabal-ownership assumptions with evidence the current
 scaffold format can actually provide, converted every command block to a tagged
 fence, and recorded the passing focused baseline.  These changes make the plan
 self-contained and executable without weakening its authority guarantees.
+
+2026-08-01 (second revision): Folded in the findings of an adversarial review
+against the current generator, Keiki `0.7`'s released surface, and the test
+suite.  Sequenced Milestone 0 after ExecPlan 178 lands (shared modules and the
+language-contract branch in `renderKeikiLiteral` would otherwise entangle the
+baselines).  Named the explicit unqualified `Keiki.Core` operator import list
+that `Keiki.Builder 0.7` does not provide, and the firewall-test update it
+requires.  Added the two renderer forms the illustrative transition misses: the
+bare Boolean-term guard fallback (`term .== K.lit True`) and wire-spelling
+nominal literal operands.  Extended the removal and migration story to the
+degenerate empty `Expressions ()` modules of Hole-only aggregates.  Enumerated
+the full regeneration blast radius (five conformance trees, the second
+`behavior-complete-report.cabal` file, and the hard-coded `Expressions.hs`
+assertions in `keiro-dsl/test/Main.hs`), required all regenerated trees to
+compile as the inference gate for inlined, signature-free expressions, and
+documented that record-free consumer scaffolds receive no stale report and must
+migrate from the regenerated manifest instead.  A final soundness validation
+re-verified the replay chain end to end — the fold surface hashes the rendered
+DSL source expression, never generated Haskell; forward execution, replay, and
+symbolic verification all consume the identical `SymTransducer` value; and
+`prettyPred`/`prettyUpdate` exist in the released Keiki `v0.7.0.0` tag — and
+added an explicit prohibition on editing `Keiro.Dsl.PrettyPrint.renderExpr`
+and `renderTransition`, the two presentation functions whose output is
+load-bearing replay identity.
