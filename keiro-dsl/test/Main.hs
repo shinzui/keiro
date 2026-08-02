@@ -77,6 +77,100 @@ main = hspec $ do
   frontendSurfaceSpec
   frontendProfilesSpec
 
+  describe "runtime capability and fold identity baseline (plan 181)" $ do
+    it "pins complete fold surfaces and fingerprints across representative aggregates" $ do
+      scalar <- checkedServiceOf "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      nominal <- checkedServiceOf "test/fixtures/nominal-scalars.keiro"
+      idDomain <- checkedServiceOf "test/fixtures/id-domain-migration-v3.keiro"
+      behavior <- checkedServiceOf "test/fixtures/behavior-complete.keiro"
+      workspace <- shouldComposeWorkspace "test/fixtures/workspace-nominals/service.keiro-workspace"
+      let actual =
+            T.intercalate
+              "\n\n"
+              [ renderFoldBaseline "aggregate-scalar-expressions-v2" scalar,
+                renderFoldBaseline "nominal-scalars" nominal,
+                renderFoldBaseline "id-domain-migration-v3" idDomain,
+                renderFoldBaseline "behavior-complete" behavior,
+                renderFoldBaseline "workspace-nominals" (checkedWorkspace workspace)
+              ]
+      golden <- readTestText "test/fixtures/fold-identity-baseline.golden"
+      T.stripEnd actual `shouldBe` T.stripEnd golden
+
+    it "pins all four runtime gates and fingerprint segment projections" $ do
+      nominalSpec <- specOf "test/fixtures/id-domain-migration-v3.keiro"
+      nominalRegistry <- case resolveNominalTypes nominalSpec of
+        Left errors -> expectationFailure (show errors) >> fail "unreachable"
+        Right value -> pure value
+      nominal <- case lookupNominalType "OrderId" nominalRegistry of
+        Nothing -> expectationFailure "missing OrderId nominal" >> fail "unreachable"
+        Just value -> pure value
+      strictSpec <-
+        parseInlineSpec
+          "<strict-profile>"
+          ( T.unlines
+              [ "context strict-profile",
+                "aggregate DuplicateRegister",
+                "  regs",
+                "    value Int = 0",
+                "    value Int = 0",
+                "  states Open"
+              ]
+          )
+      rows <- forM [1 .. 4 :: Int] $ \number -> do
+        contract <- case languageVersion (fromIntegral number) >>= effectiveLanguageContractForVersion of
+          Nothing -> expectationFailure ("missing released language contract " <> show number) >> fail "unreachable"
+          Just value -> pure value
+        let hasAggregateIdDomain = maybe False (const True) (idDomainContractFor contract "ord")
+            hasContractIdDomain = maybe False (const True) (contractIdDomainContractFor contract "ord")
+            nominalContract = equalityContractVersion <$> nominalEqualityContractForService contract nominal
+            strictService = CheckedService contract strictSpec
+            hasStrictValidation = any ((== AggregateDuplicateRegister) . code) (validateService strictService)
+        pure
+          ( number,
+            effectiveRuntimeSemantics contract,
+            runtimeSemanticsFingerprintSegment contract,
+            hasAggregateIdDomain,
+            hasContractIdDomain,
+            nominalContract,
+            hasStrictValidation
+          )
+      rows
+        `shouldBe` [ (1, "keiro-dsl/runtime-semantics/1", Nothing, False, False, Just "keiro-dsl/nominal-equality/1", False),
+                     (2, "keiro-dsl/runtime-semantics/1", Nothing, False, False, Just "keiro-dsl/nominal-equality/1", False),
+                     (3, "keiro-dsl/runtime-semantics/2", Just "semantic-contract:keiro-dsl/runtime-semantics/2", True, False, Just "keiro-dsl/nominal-equality/2", False),
+                     (4, "keiro-dsl/runtime-semantics/3", Just "semantic-contract:keiro-dsl/runtime-semantics/2", True, True, Just "keiro-dsl/nominal-equality/2", True)
+                   ]
+
+    it "pins representative diff and replay-impact rendering" $ do
+      old <- parsedSourceOf "test/fixtures/reservation.keiro"
+      new <- parsedSourceOf "test/fixtures/reservation-guard-tightened.keiro"
+      let changes = diffSources old new
+          impact = ReplayImpact.replayImpactServices (checkedSource old) (checkedSource new)
+          actual =
+            T.intercalate
+              "\n"
+              ( "diff:"
+                  : map renderFinding changes
+                    <> ["replay:", ReplayImpact.renderReplayImpact impact]
+              )
+      golden <- readTestText "test/fixtures/fold-identity-diff-replay.golden"
+      T.stripEnd actual `shouldBe` T.stripEnd golden
+
+    it "pins unrelated public 64-bit identities outside the fold digest" $ do
+      readModelSpec <- specOf "test/fixtures/readmodel.keiro"
+      wireSpec <- specOf "test/fixtures/consumer-types.keiro"
+      behaviorSpec <- specOf "test/fixtures/behavior-complete.keiro"
+      readModel <- case [value | NReadModel value <- specNodes readModelSpec] of
+        value : _ -> pure value
+        [] -> expectationFailure "missing read-model fixture" >> fail "unreachable"
+      graph <- shouldResolveTypeGraph wireSpec
+      behaviorKey <- case Behavior.deriveBehaviorRequirements behaviorSpec of
+        Right (requirement : _) -> pure (Behavior.unBehaviorKey (Behavior.requirementKey requirement))
+        result -> expectationFailure ("missing behavior requirement: " <> show result) >> fail "unreachable"
+      deriveShapeHash readModel `shouldBe` "fnv1a:3717f6d9e3c44bd6"
+      wireFingerprint graph "ArtifactInfo" `shouldBe` "2bd99b3e57bcde9b"
+      behaviorKey `shouldBe` "behavior-v1-2e1fd6b9580e1a3d"
+
   describe "source language version" $ do
     let legacy = "context hospital-capacity\n"
         declared = "# leading comment\n\nlanguage keiro-dsl 1\ncontext hospital-capacity\n"
@@ -6401,6 +6495,33 @@ genWorkspaceManifest = do
         wmfLayoutLoc = Loc 3,
         wmfMembers = NE.fromList [WorkspaceMemberRef path (Loc 4) | path <- sort chosen]
       }
+
+-- | Parse a fixture while retaining its released language contract.
+parsedSourceOf :: FilePath -> IO ParsedSource
+parsedSourceOf path = do
+  input <- readTestText path
+  case parseSource path input of
+    Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+    Right parsed -> pure parsed
+
+checkedServiceOf :: FilePath -> IO CheckedService
+checkedServiceOf = fmap checkedSource . parsedSourceOf
+
+renderFoldBaseline :: T.Text -> CheckedService -> T.Text
+renderFoldBaseline fixture service =
+  T.intercalate
+    "\n\n"
+    [ T.unlines
+        ( [ "fixture=" <> fixture,
+            "aggregate=" <> aggName aggregate,
+            "fingerprint=" <> aggregateFoldFingerprintForService service aggregate,
+            "surface-begin"
+          ]
+            <> T.lines (aggregateFoldSurfaceForService service aggregate)
+            <> ["surface-end"]
+        )
+    | NAggregate aggregate <- specNodes (checkedSpec service)
+    ]
 
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec

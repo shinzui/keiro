@@ -60,8 +60,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 0: pin the current fingerprint, surface, gate, and
-  classification bytes as the no-drift baseline.
+- [x] 2026-08-02 10:10 PDT: Milestone 0 pinned complete fold surfaces and
+  fingerprints for six representative aggregates across five fixture families,
+  all four gate/segment projections, representative diff/replay rendering, and
+  the unrelated read-model, wire, and behavior-key 64-bit identities; all 486
+  focused examples pass.
 - [ ] Milestone 1: introduce `RuntimeCapability` and `RuntimeSemanticsProfile`,
   rewrite every string gate, and add registry monotonicity tests.
 - [ ] Milestone 2: derive the fold-surface version segment from declared fold
@@ -139,6 +142,13 @@ implementation. Provide concise evidence.
   milestones remain pending.  Milestone 5 here may therefore update that pin
   before the coordinated `0.9.0.0` publication without crossing the ordering
   constraint.
+- Discovery (Milestone 0, 2026-08-02): the pinned unrelated identities are
+  read-model shape `fnv1a:3717f6d9e3c44bd6`, mapped-wire fingerprint
+  `2bd99b3e57bcde9b`, and behavior key
+  `behavior-v1-2e1fd6b9580e1a3d`.  The fold baselines include the six current
+  fingerprints `d0897c163c958108`, `d452ae7d73a3bf7f`,
+  `ce837676f16ed1a5`, `c5e44f6d33b3dd6f`, `f9264cc50ea1c28f`, and
+  `6ee6400f21b05845`.
 - Discovery: the presentation pretty printer is load-bearing replay identity.
   `FoldFingerprint.hs` imports `renderExpr` from
   `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` for guard, write, and case
@@ -282,7 +292,11 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 0 completed with the production code untouched.  Two committed
+goldens now pin the full pre-hash fold bytes plus representative diff/replay
+rendering, while focused assertions pin every released runtime gate and the
+three unrelated 64-bit identity families that Milestone 5 must preserve.  The
+focused suite grew from 482 to 486 examples and passes in full.
 
 
 ## Context and Orientation

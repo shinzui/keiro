@@ -1,0 +1,13 @@
+diff:
+WARNING: Reservation transition Unrequested -- RequestTransferReservation: guard changed on Unrequested -- RequestTransferReservation. Stored events appended under the old guard may no longer invert: the next command on any stream containing one fails hydration with no inverting edge. Either confirm via the replay audit that no stored stream exercises the removed region, or keep history replayable by adding the computed replay-only twin (the removed region with the old transition's writes/emits/goto):
+
+replay-only Unrequested -- RequestTransferReservation -->
+  guard (divertStatus != TotalDivert || lifeCriticalOverride) && (divertStatus == TotalDivert && lifeCriticalOverride == false || patientAcuity == RedTag)
+  write reservationState := Held
+  emit TransferReservationCreated
+  goto Held [AggGuardTightened]
+    vector: private-history-read=advisory old-binary-read-new-events=compatible
+WARNING: Reservation transitions Reservation: aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change. [AggFoldSurfaceChanged]
+    vector: private-history-read=advisory old-binary-read-new-events=compatible snapshot-hydration=advisory
+replay:
+replay-affected: run the candidate binary's targeted replay audit for Reservation events=[TransferReservationCreated] snapshots=yes

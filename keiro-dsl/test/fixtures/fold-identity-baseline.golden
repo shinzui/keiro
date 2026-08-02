@@ -1,0 +1,115 @@
+fixture=aggregate-scalar-expressions-v2
+aggregate=ScalarAccount
+fingerprint=d0897c163c958108
+surface-begin
+state:Open|terminal=false
+state:Reviewed|terminal=false
+state:Closed|terminal=true
+reg:balance:Integer=0
+reg:reserved:Natural=0
+reg:capacity:Natural=5
+reg:machine:Int=0
+reg:label:Text=""
+reg:active:Bool=False
+reg:mode:AccountMode=Normal
+reg:requestId:RequestId=placeholder
+reg:openedAt:Time=(UTCTime (fromGregorian 2026 1 1) (picosecondsToDiffTime 0))
+reg:limits:Limits=initial
+mapped-register:Limits|wire=4463db782a5b9924|canonical=scalar-expressions.Limits.v1|binding=ScalarExpressions.Bindings.limitsBinding|binding-version=1|initial=ScalarExpressions.Bindings.initialLimits
+nominal-equality-use:nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated
+nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated
+transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:="adjusted";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId("req_00041061050r3gg28a1c60t3gf");openedAt:="2026-02-03T04:05:06Z";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed
+transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed
+surface-end
+
+
+fixture=nominal-scalars
+aggregate=NominalLedger
+fingerprint=d452ae7d73a3bf7f
+surface-begin
+state:Empty|terminal=false
+state:Recorded|terminal=true
+reg:orderId:OrderId=initial
+reg:status:OrderStatus=initial
+reg:accountNumber:AccountNumber=initial
+reg:riskScore:RiskScore=initial
+reg:sequenceNumber:SequenceNumber=initial
+reg:featureFlag:FeatureFlag=initial
+reg:observedAt:ObservedAt=initial
+nominal-use:register:orderId|name=OrderId|representation=id:ord|canonical=nominal.OrderId.v1|binding=NominalConformance.Bindings.orderIdBinding|binding-version=1|initial=NominalConformance.Bindings.initialOrderId
+nominal-use:register:status|name=OrderStatus|representation=enum:Draft=draft,Submitted=submitted|canonical=nominal.OrderStatus.v1|binding=NominalConformance.Bindings.orderStatusBinding|binding-version=1|initial=NominalConformance.Bindings.initialOrderStatus
+nominal-use:register:accountNumber|name=AccountNumber|representation=Text|canonical=nominal.AccountNumber.v1|binding=NominalConformance.Bindings.accountNumberBinding|binding-version=1|initial=NominalConformance.Bindings.initialAccountNumber
+nominal-use:register:riskScore|name=RiskScore|representation=Int|canonical=nominal.RiskScore.v1|binding=NominalConformance.Bindings.riskScoreBinding|binding-version=1|initial=NominalConformance.Bindings.initialRiskScore
+nominal-use:register:sequenceNumber|name=SequenceNumber|representation=Natural|canonical=nominal.SequenceNumber.v1|binding=NominalConformance.Bindings.sequenceNumberBinding|binding-version=1|initial=NominalConformance.Bindings.initialSequenceNumber
+nominal-use:register:featureFlag|name=FeatureFlag|representation=Bool|canonical=nominal.FeatureFlag.v1|binding=NominalConformance.Bindings.featureFlagBinding|binding-version=1|initial=NominalConformance.Bindings.initialFeatureFlag
+nominal-use:register:observedAt|name=ObservedAt|representation=Time|canonical=nominal.ObservedAt.v1|binding=NominalConformance.Bindings.observedAtBinding|binding-version=1|initial=NominalConformance.Bindings.initialObservedAt
+nominal-use:event:NominalsRecorded.orderId|name=OrderId|representation=id:ord|canonical=nominal.OrderId.v1|binding=NominalConformance.Bindings.orderIdBinding|binding-version=1|initial=NominalConformance.Bindings.initialOrderId
+nominal-use:event:NominalsRecorded.status|name=OrderStatus|representation=enum:Draft=draft,Submitted=submitted|canonical=nominal.OrderStatus.v1|binding=NominalConformance.Bindings.orderStatusBinding|binding-version=1|initial=NominalConformance.Bindings.initialOrderStatus
+nominal-use:event:NominalsRecorded.accountNumber|name=AccountNumber|representation=Text|canonical=nominal.AccountNumber.v1|binding=NominalConformance.Bindings.accountNumberBinding|binding-version=1|initial=NominalConformance.Bindings.initialAccountNumber
+nominal-use:event:NominalsRecorded.riskScore|name=RiskScore|representation=Int|canonical=nominal.RiskScore.v1|binding=NominalConformance.Bindings.riskScoreBinding|binding-version=1|initial=NominalConformance.Bindings.initialRiskScore
+nominal-use:event:NominalsRecorded.sequenceNumber|name=SequenceNumber|representation=Natural|canonical=nominal.SequenceNumber.v1|binding=NominalConformance.Bindings.sequenceNumberBinding|binding-version=1|initial=NominalConformance.Bindings.initialSequenceNumber
+nominal-use:event:NominalsRecorded.featureFlag|name=FeatureFlag|representation=Bool|canonical=nominal.FeatureFlag.v1|binding=NominalConformance.Bindings.featureFlagBinding|binding-version=1|initial=NominalConformance.Bindings.initialFeatureFlag
+nominal-use:event:NominalsRecorded.observedAt|name=ObservedAt|representation=Time|canonical=nominal.ObservedAt.v1|binding=NominalConformance.Bindings.observedAtBinding|binding-version=1|initial=NominalConformance.Bindings.initialObservedAt
+nominal-equality-use:nominal-equality|name=OrderId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=typeid-text:ord|owner=consumer;canonical=nominal.OrderId.v1;binding=NominalConformance.Bindings.orderIdBinding;binding-version=1
+nominal-equality-use:nominal-equality|name=OrderStatus|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,submitted|owner=consumer;canonical=nominal.OrderStatus.v1;binding=NominalConformance.Bindings.orderStatusBinding;binding-version=1
+transition:live|Empty|RecordNominals|implementation=generated|guard=cmd.orderId == reg.orderId && cmd.status == reg.status|writes=orderId:=cmd.orderId;status:=cmd.status;accountNumber:=cmd.accountNumber;riskScore:=cmd.riskScore;sequenceNumber:=cmd.sequenceNumber;featureFlag:=cmd.featureFlag;observedAt:=cmd.observedAt|emits=NominalsRecorded|outputs=NominalsRecorded=generated-command-identity:RecordNominals[orderId=orderId:OrderId,status=status:OrderStatus,accountNumber=accountNumber:AccountNumber,riskScore=riskScore:RiskScore,sequenceNumber=sequenceNumber:SequenceNumber,featureFlag=featureFlag:FeatureFlag,observedAt=observedAt:ObservedAt]|goto=Recorded
+surface-end
+
+
+fixture=id-domain-migration-v3
+aggregate=OrderBook
+fingerprint=ce837676f16ed1a5
+surface-begin
+semantic-contract:keiro-dsl/runtime-semantics/2
+state:Empty|terminal=false
+state:Recorded|terminal=true
+reg:orderId:OrderId=placeholder
+transition:live|Empty|Record|implementation=generated|guard=|writes=orderId:=cmd.orderId|emits=OrderRecorded|outputs=OrderRecorded=generated-command-identity:Record[orderId=orderId:OrderId]|goto=Recorded
+surface-end
+
+
+fixture=behavior-complete
+aggregate=Journey
+fingerprint=c5e44f6d33b3dd6f
+surface-begin
+state:Empty|terminal=false
+state:Active|terminal=false
+state:Closed|terminal=true
+reg:lastAmount:Natural=0
+transition:live|Empty|Start|implementation=generated|guard=|writes=lastAmount:=cmd.amount|emits=Started|outputs=Started=generated-command-identity:Start[requestId=requestId:RequestId,observedAt=observedAt:Time,amount=amount:Natural,details=details:StartPayload]|goto=Active
+transition:live|Active|Decide|implementation=generated|guard=cmd.amount <= 5|writes=lastAmount:=cmd.amount|emits=DecisionRecorded|outputs=DecisionRecorded=generated-command-identity:Decide[amount=amount:Natural]|goto=Active
+transition:live|Active|Decide|implementation=generated|guard=cmd.amount > 5|writes=lastAmount:=cmd.amount|emits=DecisionRecorded|outputs=DecisionRecorded=generated-command-identity:Decide[amount=amount:Natural]|goto=Active
+transition:live|Active|Ping|implementation=generated|guard=|writes=|emits=|outputs=|goto=Active
+transition:live|Active|Retire|implementation=generated|guard=cmd.amount > 0|writes=lastAmount:=cmd.amount|emits=Retired,RetirementAudited|outputs=Retired=generated-command-identity:Retire[amount=amount:Natural],RetirementAudited=generated-command-identity:Retire[amount=amount:Natural]|goto=Closed
+transition:replay-only|Active|Retire|implementation=generated|guard=cmd.amount <= 0|writes=lastAmount:=cmd.amount|emits=Retired,RetirementAudited|outputs=Retired=generated-command-identity:Retire[amount=amount:Natural],RetirementAudited=generated-command-identity:Retire[amount=amount:Natural]|goto=Closed
+surface-end
+
+
+fixture=workspace-nominals
+aggregate=ProjectArtifact
+fingerprint=f9264cc50ea1c28f
+surface-begin
+state:Empty|terminal=false
+state:Recorded|terminal=true
+reg:projectId:ProjectId=placeholder
+reg:phase:ProjectPhase=Draft
+nominal-equality-use:nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated
+nominal-equality-use:nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated
+transition:live|Empty|RecordArtifact|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ArtifactRecorded|outputs=ArtifactRecorded=generated-command-identity:RecordArtifact[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Recorded
+surface-end
+
+
+fixture=workspace-nominals
+aggregate=Project
+fingerprint=6ee6400f21b05845
+surface-begin
+state:Empty|terminal=false
+state:Live|terminal=false
+state:Archived|terminal=true
+reg:projectId:ProjectId=placeholder
+reg:phase:ProjectPhase=Draft
+nominal-equality-use:nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated
+nominal-equality-use:nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated
+transition:live|Empty|RegisterProject|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ProjectRegistered|outputs=ProjectRegistered=generated-command-identity:RegisterProject[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Live
+transition:live|Live|ArchiveProject|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=|emits=ArchivalRecorded|outputs=ArchivalRecorded=generated-command-identity:ArchiveProject[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Archived
+surface-end
