@@ -131,8 +131,8 @@ structuralWirePolicyAssertions =
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: scalar-expressions.Limits.v1/ceiling", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC63ZC65ZC69ZC6cZC69ZC6eZC67ZWitness (\referenceOwner -> Generated.AggregateScalarExpressions.Structural.Shape.Limits.ceiling (bindingToShape ScalarExpressions.Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases ScalarExpressions.Bindings.limitsCases)))
-  , ("projection witness agreement: scalar-expressions.Limits.v1/minimum", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC6dZC69ZC6eZC69ZC6dZC75ZC6dZWitness (\referenceOwner -> Generated.AggregateScalarExpressions.Structural.Shape.Limits.minimum (bindingToShape ScalarExpressions.Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases ScalarExpressions.Bindings.limitsCases)))
+  [ ("projection witness agreement: scalar-expressions.Limits.v1/ceiling", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsCeilingWitness (\referenceOwner -> Generated.AggregateScalarExpressions.Structural.Shape.Limits.ceiling (bindingToShape ScalarExpressions.Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases ScalarExpressions.Bindings.limitsCases)))
+  , ("projection witness agreement: scalar-expressions.Limits.v1/minimum", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsMinimumWitness (\referenceOwner -> Generated.AggregateScalarExpressions.Structural.Shape.Limits.minimum (bindingToShape ScalarExpressions.Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases ScalarExpressions.Bindings.limitsCases)))
   ]
 
 deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value

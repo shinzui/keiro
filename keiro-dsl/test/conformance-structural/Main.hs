@@ -40,7 +40,7 @@ projectionAssertions =
         )
     ]
   where
-    artifactKeyWitness = StructuralProjections.structuralProjectionC41ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC49ZC6eZC66ZC6fZC2fZC61ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC5fZC6bZC65ZC79ZWitness
+    artifactKeyWitness = StructuralProjections.artifactInfoArtifactKeyWitness
 
 loadGoldenAssertions :: IO [(String, Bool)]
 loadGoldenAssertions = do

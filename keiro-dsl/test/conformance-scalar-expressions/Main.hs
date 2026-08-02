@@ -225,7 +225,7 @@ repeatedPathUsesOneSymbol = do
   let projected :: K.Term ScalarAccountRegs ScalarAccountCommand (RegFieldsOf AdjustData) Integer
       projected =
         K.inpProj
-          StructuralProjections.structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC6dZC69ZC6eZC69ZC6dZC75ZC6dZWitness
+          StructuralProjections.limitsMinimumWitness
           inCtorAdjust
           (#limits :: K.Index (RegFieldsOf AdjustData) Domain.Limits)
       contradiction :: K.HsPred ScalarAccountRegs ScalarAccountCommand

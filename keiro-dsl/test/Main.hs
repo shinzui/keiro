@@ -53,7 +53,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -4012,6 +4012,33 @@ main = hspec $ do
       facade `shouldSatisfy` T.isInfixOf "= \"/key\""
       facade `shouldSatisfy` T.isInfixOf "fieldShapeId _ = \"example.artifact.ArtifactInfo.v1\""
       facade `shouldSatisfy` T.isInfixOf "bindingToShape Example.Artifact.KeiroBindings.artifactInfoBinding owner"
+      facade `shouldSatisfy` T.isInfixOf "artifactInfoKeyWitness"
+      facade `shouldNotSatisfy` T.isInfixOf "structuralProjectionC"
+    it "suffixes only structural witness names that collide after normalization" $ do
+      source <- readTestText "test/fixtures/consumer-types.keiro"
+      collisionSpec <-
+        parseInlineSpec
+          "<projection-name-collision>"
+          ( T.replace
+              "    key         as \"key\"         : Text                 required"
+              ( T.unlines
+                  [ "    key         as \"key\"         : Text                 required",
+                    "    fooDash     as \"foo-bar\"     : Text                 required",
+                    "    fooUnder    as \"foo_bar\"     : Text                 required"
+                  ]
+              )
+              source
+          )
+      graph <- shouldResolveTypeGraph collisionSpec
+      let specs = projectionSpecs graph
+          keyWitnesses = [spWitness spec | spec <- specs, spPointer spec == "/key"]
+          collidedWitnesses = [spWitness spec | spec <- specs, spPointer spec `elem` ["/foo-bar", "/foo_bar"]]
+      keyWitnesses `shouldBe` ["artifactInfoKeyWitness"]
+      length collidedWitnesses `shouldBe` 2
+      Set.size (Set.fromList collidedWitnesses) `shouldBe` 2
+      collidedWitnesses `shouldSatisfy` all (T.isPrefixOf "artifactInfoFooBar")
+      collidedWitnesses `shouldSatisfy` all (T.isSuffixOf "Witness")
+      collidedWitnesses `shouldSatisfy` all ((== 8) . T.length . T.dropEnd (T.length ("Witness" :: T.Text)) . T.drop (T.length ("artifactInfoFooBar" :: T.Text)))
 
   describe "structural manifest" $ do
     it "lists consumer packages and every domain, binding, fixture, and initial module" $ do

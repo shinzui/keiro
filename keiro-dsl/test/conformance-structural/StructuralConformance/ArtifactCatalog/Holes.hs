@@ -31,7 +31,7 @@ artifactCatalogTransducer =
         B.from ArtifactCatalogEmpty do
             B.onCmd inCtorObserveArtifact $ \d -> B.do
                 B.requireEq
-                    (inpProj StructuralProjections.structuralProjectionC41ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC49ZC6eZC66ZC6fZC2fZC61ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC5fZC6bZC65ZC79ZWitness inCtorObserveArtifact #artifact)
+                    (inpProj StructuralProjections.artifactInfoArtifactKeyWitness inCtorObserveArtifact #artifact)
                     (lit "artifact-local-file")
                 B.slot @"currentArtifact" =: d.artifact
                 B.slot @"currentGeometry" =: d.geometry

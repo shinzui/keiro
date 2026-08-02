@@ -134,7 +134,7 @@ structuralWirePolicyAssertions =
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.structuralProjectionC53ZC74ZC61ZC72ZC74ZC50ZC61ZC79ZC6cZC6fZC61ZC64ZC2fZC64ZC69ZC73ZC70ZC6cZC61ZC79ZC5fZC6cZC61ZC62ZC65ZC6cZWitness (\referenceOwner -> Generated.BehaviorComplete.Structural.Shape.StartPayload.label (bindingToShape BehaviorComplete.Bindings.startPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases BehaviorComplete.Bindings.startPayloadCases)))
+  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> Generated.BehaviorComplete.Structural.Shape.StartPayload.label (bindingToShape BehaviorComplete.Bindings.startPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases BehaviorComplete.Bindings.startPayloadCases)))
   ]
 
 deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value

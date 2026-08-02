@@ -60,7 +60,11 @@ This section must always reflect the actual current state of the work.
   failure detail, regenerated affected fixtures through the scaffolder, and
   passed the unit, queue, inbox, contract, typed-contract, and full integration
   suites.
-- [ ] Milestone 2: readable structural-projection witness names.
+- [x] 2026-08-02 12:38 PDT: Milestone 2 replaced hex-mangled structural
+  witness/type names with owner-and-path names, added deterministic
+  collision-only suffix allocation, resolved transducer use sites through the
+  same global table, migrated hand-owned fixture consumers, and passed the
+  structural, scalar-expression, and behavior-complete suites.
 - [ ] Milestone 3: diagnosable decode failures.
 - [ ] Milestone 4: provenance-stamped generated banners with migration-safe
   recognition of the legacy banner.
@@ -243,6 +247,20 @@ Record every decision made while working on the plan.
   gives generated applications the live retry type without a new direct
   package dependency.
   Date: 2026-08-02
+- Decision: Name a structural projection from its root declaration and every
+  normalized JSON-pointer segment (for example
+  `ArtifactInfoArtifactKeyProjection` /
+  `artifactInfoArtifactKeyWitness`).  When multiple paths normalize to the
+  same stem, suffix every member of that collision group with the first eight
+  hexadecimal digits of FNV-1a-64 over canonical owner plus pointer; only an
+  actual digest collision receives a stable ordinal.
+  Rationale: unsuffixed common names stay readable, colliding names remain
+  deterministic regardless of declaration order, and the explicit final
+  ordinal prevents the generator from ever emitting duplicate Haskell
+  declarations.  Transducer references look the name up in `projectionSpecs`
+  rather than reimplementing naming, keeping declarations and use sites one
+  authority.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -271,6 +289,16 @@ declared classifications, a detailed disposition carrying the live
 detail, plus a total bridge over all five live `InboxResult` constructors.
 The exact queue wire bytes and all focused decode acceptance/rejection pins
 remained green, confirming that the change is Haskell-API-only.
+
+Milestone 2 completed on 2026-08-02.  The representative exported witness is
+now `artifactInfoArtifactKeyWitness`; scalar and behavior fixtures similarly
+use `limitsMinimumWitness` and `startPayloadDisplayLabelWitness`.  The old
+`structuralProjectionC...` pattern is absent from source and tests.  A unit
+fixture proves that `/foo-bar` and `/foo_bar` receive distinct stable
+eight-hex suffixes while `/key` remains the unsuffixed
+`artifactInfoKeyWitness`.  Structural, scalar-expression, and behavior
+conformance remained green, proving that witness values and projection
+semantics did not change.
 
 
 ## Context and Orientation

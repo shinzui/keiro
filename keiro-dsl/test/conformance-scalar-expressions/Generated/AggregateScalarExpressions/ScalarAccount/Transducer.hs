@@ -44,8 +44,8 @@ scalarAccountTransducer =
   B.buildTransducer ScalarAccountOpen initialScalarAccountRegs isTerminal do
     B.from ScalarAccountOpen do
       B.onCmd inCtorAdjust $ \d -> B.do
-        let commandLimitsMinimum = K.inpProj StructuralProjections.structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC6dZC69ZC6eZC69ZC6dZC75ZC6dZWitness inCtorAdjust (#limits :: K.Index (RegFieldsOf AdjustData) ScalarExpressions.Domain.Limits)
-            registerLimitsMinimum = K.regProj StructuralProjections.structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC6dZC69ZC6eZC69ZC6dZC75ZC6dZWitness (#limits :: K.Index ScalarAccountRegs ScalarExpressions.Domain.Limits)
+        let commandLimitsMinimum = K.inpProj StructuralProjections.limitsMinimumWitness inCtorAdjust (#limits :: K.Index (RegFieldsOf AdjustData) ScalarExpressions.Domain.Limits)
+            registerLimitsMinimum = K.regProj StructuralProjections.limitsMinimumWitness (#limits :: K.Index ScalarAccountRegs ScalarExpressions.Domain.Limits)
             commandMode = K.inpProj GeneratedNominals.accountModeEqualityWitness inCtorAdjust (#mode :: K.Index (RegFieldsOf AdjustData) AccountMode)
             registerMode = K.regProj GeneratedNominals.accountModeEqualityWitness (#mode :: K.Index ScalarAccountRegs AccountMode)
             commandRequestId = K.inpProj GeneratedNominals.requestIdEqualityWitness inCtorAdjust (#requestId :: K.Index (RegFieldsOf AdjustData) RequestId)

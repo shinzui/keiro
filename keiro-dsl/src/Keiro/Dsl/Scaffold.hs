@@ -87,7 +87,7 @@ module Keiro.Dsl.Scaffold
   )
 where
 
-import Data.Char (isAlpha, isAlphaNum, isUpper, ord, toLower, toUpper)
+import Data.Char (isAlpha, isAlphaNum, isUpper, toLower, toUpper)
 import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
@@ -108,11 +108,10 @@ import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDoma
 import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned))
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
-import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
-import Numeric (showHex)
 import Text.Read (readMaybe)
 
 -- | One emitted module: its on-disk path (relative to the scaffold @--out@
@@ -1791,7 +1790,7 @@ data StructuralProjection = StructuralProjection
 
 projectionSpecs :: TypeGraph -> [StructuralProjection]
 projectionSpecs graph =
-  sortOn spTag . concat $
+  sortOn spTag . allocateProjectionNames . concat $
     [ projectionsForRoot graph declaration shape
     | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
     ]
@@ -1834,8 +1833,8 @@ projectionsForRoot graph root rootShape = case rootShape of
     shapeModuleFor declaration = "__SHAPE__." <> sdName declaration
     mkProjection keys selectors result =
       StructuralProjection
-        { spTag = projectionTag (sdName root) pointer,
-          spWitness = lowerFirst (projectionTag (sdName root) pointer) <> "Witness",
+        { spTag = nameStem <> "Projection",
+          spWitness = lowerFirst nameStem <> "Witness",
           spPointer = pointer,
           spOwner = sdHaskell root,
           spResult = result,
@@ -1845,6 +1844,7 @@ projectionsForRoot graph root rootShape = case rootShape of
         }
       where
         pointer = T.concat ["/" <> escapePointer key | key <- keys]
+        nameStem = projectionNameStem (sdName root) pointer
 
 projectionScalar :: ResolvedTypeExpr -> Maybe Text
 projectionScalar = \case
@@ -1863,11 +1863,53 @@ projectionScalar = \case
 escapePointer :: Text -> Text
 escapePointer = T.replace "/" "~1" . T.replace "~" "~0"
 
-projectionTag :: Name -> Text -> Text
-projectionTag owner pointer = "StructuralProjection" <> encodeIdentifier (owner <> pointer)
+projectionNameStem :: Name -> Text -> Text
+projectionNameStem owner pointer =
+  pascal owner
+    <> T.concat
+      [ normaliseAliasPart (unescapePointer segment)
+      | segment <- filter (not . T.null) (T.splitOn "/" pointer)
+      ]
 
-encodeIdentifier :: Text -> Text
-encodeIdentifier = T.concatMap (\character -> "C" <> T.pack (showHex (ord character) "") <> "Z")
+-- | Add a stable digest only when two distinct wire paths normalize to the
+-- same Haskell name. Digest collisions receive a deterministic ordinal, so the
+-- emitter never produces duplicate declarations even in that unlikely case.
+allocateProjectionNames :: [StructuralProjection] -> [StructuralProjection]
+allocateProjectionNames specs = concatMap allocateGroup groups
+  where
+    groups = groupBy (\left right -> spTag left == spTag right) (sortOn spTag specs)
+    allocateGroup [spec] = [spec]
+    allocateGroup collided = reverse named
+      where
+        ordered = sortOn projectionIdentity collided
+        digest spec = T.take 8 (fnv1a64 (projectionIdentity spec))
+        digestCounts = Map.fromListWith (+) [(digest spec, 1 :: Int) | spec <- ordered]
+        (_, named) = foldl allocate (Map.empty, []) ordered
+        allocate (seen, allocated) spec =
+          let shortDigest = digest spec
+              occurrence = Map.findWithDefault 0 shortDigest seen + 1
+              suffix =
+                shortDigest
+                  <> if Map.findWithDefault 0 shortDigest digestCounts == 1
+                    then ""
+                    else tshow' occurrence
+           in (Map.insert shortDigest occurrence seen, renameWithSuffix suffix spec : allocated)
+    projectionIdentity spec = unCanonicalTypeId (spCanonical spec) <> "#" <> spPointer spec
+    renameWithSuffix suffix spec =
+      spec
+        { spTag = nameStem <> suffix <> "Projection",
+          spWitness = lowerFirst nameStem <> suffix <> "Witness"
+        }
+      where
+        nameStem = fromMaybe (spTag spec) (T.stripSuffix "Projection" (spTag spec))
+
+projectionWitnessName :: TypeGraph -> MappedKey -> Text -> Maybe Text
+projectionWitnessName graph owner pointer = do
+  ResolvedStructural declaration _ <- Map.lookup owner (tgDeclarations graph)
+  spWitness
+    <$> find
+      (\spec -> spCanonical spec == sdCanonical declaration && spPointer spec == pointer)
+      (projectionSpecs graph)
 
 emitStructuralProjections :: Context -> TypeGraph -> Text
 emitStructuralProjections ctx graph =
@@ -4760,7 +4802,10 @@ renderStructuralProjectionTerm aggregate transition provenance projection = case
       <> renderDomainType aggregate ownerType
       <> ")"
   where
-    witness = lowerFirst (projectionTag (unMappedKey (scalarProjectionOwner projection)) (scalarProjectionPointer projection)) <> "Witness"
+    witness =
+      fromMaybe
+        (error ("resolved structural projection witness disappeared: " <> show projection))
+        (aTypeGraph aggregate >>= \graph -> projectionWitnessName graph (scalarProjectionOwner projection) (scalarProjectionPointer projection))
 
 renderKeikiLiteral :: Agg -> ResolvedAggregateType -> ScalarValue -> Text
 renderKeikiLiteral aggregate scalarType = \case
