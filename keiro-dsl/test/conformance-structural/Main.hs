@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedLabels #-}
 
 module Main (main) where
 

@@ -46,8 +46,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 0: capture and automate the pre-change guarantee ledger for the
-  canonical scalar-expression fixture.
+- [x] 2026-08-02 05:59 PDT: Milestone 0 captured and automated the pre-change
+  guarantee ledger for the canonical scalar-expression fixture.
 - [ ] Milestone 1: replace raw Keiki-constructor emission with a precedence-aware,
   human-readable Haskell expression renderer.
 - [ ] Milestone 2: inline checked guard and write terms into `Transducer`, remove
@@ -145,6 +145,18 @@ implementation. Provide concise evidence.
   preferred-version document and upstream tag `v0.7.0.0`, which peels to
   `7c5d433ef4455e9e626347f89cb3a416bad62e72`.  No `0.8` tag or Hackage version
   existed at this review, so Milestone 4 remains correctly gated.
+- Discovery: concurrent Cabal commands sharing this checkout's `dist-newstyle`
+  can race while creating the same inplace package database.  Guarantee-ledger
+  commands must run sequentially in this working tree.
+  Evidence: a parallel baseline attempt failed with
+  `package.conf.inplace already exists`; rerunning the same conformance command
+  after the focused unit suite completed passed.
+- Discovery: Fourmolu does not read Cabal common-stanza defaults when parsing a
+  staged file directly.  Repository-wide extensions therefore have to be
+  mirrored in `nix/treefmt.nix`; adding a redundant file-local pragma hides the
+  configuration mismatch instead of fixing it.
+  Evidence: the commit hook rejected a postpositive qualified import even though
+  `keiro-dsl/keiro-dsl.cabal` already declared `ImportQualifiedPost` globally.
 
 
 ## Decision Log
@@ -259,6 +271,15 @@ Record every decision made while working on the plan.
   The wire-spelling literal is intentionally not source-shaped; acceptance
   judges the surrounding business path names, not that literal's spelling.
   Date: 2026-08-01
+- Decision: Keep `ImportQualifiedPost` and `OverloadedLabels` in every package's
+  shared Cabal defaults and mirror them in the repository-wide Fourmolu parser
+  configuration; do not add them to hand-authored Haskell files.  Generated and
+  scaffolded consumer modules retain emitted pragmas because they must compile
+  independently of this repository's Cabal defaults.
+  Rationale: extension policy belongs to the build and formatter configuration.
+  File-local workarounds drift, duplicate the package contract, and fail to fix
+  tools that parse files outside Cabal.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -273,6 +294,15 @@ The 2026-08-01 soundness review found the core design feasible on released Keiki
 two unsafe migration assumptions before code work began.  No product behavior or
 generated output has changed yet; later milestone outcomes belong below this
 planning-review note.
+
+Milestone 0 completed on 2026-08-02.  The focused unit suite now pins the full
+canonical fold surface, fingerprint `d0897c163c958108`, identity diff and replay
+classification, generated manifest/module shape, Hole-only module shape, stale
+report wording, and firewall boundary.  The compiled conformance suite pins
+Keiki `0.7`'s exact `prettyPred` and `prettyUpdate` output in addition to its
+existing forward, replay, projection, symbolic, ownership, and snapshot checks.
+Both focused suites passed, and the mutation script proved all eight semantic and
+ownership defects turn their owning checks red before restoring the exact files.
 
 
 ## Context and Orientation
@@ -871,3 +901,14 @@ symbolic verification all consume the identical `SymTransducer` value; and
 added an explicit prohibition on editing `Keiro.Dsl.PrettyPrint.renderExpr`
 and `renderTransition`, the two presentation functions whose output is
 load-bearing replay identity.
+
+2026-08-02: Completed Milestone 0 by converting the pre-change guarantee ledger
+into executable unit, compiled-conformance, and mutation assertions.  Recorded
+the local Cabal shared-build-directory race and the requirement to run those
+validation commands sequentially.
+
+2026-08-02 (extension-policy audit): Audited every Cabal component and every
+hand-authored Haskell occurrence of `ImportQualifiedPost` and
+`OverloadedLabels`.  Centralized both extensions in shared package defaults and
+the Fourmolu parser configuration, removed redundant inline declarations, and
+kept self-contained pragmas only in generated/scaffolded consumer artifacts.

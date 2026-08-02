@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Durable workflow and operation syntax.
 module Keiro.Dsl.Parser.Workflow
   ( pWorkflow,

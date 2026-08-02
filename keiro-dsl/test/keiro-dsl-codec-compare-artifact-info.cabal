@@ -12,7 +12,9 @@ executable keiro-dsl-codec-compare-artifact-info
   default-language:   GHC2024
   default-extensions:
     DuplicateRecordFields
+    ImportQualifiedPost
     LambdaCase
+    OverloadedLabels
     OverloadedStrings
 
   ghc-options:        -Wall -Werror=missing-fields

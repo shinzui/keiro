@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 -- EP-4 integration: structural keywords never used as identifiers, so a
 -- list like @accept A B C@ stops at the next block keyword.
 -- EP-5 pgmq structural keywords.
@@ -12,7 +11,6 @@
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
-{-# LANGUAGE ImportQualifiedPost #-}
 
 -- | Parser primitives shared by every internal grammar concern.
 module Keiro.Dsl.Parser.Core

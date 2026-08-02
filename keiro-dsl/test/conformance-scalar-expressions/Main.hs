@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -20,6 +19,7 @@ import Generated.AggregateScalarExpressions.ScalarAccount.Transducer
 import Generated.AggregateScalarExpressions.StructuralProjections qualified as StructuralProjections
 import Keiki.Core qualified as K
 import Keiki.Generics (RegFieldsOf)
+import Keiki.Render.Pretty qualified as Pretty
 import Keiki.Symbolic qualified as S
 import Keiro.Codec (eventType)
 import Keiro.EventStream (EventStream (..), StateCodec (..))
@@ -41,6 +41,7 @@ main = do
           <> [ ("finite scalar oracle agrees with generated execution", finiteOracleAgreement)
              , ("Natural 2 - 5 is total monus zero", naturalMonusExample)
              , ("Integer/Natural oracle, concrete terms, and symbolic formulas agree", arithmeticAgreement)
+             , ("Keiki 0.7 pretty predicate/update pin the authoritative tree", scalarTreeBaseline)
              , ("one-way projected scalar paths remain conservatively unverified", repeatedPathAgreement)
              , ("one-way generated projection and opaque Hole remain unverified", verificationReport == expectedVerificationReport)
              , ("same-declaration nominal guards take both concrete branches", nominalGuardBranches)
@@ -56,6 +57,16 @@ main = do
   forM_ checks $ \(label, passed) ->
     putStrLn ((if passed then "PASS  " else "FAIL  ") <> label)
   unless (all snd checks) exitFailure
+
+scalarTreeBaseline :: Bool
+scalarTreeBaseline =
+  case K.edgesOut scalarAccountTransducer ScalarAccountOpen of
+    K.Edge predicate update _ _ _ : _ ->
+      Pretty.prettyPred predicate
+        == "(Adjust && (((((((Adjust.balance + balance) >= <lit> && (reserved + Adjust.requested) <= capacity) && Adjust.observedAt >= openedAt) && Adjust.limits./minimum >= limits./minimum) && Adjust.active == <lit>) && Adjust.mode.AccountMode == mode.AccountMode) && Adjust.requestId.RequestId == requestId.RequestId))"
+        && Pretty.prettyUpdate update
+          == "limits := Adjust.limits, openedAt := <lit>, requestId := <lit>, mode := <lit>, active := <lit>, label := <lit>, machine := <lit>, reserved := (reserved + (Adjust.requested - capacity)), balance := (balance + (Adjust.balance * <lit>)), (keep)"
+    [] -> False
 
 expectedVerificationReport :: [(T.Text, BehaviorOwnership, S.PredicateVerification)]
 expectedVerificationReport =

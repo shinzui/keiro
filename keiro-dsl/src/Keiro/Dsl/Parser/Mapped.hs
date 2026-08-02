@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Consumer-owned mapped and nominal type syntax.
 module Keiro.Dsl.Parser.Mapped
   ( pMappedTopItem,

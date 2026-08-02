@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NoFieldSelectors #-}
 
 module Keiro.Dsl.FrontendProfiles (frontendProfilesSpec) where

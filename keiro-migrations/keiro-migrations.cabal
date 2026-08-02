@@ -310,6 +310,7 @@ common common
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
+    ImportQualifiedPost
     MultilineStrings
     OverloadedLabels
     OverloadedStrings

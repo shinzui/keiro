@@ -31,6 +31,7 @@ common shared
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
+    ImportQualifiedPost
     MultilineStrings
     OverloadedLabels
     OverloadedStrings

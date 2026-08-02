@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Aggregate declarations, clauses, transitions, and expression ownership.
 module Keiro.Dsl.Parser.Aggregate
   ( pAggregate,

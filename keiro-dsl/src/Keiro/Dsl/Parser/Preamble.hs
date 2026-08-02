@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Released-language preamble recognition and source selection.
 module Keiro.Dsl.Parser.Preamble
   ( contextualDiagnostic,

@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | The executable compatibility oracle for the released keiro-dsl-0.7.0.0
 -- language frontend. The checked JSON is deliberately data, not an update mode:
 -- a behavior change must produce a reviewed manifest diff.

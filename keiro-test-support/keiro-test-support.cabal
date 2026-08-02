@@ -32,6 +32,8 @@ library
   default-language:   GHC2024
   default-extensions:
     BlockArguments
+    ImportQualifiedPost
+    OverloadedLabels
     OverloadedRecordDot
     OverloadedStrings
 

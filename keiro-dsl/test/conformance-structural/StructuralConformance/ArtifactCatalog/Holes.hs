@@ -1,6 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE TypeApplications #-}

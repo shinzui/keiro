@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Legacy and typed scalar expression syntax.
 module Keiro.Dsl.Parser.Expression
   ( pExpr,

@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Process-manager, router, timer, dispatch, and correlation syntax.
 module Keiro.Dsl.Parser.Coordination
   ( pProcess,

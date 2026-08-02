@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Test driver for keiro-dsl. EP-1 milestone 1 tests: the @parse . pretty@
 -- round-trip property over generated specs, and a unit test pinning the shape
 -- of the canonical Reservation fixture.
@@ -768,6 +766,33 @@ main = hspec $ do
                 expressions = generatedTextEndingIn "Expressions.hs" modules
                 transducer = generatedTextEndingIn "Transducer.hs" modules
                 holes = holeTextEndingIn "Holes.hs" modules
+                service = checkedSource parsed
+                surface = aggregateFoldSurfaceForService service aggregate
+                manifest = renderManifestForService "aggregate-scalar-expressions-v2.keiro" modules service
+            aggregateFoldFingerprintForService service aggregate `shouldBe` "d0897c163c958108"
+            T.lines surface
+              `shouldBe` [ "state:Open|terminal=false",
+                           "state:Reviewed|terminal=false",
+                           "state:Closed|terminal=true",
+                           "reg:balance:Integer=0",
+                           "reg:reserved:Natural=0",
+                           "reg:capacity:Natural=5",
+                           "reg:machine:Int=0",
+                           "reg:label:Text=\"\"",
+                           "reg:active:Bool=False",
+                           "reg:mode:AccountMode=Normal",
+                           "reg:requestId:RequestId=placeholder",
+                           "reg:openedAt:Time=(UTCTime (fromGregorian 2026 1 1) (picosecondsToDiffTime 0))",
+                           "reg:limits:Limits=initial",
+                           "mapped-register:Limits|wire=4463db782a5b9924|canonical=scalar-expressions.Limits.v1|binding=ScalarExpressions.Bindings.limitsBinding|binding-version=1|initial=ScalarExpressions.Bindings.initialLimits",
+                           "nominal-equality-use:nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated",
+                           "nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated",
+                           "transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:=\"adjusted\";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId(\"req_00041061050r3gg28a1c60t3gf\");openedAt:=\"2026-02-03T04:05:06Z\";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed",
+                           "transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed"
+                         ]
+            diffServices service service `shouldBe` []
+            ReplayImpact.replayImpactServices service service `shouldBe` ReplayNeutral
+            manifest `shouldSatisfy` T.isInfixOf "Generated.AggregateScalarExpressions.ScalarAccount.Expressions"
             map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Expressions.hs" . T.pack)
             map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Transducer.hs" . T.pack)
             expressions `shouldSatisfy` T.isInfixOf "K.tsub (d.requested) (B.reg @\"capacity\")"
@@ -966,6 +991,7 @@ main = hspec $ do
           transducer = generatedTextEndingIn "Transducer.hs" modules
           holes = holeTextEndingIn "Holes.hs" modules
       errorCodes spec `shouldBe` []
+      map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Expressions.hs" . T.pack)
       transducer `shouldSatisfy` T.isInfixOf "Holes.transition1OpenSetHole d"
       transducer `shouldSatisfy` T.isInfixOf "foldToken Holes.transition1OpenSetHoleFoldVersion"
       holes `shouldSatisfy` T.isInfixOf "transition1OpenSetHole _d = B.requireGuard K.PTop"
@@ -3668,6 +3694,7 @@ main = hspec $ do
         reportStale second `shouldSatisfy` \stale -> StaleModule Generated oldDomain `elem` stale && StaleModule HoleStub oldHoles `elem` stale
         doesFileExist (out </> oldDomain) `shouldReturn` True
         doesFileExist (out </> oldHoles) `shouldReturn` True
+        renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "safe to delete; still on disk")
     it "reports the entire old tree across a module-root flip" $
       withTempDirectory "keiro-dsl-stale-root" $ \out -> do
         spec <- parseInlineSpec "<stale-root>" loweringAggregateSpec

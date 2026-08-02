@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Released-language dispatch and complete document composition.
 module Keiro.Dsl.Parser.Document
   ( parseSurfaceSource,

@@ -16,9 +16,13 @@
         programs.nixpkgs-fmt.enable = true;
         programs.fourmolu.enable = true;
         programs.fourmolu.package = haskellPkgs.fourmolu;
-        # Fourmolu does not read Cabal's default-language setting, so mirror
-        # the project's GHC2024 parser mode explicitly.
-        programs.fourmolu.ghcOpts = [ "GHC2024" ];
+        # Fourmolu does not read Cabal's shared defaults, so mirror the
+        # repository-wide parser extensions explicitly.
+        programs.fourmolu.ghcOpts = [
+          "GHC2024"
+          "ImportQualifiedPost"
+          "OverloadedLabels"
+        ];
         programs.cabal-fmt.enable = true;
         # The keiro-dsl conformance slice is captured/scaffolded fixture source
         # (the `-- @generated` Generated.* modules plus a hand-filled Holes.hs).

@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NoFieldSelectors #-}
 
 -- | Shared implementation behind the public frontend and parser compatibility

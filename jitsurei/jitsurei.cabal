@@ -30,6 +30,7 @@ common shared
     BlockArguments
     DeriveAnyClass
     DuplicateRecordFields
+    ImportQualifiedPost
     MultilineStrings
     OverloadedLabels
     OverloadedRecordDot
