@@ -592,6 +592,21 @@ test-suite keiro-dsl-conformance-contract
     , base   >=4.21 && <5
     , text   >=2.1  && <2.2
 
+-- Language-4 contract conformance: prefix-indexed KindID fields, canonical
+-- text JSON, field-path-aware rejection, and the complete generated dependency set.
+test-suite keiro-dsl-conformance-contract-typeid
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-contract-typeid
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.Emergency.Contract
+  build-depends:
+    , aeson        >=2.2  && <2.3
+    , base         >=4.21 && <5
+    , keiro-core
+    , mmzk-typeid  >=0.7  && <0.8
+    , text         >=2.1  && <2.2
+
 -- EP-4 intake runtime conformance: the scaffolded Inbox disposition + dedupe
 -- policy compiled against the LIVE Keiro.Inbox.Types (InboxResult / dedupe).
 test-suite keiro-dsl-conformance-intake-runtime

@@ -28,7 +28,9 @@
 -- @base@ is always present.
 module Keiro.Dsl.Manifest
   ( renderManifest,
+    renderManifestForService,
     manifestDependencies,
+    manifestDependenciesForService,
     moduleNameOf,
   )
 where
@@ -39,15 +41,23 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.IdDomain (contractIdDomainContractFor)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 
 -- | Render a Cabal-pasteable manifest from the modules a scaffold run produced
 -- plus the node kinds present (which imply the dependency set). The first argument
 -- names the source spec (for the header comment).
 renderManifest :: Text -> [ScaffoldModule] -> Spec -> Text
-renderManifest specName mods spec =
+renderManifest specName mods = renderManifestForService specName mods . legacyCheckedService
+
+-- | Service-aware manifest renderer. Semantic CLI and workspace routes use
+-- this entry point so language-4 typed contract imports are represented in the
+-- consuming Cabal dependencies.
+renderManifestForService :: Text -> [ScaffoldModule] -> CheckedService -> Text
+renderManifestForService specName mods service =
   T.unlines $
     [ "-- keiro-dsl build manifest for " <> specName,
       "-- Paste the two blocks below into the consuming Cabal stanza.",
@@ -60,9 +70,10 @@ renderManifest specName mods spec =
       ++ [ "",
            "build-depends:"
          ]
-      ++ map ("    , " <>) (manifestDependencies spec)
+      ++ map ("    , " <>) (manifestDependenciesForService service)
       ++ consumerBlocks
   where
+    spec = checkedSpec service
     plan = consumerPlan spec
     consumerBlocks
       | null (consumerMappings plan) = []
@@ -84,16 +95,21 @@ moduleNameOf p = T.replace "/" "." (T.dropEnd 3 (T.pack p))
 -- | The sorted, deduplicated dependency set implied by the node kinds present
 -- in the spec. @base@ is always included.
 manifestDependencies :: Spec -> [Text]
-manifestDependencies spec =
-  sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap (depsForNode spec) (specNodes spec)))
+manifestDependencies = manifestDependenciesForService . legacyCheckedService
+
+manifestDependenciesForService :: CheckedService -> [Text]
+manifestDependenciesForService service =
+  sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap (depsForNode service spec) (specNodes spec)))
+  where
+    spec = checkedSpec service
 
 -- | The dependencies a single node kind implies (see the module header table).
-depsForNode :: Spec -> Node -> [Text]
-depsForNode spec n = case n of
+depsForNode :: CheckedService -> Spec -> Node -> [Text]
+depsForNode service spec n = case n of
   NAggregate aggregate -> ["aeson", "keiki", "keiro", "text"] <> aggregateDependencies spec aggregate
   NProcess {} -> ["aeson", "keiki", "keiro", "shibuya-core", "text", "time", "uuid"]
   NRouter {} -> ["effectful-core", "keiro", "shibuya-core", "text"]
-  NContract {} -> ["aeson", "text"]
+  NContract contract -> ["aeson", "text"] <> [dependency | hasTypedContractId contract, dependency <- ["keiro-core", "mmzk-typeid"]]
   NIntake {} -> integration
   NEmit {} -> integration
   NPublisher {} -> integration
@@ -104,6 +120,13 @@ depsForNode spec n = case n of
   NOperation {} -> ["effectful-core", "keiro", "text"]
   where
     integration = ["effectful-core", "hasql-transaction", "keiro", "kiroku-store"]
+    hasTypedContractId contract =
+      or
+        [ contractIdDomainContractFor (checkedLanguageContract service) prefix /= Nothing
+        | event <- ctrEvents contract,
+          field <- ceFields event,
+          CTypeId prefix <- [cfType field]
+        ]
 
 aggregateDependencies :: Spec -> Aggregate -> [Text]
 aggregateDependencies spec aggregate =

@@ -61,6 +61,7 @@
     {"declaredVersion":1,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/contract-fieldadd.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/contract-fieldtype.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/contract-topic.keiro","result":"accept","sourceForm":"declared"},
+    {"declaredVersion":4,"diagnosticCode":null,"effectiveVersion":4,"failureClass":null,"path":"keiro-dsl/test/fixtures/contract-v4.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/contract.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":"DispatchDedupFieldUnresolved","effectiveVersion":1,"failureClass":"semantic","path":"keiro-dsl/test/fixtures/dispatch-dedup-bad-field.keiro","result":"reject","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":"DispatchDedupQueueUnresolved","effectiveVersion":1,"failureClass":"semantic","path":"keiro-dsl/test/fixtures/dispatch-dedup-ghost-queue.keiro","result":"reject","sourceForm":"declared"},

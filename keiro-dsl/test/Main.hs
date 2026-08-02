@@ -42,7 +42,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
-import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
+import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSpec)
@@ -50,7 +50,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -349,6 +349,7 @@ main = hspec $ do
             "behavior-complete-workspace/declarations.keiro",
             "behavior-complete-workspace/journey.keiro",
             "behavior-complete.keiro",
+            "contract-v4.keiro",
             "id-domain-migration-v3.keiro",
             "language-future.keiro",
             "language-identifier-v1.keiro",
@@ -2285,6 +2286,82 @@ main = hspec $ do
             map fst (ctrTopics c) `shouldBe` ["incidentEvents", "hospitalEvents"]
             map ceName (ctrEvents c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
           [] -> expectationFailure "no contract node parsed"
+
+    it "branches contract scaffolding, manifests, and durable identities only for language 4" $ do
+      sourceText <- readTestText "test/fixtures/contract-v4.keiro"
+      parsed <- case parseSource "contract-v4.keiro" sourceText of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+          ctx = defaultContext (specContext spec)
+      contract <- case [value | NContract value <- specNodes spec] of
+        [value] -> pure value
+        values -> expectationFailure ("expected one contract, got " <> show (length values)) >> fail "unreachable"
+      legacyModule <- case scaffoldContract ctx contract of
+        [value] -> pure value
+        values -> expectationFailure ("expected one legacy module, got " <> show (length values)) >> fail "unreachable"
+      typedModule <- case scaffoldContractForService ctx service contract of
+        [value] -> pure value
+        values -> expectationFailure ("expected one typed module, got " <> show (length values)) >> fail "unreachable"
+      let dependencies = manifestDependenciesForService service
+          identities = idDomainIdentitiesForService service
+          manifestText = renderManifestForService "contract-v4.keiro" [typedModule] service
+      committed <- readTestText "test/conformance-contract-typeid/Generated/HospitalCapacity/Emergency/Contract.hs"
+      moduleText typedModule `shouldBe` committed
+      moduleText legacyModule `shouldSatisfy` T.isInfixOf "incidentId :: !Text"
+      moduleText legacyModule `shouldSatisfy` (not . T.isInfixOf "KindID")
+      moduleText typedModule `shouldSatisfy` T.isInfixOf "incidentId :: !(KindID \"inc\")"
+      moduleText typedModule `shouldSatisfy` T.isInfixOf "KindID.toText payload.incidentId"
+      moduleText typedModule `shouldSatisfy` T.isInfixOf "explicitParseField (parseKindIdV7Value @\"inc\") o \"incidentId\""
+      dependencies `shouldBe` ["aeson", "base", "keiro-core", "mmzk-typeid", "text"]
+      manifestDependencies spec `shouldBe` ["aeson", "base", "text"]
+      forM_ dependencies $ \dependency -> manifestText `shouldSatisfy` T.isInfixOf ("    , " <> dependency)
+      identities
+        `shouldBe` [ "id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text",
+                     "id-domain|name=contract:emergency.TransferReservationAccepted.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text",
+                     "id-domain|name=contract:emergency.TransferReservationAccepted.reservationId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=rsv|separator=_|json=canonical-json-text",
+                     "id-domain|name=contract:emergency.TransferReservationAccepted.hospitalId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=hsp|separator=_|json=canonical-json-text"
+                   ]
+
+    it "persists contract ID domains in single-file and workspace records with owner attribution" $ do
+      sourceText <- readTestText "test/fixtures/contract-v4.keiro"
+      parsed <- case parseSource "contract-v4.keiro" sourceText of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+          ctx = defaultContext (specContext spec)
+          modules = scaffoldServiceModules ctx service
+          identities = idDomainIdentitiesForService service
+      duplicateIdentity <- case identities of
+        value : _ -> pure value
+        [] -> expectationFailure "typed contract service did not expose ID-domain identities" >> fail "unreachable"
+      withTempDirectory "keiro-dsl-v4-contract-record" $ \out -> do
+        result <- executeServiceScaffold out False "contract-v4.keiro" (parsedSourceLanguage parsed) ctx service modules
+        result `shouldSatisfy` isRight
+        contents <- TIO.readFile (out </> recordFileName (specContext spec))
+        record <- maybe (expectationFailure "typed contract scaffold record did not parse" >> fail "unreachable") pure (parseRecord contents)
+        recIdDomains record `shouldBe` identities
+        parseRecord (contents <> "id-domain " <> duplicateIdentity <> "\n") `shouldBe` Nothing
+
+      let manifest = "service hospital-capacity\nspec domain/contract.keiro\n"
+          source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/contract.keiro", sourceText)])
+      loaded <- loadWorkspace source "service.keiro-workspace"
+      workspace <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure loaded
+      workspacePlan <- either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure (planWorkspaceScaffold "goldens" ctx workspace)
+      case [provenance | (scaffoldModule, provenance) <- wpModules workspacePlan, modulePath scaffoldModule == "Generated/HospitalCapacity/Emergency/Contract.hs"] of
+        [MemberOwned owner] -> owner `shouldBe` "domain/contract.keiro"
+        values -> expectationFailure ("expected one member-owned contract module, got " <> show values)
+      withTempDirectory "keiro-dsl-v4-contract-workspace-record" $ \out -> do
+        result <- executeWorkspaceScaffold out False workspacePlan
+        result `shouldSatisfy` isRight
+        contents <- TIO.readFile (out </> workspaceRecordFileName (wsService workspace))
+        record <- maybe (expectationFailure "typed contract workspace record did not parse" >> fail "unreachable") pure (parseWorkspaceRecord contents)
+        wrIdDomains record `shouldBe` identities
+        [(wrmPath row, wrmOwner row) | row <- wrModules record, wrmPath row == "Generated/HospitalCapacity/Emergency/Contract.hs"]
+          `shouldBe` [("Generated/HospitalCapacity/Emergency/Contract.hs", Just "domain/contract.keiro")]
+        parseWorkspaceRecord (contents <> "id-domain " <> duplicateIdentity <> "\n") `shouldBe` Nothing
     it "round-trips the contract spec through parse . pretty" $ do
       input <- readTestText "test/fixtures/contract.keiro"
       case parseSpec "in" input of

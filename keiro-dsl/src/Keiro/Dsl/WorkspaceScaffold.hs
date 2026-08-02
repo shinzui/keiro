@@ -60,7 +60,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
-import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForService)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.Scaffold
@@ -178,7 +178,7 @@ workspaceModules goldens ctx workspace =
       NAggregate aggregate -> scaffoldAggregateForService ctx service aggregate <> harnessForServiceWithGoldens goldens ctx service aggregate
       NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
       NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
-      NContract contract -> scaffoldContract ctx contract
+      NContract contract -> scaffoldContractForService ctx service contract
       NIntake intake -> scaffoldIntake ctx intake
       NPublisher publisher -> scaffoldPublisher ctx publisher
       NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
@@ -364,7 +364,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
           (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . wrBehaviorRequirements) previous
       createDirectoryIfMissing True out
       dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
-      TIO.writeFile buildManifestPath (renderManifest (T.pack manifestName) modules merged)
+      TIO.writeFile buildManifestPath (renderManifestForService (T.pack manifestName) modules (wpCheckedService plan))
       -- Adoption provenance is durable history, not a one-run note: a
       -- later run that adopts nothing carries the previous rows forward,
       -- or the record would silently forget where its files came from.

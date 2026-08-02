@@ -18,7 +18,7 @@ where
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Codec.IdDomain
-import Keiro.Dsl.Grammar (IdDecl (..), Spec (..))
+import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractType (..), IdDecl (..), Node (..), Spec (..))
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeSemantics)
 
 -- | Versions 1 and 2 intentionally return 'Nothing': their generated IDs
@@ -54,7 +54,20 @@ idDomainIdentity name contract =
 
 idDomainIdentitiesForService :: CheckedService -> [Text]
 idDomainIdentitiesForService service =
-  [ idDomainIdentity (idName declaration) contract
-  | declaration <- specIds (checkedSpec service),
-    Just contract <- [idDomainContractFor (checkedLanguageContract service) (idPrefix declaration)]
-  ]
+  aggregateIdentities <> contractIdentities
+  where
+    spec = checkedSpec service
+    languageContract = checkedLanguageContract service
+    aggregateIdentities =
+      [ idDomainIdentity (idName declaration) contract
+      | declaration <- specIds spec,
+        Just contract <- [idDomainContractFor languageContract (idPrefix declaration)]
+      ]
+    contractIdentities =
+      [ idDomainIdentity ("contract:" <> ctrName contractNode <> "." <> ceName event <> "." <> cfName field) contract
+      | NContract contractNode <- specNodes spec,
+        event <- ctrEvents contractNode,
+        field <- ceFields event,
+        CTypeId prefix <- [cfType field],
+        Just contract <- [contractIdDomainContractFor languageContract prefix]
+      ]

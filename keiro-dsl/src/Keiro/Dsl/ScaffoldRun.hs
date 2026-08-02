@@ -50,7 +50,7 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
-import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForService)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.Scaffold
@@ -144,7 +144,7 @@ scaffoldServiceModulesWithGoldens goldens ctx service =
           NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
           NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
           NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
-          NContract contract -> scaffoldContract ctx contract
+          NContract contract -> scaffoldContractForService ctx service contract
           NIntake intake -> scaffoldIntake ctx intake
           NPublisher publisher -> scaffoldPublisher ctx publisher
           NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
@@ -310,7 +310,7 @@ executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx s
               createDirectoryIfMissing True out
               dispositions <- mapM (writeModule out) modules
               let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
-              TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
+              TIO.writeFile manifestPath (renderManifestForService (T.pack specPath) modules service)
               TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
               pure $
                 Right

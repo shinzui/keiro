@@ -50,8 +50,12 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
   semantic diffs, and replay classifications remain equal. `cabal build keiro-core keiro-dsl`,
   all 468 `keiro-dsl-test` examples (plus property cases), and
   `keiro-dsl-conformance-id-domain-migration` passed.
-- [ ] Implement and validate milestone 2: service-aware typed scaffolding, manifests, durable
-  identities, and the compiled language-4 contract conformance target.
+- [x] (2026-08-02 04:34Z) Implemented and validated milestone 2: semantic scaffold and manifest
+  routes now retain the checked language contract; language 4 emits prefix-indexed `KindID`
+  fields, frozen field-path decoders, complete dependencies, and durable per-field identities in
+  single-file and workspace records. The checked module is byte-identical to fresh scaffold
+  output, the six-case typed conformance target and two-case legacy target pass, and all 470
+  `keiro-dsl-test` examples (plus property cases) pass.
 - [ ] Implement and validate milestone 3: semantic diff/rollout reporting, ADR updates, and
   package changelogs.
 - [ ] Complete milestone 4: mutation-style compatibility evidence, repository-wide checks, and

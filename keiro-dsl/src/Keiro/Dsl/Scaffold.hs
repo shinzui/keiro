@@ -48,6 +48,7 @@ module Keiro.Dsl.Scaffold
     scaffoldProcess,
     scaffoldRouter,
     scaffoldContract,
+    scaffoldContractForService,
     scaffoldIntake,
     scaffoldPublisher,
     scaffoldWorkqueue,
@@ -102,11 +103,12 @@ import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind 
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.IdDomain (IdDomainContract, idDomainContractFor, idDomainPrefix, idDomainSampleText)
+import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDomainContractFor, idDomainPrefix, idDomainSampleText)
+import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned))
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
 import Numeric (showHex)
@@ -2472,10 +2474,19 @@ holeModule a body =
 -- compiles standalone — the cross-service schema both producer and consumer agree
 -- on. No keiki symbolic operator (firewall holds).
 scaffoldContract :: Context -> ContractNode -> [ScaffoldModule]
-scaffoldContract ctx c =
+scaffoldContract ctx = scaffoldContractWithLanguage ctx (effectiveLanguageContract LegacyUnversioned)
+
+-- | Emit a contract under the checked service's released semantic contract.
+-- Language versions 1 through 3 retain the legacy Text representation; only
+-- runtime semantics 3 lowers declared TypeID fields to prefix-indexed KindIDs.
+scaffoldContractForService :: Context -> CheckedService -> ContractNode -> [ScaffoldModule]
+scaffoldContractForService ctx service = scaffoldContractWithLanguage ctx (checkedLanguageContract service)
+
+scaffoldContractWithLanguage :: Context -> EffectiveLanguageContract -> ContractNode -> [ScaffoldModule]
+scaffoldContractWithLanguage ctx languageContract c =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs"),
-        moduleText = emitContractGen genPrefix c,
+        moduleText = emitContractGen languageContract genPrefix c,
         kind = Generated,
         origin = nodeOrigin "contract" (ctrName c) (ctrLoc c)
       }
@@ -2483,97 +2494,166 @@ scaffoldContract ctx c =
   where
     genPrefix = genPrefixFor ctx (pascal (ctrName c))
 
-emitContractGen :: Text -> ContractNode -> Text
-emitContractGen genPrefix c =
-  nl $
-    [ "{-# LANGUAGE DuplicateRecordFields #-}",
-      "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
-      generatedBanner,
-      "module " <> genPrefix <> ".Contract",
-      "  ( " <> payloadTy <> " (..)",
-      nl ["  , " <> ceName e <> "Data (..)" | e <- ctrEvents c],
-      "  , messageTypeOf",
-      "  , encode" <> payloadTy,
-      "  , parse" <> payloadTy,
-      "  ) where",
-      "",
-      "import Data.Aeson (Value, object, withObject, (.:), (.=))",
-      "import Data.Aeson.Types (Parser, parseEither)",
-      "import Data.Text (Text)",
-      "import qualified Data.Text as T",
-      "",
-      "-- topic constants"
-    ]
-      ++ [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow t | (alias, t) <- ctrTopics c]
-      ++ [ "",
-           "-- the closed payload set (discriminated by " <> tshow (ctrDiscriminator c) <> ")"
-         ]
-      ++ [emitPayloadAdt payloadTy (ctrEvents c)]
-      ++ [ "",
-           "messageTypeOf :: " <> payloadTy <> " -> Text",
-           "messageTypeOf = \\case"
-         ]
-      ++ ["  " <> ceName e <> " {} -> " <> tshow (ceName e) | e <- ctrEvents c]
-      ++ [ "",
-           "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value",
-           "encode" <> payloadTy <> " = \\case"
-         ]
-      ++ concatMap encodeArm (ctrEvents c)
-      ++ [ "",
-           "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy,
-           "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
-           "  where",
-           "    go o = do",
-           "      kind <- o .: " <> tshow (ctrDiscriminator c) <> " :: Parser Text",
-           "      case kind of"
-         ]
-      ++ concatMap decodeArm (ctrEvents c)
-      ++ [ "        _ -> fail \"unknown message type\"",
-           "",
-           "mapLeftText :: Either String b -> Either Text b",
-           "mapLeftText = either (Left . T.pack) Right"
-         ]
+emitContractGen :: EffectiveLanguageContract -> Text -> ContractNode -> Text
+emitContractGen languageContract genPrefix c =
+  ( nl $
+      pragmas
+        ++ ["{-# OPTIONS_GHC -Wno-unused-top-binds #-}"]
+        ++ ["" | hasTypedTypeIds]
+        ++ [generatedBanner]
+        ++ moduleHeader
+        ++ [ "",
+             "import Data.Aeson (Value, object, withObject, (.:), (.=))",
+             aesonTypesImport
+           ]
+        ++ typedKindIdImports
+        ++ [ "import Data.Text (Text)",
+             "import qualified Data.Text as T"
+           ]
+        ++ ["import Keiro.Codec.IdDomain (parseKindIdV7Value)" | hasTypedTypeIds]
+        ++ [ "",
+             "-- topic constants"
+           ]
+        ++ topicConstants
+        ++ [ "",
+             "-- the closed payload set (discriminated by " <> tshow (ctrDiscriminator c) <> ")"
+           ]
+        ++ [emitPayloadAdt languageContract payloadTy (ctrEvents c)]
+        ++ [ "",
+             "messageTypeOf :: " <> payloadTy <> " -> Text",
+             "messageTypeOf = \\case"
+           ]
+        ++ ["  " <> ceName e <> " {} -> " <> tshow (ceName e) | e <- ctrEvents c]
+        ++ [ "",
+             "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value",
+             "encode" <> payloadTy <> " = \\case"
+           ]
+        ++ concatMap encodeArm (ctrEvents c)
+        ++ [ "",
+             "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy,
+             "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
+             "  where",
+             "    go o = do",
+             "      kind <- o .: " <> tshow (ctrDiscriminator c) <> " :: Parser Text",
+             "      case kind of"
+           ]
+        ++ concatMap decodeArm (ctrEvents c)
+        ++ [ "        _ -> fail \"unknown message type\"",
+             "",
+             "mapLeftText :: Either String b -> Either Text b",
+             "mapLeftText = either (Left . T.pack) Right"
+           ]
+  )
+    <> if hasTypedTypeIds then "\n" else ""
   where
     payloadTy = pascal (ctrName c) <> "Payload"
+    hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) (ctrEvents c)
+    pragmas =
+      ["{-# LANGUAGE DataKinds #-}" | hasTypedTypeIds]
+        ++ [ "{-# LANGUAGE DuplicateRecordFields #-}",
+             "{-# LANGUAGE OverloadedRecordDot #-}"
+           ]
+        ++ ["{-# LANGUAGE TypeApplications #-}" | hasTypedTypeIds]
+    typedKindIdImports
+      | hasTypedTypeIds = ["import Data.KindID (KindID)", "import qualified Data.KindID as KindID"]
+      | otherwise = []
+    moduleHeader
+      | hasTypedTypeIds =
+          [ "module " <> genPrefix <> ".Contract",
+            "  ( " <> payloadTy <> " (..),"
+          ]
+            ++ ["    " <> ceName event <> "Data (..)," | event <- ctrEvents c]
+            ++ [ "    messageTypeOf,",
+                 "    encode" <> payloadTy <> ",",
+                 "    parse" <> payloadTy <> ",",
+                 "  )",
+                 "where"
+               ]
+      | otherwise =
+          [ "module " <> genPrefix <> ".Contract",
+            "  ( " <> payloadTy <> " (..)",
+            nl ["  , " <> ceName event <> "Data (..)" | event <- ctrEvents c],
+            "  , messageTypeOf",
+            "  , encode" <> payloadTy,
+            "  , parse" <> payloadTy,
+            "  ) where"
+          ]
+    topicConstants
+      | hasTypedTypeIds =
+          [ T.intercalate
+              "\n\n"
+              [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- ctrTopics c]
+          ]
+      | otherwise = [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- ctrTopics c]
+    isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
+    isTypedTypeId _ = False
+    aesonTypesImport
+      | hasTypedTypeIds = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
+      | otherwise = "import Data.Aeson.Types (Parser, parseEither)"
     encodeArm e =
       [ "  " <> ceName e <> " payload ->",
         "    object"
       ]
-        ++ [lead i kv | (i, kv) <- zip [(0 :: Int) ..] ((tshow (ctrDiscriminator c) <> " .= (" <> tshow (ceName e) <> " :: Text)") : [tshow (cfName f) <> " .= payload." <> cfName f | f <- ceFields e])]
+        ++ objectEntriesFor ((tshow (ctrDiscriminator c) <> " .= (" <> tshow (ceName e) <> " :: Text)") : map encodeField (ceFields e))
         ++ ["      ]"]
     lead 0 kv = "      [ " <> kv
     lead _ kv = "      , " <> kv
+    objectEntriesFor entries
+      | hasTypedTypeIds =
+          [ (if index == 0 then "      [ " else "        ")
+              <> entry
+              <> if index < length entries - 1 then "," else ""
+          | (index, entry) <- zip [(0 :: Int) ..] entries
+          ]
+      | otherwise = [lead index entry | (index, entry) <- zip [(0 :: Int) ..] entries]
     decodeArm e =
       [ "        " <> tshow (ceName e) <> " ->",
         "          " <> ceName e <> " <$> (" <> ceName e <> "Data" <> fieldApps (ceFields e) <> ")"
       ]
     fieldApps [] = ""
-    fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (cfName f) | f <- fs]
+    fieldApps fs = " <$> " <> T.intercalate " <*> " (map decodeField fs)
+    encodeField field =
+      tshow (cfName field)
+        <> " .= "
+        <> case cfType field of
+          CTypeId prefix
+            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> cfName field
+          _ -> "payload." <> cfName field
+    decodeField field = case cfType field of
+      CTypeId prefix
+        | isJust (contractIdDomainContractFor languageContract prefix) ->
+            "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow (cfName field)
+      _ -> "o .: " <> tshow (cfName field)
 
-emitPayloadAdt :: Text -> [ContractEvent] -> Text
-emitPayloadAdt tyName events =
+emitPayloadAdt :: EffectiveLanguageContract -> Text -> [ContractEvent] -> Text
+emitPayloadAdt languageContract tyName events =
   sectionsOf [map dataRecord events, [sumDecl]]
   where
+    hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) events
+    isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
+    isTypedTypeId _ = False
     hsType CText = "Text"
     hsType CInt = "Int"
-    hsType (CTypeId _) = "Text"
+    hsType (CTypeId prefix)
+      | isJust (contractIdDomainContractFor languageContract prefix) = "(KindID " <> tshow prefix <> ")"
+      | otherwise = "Text"
     dataRecord e =
       "data "
         <> ceName e
         <> "Data = "
         <> ceName e
-        <> "Data { "
+        <> (if hasTypedTypeIds then "Data {" else "Data { ")
         <> T.intercalate ", " [cfName f <> " :: !" <> hsType (cfType f) | f <- ceFields e]
-        <> " }\n  deriving stock (Eq, Show)"
+        <> (if hasTypedTypeIds then "}\n  deriving stock (Eq, Show)" else " }\n  deriving stock (Eq, Show)")
     arm e = ceName e <> " !" <> ceName e <> "Data"
     sumDecl = case events of
       [] -> "data " <> tyName <> " = " <> tyName <> "Empty\n  deriving stock (Eq, Show)"
       (e : es) ->
-        nl $
-          ["data " <> tyName <> " = " <> arm e]
-            ++ ["  | " <> arm e2 | e2 <- es]
-            ++ ["  deriving stock (Eq, Show)"]
+        nl
+          ( (if hasTypedTypeIds then ["data " <> tyName, "  = " <> arm e] else ["data " <> tyName <> " = " <> arm e])
+              ++ ["  | " <> arm e2 | e2 <- es]
+              ++ ["  deriving stock (Eq, Show)"]
+          )
 
 --------------------------------------------------------------------------------
 -- Integration intake (EP-4): inbox disposition vs the live Keiro.Inbox runtime
