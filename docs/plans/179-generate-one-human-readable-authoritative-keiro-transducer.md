@@ -48,12 +48,18 @@ This section must always reflect the actual current state of the work.
 
 - [x] 2026-08-02 05:59 PDT: Milestone 0 captured and automated the pre-change
   guarantee ledger for the canonical scalar-expression fixture.
-- [ ] Milestone 1: replace raw Keiki-constructor emission with a precedence-aware,
-  human-readable Haskell expression renderer.
-- [ ] Milestone 2: inline checked guard and write terms into `Transducer`, remove
-  generated `Expressions`, and provide a safe migration for existing scaffolds.
-- [ ] Milestone 3: prove every authority, typing, replay, fingerprint, diff,
-  symbolic, ownership, and scaffold guarantee against the baseline and amend ADRs.
+- [x] 2026-08-02 07:05 PDT: Milestone 1 replaced raw Keiki constructors with a
+  precedence- and associativity-aware infix renderer over one resolved transition
+  inventory, including bare Boolean guards and deterministic projection aliases.
+- [x] 2026-08-02 07:05 PDT: Milestone 2 inlined every generated-owned guard and
+  write in `Transducer`, removed all aggregate `Expressions` modules and manifest
+  entries, regenerated every affected conformance tree, and made stale-file
+  evidence explicit without deleting consumer files.
+- [x] 2026-08-02 07:19 PDT: Milestone 3 passed the focused 15-example renderer
+  suite, all five affected compiled conformance suites, all eight mutation
+  sentinels, the complete Cabal test matrix, `cabal build all`, `cabal sdist all`,
+  strict ADR validation, and `nix flake check`; documentation and ADR amendments
+  are complete.
 - [ ] Milestone 4: adopt released Keiki `0.8`, make committed diagrams semantic,
   and refresh generated documentation.
 - [ ] Milestone 5: prepare and, with explicit operator approval, publish the
@@ -157,6 +163,30 @@ implementation. Provide concise evidence.
   configuration mismatch instead of fixing it.
   Evidence: the commit hook rejected a postpositive qualified import even though
   `keiro-dsl/keiro-dsl.cabal` already declared `ImportQualifiedPost` globally.
+- Discovery: Keiki's assignment operator `(=:)` is `infixr 6`, while `.+` and
+  `.-` are `infixl 6`.  Haskell rejects an unparenthesized assignment right-hand
+  side that begins with either arithmetic operator even though the term renderer
+  itself is precedence-correct.  Assignment emission therefore parenthesizes a
+  rendered term whose precedence is at most six; this is syntax required by the
+  surrounding builder operator, not a reassociation of the checked tree.
+  Evidence: the first regenerated scalar conformance compile failed at the mixed
+  fixity boundary and passed after `renderAssignmentOperand` was added.
+- Discovery: regenerating the behavior-complete fixture after the already-landed
+  shared-nominal authority work correctly materializes the context-level
+  `Generated.BehaviorComplete.Nominals` module.  The conformance package had not
+  previously listed that generated owner, so this plan's true full regeneration
+  also repaired its Cabal module list and the hand-owned `BehaviorHoles` import.
+  Evidence: the regenerated behavior-complete tree and its passing conformance
+  suite.
+- Discovery: applying Fourmolu to every generated conformance file changes some
+  scaffold-owned Haddock comment bytes and therefore makes a freshly regenerated
+  workspace fail its byte-currentness check.  Only the human-facing generated
+  `Transducer` artifacts are formatter inputs; the remaining generated files stay
+  byte-for-byte as emitted by the live scaffolder.
+  Evidence: the first full Cabal test run failed only the workspace freshness
+  assertion after broad formatting; regenerating the tree and formatting only its
+  `Transducer` files made the corrected 475-example DSL suite and complete Cabal
+  matrix pass.
 
 
 ## Decision Log
@@ -275,10 +305,20 @@ Record every decision made while working on the plan.
   shared Cabal defaults and mirror them in the repository-wide Fourmolu parser
   configuration; do not add them to hand-authored Haskell files.  Generated and
   scaffolded consumer modules retain emitted pragmas because they must compile
-  independently of this repository's Cabal defaults.
+  independently of this repository's Cabal defaults.  Enforce the distinction in
+  `scripts/check-extension-policy.sh`, the normal `just verify` graph, and the
+  pre-commit/flake check rather than relying on another manual audit.
   Rationale: extension policy belongs to the build and formatter configuration.
   File-local workarounds drift, duplicate the package contract, and fail to fix
   tools that parse files outside Cabal.
+  Date: 2026-08-02
+- Decision: Treat the precedence of the enclosing Keiki builder operator as part
+  of readable emission.  Parenthesize an assignment operand at precedence six or
+  below, while leaving atomic and multiplicative terms unwrapped.
+  Rationale: `(=:)` and additive Keiki operators have incompatible associativity
+  at the same precedence.  The wrapper makes the generated Haskell unambiguous
+  without altering the typed expression tree or adding redundant parentheses to
+  tighter expressions.
   Date: 2026-08-02
 
 
@@ -304,6 +344,21 @@ existing forward, replay, projection, symbolic, ownership, and snapshot checks.
 Both focused suites passed, and the mutation script proved all eight semantic and
 ownership defects turn their owning checks red before restoring the exact files.
 
+Milestones 1 through 3 completed on 2026-08-02.  `Transducer` is now the single
+generated behavioral artifact: its generated-owned blocks contain readable Keiki
+guards, register writes, emitted payloads, and target states together.  All six
+previously committed aggregate `Expressions.hs` files and their Cabal entries are
+gone, including Hole-only and workspace aggregates.  Single-file, workspace, and
+adoption stale reports distinguish an exact generated banner from a missing one
+and make no safe-deletion claim.  The canonical fingerprint remains
+`d0897c163c958108`; the exact Keiki `0.7` pretty predicate/update pins, forward and
+replay equality, symbolic classifications, nominal/structural witness laws,
+behavior ownership, and snapshot identity all pass.  Milestones 4 and 5 remain
+blocked by the external Keiki `0.8` release/tag and separate publication approval.
+Final validation also passed `cabal build all`, `cabal sdist all`, the complete
+Cabal test matrix, strict ADR validation, the repository extension-policy check,
+and `nix flake check`.
+
 
 ## Context and Orientation
 
@@ -315,19 +370,16 @@ hatch in a create-once Haskell module.  Cabal is the Haskell build tool and its
 package file carries the module list a consumer compiles.
 
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` turns a validated aggregate into generated
-Haskell modules.  For a language-version-2 generated-owned transition it currently
-emits one typed function per guard and register write into
-`Generated.<Context>.<Aggregate>.Expressions`, then emits a `Transducer` whose
-transition body calls names such as `transition1OpenAdjustWriteBalance`.  The
-functions use raw forms such as `K.PAnd`, `K.PCmp`, `K.tadd`, and `K.tmul`.  This is
-type-safe but obscures the business expression and separates it from the command,
-emit, and target state.
+Haskell modules.  Before Milestone 2, a language-version-2 generated-owned
+transition emitted one typed function per guard and register write into
+`Generated.<Context>.<Aggregate>.Expressions`, and its `Transducer` called those
+mechanical names.  The current generator instead emits readable infix Keiki terms
+directly inside the owning `B.onCmd` block and generates no `Expressions` module.
 
-`TypedScalarExpr` is the checked expression tree.  Today
-`resolvedGeneratedExpressions` derives a flat list for import analysis, while
-`emitTransitionExpressions` separately calls `resolveGuardExpr` and
-`resolveWriteExpr` again for definitions.  The new resolved-behavior inventory
-replaces that duplication and is the sole value consumed by imports and rendering.
+`TypedScalarExpr` is the checked expression tree.  The implemented
+`ResolvedGeneratedTransition` inventory resolves each generated guard and ordered
+write once; import analysis, projection-alias planning, fingerprint-adjacent
+consumers, and Haskell rendering all consume that inventory.
 `renderKeikiPredicate`, `renderComparisonTerm`, `renderNominalProjectionTerm`,
 `renderKeikiTerm`, and `renderStructuralProjectionTerm` are the current raw Haskell
 emitters.  `emitExpressions` owns expression-specific pragmas and imports;
@@ -912,3 +964,5 @@ hand-authored Haskell occurrence of `ImportQualifiedPost` and
 `OverloadedLabels`.  Centralized both extensions in shared package defaults and
 the Fourmolu parser configuration, removed redundant inline declarations, and
 kept self-contained pragmas only in generated/scaffolded consumer artifacts.
+Added a repository check to prevent any of those three policy surfaces from
+drifting again.

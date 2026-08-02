@@ -103,17 +103,20 @@ Types:
 
 Use it to define an aggregate stream contract around a Keiki transducer.
 
-## Generated version-2 aggregate expression modules
+## Generated version-2 aggregate transducer
 
-`keiro-dsl scaffold` emits two authoritative modules for each language-version-2
-aggregate:
+`keiro-dsl scaffold` emits one authoritative behavior module for each
+language-version-2 aggregate:
 
-- `Generated.<Context>.<Aggregate>.Expressions` exports one typed Keiki
-  predicate for each declared guard and one typed Keiki term for each register
-  write;
 - `Generated.<Context>.<Aggregate>.Transducer` exports the assembled transducer,
   the aggregate fold fingerprint, `BehaviorOwnership (GeneratedOwned,
   HoleOwned)`, and an aggregate-specific `...PredicateVerifications` action.
+
+Each generated-owned `B.onCmd` block contains its checked guard, ordered writes,
+emits, and target together. Scalar operators use Keiki's readable infix surface.
+Nested structural and nominal equality projections are bound once under local
+business-shaped names such as `commandLimitsMinimum`; those aliases still apply
+the checked generated witness and are not a second behavior authority.
 
 The verification action returns labelled ownership and the conservative
 `PredicateVerification` result from `mori://shinzui/keiki/packages/keiki` for

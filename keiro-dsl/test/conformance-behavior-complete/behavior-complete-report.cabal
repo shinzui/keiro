@@ -10,10 +10,10 @@ executable keiro-dsl-behavior-complete-report
     BehaviorComplete.Domain
     BehaviorComplete.Journey.BehaviorHoles
     BehaviorComplete.Journey.Holes
+    Generated.BehaviorComplete.Nominals
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain
-    Generated.BehaviorComplete.Journey.Expressions
     Generated.BehaviorComplete.Journey.Transducer
     Generated.BehaviorComplete.Structural.Shape.StartPayload
     Generated.BehaviorComplete.StructuralProjections

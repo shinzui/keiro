@@ -414,7 +414,7 @@ the spec and scaffold again.
 For structural mappings, generated files include one private shape leaf module
 per declaration, aggregate codecs derived from the declared wire policy, and a
 `StructuralProjections` facade containing eligible scalar `FieldWitness`
-values. Version-2 generated expressions use those witnesses for checked dotted
+values. Version-2 generated transducers use those witnesses for checked dotted
 paths through required structural records. Hand-written Hole implementations
 may use the same witnesses with Keiki's `regProj` and `inpProj`.
 
@@ -427,7 +427,7 @@ bound IDs also add `mmzk-typeid`.
 
 For generated (unbound) IDs and enums, the context-level `Nominals` module owns
 the Haskell declaration, JSON and `CanonicalTypeName` instances, and textual wire
-helpers. Generated domain, codec, expression, and harness modules import it
+helpers. Generated domain, codec, transducer, and harness modules import it
 directly. Because aggregate `Domain` modules no longer declare or implicitly
 export these constructors, a hand-owned Hole or application module that constructs
 one must also import it explicitly, for example:
@@ -442,10 +442,11 @@ only generated aggregate files to replace embedded declarations with imports. It
 does not edit hand-owned modules or change event wire bytes, canonical nominal
 identity, or fold behavior.
 
-For each version-2 aggregate, generated ownership adds an `Expressions` module
-with stable typed guard/write functions and a `Transducer` module that assembles
-the declared command, predicate, ordered writes, emits, target, and transition
-mode. Generated ownership is the default. An event declared as
+For each version-2 aggregate, generated ownership adds one `Transducer` module.
+Each generated-owned command block keeps the declared predicate, ordered writes,
+emits, target, and transition mode adjacent. Checked structural and nominal
+projections are transition-local `let` aliases; guard and write behavior is never
+hidden behind generated helper functions. Generated ownership is the default. An event declared as
 `fields(Command)` is also generated-owned: after checking that it names the
 transition's command and is a total type-identical copy, the transducer builds
 the event term directly. Wire aliases remain codec policy and do not create a
@@ -532,6 +533,25 @@ containing generated paths and mapping provenance. A later run reports mapping
 drift and obligations newly required by a changed structural declaration but
 never edits the hand-owned binding module. When a spec emits fewer modules, the
 report marks old paths as stale but never deletes them.
+
+Stale reporting is deliberately provenance-only. For a recorded generated path,
+`exact generated banner present` means the exact keiro-dsl banner was found; it
+does not prove that the remaining bytes are unchanged. Delete a stale generated
+file only after a clean version-control comparison, or after comparing it byte for
+byte with output regenerated from the same source into a disposable directory.
+`exact generated banner missing` means preserve the file and review it. Hole paths
+are always preserved for review.
+
+The 0.8 aggregate-layout migration removes every generated `Expressions` module,
+including the empty module formerly emitted for Hole-only aggregates. Re-scaffold,
+then treat the regenerated `keiro-dsl-manifest.<context>.txt` (or workspace
+manifest) as the authoritative module list and remove the obsolete `Expressions`
+entry from the consuming Cabal stanza manually. If a previous scaffold record
+exists, the old file appears in the stale report under the evidence rules above.
+If no record exists, locate it by reconciling the old Cabal/module tree against the
+new manifest; absence from a report is not deletion evidence. When neither a clean
+version-control comparison nor a same-source disposable regeneration is available,
+preserve the file. Keiro never deletes it or edits Cabal automatically.
 
 ## Binding authoring and conformance
 

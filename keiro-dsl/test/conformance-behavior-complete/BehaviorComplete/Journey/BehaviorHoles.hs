@@ -7,6 +7,7 @@ import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
 import Generated.BehaviorComplete.Journey.BehaviorContract
 import Generated.BehaviorComplete.Journey.Domain
+import Generated.BehaviorComplete.Nominals (RequestId (..))
 import Numeric.Natural (Natural)
 
 behaviorWitnesses :: [BehaviorWitness]

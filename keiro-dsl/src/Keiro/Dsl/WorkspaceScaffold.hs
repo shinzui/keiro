@@ -67,6 +67,7 @@ import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
     Refusal (..),
+    StaleGeneratedEvidence (..),
     StaleModule (..),
     WriteDisposition (..),
     behaviorDrift,
@@ -684,9 +685,12 @@ renderWorkspaceScaffoldReport report =
         ]
           <> map staleLine stale
           <> ["note: keiro-dsl never deletes files."]
-    staleLine stale = case staleKind stale of
-      Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
-      HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+    staleLine stale = case (staleKind stale, staleGeneratedEvidence stale) of
+      (Generated, Just ExactGeneratedBannerPresent) ->
+        "  generated " <> T.pack (stalePath stale) <> "  (exact generated banner present; verify unchanged bytes before deleting)"
+      (Generated, _) ->
+        "  generated " <> T.pack (stalePath stale) <> "  (exact generated banner missing; preserve and review)"
+      (HoleStub, _) -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — preserve and review)"
 
 workspaceSourceLanguageLabel :: SourceLanguage -> Text
 workspaceSourceLanguageLabel sourceLanguage =

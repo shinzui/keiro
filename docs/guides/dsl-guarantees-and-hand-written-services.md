@@ -120,9 +120,10 @@ still admit arbitrary `Text`, so they retain correct concrete equality but are
 reported as a one-way, unverified projection.
 
 These guarantees stop at the spec-visible surface, but language version 2
-moves scalar aggregate behavior onto that surface. Its generated `Expressions`
-and `Transducer` modules execute the checked guard/write Keiki tree directly;
-a Holes module can supply event fields but cannot replace generated behavior.
+moves scalar aggregate behavior onto that surface. Its generated `Transducer`
+executes the checked guard/write Keiki tree directly and keeps the readable guard,
+ordered writes, event, and target in one command block; a Holes module can supply
+event fields but cannot replace generated behavior.
 An explicitly `implementation hole` transition remains hand-owned only for its
 predicate and updates, within a generated command/event/target/mode envelope,
 and contributes a required manual `FoldVersion`. The generated ownership and

@@ -49,7 +49,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Scaffold (ModuleKind (..), ScaffoldModule (..))
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
-import Keiro.Dsl.ScaffoldRun (StaleModule (..))
+import Keiro.Dsl.ScaffoldRun (StaleGeneratedEvidence (..), StaleModule (..), staleAgainst)
 import Keiro.Dsl.WorkspaceRecord (AdoptedRow (..), supersededByLine, workspaceMigrationReportFileName)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath ((</>))
@@ -120,18 +120,13 @@ adoptionReport out context service modules = do
         onDisk path,
         path `Set.notMember` recordClaimedPaths
       ]
+  likelyStale <- staleAgainst out (map modulePath modules) recordedFiles
   let claimedFromBanner =
         [ ClaimedFile {cfPath = path, cfEvidence = ClaimedFromBanner, cfSource = Nothing, cfSpec = Nothing}
         | (path, True) <- bannerCandidates
         ]
       claimed = claimedFromRecord <> claimedFromBanner
 
-      likelyStale =
-        [ StaleModule fileKind path
-        | (fileKind, path) <- recordedFiles,
-          path `Set.notMember` plannedAll,
-          onDisk path
-        ]
       staleOrGenerated =
         Set.fromList (map stalePath likelyStale) <> Set.fromList plannedGenerated
 
@@ -249,9 +244,12 @@ renderMigrationReport report =
             <> " file(s) the legacy scaffold recorded that this workspace does not produce:"
         ]
           <> map staleLine stale
-    staleLine stale = case staleKind stale of
-      Generated -> "    generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
-      HoleStub -> "    hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+    staleLine stale = case (staleKind stale, staleGeneratedEvidence stale) of
+      (Generated, Just ExactGeneratedBannerPresent) ->
+        "    generated " <> T.pack (stalePath stale) <> "  (exact generated banner present; verify unchanged bytes before deleting)"
+      (Generated, _) ->
+        "    generated " <> T.pack (stalePath stale) <> "  (exact generated banner missing; preserve and review)"
+      (HoleStub, _) -> "    hole      " <> T.pack (stalePath stale) <> "  (hand-owned — preserve and review)"
     unclaimedSection = case mrUnclaimed report of
       [] -> []
       unclaimed ->

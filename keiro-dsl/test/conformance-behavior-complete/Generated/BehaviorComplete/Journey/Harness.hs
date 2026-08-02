@@ -9,6 +9,7 @@ import Generated.BehaviorComplete.Journey.Codec (encodeJourneyEvent, parseJourne
 import Generated.BehaviorComplete.Journey.Transducer (journeyTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
 import Keiro.Codec (eventType)
+import Generated.BehaviorComplete.Nominals (RequestId (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap

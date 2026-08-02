@@ -7,6 +7,12 @@
 
   perSystem = { config, pkgs, ... }: {
     pre-commit.settings.hooks = {
+      extension-policy = {
+        enable = true;
+        name = "global Haskell extension policy";
+        entry = "${pkgs.bash}/bin/bash -c 'PATH=${pkgs.git}/bin:${pkgs.ripgrep}/bin:$PATH scripts/check-extension-policy.sh'";
+        pass_filenames = false;
+      };
       treefmt = {
         enable = true;
         package = config.treefmt.build.wrapper;

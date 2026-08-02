@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Mutation sentinels for authoritative scalar expressions (plan 161).
+# Mutation sentinels for the authoritative inline scalar transducer.
 set -euo pipefail
 
-EXPRESSIONS="keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Expressions.hs"
 TRANSDUCER="keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs"
 HOLES="keiro-dsl/test/conformance-scalar-expressions/AggregateScalarExpressions/ScalarAccount/Holes.hs"
 FIXTURE="keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro"
@@ -13,13 +12,11 @@ case "$BACKUP_DIR" in
   *) echo "FAIL: unexpected backup path: $BACKUP_DIR"; exit 1 ;;
 esac
 
-cp "$EXPRESSIONS" "$BACKUP_DIR/Expressions.hs"
 cp "$TRANSDUCER" "$BACKUP_DIR/Transducer.hs"
 cp "$HOLES" "$BACKUP_DIR/Holes.hs"
 cp "$FIXTURE" "$BACKUP_DIR/fixture.keiro"
 
 restore_all() {
-  cp "$BACKUP_DIR/Expressions.hs" "$EXPRESSIONS"
   cp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
   cp "$BACKUP_DIR/Holes.hs" "$HOLES"
   cp "$BACKUP_DIR/fixture.keiro" "$FIXTURE"
@@ -27,7 +24,7 @@ restore_all() {
 
 cleanup() {
   restore_all
-  rm -f "$BACKUP_DIR/Expressions.hs" "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/fixture.keiro" "$BACKUP_DIR/mutation.log"
+  rm -f "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/fixture.keiro" "$BACKUP_DIR/mutation.log"
   rmdir "$BACKUP_DIR"
 }
 trap cleanup EXIT
@@ -61,26 +58,34 @@ run_conformance >/dev/null
 cabal test keiro-dsl-test --test-option=--match --test-option='scalar expressions' >/dev/null
 
 sed -i.sed-bak \
-  's/K.tsub (d.requested) (B.reg @"capacity")/K.TApp2 (-) (d.requested) (B.reg @"capacity")/' \
-  "$EXPRESSIONS"
-rm -f "$EXPRESSIONS.sed-bak"
+  's/d.requested .- B.reg @"capacity"/K.TApp2 (-) (d.requested) (B.reg @"capacity")/' \
+  "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
 expect_red "Natural monus becomes partial subtraction" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct
-restore_file Expressions.hs "$EXPRESSIONS"
+restore_file Transducer.hs "$TRANSDUCER"
 
 sed -i.sed-bak \
-  '/^transition1OpenAdjustGuard d = /c\
-transition1OpenAdjustGuard _d = K.PTop' \
-  "$EXPRESSIONS"
-rm -f "$EXPRESSIONS.sed-bak"
+  '/^        B.requireGuard \$/c\
+        B.requireGuard K.PTop' \
+  "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
 expect_red "generated guard is bypassed" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct
-restore_file Expressions.hs "$EXPRESSIONS"
+cabal run -v0 keiro-dsl -- scaffold "$FIXTURE" --out keiro-dsl/test/conformance-scalar-expressions >/dev/null
+nix develop --command fourmolu -i \
+  --ghc-opt -XGHC2024 \
+  --ghc-opt -XImportQualifiedPost \
+  --ghc-opt -XOverloadedLabels \
+  "$TRANSDUCER" >/dev/null
+run_conformance >/dev/null
+cmp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
+restore_file Transducer.hs "$TRANSDUCER"
 
 sed -i.sed-bak \
   's/K.lit (2 :: Integer)/K.lit (3 :: Integer)/' \
-  "$EXPRESSIONS"
-rm -f "$EXPRESSIONS.sed-bak"
+  "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
 expect_red "generated write operand changes" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct
-restore_file Expressions.hs "$EXPRESSIONS"
+restore_file Transducer.hs "$TRANSDUCER"
 
 sed -i.sed-bak \
   '/^    implementation hole$/a\
@@ -92,8 +97,7 @@ expect_red "Hole ownership coexists with a DSL guard" \
 restore_file fixture.keiro "$FIXTURE"
 
 sed -i.sed-bak \
-  '/B.emit wireClosedEvent/c\
-        B.noEmit' \
+  's/^          wireClosedEvent$/          wireAdjusted/' \
   "$TRANSDUCER"
 rm -f "$TRANSDUCER.sed-bak"
 expect_red "Hole transition violates its declared event envelope" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct

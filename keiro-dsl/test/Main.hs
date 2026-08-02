@@ -52,7 +52,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedNominalModule, holePrefixFor, obsoleteGeneratedOutputHooks, planNominalGeneration, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
@@ -730,7 +730,7 @@ main = hspec $ do
       internalNominals <- moduleAt "Generated/AggregateScalarExpressions/Nominals/Internal.hs"
       domainModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs"
       codecModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs"
-      expressionsModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Expressions.hs"
+      transducerModule <- moduleAt "Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs"
       moduleText publicNominals `shouldSatisfy` T.isInfixOf "parseRequestId"
       moduleText publicNominals `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection RequestIdEqualityProjection"
       moduleText publicNominals `shouldSatisfy` T.isInfixOf "idDomainTextPattern (typeIdV7Domain \"req\")"
@@ -740,7 +740,7 @@ main = hspec $ do
       moduleText internalNominals `shouldSatisfy` T.isInfixOf "unsafeRequestIdFromLegacyText"
       moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "RequestId (..)")
       moduleText codecModule `shouldSatisfy` T.isInfixOf "unsafeRequestIdFromLegacyText <$>"
-      moduleText expressionsModule `shouldSatisfy` T.isInfixOf "case parseRequestId"
+      moduleText transducerModule `shouldSatisfy` T.isInfixOf "case parseRequestId"
       firewallBreaches modules `shouldBe` []
 
   describe "scalar expressions" $ do
@@ -763,12 +763,12 @@ main = hspec $ do
                 show (typedScalarNode resolved) `shouldContain` "TotalNaturalArithmetic"
               Nothing -> expectationFailure "reserved write did not resolve"
             let modules = scaffoldAggregate (defaultContext (specContext (parsedSpec parsed))) (parsedSpec parsed) aggregate
-                expressions = generatedTextEndingIn "Expressions.hs" modules
                 transducer = generatedTextEndingIn "Transducer.hs" modules
                 holes = holeTextEndingIn "Holes.hs" modules
                 service = checkedSource parsed
                 surface = aggregateFoldSurfaceForService service aggregate
                 manifest = renderManifestForService "aggregate-scalar-expressions-v2.keiro" modules service
+                readableTransducer = T.unwords (T.words transducer)
             aggregateFoldFingerprintForService service aggregate `shouldBe` "d0897c163c958108"
             T.lines surface
               `shouldBe` [ "state:Open|terminal=false",
@@ -792,12 +792,16 @@ main = hspec $ do
                          ]
             diffServices service service `shouldBe` []
             ReplayImpact.replayImpactServices service service `shouldBe` ReplayNeutral
-            manifest `shouldSatisfy` T.isInfixOf "Generated.AggregateScalarExpressions.ScalarAccount.Expressions"
-            map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Expressions.hs" . T.pack)
+            manifest `shouldSatisfy` (not . T.isInfixOf "Generated.AggregateScalarExpressions.ScalarAccount.Expressions")
+            map modulePath modules `shouldSatisfy` all (not . T.isSuffixOf "Expressions.hs" . T.pack)
             map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Transducer.hs" . T.pack)
-            expressions `shouldSatisfy` T.isInfixOf "K.tsub (d.requested) (B.reg @\"capacity\")"
-            transducer `shouldSatisfy` T.isInfixOf "B.requireGuard (Expressions.transition1OpenAdjustGuard d)"
-            transducer `shouldSatisfy` T.isInfixOf "B.slot @\"balance\" =: Expressions.transition1OpenAdjustWriteBalance d"
+            transducer `shouldSatisfy` T.isInfixOf "let commandLimitsMinimum = K.inpProj"
+            transducer `shouldSatisfy` T.isInfixOf "registerLimitsMinimum = K.regProj"
+            readableTransducer `shouldSatisfy` T.isInfixOf "B.requireGuard $ (((((d.balance .+ B.reg @\"balance\" .>= K.lit (-100 :: Integer) .&& B.reg @\"reserved\" .+ d.requested .<= B.reg @\"capacity\") .&& d.observedAt .>= B.reg @\"openedAt\") .&& commandLimitsMinimum .>= registerLimitsMinimum) .&& d.active .== K.lit False) .&& commandMode .== registerMode) .&& commandRequestId .== registerRequestId"
+            transducer `shouldSatisfy` T.isInfixOf "B.slot @\"balance\" =: (B.reg @\"balance\" .+ d.balance .* K.lit (2 :: Integer))"
+            transducer `shouldSatisfy` T.isInfixOf "B.slot @\"reserved\" =: (B.reg @\"reserved\" .+ (d.requested .- B.reg @\"capacity\"))"
+            transducer `shouldSatisfy` (not . T.isInfixOf "K.PAnd")
+            transducer `shouldSatisfy` (not . T.isInfixOf "K.tadd")
             transducer `shouldSatisfy` T.isInfixOf "scalarAccountPredicateVerifications"
             transducer `shouldSatisfy` T.isInfixOf "S.verifyPredicate predicate"
             transducer `shouldSatisfy` T.isInfixOf "B.emit wireAdjusted (AdjustedTermFields"
@@ -810,6 +814,136 @@ main = hspec $ do
             firewallBreaches modules `shouldBe` []
           _ -> expectationFailure "expected one generated and one Hole scalar transition"
         _ -> expectationFailure "expected one scalar aggregate"
+
+    it "pins every readable operator, equal-precedence child position, and bare Boolean guard" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context readable-renderer",
+                "enum RenderStatus { Ready=ready Waiting=waiting }",
+                "aggregate Renderer",
+                "  regs",
+                "    total Integer = 0",
+                "    leftNested Integer = 0",
+                "    product Integer = 1",
+                "    status RenderStatus = Ready",
+                "  states Open Closed!",
+                "  command Evaluate { left:Integer right:Integer third:Integer status:RenderStatus }",
+                "  event Evaluated = fields(Evaluate)",
+                "  Open -- Evaluate -->",
+                "    guard ((cmd.left < cmd.right || cmd.left <= cmd.right) || (cmd.left > cmd.right || cmd.left >= cmd.right))",
+                "      && (cmd.left == cmd.right && cmd.left != cmd.third)",
+                "      && cmd.status == RenderStatus.Waiting",
+                "    write total := reg.total + (cmd.left - cmd.right)",
+                "    write leftNested := (reg.leftNested + cmd.left) - cmd.right",
+                "    write product := cmd.left * (cmd.right * cmd.third)",
+                "    write status := RenderStatus.Ready",
+                "    emit Evaluated",
+                "    goto Closed",
+                "aggregate BooleanRenderer",
+                "  regs",
+                "    enabled Bool = False",
+                "  states Open Closed!",
+                "  command Enable { enabled:Bool }",
+                "  event Enabled = fields(Enable)",
+                "  Open -- Enable -->",
+                "    guard cmd.enabled",
+                "    write enabled := cmd.enabled",
+                "    emit Enabled",
+                "    goto Closed"
+              ]
+      spec <- parseInlineSpec "<readable-renderer>" source
+      errorCodes spec `shouldBe` []
+      let modules = scaffoldModules (defaultContext (specContext spec)) spec
+          moduleAt suffix = case [moduleText value | value <- modules, T.pack suffix `T.isSuffixOf` T.pack (modulePath value)] of
+            [value] -> pure value
+            values -> expectationFailure ("expected one generated module ending in " <> suffix <> ", got " <> show (length values)) >> fail "unreachable"
+      renderer <- moduleAt "/Renderer/Transducer.hs"
+      booleanRenderer <- moduleAt "/BooleanRenderer/Transducer.hs"
+      let normalizedRenderer = T.unwords (T.words renderer)
+          normalizedBooleanRenderer = T.unwords (T.words booleanRenderer)
+      renderer
+        `shouldSatisfy` T.isInfixOf "import Keiki.Core (HsPred, SymTransducer, (.*), (.+), (.-), (.==), (./=), (.<), (.<=), (.>), (.>=), (.&&), (.||))"
+      normalizedRenderer
+        `shouldSatisfy` T.isInfixOf "(d.left .< d.right .|| d.left .<= d.right) .|| d.left .> d.right .|| d.left .>= d.right"
+      normalizedRenderer
+        `shouldSatisfy` T.isInfixOf ".&& d.left .== d.right .&& d.left ./= d.third"
+      normalizedRenderer
+        `shouldSatisfy` T.isInfixOf ".&& commandStatus .== K.lit (\"waiting\" :: Text)"
+      renderer
+        `shouldSatisfy` T.isInfixOf "B.slot @\"total\" =: (B.reg @\"total\" .+ (d.left .- d.right))"
+      renderer
+        `shouldSatisfy` T.isInfixOf "B.slot @\"leftNested\" =: (B.reg @\"leftNested\" .+ d.left .- d.right)"
+      renderer
+        `shouldSatisfy` T.isInfixOf "B.slot @\"product\" =: d.left .* (d.right .* d.third)"
+      normalizedBooleanRenderer `shouldSatisfy` T.isInfixOf "B.requireGuard $ d.enabled .== K.lit True"
+      firewallBreaches modules `shouldBe` []
+
+    it "suffixes normalized projection-alias collisions deterministically" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context projection-alias-collision",
+                "mapped structural record AliasCollision {",
+                "  haskell package=keiro-dsl module=Renderer.Domain type=AliasCollision",
+                "  binding = \"Renderer.Bindings.aliasCollisionBinding\"",
+                "  binding-version = \"1\"",
+                "  canonical-type = \"renderer.AliasCollision.v1\"",
+                "  fixtures = \"Renderer.Bindings.aliasCollisionCases\"",
+                "  initial = \"Renderer.Bindings.initialAliasCollision\"",
+                "  wire object constructor=AliasCollision unknown-fields=reject {",
+                "    dash as \"foo-bar\" : Integer required",
+                "    underscore as \"foo_bar\" : Integer required",
+                "  }",
+                "}",
+                "aggregate AliasRenderer",
+                "  regs",
+                "    values AliasCollision = initial",
+                "  states Open Closed!",
+                "  command Compare { values:AliasCollision }",
+                "  event Compared = fields(Compare)",
+                "  Open -- Compare -->",
+                "    guard cmd.values.dash == reg.values.dash",
+                "      && cmd.values.underscore == reg.values.underscore",
+                "    emit Compared",
+                "    goto Closed"
+              ]
+      spec <- parseInlineSpec "<projection-alias-collision>" source
+      errorCodes spec `shouldBe` []
+      let transducer = generatedTextEndingIn "Transducer.hs" (scaffoldModules (defaultContext (specContext spec)) spec)
+      transducer `shouldSatisfy` T.isInfixOf "let commandValuesFooBar = K.inpProj"
+      transducer `shouldSatisfy` T.isInfixOf "registerValuesFooBar = K.regProj"
+      transducer `shouldSatisfy` T.isInfixOf "commandValuesFooBar2 = K.inpProj"
+      transducer `shouldSatisfy` T.isInfixOf "registerValuesFooBar2 = K.regProj"
+
+    it "keeps evolution identity independent of module layout but sensitive to checked behavior" $ do
+      source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      original <- case parseSource "aggregate-scalar-expressions-v2.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      changed <- case parseSource "aggregate-scalar-expressions-changed.keiro" (T.replace "cmd.active == false" "cmd.active == true" source) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      case ( [aggregate | NAggregate aggregate <- specNodes (parsedSpec original)],
+             [aggregate | NAggregate aggregate <- specNodes (parsedSpec changed)]
+           ) of
+        ([originalAggregate], [changedAggregate]) -> do
+          let service = checkedSource original
+              changedService = checkedSource changed
+              prefixed = defaultContext (specContext (parsedSpec original))
+              collocated = prefixed {moduleRoot = "Acme", placement = CollocatedLeaf}
+              prefixedModules = scaffoldServiceModules prefixed service
+              collocatedModules = scaffoldServiceModules collocated service
+              originalSurface = aggregateFoldSurfaceForService service originalAggregate
+              originalFingerprint = aggregateFoldFingerprintForService service originalAggregate
+          map modulePath prefixedModules `shouldNotBe` map modulePath collocatedModules
+          sum (map (T.length . moduleText) prefixedModules) `shouldSatisfy` (> 0)
+          sum (map (T.length . moduleText) collocatedModules) `shouldSatisfy` (> 0)
+          aggregateFoldSurfaceForService service originalAggregate `shouldBe` originalSurface
+          aggregateFoldFingerprintForService service originalAggregate `shouldBe` originalFingerprint
+          aggregateFoldSurfaceForService changedService changedAggregate `shouldNotBe` originalSurface
+          aggregateFoldFingerprintForService changedService changedAggregate `shouldNotBe` originalFingerprint
+        found -> expectationFailure ("expected one aggregate before and after behavior mutation, got " <> show (length (fst found), length (snd found)))
 
     it "rejects cross-command fields(Command) output before scaffolding" $ do
       let source =
@@ -991,7 +1125,7 @@ main = hspec $ do
           transducer = generatedTextEndingIn "Transducer.hs" modules
           holes = holeTextEndingIn "Holes.hs" modules
       errorCodes spec `shouldBe` []
-      map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Expressions.hs" . T.pack)
+      map modulePath modules `shouldSatisfy` all (not . T.isSuffixOf "Expressions.hs" . T.pack)
       transducer `shouldSatisfy` T.isInfixOf "Holes.transition1OpenSetHole d"
       transducer `shouldSatisfy` T.isInfixOf "foldToken Holes.transition1OpenSetHoleFoldVersion"
       holes `shouldSatisfy` T.isInfixOf "transition1OpenSetHole _d = B.requireGuard K.PTop"
@@ -3644,11 +3778,12 @@ main = hspec $ do
       firewallBreaches [forbidden] `shouldBe` [("Gen/Builder.hs", "import:Keiki.Builder", 1)]
       firewallBreaches [restricted] `shouldBe` [("Gen/CoreBad.hs", "import:Keiki.Core", 1)]
       firewallBreaches [allowed] `shouldBe` []
-    it "exempts only the authoritative generated expression/transducer module paths" $ do
+    it "exempts only the authoritative generated transducer module path" $ do
       let expressions = syntheticGenerated "Gen/Aggregate/Expressions.hs" "import Keiki.Core qualified as K\nx = K.lit 1"
           transducer = syntheticGenerated "Gen/Aggregate/Transducer.hs" "import Keiki.Builder qualified as B\nx = B.slot"
           ordinary = syntheticGenerated "Gen/Aggregate/Projection.hs" "import Keiki.Builder qualified as B"
-      firewallBreaches [expressions, transducer] `shouldBe` []
+      firewallBreaches [expressions, transducer]
+        `shouldBe` [("Gen/Aggregate/Expressions.hs", "import:Keiki.Core", 1)]
       firewallBreaches [ordinary] `shouldBe` [("Gen/Aggregate/Projection.hs", "import:Keiki.Builder", 1)]
     it "finds no breach in real scaffolder output (aggregate + process fixtures)" $ do
       aggMods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -3691,10 +3826,24 @@ main = hspec $ do
         second <- executePlannedScaffold out "counter.keiro" (defaultContext (specContext renamed)) renamed
         let oldDomain = onlyPathEndingIn "Counter/Domain.hs" (map fst (reportDispositions first))
             oldHoles = onlyPathEndingIn "Counter/Holes.hs" (map fst (reportDispositions first))
-        reportStale second `shouldSatisfy` \stale -> StaleModule Generated oldDomain `elem` stale && StaleModule HoleStub oldHoles `elem` stale
+        reportStale second `shouldSatisfy` \stale ->
+          StaleModule Generated oldDomain (Just ExactGeneratedBannerPresent) `elem` stale
+            && StaleModule HoleStub oldHoles Nothing `elem` stale
         doesFileExist (out </> oldDomain) `shouldReturn` True
         doesFileExist (out </> oldHoles) `shouldReturn` True
-        renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "safe to delete; still on disk")
+        renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "exact generated banner present; verify unchanged bytes before deleting")
+        renderScaffoldReport second `shouldSatisfy` all (not . T.isInfixOf "safe to delete")
+    it "preserves a stale generated path whose exact banner is missing" $
+      withTempDirectory "keiro-dsl-stale-banner" $ \out -> do
+        spec <- parseInlineSpec "<stale-banner>" loweringAggregateSpec
+        first <- executePlannedScaffold out "counter.keiro" (defaultContext (specContext spec)) spec
+        let oldDomain = onlyPathEndingIn "Counter/Domain.hs" (map fst (reportDispositions first))
+            renamed = spec {specNodes = map renameCounter (specNodes spec)}
+        TIO.writeFile (out </> oldDomain) "-- generated by something else\n"
+        second <- executePlannedScaffold out "counter.keiro" (defaultContext (specContext renamed)) renamed
+        reportStale second `shouldSatisfy` elem (StaleModule Generated oldDomain (Just ExactGeneratedBannerMissing))
+        renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "exact generated banner missing; preserve and review")
+        TIO.readFile (out </> oldDomain) `shouldReturn` "-- generated by something else\n"
     it "reports the entire old tree across a module-root flip" $
       withTempDirectory "keiro-dsl-stale-root" $ \out -> do
         spec <- parseInlineSpec "<stale-root>" loweringAggregateSpec
@@ -3703,7 +3852,9 @@ main = hspec $ do
         first <- executePlannedScaffold out "counter.keiro" initialCtx spec
         second <- executePlannedScaffold out "moved-counter.keiro" rootedCtx spec
         reportStale second
-          `shouldMatchList` [StaleModule (kind m) (modulePath m) | (m, _) <- reportDispositions first]
+          `shouldMatchList` [ StaleModule (kind m) (modulePath m) (if kind m == Generated then Just ExactGeneratedBannerPresent else Nothing)
+                            | (m, _) <- reportDispositions first
+                            ]
         forM_ (reportStale second) $ \stale -> doesFileExist (out </> stalePath stale) `shouldReturn` True
         renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "previous scaffold record used spec counter.keiro")
     it "reports moved generated modules across a layout flip" $
@@ -3713,7 +3864,7 @@ main = hspec $ do
             collocatedCtx = initialCtx {placement = CollocatedLeaf}
         first <- executePlannedScaffold out "counter.keiro" initialCtx spec
         second <- executePlannedScaffold out "counter.keiro" collocatedCtx spec
-        let oldGenerated = [StaleModule Generated (modulePath m) | (m, _) <- reportDispositions first, kind m == Generated]
+        let oldGenerated = [StaleModule Generated (modulePath m) (Just ExactGeneratedBannerPresent) | (m, _) <- reportDispositions first, kind m == Generated]
         reportStale second `shouldSatisfy` all (`elem` oldGenerated)
         length (reportStale second) `shouldBe` length oldGenerated
     it "writes a parseable record and no stale section for a fresh output" $
@@ -4658,7 +4809,6 @@ main = hspec $ do
               [ "Generated/WorkspaceNominalProof/Nominals.hs",
                 "Generated/WorkspaceNominalProof/Project/Domain.hs",
                 "Generated/WorkspaceNominalProof/Project/Codec.hs",
-                "Generated/WorkspaceNominalProof/Project/Expressions.hs",
                 "Generated/WorkspaceNominalProof/Project/Transducer.hs",
                 "Generated/WorkspaceNominalProof/Project/BehaviorContract.hs",
                 "Generated/WorkspaceNominalProof/Project/EventStream.hs",
@@ -4666,7 +4816,6 @@ main = hspec $ do
                 "Generated/WorkspaceNominalProof/Project/Projection.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs",
-                "Generated/WorkspaceNominalProof/ProjectArtifact/Expressions.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/Transducer.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs",
                 "Generated/WorkspaceNominalProof/ProjectArtifact/EventStream.hs",
@@ -4828,8 +4977,18 @@ main = hspec $ do
           siblingsAfter <- traverse (TIO.readFile . (out </>)) siblingPaths
           siblingsAfter `shouldBe` siblingsBefore
           forM_ stalePaths $ \path -> doesFileExist (out </> path) `shouldReturn` True
+          wsrStale second
+            `shouldSatisfy` all
+              ( \stale -> case staleKind stale of
+                  Generated -> staleGeneratedEvidence stale == Just ExactGeneratedBannerPresent
+                  HoleStub -> staleGeneratedEvidence stale == Nothing
+              )
           renderWorkspaceScaffoldReport second
             `shouldSatisfy` any (T.isInfixOf "keiro-dsl never deletes files.")
+          renderWorkspaceScaffoldReport second
+            `shouldSatisfy` any (T.isInfixOf "exact generated banner present; verify unchanged bytes before deleting")
+          renderWorkspaceScaffoldReport second
+            `shouldSatisfy` all (not . T.isInfixOf "safe to delete")
       it "reports an aggregate moved between members as an ownership move, not stale churn" $
         withWorkspaceFixture "keiro-dsl-workspace-move" id $ \root out workspace -> do
           _ <- executePlannedWorkspaceScaffold out workspace
@@ -5965,14 +6124,18 @@ assertMatchesCommitted m = do
 
 normalizeGenerated :: T.Text -> (T.Text, [T.Text])
 normalizeGenerated text =
-  let (imports, body) = partition isImport (T.lines text)
-   in (normalizeBody body, sort (map normalizeImport imports))
+  let (orderInsensitiveLines, body) = partition isOrderInsensitive (T.lines text)
+   in (normalizeBody body, sort (map normalizeImport orderInsensitiveLines))
   where
-    -- Compare the deterministic body exactly as before and imports as a sorted,
-    -- whitespace-normalized list. Sorting tolerates formatter reordering while
-    -- additions, removals, and renamed imports now fail the pin.
+    -- Compare the deterministic body exactly as before and imports/language
+    -- pragmas as a sorted, whitespace-normalized list. Sorting tolerates
+    -- formatter reordering while additions, removals, and renamed entries still
+    -- fail the pin.
+    isOrderInsensitive line = isImport line || "{-# LANGUAGE " `T.isPrefixOf` line
     normalizeBody =
-      T.replace " , )" " )"
+      T.replace "( " "("
+        . T.replace " )" ")"
+        . T.replace " , )" " )"
         . T.unwords
         . T.words
         . T.replace "}" " } "

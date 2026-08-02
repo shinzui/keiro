@@ -14,5 +14,6 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Shape (CanonicalTypeName)
 import Generated.IdDomainMigration.Nominals.Internal (OrderId, mkOrderId, parseOrderId, orderIdText)
+import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)
 
 instance CanonicalTypeName OrderId

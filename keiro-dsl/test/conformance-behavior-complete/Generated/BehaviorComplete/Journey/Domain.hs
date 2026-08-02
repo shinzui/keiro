@@ -13,19 +13,12 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)
+import Generated.BehaviorComplete.Nominals (RequestId (..))
 import BehaviorComplete.Domain qualified
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
 import Numeric.Natural (Natural)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
-
-newtype RequestId = RequestId Text
-  deriving stock (Generic, Eq, Ord, Show)
-  deriving anyclass (ToJSON, FromJSON)
-instance CanonicalTypeName RequestId
-
-requestIdText :: RequestId -> Text
-requestIdText (RequestId t) = t
 
 data JourneyVertex = JourneyEmpty | JourneyActive | JourneyClosed
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)

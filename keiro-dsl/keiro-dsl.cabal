@@ -212,7 +212,6 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     Generated.AggregateScalarExpressions.ScalarAccount.Codec
     Generated.AggregateScalarExpressions.ScalarAccount.Domain
     Generated.AggregateScalarExpressions.ScalarAccount.EventStream
-    Generated.AggregateScalarExpressions.ScalarAccount.Expressions
     Generated.AggregateScalarExpressions.ScalarAccount.Harness
     Generated.AggregateScalarExpressions.ScalarAccount.Projection
     Generated.AggregateScalarExpressions.ScalarAccount.Transducer
@@ -245,10 +244,10 @@ test-suite keiro-dsl-conformance-behavior-complete
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain
     Generated.BehaviorComplete.Journey.EventStream
-    Generated.BehaviorComplete.Journey.Expressions
     Generated.BehaviorComplete.Journey.Harness
     Generated.BehaviorComplete.Journey.Projection
     Generated.BehaviorComplete.Journey.Transducer
+    Generated.BehaviorComplete.Nominals
     Generated.BehaviorComplete.ReplayAudit
     Generated.BehaviorComplete.Structural.Shape.StartPayload
     Generated.BehaviorComplete.StructuralProjections
@@ -276,7 +275,6 @@ test-suite keiro-dsl-conformance-nominal-scalars
     Generated.NominalScalars.NominalLedger.Codec
     Generated.NominalScalars.NominalLedger.Domain
     Generated.NominalScalars.NominalLedger.EventStream
-    Generated.NominalScalars.NominalLedger.Expressions
     Generated.NominalScalars.NominalLedger.Harness
     Generated.NominalScalars.NominalLedger.Projection
     Generated.NominalScalars.NominalLedger.Transducer
@@ -311,7 +309,6 @@ test-suite keiro-dsl-conformance-workspace-nominals
     Generated.WorkspaceNominalProof.Project.Codec
     Generated.WorkspaceNominalProof.Project.Domain
     Generated.WorkspaceNominalProof.Project.EventStream
-    Generated.WorkspaceNominalProof.Project.Expressions
     Generated.WorkspaceNominalProof.Project.Harness
     Generated.WorkspaceNominalProof.Project.Projection
     Generated.WorkspaceNominalProof.Project.Transducer
@@ -319,7 +316,6 @@ test-suite keiro-dsl-conformance-workspace-nominals
     Generated.WorkspaceNominalProof.ProjectArtifact.Codec
     Generated.WorkspaceNominalProof.ProjectArtifact.Domain
     Generated.WorkspaceNominalProof.ProjectArtifact.EventStream
-    Generated.WorkspaceNominalProof.ProjectArtifact.Expressions
     Generated.WorkspaceNominalProof.ProjectArtifact.Harness
     Generated.WorkspaceNominalProof.ProjectArtifact.Projection
     Generated.WorkspaceNominalProof.ProjectArtifact.Transducer

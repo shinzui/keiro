@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-08-01T19:21:22Z
+timestamp: 2026-08-02T13:36:12Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -44,11 +44,14 @@ lowered into structural Keiki terms, and necessarily executed by the generated t
 hand-owned module may construct declared event/output values, but it cannot replace the transition
 predicate, reorder or override its writes, or supply an alternative aggregate transducer.
 
-The landed scaffold expresses this boundary with one generated `Expressions`
-module and one generated `Transducer` module per version-2 aggregate.
-`Expressions` exports stable typed guard/write terms. `Transducer` exports the
-assembled machine, its fold fingerprint, `BehaviorOwnership`, and a labelled
-aggregate-specific `...PredicateVerifications` action. That action runs the
+The landed scaffold expresses this boundary with one generated `Transducer`
+module per version-2 aggregate. Each generated-owned `B.onCmd` block renders its
+checked guard and ordered writes inline beside its emits and target. Nested
+projection plumbing is shared only through transition-local `let` aliases; it
+does not become a guard/write helper seam. The module exports the assembled
+machine, its fold fingerprint, `BehaviorOwnership`, and a labelled
+aggregate-specific `...PredicateVerifications` action. No `Expressions` module
+is emitted, including for a Hole-only aggregate. The verification action runs the
 conservative verifier from `mori://shinzui/keiki/packages/keiki` over each
 assembled edge; an opaque predicate reports `UnverifiedOpaque`. Keiki 0.7 also
 classifies predicates that cross a one-way projection as `UnverifiedOpaque`.

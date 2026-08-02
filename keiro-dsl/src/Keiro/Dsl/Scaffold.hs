@@ -1,18 +1,19 @@
 -- | The scaffold engine. Given an 'Aggregate' (and a 'Context' naming the
--- service and output module-namespace root), it emits the __symbol-free
--- deterministic layer__ as @-- \@generated@ modules plus a single create-if-absent
--- @Holes.hs@ holding the typed holes a human or coding agent must fill.
+-- service and output module-namespace root), it emits deterministic
+-- @-- \@generated@ modules plus create-if-absent Hole modules for the behavior
+-- that remains explicitly hand-owned.
 --
--- The load-bearing invariant of this module is the __firewall__: no @Generated@
--- module ever contains a keiki symbolic operator (@./=@, @.==@, @.||@, @lit@,
--- @B.slot@, @B.requireGuard@). Those live only in the hand-owned @Holes.hs@. A
--- test ('Generated' text scan) enforces it.
+-- The load-bearing invariant of this module is the __firewall__: only a
+-- generated aggregate @Transducer.hs@ may contain Keiki symbolic operators
+-- (@./=@, @.==@, @.||@, @lit@, @B.slot@, @B.requireGuard@). Hand-owned Hole
+-- modules remain the other intentional construction boundary. A generated-text
+-- scan enforces the exception by path.
 --
--- Scope (EP-1, recorded in the plan's Decision Log): the scaffolder does /not/
--- emit the symbolic transducer body — that is the @buildTransducer@ hole in
--- @Holes.hs@, pinned by the harness. It also does not emit the read-model SQL
--- (the projection @apply@), which is a DB-coupled hole delegated to @codd@/the
--- agent; the @Generated@ Projection module emits only the deterministic
+-- Version-2 generated-owned transition bodies are rendered authoritatively in
+-- that transducer. Explicit Hole-owned transitions keep only predicate/update
+-- ownership; the generated command/event/target envelope remains authoritative.
+-- Read-model SQL (the projection @apply@) is still a DB-coupled Hole delegated
+-- to @codd@/the agent; the @Generated@ Projection module emits deterministic
 -- @InlineProjection@ wiring and the pure event→status mapping. The decode emitted
 -- here is /strict/ (every field required); lenient\/optional decode is EP-4's
 -- concern.
@@ -267,13 +268,12 @@ firewallBreaches mods =
     breach <- lineBreaches line
   ]
 
--- Version-2 aggregate expression and transducer modules are the narrow,
--- intentional exception to the generated symbolic-operator firewall: they
--- are precisely the generated authority that constructs Keiki terms. Every
--- other generated module remains subject to the original firewall.
+-- The version-2 aggregate transducer is the narrow, intentional exception to
+-- the generated symbolic-operator firewall: it is precisely the generated
+-- authority that constructs Keiki terms. Every other generated module remains
+-- subject to the original firewall.
 authoritativeScalarModule :: FilePath -> Bool
-authoritativeScalarModule path =
-  any (`isSuffixOf` path) ["/Expressions.hs", "/Transducer.hs"]
+authoritativeScalarModule path = "/Transducer.hs" `isSuffixOf` path
 
 lineBreaches :: Text -> [Text]
 lineBreaches line = case importModule line of
@@ -1959,8 +1959,7 @@ scaffoldAggregateForService ctx service agg =
   ]
     ++ ( if hasVersion2Ownership a
            then
-             [ genModule a "Expressions" (emitExpressions a),
-               genModule a "Transducer" (emitGeneratedTransducer a),
+             [ genModule a "Transducer" (emitGeneratedTransducer a),
                genModule a "BehaviorContract" (emitBehaviorContract a),
                behaviorHoleModule a
              ]
@@ -4389,127 +4388,46 @@ payloadProjectionType aggregate transition =
     <> commandFieldsType transition
     <> ")"
 
-expressionFunctionNames :: Agg -> [Text]
-expressionFunctionNames aggregate =
-  concat
-    [ maybe [] (const [guardFunctionName index transition]) (tGuard transition)
-        <> [writeFunctionName index transition registerName | (registerName, _) <- tWrites transition]
-    | (index, transition) <- transitionEntries aggregate,
-      tImplementation transition == GeneratedImplementation
-    ]
+data ResolvedGeneratedTransition = ResolvedGeneratedTransition
+  { resolvedTransitionIndex :: !Int,
+    resolvedTransitionSource :: !Transition,
+    resolvedTransitionGuard :: !(Maybe TypedScalarExpr),
+    resolvedTransitionWrites :: ![(Name, TypedScalarExpr)]
+  }
+  deriving stock (Eq, Show)
 
-emitExpressions :: Agg -> Text
-emitExpressions aggregate
-  | null exports = nl [generatedBanner, "module " <> aGenPrefix aggregate <> ".Expressions () where"]
-  | otherwise =
-      nl $
-        [ "{-# LANGUAGE DataKinds #-}",
-          "{-# LANGUAGE OverloadedLabels #-}",
-          "{-# LANGUAGE OverloadedRecordDot #-}",
-          "{-# LANGUAGE TypeApplications #-}",
-          generatedBanner
-        ]
-          ++ moduleDeclaration
-          ++ [ "",
-               "import " <> aGenPrefix aggregate <> ".Domain",
-               "import Keiki.Builder qualified as B",
-               "import Keiki.Core qualified as K",
-               "import Keiki.Generics (RegFieldsOf)"
-             ]
-          ++ ["import Data.Text (Text)" | expressionUsesType AggregateText || expressionUsesNominalEqualityKey]
-          ++ ["import Data.Time.Clock (UTCTime)" | expressionUsesType AggregateTime && not expressionUsesTimeLiteral]
-          ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
-          ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
-          ++ ["import Numeric.Natural (Natural)" | expressionUsesType AggregateNatural]
-          ++ generatedNominalTypeImportsForService (aggregateCheckedService aggregate) (aContext aggregate) generatedExpressionNominals
-          ++ structuralProjectionImport
-          ++ generatedNominalProjectionImport
-          ++ consumerNominalProjectionImport
-          ++ consumerImports
-          ++ ["import Data.KindID qualified as KindID" | expressionUsesConsumerIdLiteral]
-          ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation)" | expressionUsesConsumerNominalLiteral]
-          ++ consumerLiteralImports
-          ++ concatMap (uncurry (emitTransitionExpressions aggregate)) (transitionEntries aggregate)
-  where
-    exports = expressionFunctionNames aggregate
-    moduleDeclaration = case exports of
-      firstExport : rest ->
-        [ "module " <> aGenPrefix aggregate <> ".Expressions",
-          "  ( " <> firstExport
-        ]
-          ++ ["  , " <> value | value <- rest]
-          ++ ["  ) where"]
-      [] -> error "non-empty expression export invariant"
-    structuralProjectionImport =
-      [ "import " <> structuralProjectionModule (aContext aggregate) <> " qualified as StructuralProjections"
-      | maybe False (not . null . projectionSpecs) (aTypeGraph aggregate)
-      ]
-    generatedNominalProjectionImport =
-      [ "import " <> generatedNominalModule (aContext aggregate) <> " qualified as GeneratedNominals"
-      | any expressionUsesGeneratedNominalProjection resolvedExpressions
-      ]
-    consumerNominalProjectionImport =
-      [ "import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections"
-      | any expressionUsesConsumerNominalProjection resolvedExpressions
-      ]
-    consumerImports =
-      map ("import " <>)
-        . filter (not . builtinExpressionImport)
-        . sort
-        . nub
-        . Set.toList
-        . Set.unions
-        $ [ aggregateImports (aSymbols aggregate) resolvedType
-          | resolvedType <- map rrType (aRegs aggregate) <> map snd (concatMap rcFields (aCommands aggregate))
+-- Resolve each generated-owned transition exactly once. Import analysis,
+-- projection planning, and Haskell emission all consume this inventory.
+resolvedGeneratedTransitions :: Agg -> [ResolvedGeneratedTransition]
+resolvedGeneratedTransitions aggregate =
+  [ ResolvedGeneratedTransition
+      { resolvedTransitionIndex = index,
+        resolvedTransitionSource = transition,
+        resolvedTransitionGuard = resolvedGuard index transition <$> tGuard transition,
+        resolvedTransitionWrites =
+          [ (registerName, resolvedWrite index transition registerName expression)
+          | (registerName, expression) <- tWrites transition
           ]
-    consumerLiteralImports =
-      [ "import " <> nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal) <> " qualified"
-      | nominal <- consumerLiteralNominals,
-        EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
-      ]
-        <> [ "import " <> qualifiedModule (consumerNominalBinding binding) <> " qualified"
-           | nominal <- consumerLiteralNominals,
-             ConsumerNominal binding <- [resolvedNominalOwnership nominal]
-           ]
-    resolvedExpressions = resolvedGeneratedExpressions aggregate
-    expressionUsesType wanted = any (anyTypedExpression ((== wanted) . typedScalarType)) resolvedExpressions
-    expressionUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) resolvedExpressions
-    expressionUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
-    expressionUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
-    expressionUsesNominalEqualityKey = any (anyTypedExpression isNominalEqualityOperand) resolvedExpressions
-    consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
-    generatedExpressionNominals =
-      stableNominals
-        [ nominal
-        | expression <- resolvedExpressions,
-          nominal <- typedGeneratedNominals expression
-        ]
-    isTimeLiteral expression = case typedScalarNode expression of
-      TypedLiteral ScalarTimeValue {} -> True
-      _ -> False
-    isIdRepresentation IdRepresentation {} = True
-    isIdRepresentation _ = False
-
-builtinExpressionImport :: Text -> Bool
-builtinExpressionImport imported =
-  any (`T.isPrefixOf` imported) ["Data.Text", "Data.Time", "Numeric.Natural"]
-
-resolvedGeneratedExpressions :: Agg -> [TypedScalarExpr]
-resolvedGeneratedExpressions aggregate =
-  concat
-    [ maybe [] (pure . resolvedGuard index transition) (tGuard transition)
-        <> [ resolvedWrite index transition registerName expression
-           | (registerName, expression) <- tWrites transition
-           ]
-    | (index, transition) <- transitionEntries aggregate,
-      tImplementation transition == GeneratedImplementation
-    ]
+      }
+  | (index, transition) <- transitionEntries aggregate,
+    tImplementation transition == GeneratedImplementation
+  ]
   where
     environment transition = expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition
     resolvedGuard index transition expression =
       expressionOrDie (guardFunctionName index transition) (resolveGuardExpr (environment transition) expression)
     resolvedWrite index transition registerName expression =
       expressionOrDie (writeFunctionName index transition registerName) (resolveWriteExpr (environment transition) registerName expression)
+
+resolvedGeneratedExpressions :: Agg -> [TypedScalarExpr]
+resolvedGeneratedExpressions = generatedTransitionExpressions . resolvedGeneratedTransitions
+
+generatedTransitionExpressions :: [ResolvedGeneratedTransition] -> [TypedScalarExpr]
+generatedTransitionExpressions = concatMap transitionExpressions
+  where
+    transitionExpressions resolved =
+      maybe [] pure (resolvedTransitionGuard resolved)
+        <> map snd (resolvedTransitionWrites resolved)
 
 anyTypedExpression :: (TypedScalarExpr -> Bool) -> TypedScalarExpr -> Bool
 anyTypedExpression predicate expression =
@@ -4529,30 +4447,6 @@ typedExpressionChildren expression = case typedScalarNode expression of
   TypedAnd left right -> [left, right]
   TypedOr left right -> [left, right]
 
-isNominalEqualityOperand :: TypedScalarExpr -> Bool
-isNominalEqualityOperand expression = case (typedScalarType expression, typedScalarNode expression) of
-  (AggregateNominal nominal, TypedRoot {}) -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
-    (ConsumerNominal {}, ScalarRepresentation {}) -> True
-    (_, IdRepresentation {}) -> True
-    (_, EnumRepresentation {}) -> True
-    _ -> False
-  _ -> False
-
-expressionUsesGeneratedNominalProjection :: TypedScalarExpr -> Bool
-expressionUsesGeneratedNominalProjection = anyTypedExpression $ \expression -> case (typedScalarType expression, typedScalarNode expression) of
-  (AggregateNominal nominal, TypedRoot {}) -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
-    (GeneratedNominal, IdRepresentation {}) -> True
-    (GeneratedNominal, EnumRepresentation {}) -> True
-    _ -> False
-  _ -> False
-
-expressionUsesConsumerNominalProjection :: TypedScalarExpr -> Bool
-expressionUsesConsumerNominalProjection = anyTypedExpression $ \expression -> case (typedScalarType expression, typedScalarNode expression) of
-  (AggregateNominal nominal, TypedRoot {}) -> case resolvedNominalOwnership nominal of
-    ConsumerNominal {} -> True
-    GeneratedNominal -> False
-  _ -> False
-
 typedConsumerLiteralNominals :: TypedScalarExpr -> [ResolvedNominalType]
 typedConsumerLiteralNominals expression = own <> concatMap typedConsumerLiteralNominals (typedExpressionChildren expression)
   where
@@ -4571,83 +4465,170 @@ typedGeneratedNominals expression = own <> concatMap typedGeneratedNominals (typ
         | GeneratedNominal <- resolvedNominalOwnership nominal -> [nominal]
       _ -> []
 
-emitTransitionExpressions :: Agg -> Int -> Transition -> [Text]
-emitTransitionExpressions aggregate index transition
-  | tImplementation transition /= GeneratedImplementation = []
-  | otherwise =
-      concat
-        [ maybe [] (emitGuardDefinition aggregate index transition) (tGuard transition),
-          concatMap (uncurry (emitWriteDefinition aggregate index transition)) (tWrites transition)
-        ]
-
-emitGuardDefinition :: Agg -> Int -> Transition -> Expr -> [Text]
-emitGuardDefinition aggregate index transition expression =
-  [ "",
-    functionName <> " :: " <> payloadProjectionType aggregate transition <> " -> K.HsPred " <> aName aggregate <> "Regs " <> aName aggregate <> "Command",
-    functionName <> " d = " <> renderKeikiPredicate aggregate transition resolved
-  ]
-  where
-    functionName = guardFunctionName index transition
-    resolved = expressionOrDie functionName (resolveGuardExpr (expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition) expression)
-
-emitWriteDefinition :: Agg -> Int -> Transition -> Name -> Expr -> [Text]
-emitWriteDefinition aggregate index transition registerName expression =
-  [ "",
-    functionName
-      <> " :: "
-      <> payloadProjectionType aggregate transition
-      <> " -> K.Term "
-      <> aName aggregate
-      <> "Regs "
-      <> aName aggregate
-      <> "Command ("
-      <> commandFieldsType transition
-      <> ") "
-      <> renderDomainType aggregate (typedScalarType resolved),
-    functionName <> " d = " <> renderKeikiTerm aggregate transition resolved
-  ]
-  where
-    functionName = writeFunctionName index transition registerName
-    resolved = expressionOrDie functionName (resolveWriteExpr (expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition) registerName expression)
-
 expressionOrDie :: Text -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr -> TypedScalarExpr
 expressionOrDie owner = either (error . (("validated expression disappeared for " <> T.unpack owner <> ": ") <>) . show) id
 
-renderKeikiPredicate :: Agg -> Transition -> TypedScalarExpr -> Text
-renderKeikiPredicate aggregate transition expression = case typedScalarNode expression of
-  TypedEqual left right -> "K.PEq " <> atom (renderComparisonTerm aggregate transition left) <> " " <> atom (renderComparisonTerm aggregate transition right)
-  TypedNotEqual left right -> "K.pnot (K.PEq " <> atom (renderComparisonTerm aggregate transition left) <> " " <> atom (renderComparisonTerm aggregate transition right) <> ")"
-  TypedCompare operator left right ->
-    "K.PCmp "
-      <> renderKeikiCmp operator
-      <> " "
-      <> atom (renderComparisonTerm aggregate transition left)
-      <> " "
-      <> atom (renderComparisonTerm aggregate transition right)
-  TypedAnd left right -> "K.PAnd " <> atom (renderKeikiPredicate aggregate transition left) <> " " <> atom (renderKeikiPredicate aggregate transition right)
-  TypedOr left right -> "K.POr " <> atom (renderKeikiPredicate aggregate transition left) <> " " <> atom (renderKeikiPredicate aggregate transition right)
-  _ -> "K.PEq " <> atom (renderKeikiTerm aggregate transition expression) <> " (K.lit True)"
+data ProjectionAliasTarget
+  = StructuralProjectionAlias !ScalarRootProvenance !ResolvedScalarProjection
+  | NominalProjectionAlias !ResolvedNominalType !ScalarRootProvenance
+  deriving stock (Eq, Show)
+
+data ProjectionAlias = ProjectionAlias
+  { projectionAliasTarget :: !ProjectionAliasTarget,
+    projectionAliasName :: !Text
+  }
+  deriving stock (Eq, Show)
+
+projectionAliasesForTransition :: ResolvedGeneratedTransition -> [ProjectionAlias]
+projectionAliasesForTransition resolved = allocateAliases targets
   where
-    atom value = "(" <> value <> ")"
+    expressions =
+      maybe [] pure (resolvedTransitionGuard resolved)
+        <> map snd (resolvedTransitionWrites resolved)
+    targets = nub (concatMap projectionAliasTargets expressions)
 
-renderKeikiCmp :: CmpOp -> Text
-renderKeikiCmp = \case
-  OpEq -> error "equality is rendered as PEq"
-  OpNeq -> error "inequality is rendered as pnot PEq"
-  OpLt -> "K.CmpLt"
-  OpLe -> "K.CmpLe"
-  OpGt -> "K.CmpGt"
-  OpGe -> "K.CmpGe"
+projectionAliasTargets :: TypedScalarExpr -> [ProjectionAliasTarget]
+projectionAliasTargets expression = own <> comparisonTargets <> concatMap projectionAliasTargets children
+  where
+    children = typedExpressionChildren expression
+    own = case typedScalarNode expression of
+      TypedProject provenance projection -> [StructuralProjectionAlias provenance projection]
+      _ -> []
+    comparisonTargets = case typedScalarNode expression of
+      TypedEqual left right -> mapMaybe nominalTarget [left, right]
+      TypedNotEqual left right -> mapMaybe nominalTarget [left, right]
+      _ -> []
+    nominalTarget operand = case (typedScalarType operand, typedScalarNode operand) of
+      (AggregateNominal nominal, TypedRoot provenance)
+        | nominalComparisonProjection nominal -> Just (NominalProjectionAlias nominal provenance)
+      _ -> Nothing
 
-renderComparisonTerm :: Agg -> Transition -> TypedScalarExpr -> Text
-renderComparisonTerm aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
+allocateAliases :: [ProjectionAliasTarget] -> [ProjectionAlias]
+allocateAliases = snd . foldl allocate (Map.empty, [])
+  where
+    allocate (counts, aliases) target =
+      let base = projectionAliasBase target
+          occurrence = Map.findWithDefault 0 base counts + 1
+          alias = if occurrence == 1 then base else base <> tshow' occurrence
+       in (Map.insert base occurrence counts, aliases <> [ProjectionAlias target alias])
+
+projectionAliasBase :: ProjectionAliasTarget -> Text
+projectionAliasBase target = prefix <> pascal rootName <> pathSuffix
+  where
+    provenance = case target of
+      StructuralProjectionAlias value _ -> value
+      NominalProjectionAlias _ value -> value
+    (prefix, rootName) = case provenance of
+      ScalarRegisterRoot name _ -> ("register", name)
+      ScalarCommandRoot name _ -> ("command", name)
+    pathSuffix = case target of
+      NominalProjectionAlias {} -> ""
+      StructuralProjectionAlias _ projection ->
+        T.concat
+          [ normaliseAliasPart (unescapePointer segment)
+          | segment <- filter (not . T.null) (T.splitOn "/" (scalarProjectionPointer projection))
+          ]
+
+normaliseAliasPart :: Text -> Text
+normaliseAliasPart value = case filter (not . T.null) (T.split (not . isAlphaNum) value) of
+  [] -> "Field"
+  pieces -> T.concat (map pascal pieces)
+
+unescapePointer :: Text -> Text
+unescapePointer = T.replace "~0" "~" . T.replace "~1" "/"
+
+projectionAliasFor :: [ProjectionAlias] -> ProjectionAliasTarget -> Text
+projectionAliasFor aliases target =
+  maybe
+    (error ("resolved projection alias disappeared: " <> show target))
+    projectionAliasName
+    (find ((== target) . projectionAliasTarget) aliases)
+
+data RenderAssociativity = RenderLeft | RenderRight | RenderNonAssociative
+  deriving stock (Eq, Show)
+
+data RenderOperandSide = RenderLeftOperand | RenderRightOperand
+  deriving stock (Eq, Show)
+
+data RenderedKeikiExpr = RenderedKeikiExpr
+  { renderedKeikiText :: !Text,
+    renderedKeikiPrecedence :: !Int
+  }
+  deriving stock (Eq, Show)
+
+renderedAtom :: Text -> RenderedKeikiExpr
+renderedAtom value = RenderedKeikiExpr value 10
+
+renderedInfix :: Int -> RenderAssociativity -> Text -> RenderedKeikiExpr -> RenderedKeikiExpr -> RenderedKeikiExpr
+renderedInfix precedence associativity operator left right =
+  RenderedKeikiExpr
+    ( renderInfixChild precedence associativity RenderLeftOperand left
+        <> " "
+        <> operator
+        <> " "
+        <> renderInfixChild precedence associativity RenderRightOperand right
+    )
+    precedence
+
+renderInfixChild :: Int -> RenderAssociativity -> RenderOperandSide -> RenderedKeikiExpr -> Text
+renderInfixChild parentPrecedence associativity side child
+  | renderedKeikiPrecedence child > parentPrecedence = renderedKeikiText child
+  | renderedKeikiPrecedence child < parentPrecedence = parenthesized
+  | otherwise = case associativity of
+      RenderLeft
+        | side == RenderLeftOperand -> renderedKeikiText child
+      RenderRight
+        | side == RenderRightOperand -> renderedKeikiText child
+      _ -> parenthesized
+  where
+    parenthesized = "(" <> renderedKeikiText child <> ")"
+
+renderKeikiPredicate :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> Text
+renderKeikiPredicate aliases aggregate transition =
+  renderedKeikiText . renderPredicate
+  where
+    renderPredicate expression = case typedScalarNode expression of
+      TypedEqual left right -> comparison ".==" left right
+      TypedNotEqual left right -> comparison "./=" left right
+      TypedCompare operator left right -> comparison (renderComparisonOperator operator) left right
+      TypedAnd left right -> boolean 3 RenderRight ".&&" left right
+      TypedOr left right -> boolean 2 RenderRight ".||" left right
+      _ ->
+        renderedInfix
+          4
+          RenderNonAssociative
+          ".=="
+          (renderKeikiTerm aliases aggregate transition expression)
+          (renderedAtom "K.lit True")
+    comparison operator left right =
+      renderedInfix
+        4
+        RenderNonAssociative
+        operator
+        (renderComparisonTerm aliases aggregate transition left)
+        (renderComparisonTerm aliases aggregate transition right)
+    boolean precedence associativity operator left right =
+      renderedInfix precedence associativity operator (renderPredicate left) (renderPredicate right)
+
+renderComparisonOperator :: CmpOp -> Text
+renderComparisonOperator = \case
+  OpEq -> ".=="
+  OpNeq -> "./="
+  OpLt -> ".<"
+  OpLe -> ".<="
+  OpGt -> ".>"
+  OpGe -> ".>="
+
+renderComparisonTerm :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderComparisonTerm aliases aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
   (AggregateNominal nominal, TypedRoot provenance)
-    | nominalComparisonProjection nominal -> renderNominalProjectionTerm aggregate transition nominal provenance
+    | nominalComparisonProjection nominal ->
+        renderedAtom (projectionAliasFor aliases (NominalProjectionAlias nominal provenance))
   (AggregateNominal nominal, TypedLiteral (ScalarEnumValue _ constructor)) ->
-    "K.lit (" <> tshow (enumWireFor nominal constructor) <> " :: Text)"
+    renderedAtom ("K.lit (" <> tshow (enumWireFor nominal constructor) <> " :: Text)")
   (AggregateNominal _, TypedLiteral (ScalarIdValue _ value)) ->
-    "K.lit (" <> tshow value <> " :: Text)"
-  _ -> renderKeikiTerm aggregate transition expression
+    renderedAtom ("K.lit (" <> tshow value <> " :: Text)")
+  _ -> renderKeikiTerm aliases aggregate transition expression
 
 nominalComparisonProjection :: ResolvedNominalType -> Bool
 nominalComparisonProjection nominal = case resolvedNominalRepresentation nominal of
@@ -4699,23 +4680,29 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       IdRepresentation {} -> nominalEqualityWitnessName nominal
       EnumRepresentation {} -> nominalEqualityWitnessName nominal
 
-renderKeikiTerm :: Agg -> Transition -> TypedScalarExpr -> Text
-renderKeikiTerm aggregate transition expression = case typedScalarNode expression of
-  TypedLiteral value -> renderKeikiLiteral aggregate (typedScalarType expression) value
-  TypedRoot (ScalarRegisterRoot registerName _) -> "B.reg @" <> tshow registerName
-  TypedRoot (ScalarCommandRoot fieldName _) -> "d." <> fieldName
-  TypedProject provenance projection -> renderStructuralProjectionTerm aggregate transition provenance projection
-  TypedAdd _ left right -> binary "K.tadd" left right
-  TypedSubtract _ left right -> binary "K.tsub" left right
-  TypedMultiply _ left right -> binary "K.tmul" left right
+renderKeikiTerm :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderKeikiTerm aliases aggregate transition expression = case typedScalarNode expression of
+  TypedLiteral value -> renderedAtom (renderKeikiLiteral aggregate (typedScalarType expression) value)
+  TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
+  TypedRoot (ScalarCommandRoot fieldName _) -> renderedAtom ("d." <> fieldName)
+  TypedProject provenance projection ->
+    renderedAtom (projectionAliasFor aliases (StructuralProjectionAlias provenance projection))
+  TypedAdd _ left right -> arithmetic 6 ".+" left right
+  TypedSubtract _ left right -> arithmetic 6 ".-" left right
+  TypedMultiply _ left right -> arithmetic 7 ".*" left right
   TypedEqual {} -> impossiblePredicate
   TypedNotEqual {} -> impossiblePredicate
   TypedCompare {} -> impossiblePredicate
   TypedAnd {} -> impossiblePredicate
   TypedOr {} -> impossiblePredicate
   where
-    binary operator left right = operator <> " " <> parenthesized left <> " " <> parenthesized right
-    parenthesized = (\value -> "(" <> value <> ")") . renderKeikiTerm aggregate transition
+    arithmetic precedence operator left right =
+      renderedInfix
+        precedence
+        RenderLeft
+        operator
+        (renderKeikiTerm aliases aggregate transition left)
+        (renderKeikiTerm aliases aggregate transition right)
     impossiblePredicate = error "predicate-valued Boolean expressions cannot be lowered as register terms"
 
 renderStructuralProjectionTerm :: Agg -> Transition -> ScalarRootProvenance -> ResolvedScalarProjection -> Text
@@ -4813,28 +4800,42 @@ emitGeneratedTransducer aggregate =
     [ "{-# LANGUAGE BlockArguments #-}",
       "{-# LANGUAGE DataKinds #-}",
       "{-# LANGUAGE GADTs #-}",
-      "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# LANGUAGE QualifiedDo #-}",
-      "{-# LANGUAGE TypeApplications #-}",
-      generatedBanner,
-      "module " <> aGenPrefix aggregate <> ".Transducer",
-      "  ( " <> lowerFirst (aName aggregate) <> "Transducer",
-      "  , " <> lowerFirst (aName aggregate) <> "FoldFingerprint",
-      "  , BehaviorOwnership (..)",
-      "  , " <> lowerFirst (aName aggregate) <> "PredicateVerifications",
-      "  ) where",
-      "",
-      "import " <> aGenPrefix aggregate <> ".Domain",
-      "import Data.Text (Text)",
-      "import Keiki.Builder qualified as B",
-      "import Keiki.Core (HsPred, SymTransducer)",
-      "import Keiki.Core qualified as K",
-      "import Keiki.Symbolic qualified as S"
+      "{-# LANGUAGE OverloadedRecordDot #-}"
     ]
+      ++ ["{-# LANGUAGE OverloadedLabels #-}" | not (null projectionAliases)]
+      ++ [ "{-# LANGUAGE QualifiedDo #-}",
+           "{-# LANGUAGE TypeApplications #-}",
+           generatedBanner,
+           "module " <> aGenPrefix aggregate <> ".Transducer",
+           "  ( " <> lowerFirst (aName aggregate) <> "Transducer",
+           "  , " <> lowerFirst (aName aggregate) <> "FoldFingerprint",
+           "  , BehaviorOwnership (..)",
+           "  , " <> lowerFirst (aName aggregate) <> "PredicateVerifications",
+           "  ) where",
+           "",
+           "import " <> aGenPrefix aggregate <> ".Domain",
+           "import Data.Text (Text)"
+         ]
+      ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
+      ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
+      ++ ["import Numeric.Natural (Natural)" | expressionUsesNaturalLiteral]
+      ++ generatedNominalTypeImportsForService (aggregateCheckedService aggregate) (aContext aggregate) generatedExpressionNominals
+      ++ structuralProjectionImport
+      ++ generatedNominalProjectionImport
+      ++ consumerNominalProjectionImport
+      ++ consumerImports
+      ++ ["import Data.KindID qualified as KindID" | expressionUsesConsumerIdLiteral]
+      ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation)" | expressionUsesConsumerNominalLiteral]
+      ++ consumerLiteralImports
+      ++ [ "import Keiki.Builder qualified as B",
+           "import Keiki.Core (" <> T.intercalate ", " keikiCoreImports <> ")",
+           "import Keiki.Core qualified as K",
+           "import Keiki.Symbolic qualified as S"
+         ]
       ++ ["import " <> aHolePrefix aggregate <> ".Holes qualified as Holes" | transducerUsesHoles aggregate]
-      ++ ["import " <> aGenPrefix aggregate <> ".Expressions qualified as Expressions" | not (null (expressionFunctionNames aggregate))]
       ++ ["import Data.Text qualified as T" | anyHoleOwned aggregate]
       ++ ["import Keiki.Builder ((=:))" | any (not . null . tWrites . snd) (transitionEntries aggregate)]
+      ++ ["import Keiki.Generics (RegFieldsOf)" | not (null projectionAliases)]
       ++ ["import Keiro.Snapshot.Codec (FoldVersion (..))" | anyHoleOwned aggregate]
       ++ [ "",
            lowerFirst (aName aggregate) <> "Transducer",
@@ -4846,7 +4847,7 @@ emitGeneratedTransducer aggregate =
            "       " <> aName aggregate <> "Event",
            lowerFirst (aName aggregate) <> "Transducer =",
            "  B.buildTransducer " <> initialVertex aggregate <> " initial" <> aName aggregate <> "Regs isTerminal do",
-           nl (concatMap (generatedFromBlock aggregate) (groupTransitionEntriesBySource aggregate)),
+           nl (concatMap (generatedFromBlock aggregate resolvedTransitions) (groupTransitionEntriesBySource aggregate)),
            " where",
            "  isTerminal = \\case",
            nl ["    " <> vertexCtor aggregate (stName state) <> " -> True" | state <- aStates aggregate, stTerminal state],
@@ -4869,6 +4870,117 @@ emitGeneratedTransducer aggregate =
            "      K.Edge predicate _ _ _ _ : _ -> (\\result -> (label, owner, result)) <$> S.verifyPredicate predicate",
            "      [] -> pure (label, owner, S.UnverifiedSolverFailure \"generated transition edge missing\")"
          ]
+  where
+    resolvedTransitions = resolvedGeneratedTransitions aggregate
+    resolvedExpressions = generatedTransitionExpressions resolvedTransitions
+    projectionAliases = concatMap projectionAliasesForTransition resolvedTransitions
+    projectionTargets = map projectionAliasTarget projectionAliases
+    structuralProjectionImport =
+      [ "import " <> structuralProjectionModule (aContext aggregate) <> " qualified as StructuralProjections"
+      | any isStructuralProjection projectionTargets
+      ]
+    generatedNominalProjectionImport =
+      [ "import " <> generatedNominalModule (aContext aggregate) <> " qualified as GeneratedNominals"
+      | any isGeneratedNominalProjection projectionTargets
+      ]
+    consumerNominalProjectionImport =
+      [ "import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections"
+      | any isConsumerNominalProjection projectionTargets
+      ]
+    consumerImports =
+      map ("import " <>)
+        . filter (not . builtinExpressionImport)
+        . sort
+        . nub
+        . Set.toList
+        . Set.unions
+        $ [ aggregateImports (aSymbols aggregate) resolvedType
+          | resolvedType <- expressionImportTypes
+          ]
+    expressionImportTypes = nub (concatMap typedExpressionImportTypes resolvedExpressions)
+    consumerLiteralImports =
+      [ "import " <> nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal) <> " qualified"
+      | nominal <- consumerLiteralNominals,
+        EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
+      ]
+        <> [ "import " <> qualifiedModule (consumerNominalBinding binding) <> " qualified"
+           | nominal <- consumerLiteralNominals,
+             ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+           ]
+    consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
+    generatedExpressionNominals =
+      stableNominals
+        [ nominal
+        | expression <- resolvedExpressions,
+          nominal <- typedGeneratedNominals expression
+        ]
+    expressionUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) resolvedExpressions
+    expressionUsesNaturalLiteral = any (anyTypedExpression isNaturalLiteral) resolvedExpressions
+    expressionUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
+    expressionUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
+    usedOperators = nub (concatMap generatedTransitionOperators resolvedTransitions)
+    keikiCoreImports = ["HsPred", "SymTransducer"] <> ["(" <> operator <> ")" | operator <- expressionOperatorOrder, operator `elem` usedOperators]
+    isTimeLiteral expression = case typedScalarNode expression of
+      TypedLiteral ScalarTimeValue {} -> True
+      _ -> False
+    isNaturalLiteral expression = case typedScalarNode expression of
+      TypedLiteral ScalarNaturalValue {} -> True
+      _ -> False
+    isIdRepresentation IdRepresentation {} = True
+    isIdRepresentation _ = False
+
+builtinExpressionImport :: Text -> Bool
+builtinExpressionImport imported =
+  any (`T.isPrefixOf` imported) ["Data.Text", "Data.Time", "Numeric.Natural"]
+
+typedExpressionImportTypes :: TypedScalarExpr -> [ResolvedAggregateType]
+typedExpressionImportTypes expression = own <> concatMap typedExpressionImportTypes (typedExpressionChildren expression)
+  where
+    own = case typedScalarNode expression of
+      TypedLiteral {} -> [typedScalarType expression]
+      TypedRoot provenance -> [scalarRootType provenance]
+      TypedProject provenance _ -> [scalarRootType provenance]
+      _ -> []
+
+scalarRootType :: ScalarRootProvenance -> ResolvedAggregateType
+scalarRootType = \case
+  ScalarRegisterRoot _ resolvedType -> resolvedType
+  ScalarCommandRoot _ resolvedType -> resolvedType
+
+isStructuralProjection :: ProjectionAliasTarget -> Bool
+isStructuralProjection StructuralProjectionAlias {} = True
+isStructuralProjection NominalProjectionAlias {} = False
+
+isGeneratedNominalProjection :: ProjectionAliasTarget -> Bool
+isGeneratedNominalProjection (NominalProjectionAlias nominal _) = resolvedNominalOwnership nominal == GeneratedNominal
+isGeneratedNominalProjection StructuralProjectionAlias {} = False
+
+isConsumerNominalProjection :: ProjectionAliasTarget -> Bool
+isConsumerNominalProjection (NominalProjectionAlias nominal _) = case resolvedNominalOwnership nominal of
+  ConsumerNominal {} -> True
+  GeneratedNominal -> False
+isConsumerNominalProjection StructuralProjectionAlias {} = False
+
+expressionOperatorOrder :: [Text]
+expressionOperatorOrder = [".*", ".+", ".-", ".==", "./=", ".<", ".<=", ".>", ".>=", ".&&", ".||"]
+
+generatedTransitionOperators :: ResolvedGeneratedTransition -> [Text]
+generatedTransitionOperators resolved =
+  maybe [] predicateOperators (resolvedTransitionGuard resolved)
+    <> concatMap (termOperators . snd) (resolvedTransitionWrites resolved)
+  where
+    predicateOperators expression = case typedScalarNode expression of
+      TypedEqual left right -> ".==" : termOperators left <> termOperators right
+      TypedNotEqual left right -> "./=" : termOperators left <> termOperators right
+      TypedCompare operator left right -> renderComparisonOperator operator : termOperators left <> termOperators right
+      TypedAnd left right -> ".&&" : predicateOperators left <> predicateOperators right
+      TypedOr left right -> ".||" : predicateOperators left <> predicateOperators right
+      _ -> ".==" : termOperators expression
+    termOperators expression = case typedScalarNode expression of
+      TypedAdd _ left right -> ".+" : termOperators left <> termOperators right
+      TypedSubtract _ left right -> ".-" : termOperators left <> termOperators right
+      TypedMultiply _ left right -> ".*" : termOperators left <> termOperators right
+      _ -> concatMap termOperators (typedExpressionChildren expression)
 
 anyHoleOwned :: Agg -> Bool
 anyHoleOwned = any ((== HoleImplementation) . tImplementation) . aTransitions
@@ -4931,14 +5043,15 @@ groupTransitionEntriesBySource aggregate = go [] (transitionEntries aggregate)
           (same, rest) = span ((== source) . tSource . snd) remaining
        in go ((source, entry : same) : accumulated) rest
 
-generatedFromBlock :: Agg -> (Text, [(Int, Transition)]) -> [Text]
-generatedFromBlock aggregate (source, transitions) =
+generatedFromBlock :: Agg -> [ResolvedGeneratedTransition] -> (Text, [(Int, Transition)]) -> [Text]
+generatedFromBlock aggregate resolvedTransitions (source, transitions) =
   ["    B.from " <> vertexCtor aggregate source <> " do"]
-    ++ concatMap (uncurry (generatedOnCmdBlock aggregate)) transitions
+    ++ concatMap (uncurry (generatedOnCmdBlock aggregate resolvedTransitions)) transitions
 
-generatedOnCmdBlock :: Agg -> Int -> Transition -> [Text]
-generatedOnCmdBlock aggregate index transition =
-  ["      B.onCmd inCtor" <> tCommand transition <> " $ \\d -> B.do"]
+generatedOnCmdBlock :: Agg -> [ResolvedGeneratedTransition] -> Int -> Transition -> [Text]
+generatedOnCmdBlock aggregate resolvedTransitions index transition =
+  ["      B.onCmd inCtor" <> tCommand transition <> " $ \\" <> payloadBinder <> " -> B.do"]
+    ++ projectionBindingLines
     ++ ["        B.replayOnly" | tMode transition == TmReplayOnly]
     ++ generatedBehavior
     ++ outputLines
@@ -4947,17 +5060,63 @@ generatedOnCmdBlock aggregate index transition =
   where
     generatedBehavior = case tImplementation transition of
       GeneratedImplementation ->
-        maybe [] (const ["        B.requireGuard (Expressions." <> guardFunctionName index transition <> " d)"]) (tGuard transition)
-          ++ [ "        B.slot @" <> tshow registerName <> " =: Expressions." <> writeFunctionName index transition registerName <> " d"
-             | (registerName, _) <- tWrites transition
+        maybe [] (renderGuardLines aliases aggregate transition) (resolvedTransitionGuard resolved)
+          ++ [ "        B.slot @" <> tshow registerName <> " =: " <> renderAssignmentOperand (renderKeikiTerm aliases aggregate transition expression)
+             | (registerName, expression) <- resolvedTransitionWrites resolved
              ]
       HoleImplementation -> ["        Holes." <> holeFunctionName index transition <> " d"]
       LegacyHoleImplementation -> error "legacy transition reached version-2 transducer generation"
+    resolved =
+      fromMaybe
+        (error ("resolved generated transition disappeared: " <> show index))
+        (find ((== index) . resolvedTransitionIndex) resolvedTransitions)
+    aliases
+      | tImplementation transition == GeneratedImplementation = projectionAliasesForTransition resolved
+      | otherwise = []
+    projectionBindingLines = case aliases of
+      [] -> []
+      firstAlias : remainingAliases ->
+        ["        let " <> renderProjectionAliasBinding aggregate transition firstAlias]
+          <> ["            " <> renderProjectionAliasBinding aggregate transition alias | alias <- remainingAliases]
     outputLines =
       concat
         [ generatedOutputLines aggregate index transition emitIndex eventName
         | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)
         ]
+    payloadBinder
+      | payloadIsUsed = "d"
+      | otherwise = "_d"
+    payloadIsUsed = case tImplementation transition of
+      GeneratedImplementation ->
+        isJust (resolvedTransitionGuard resolved)
+          || not (null (resolvedTransitionWrites resolved))
+          || any outputUsesPayload (zip [1 ..] (tEmits transition))
+      HoleImplementation -> True
+      LegacyHoleImplementation -> True
+    outputUsesPayload (emitIndex, _) = case outputMappingFor aggregate index emitIndex of
+      GeneratedCommandIdentity _ fields -> not (null fields)
+      HandOwnedEventOutput {} -> True
+
+renderProjectionAliasBinding :: Agg -> Transition -> ProjectionAlias -> Text
+renderProjectionAliasBinding aggregate transition alias =
+  projectionAliasName alias <> " = " <> case projectionAliasTarget alias of
+    StructuralProjectionAlias provenance projection -> renderStructuralProjectionTerm aggregate transition provenance projection
+    NominalProjectionAlias nominal provenance -> renderNominalProjectionTerm aggregate transition nominal provenance
+
+renderGuardLines :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> [Text]
+renderGuardLines aliases aggregate transition expression =
+  ["        B.requireGuard $"]
+    <> ["          " <> line | line <- T.lines readable]
+  where
+    readable =
+      T.replace " .|| " "\n.|| "
+        . T.replace " .&& " "\n.&& "
+        $ renderKeikiPredicate aliases aggregate transition expression
+
+renderAssignmentOperand :: RenderedKeikiExpr -> Text
+renderAssignmentOperand expression
+  | renderedKeikiPrecedence expression <= 6 = "(" <> renderedKeikiText expression <> ")"
+  | otherwise = renderedKeikiText expression
 
 generatedOutputLines :: Agg -> Int -> Transition -> Int -> Name -> [Text]
 generatedOutputLines aggregate transitionIndex transition emitIndex eventName =

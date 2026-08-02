@@ -9,6 +9,7 @@ module Generated.BehaviorComplete.Journey.Codec (
 ) where
 
 import Generated.BehaviorComplete.Journey.Domain
+import Generated.BehaviorComplete.Nominals (RequestId (..), requestIdText)
 import Control.Monad (unless)
 import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
 import Data.Aeson.Key qualified as Key

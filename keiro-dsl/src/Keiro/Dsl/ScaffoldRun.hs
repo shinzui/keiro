@@ -3,6 +3,7 @@
 module Keiro.Dsl.ScaffoldRun
   ( Refusal (..),
     WriteDisposition (..),
+    StaleGeneratedEvidence (..),
     StaleModule (..),
     MappingDrift (..),
     SourceLanguageDrift (..),
@@ -90,9 +91,15 @@ data Refusal
 data WriteDisposition = Overwritten | Created | Skipped | Unchanged
   deriving stock (Eq, Show)
 
+data StaleGeneratedEvidence
+  = ExactGeneratedBannerPresent
+  | ExactGeneratedBannerMissing
+  deriving stock (Eq, Show)
+
 data StaleModule = StaleModule
   { staleKind :: !ModuleKind,
-    stalePath :: !FilePath
+    stalePath :: !FilePath,
+    staleGeneratedEvidence :: !(Maybe StaleGeneratedEvidence)
   }
   deriving stock (Eq, Show)
 
@@ -402,8 +409,20 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
     currentPaths = Set.fromList currentPathList
     removed = [(fileKind, path) | (fileKind, path) <- previous, path `Set.notMember` currentPaths]
     stillExists (fileKind, path) = do
-      exists <- doesFileExist (out </> path)
-      pure [StaleModule fileKind path | exists]
+      let fullPath = out </> path
+      exists <- doesFileExist fullPath
+      if not exists
+        then pure []
+        else do
+          evidence <- case fileKind of
+            HoleStub -> pure Nothing
+            Generated -> do
+              contents <- TIO.readFile fullPath
+              pure . Just $
+                if generatedBanner `elem` T.lines contents
+                  then ExactGeneratedBannerPresent
+                  else ExactGeneratedBannerMissing
+          pure [StaleModule fileKind path evidence]
 
 currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> [BehaviorRecordRow] -> ScaffoldRecord
 currentRecord specPath sourceLanguage ctx service modules currentBehavior =
@@ -610,9 +629,12 @@ renderScaffoldReport report =
         ]
           <> map staleLine stale
           <> ["note: keiro-dsl never deletes files."]
-    staleLine stale = case staleKind stale of
-      Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
-      HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+    staleLine stale = case (staleKind stale, staleGeneratedEvidence stale) of
+      (Generated, Just ExactGeneratedBannerPresent) ->
+        "  generated " <> T.pack (stalePath stale) <> "  (exact generated banner present; verify unchanged bytes before deleting)"
+      (Generated, _) ->
+        "  generated " <> T.pack (stalePath stale) <> "  (exact generated banner missing; preserve and review)"
+      (HoleStub, _) -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — preserve and review)"
 
 sourceLanguageLabel :: SourceLanguage -> Text
 sourceLanguageLabel sourceLanguage =

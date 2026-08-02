@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-02T04:49:52Z
+timestamp: 2026-08-02T13:36:12Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -203,8 +203,8 @@ For every eligible scalar leaf path in a structural mapped record, the generatio
 narrow projection facade containing one canonical nominal tag type,
 `FieldProjection` instance, and `FieldWitness`. It derives the concrete getter
 and symbolic metadata from the same resolved graph and total binding as the
-codec. The facade exposes Keiki's `regProj` and `inpProj` capability to both
-generated version-2 expressions and hand-written Holes; it does not invent a
+codec. The facade exposes Keiki's `regProj` and `inpProj` capability to both the
+generated version-2 transducer and hand-written Holes; it does not invent a
 second evaluator.
 The instance's owner is the consumer type; its shape id is the declaration's
 `canonical-type`; its field name is the RFC 6901 JSON Pointer for the wire-key path; and its total getter runs
@@ -217,12 +217,15 @@ ordering subset when ordered comparison is required.
 
 Language version 2 claims checked dotted syntax only across those required
 record paths and only when the endpoint is a supported scalar. The expression
-resolver consumes the same graph and witness identity as the generated codec,
-then the generated `Expressions` module lowers the result into Keiki `Term` and
-`HsPred` trees. The generated transducer executes those exact trees during
-forward decisions and replay; there is no second pure-Haskell evaluator and no
-hand-owned override seam. Version 1 retains its historical comment/Holes
-surface unchanged.
+resolver consumes the same graph and witness identity as the generated codec.
+One resolved transition inventory drives imports and rendering in the generated
+`Transducer` module. Nested projections are bound once under transition-local
+business-shaped aliases whose right-hand sides remain the generated `regProj` or
+`inpProj` witness applications; guards and writes are rendered inline from the
+same checked trees. The transducer executes those exact trees during forward
+decisions and replay; there is no second pure-Haskell evaluator, generated
+guard/write helper module, or hand-owned override seam. Version 1 retains its
+historical comment/Holes surface unchanged.
 
 Private event/register schemas and public contract DTOs remain separate
 ownership domains. Structural private types are not reused in a public
