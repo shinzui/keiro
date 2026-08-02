@@ -10,8 +10,10 @@ import Control.Monad (filterM, forM, forM_, unless)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Types (parseEither)
 import Data.Either (isLeft, isRight)
 import Data.Foldable (toList)
+import Data.KindID qualified as KindID
 import Data.List (partition, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
@@ -21,7 +23,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
-import Keiro.Codec.IdDomain (idDomainSampleText, idDomainTextPattern, typeIdV7Domain, validateIdDomainText)
+import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare
@@ -38,7 +40,7 @@ import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
-import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor, idDomainIdentitiesForService)
+import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
@@ -188,7 +190,7 @@ main = hspec $ do
       failureCode "language keiro-dsl 0\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl nope\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl -1\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
-      failureCode "language keiro-dsl 4\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
+      failureCode "language keiro-dsl 5\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
       failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
       failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
 
@@ -214,10 +216,10 @@ main = hspec $ do
       sourceFailureAt MisplacedLanguagePreamble 3 "context located\nid language prefix=lang\nlanguage keiro-dsl 1\n"
 
     it "rejects a future version before parsing an invalid v1 body" $
-      case parseSource "future.keiro" "language keiro-dsl 4\nthis is not a v2 body\n" of
+      case parseSource "future.keiro" "language keiro-dsl 5\nthis is not a v2 body\n" of
         Left failure@(SourceLanguageFailure diagnostic) -> do
           sourceLanguageErrorCode diagnostic `shouldBe` UnsupportedLanguageVersion
-          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2, 3"
+          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2, 3, 4"
           renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
         other -> expectationFailure ("expected source-language failure, got " <> show other)
 
@@ -375,7 +377,7 @@ main = hspec $ do
       (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
       futureCode `shouldBe` ExitFailure 1
       T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
-      futureErr `shouldContain` "supported versions: 1, 2, 3"
+      futureErr `shouldContain` "supported versions: 1, 2, 3, 4"
       futureErr `shouldNotContain` "expecting `context`"
       (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["inspect", "test/fixtures/language-legacy.keiro", "--format=json"]
       legacyCode `shouldBe` ExitSuccess
@@ -398,7 +400,7 @@ main = hspec $ do
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"
-          futureSource = "language keiro-dsl 4\nthis body must not parse\n"
+          futureSource = "language keiro-dsl 5\nthis body must not parse\n"
           source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/future.keiro", futureSource)])
       loaded <- loadWorkspace source "service.keiro-workspace"
       case loaded of
@@ -423,6 +425,10 @@ main = hspec $ do
         _ -> expectationFailure "canonical workspace had no member"
 
   describe "ID domain" $ do
+    let parseRight name source = case parseSource name source of
+          Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+          Right value -> pure value
+
     it "registers language 3 as the first enforced runtime contract" $ do
       parsed <- case parseSource "id-domain-v3.keiro" "language keiro-dsl 3\ncontext id-domain\n" of
         Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
@@ -431,6 +437,76 @@ main = hspec $ do
       effectiveRuntimeSemantics contract `shouldBe` "keiro-dsl/runtime-semantics/2"
       effectiveContractLanguageVersion contract `shouldBe` maybe (error "missing v3") id (languageVersion 3)
       idDomainContractFor contract "req" `shouldSatisfy` (/= Nothing)
+
+    it "registers language 4 as contract admission semantics without changing aggregate ID admission" $ do
+      v3 <- parseRight "id-domain-v3.keiro" "language keiro-dsl 3\ncontext id-domain\n"
+      v4 <- parseRight "id-domain-v4.keiro" "language keiro-dsl 4\ncontext id-domain\n"
+      let v3Contract = checkedLanguageContract (checkedSource v3)
+          v4Contract = checkedLanguageContract (checkedSource v4)
+      effectiveRuntimeSemantics v4Contract `shouldBe` "keiro-dsl/runtime-semantics/3"
+      effectiveContractLanguageVersion v4Contract `shouldBe` maybe (error "missing v4") id (languageVersion 4)
+      idDomainContractFor v4Contract "req" `shouldBe` idDomainContractFor v3Contract "req"
+      contractIdDomainContractFor v3Contract "req" `shouldBe` Nothing
+      contractIdDomainContractFor v4Contract "req" `shouldBe` Just (typeIdV7Domain "req")
+
+    it "constructs typed KindIDs only after the frozen four-way admission policy" $ do
+      let valid = "req_01h455vb4pex5vsknk084sn02q"
+          uppercase = "req_01H455VB4PEX5VSKNK084SN02Q"
+          nonV7 = "req_00041061050r3gg28a1c60t3gf"
+      (KindID.toText <$> parseKindIdV7Text @"req" valid) `shouldBe` Right valid
+      parseKindIdV7Text @"req" "req-1" `shouldSatisfy` \case
+        Left IdDomainMalformed {} -> True
+        _ -> False
+      parseKindIdV7Text @"req" "other_01h455vb4pex5vsknk084sn02q" `shouldSatisfy` \case
+        Left (IdDomainWrongPrefix "req" "other") -> True
+        _ -> False
+      parseKindIdV7Text @"req" uppercase `shouldBe` Left IdDomainNonCanonical
+      parseKindIdV7Text @"req" nonV7 `shouldSatisfy` \case
+        Left IdDomainNotUuidV7 {} -> True
+        _ -> False
+      parseEither (parseKindIdV7Value @"req") (Aeson.String uppercase)
+        `shouldSatisfy` \case
+          Left problem -> "not canonical lowercase" `T.isInfixOf` T.pack problem
+          Right _ -> False
+
+    it "validates contract TypeID prefixes only at the language-4 boundary" $ do
+      let source versionNumber =
+            T.unlines
+              [ "language keiro-dsl " <> T.pack (show versionNumber),
+                "context invalid-contract-prefix",
+                "contract emergency {",
+                "  schemaVersion 1",
+                "  discriminator messageType",
+                "  topic incidentEvents \"emergency.incident.events\"",
+                "  event IncidentDeclared on incidentEvents {",
+                "    incidentId: typeid \"Bad\"",
+                "  }",
+                "}"
+              ]
+      v3 <- parseRight "contract-prefix-v3.keiro" (source (3 :: Int))
+      v4 <- parseRight "contract-prefix-v4.keiro" (source (4 :: Int))
+      validateService (checkedSource v3) `shouldBe` []
+      case validateService (checkedSource v4) of
+        [diagnostic] -> do
+          code diagnostic `shouldBe` ContractInvalidTypeIdPrefix
+          line diagnostic `shouldBe` 3
+          message diagnostic `shouldSatisfy` T.isInfixOf "contract 'emergency' event 'IncidentDeclared' field 'incidentId'"
+          message diagnostic `shouldSatisfy` T.isInfixOf "invalid TypeID prefix 'Bad'"
+        diagnostics -> expectationFailure ("expected one invalid contract prefix diagnostic, got " <> show diagnostics)
+
+    it "keeps version-3 and version-4 aggregate fold and replay semantics equal" $ do
+      v3Text <- readTestText "test/fixtures/id-domain-migration-v3.keiro"
+      v3 <- parseRight "fold-v3.keiro" v3Text
+      v4 <- parseRight "fold-v4.keiro" (T.replace "language keiro-dsl 3" "language keiro-dsl 4" v3Text)
+      let v3Service = checkedSource v3
+          v4Service = checkedSource v4
+          fingerprints service =
+            [ aggregateFoldFingerprintForService service aggregate
+            | NAggregate aggregate <- specNodes (checkedSpec service)
+            ]
+      fingerprints v4Service `shouldBe` fingerprints v3Service
+      diffServices v3Service v4Service `shouldBe` []
+      ReplayImpact.replayImpactServices v3Service v4Service `shouldBe` ReplayNeutral
 
     it "keeps runtime validation and the exact Keiki text image in agreement" $ do
       let contract = typeIdV7Domain "req"

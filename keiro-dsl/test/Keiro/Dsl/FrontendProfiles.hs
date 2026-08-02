@@ -24,18 +24,20 @@ frontendProfilesSpec = do
       map definitionRow (NE.toList languageRegistry)
         `shouldBe` [ (1, Nothing, "keiro-dsl/syntax-profile/1", "keiro-dsl/runtime-semantics/1"),
                      (2, Just 1, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/1"),
-                     (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2")
+                     (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2"),
+                     (4, Just 3, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/3")
                    ]
       forM_ allFeatures $ \feature -> do
         languageFeatureMinimumVersion feature `shouldBe` version 2
         languageSupportsFeature (version 1) feature `shouldBe` False
         languageSupportsFeature (version 2) feature `shouldBe` True
         languageSupportsFeature (version 3) feature `shouldBe` True
+        languageSupportsFeature (version 4) feature `shouldBe` True
 
     it "does not infer a hypothetical successor profile or runtime contract" $ do
-      lookupLanguageDefinition (version 4) `shouldBe` Nothing
-      effectiveLanguageContractForVersion (version 4) `shouldBe` Nothing
-      forM_ allFeatures $ \feature -> languageSupportsFeature (version 4) feature `shouldBe` False
+      lookupLanguageDefinition (version 5) `shouldBe` Nothing
+      effectiveLanguageContractForVersion (version 5) `shouldBe` Nothing
+      forM_ allFeatures $ \feature -> languageSupportsFeature (version 5) feature `shouldBe` False
       languageVersionPolicy <- readRepoText "keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs"
       semanticPolicy <- readRepoText "keiro-dsl/src/Keiro/Dsl/SemanticContract.hs"
       languageVersionPolicy `shouldNotSatisfy` T.isInfixOf "version >="
@@ -43,7 +45,7 @@ frontendProfilesSpec = do
 
     it "checks every real feature marker against the exact selected profile" $ do
       forM_ featureCases $ \FeatureCase {feature, marker, body} ->
-        forM_ [1, 2, 3] $ \versionNumber -> do
+        forM_ [1, 2, 3, 4] $ \versionNumber -> do
           let sourceName = "profile-" <> show versionNumber <> ".keiro"
               source = preamble versionNumber <> body
           case (versionNumber, parseSurfaceSource sourceName source) of
@@ -51,7 +53,7 @@ frontendProfilesSpec = do
               phase `shouldBe` BodyParsingPhase
               code `shouldBe` SourceLanguageError LanguageFeatureRequiresVersion
               spanText source span `shouldBe` marker
-              supportedVersions `shouldBe` [version 2, version 3]
+              supportedVersions `shouldBe` [version 2, version 3, version 4]
               languageSupportsFeature (version versionNumber) feature `shouldBe` False
             (1, result) -> expectationFailure ("expected v1 feature refusal, got " <> show result)
             (_, Right _) -> languageSupportsFeature (version versionNumber) feature `shouldBe` True
@@ -59,14 +61,14 @@ frontendProfilesSpec = do
 
     it "keeps feature spellings inert in comments, strings, wire keys, and identifiers" $ do
       inertBody <- readRepoText "keiro-dsl/test/fixtures/language-identifier-v1.keiro"
-      forM_ [1, 2, 3] $ \versionNumber ->
+      forM_ [1, 2, 3, 4] $ \versionNumber ->
         parseSurfaceSource ("inert-" <> show versionNumber <> ".keiro") (preamble versionNumber <> inertBody)
           `shouldSatisfy` isRight
 
   describe "frontend diagnostics" $ do
     it "classifies malformed and unsupported preambles at source selection with exact spans" $ do
       assertSourceSelection InvalidLanguageVersion "language keiro-dsl nope\ncontext malformed\n" "language keiro-dsl nope"
-      assertSourceSelection UnsupportedLanguageVersion "language keiro-dsl 4\ncontext future\n" "language keiro-dsl 4"
+      assertSourceSelection UnsupportedLanguageVersion "language keiro-dsl 5\ncontext future\n" "language keiro-dsl 5"
 
     it "reports ordinary body syntax with expected items and a point span" $ do
       let source = "language keiro-dsl 1\ncontext body\nlayout\n"
@@ -101,7 +103,7 @@ frontendProfilesSpec = do
     it "keeps the released compatibility renderer byte-identical" $ do
       forM_
         [ "language keiro-dsl nope\ncontext malformed\n",
-          "language keiro-dsl 4\ncontext future\n",
+          "language keiro-dsl 5\ncontext future\n",
           preamble 1 <> featureBody TypedAggregateExpressionSyntax,
           "language keiro-dsl 1\ncontext\n"
         ]

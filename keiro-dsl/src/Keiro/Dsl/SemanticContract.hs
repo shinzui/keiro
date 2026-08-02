@@ -89,6 +89,8 @@ effectiveLanguageContractForVersion version = do
 runtimeSemanticsFingerprintSegment :: EffectiveLanguageContract -> Maybe Text
 runtimeSemanticsFingerprintSegment contract
   | effectiveRuntimeSemantics contract == "keiro-dsl/runtime-semantics/1" = Nothing
+  | effectiveRuntimeSemantics contract `elem` ["keiro-dsl/runtime-semantics/2", "keiro-dsl/runtime-semantics/3"] =
+      Just "semantic-contract:keiro-dsl/runtime-semantics/2"
   | otherwise = Just ("semantic-contract:" <> effectiveRuntimeSemantics contract)
 
 -- | A normalized service graph paired with the effective contract under which

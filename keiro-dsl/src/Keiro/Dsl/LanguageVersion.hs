@@ -134,12 +134,16 @@ version2 = LanguageVersion 2
 version3 :: LanguageVersion
 version3 = LanguageVersion 3
 
+version4 :: LanguageVersion
+version4 = LanguageVersion 4
+
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
   LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 "keiro-dsl/runtime-semantics/1"
     :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/1",
-         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/2"
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/2",
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/3"
        ]
 
 profileV1 :: SyntaxProfile

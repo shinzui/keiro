@@ -7,15 +7,24 @@ module Keiro.Codec.IdDomain
     typeIdV7Domain,
     idDomainAcceptsText,
     validateIdDomainText,
+    parseKindIdV7Text,
+    parseKindIdV7Value,
     idDomainTextPattern,
     idDomainSampleText,
   )
 where
 
+import Data.Aeson (Value, withText)
+import Data.Aeson.Types (Parser)
+import Data.KindID (KindID)
+import Data.KindID qualified as KindID
+import Data.KindID.Class (ValidPrefix)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.TypeID qualified as TypeID
+import GHC.TypeLits (symbolVal)
 import Keiki.ProjectionDomain
   ( DomainConstructionError,
     TextPattern,
@@ -68,7 +77,13 @@ idDomainAcceptsText contract = either (const False) (const True) . validateIdDom
 -- version check, so both operations are part of this frozen contract.
 validateIdDomainText :: IdDomainContract -> Text -> Either IdDomainFailure ()
 validateIdDomainText contract input = do
-  parsed <- either (Left . IdDomainMalformed . T.pack . show) Right (TypeID.parseText input)
+  parsed <- case TypeID.parseText input of
+    Right value -> Right value
+    Left reason ->
+      case TypeID.parseText (T.toLower input) of
+        Right canonical
+          | TypeID.toText canonical == T.toLower input -> Left IdDomainNonCanonical
+        _ -> Left (IdDomainMalformed (T.pack (show reason)))
   let actualPrefix = TypeID.getPrefix parsed
   if actualPrefix == idDomainPrefix contract
     then pure ()
@@ -77,6 +92,31 @@ validateIdDomainText contract input = do
     then pure ()
     else Left IdDomainNonCanonical
   maybe (Right ()) (Left . IdDomainNotUuidV7 . T.pack . show) (TypeID.checkTypeID parsed)
+
+-- | Parse a canonical TypeID-v7 whose prefix is reflected in the result type.
+-- Keiro's frozen admission policy runs before the dependency constructs the
+-- prefix-indexed value, so generated consumers cannot accidentally widen it.
+parseKindIdV7Text :: forall prefix. (ValidPrefix prefix) => Text -> Either IdDomainFailure (KindID prefix)
+parseKindIdV7Text input = do
+  validateIdDomainText (typeIdV7Domain expectedPrefix) input
+  either (Left . IdDomainMalformed . T.pack . show) Right (KindID.parseText @prefix input)
+  where
+    expectedPrefix = T.pack (symbolVal (Proxy @prefix))
+
+-- | Aeson parser for generated integration-contract fields. When used with
+-- @explicitParseField@, Aeson attaches the owning field key to these stable
+-- Keiro admission failures.
+parseKindIdV7Value :: forall prefix. (ValidPrefix prefix) => Value -> Parser (KindID prefix)
+parseKindIdV7Value = withText "KindID" $ \input ->
+  either (fail . T.unpack . renderIdDomainFailure) pure (parseKindIdV7Text @prefix input)
+
+renderIdDomainFailure :: IdDomainFailure -> Text
+renderIdDomainFailure failure = case failure of
+  IdDomainNonCanonical -> "TypeID text is not canonical lowercase"
+  IdDomainWrongPrefix expected actual ->
+    "TypeID prefix mismatch: expected '" <> expected <> "', found '" <> actual <> "'"
+  IdDomainMalformed reason -> "malformed TypeID text: " <> reason
+  IdDomainNotUuidV7 reason -> "TypeID suffix is not UUIDv7: " <> reason
 
 idDomainTextPattern :: IdDomainContract -> Either DomainConstructionError TextPattern
 idDomainTextPattern contract = do

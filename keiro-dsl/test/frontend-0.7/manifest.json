@@ -96,7 +96,7 @@
     {"declaredVersion":1,"diagnosticCode":"TopicAffinityMismatch","effectiveVersion":1,"failureClass":"semantic","path":"keiro-dsl/test/fixtures/intake-topic-mismatch.keiro","result":"reject","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/intake.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":1,"diagnosticCode":"DuplicateLanguagePreamble","effectiveVersion":null,"failureClass":"source-language","path":"keiro-dsl/test/fixtures/language-duplicate.keiro","result":"reject","sourceForm":"declared"},
-    {"declaredVersion":4,"diagnosticCode":"UnsupportedLanguageVersion","effectiveVersion":4,"failureClass":"source-language","path":"keiro-dsl/test/fixtures/language-future.keiro","result":"reject","sourceForm":"declared"},
+    {"declaredVersion":5,"diagnosticCode":"UnsupportedLanguageVersion","effectiveVersion":5,"failureClass":"source-language","path":"keiro-dsl/test/fixtures/language-future.keiro","result":"reject","sourceForm":"declared"},
     {"declaredVersion":null,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/language-identifier-v1.keiro","result":"accept","sourceForm":"legacy-unversioned"},
     {"declaredVersion":2,"diagnosticCode":null,"effectiveVersion":2,"failureClass":null,"path":"keiro-dsl/test/fixtures/language-identifier-v2.keiro","result":"accept","sourceForm":"declared"},
     {"declaredVersion":null,"diagnosticCode":null,"effectiveVersion":1,"failureClass":null,"path":"keiro-dsl/test/fixtures/language-legacy.keiro","result":"accept","sourceForm":"legacy-unversioned"},

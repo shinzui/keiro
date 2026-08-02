@@ -5,6 +5,7 @@ module Keiro.Dsl.IdDomain
     IdDomainFailure (..),
     enforcedIdDomainVersion,
     idDomainContractFor,
+    contractIdDomainContractFor,
     idDomainIdentity,
     idDomainIdentitiesForService,
     idDomainAcceptsText,
@@ -25,8 +26,16 @@ import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContrac
 -- enforcing contract.
 idDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 idDomainContractFor languageContract prefix
-  | effectiveRuntimeSemantics languageContract /= "keiro-dsl/runtime-semantics/2" = Nothing
-  | otherwise = Just (typeIdV7Domain prefix)
+  | effectiveRuntimeSemantics languageContract `elem` ["keiro-dsl/runtime-semantics/2", "keiro-dsl/runtime-semantics/3"] =
+      Just (typeIdV7Domain prefix)
+  | otherwise = Nothing
+
+-- | Public contract DTOs adopt the frozen TypeID-v7 admission contract only
+-- in runtime semantics 3. Aggregate IDs retain the independent selector above.
+contractIdDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
+contractIdDomainContractFor languageContract prefix
+  | effectiveRuntimeSemantics languageContract == "keiro-dsl/runtime-semantics/3" = Just (typeIdV7Domain prefix)
+  | otherwise = Nothing
 
 -- | Durable identity for the runtime admission domain of one declaration.
 -- This is deliberately separate from nominal equality: IDs without equality

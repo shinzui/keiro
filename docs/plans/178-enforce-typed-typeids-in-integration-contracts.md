@@ -38,12 +38,34 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
 
 ## Progress
 
-(No implementation work has begun.)
+- [x] (2026-08-02 04:01Z) Read the governing ExecPlan/ADR specifications, confirmed the active
+  intention, inspected the clean worktree and profiled ADR bundle, resolved `mmzk-typeid` and
+  `aeson` through Mori, and verified `mmzk-typeid` 0.7.1.1 against Hackage and upstream tags.
+- [x] (2026-08-02 04:01Z) Captured the legacy baseline with
+  `cabal test keiro-dsl-conformance-contract --test-show-details=direct`; both
+  `IncidentTransferNeedDeclared` and `TransferReservationAccepted` passed.
+- [x] (2026-08-02 04:13Z) Implemented and validated milestone 1: language 4 now selects syntax
+  profile 2 and runtime semantics 3; typed `KindID` construction applies Keiro's frozen policy;
+  contract prefixes validate only at the v4 boundary; and v3/v4 aggregate fold fingerprints,
+  semantic diffs, and replay classifications remain equal. `cabal build keiro-core keiro-dsl`,
+  all 468 `keiro-dsl-test` examples (plus property cases), and
+  `keiro-dsl-conformance-id-domain-migration` passed.
+- [ ] Implement and validate milestone 2: service-aware typed scaffolding, manifests, durable
+  identities, and the compiled language-4 contract conformance target.
+- [ ] Implement and validate milestone 3: semantic diff/rollout reporting, ADR updates, and
+  package changelogs.
+- [ ] Complete milestone 4: mutation-style compatibility evidence, repository-wide checks, and
+  final ADR distillation.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: `mmzk-typeid` 0.7.1.1 rejects uppercase TypeID suffix characters during parsing,
+  before Keiro's byte-for-byte canonical-render comparison can classify them.
+  Evidence: the dependency's `Data.TypeID.Internal.decodeUUID` table accepts only canonical
+  lowercase Crockford characters, while the plan requires a stable failure distinct from a
+  structurally malformed value. `validateIdDomainText` now retries only the lowercase spelling
+  for classification; acceptance remains unchanged.
 
 
 ## Decision Log
@@ -83,6 +105,13 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
   legacy-invalid messages and expose a different Haskell field type. Producers must emit valid
   values before strict consumers deploy, and invalid in-flight messages must leave the channel.
   Date: 2026-08-01
+
+- Decision: Classify an input as `IdDomainNonCanonical` when its lowercase spelling parses and
+  renders canonically, even though the current dependency rejects the original uppercase bytes
+  before canonical rendering.
+  Rationale: This preserves the frozen lowercase admission rule, keeps malformed and
+  non-canonical evidence distinct as required, and does not admit or normalize the input.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective

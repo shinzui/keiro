@@ -1,1 +1,1 @@
-feature-nominal-binding-v1.keiro:2:1: error [LanguageFeatureRequiresVersion]: selected syntax requires keiro-dsl language version 3; selected version 1
+feature-nominal-binding-v1.keiro:2:1: error [LanguageFeatureRequiresVersion]: selected syntax requires keiro-dsl language version 4; selected version 1

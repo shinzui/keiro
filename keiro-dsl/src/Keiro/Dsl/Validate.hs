@@ -36,7 +36,7 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.IdDomain (idDomainContractFor)
+import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService)
@@ -331,6 +331,8 @@ data DiagnosticCode
   | -- ExecPlan 159 / IR-13: @fields(Command)@ output authority.
     EventOutputCommandMismatch
   | AggregateEventlessStateChange
+  | -- ExecPlan 178: language-4 integration contract TypeID admission.
+    ContractInvalidTypeIdPrefix
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -377,7 +379,7 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract spec =
-  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors
@@ -1300,19 +1302,39 @@ nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
-validateNode :: Spec -> Node -> [Diagnostic]
-validateNode spec (NAggregate agg) = validateAggregate spec agg
-validateNode spec (NProcess p) = validateProcess spec p
-validateNode spec (NRouter router) = validateRouter spec router
-validateNode _spec (NContract _) = [] -- a contract is a declaration; coupling is checked at the referrers
-validateNode spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
-validateNode spec (NEmit e) = validateEmit spec e
-validateNode spec (NPublisher p) = validatePublisher spec p
-validateNode _spec (NWorkqueue w) = validateWorkqueue w
-validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
-validateNode spec (NReadModel readModel) = validateReadModel spec readModel
-validateNode _spec (NWorkflow w) = validateWorkflow w
-validateNode spec (NOperation o) = validateOperation spec o
+validateNode :: EffectiveLanguageContract -> Spec -> Node -> [Diagnostic]
+validateNode _languageContract spec (NAggregate agg) = validateAggregate spec agg
+validateNode _languageContract spec (NProcess p) = validateProcess spec p
+validateNode _languageContract spec (NRouter router) = validateRouter spec router
+validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
+validateNode _languageContract spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
+validateNode _languageContract spec (NEmit e) = validateEmit spec e
+validateNode _languageContract spec (NPublisher p) = validatePublisher spec p
+validateNode _languageContract _spec (NWorkqueue w) = validateWorkqueue w
+validateNode _languageContract spec (NPgmqDispatch d) = validatePgmqDispatch spec d
+validateNode _languageContract spec (NReadModel readModel) = validateReadModel spec readModel
+validateNode _languageContract _spec (NWorkflow w) = validateWorkflow w
+validateNode _languageContract spec (NOperation o) = validateOperation spec o
+
+validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
+validateContract languageContract contract =
+  [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
+      "contract '"
+        <> ctrName contract
+        <> "' event '"
+        <> ceName event
+        <> "' field '"
+        <> cfName field
+        <> "' has invalid TypeID prefix '"
+        <> prefix
+        <> "': "
+        <> T.pack (show reason)
+  | event <- ctrEvents contract,
+    field <- ceFields event,
+    CTypeId prefix <- [cfType field],
+    Just _ <- [contractIdDomainContractFor languageContract prefix],
+    Just reason <- [TypeID.checkPrefix prefix]
+  ]
 
 -- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
 validateWorkflow :: WorkflowNode -> [Diagnostic]
