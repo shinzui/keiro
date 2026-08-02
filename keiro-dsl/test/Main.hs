@@ -2119,6 +2119,34 @@ main = hspec $ do
       forM_ cases $ \(candidate, expected) -> do
         serviceErrorCodes 3 candidate `shouldNotContain` [expected]
         serviceErrorCodes 4 candidate `shouldContain` [expected]
+    it "gates stable identities and external names on language 4" $ do
+      workflowSpec <- specOf "test/fixtures/workflow.keiro"
+      processSpec <- specOf "test/fixtures/surge-service.keiro"
+      routerSpec <- specOf "test/fixtures/transfer-routing.keiro"
+      integration <- specOf "test/fixtures/emit.keiro"
+      let invalidIdentity = mapWorkflow (\workflow -> workflow {wfStable = ""}) workflowSpec
+          duplicateIdentity =
+            processSpec
+              { specNodes =
+                  specNodes processSpec
+                    <> [NRouter (router {rtName = "surge-demo"}) | NRouter router <- specNodes routerSpec]
+              }
+          invalidTopic = mapContract (\contract -> contract {ctrTopics = [(alias, "bad topic") | (alias, _) <- ctrTopics contract]}) integration
+          emptyTopic = mapContract (\contract -> contract {ctrTopics = [(alias, "") | (alias, _) <- ctrTopics contract]}) integration
+          invalidReadModel = modifyReadModel "transferDecision" (\readModel -> readModel {rmTable = "Bad-Table"}) workflowSpec
+          duplicateColumn = modifyReadModel "transferDecision" (\readModel -> readModel {rmColumns = duplicateFirst (rmColumns readModel)}) workflowSpec
+          gatedCases =
+            [ (invalidIdentity, RuntimeIdentityInvalid),
+              (duplicateIdentity, RuntimeIdentityDuplicate),
+              (invalidTopic, ContractTopicNameInvalid),
+              (invalidReadModel, ReadModelIdentifierInvalid),
+              (duplicateColumn, ReadModelDuplicateColumn)
+            ]
+      forM_ gatedCases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+      serviceErrorCodes 3 emptyTopic `shouldContain` [ContractTopicNameInvalid]
+      serviceErrorCodes 4 emptyTopic `shouldContain` [ContractTopicNameInvalid]
     it "rejects a missing status-map as StatusMapNotTotal" $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
       codes `shouldContain` [StatusMapNotTotal]
@@ -5629,6 +5657,17 @@ mapEmit update spec =
     { specNodes =
         [ case node of
             NEmit emitNode -> NEmit (update emitNode)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+mapWorkflow :: (WorkflowNode -> WorkflowNode) -> Spec -> Spec
+mapWorkflow update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NWorkflow workflow -> NWorkflow (update workflow)
             _ -> node
         | node <- specNodes spec
         ]

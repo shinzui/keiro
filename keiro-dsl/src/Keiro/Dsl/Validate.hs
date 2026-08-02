@@ -354,6 +354,11 @@ data DiagnosticCode
   | NominalDuplicateDeclaration
   | EmitMapDuplicateCase
   | TransitionUnguardedSibling
+  | RuntimeIdentityInvalid
+  | RuntimeIdentityDuplicate
+  | ContractTopicNameInvalid
+  | ReadModelIdentifierInvalid
+  | ReadModelDuplicateColumn
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -1288,9 +1293,29 @@ asciiLower c = c >= 'a' && c <= 'z'
 asciiAlphaNumOrUnderscore :: Char -> Bool
 asciiAlphaNumOrUnderscore c = asciiUpper c || asciiLower c || (c >= '0' && c <= '9') || c == '_'
 
+kafkaTopicError :: Text -> Maybe Text
+kafkaTopicError topic
+  | T.null topic = Just "is empty"
+  | T.length topic > 249 = Just "is longer than Kafka's 249-character limit"
+  | topic == "." || topic == ".." = Just "is reserved by Kafka"
+  | Just illegal <- T.find (not . kafkaTopicCharacter) topic =
+      Just ("contains character " <> T.pack (show illegal) <> "; use only ASCII letters, digits, '.', '_', or '-'")
+  | otherwise = Nothing
+  where
+    kafkaTopicCharacter character = asciiAlphaNumOrUnderscore character || character == '.' || character == '-'
+
+validPostgresIdentifier :: Text -> Bool
+validPostgresIdentifier identifier =
+  T.length identifier <= 63
+    && case T.uncons identifier of
+      Nothing -> False
+      Just (firstCharacter, rest) ->
+        (asciiLower firstCharacter || firstCharacter == '_')
+          && T.all (\character -> asciiLower character || (character >= '0' && character <= '9') || character == '_') rest
+
 -- | Rules over namespaces shared by the whole specification.
 specLevelRules :: EffectiveLanguageContract -> Spec -> [Diagnostic]
-specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ ruleDiagnostics
+specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ runtimeIdentities ++ duplicateRuntimeIdentities ++ ruleDiagnostics
   where
     duplicateNodes =
       [ mkErr (locLine loc) DuplicateNodeName $
@@ -1326,6 +1351,23 @@ specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++
         <> [("nominal scalar", nominalScalarName value, nominalScalarLoc value) | value <- specNominalScalars spec]
         <> [("mapped", mappedName value, mappedLoc value) | value <- specMapped spec]
         <> [("rule", ruleName value, ruleLoc value) | value <- specRules spec]
+    runtimeIdentities =
+      [ mkErr (locLine loc) RuntimeIdentityInvalid $
+          kind <> " stable identity " <> T.pack (show identity) <> " " <> reason
+      | enforcesSpecSurfaceClosures languageContract,
+        (kind, identity, loc) <- stableIdentityOrigins,
+        Just reason <- [stableIdentityError identity]
+      ]
+    duplicateRuntimeIdentities =
+      [ mkErr (locLine loc) RuntimeIdentityDuplicate $
+          kind <> " stable identity " <> T.pack (show identity) <> " is already used by another workflow, process, or router"
+      | enforcesSpecSurfaceClosures languageContract,
+        (kind, identity, loc) <- duplicatesBy (\(_, identity, _) -> identity) stableIdentityOrigins
+      ]
+    stableIdentityOrigins =
+      [("workflow", wfStable workflow, workflowNodeLoc workflow) | NWorkflow workflow <- specNodes spec]
+        <> [("process", procName process, procLoc process) | NProcess process <- specNodes spec]
+        <> [("router", rtName router, rtLoc router) | NRouter router <- specNodes spec]
     ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
 
 nodeIdentity :: Node -> (Text, Name, Loc)
@@ -1360,6 +1402,7 @@ validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
   typeIdPrefixErrors
     <> schemaVersionFloor
+    <> topicNames
     <> duplicateEvents
     <> duplicateTopicAliases
     <> duplicateFields
@@ -1388,6 +1431,13 @@ validateContract languageContract contract =
           "contract '" <> ctrName contract <> "' schemaVersion must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
         ctrSchemaVersion contract < 1
+      ]
+    topicNames =
+      [ mkErr (locLine (ctrLoc contract)) ContractTopicNameInvalid $
+          "contract '" <> ctrName contract <> "' topic alias '" <> alias <> "' has invalid Kafka topic " <> T.pack (show topic) <> ": " <> reason
+      | (alias, topic) <- ctrTopics contract,
+        T.null topic || enforcesSpecSurfaceClosures languageContract,
+        Just reason <- [kafkaTopicError topic]
       ]
     duplicateEvents =
       [ mkErr (locLine (ctrLoc contract)) ContractDuplicateEvent $
@@ -1605,7 +1655,7 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference ++ versionFloor
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference ++ versionFloor ++ identifiers ++ duplicateColumns
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -1652,6 +1702,21 @@ validateReadModel languageContract spec readModel =
           "readmodel '" <> rmName readModel <> "' version must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
         rmVersion readModel < 1
+      ]
+    identifiers =
+      [ mkErr readModelLine ReadModelIdentifierInvalid $
+          "readmodel '" <> rmName readModel <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
+      | enforcesSpecSurfaceClosures languageContract,
+        (kind, identifier) <-
+          [("schema", rmSchema readModel), ("table", rmTable readModel)]
+            <> [("column", rmcName columnDecl) | columnDecl <- rmColumns readModel],
+        not (validPostgresIdentifier identifier)
+      ]
+    duplicateColumns =
+      [ mkErr readModelLine ReadModelDuplicateColumn $
+          "readmodel '" <> rmName readModel <> "' declares column '" <> rmcName columnDecl <> "' more than once"
+      | enforcesSpecSurfaceClosures languageContract,
+        columnDecl <- duplicatesBy rmcName (rmColumns readModel)
       ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
@@ -2098,13 +2163,19 @@ validateProcess spec p =
 -- the toolchain library.  The final @:@ case is deliberately stricter because
 -- that prefix is reserved for the @wf:<name>@ workflow stream family.
 sagaCategoryError :: Text -> Maybe Text
-sagaCategoryError categoryName
-  | T.null categoryName = Just "is empty; use a non-empty camelCase category"
-  | categoryName == "$all" = Just "is reserved by the event store; choose a service-owned camelCase category"
-  | T.isInfixOf "-" categoryName = Just "contains '-' (kiroku's category/id boundary); write compound categories in camelCase, for example \"hospitalSurge\""
-  | Just illegal <- T.find (\character -> isSpace character || isControl character) categoryName =
+sagaCategoryError = runtimeIdentityError False
+
+stableIdentityError :: Text -> Maybe Text
+stableIdentityError = runtimeIdentityError True
+
+runtimeIdentityError :: Bool -> Text -> Maybe Text
+runtimeIdentityError allowsHyphen identity
+  | T.null identity = Just "is empty; use a non-empty stable name"
+  | identity == "$all" = Just "is reserved by the event store; choose a service-owned stable name"
+  | not allowsHyphen && T.isInfixOf "-" identity = Just "contains '-' (kiroku's category/id boundary); write compound categories in camelCase, for example \"hospitalSurge\""
+  | Just illegal <- T.find (\character -> isSpace character || isControl character) identity =
       Just ("contains whitespace or control character " <> T.pack (show illegal) <> "; remove it and use camelCase")
-  | T.isInfixOf ":" categoryName = Just "contains ':' which is reserved for the wf:<name> workflow stream family; choose a camelCase category without ':'"
+  | T.isInfixOf ":" identity = Just "contains ':' which is reserved for runtime stream-family prefixes; choose a stable name without ':'"
   | otherwise = Nothing
 
 -- | EP-108 rules for a stateless content-based router.

@@ -56,7 +56,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-02 15:07Z) Milestone 2: duplicate and collision detection across
   declarations.  `cabal test keiro-dsl-test --test-show-details=direct` passed
   479 examples.
-- [ ] Milestone 3: stable-identity and external-name constraints.
+- [x] (2026-08-02 15:13Z) Milestone 3: stable-identity and external-name
+  constraints.  `cabal test keiro-dsl-test --test-show-details=direct` passed
+  480 examples.
 - [ ] Milestone 4: language-4 semantic couplings for the intake envelope,
   contract topology, and wire clause.
 - [ ] Milestone 5: dead-grammar removal, negative-test coverage for previously
@@ -112,6 +114,12 @@ implementation. Provide concise evidence.
   `EnvelopeLayer`) and their no-op `HasLocs` instances in
   `keiro-dsl/src/Keiro/Dsl/Workspace.hs`; the original plan named only the
   headline declarations.
+- Discovery (Milestone 3): stable workflow, process, and router names are
+  intentionally kebab-cased throughout the canonical fixtures, whereas `-` is
+  forbidden specifically in a saga category because kiroku interprets it as
+  the category/id boundary.  Reusing `sagaCategoryError` verbatim would reject
+  the established runtime-identity convention; the common empty, reserved,
+  whitespace/control, and colon rules can be shared, but the hyphen rule cannot.
 - Discovery (validation pass): the exact unreferenced single-spec diagnostic
   inventory to pin in Milestone 5 is `UndeclaredEvent`, `UndeclaredState`,
   `TerminalHasOutgoing`, `DeprecatedEventStillEmitted`,
@@ -211,6 +219,14 @@ Record every decision made while working on the plan.
   manifest remains the reviewed compatibility oracle and now records the named
   semantic correction instead of silently regenerating it.
   Date: 2026-08-02
+- Decision: Factor workflow/process/router stable-name admission and saga
+  category admission through one runtime-identity rule, while allowing `-` in
+  stable names and retaining the category-specific hyphen rejection.
+  Rationale: the stable names become stream-name components and the checked-in
+  fixtures deliberately use kebab case; saga categories alone participate in
+  kiroku's `category-id` split.  Both forms still reject empty, `$all`,
+  whitespace/control, and colon-bearing identities consistently.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -234,6 +250,12 @@ this section into docs/adr/. Keep task-local execution details here.
   nominal declarations, duplicate emit-map cases, and transitions hidden by
   an unguarded sibling; the matching language-3 graphs remain accepted.  The
   focused DSL suite passes all 479 examples.
+- Milestone 3 outcome: language 4 now admits only valid, spec-wide-unique
+  workflow/process/router runtime identities, Kafka-compatible contract topic
+  names, and PostgreSQL-compatible read-model identifiers with unique columns.
+  Empty Kafka topics are rejected under every language contract; the other
+  constraints preserve language-3 acceptance.  The focused DSL suite passes
+  all 480 examples.
 
 
 ## Context and Orientation
@@ -381,8 +403,9 @@ most specific `Loc` the current AST retains.
 
 Milestone 3 constrains stable identities and external names, all Tier B under
 version 4.  Workflow `name`, process `name`, and router `name` must be
-non-empty, match the same legality rule the saga-category check already applies
-(reuse its charset), and be unique spec-wide across the union of the three
+non-empty, share the saga-category rule for reserved, whitespace/control, and
+colon-bearing identities while retaining their established kebab-case spelling,
+and be unique spec-wide across the union of the three
 kinds (`RuntimeIdentityInvalid`, `RuntimeIdentityDuplicate`).  Kafka topic
 strings in contracts must match the broker's grammar — one to 249 characters
 from `[a-zA-Z0-9._-]`, not `.` or `..` (`ContractTopicNameInvalid`); an empty
