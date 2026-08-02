@@ -39,9 +39,10 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
+import Text.Read (readMaybe)
 
 data Severity = Error | Warning
   deriving stock (Eq, Show)
@@ -334,6 +335,14 @@ data DiagnosticCode
   | -- ExecPlan 178: language-4 integration contract TypeID admission.
     ContractInvalidTypeIdPrefix
   | ContractTypeIdDomainChanged
+  | -- ExecPlan 180: accepted-but-unenforced spec surfaces.
+    PublisherOrderingUnknown
+  | PublisherBackoffInvalid
+  | IntakeDedupePolicyUnknown
+  | PublisherMaxAttemptsBelowMinimum
+  | ContractSchemaVersionBelowMinimum
+  | ReadModelVersionBelowMinimum
+  | IntakeDecodeSchemaVersionBelowMinimum
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -381,6 +390,13 @@ validateSpec = validateService . legacyCheckedService
 validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract spec =
   sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
+
+-- | Rules added before language 4 ships consult the effective semantic
+-- contract, not the numeric source spelling. Versions 1 through 3 retain their
+-- released acceptance; runtime semantics 3 is the unreleased tightening gate.
+enforcesSpecSurfaceClosures :: EffectiveLanguageContract -> Bool
+enforcesSpecSurfaceClosures languageContract =
+  effectiveRuntimeSemantics languageContract == "keiro-dsl/runtime-semantics/3"
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors
@@ -1308,34 +1324,43 @@ validateNode _languageContract spec (NAggregate agg) = validateAggregate spec ag
 validateNode _languageContract spec (NProcess p) = validateProcess spec p
 validateNode _languageContract spec (NRouter router) = validateRouter spec router
 validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
-validateNode _languageContract spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
+validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling spec i
 validateNode _languageContract spec (NEmit e) = validateEmit spec e
-validateNode _languageContract spec (NPublisher p) = validatePublisher spec p
+validateNode languageContract spec (NPublisher p) = validatePublisher languageContract spec p
 validateNode _languageContract _spec (NWorkqueue w) = validateWorkqueue w
 validateNode _languageContract spec (NPgmqDispatch d) = validatePgmqDispatch spec d
-validateNode _languageContract spec (NReadModel readModel) = validateReadModel spec readModel
+validateNode languageContract spec (NReadModel readModel) = validateReadModel languageContract spec readModel
 validateNode _languageContract _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract spec (NOperation o) = validateOperation spec o
 
 validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
-  [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
-      "contract '"
-        <> ctrName contract
-        <> "' event '"
-        <> ceName event
-        <> "' field '"
-        <> cfName field
-        <> "' has invalid TypeID prefix '"
-        <> prefix
-        <> "': "
-        <> T.pack (show reason)
-  | event <- ctrEvents contract,
-    field <- ceFields event,
-    CTypeId prefix <- [cfType field],
-    Just _ <- [contractIdDomainContractFor languageContract prefix],
-    Just reason <- [TypeID.checkPrefix prefix]
-  ]
+  typeIdPrefixErrors <> schemaVersionFloor
+  where
+    typeIdPrefixErrors =
+      [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
+          "contract '"
+            <> ctrName contract
+            <> "' event '"
+            <> ceName event
+            <> "' field '"
+            <> cfName field
+            <> "' has invalid TypeID prefix '"
+            <> prefix
+            <> "': "
+            <> T.pack (show reason)
+      | event <- ctrEvents contract,
+        field <- ceFields event,
+        CTypeId prefix <- [cfType field],
+        Just _ <- [contractIdDomainContractFor languageContract prefix],
+        Just reason <- [TypeID.checkPrefix prefix]
+      ]
+    schemaVersionFloor =
+      [ mkErr (locLine (ctrLoc contract)) ContractSchemaVersionBelowMinimum $
+          "contract '" <> ctrName contract <> "' schemaVersion must be at least 1"
+      | enforcesSpecSurfaceClosures languageContract,
+        ctrSchemaVersion contract < 1
+      ]
 
 -- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
 validateWorkflow :: WorkflowNode -> [Diagnostic]
@@ -1520,9 +1545,9 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   ]
 
 -- | Validate captured identity, feed semantics, and the declared column surface.
-validateReadModel :: Spec -> ReadModelNode -> [Diagnostic]
-validateReadModel spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference
+validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
+validateReadModel languageContract spec readModel =
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference ++ versionFloor
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -1563,6 +1588,12 @@ validateReadModel spec readModel =
           "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
       | rmFeed readModel == RmInline,
         rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
+      ]
+    versionFloor =
+      [ mkErr readModelLine ReadModelVersionBelowMinimum $
+          "readmodel '" <> rmName readModel <> "' version must be at least 1"
+      | enforcesSpecSurfaceClosures languageContract,
+        rmVersion readModel < 1
       ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
@@ -1744,16 +1775,66 @@ validateEmit spec e = skipRule ++ coupling
                ceTopic event /= emTopic e
              ]
 
-validatePublisher :: Spec -> PublisherNode -> [Diagnostic]
-validatePublisher spec p =
-  [ mkErr (locLine (pubLoc p)) PublisherUnresolvedEmit ("publisher '" <> pubName p <> "' references undeclared emit '" <> pubEmit p <> "'")
-  | pubEmit p `notElem` [emName e | NEmit e <- specNodes spec]
-  ]
+validatePublisher :: EffectiveLanguageContract -> Spec -> PublisherNode -> [Diagnostic]
+validatePublisher languageContract spec p =
+  unresolvedEmit ++ orderingVocabulary ++ backoffPolicy ++ attemptsFloor
+  where
+    publisherLine = locLine (pubLoc p)
+    unresolvedEmit =
+      [ mkErr publisherLine PublisherUnresolvedEmit ("publisher '" <> pubName p <> "' references undeclared emit '" <> pubEmit p <> "'")
+      | pubEmit p `notElem` [emName e | NEmit e <- specNodes spec]
+      ]
+    orderingVocabulary =
+      [ mkErr publisherLine PublisherOrderingUnknown $
+          "publisher '"
+            <> pubName p
+            <> "' has unknown ordering '"
+            <> pubOrdering p
+            <> "'; expected PerKeyHeadOfLine, PerSourceStream, StopTheLine, or BestEffort"
+      | pubOrdering p `Set.notMember` publisherOrderings
+      ]
+    backoffPolicy =
+      [ mkErr publisherLine PublisherBackoffInvalid $
+          "publisher '" <> pubName p <> "' has an invalid " <> problem
+      | Just problem <- [backoffProblemMaybe (pubBackoff p)]
+      ]
+    attemptsFloor =
+      [ mkErr publisherLine PublisherMaxAttemptsBelowMinimum $
+          "publisher '" <> pubName p <> "' maxAttempts must be at least 1"
+      | enforcesSpecSurfaceClosures languageContract,
+        pubMaxAttempts p < 1
+      ]
+
+publisherOrderings :: Set Name
+publisherOrderings = Set.fromList ["PerKeyHeadOfLine", "PerSourceStream", "StopTheLine", "BestEffort"]
+
+backoffProblemMaybe :: BackoffSpec -> Maybe Text
+backoffProblemMaybe backoff = case boKind backoff of
+  "constant" -> Nothing
+  "exponential" -> case (boMax backoff, boMultiplier backoff) of
+    (Just maximumWindow, Just multiplierText) ->
+      case (validationWindowSeconds (boWindow backoff), validationWindowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
+        (Just initialSeconds, Just maximumSeconds, Just multiplier)
+          | initialSeconds > 0 && maximumSeconds >= initialSeconds && multiplier >= 1 -> Nothing
+        _ -> Just "exponential backoff; initial must be positive, max must be at least initial, and multiplier must be at least 1"
+    _ -> Just "exponential backoff; both max and multiplier are required"
+  other -> Just ("backoff kind '" <> other <> "'; expected constant or exponential")
+
+validationWindowSeconds :: Text -> Maybe Int
+validationWindowSeconds window = case T.unsnoc window of
+  Just (digits, unit) -> do
+    amount <- readMaybe (T.unpack digits)
+    case unit of
+      's' -> Just amount
+      'm' -> Just (amount * 60)
+      'h' -> Just (amount * 3600)
+      _ -> Nothing
+  Nothing -> Nothing
 
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.
-validateIntake :: IntakeNode -> [Diagnostic]
-validateIntake i = concat [completeness, duplicateRows, inversions]
+validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
+validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor]
   where
     il = locLine (inkLoc i)
     rows = inkDisposition i
@@ -1769,6 +1850,21 @@ validateIntake i = concat [completeness, duplicateRows, inversions]
       [ mkErr (locLine (drLoc row)) DispositionDuplicateOutcome $
           "intake '" <> inkName i <> "' repeats disposition outcome '" <> drOutcome row <> "'; the first row would shadow this row"
       | row <- duplicatesBy drOutcome rows
+      ]
+    dedupeVocabulary =
+      [ mkErr il IntakeDedupePolicyUnknown $
+          "intake '"
+            <> inkName i
+            <> "' has unknown dedupe policy '"
+            <> inkDedupePolicy i
+            <> "'; expected PreferIntegrationMessageId, PreferSourceEventIdentity, or KafkaDeliveryIdentity"
+      | inkDedupePolicy i `Set.notMember` intakeDedupePolicies
+      ]
+    decodeVersionFloor =
+      [ mkErr il IntakeDecodeSchemaVersionBelowMinimum $
+          "intake '" <> inkName i <> "' decode schemaVersion must be at least 1"
+      | enforcesSpecSurfaceClosures languageContract,
+        decBodySchemaVersion (inkDecode i) < 1
       ]
     firstRow outcome = case [row | row <- rows, drOutcome row == outcome] of
       (row : _) -> Just row
@@ -1790,6 +1886,9 @@ validateIntake i = concat [completeness, duplicateRows, inversions]
            | Just row <- [firstRow "decodeFailed"],
              isRetry row
            ]
+
+intakeDedupePolicies :: Set Name
+intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSourceEventIdentity", "KafkaDeliveryIdentity"]
 
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]

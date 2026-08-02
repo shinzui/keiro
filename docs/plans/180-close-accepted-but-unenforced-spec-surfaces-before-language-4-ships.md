@@ -49,8 +49,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: enforcement-tier framework, closed policy vocabularies, and
-  numeric floors.
+- [x] (2026-08-02 07:08Z) Milestone 1: enforcement-tier framework, closed policy
+  vocabularies, and numeric floors.  `cabal test keiro-dsl-test
+  --test-show-details=direct` passed 477 examples after the two reviewed Tier A
+  frontend-oracle corrections.
 - [ ] Milestone 2: duplicate and collision detection across declarations.
 - [ ] Milestone 3: stable-identity and external-name constraints.
 - [ ] Milestone 4: language-4 semantic couplings for the intake envelope,
@@ -117,6 +119,23 @@ implementation. Provide concise evidence.
   `DispatchEnqueueUnresolved`, `RunWorkflowUnresolved`, and
   `RouterReadModelUnverified`.  Diff-only and consumer-binding codes absent
   from `keiro-dsl/test/` are outside this single-spec closure plan.
+- Discovery (Milestone 1): the released frontend manifest intentionally listed
+  two policy-diff fixtures as accepted even though their values cannot compile:
+  `keiro-dsl/test/fixtures/emit-ordering.keiro` says `ordering Unordered`, which
+  is not a constructor of runtime `OrderingPolicy`, and
+  `keiro-dsl/test/fixtures/intake-dedupepolicy.keiro` says
+  `PreferIdempotencyKey`, which is not a constructor of `InboxDedupePolicy`.
+  The full validator runs exposed the rows in manifest order:
+
+  ```text
+  emit-ordering: expected accept, got PublisherOrderingUnknown
+  intake-dedupepolicy: expected accept, got IntakeDedupePolicyUnknown
+  ```
+
+  This is direct evidence of the Tier A exception contemplated by the plan:
+  the fixture's generated publisher cannot compile.  Its reviewed manifest row
+  now records the earlier semantic rejection; no accepted working fixture was
+  changed.
 
 
 ## Decision Log
@@ -183,6 +202,13 @@ Record every decision made while working on the plan.
   envelope extension already used by every intake fixture; making it explicit
   prevents an invented field set and keeps valid existing spellings explainable.
   Date: 2026-08-02
+- Decision: Update the released frontend oracle for the two intentionally
+  invalid Tier A policy fixtures.
+  Rationale: preserving an `accept` row for source that splices a non-existent
+  Haskell constructor would contradict the plan's explicit Tier A policy.  The
+  manifest remains the reviewed compatibility oracle and now records the named
+  semantic correction instead of silently regenerating it.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -193,6 +219,13 @@ distill durable project context from the Decision Log, Surprises & Discoveries, 
 this section into docs/adr/. Keep task-local execution details here.
 
 (To be filled during and after implementation.)
+
+- Milestone 1 outcome: `check` now rejects publisher ordering constructors,
+  publisher backoff shapes, and intake dedupe policy constructors that generated
+  Haskell cannot lower.  Language 4 additionally rejects zero publisher
+  attempts, contract schema versions, intake decode schema versions, and
+  read-model versions, while the identical graphs remain accepted under
+  language 3.  The focused DSL suite passes all 477 examples.
 
 
 ## Context and Orientation

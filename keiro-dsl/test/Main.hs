@@ -2018,6 +2018,40 @@ main = hspec $ do
     it "accepts the canonical reservation.keiro" $ do
       codes <- errorCodesOf "test/fixtures/reservation.keiro"
       codes `shouldBe` []
+    it "rejects policy words that generated Haskell cannot lower" $ do
+      emitSpec <- specOf "test/fixtures/emit.keiro"
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      let unknownOrdering = mapPublisher (\publisher -> publisher {pubOrdering = "banana"}) emitSpec
+          unknownBackoff =
+            mapPublisher
+              (\publisher -> publisher {pubBackoff = (pubBackoff publisher) {boKind = "banana"}})
+              emitSpec
+          incompleteBackoff =
+            mapPublisher
+              (\publisher -> publisher {pubBackoff = BackoffSpec "exponential" "2s" Nothing Nothing})
+              emitSpec
+          unknownDedupe = mapIntake (\intake -> intake {inkDedupePolicy = "Banana"}) intakeSpec
+      errorCodes unknownOrdering `shouldContain` [PublisherOrderingUnknown]
+      errorCodes unknownBackoff `shouldContain` [PublisherBackoffInvalid]
+      errorCodes incompleteBackoff `shouldContain` [PublisherBackoffInvalid]
+      errorCodes unknownDedupe `shouldContain` [IntakeDedupePolicyUnknown]
+    it "gates numeric floors on the unreleased language-4 contract" $ do
+      emitSpec <- specOf "test/fixtures/emit.keiro"
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      readModelSpec <- specOf "test/fixtures/workflow.keiro"
+      let zeroContract = mapContract (\contract -> contract {ctrSchemaVersion = 0}) emitSpec
+          zeroAttempts = mapPublisher (\publisher -> publisher {pubMaxAttempts = 0}) emitSpec
+          zeroDecode = mapIntake (\intake -> intake {inkDecode = (inkDecode intake) {decBodySchemaVersion = 0}}) intakeSpec
+          zeroReadModel = modifyReadModel "transferDecision" (\readModel -> readModel {rmVersion = 0}) readModelSpec
+          floors =
+            [ (zeroContract, ContractSchemaVersionBelowMinimum),
+              (zeroAttempts, PublisherMaxAttemptsBelowMinimum),
+              (zeroDecode, IntakeDecodeSchemaVersionBelowMinimum),
+              (zeroReadModel, ReadModelVersionBelowMinimum)
+            ]
+      forM_ floors $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
     it "rejects a missing status-map as StatusMapNotTotal" $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
       codes `shouldContain` [StatusMapNotTotal]
@@ -5499,6 +5533,47 @@ modifyReadModel target update spec =
         | node <- specNodes spec
         ]
     }
+
+mapContract :: (ContractNode -> ContractNode) -> Spec -> Spec
+mapContract update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NContract contract -> NContract (update contract)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+mapIntake :: (IntakeNode -> IntakeNode) -> Spec -> Spec
+mapIntake update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NIntake intake -> NIntake (update intake)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+mapPublisher :: (PublisherNode -> PublisherNode) -> Spec -> Spec
+mapPublisher update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NPublisher publisher -> NPublisher (update publisher)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
+serviceErrorCodes :: Int -> Spec -> [DiagnosticCode]
+serviceErrorCodes versionNumber spec =
+  [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
+  where
+    service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
+      Nothing -> error ("unsupported test language version " <> show versionNumber)
+      Just languageContract -> CheckedService languageContract spec
 
 removeReadModel :: Name -> Spec -> Spec
 removeReadModel target spec =
