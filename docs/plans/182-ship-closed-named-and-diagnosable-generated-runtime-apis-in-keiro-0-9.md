@@ -36,9 +36,12 @@ a structural-projection witness is named `artifactInfoArtifactKeyWitness`
 instead of `structuralProjectionC41Z...Witness`; a poison message's decode
 failure names the unknown tag and the expected set; every generated file's
 banner states the language version and generator version that produced it;
-and generated modules pass the repository's fourmolu configuration untouched.
-All of it is provably representation-only: the same wire-byte and fingerprint
-pins ExecPlan 179 establishes must hold through every milestone here.
+and the regenerated fixtures changed here pass the repository's Fourmolu
+configuration untouched; converting every unrelated historical emitter is
+tracked separately after validation found the repository-wide baseline is not
+clean.  All implementation in this plan is provably representation-only: the
+same wire-byte and fingerprint pins ExecPlan 179 establishes must hold through
+every milestone here.
 
 
 ## Progress
@@ -47,17 +50,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 0: extend the wire-byte and fingerprint invariance harness
-  across the queue, inbox, contract, and event-codec conformance suites.
+- [x] 2026-08-02 12:10 PDT: Milestone 0 extended wire-byte and
+  accepted/rejected-outcome invariance across the queue, inbox, contract, and
+  event-codec conformance suites while retaining the aggregate
+  fold-fingerprint pin.  All five focused compiled suites passed.
 - [ ] Milestone 1: closed disposition types for workqueues and inboxes.
 - [ ] Milestone 2: readable structural-projection witness names.
 - [ ] Milestone 3: diagnosable decode failures.
 - [ ] Milestone 4: provenance-stamped generated banners with migration-safe
   recognition of the legacy banner.
 - [ ] Milestone 5: module hygiene — exports, warnings, formatter conformance,
-  and typed read-model holes.
+  typed workflow facts, and concrete stream-category phantoms.
 - [ ] Milestone 6: full regeneration, migration guide, and `0.9.0.0`
   changelog entries.
+- [x] 2026-08-02 12:00 PDT: validated the plan against the clean `master`
+  tree, the completed prerequisite milestones in ExecPlan 179, ADRs 0012,
+  0015, 0016, 0017, and 0018, Mori-resolved Aeson/Kiroku sources, and the
+  focused baseline suites.  The validation corrected the read-model,
+  empty-sum, banner-version, category-phantom, and formatter assumptions
+  before implementation.
 
 
 ## Surprises & Discoveries
@@ -93,6 +104,35 @@ implementation. Provide concise evidence.
   the repository's `fourmolu.yaml` (trailing commas) disagrees with the
   leading-comma export lists the emitters produce, so formatting the repo
   would churn "do not edit" files.
+- Discovery (validation, 2026-08-02): `ReadModelNode` records registry,
+  table, consistency, scope, and subscription facts, but no aggregate or
+  event-codec source.  The representative read-model-only fixture therefore
+  has no generated event type or codec that a typed dispatch shim could
+  import.  Treating the free-text category scope as a codec authority would
+  be an unchecked guess, contrary to this plan's closed/generated-API goal.
+  Evidence: `keiro-dsl/src/Keiro/Dsl/Grammar.hs` fields `rmScope` and
+  `rmFeed`, and `keiro-dsl/test/fixtures/readmodel-runtime.keiro`.
+- Discovery (validation, 2026-08-02): the `emitSum []` branch is live, not
+  dead.  The checked process fixtures deliberately contain saga and target
+  aggregates with no commands or events and currently generate
+  `data HospitalCommand = ()` and similar declarations.  The branch must be
+  replaced by an explicit empty datatype, not deleted as unreachable.
+- Discovery (validation, 2026-08-02): the plan's repository-wide Fourmolu
+  command fails before this work.  It passes 245 generated files without
+  `-XImportQualifiedPost`, so many files do not parse; after supplying the
+  extension, numerous untouched module kinds still need formatting.  Making
+  every historical emitter byte-conformant is a separate generator-wide
+  rewrite, not a safe incidental step in this API plan.
+- Discovery (validation, 2026-08-02): the pre-release tree still declares
+  `keiro-dsl-0.8.0.0`.  A truthful banner must read the build's package
+  version, producing `0.8.0.0` during this plan and naturally changing to
+  `0.9.0.0` when ExecPlan 179 performs the coordinated version bump.
+- Discovery (validation, 2026-08-02): `Keiro.Stream.StreamCategory a`
+  supplies the phantom type of the `Stream a` it constructs.  Both process
+  saga categories and aggregate target categories are currently polymorphic,
+  so pinning only the process module would leave target-category mixups
+  typable.  Both generated category surfaces must name their concrete raw
+  event-stream definition types.
 
 
 ## Decision Log
@@ -145,6 +185,40 @@ Record every decision made while working on the plan.
   mixing in admission changes would destroy the property every milestone here
   is validated against.
   Date: 2026-08-01
+- Decision: Defer typed subscription read-model Hole dispatch until the
+  language declares and validates the read model's aggregate/event-codec
+  source; keep the existing honest `RecordedEvent` boundary in this plan.
+  Rationale: the current semantic graph contains no source codec to select.
+  Inferring one from `scope = category "..."` would turn a free-text runtime
+  filter into an unvalidated type authority and cannot work for entire-log or
+  read-model-only specifications.  Adding the missing declaration is a
+  language-surface design with its own compatibility and evolution rules, not
+  representation-only generator hygiene.
+  Date: 2026-08-02
+- Decision: Keep repository-wide direct Fourmolu emission out of this plan;
+  format regenerated committed fixtures as repository artifacts and check the
+  module kinds changed here with the required parser extension.  A follow-up
+  generator-format plan must convert every emitter and add a byte-currentness
+  gate before claiming all scaffold output is formatter-idempotent.
+  Rationale: the validated baseline is neither parseable by the written
+  command nor formatter-clean, and repairing 245 files across unrelated
+  emitters would make the representation-invariance review materially less
+  sound.
+  Date: 2026-08-02
+- Decision: Stamp provenance with the package version compiled into the
+  running `keiro-dsl`, not a hard-coded future release number.
+  Rationale: pre-release builds are currently `0.8.0.0`; claiming `0.9.0.0`
+  before the coordinated release bump would make provenance false.  Reading
+  the Cabal-generated version keeps identical binaries deterministic and lets
+  ExecPlan 179's version bump update the stamp honestly.
+  Date: 2026-08-02
+- Decision: Pin both aggregate and process-manager stream categories to their
+  concrete generated event-stream definition phantoms.
+  Rationale: a process category alone protects its saga stream, while a
+  polymorphic aggregate category still permits the wrong target category to
+  unify with an expected target stream.  Both sides are required for the
+  compile-time guarantee.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -155,6 +229,14 @@ distill durable project context from the Decision Log, Surprises & Discoveries, 
 this section into docs/adr/. Keep task-local execution details here.
 
 (To be filled during and after implementation.)
+
+Milestone 0 completed on 2026-08-02.  The queue payload is pinned to its exact
+four-field JSON bytes and missing-field rejection; both contract messages are
+pinned to exact bytes plus unknown-discriminator and missing-field rejection;
+and the aggregate event is pinned to exact bytes plus known/unknown event-type
+outcomes.  The inbox suite continues to exercise all four runtime result
+constructors.  The focused queue, inbox, contract, typed-contract, and
+aggregate suites all passed before generator changes.
 
 
 ## Context and Orientation
@@ -167,23 +249,22 @@ The kinds this plan touches: workqueue policy modules (`QueuePolicy.hs` under
 event codec modules (`Codec.hs` under `conformance/`), structural projection
 modules (`StructuralProjections.hs` under `conformance-structural/`), process
 modules (`conformance-process/`), workflow fact modules
-(`conformance-workflow-full/.../WorkflowFacts.hs`), and read-model holes
-(`conformance-readmodel-runtime/.../ReadModelHoles.hs`).  A "hole" is a
-create-once hand-written module the scaffolder generates as a stub and never
-overwrites; hole authors are the consumers of the generated API surface this
-plan changes.
+(`conformance-workflow-full/.../WorkflowFacts.hs`), and aggregate event-stream
+modules throughout the conformance trees.  A "hole" is a create-once
+hand-written module the scaffolder generates as a stub and never overwrites;
+workqueue hole authors are consumers of the generated API surface this plan
+changes.
 
-The specific defects, beyond the discoveries above: the generated
-`StreamCategory a` phantom in process modules is unconstrained, so any saga
-category composes with any stream type; `WorkflowFacts` is
+The specific defects, beyond the discoveries above: generated
+`StreamCategory a` values in process and aggregate modules are unconstrained,
+so any saga or target category composes with any stream type; `WorkflowFacts` is
 `[(String, String)]` with pipeline stages packed into comma-joined strings;
-the event-codec decode arms are single ~330-character applicative lines; a
-dead `emitSum []` arm renders the non-compiling `data X = ()`; contract topic
-constants are generated but unexported; and the read-model hole receives a
-raw undecoded event
-(`applyTransferDecisions :: RecordedEvent -> Tx.Transaction ()`) whose
-generated `pure ()` stub compiles and silently drops events even though the
-generator knows the source category's codec.
+the event-codec decode arms are single ~330-character applicative lines; the
+live `emitSum []` arm renders the misleading `data X = ()`; and contract topic
+constants are generated but unexported.  The read-model hole receives a raw
+undecoded event (`applyTransferDecisions :: RecordedEvent -> Tx.Transaction
+()`), but the current grammar does not name a source aggregate or codec, so a
+truthful typed shim is deferred by the validated decision above.
 
 Wire-byte invariance means: for every conformance fixture, the JSON bytes
 produced by encoding sample events/jobs/messages, and accepted by decoding
@@ -212,11 +293,16 @@ what hole authors write but not who owns which behavior.  ExecPlans 178, 179,
 
 ## Plan of Work
 
-Milestone 0 extends invariance evidence.  For the queue, inbox, contract, and
+Milestone 0 extends invariance evidence.  For the queue, contract, and
 event-codec conformance suites, add assertions that pin the exact encoded
 JSON bytes of representative values and the exact accepted/rejected decoding
-outcomes.  These pins are the safety net every later milestone must keep
-green; they run against the unchanged generator first.
+outcomes.  The inbox has no wire codec, so its suite pins the success/retry/
+dead-letter classification of every runtime `InboxResult` constructor while
+later detail assertions prove the declared retry delay and dead-letter reason.
+The aggregate suite retains ExecPlans 179 and 181's exact fold fingerprint
+pin; queues, inboxes, and contracts have no fold fingerprint to invent.  These
+pins are the safety net every later milestone must keep green; they run
+against the unchanged generator first.
 
 Milestone 1 closes the disposition tables.  For each workqueue, generate a
 closed sum type named after the queue (for example
@@ -252,7 +338,8 @@ texts improve, and fixtures asserting exact error strings are updated
 deliberately.
 
 Milestone 4 stamps provenance.  The banner becomes one line carrying the
-marker, the effective language version, the keiro-dsl version, and the owning
+marker, the effective language version, the running keiro-dsl package version,
+and the owning
 source node, in a fixed format decided during implementation (for example
 `-- @generated by keiro-dsl 0.9.0.0 (language keiro-dsl 4) from context HospitalCapacity, aggregate Reservation; do not edit.`),
 keeping the leading `-- @generated` token for tooling compatibility.  Teach
@@ -261,24 +348,21 @@ stale-evidence path ExecPlan 179 adds — to accept the legacy line or any
 stamped line as generated provenance.  Add tests for both recognitions and
 for the stamped banner's byte-stability across two identical scaffold runs.
 
-Milestone 5 is module hygiene, in one regeneration pass: export contract
-topic constants and remove `-Wno-unused-top-binds` from every module kind
-that becomes warning-clean (keep it, with a comment naming the binding that
-still needs it, where one remains); emit fourmolu-conformant style per the
-repository's `fourmolu.yaml` (trailing commas, consistent indentation) and
-prove it by running fourmolu in check mode over regenerated fixtures; break
-event-codec decode arms to one field per line; delete the dead `emitSum []`
-arm; pin the process `StreamCategory` phantom to its category kind so
-mismatched saga categories stop unifying; replace `WorkflowFacts`'
-`[(String, String)]` with a small generated record; and give read-model holes
-a typed shim — the generated side decodes the recorded event with the codec
-it already knows and dispatches typed events to the hole, so the hole author
-implements per-event functions instead of pattern-matching raw
-`RecordedEvent` (the stub still compiles, but now its emptiness is visible
-per event type).
+Milestone 5 is focused module hygiene, in one regeneration pass: export
+contract topic constants and remove `-Wno-unused-top-binds` from every module
+kind that becomes warning-clean; break event-codec decode arms to one field
+per line; replace `emitSum []` with an explicit empty datatype and the needed
+language pragma; pin aggregate and process `StreamCategory` phantoms to their
+concrete raw event-stream definition types so mismatched saga and target
+categories stop unifying; and replace `WorkflowFacts`' `[(String, String)]`
+with a small generated record whose body, await labels, and patch identifiers
+are real lists rather than comma-packed strings.  Run Fourmolu with
+`-XImportQualifiedPost` over the regenerated fixture files changed by this
+plan, but do not claim the unrelated historical emitters are byte-conformant.
 
-Milestone 6 regenerates every conformance tree, verifies the Milestone 0
-pins and the full test suite, runs fourmolu check over generated fixtures,
+Milestone 6 regenerates every affected conformance tree, verifies the Milestone 0
+pins and the full test suite, runs Fourmolu check over generated fixtures
+changed by this plan,
 and writes the `0.9.0.0` migration guide section covering: disposition sum
 migration for hole authors, witness rename mapping (old mangled name to new
 readable name per fixture), banner recognition, read-model hole signature
@@ -310,11 +394,14 @@ cabal test keiro-dsl-conformance-contract --test-show-details=direct
 cabal test keiro-dsl-conformance-contract-typeid --test-show-details=direct
 ```
 
-After Milestone 5, prove formatter conformance and the absence of the old
-names:
+After Milestone 5, prove formatter conformance for the regenerated files
+changed by this plan and the absence of the old names.  Build the file list
+from `git diff --name-only --diff-filter=ACM` so the check does not silently
+make a false repository-wide claim:
 
 ```bash
-fourmolu --mode check $(git ls-files 'keiro-dsl/test/*/Generated/**/*.hs')
+fourmolu --mode check --ghc-opt -XImportQualifiedPost \
+  $(git diff --name-only --diff-filter=ACM -- 'keiro-dsl/test/*/Generated/**/*.hs')
 rg -n "structuralProjectionC[0-9a-f]" keiro-dsl/test keiro-dsl/src
 ```
 
@@ -350,7 +437,7 @@ Acceptance is behavioral:
 - Two consecutive scaffold runs produce byte-identical output including the
   stamped banner; a tree containing legacy-banner files regenerates without
   any spurious hand-modified refusal.
-- `fourmolu --mode check` passes over all regenerated fixtures; the Milestone
+- Fourmolu check passes over regenerated fixtures changed by this plan; the Milestone
   0 wire-byte pins pass unchanged at every milestone boundary; every
   conformance suite, `cabal build all`, `nix flake check`, and strict ADR
   validation pass at the end.
@@ -393,8 +480,8 @@ data IncidentInboxDisposition
 -- structural projections module
 artifactInfoArtifactKeyWitness :: {- unchanged witness type -}
 
--- read-model hole (generated dispatch side decodes; hole receives typed events)
-applyTransferDecisions :: TransferDecisionEvent -> Tx.Transaction ()
+-- read-model holes remain raw until the language declares a source codec
+applyTransferDecisions :: RecordedEvent -> Tx.Transaction ()
 ```
 
 The generated banner format, once shipped in `0.9.0.0`, is frozen the same
@@ -405,3 +492,15 @@ must complete before ExecPlan 179's Milestone 5 cuts the `0.9.0.0` release;
 ExecPlan 181's hash widening is independent of every surface here except
 that both regenerate fixtures, so coordinate regeneration ordering in
 whichever lands second.
+
+
+Revision note (2026-08-02): validated the plan before implementation against
+the current semantic graph, generated fixtures, prerequisite plan state, ADRs,
+Mori-resolved dependency sources, and focused tests.  Corrected five unsound
+assumptions: typed read-model dispatch lacks a declared codec authority;
+`emitSum []` is live; truthful pre-release banners must use the running package
+version; category safety requires concrete aggregate and process phantoms; and
+the repository-wide formatter command neither parses nor passes on the current
+baseline.  The revised milestones retain the representation-only API work and
+defer the two generator-wide/language-surface projects that need independent
+design and gates.

@@ -165,11 +165,12 @@ test-suite keiro-dsl-conformance
     HospitalCapacity.Reservation.Holes
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.7  && <0.8
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , bytestring  >=0.12 && <0.13
+    , keiki       >=0.7  && <0.8
     , keiro
-    , text   >=2.1  && <2.2
+    , text        >=2.1  && <2.2
 
 -- Plan 157: compiled direct Time/Natural aggregate fields and registers,
 -- symbolic equality/ordering, codecs, snapshots, forward/replay equality,
@@ -586,9 +587,10 @@ test-suite keiro-dsl-conformance-contract
   main-is:        Main.hs
   other-modules:  Generated.HospitalCapacity.Emergency.Contract
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , text   >=2.1  && <2.2
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , bytestring  >=0.12 && <0.13
+    , text        >=2.1  && <2.2
 
 -- Language-4 contract conformance: prefix-indexed KindID fields, canonical
 -- text JSON, field-path-aware rejection, and the complete generated dependency set.
@@ -681,6 +683,7 @@ test-suite keiro-dsl-conformance-queue-runtime
   build-depends:
     , aeson        >=2.2  && <2.3
     , base         >=4.21 && <5
+    , bytestring   >=0.12 && <0.13
     , keiro-core
     , keiro-dsl
     , keiro-pgmq
