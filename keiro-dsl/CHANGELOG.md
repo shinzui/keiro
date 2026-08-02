@@ -31,6 +31,23 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `EnvelopeLayer`. No parser, renderer, validator, or generator constructed
   them; use the live node-specific derivation, disposition, and intake binding
   types instead.
+- Workqueue `jobOutcomeFor` functions now accept a generated queue-named closed
+  outcome sum instead of `Text`; inbox generation exposes closed outcome and
+  detailed disposition sums carrying retry delays, dead-letter reasons, and
+  runtime failure detail. Replace string literals and bare acknowledgement
+  matches with the generated constructors.
+- Structural projection witnesses are renamed from hex-mangled identifiers to
+  deterministic owner-and-JSON-pointer names, with a stable suffix only for
+  normalized-name collisions. Re-scaffold and update hand-owned imports and
+  uses; witness values and projection semantics are unchanged.
+- Aggregate stream categories are fixed to their generated event-stream
+  definition phantom. `PMCommand` and router consumers must use the new
+  `<aggregate>CommandCategory`, fixed to the command phantom; generated process
+  categories are fixed to the saga event-stream definition.
+- `workflowFacts` changes from packed `[(String, String)]` values to the
+  generated `WorkflowFacts` record with separate body, await-label, and
+  patch-identifier lists. Honest zero-constructor command/event declarations
+  are now empty datatypes rather than a synthetic `()` constructor.
 
 ### New Features
 
@@ -67,6 +84,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   the frozen TypeID-v7 domain, legacy-invalid in-flight messages must drain or
   be remediated, and consumers must then be re-scaffolded, recompiled, and run
   through contract conformance.
+- Generated contract topic constants are exported. Generated contract,
+  aggregate, mapped-enum, nominal, and union decoders now report the rejected
+  value, complete expected set, and Aeson field path without changing accepted
+  wire bytes.
+- Generated files carry the package version, effective language version, and a
+  stable node origin in their provenance banner. Overwrite, stale, and
+  workspace-adoption checks accept both this frozen stamped shape and the
+  historical banner, but reject unrelated marker comments.
+- Regenerated committed fixtures pass the repository Fourmolu configuration;
+  event decode arms render one field per line, contract topics no longer need
+  private-binding warning suppression, and generated workflow facts expose
+  typed list structure.
 
 ## 0.8.0.0 — 2026-08-01
 

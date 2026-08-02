@@ -86,8 +86,11 @@ This section must always reflect the actual current state of the work.
   regenerated Generated modules.  The 496-example generator suite and all 17
   affected compiled conformance closures passed after updating the intentional
   nominal-module snapshot shape capture.
-- [ ] Milestone 6: full regeneration, migration guide, and `0.9.0.0`
-  changelog entries.
+- [x] 2026-08-02 14:30 PDT: Milestone 6 completed full affected-fixture
+  regeneration, added the 0.9 consumer migration guide and changelog entries,
+  froze the stamped-banner compatibility contract in ADR 0015, and passed
+  `cabal build all`, `cabal test all`, the 247-file generated Fourmolu check,
+  strict ADR validation, `nix fmt`, and `nix flake check`.
 - [x] 2026-08-02 12:00 PDT: validated the plan against the clean `master`
   tree, the completed prerequisite milestones in ExecPlan 179, ADRs 0012,
   0015, 0016, 0017, and 0018, Mori-resolved Aeson/Kiroku sources, and the
@@ -409,6 +412,28 @@ freshness, Fourmolu, the focused wire pins, and all affected compile proofs are
 green.  Full regeneration also made the prerequisite nominal-module move
 visible to the snapshot fixture; its register-layout capture was deliberately
 updated while its event bytes and fold fingerprint stayed fixed.
+
+Milestone 6 completed on 2026-08-02.  The user guide now gives hole authors
+concrete migrations for queue and inbox outcomes, aggregate event versus
+command categories, typed workflow facts, topic exports, all five committed
+witness renames, stamped-banner recognition, and the one-time advisory
+snapshot cache miss.  It explicitly preserves the raw read-model
+`RecordedEvent` boundary because the language still lacks a validated source
+codec.  The Unreleased changelog records the 0.9 generated-API break without
+falsely changing the package version: ExecPlan 179 remains the coordinated
+release vehicle, so the current generated stamp truthfully says `0.8.0.0`.
+ADR 0015 and its strict bundle log now preserve both shipped provenance forms.
+
+The complete implementation passed `cabal build all` and `cabal test all`;
+the generator suite contains 496 passing examples, all 17 affected compiled
+conformance closures passed, and the long-running Keiro integration suite
+contains 378 passing examples.  Fourmolu accepted all 247 generated Haskell
+modules changed in the full regeneration.  `okf validate docs/adr --strict
+--profile docs/adr/profile.dhall --profile-enforce --log-enforce` validated all
+18 ADR concepts, `nix fmt` made no changes, and both native checks passed under
+`nix flake check`.  The result meets the plan's purpose: generated runtime APIs
+are closed, readable, typed, attributable, and diagnosable while the pinned
+wire bytes and fold fingerprint remain unchanged.
 
 
 ## Context and Orientation
