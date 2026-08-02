@@ -64,7 +64,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.IdDomain (IdDomainContract (..), idDomainContractFor)
+import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
 import Keiro.Dsl.PrettyPrint
@@ -75,7 +75,7 @@ import Keiro.Dsl.PrettyPrint
     renderTransition,
   )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -110,6 +110,7 @@ data RolloutConstraint
   | RolloutWorkersFirst
   | RolloutDrainRequired
   | RolloutProducerLast
+  | RolloutProducerFirst
   deriving stock (Eq, Ord, Show)
 
 -- | The explicit, compile-forcing compatibility result for one finding.
@@ -279,6 +280,7 @@ classifyCompatibility context code
   | code == NominalRepresentationChanged = mappedWireBreakingVector context
   | code == NominalIdDecoderTightened =
       (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
+  | code == ContractTypeIdDomainChanged = contractTypeIdDomainVector
   | code == IdDomainContractChanged = idDomainContractVector
   | code == MappedDeclAdded = compatibleVector
   | code `elem` privateDecodeCodes = privateDecodeBreakingVector
@@ -375,6 +377,18 @@ idDomainContractVector =
       cvPersistedIdentity = VCompatible,
       cvConsumerBuild = VAdvisory,
       cvRollout = Set.singleton RolloutProducerLast
+    }
+
+contractTypeIdDomainVector :: CompatibilityVector
+contractTypeIdDomainVector =
+  CompatibilityVector
+    { cvPrivateHistoryRead = VNotApplicable,
+      cvOldBinaryReadNewEvents = VNotApplicable,
+      cvSnapshotHydration = VNotApplicable,
+      cvPublicConsumer = VBreaking,
+      cvPersistedIdentity = VNotApplicable,
+      cvConsumerBuild = VBreaking,
+      cvRollout = Set.fromList [RolloutDrainRequired, RolloutProducerFirst]
     }
 
 mappedWireBreakingCodes :: [DiagnosticCode]
@@ -633,13 +647,12 @@ familyRegistry =
     (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
   ]
 
--- | Compare two graphs under their effective semantic contracts. Current
--- released contracts share runtime semantics, so the selected policy delegates
--- to the graph differ; successor semantics extend this boundary rather than
--- teaching CLI callers to recover versions from provenance.
+-- | Compare two graphs under their effective semantic contracts. The ordinary
+-- graph differ runs first; service-aware admission and fold findings then expose
+-- semantic-profile changes that leave the normalized graph itself unchanged.
 diffServices :: CheckedService -> CheckedService -> [Change]
 diffServices oldService newService =
-  diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> semanticContractFoldChanges
+  diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> contractTypeIdDomainChanges <> semanticContractFoldChanges
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
@@ -663,6 +676,28 @@ diffServices oldService newService =
         let newContract = idDomainContractFor (checkedLanguageContract newService) (idPrefix newDeclaration),
         oldContract /= newContract
       ]
+    contractTypeIdDomainChanges =
+      [ breaking
+          (ctrName newContract)
+          "contract-typeid-domain"
+          (ceName newEvent <> "." <> cfName newField)
+          ContractTypeIdDomainChanged
+          ( renderContractIdDomainChange
+              (cfType newField)
+              oldContract
+              newContract'
+          )
+      | newContract <- [contract | NContract contract <- specNodes newSpec],
+        Just oldContractNode <- [find ((== ctrName newContract) . ctrName) [contract | NContract contract <- specNodes oldSpec]],
+        newEvent <- ctrEvents newContract,
+        Just oldEvent <- [find ((== ceName newEvent) . ceName) (ctrEvents oldContractNode)],
+        newField <- ceFields newEvent,
+        Just oldField <- [find ((== cfName newField) . cfName) (ceFields oldEvent)],
+        cfType oldField == cfType newField,
+        let oldContract = contractFieldIdDomain (checkedLanguageContract oldService) oldField,
+        let newContract' = contractFieldIdDomain (checkedLanguageContract newService) newField,
+        oldContract /= newContract'
+      ]
     semanticContractFoldChanges =
       [ advisory
           name
@@ -680,6 +715,33 @@ renderIdDomainContract :: Maybe IdDomainContract -> Text
 renderIdDomainContract Nothing = "legacy-unchecked"
 renderIdDomainContract (Just contract) =
   idDomainVersion contract <> "(prefix=" <> idDomainPrefix contract <> ",json=" <> idDomainJsonRepresentation contract <> ")"
+
+contractFieldIdDomain :: EffectiveLanguageContract -> ContractField -> Maybe IdDomainContract
+contractFieldIdDomain languageContract field = case cfType field of
+  CTypeId prefix -> contractIdDomainContractFor languageContract prefix
+  _ -> Nothing
+
+renderContractIdDomainChange :: ContractType -> Maybe IdDomainContract -> Maybe IdDomainContract -> Text
+renderContractIdDomainChange fieldType oldContract newContract =
+  "contract TypeID admission changed "
+    <> renderIdDomainContract oldContract
+    <> " -> "
+    <> renderIdDomainContract newContract
+    <> representationChange
+  where
+    prefix = case fieldType of
+      CTypeId value -> value
+      _ -> ""
+    representationChange = case (oldContract, newContract) of
+      (Nothing, Just _) ->
+        "; generated Haskell changes from Text to KindID \""
+          <> prefix
+          <> "\" while valid JSON stays canonical text; newly generated consumers reject malformed, wrong-prefix, non-canonical, and non-v7 values"
+      (Just _, Nothing) ->
+        "; generated Haskell changes from KindID \""
+          <> prefix
+          <> "\" to Text and the generated decoder no longer enforces the frozen TypeID-v7 domain"
+      _ -> "; generated contract admission changed while the source field type remained unchanged"
 
 -- | Compatibility wrapper for graph-only callers, explicitly using
 -- legacy/version-1 semantics on both sides.
@@ -2197,6 +2259,7 @@ contextFor label root facet subject code =
     publicCodes =
       [ ContractEventRemoved,
         ContractFieldChanged,
+        ContractTypeIdDomainChanged,
         ContractDiscriminatorChanged,
         ContractTopicChanged,
         ContractSchemaVersionDecreased,

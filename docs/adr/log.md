@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-02
+* **Update**: Record language-4 typed integration-contract TypeID admission and rollout semantics (plan 178).
+
 ## 2026-08-01
 * **Update**: Record explicit released syntax/runtime profiles and structured span-aware frontend failure phases (EP-175).
 * **Update**: Record located surface syntax and explicit lowering before the normalized Spec graph.

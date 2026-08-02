@@ -333,6 +333,7 @@ data DiagnosticCode
   | AggregateEventlessStateChange
   | -- ExecPlan 178: language-4 integration contract TypeID admission.
     ContractInvalidTypeIdPrefix
+  | ContractTypeIdDomainChanged
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

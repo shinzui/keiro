@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a released parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-01T22:15:14Z
+timestamp: 2026-08-02T04:49:52Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -48,9 +48,13 @@ predecessor relation. Existing version parsers and their rejection fixtures are 
 **Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
 Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
-`keiro-dsl/syntax-profile/2`. Versions 1 and 2 select
+`keiro-dsl/syntax-profile/2`, and version 4 deliberately reuses that profile.
+Versions 1 and 2 select
 `keiro-dsl/runtime-semantics/1`, while version 3 selects
-`keiro-dsl/runtime-semantics/2`. The parser threads the chosen definition through every production,
+`keiro-dsl/runtime-semantics/2` and version 4 selects
+`keiro-dsl/runtime-semantics/3`. Runtime semantics 3 preserves version 3's
+aggregate ID and fold projection while enabling the separate public-contract
+TypeID admission capability. The parser threads the chosen definition through every production,
 and semantic planning reads the runtime discriminator from that same definition. Adding a larger
 version number therefore enables neither syntax nor runtime behavior until its registry entry
 chooses both values explicitly. The historical minimum-version query remains documentation and
@@ -72,6 +76,15 @@ the selected language version and a runtime-semantics discriminator. Grammar-onl
 share the discriminator; a successor that can change runtime or fold behavior must receive a new
 one. Compatibility entry points that accept only `Spec` remain documented legacy/version-1
 wrappers and are not used by CLI or workspace semantic routes.
+
+**Version 4 tightens only declared public contract TypeID fields.** A contract
+field that already says `typeid "inc"` generates `KindID "inc"` and enforces the
+frozen TypeID-v7 domain at JSON decoding. Valid JSON bytes remain canonical text.
+Versions 1 through 3 retain their generated `Text` field and permissive decoder
+bytes. Because aggregate fold behavior is unchanged, runtime semantics 3 reuses
+the predecessor's aggregate fingerprint segment; service-aware scaffold,
+manifest, durable ID-domain, and diff consumers still observe the new contract
+capability through `CheckedService`.
 
 **Parsing and semantic graph construction are separated by located surface syntax.** After source
 selection, Megaparsec produces a non-lossless `SurfaceSource`. Its document clauses and ordered
@@ -139,6 +152,10 @@ fleet planning remain in
   than an automatic property of the parser-combinator library.
 - A higher language version does not inherit a predecessor's feature set or runtime semantics by
   ordering. Intentional reuse is visible as the same profile identifier in two registry entries.
+- Version 4 demonstrates that a successor runtime profile may preserve the
+  predecessor's aggregate-fold projection while changing another checked
+  semantic consumer. Fingerprint equality is explicit and does not authorize
+  scaffold or diff code to discard `CheckedService`.
 - Source-aware tools can branch on frontend phase, stable code, and exact span without parsing
   human-readable Megaparsec output; compatibility callers retain the released text.
 - A version-2 expression is not accepted merely because its tokens parse. Its

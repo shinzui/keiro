@@ -6,6 +6,14 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Adds `parseKindIdV7Text` and `parseKindIdV7Value` to
+  `Keiro.Codec.IdDomain`. Both construct a prefix-indexed `KindID` only after
+  the frozen TypeID-v7 policy succeeds; the Aeson entry point preserves the
+  owning JSON field path for malformed, wrong-prefix, non-canonical, and non-v7
+  failures.
+
 ## 0.8.0.0 — 2026-08-01
 
 No changes this release. Version moves with the package set.

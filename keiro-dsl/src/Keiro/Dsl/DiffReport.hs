@@ -50,6 +50,10 @@ data Remedy
   | RemedyRunConformance
   | RemedyNoSemanticAction
   | RemedyDoNotDeploy Text
+  | RemedyEmitContractTypeIdDomain
+  | RemedyDrainLegacyInvalidContractMessages
+  | RemedyRescaffoldContractConsumers
+  | RemedyRunContractConformance
   deriving stock (Eq, Show)
 
 data DiffReport = DiffReport
@@ -184,6 +188,12 @@ remediationFor context code
   | code == AggFoldSurfaceChanged = RemedyStateCodecBump :| [RemedyRunConformance]
   | code == IdDomainContractChanged =
       RemedyDeploymentOrder RolloutProducerLast :| [RemedyStateCodecBump, RemedyRecompileConsumers, RemedyRunConformance]
+  | code == ContractTypeIdDomainChanged =
+      RemedyEmitContractTypeIdDomain
+        :| [ RemedyDrainLegacyInvalidContractMessages,
+             RemedyRescaffoldContractConsumers,
+             RemedyRunContractConformance
+           ]
   | code `elem` mappedWireCodes = mappedWireRemedy
   | code `elem` [MappedFieldAddedWithDefault, MappedArmAdded, MappedEnumValueAdded] = mappedAdditionRemedy
   | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged] =
@@ -304,6 +314,10 @@ renderRemedy remedy = case remedy of
   RemedyRunConformance -> "run the generated conformance and historical fixture suites"
   RemedyNoSemanticAction -> "no semantic action is required; only source-language provenance changed"
   RemedyDoNotDeploy detail -> detail
+  RemedyEmitContractTypeIdDomain -> "make all producers emit the frozen TypeID-v7 domain"
+  RemedyDrainLegacyInvalidContractMessages -> "drain or remediate legacy-invalid in-flight messages"
+  RemedyRescaffoldContractConsumers -> "re-scaffold and recompile every affected consumer against the generated interface"
+  RemedyRunContractConformance -> "run contract conformance"
 
 renderFinding :: Change -> Text
 renderFinding change =
@@ -389,6 +403,7 @@ rolloutName rollout = case rollout of
   RolloutWorkersFirst -> "workers-first"
   RolloutDrainRequired -> "drain-required"
   RolloutProducerLast -> "producer-last"
+  RolloutProducerFirst -> "producer-first"
 
 labelName :: Label -> Text
 labelName label = case label of

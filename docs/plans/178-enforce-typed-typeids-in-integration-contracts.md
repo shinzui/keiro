@@ -56,8 +56,13 @@ language-3 module still contains `incidentId :: !Text`; the language-4 module co
   single-file and workspace records. The checked module is byte-identical to fresh scaffold
   output, the six-case typed conformance target and two-case legacy target pass, and all 470
   `keiro-dsl-test` examples (plus property cases) pass.
-- [ ] Implement and validate milestone 3: semantic diff/rollout reporting, ADR updates, and
-  package changelogs.
+- [x] (2026-08-02 04:51Z) Implemented and validated milestone 3: graph-identical v3-to-v4
+  contract fields emit `ContractTypeIdDomainChanged` with public-consumer and consumer-build
+  breakage, producer-first plus drain-required rollout, and the ordered operational remedy; source
+  field edits are not duplicated. Text/JSON goldens, gate assertions, v1-to-v3 and same-version
+  negative cases, and all 471 DSL examples pass. ADRs 4, 12, and 16 and both package changelogs
+  record the boundary; the single bundle-log update was added and strict validation reports
+  `OK: 17 concepts`.
 - [ ] Complete milestone 4: mutation-style compatibility evidence, repository-wide checks, and
   final ADR distillation.
 

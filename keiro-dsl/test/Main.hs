@@ -21,6 +21,8 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Data.Text.Lazy qualified as LazyText
+import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
 import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
@@ -3029,6 +3031,52 @@ main = hspec $ do
       [ckCode k | Breaking k <- changed] `shouldContain` [ContractFieldChanged]
       added <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldadd.keiro"
       [ckCode k | Breaking k <- added] `shouldContain` [ContractFieldChanged]
+    it "goldens language-3 to language-4 contract TypeID admission and rollout" $ do
+      let source versionNumber prefix =
+            T.unlines
+              [ "language keiro-dsl " <> T.pack (show versionNumber),
+                "context hospital-capacity",
+                "contract emergency {",
+                "  schemaVersion 1",
+                "  discriminator messageType",
+                "  topic incidentEvents \"emergency.incident.events\"",
+                "  event IncidentTransferNeedDeclared on incidentEvents {",
+                "    incidentId: typeid \"" <> prefix <> "\"",
+                "  }",
+                "}"
+              ]
+          checked name input = case parseSource name input of
+            Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+            Right parsed -> pure (checkedSource parsed)
+      v1 <- checked "contract-typeid-v1.keiro" (source (1 :: Int) "inc")
+      v3 <- checked "contract-typeid-v3.keiro" (source (3 :: Int) "inc")
+      v4 <- checked "contract-typeid-v4.keiro" (source (4 :: Int) "inc")
+      v4Edited <- checked "contract-typeid-v4-edited.keiro" (source (4 :: Int) "rsv")
+      let changes = diffServices v3 v4
+          textGolden = T.intercalate "\n" (map renderFinding changes)
+          jsonGolden = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReport defaultGate changes)))
+          findings = [kind | Breaking kind <- changes, ckCode kind == ContractTypeIdDomainChanged]
+      expectedText <- readTestText "test/fixtures/contract-typeid-domain.diff.golden"
+      expectedJson <- readTestText "test/fixtures/contract-typeid-domain.diff.json.golden"
+      T.stripEnd textGolden `shouldBe` T.stripEnd expectedText
+      T.stripEnd jsonGolden `shouldBe` T.stripEnd expectedJson
+      case findings of
+        [finding] -> do
+          verdictFor PublicConsumer (ckVector finding) `shouldBe` VBreaking
+          verdictFor ConsumerBuild (ckVector finding) `shouldBe` VBreaking
+          [verdictFor surface (ckVector finding) | surface <- [PrivateHistoryRead, OldBinaryReadNewEvents, SnapshotHydration, PersistedIdentity]]
+            `shouldBe` replicate 4 VNotApplicable
+          cvRollout (ckVector finding) `shouldBe` Set.fromList [RolloutDrainRequired, RolloutProducerFirst]
+          deriveLabel (Set.singleton PublicConsumer) (ckVector finding) `shouldBe` LabelBreaking
+          deriveLabel (Set.singleton ConsumerBuild) (ckVector finding) `shouldBe` LabelBreaking
+          remediationFor (ckContext finding) (ckCode finding)
+            `shouldBe` RemedyEmitContractTypeIdDomain :| [RemedyDrainLegacyInvalidContractMessages, RemedyRescaffoldContractConsumers, RemedyRunContractConformance]
+        values -> expectationFailure ("expected one contract TypeID-domain finding, got " <> show (length values))
+      [kind | change <- diffServices v1 v3, let { kind = kindOfChange change }, ckCode kind == ContractTypeIdDomainChanged] `shouldBe` []
+      [kind | change <- diffServices v4 v4, let { kind = kindOfChange change }, ckCode kind == ContractTypeIdDomainChanged] `shouldBe` []
+      let edited = diffServices v3 v4Edited
+      map (ckCode . kindOfChange) edited `shouldContain` [ContractFieldChanged]
+      [kind | change <- edited, let { kind = kindOfChange change }, ckCode kind == ContractTypeIdDomainChanged] `shouldBe` []
     it "reports a field addition with a contract version bump as an advisory" $ do
       cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-bump-fieldadd.keiro"
       any isBreaking cs `shouldBe` False
@@ -5234,7 +5282,8 @@ genCompatibilityVector =
       [ RolloutStopTheWorld,
         RolloutWorkersFirst,
         RolloutDrainRequired,
-        RolloutProducerLast
+        RolloutProducerLast,
+        RolloutProducerFirst
       ]
 
 replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact

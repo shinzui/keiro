@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-01T19:21:22Z
+timestamp: 2026-08-02T04:49:52Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -228,6 +228,16 @@ Private event/register schemas and public contract DTOs remain separate
 ownership domains. Structural private types are not reused in a public
 contract merely to demonstrate a compatibility-vector scenario.
 
+Language version 4 reuses Keiro's frozen TypeID-v7 admission authority at the
+public contract boundary without turning a contract DTO into a private
+aggregate type. A declared `typeid "inc"` field lowers to `KindID "inc"` in the
+generated public DTO, renders with `KindID.toText`, and parses through the same
+canonical lowercase, declared-prefix, and UUIDv7 checks before construction.
+The valid JSON representation remains a string. The generated module imports
+`keiro-core` for that policy and `mmzk-typeid` for the prefix-indexed type; its
+per-field domain identity is persisted independently of private aggregate ID
+ownership.
+
 The implementation gate is a generated, fixture-driven conformance harness. It checks both
 binding laws, canonical identity, declared branch coverage, missing/null/unknown-field policy,
 generated codec round trips, pinned event payload bytes, projection witness/getter agreement,
@@ -257,6 +267,10 @@ the totality and ownership requirements above.
   and Keiki exact-domain contract. Binding mode cannot widen, normalize, or
   redefine the declared prefix domain; versions 1 and 2 retain their released
   generated-ID behavior.
+- Language-4 public contract TypeID fields reuse that admission contract in
+  prefix-indexed DTO fields and field-path-aware decoders. They remain public
+  integration types with canonical JSON text, not aliases of private aggregate
+  IDs; versions 1 through 3 retain their released `Text` DTO representation.
 - Bound scalar whole-value projections reuse the declared total nominal binding
   and canonical identity. Same-declaration IDs and enums also reuse that
   authority for equality: consumer `KindID` IDs and all enums have exact

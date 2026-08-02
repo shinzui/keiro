@@ -1,0 +1,2 @@
+BREAKING: emergency contract-typeid-domain IncidentTransferNeedDeclared.incidentId: contract TypeID admission changed legacy-unchecked -> keiro-dsl/id-domain/typeid-v7/1(prefix=inc,json=canonical-json-text); generated Haskell changes from Text to KindID "inc" while valid JSON stays canonical text; newly generated consumers reject malformed, wrong-prefix, non-canonical, and non-v7 values [ContractTypeIdDomainChanged]
+    vector: public-consumer=breaking consumer-build=breaking rollout=drain-required,producer-first

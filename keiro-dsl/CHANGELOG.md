@@ -6,6 +6,35 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `DiagnosticCode` gains the append-only `ContractInvalidTypeIdPrefix` and
+  `ContractTypeIdDomainChanged` constructors, and `RolloutConstraint` gains
+  `RolloutProducerFirst`. Exhaustive matches over these exported types must be
+  extended.
+
+### New Features
+
+- Adds `language keiro-dsl 4`, selecting syntax profile 2 and
+  `keiro-dsl/runtime-semantics/3`. Aggregate ID admission, fold fingerprints,
+  replay classification, and versions 1 through 3 remain unchanged.
+- Language-4 public contract fields declared as `typeid "inc"` now scaffold as
+  `KindID "inc"`. Generated encoders keep canonical JSON strings, while
+  field-path-aware decoders reject malformed text, the wrong prefix,
+  non-canonical spelling, and non-v7 UUIDs through Keiro's frozen admission
+  policy. Their manifests add `keiro-core` and `mmzk-typeid`; single-file and
+  workspace records persist stable per-field ID-domain identities.
+- Adds service-aware `scaffoldContractForService`,
+  `manifestDependenciesForService`, and `renderManifestForService` entry points.
+  Existing `Spec`-only functions remain legacy/version-1 wrappers, and CLI and
+  workspace semantic routes use the checked service.
+- Diffing an unchanged contract TypeID field from language 3 to language 4 now
+  emits `ContractTypeIdDomainChanged`: public consumers and consumer builds are
+  breaking, with producer-first and drain-required rollout. Producers must emit
+  the frozen TypeID-v7 domain, legacy-invalid in-flight messages must drain or
+  be remediated, and consumers must then be re-scaffolded, recompiled, and run
+  through contract conformance.
+
 ## 0.8.0.0 — 2026-08-01
 
 ### Breaking Changes

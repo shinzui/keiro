@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-08-01T22:15:14Z
+timestamp: 2026-08-02T04:49:52Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -111,6 +111,7 @@ The landed inventory is:
 | Nominal binding, fixture, canonical, initial, or representation change | Required facts are checked but consumer behavior is not inspected | Separate consumer-build, snapshot-hydration, wire-history, and replay findings target each containing use; fixture-only changes request evidence without claiming runtime change | Recompile and rerun conformance, invalidate register snapshots when named, and audit affected old event histories for opaque binding changes |
 | Bound-ID adoption at an existing event use | The new declaration and TypeID prefix are valid | `NominalIdDecoderTightened` is a private-history-read advisory even when valid wire bytes and prefix are unchanged | A committed valid pre-adoption payload must decode, and a targeted real-log audit must pass; already-valid bytes need no fabricated upcast |
 | Enforced ID-domain adoption, removal, or change | The effective language contract selects one checked domain; current construction, JSON, literals, and consumer conversion validate before use | `IdDomainContractChanged` classifies private history, old-binary reads, snapshot hydration, public consumers, persisted identity, consumer builds, and producer-last rollout independently | Generated historical event codecs alone retain the internal legacy constructor; generated/consumer harnesses prove exact runtime/Keiki agreement and binding representation probes; snapshots miss under ADR 0003 and real affected streams are audited before cutover |
+| Language-4 public-contract TypeID admission | `ContractInvalidTypeIdPrefix` rejects an invalid declared prefix before scaffolding; versions 1 through 3 retain their released permissive contract graph | For an unchanged `typeid` field, `ContractTypeIdDomainChanged` reports public-consumer and consumer-build breakage plus producer-first and drain-required rollout; a source field edit remains only `ContractFieldChanged` | Generated `KindID prefix` DTOs keep canonical JSON text for valid values and reject malformed, wrong-prefix, non-canonical, and non-v7 input at the field path; make producers conform, drain or remediate invalid in-flight messages, then re-scaffold and compile consumers and run contract conformance |
 | Mapped structural wire change | Single-spec shape remains valid | Recursive mapped diagnostic at every complete command, event, and register root path; event history, old-binary rollout, snapshot hydration, and consumer build are classified independently | Version and upcast affected events, rebuild affected snapshots, and recompile affected consumers according to the finding's compatibility vector |
 | Mapped source, binding, fixture, canonical identity, or opaque-codec provenance change | Required facts and identities are checked | Declaration-level build or identity finding; opaque codec-version changes remain historical-read hazards even when no structural shape is visible | Recompile consumers, bump binding provenance, or migrate the declared opaque codec as directed; no Haskell source inspection is claimed |
 | Structural binding correctness | The declaration names one total binding and a non-empty fixture corpus | Binding-version and canonical-identity changes are consumer-build findings | Generated conformance checks domain→shape→domain and shape→domain→shape for every fixture; a transposed-field mutation must fail |
@@ -129,7 +130,8 @@ Every cross-spec finding carries a compatibility vector over six surfaces:
 `snapshot-hydration`, `public-consumer`, `persisted-identity`, and
 `consumer-build`. Each verdict is `compatible`, `advisory`, `breaking`, or
 `n/a`. Rollout constraints are a zero-or-more set using the vocabulary below:
-`stop-the-world`, `workers-first`, `drain-required`, and `producer-last`. The
+`stop-the-world`, `workers-first`, `drain-required`, `producer-last`, and
+`producer-first`. The
 default gate contains every surface except `old-binary-read-new-events`, which
 preserves the previous merge-blocking behavior; repeated `--gate` flags only
 add surfaces. ADDITIVE/WARNING/BREAKING headlines and append-only
@@ -182,6 +184,10 @@ The same evidence boundaries determine rollout ordering:
   have no automatic migration boundary. Firers/consumers must learn new shapes
   before producers write them, old decoders remain until backlogs drain, and a
   changed workflow result gets a new step name.
+- Tightening an unchanged public contract `typeid` field to language-4
+  admission reverses that generic consumer-first order: every producer must
+  emit the frozen TypeID-v7 domain first, then legacy-invalid in-flight
+  messages must drain or be remediated before strict generated consumers deploy.
 - Non-neutral transducer changes require the targeted
   real-log audit before traffic switches. Full-store replay remains a
   one-time-cutover and forensics mode, not a routine deploy gate.
