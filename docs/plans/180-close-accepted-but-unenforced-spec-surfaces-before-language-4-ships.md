@@ -53,7 +53,9 @@ This section must always reflect the actual current state of the work.
   vocabularies, and numeric floors.  `cabal test keiro-dsl-test
   --test-show-details=direct` passed 477 examples after the two reviewed Tier A
   frontend-oracle corrections.
-- [ ] Milestone 2: duplicate and collision detection across declarations.
+- [x] (2026-08-02 15:07Z) Milestone 2: duplicate and collision detection across
+  declarations.  `cabal test keiro-dsl-test --test-show-details=direct` passed
+  479 examples.
 - [ ] Milestone 3: stable-identity and external-name constraints.
 - [ ] Milestone 4: language-4 semantic couplings for the intake envelope,
   contract topology, and wire clause.
@@ -226,6 +228,12 @@ this section into docs/adr/. Keep task-local execution details here.
   attempts, contract schema versions, intake decode schema versions, and
   read-model versions, while the identical graphs remain accepted under
   language 3.  The focused DSL suite passes all 477 examples.
+- Milestone 2 outcome: `check` now rejects every duplicate declaration that
+  would produce unusable generated behavior in all language versions.  Under
+  language 4 it also rejects discriminator shadows, duplicate registers and
+  nominal declarations, duplicate emit-map cases, and transitions hidden by
+  an unguarded sibling; the matching language-3 graphs remain accepted.  The
+  focused DSL suite passes all 479 examples.
 
 
 ## Context and Orientation

@@ -343,6 +343,17 @@ data DiagnosticCode
   | ContractSchemaVersionBelowMinimum
   | ReadModelVersionBelowMinimum
   | IntakeDecodeSchemaVersionBelowMinimum
+  | AggregateDuplicateFieldName
+  | ContractDuplicateFieldName
+  | ContractFieldShadowsDiscriminator
+  | TransitionDuplicateUnguarded
+  | ContractDuplicateEvent
+  | ContractDuplicateTopicAlias
+  | AggregateDuplicateState
+  | AggregateDuplicateRegister
+  | NominalDuplicateDeclaration
+  | EmitMapDuplicateCase
+  | TransitionUnguardedSibling
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -389,7 +400,7 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract spec =
-  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
+  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -1278,8 +1289,8 @@ asciiAlphaNumOrUnderscore :: Char -> Bool
 asciiAlphaNumOrUnderscore c = asciiUpper c || asciiLower c || (c >= '0' && c <= '9') || c == '_'
 
 -- | Rules over namespaces shared by the whole specification.
-specLevelRules :: Spec -> [Diagnostic]
-specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ ruleDiagnostics
+specLevelRules :: EffectiveLanguageContract -> Spec -> [Diagnostic]
+specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ ruleDiagnostics
   where
     duplicateNodes =
       [ mkErr (locLine loc) DuplicateNodeName $
@@ -1303,6 +1314,18 @@ specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefi
           "id '" <> idName d <> "' reuses prefix '" <> idPrefix d <> "'"
       | d <- duplicatesBy idPrefix (specIds spec)
       ]
+    duplicateDeclarations =
+      [ mkErr (locLine loc) NominalDuplicateDeclaration $
+          "duplicate " <> category <> " declaration '" <> name <> "'; the last declaration would silently replace the earlier one"
+      | enforcesSpecSurfaceClosures languageContract,
+        (category, name, loc) <- duplicatesBy (\(category, name, _) -> (category, name)) declarationOrigins
+      ]
+    declarationOrigins =
+      [("id", idName value, idLoc value) | value <- specIds spec]
+        <> [("enum", enumName value, enumLoc value) | value <- specEnums spec]
+        <> [("nominal scalar", nominalScalarName value, nominalScalarLoc value) | value <- specNominalScalars spec]
+        <> [("mapped", mappedName value, mappedLoc value) | value <- specMapped spec]
+        <> [("rule", ruleName value, ruleLoc value) | value <- specRules spec]
     ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
 
 nodeIdentity :: Node -> (Text, Name, Loc)
@@ -1320,12 +1343,12 @@ nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
 validateNode :: EffectiveLanguageContract -> Spec -> Node -> [Diagnostic]
-validateNode _languageContract spec (NAggregate agg) = validateAggregate spec agg
+validateNode languageContract spec (NAggregate agg) = validateAggregate languageContract spec agg
 validateNode _languageContract spec (NProcess p) = validateProcess spec p
 validateNode _languageContract spec (NRouter router) = validateRouter spec router
 validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
 validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling spec i
-validateNode _languageContract spec (NEmit e) = validateEmit spec e
+validateNode languageContract spec (NEmit e) = validateEmit languageContract spec e
 validateNode languageContract spec (NPublisher p) = validatePublisher languageContract spec p
 validateNode _languageContract _spec (NWorkqueue w) = validateWorkqueue w
 validateNode _languageContract spec (NPgmqDispatch d) = validatePgmqDispatch spec d
@@ -1335,7 +1358,12 @@ validateNode _languageContract spec (NOperation o) = validateOperation spec o
 
 validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
-  typeIdPrefixErrors <> schemaVersionFloor
+  typeIdPrefixErrors
+    <> schemaVersionFloor
+    <> duplicateEvents
+    <> duplicateTopicAliases
+    <> duplicateFields
+    <> discriminatorShadows
   where
     typeIdPrefixErrors =
       [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
@@ -1360,6 +1388,36 @@ validateContract languageContract contract =
           "contract '" <> ctrName contract <> "' schemaVersion must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
         ctrSchemaVersion contract < 1
+      ]
+    duplicateEvents =
+      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateEvent $
+          "contract '" <> ctrName contract <> "' declares event '" <> ceName event <> "' more than once"
+      | event <- duplicatesBy ceName (ctrEvents contract)
+      ]
+    duplicateTopicAliases =
+      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateTopicAlias $
+          "contract '" <> ctrName contract <> "' declares topic alias '" <> alias <> "' more than once"
+      | (alias, _) <- duplicatesBy fst (ctrTopics contract)
+      ]
+    duplicateFields =
+      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateFieldName $
+          "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' declares field '" <> cfName field <> "' more than once"
+      | event <- ctrEvents contract,
+        field <- duplicatesBy cfName (ceFields event)
+      ]
+    discriminatorShadows =
+      [ mkErr (locLine (ctrLoc contract)) ContractFieldShadowsDiscriminator $
+          "contract '"
+            <> ctrName contract
+            <> "' event '"
+            <> ceName event
+            <> "' field '"
+            <> cfName field
+            <> "' shadows the payload discriminator"
+      | enforcesSpecSurfaceClosures languageContract,
+        event <- ctrEvents contract,
+        field <- ceFields event,
+        cfName field == ctrDiscriminator contract
       ]
 
 -- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
@@ -1749,13 +1807,19 @@ intakeCoupling spec i = case lookupContract (inkContract i) of
   where
     lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
 
-validateEmit :: Spec -> EmitNode -> [Diagnostic]
-validateEmit spec e = skipRule ++ coupling
+validateEmit :: EffectiveLanguageContract -> Spec -> EmitNode -> [Diagnostic]
+validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
   where
     el = locLine (emLoc e)
     skipRule =
       [ mkErr el EmitSkipMissing ("emit '" <> emName e <> "' map must end with an explicit '_ => skip' catch-all (hole-kind 7 optionality)")
       | not (emSkip e)
+      ]
+    duplicateCases =
+      [ mkErr (locLine (emrLoc row)) EmitMapDuplicateCase $
+          "emit '" <> emName e <> "' repeats map discriminant '" <> emrValue row <> "'; the first row would shadow this row"
+      | enforcesSpecSurfaceClosures languageContract,
+        row <- duplicatesBy emrValue (emMap e)
       ]
     coupling = case [c | c <- specContracts spec, ctrName c == emContract e] of
       [] -> [mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' references undeclared contract '" <> emContract e <> "'")]
@@ -2179,8 +2243,8 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
     isDeadLetter DDeadLetter {} = True
     isDeadLetter _ = False
 
-validateAggregate :: Spec -> Aggregate -> [Diagnostic]
-validateAggregate spec agg =
+validateAggregate :: EffectiveLanguageContract -> Spec -> Aggregate -> [Diagnostic]
+validateAggregate languageContract spec agg =
   concat
     [ duplicateMembers,
       declaredRefs,
@@ -2231,6 +2295,54 @@ validateAggregate spec agg =
                "aggregate '" <> aggName agg <> "' declares event '" <> evName e <> "' more than once"
            | e <- duplicatesBy evName (aggEvents agg)
            ]
+        ++ [ mkErr (locLine (aggregateFieldLoc field)) AggregateDuplicateFieldName $
+               "aggregate '" <> aggName agg <> "' command '" <> cmdName command <> "' declares field '" <> aggregateFieldName field <> "' more than once"
+           | command <- aggCommands agg,
+             field <- duplicatesBy aggregateFieldName (cmdFields command)
+           ]
+        ++ [ mkErr (locLine (aggregateFieldLoc field)) AggregateDuplicateFieldName $
+               "aggregate '" <> aggName agg <> "' event '" <> evName event <> "' declares field '" <> aggregateFieldName field <> "' more than once"
+           | event <- aggEvents agg,
+             EventFields fields <- [evBody event],
+             field <- duplicatesBy aggregateFieldName fields
+           ]
+        ++ [ mkErr (locLine (stLoc state)) AggregateDuplicateState $
+               "aggregate '" <> aggName agg <> "' declares state '" <> stName state <> "' more than once"
+           | state <- duplicatesBy stName (aggStates agg)
+           ]
+        ++ [ mkErr (locLine (regLoc register)) AggregateDuplicateRegister $
+               "aggregate '" <> aggName agg <> "' declares register '" <> regName register <> "' more than once"
+           | enforcesSpecSurfaceClosures languageContract,
+             register <- duplicatesBy regName (aggRegs agg)
+           ]
+        ++ [ mkErr (locLine (tLoc transition)) TransitionDuplicateUnguarded $
+               "aggregate '"
+                 <> aggName agg
+                 <> "' has more than one live unguarded transition for '"
+                 <> tSource transition
+                 <> " -- "
+                 <> tCommand transition
+                 <> "'; every matching command would be ambiguous"
+           | group <- duplicateGroupsBy transitionKey unguardedTransitions,
+             transition <- group
+           ]
+        ++ [ mkErr (locLine (tLoc guarded)) TransitionUnguardedSibling $
+               "aggregate '"
+                 <> aggName agg
+                 <> "' guarded transition '"
+                 <> tSource guarded
+                 <> " -- "
+                 <> tCommand guarded
+                 <> "' overlaps an unguarded sibling at line "
+                 <> tInt (locLine (tLoc unguarded))
+           | enforcesSpecSurfaceClosures languageContract,
+             guarded <- liveTransitions,
+             tGuard guarded /= Nothing,
+             unguarded : _ <- [[candidate | candidate <- unguardedTransitions, transitionKey candidate == transitionKey guarded]]
+           ]
+    liveTransitions = [transition | transition <- aggTransitions agg, tMode transition == TmLive]
+    unguardedTransitions = [transition | transition <- liveTransitions, tGuard transition == Nothing]
+    transitionKey transition = (tSource transition, tCommand transition)
 
     eventBodyRefs =
       [ mkErr (locLine (evLoc e)) UndeclaredCommand $
@@ -2678,3 +2790,11 @@ duplicatesBy key xs =
   | (index, x) <- zip [0 :: Int ..] xs,
     key x `elem` map key (take index xs)
   ]
+
+-- | Return every source-ordered group whose selected key occurs at least
+-- twice. New diagnostics that describe a relationship use this helper; the
+-- older 'duplicatesBy' contract remains first-shadow only.
+duplicateGroupsBy :: (Ord key) => (a -> key) -> [a] -> [[a]]
+duplicateGroupsBy key values =
+  filter ((> 1) . length) . Map.elems $
+    Map.fromListWith (flip (<>)) [(key value, [value]) | value <- values]

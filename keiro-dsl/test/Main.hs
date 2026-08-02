@@ -2052,6 +2052,73 @@ main = hspec $ do
       forM_ floors $ \(candidate, expected) -> do
         serviceErrorCodes 3 candidate `shouldNotContain` [expected]
         serviceErrorCodes 4 candidate `shouldContain` [expected]
+    it "rejects duplicate declarations whose generated behavior cannot work" $ do
+      reservation <- specOf "test/fixtures/reservation.keiro"
+      integration <- specOf "test/fixtures/emit.keiro"
+      let duplicateCommandField =
+            modifyAggregate
+              "Reservation"
+              (\aggregate -> aggregate {aggCommands = updateFirst (\command -> command {cmdFields = duplicateFirst (cmdFields command)}) (aggCommands aggregate)})
+              reservation
+          duplicateState = modifyAggregate "Reservation" (\aggregate -> aggregate {aggStates = duplicateFirst (aggStates aggregate)}) reservation
+          duplicateTransition =
+            modifyAggregate
+              "Reservation"
+              (\aggregate -> aggregate {aggTransitions = aggTransitions aggregate <> take 1 (reverse (aggTransitions aggregate))})
+              reservation
+          duplicateContractField =
+            mapContract
+              (\contract -> contract {ctrEvents = updateFirst (\event -> event {ceFields = duplicateFirst (ceFields event)}) (ctrEvents contract)})
+              integration
+          duplicateContractEvent = mapContract (\contract -> contract {ctrEvents = duplicateFirst (ctrEvents contract)}) integration
+          duplicateTopicAlias = mapContract (\contract -> contract {ctrTopics = duplicateFirst (ctrTopics contract)}) integration
+          cases =
+            [ (duplicateCommandField, AggregateDuplicateFieldName),
+              (duplicateState, AggregateDuplicateState),
+              (duplicateTransition, TransitionDuplicateUnguarded),
+              (duplicateContractField, ContractDuplicateFieldName),
+              (duplicateContractEvent, ContractDuplicateEvent),
+              (duplicateTopicAlias, ContractDuplicateTopicAlias)
+            ]
+      forM_ cases $ \(candidate, expected) -> errorCodes candidate `shouldContain` [expected]
+    it "gates ambiguous and silently shadowed duplicate surfaces on language 4" $ do
+      reservation <- specOf "test/fixtures/reservation.keiro"
+      integration <- specOf "test/fixtures/emit.keiro"
+      let duplicateRegister = modifyAggregate "Reservation" (\aggregate -> aggregate {aggRegs = duplicateFirst (aggRegs aggregate)}) reservation
+          duplicateNominal = reservation {specIds = duplicateFirst (specIds reservation)}
+          duplicateMap = mapEmit (\emitNode -> emitNode {emMap = duplicateFirst (emMap emitNode)}) integration
+          shadowDiscriminator =
+            mapContract
+              ( \contract ->
+                  contract
+                    { ctrEvents =
+                        updateFirst
+                          (\event -> event {ceFields = updateFirst (\field -> field {cfName = ctrDiscriminator contract}) (ceFields event)})
+                          (ctrEvents contract)
+                    }
+              )
+              integration
+          guardedSibling =
+            modifyAggregate
+              "Reservation"
+              ( \aggregate ->
+                  aggregate
+                    { aggTransitions =
+                        aggTransitions aggregate
+                          <> [transition {tGuard = Just (EAtom (ABool True))} | transition <- take 1 (reverse (aggTransitions aggregate))]
+                    }
+              )
+              reservation
+          cases =
+            [ (duplicateRegister, AggregateDuplicateRegister),
+              (duplicateNominal, NominalDuplicateDeclaration),
+              (duplicateMap, EmitMapDuplicateCase),
+              (shadowDiscriminator, ContractFieldShadowsDiscriminator),
+              (guardedSibling, TransitionUnguardedSibling)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
     it "rejects a missing status-map as StatusMapNotTotal" $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
       codes `shouldContain` [StatusMapNotTotal]
@@ -5556,6 +5623,17 @@ mapIntake update spec =
         ]
     }
 
+mapEmit :: (EmitNode -> EmitNode) -> Spec -> Spec
+mapEmit update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NEmit emitNode -> NEmit (update emitNode)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
 mapPublisher :: (PublisherNode -> PublisherNode) -> Spec -> Spec
 mapPublisher update spec =
   spec
@@ -5574,6 +5652,16 @@ serviceErrorCodes versionNumber spec =
     service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
       Nothing -> error ("unsupported test language version " <> show versionNumber)
       Just languageContract -> CheckedService languageContract spec
+
+duplicateFirst :: [a] -> [a]
+duplicateFirst = \case
+  [] -> []
+  first : rest -> first : first : rest
+
+updateFirst :: (a -> a) -> [a] -> [a]
+updateFirst update = \case
+  [] -> []
+  first : rest -> update first : rest
 
 removeReadModel :: Name -> Spec -> Spec
 removeReadModel target spec =
