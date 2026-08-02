@@ -1,0 +1,9 @@
+language keiro-dsl 1
+context feature
+aggregate Counter
+  regs
+  states Open
+  command Tick { }
+  Open -- Tick -->
+    implementation hole
+    goto Open

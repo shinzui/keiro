@@ -1,0 +1,6 @@
+language keiro-dsl 1
+context feature
+aggregate Counter
+  regs
+    value Integer = 0
+  states Open

@@ -1,0 +1,8 @@
+# The demo-project service workspace: one aggregate per member file plus a
+# member owning the shared declarations.
+service demo-project
+module Demo.Modules.Project
+layout collocated
+spec domain/project-artifact.keiro
+spec domain/project.keiro
+spec domain/shared.keiro

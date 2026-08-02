@@ -1,0 +1,7 @@
+language keiro-dsl 1
+context demo-project
+
+aggregate Beta
+  regs
+  states Pending
+  command !!! not a spec !!!

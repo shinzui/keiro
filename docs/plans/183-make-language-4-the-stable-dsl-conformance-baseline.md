@@ -51,9 +51,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-02T23:01:34Z) Milestone 1: represented version 4 as the sole stable authoring
   language and made all new skeletons and inspection output expose that status without removing
   versions 1 through 3.
-- [ ] Milestone 2: separate the current conformance corpus from the frozen frontend-compatibility
-  corpus, make semantic test helpers service-aware by default, and add an enforced baseline
-  manifest.
+- [x] (2026-08-02T23:26:01Z) Milestone 2: separated the current conformance corpus from the
+  frozen frontend-compatibility corpus, made semantic test helpers service-aware by default, and
+  added an enforced baseline manifest with explicit transitional migration rows for Milestone 3.
 - [ ] Milestone 3: migrate coherent fixture families and primary compiled conformance components
   to version 4, regenerate their generated modules, and repair consumers against the complete
   version-4 API.
@@ -72,6 +72,16 @@ implementation. Provide concise evidence.
   by `goto Done`, so removing the mirror register and write made all eleven skeleton kinds pass
   checked version-4 validation and scaffolding. Evidence: the focused skeleton group initially
   failed one of eleven stable cases and then passed all eleven after the repair.
+
+- Surprise: Routing the in-memory fold, diff, and replay helpers through the stable contract made
+  ten existing unit examples fail immediately. The failures were useful evidence rather than
+  infrastructure defects: old reservation fixtures use an unqualified enum constructor, the
+  scalar fixture intentionally leaves command/register roots ambiguous, and one replay pairing
+  test invents names that resolve to no field. Evidence: the full `keiro-dsl-test` run reported
+  `FoldGuardResolutionFailed` for `TotalDivert`, `observedAt`, `revision`, and the synthetic guard
+  names. Those examples remain explicitly routed through locally named `legacy...` helpers until
+  their fixture families are repaired together in Milestone 3; the full 512-example unit suite is
+  green at this checkpoint.
 
 
 ## Decision Log
@@ -120,6 +130,14 @@ Record every decision made while working on the plan.
   old ambiguous `parseSpec` behavior and keeps the intermediate commit compiling.
   Date: 2026-08-02
 
+- Decision: Permit the baseline manifest's temporary `migration-pending` role only at the
+  Milestone-2 checkpoint, and eliminate every such row while migrating the corpus in Milestone 3.
+  Rationale: The inventory must become enforceable before the large fixture and component rewrite
+  begins, but classifying ordinary old fixtures as permanent compatibility evidence would defeat
+  the policy. The temporary role makes the remaining work exact: 225 fixtures and 31 compiled
+  components, with no prefix-wide exemption.
+  Date: 2026-08-02
+
 
 ## Outcomes & Retrospective
 
@@ -135,6 +153,18 @@ and source/workspace inspection exposes it. Focused validation passed 2 language
 15 skeleton examples, 5 released-profile examples, 7 fold/replay examples, and the compiled
 skeleton component. The aggregate starter needed one strict-validation repair; the remaining ten
 starter bodies were already valid under version 4.
+
+Milestone 2 split the frozen frontend oracle into 15 dedicated source vectors and two dedicated
+workspace scenarios (seven member/manifest files) while retaining the released exact diagnostic
+bytes. The new baseline accounts for all 239 fixture sources and all 33 compiled components: at
+this transitional checkpoint it records 13 fixture compatibility proofs, 225 migration-pending
+fixtures, one stable component, one compatibility component, and 31 migration-pending components.
+The service-aware regression observes version-4 `KindID "inc"`/`KindID "rsv"` output and the
+durable contract-field identity. Both required mutations were exercised: changing the unlisted
+stable contract fixture to version 1 named its path in two baseline failures, and routing the
+scaffold helper through `legacyCheckedService` changed the generated fields to `Text` and failed
+the capability assertion. Restoring both mutations returned the focused groups and the complete
+512-example unit suite to green.
 
 
 ## Context and Orientation
@@ -653,3 +683,7 @@ generated modules import those packages. Cross-repository dependency APIs do not
 2026-08-02: Recorded the completed Milestone-1 implementation, validation evidence, the aggregate
 starter repair exposed by strict version-4 checking, and the temporary explicit compatibility
 status of the checked-in skeleton conformance tree.
+
+2026-08-02: Recorded the completed Milestone-2 compatibility-oracle split, enforced transitional
+inventory, service-aware helper boundary, mutation evidence, and exact remaining Milestone-3
+migration counts.

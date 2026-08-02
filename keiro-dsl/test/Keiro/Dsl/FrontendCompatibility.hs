@@ -269,16 +269,16 @@ readCompatibilityManifest :: IO CompatibilityManifest
 readCompatibilityManifest = readManifest
 
 sourceFixturePaths :: IO [FilePath]
-sourceFixturePaths = fixturePaths ".keiro"
+sourceFixturePaths = fixturePaths "keiro-dsl/test/frontend-0.7/sources" ".keiro"
 
 workspaceFixturePaths :: IO [FilePath]
-workspaceFixturePaths = fixturePaths ".keiro-workspace"
+workspaceFixturePaths = fixturePaths "keiro-dsl/test/frontend-0.7/workspaces" ".keiro-workspace"
 
-fixturePaths :: String -> IO [FilePath]
-fixturePaths extension = do
-  fixtureRoot <- resolveRepoDirectory "keiro-dsl/test/fixtures"
+fixturePaths :: FilePath -> String -> IO [FilePath]
+fixturePaths rootPath extension = do
+  fixtureRoot <- resolveRepoDirectory rootPath
   relative <- walk fixtureRoot ""
-  pure . sort $ ["keiro-dsl/test/fixtures" </> path | path <- relative, takeExtension path == extension]
+  pure . sort $ [rootPath </> path | path <- relative, takeExtension path == extension]
   where
     walk root relative = do
       entries <- sort <$> listDirectory (root </> relative)
@@ -368,11 +368,12 @@ renderSemantic path source = pure $ case parseSource path source of
 
 renderWorkspaceMemberFailure :: IO Text
 renderWorkspaceMemberFailure = do
-  let path = "keiro-dsl/test/fixtures/workspace-member-parse-failed/service.keiro-workspace"
-  resolved <- resolveRepoPath path
-  loaded <- loadWorkspace (fileContentSource (takeDirectory resolved)) path
+  let vectorPath = "keiro-dsl/test/frontend-0.7/workspaces/member-parse-failed/service.keiro-workspace"
+      releasedDiagnosticPath = "keiro-dsl/test/fixtures/workspace-member-parse-failed/service.keiro-workspace"
+  resolved <- resolveRepoPath vectorPath
+  loaded <- loadWorkspace (fileContentSource (takeDirectory resolved)) releasedDiagnosticPath
   pure $ case loaded of
-    Left failure -> T.stripEnd (T.unlines (renderWorkspaceFailure path failure)) <> "\n"
+    Left failure -> T.stripEnd (T.unlines (renderWorkspaceFailure releasedDiagnosticPath failure)) <> "\n"
     Right _ -> error "workspace-member-parse-failed unexpectedly composed"
 
 integerFeatureSource :: Text

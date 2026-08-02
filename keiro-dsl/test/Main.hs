@@ -28,6 +28,7 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CanonicalEncoding (foldFingerprint128)
 import Keiro.Dsl.CodecCompare
+import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
@@ -85,10 +86,16 @@ aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> T.Text
 aggregateFoldSurfaceForService service aggregate = resolvedFold (CheckedFold.aggregateFoldSurfaceForService service aggregate)
 
 aggregateFoldFingerprint :: Spec -> Aggregate -> T.Text
-aggregateFoldFingerprint spec aggregate = aggregateFoldFingerprintForService (legacyCheckedService spec) aggregate
+aggregateFoldFingerprint spec aggregate = aggregateFoldFingerprintForService (stableCheckedService spec) aggregate
 
 aggregateFoldSurface :: Spec -> Aggregate -> T.Text
-aggregateFoldSurface spec aggregate = aggregateFoldSurfaceForService (legacyCheckedService spec) aggregate
+aggregateFoldSurface spec aggregate = aggregateFoldSurfaceForService (stableCheckedService spec) aggregate
+
+legacyAggregateFoldFingerprint :: Spec -> Aggregate -> T.Text
+legacyAggregateFoldFingerprint spec aggregate = aggregateFoldFingerprintForService (legacyCheckedService spec) aggregate
+
+legacyAggregateFoldSurface :: Spec -> Aggregate -> T.Text
+legacyAggregateFoldSurface spec aggregate = aggregateFoldSurfaceForService (legacyCheckedService spec) aggregate
 
 diffServices :: CheckedService -> CheckedService -> [Change]
 diffServices old new = resolvedFold (CheckedDiff.diffServices old new)
@@ -97,20 +104,38 @@ diffSources :: ParsedSource -> ParsedSource -> [Change]
 diffSources old new = resolvedFold (CheckedDiff.diffSources old new)
 
 diffSpecs :: Spec -> Spec -> [Change]
-diffSpecs old new = diffServices (legacyCheckedService old) (legacyCheckedService new)
+diffSpecs old new = diffServices (stableCheckedService old) (stableCheckedService new)
+
+legacyDiffSpecs :: Spec -> Spec -> [Change]
+legacyDiffSpecs old new = diffServices (legacyCheckedService old) (legacyCheckedService new)
 
 diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 diffWorkspaces old new = resolvedFold (CheckedWorkspaceDiff.diffWorkspaces old new)
 
 replayImpactSpecs :: Spec -> Spec -> ReplayImpact
 replayImpactSpecs old new =
+  resolvedFold (ReplayImpact.replayImpactServices (stableCheckedService old) (stableCheckedService new))
+
+legacyReplayImpactSpecs :: Spec -> Spec -> ReplayImpact
+legacyReplayImpactSpecs old new =
   resolvedFold (ReplayImpact.replayImpactServices (legacyCheckedService old) (legacyCheckedService new))
 
 nominalEqualityIdentities :: Spec -> [T.Text]
-nominalEqualityIdentities = nominalEqualityIdentitiesForService . legacyCheckedService
+nominalEqualityIdentities = nominalEqualityIdentitiesForService . stableCheckedService
+
+stableCheckedService :: Spec -> CheckedService
+stableCheckedService = checkedService stableSourceLanguage
+
+stableSourceLanguage :: SourceLanguage
+stableSourceLanguage =
+  DeclaredLanguage
+    { declaredLanguageVersion = currentStableLanguageVersion,
+      languageVersionLoc = noLoc
+    }
 
 main :: IO ()
 main = hspec $ do
+  conformanceBaselineSpec
   frontendCompatibilitySpec
   frontendSurfaceSpec
   frontendProfilesSpec
@@ -513,21 +538,22 @@ main = hspec $ do
           changes = diffSources legacySource declaredSource
           vectors = [ckVector kind | change <- changes, let kind = workspaceChangeKind change]
       map changeCode changes `shouldBe` [SourceLanguageDeclarationChanged]
-      diffSpecs oldSpec newSpec `shouldBe` []
+      legacyDiffSpecs oldSpec newSpec `shouldBe` []
       vectors `shouldSatisfy` all (\compatibility -> all ((== VCompatible) . (`verdictFor` compatibility)) [minBound .. maxBound])
       case changes of
         [change] ->
           remediationFor (ckContext (workspaceChangeKind change)) SourceLanguageDeclarationChanged
             `shouldBe` (RemedyNoSemanticAction :| [])
         _ -> expectationFailure "expected one source-language change"
-      let generatedSurface spec =
+      let legacyGeneratedSurface spec =
             [ (modulePath scaffoldModule, moduleText scaffoldModule, kind scaffoldModule)
             | scaffoldModule <- scaffoldModules (defaultContext (specContext spec)) spec
             ]
-      generatedSurface oldSpec `shouldBe` generatedSurface newSpec
-      [aggregateFoldFingerprint oldSpec aggregate | NAggregate aggregate <- specNodes oldSpec]
-        `shouldBe` [aggregateFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
-      replayImpactSpecs oldSpec newSpec `shouldBe` ReplayNeutral
+          legacyFoldFingerprint spec aggregate = aggregateFoldFingerprintForService (legacyCheckedService spec) aggregate
+      legacyGeneratedSurface oldSpec `shouldBe` legacyGeneratedSurface newSpec
+      [legacyFoldFingerprint oldSpec aggregate | NAggregate aggregate <- specNodes oldSpec]
+        `shouldBe` [legacyFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
+      legacyReplayImpactSpecs oldSpec newSpec `shouldBe` ReplayNeutral
 
     it "exposes stable JSON inspection for a source and canonically ordered workspace members" $ do
       (sourceCode, sourceOut, sourceErr) <- runKeiroDsl ["inspect", "test/fixtures/reservation.keiro", "--format=json"]
@@ -2016,11 +2042,11 @@ main = hspec $ do
       canonical <- parseInlineSpec "<time>" source
       alias <- parseInlineSpec "<utctime>" (T.replace ":Time" ":UTCTime" (T.replace " Time =" " UTCTime =" source))
       renderSpec alias `shouldBe` renderSpec canonical
-      diffSpecs canonical alias `shouldBe` []
-      aggregateFoldFingerprint canonical (onlyAggregate canonical)
-        `shouldBe` aggregateFoldFingerprint alias (onlyAggregate alias)
-      aggregateFoldSurface canonical (onlyAggregate canonical)
-        `shouldBe` aggregateFoldSurface alias (onlyAggregate alias)
+      legacyDiffSpecs canonical alias `shouldBe` []
+      legacyAggregateFoldFingerprint canonical (onlyAggregate canonical)
+        `shouldBe` legacyAggregateFoldFingerprint alias (onlyAggregate alias)
+      legacyAggregateFoldSurface canonical (onlyAggregate canonical)
+        `shouldBe` legacyAggregateFoldSurface alias (onlyAggregate alias)
     it "keeps the committed scalar conformance generated tree fresh" $ do
       spec <- specOf "test/fixtures/aggregate-scalars.keiro"
       let modules = scaffoldModules (defaultContext (specContext spec)) spec
@@ -2657,26 +2683,26 @@ main = hspec $ do
       source <- readTestText "test/fixtures/reservation.keiro"
       first <- parseInlineSpec "<first>" source
       second <- parseInlineSpec "<second>" ("\n\n" <> renderSpec first <> "\n")
-      aggregateFoldFingerprint first (onlyAggregate first)
-        `shouldBe` aggregateFoldFingerprint second (onlyAggregate second)
+      legacyAggregateFoldFingerprint first (onlyAggregate first)
+        `shouldBe` legacyAggregateFoldFingerprint second (onlyAggregate second)
     it "changes for transition writes, guards, and referenced rule bodies" $ do
       base <- specOf "test/fixtures/reservation.keiro"
       writeChanged <- specOf "test/fixtures/reservation-foldchange.keiro"
       guardChanged <- specOf "test/fixtures/reservation-guard-tightened.keiro"
       source <- readTestText "test/fixtures/reservation.keiro"
       ruleChanged <- parseInlineSpec "<rule-change>" (T.replace "RedTag => true" "RedTag => false" source)
-      let baseFingerprint = aggregateFoldFingerprint base (onlyAggregate base)
-      aggregateFoldFingerprint writeChanged (onlyAggregate writeChanged) `shouldNotBe` baseFingerprint
-      aggregateFoldFingerprint guardChanged (onlyAggregate guardChanged) `shouldNotBe` baseFingerprint
-      aggregateFoldFingerprint ruleChanged (onlyAggregate ruleChanged) `shouldNotBe` baseFingerprint
+      let baseFingerprint = legacyAggregateFoldFingerprint base (onlyAggregate base)
+      legacyAggregateFoldFingerprint writeChanged (onlyAggregate writeChanged) `shouldNotBe` baseFingerprint
+      legacyAggregateFoldFingerprint guardChanged (onlyAggregate guardChanged) `shouldNotBe` baseFingerprint
+      legacyAggregateFoldFingerprint ruleChanged (onlyAggregate ruleChanged) `shouldNotBe` baseFingerprint
     it "ignores wire and projection changes" $ do
       base <- specOf "test/fixtures/reservation.keiro"
       wireChanged <- specOf "test/fixtures/reservation-wire.keiro"
       source <- readTestText "test/fixtures/reservation.keiro"
       projectionChanged <- parseInlineSpec "<projection-change>" (T.replace "projection transfer_decisions" "projection renamed_projection" source)
-      let surface = aggregateFoldSurface base (onlyAggregate base)
-      aggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
-      aggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
+      let surface = legacyAggregateFoldSurface base (onlyAggregate base)
+      legacyAggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
+      legacyAggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
     it "invalidates mapped-register snapshots when binding or wire identity changes" $ do
       base <- specOf "test/fixtures/consumer-types.keiro"
       bindingChanged <- specOf "test/fixtures/consumer-types-binding-change.keiro"
@@ -2861,7 +2887,7 @@ main = hspec $ do
       codes <- errorCodesOf "test/fixtures/surge-service.keiro"
       codes `shouldBe` []
     it "scaffolds the process: Generated wiring is firewall-clean + a HoleStub" $ do
-      mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+      mods <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       let gens = [m | m <- mods, kind m == Generated]
           holes = [m | m <- mods, kind m == HoleStub]
       length holes `shouldBe` 1
@@ -2882,8 +2908,8 @@ main = hspec $ do
             _ -> expectationFailure "expected one process hole module"
         _ -> expectationFailure "expected one generated process module"
     it "process scaffold is deterministic" $ do
-      a <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
-      b <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+      a <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+      b <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       map moduleText a `shouldBe` map moduleText b
     it "separates aggregate event-stream and command-target categories and emits honest empty sums" $ do
       spec <- specOf "test/fixtures/hospital-surge.keiro"
@@ -3325,7 +3351,7 @@ main = hspec $ do
                         }
                   )
                   old
-          replayImpactSpecs old new `shouldBe` ReplayNeutral
+          legacyReplayImpactSpecs old new `shouldBe` ReplayNeutral
         _ -> expectationFailure "reservation fixture must contain an event and transition"
 
     it "narrows a guard edit to that transition's event types" $ do
@@ -3354,7 +3380,7 @@ main = hspec $ do
                     }
               )
               old
-      replayImpactSpecs old loosened `shouldBe` ReplayNeutral
+      legacyReplayImpactSpecs old loosened `shouldBe` ReplayNeutral
 
     it "pairs guard-disambiguated siblings independently of both declaration orders" $ do
       base <- specOf "test/fixtures/reservation.keiro"
@@ -3380,7 +3406,7 @@ main = hspec $ do
                   (\candidate -> candidate {aggTransitions = transitions})
                   base
               impacts =
-                [ replayImpactSpecs (withTransitions oldOrder) (withTransitions newOrder)
+                [ legacyReplayImpactSpecs (withTransitions oldOrder) (withTransitions newOrder)
                 | oldOrder <- permutations oldSiblings,
                   newOrder <- permutations newSiblings
                 ]
@@ -3412,7 +3438,7 @@ main = hspec $ do
       changed `shouldSatisfy` (/= ReplayNeutral)
       old <- specOf "test/fixtures/reservation.keiro"
       formatted <- parseInlineSpec "<formatted>" (renderSpec old)
-      replayImpactSpecs old formatted `shouldBe` ReplayNeutral
+      legacyReplayImpactSpecs old formatted `shouldBe` ReplayNeutral
 
     it "names mapped nested event and snapshot roots while ignoring Haskell-only changes" $ do
       nested <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
@@ -3667,7 +3693,7 @@ main = hspec $ do
                   | node <- specNodes old
                   ]
               }
-          removals = [change | change@(Breaking kind) <- diffSpecs old new, ckCode kind == EvtRemovedNotDeprecated]
+          removals = [change | change@(Breaking kind) <- legacyDiffSpecs old new, ckCode kind == EvtRemovedNotDeprecated]
       removals `shouldSatisfy` (not . null)
       [ckDetail kind | Breaking kind <- removals]
         `shouldSatisfy` all (not . T.isInfixOf "so old payloads still decode")
@@ -3690,7 +3716,7 @@ main = hspec $ do
         Right pastedSpec -> do
           [code d | d <- validateSpec pastedSpec, severity d == Error] `shouldBe` []
           base <- specOf "test/fixtures/reservation.keiro"
-          [k | Advisory k <- diffSpecs base pastedSpec, ckCode k == AggGuardTightened]
+          [k | Advisory k <- legacyDiffSpecs base pastedSpec, ckCode k == AggGuardTightened]
             `shouldBe` []
     it "omits the twin advisory when the twin is already present (plan 143)" $ do
       cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened-twin.keiro"
@@ -4253,8 +4279,8 @@ main = hspec $ do
   describe "manifest (M2)" $ do
     it "lists exactly the modules the scaffolder produced" $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
-      spec <- specOf "test/fixtures/reservation.keiro"
-      let manifest = renderManifest "reservation.keiro" mods spec
+      service <- checkedServiceOf "test/fixtures/reservation.keiro"
+      let manifest = renderManifestForService "reservation.keiro" mods service
           expectedNames = sort (map (moduleNameOf . modulePath) mods)
       -- every produced module name appears in the manifest…
       mapM_ (\m -> (m `T.isInfixOf` manifest) `shouldBe` True) expectedNames
@@ -4266,18 +4292,20 @@ main = hspec $ do
             "Generated.HospitalCapacity.Reservation.EventStream",
             "Generated.HospitalCapacity.Reservation.Harness",
             "Generated.HospitalCapacity.Reservation.Projection",
+            "Generated.HospitalCapacity.Nominals",
+            "Generated.HospitalCapacity.ReplayAudit",
             "HospitalCapacity.Reservation.Holes"
           ]
     it "derives the dependency set from the node kinds present (aggregate)" $ do
-      spec <- specOf "test/fixtures/reservation.keiro"
-      manifestDependencies spec `shouldBe` ["aeson", "base", "keiki", "keiro", "text"]
+      service <- checkedServiceOf "test/fixtures/reservation.keiro"
+      manifestDependenciesForService service `shouldBe` ["aeson", "base", "keiki", "keiro", "text"]
     it "derives the process dependency set, including worker-policy runtime imports" $ do
-      spec <- specOf "test/fixtures/hospital-surge.keiro"
-      let dependencies = manifestDependencies spec
+      service <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
+      let dependencies = manifestDependenciesForService service
       mapM_ (\dependency -> dependencies `shouldContain` [dependency]) ["time", "uuid", "shibuya-core", "keiki", "keiro"]
     it "uses the registered shibuya-core package name for router scaffolds" $ do
-      spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
-      let dependencies = manifestDependencies spec
+      service <- checkedServiceOf "test/fixtures/incident-paging/incident-paging.keiro"
+      let dependencies = manifestDependenciesForService service
       mapM_ (\dependency -> dependencies `shouldContain` [dependency]) ["effectful-core", "keiro", "shibuya-core"]
       dependencies `shouldNotContain` ["shibuya"]
 
@@ -4329,7 +4357,7 @@ main = hspec $ do
       firewallBreaches [ordinary] `shouldBe` [("Gen/Aggregate/Projection.hs", "import:Keiki.Builder", 1)]
     it "finds no breach in real scaffolder output (aggregate + process fixtures)" $ do
       aggMods <- scaffoldFixture "test/fixtures/reservation.keiro"
-      procMods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+      procMods <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       firewallBreaches (aggMods <> procMods) `shouldBe` []
 
   describe "generated provenance banners (plan 182 M4)" $ do
@@ -4379,6 +4407,17 @@ main = hspec $ do
             treeSnapshot out `shouldReturn` firstTree
             TIO.readFile path `shouldReturn` moduleText target
           [] -> expectationFailure "counter scaffold has no Generated module"
+
+  describe "service-aware fixture helpers" $ do
+    it "retains version-4 contract TypeIDs and their durable admission identities" $ do
+      service <- checkedServiceOf "test/fixtures/contract-v4.keiro"
+      modules <- scaffoldFixture "test/fixtures/contract-v4.keiro"
+      let contractModule = generatedTextEndingIn "Contract.hs" modules
+          identities = idDomainIdentitiesForService service
+      contractModule `shouldSatisfy` T.isInfixOf "incidentId :: !(KindID \"inc\")"
+      contractModule `shouldSatisfy` T.isInfixOf "reservationId :: !(KindID \"rsv\")"
+      identities
+        `shouldContain` ["id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text"]
 
   describe "scaffold gates" $ do
     it "refuses duplicate and case-folded module paths with both origins" $ do
@@ -4678,8 +4717,8 @@ main = hspec $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
       let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
       map kind holes `shouldBe` [HoleStub]
-      -- Domain, Codec, EventStream, Projection, Harness.
-      length [m | m <- mods, kind m == Generated] `shouldBe` 5
+      -- Context nominals/replay plus Domain, Codec, EventStream, Projection, Harness.
+      length [m | m <- mods, kind m == Generated] `shouldBe` 7
     it "is deterministic (re-scaffolding yields byte-identical text)" $ do
       a <- scaffoldFixture "test/fixtures/reservation.keiro"
       b <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -4700,8 +4739,8 @@ main = hspec $ do
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
     it "scaffolds the register-free OrderStream smoke target without error" $ do
       mods <- scaffoldFixture "test/fixtures/order.keiro"
-      -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
-      length mods `shouldBe` 6
+      -- Context nominals/replay + 5 aggregate Generated modules + 1 Holes.
+      length mods `shouldBe` 8
       firewallBreaches mods `shouldBe` []
       let harness = generatedTextEndingIn "Harness.hs" mods
       harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: PlaceOrder from OrderNotStarted -- \""
@@ -5962,10 +6001,8 @@ diagnosticCodesOf path = do
 -- | Parse a fixture and return all validator diagnostics.
 diagnosticsOf :: FilePath -> IO [Diagnostic]
 diagnosticsOf path = do
-  input <- readTestText path
-  case parseSpec path input of
-    Left err -> expectationFailure (T.unpack err) >> pure []
-    Right spec -> pure (validateSpec spec)
+  service <- checkedServiceOf path
+  pure (validateService service)
 
 -- | Like 'diagnosticCodesOf' but only the Error-severity codes (warnings, e.g.
 -- the benign-inversion notices, are excluded).
@@ -6023,11 +6060,9 @@ replayOnlySpecWith clauseLines =
 
 diffFixtures :: FilePath -> FilePath -> IO [Change]
 diffFixtures oldP newP = do
-  old <- readTestText oldP
-  new <- readTestText newP
-  case (,) <$> parseSpec oldP old <*> parseSpec newP new of
-    Left err -> expectationFailure (T.unpack err) >> pure []
-    Right (o, n) -> pure (diffSpecs o n)
+  old <- parsedSourceOf oldP
+  new <- parsedSourceOf newP
+  pure (diffSources old new)
 
 kindOfChange :: Change -> ChangeKind
 kindOfChange (Additive kind) = kind
@@ -6064,9 +6099,9 @@ genCompatibilityVector =
 
 replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact
 replayImpactFixtures oldPath newPath = do
-  old <- specOf oldPath
-  new <- specOf newPath
-  pure (replayImpactSpecs old new)
+  old <- checkedServiceOf oldPath
+  new <- checkedServiceOf newPath
+  pure (resolvedFold (ReplayImpact.replayImpactServices old new))
 
 modifyAggregate :: Name -> (Aggregate -> Aggregate) -> Spec -> Spec
 modifyAggregate target update spec =
@@ -6820,36 +6855,20 @@ renderFoldBaseline fixture service =
     | NAggregate aggregate <- specNodes (checkedSpec service)
     ]
 
--- | Parse a fixture into a 'Spec', failing the test on a parse error.
+-- | Parse a fixture through the source-aware boundary and return its graph.
 specOf :: FilePath -> IO Spec
-specOf path = do
-  input <- readTestText path
-  case parseSpec path input of
-    Left err -> expectationFailure (T.unpack err) >> error "unreachable"
-    Right spec -> pure spec
+specOf = fmap checkedSpec . checkedServiceOf
 
--- | Parse a fixture and scaffold every aggregate in it.
+-- | Parse a fixture and scaffold its checked semantic service.
 scaffoldFixture :: FilePath -> IO [ScaffoldModule]
 scaffoldFixture path = do
-  input <- readTestText path
-  case parseSpec path input of
-    Left err -> expectationFailure (T.unpack err) >> pure []
-    Right spec ->
-      pure $
-        concat
-          [ scaffoldAggregate (ctx spec) spec agg <> harnessFor (ctx spec) spec agg
-          | NAggregate agg <- specNodes spec
-          ]
-  where
-    ctx spec = defaultContext (specContext spec)
+  service <- checkedServiceOf path
+  pure (scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service)
 
-scaffoldProcessFixture :: FilePath -> IO [ScaffoldModule]
-scaffoldProcessFixture path = do
-  input <- readTestText path
-  case parseSpec path input of
-    Left err -> expectationFailure (T.unpack err) >> pure []
-    Right spec ->
-      pure $ concat [scaffoldProcess (ctx spec) p | NProcess p <- specNodes spec]
+legacyScaffoldProcessFixture :: FilePath -> IO [ScaffoldModule]
+legacyScaffoldProcessFixture path = do
+  spec <- specOf path
+  pure $ concat [scaffoldProcess (ctx spec) process | NProcess process <- specNodes spec]
   where
     ctx spec = defaultContext (specContext spec)
 

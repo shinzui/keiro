@@ -126,6 +126,7 @@ test-suite keiro-dsl-test
   hs-source-dirs: test
   main-is:        Main.hs
   other-modules:
+    Keiro.Dsl.ConformanceBaseline
     Keiro.Dsl.FrontendCompatibility
     Keiro.Dsl.FrontendProfiles
     Keiro.Dsl.FrontendPublicApiProbe

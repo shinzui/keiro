@@ -1,0 +1,10 @@
+language keiro-dsl 1
+context feature
+aggregate Counter
+  regs
+    value Int = 0
+  states Open
+  command Tick { amount:Int }
+  Open -- Tick -->
+    guard reg.value == cmd.amount
+    goto Open
