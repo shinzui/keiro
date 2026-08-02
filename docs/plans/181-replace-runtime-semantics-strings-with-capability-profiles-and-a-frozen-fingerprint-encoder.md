@@ -20,8 +20,9 @@ Today, registering a new Keiro language version is dangerous in two silent
 ways.  First, runtime behavior is keyed on one opaque string per registry row
 (`"keiro-dsl/runtime-semantics/N"`), and every consumer interrogates that
 string through its own hand-maintained membership list: forgetting to extend
-one list when version 5 arrives silently reverts ID-domain enforcement or
-nominal-equality semantics to their legacy behavior with no diagnostic.
+one list when version 5 arrives silently reverts ID-domain enforcement,
+nominal-equality semantics, contract-ID admission, or strict validation to
+legacy behavior with no diagnostic.
 Second, the aggregate fold fingerprint — the token that decides whether a
 persisted snapshot may seed replay
 ([ADR 0003](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md))
@@ -42,7 +43,9 @@ can no longer disturb.  A hypothetical language version 5 that fixes a
 contract-DTO codec then requires: one registry row, one capability, zero edits
 to membership lists, and zero snapshot invalidation — and forgetting something
 becomes a compile error or a failing registry test instead of silent legacy
-fallback.
+fallback.  The wider digest is private to aggregate fold identity; read-model
+shape hashes, mapped-wire fingerprints, behavior keys, and other already
+published 64-bit identities do not change as collateral damage.
 
 The change is observable: after every milestone except the final hash
 widening, all existing fold fingerprints, fold surfaces, diff results, and
@@ -69,6 +72,11 @@ This section must always reflect the actual current state of the work.
   of the `Spec`-only legacy entry points.
 - [ ] Milestone 5: widen the fingerprint hash beyond 64 bits in one
   coordinated invalidation before the `0.9.0.0` release.
+- [x] 2026-08-02 09:57 PDT: reviewed the plan against the post-ExecPlan-180
+  working tree, corrected the missing language-4 validation capability,
+  order-dependent replay fallback, non-total API propagation, shared-hash
+  blast radius, and stale legacy-wrapper claim; the untouched 482-example
+  `keiro-dsl-test` baseline passes.
 
 
 ## Surprises & Discoveries
@@ -76,13 +84,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-- Discovery (pre-plan audit, 2026-08-01): the string-membership gates are
-  real and already three-deep.  `keiro-dsl/src/Keiro/Dsl/IdDomain.hs` enables
+- Discovery (pre-plan audit, updated 2026-08-02): the string-membership gates
+  are real and four-deep.  `keiro-dsl/src/Keiro/Dsl/IdDomain.hs` enables
   generated-ID enforcement via
   ``effectiveRuntimeSemantics ... `elem` ["keiro-dsl/runtime-semantics/2", "keiro-dsl/runtime-semantics/3"]``
   with `otherwise -> Nothing` (legacy unchecked), and contract-ID enforcement
   via equality with `".../3"`; `keiro-dsl/src/Keiro/Dsl/NominalType.hs`
-  derives `"keiro-dsl/nominal-equality/2"` from the same gate.
+  derives `"keiro-dsl/nominal-equality/2"` from the generated-ID gate.
+  `keiro-dsl/src/Keiro/Dsl/Validate.hs` separately compares with runtime
+  semantics 3 in `enforcesSpecSurfaceClosures`, governing all strict
+  language-4 validation added by ExecPlan 180.  The original plan inventory
+  predates those last commits and would have left that gate stringly typed.
 - Discovery: `runtimeSemanticsFingerprintSegment` in
   `keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` hand-collapses semantics 2 and
   3 to the literal `"semantic-contract:keiro-dsl/runtime-semantics/2"` and
@@ -100,6 +112,33 @@ implementation. Provide concise evidence.
   and pairs old/new transitions greedily by (mode, source, command) with
   `find`/`delete`, so declaration order can decide which of two
   guard-disambiguated siblings pairs with which.
+- Discovery (soundness review, 2026-08-02): the plan's proposed fallback of
+  pairing leftovers positionally would preserve that order dependence.  Exact
+  matches must be removed as a multiset, provable guard-only loosenings must be
+  matched deterministically, and all remaining candidates must be sorted by
+  canonical structural bytes before positional pairing.
+- Discovery (soundness review, 2026-08-02): `fnv1a64` in
+  `keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs` is shared by aggregate fold
+  fingerprints, read-model shape hashes, and behavior-obligation keys, while
+  `TypeGraph.hs` carries another frozen FNV-1a-64 for mapped-wire identity.
+  Replacing the shared helper would therefore invalidate unrelated public
+  identities.  The widened digest must be a new fold-only function.
+- Discovery (soundness review, 2026-08-02): `CheckedService` proves that a
+  graph is paired with an effective language contract; it does not prove that
+  `validateService` succeeded.  Therefore an `Either` result only on the leaf
+  surface function is insufficient: fingerprint, diff, replay-impact, and
+  scaffold planning paths must either propagate `FoldSurfaceError` or refuse
+  before consuming a surface.
+- Discovery (soundness review, 2026-08-02): `legacyCheckedService` is not the
+  repository's only version-1 bridge.  Scaffold, harness, manifest, validation,
+  and binding-explanation modules intentionally retain documented `Spec`-only
+  compatibility wrappers.  This plan removes the identity/evolution wrappers
+  it owns, but does not falsely claim to eliminate every compatibility wrapper.
+- Discovery (dependency check, 2026-08-02): ExecPlan 179's Milestone 3
+  guarantee ledger is closed and still pins `d0897c163c958108`; its release
+  milestones remain pending.  Milestone 5 here may therefore update that pin
+  before the coordinated `0.9.0.0` publication without crossing the ordering
+  constraint.
 - Discovery: the presentation pretty printer is load-bearing replay identity.
   `FoldFingerprint.hs` imports `renderExpr` from
   `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` for guard, write, and case
@@ -121,17 +160,32 @@ Record every decision made while working on the plan.
   append-only; keeping the identifier strings means no persisted record,
   JSON document, or fingerprint byte changes shape.
   Date: 2026-08-01
+- Decision: Represent all four shipped gates, including ExecPlan 180's
+  language-4 validation policy.  The initial capability set is
+  `GeneratedIdDomainTypeIdV7`, `NominalEqualityV2`,
+  `ContractIdDomainTypeIdV7`, and `StrictSpecSurfaceValidation` (exact
+  constructor spelling may be tightened while implementing, but each behavior
+  remains independently queryable).  Runtime profile 1 is empty; runtime
+  profile 2 owns the generated-ID and nominal-equality capabilities; runtime
+  profile 3 adds contract-ID admission and strict validation.
+  Rationale: the 2026-08-02 audit found a fourth raw string gate in
+  `Validate.hs`, added after the original plan inventory.  Leaving it behind
+  would violate the stated goal and let a successor silently skip most
+  language-4 validation.
+  Date: 2026-08-02
 - Decision: Capabilities are monotone across successors, and a registry test
   enforces it: every version's capability set must be a superset of its
   predecessor's.
-  Rationale: all three shipped semantic changes (generated-ID enforcement,
-  nominal-equality v2, contract-ID enforcement) are "enforced since
-  generation N" facts; encoding monotonicity as a test converts the
+  Rationale: all four shipped semantic changes (generated-ID enforcement,
+  nominal-equality v2, contract-ID enforcement, and strict validation) are
+  "enforced since generation N" facts; encoding monotonicity as a test converts the
   forget-one-list failure mode into a red test.
   Date: 2026-08-01
 - Decision: A capability declares its own optional fold-surface segment token
-  (`Maybe Text`), the profile's segment set is the deduplicated ascending
-  union, and the default for a new capability is `Nothing`.
+  (`Maybe Text`), and the profile's segment set is the deduplicated ascending
+  union.  `capabilityFoldSegment` is an exhaustive pattern match: adding a
+  capability is a compile error until its author deliberately chooses `Just`
+  or `Nothing`; there is no wildcard/default branch.
   Rationale: this inverts today's dangerous default.  Currently an unknown
   semantics string mints a fresh segment (fleet-wide snapshot invalidation);
   after this change a new capability moves fingerprints only when its author
@@ -152,10 +206,14 @@ Record every decision made while working on the plan.
   checkable property instead of a per-plan manual proof (ExecPlan 179 had to
   prove it by hand).
   Date: 2026-08-01
-- Decision: Remove the `Spec`-only legacy entry points (`Spec`-typed
+- Decision: Remove the `Spec`-only identity/evolution entry points (`Spec`-typed
   fingerprint, surface, replay-impact, diff, and nominal functions that route
-  through `legacyCheckedService`) rather than deprecate them, keeping
-  `legacyCheckedService` itself as the single explicit opt-in bridge.
+  through version-1 semantics) rather than deprecate them.  Keep
+  `legacyCheckedService` as the explicit bridge for callers that knowingly
+  need a legacy contract.  Other documented `Spec`-only compatibility APIs in
+  scaffold, harness, manifest, validation, and binding explanation are not
+  removed incidentally by this plan; their eventual retirement is separate
+  API-cleanup work and this plan must not claim otherwise.
   Rationale: a caller holding a `Spec` from a version-4 workspace silently
   gets version-1 answers today — wrong fingerprints with no error.  The
   operator has confirmed nothing serious consumes Keiro yet and `0.9.0.0` is
@@ -174,6 +232,38 @@ Record every decision made while working on the plan.
   (`d0897c163c958108`) valid throughout its proofs; this plan then updates
   179's pinned values and records that update in 179's living sections.
   Date: 2026-08-01
+- Decision: Implement the widened digest as a new aggregate-fold-only
+  FNV-1a-128 function over the frozen UTF-8 encoding.  Do not replace the
+  exported `ReadModelShape.fnv1a64` helper or `TypeGraph`'s independent
+  FNV-1a-64 implementation.
+  Rationale: the shared 64-bit helper also creates read-model shape identities
+  and behavior-obligation keys, and the type-graph implementation creates
+  mapped-wire fingerprints.  Those are separate persisted/public contracts;
+  widening them would turn a targeted snapshot invalidation into several
+  undocumented migrations.  Standard FNV-1a-128 is dependency-free,
+  platform-stable when reduced modulo 2^128, and satisfies this plan's width
+  requirement without broadening the compatibility break.
+  Date: 2026-08-02
+- Decision: Make fold-surface failure explicit throughout every path that
+  consumes it.  `aggregateFoldSurfaceForService` and
+  `aggregateFoldFingerprintForService` return `Either FoldSurfaceError Text`;
+  diff and replay-impact service APIs return the same error channel; scaffold
+  planning turns it into a refusal before emitting modules.  Low-level module
+  rendering may consume only a surface/fingerprint successfully resolved by
+  its planner.
+  Rationale: `CheckedService` retains language provenance but is constructible
+  before semantic validation.  Leaf-only `Either` with downstream partial
+  extraction would merely move the silent/partial behavior rather than remove
+  it.
+  Date: 2026-08-02
+- Decision: Pair replay transitions per structural identity group by removing
+  exact canonical matches as a multiset, deterministically matching provable
+  guard-only loosenings, sorting remaining old and new transitions by
+  `(canonical guard, canonical transition)`, and only then zipping leftovers.
+  Rationale: sorting makes the result invariant under declaration permutation;
+  preserving exact and proven-loosening matches first retains the narrowest
+  sound replay classification available from the current syntax.
+  Date: 2026-08-02
 - Decision: Out of scope: durable scaffold/workspace record hardening
   (unknown-row round-tripping, unrecognized-row counts, a `requires-reader`
   header) and the coarse `nonTransitionFoldChanged` audit scoping in
@@ -222,6 +312,10 @@ Runtime semantics has no such structure: each row carries
   via string equality; added by ExecPlan 178).
 - `keiro-dsl/src/Keiro/Dsl/NominalType.hs` — selects
   `"keiro-dsl/nominal-equality/2"` versus `".../1"` off the same gate.
+- `keiro-dsl/src/Keiro/Dsl/Validate.hs` —
+  `enforcesSpecSurfaceClosures` enables the language-4 numeric floors,
+  duplicate/shadowing checks, stable external identity checks, contract/intake
+  coupling, and aggregate wire policy only when the raw string is semantics 3.
 - `keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` —
   `runtimeSemanticsFingerprintSegment` maps semantics 1 to no segment,
   semantics 2 and 3 to the shared literal
@@ -238,14 +332,34 @@ families (`Left _ -> []`), an unresolvable register initial falls back to raw
 source text, and one invalid-mapping case is rendered via derived `Show`.
 And it exposes `Spec`-only wrappers that assume version-1 semantics through
 `legacyCheckedService` — as do `ReplayImpact.hs`, `Diff.hs`, and
-`NominalType.hs`.
+`NominalType.hs`.  Other packages intentionally expose similarly documented
+compatibility wrappers; this plan removes the identity/evolution subset, not
+the whole 0.8 compatibility surface.
+
+`CheckedService` is a provenance-preserving pair, not a proof of successful
+semantic validation: `checkedSource` constructs it immediately after parsing.
+The single-file diff CLI also currently parses and computes diff/replay output
+without calling `validateService`.  Consequently, making only the leaf fold
+surface return `Either` would be incomplete; each consumer must propagate the
+error or refuse before rendering output.
+
+The current aggregate fold digest imports `fnv1a64` from
+`keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs`.  That exported helper is also used
+for behavior-obligation keys, and `deriveShapeHash` uses it for read-model
+shape identities.  `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs` has a separate copy
+for mapped-wire identities.  None of those identities is the aggregate fold
+fingerprint governed by ADR 0003, so Milestone 5 introduces a dedicated
+fold-only FNV-1a-128 encoder instead of altering either 64-bit helper.
 
 ExecPlan 179 (`docs/plans/179-generate-one-human-readable-authoritative-keiro-transducer.md`)
 depends on this machinery staying put: its guarantee ledger pins fingerprint
 `d0897c163c958108` for the canonical scalar fixture, and its Context section
 prohibits editing `renderExpr`/`renderTransition` precisely because this plan
-has not yet frozen the encoding.  ExecPlan 178 established the current
-version-4 gates this plan rewrites.
+has not yet frozen the encoding.  ExecPlan 178 established the contract-ID
+gate, and ExecPlan 180
+(`docs/plans/180-close-accepted-but-unenforced-spec-surfaces-before-language-4-ships.md`)
+established the strict-validation gate that landed after this plan's original
+inventory.  Both are current version-4 behavior this plan rewrites.
 
 Relevant ADRs: ADR 0003 (the fingerprint is a snapshot-compatibility
 component and explicitly accepts the 64-bit risk — Milestone 5 amends it),
@@ -260,47 +374,48 @@ or frozen-encoder decisions; the distillation pass must create one.
 
 ## Plan of Work
 
-Milestone 0 pins the baseline.  Add tests that record, for every aggregate
-fixture in the repository (at minimum the scalar-expressions, nominal-scalars,
-id-domain-migration, workspace-nominals, and behavior-complete trees): the
-complete fold-surface text, the fold fingerprint, the
-`runtimeSemanticsFingerprintSegment` result for all four versions, the
-`idDomainContractFor`/`contractIdDomainContractFor`/nominal-equality gate
-results for all four versions, and the diff plus replay-impact classification
-for a representative unchanged and changed pair.  Commit the surface texts as
-golden files.  These tests are the no-drift proof reused by every later
-milestone; they must pass against the unchanged code before any edit.
+Milestone 0 pins the baseline.  Add tests that record the representative
+aggregate coverage set consisting of scalar-expressions, nominal-scalars,
+id-domain-migration, workspace-nominals, and behavior-complete: the complete
+fold-surface text, the fold fingerprint, the runtime-semantics fingerprint
+segments for all four versions, the
+`idDomainContractFor`/`contractIdDomainContractFor`/nominal-equality/strict-
+validation gate results for all four versions, and the diff plus replay-impact
+classification for a representative unchanged and changed pair.  Commit the
+surface texts as golden files.  Also pin the current read-model shape hash,
+mapped-wire fingerprint, and behavior key that Milestone 5 must not move.
+These tests are the no-drift proof reused by every later milestone; they must
+pass against the unchanged code before any production edit.
 
 Milestone 1 introduces the capability model in
 `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` (or a sibling module if size
 demands): a `RuntimeCapability` sum naming today's shipped behaviors —
-indicatively `GeneratedIdDomainTypeIdV7`, `NominalEqualityV2`, and
-`ContractIdDomainTypeIdV7`, with exact names chosen from the gate semantics
-during implementation — and a `RuntimeSemanticsProfile` with a private
-constructor, the existing identifier string, and the capability set.
-Registry rows: semantics 1 = empty set; semantics 2 = generated-ID and
-nominal-equality capabilities; semantics 3 = those plus the contract-ID
-capability.  Rewrite the gates in `IdDomain.hs` and `NominalType.hs` to
-`profileHasCapability`, delete the string comparisons, and give the
+`GeneratedIdDomainTypeIdV7`, `NominalEqualityV2`,
+`ContractIdDomainTypeIdV7`, and `StrictSpecSurfaceValidation`, with exact names
+chosen from the gate semantics during implementation — and a
+`RuntimeSemanticsProfile` with a private constructor, the existing identifier
+string, and the capability set.  Registry rows: semantics 1 = empty set;
+semantics 2 = generated-ID and nominal-equality capabilities; semantics 3 =
+those plus the contract-ID and strict-validation capabilities.  Rewrite the
+gates in `IdDomain.hs`, `NominalType.hs`, and `Validate.hs` to
+`runtimeProfileHasCapability`, delete the string comparisons, and give the
 `SemanticContract.hs` `FromJSON` mismatch a real error message.  Add registry
-tests: monotonicity across successors, and a test that every capability is
-queried through the profile API (no remaining
-`effectiveRuntimeSemantics ... ==`/`elem` comparison outside the registry
-module, enforced by a source grep in the test or by removing
-`effectiveRuntimeSemantics` from the public API in favor of the profile).
-Milestone 0's gate baselines must pass unchanged.
+tests for successor monotonicity and a focused source-boundary assertion that
+no consumer compares runtime-semantics identifier strings.  Milestone 0's gate
+baselines must pass unchanged.
 
 Milestone 2 replaces `runtimeSemanticsFingerprintSegment`'s hand-maintained
 table.  Each capability carries `capabilityFoldSegment :: Maybe Text`; the
 generated-ID and nominal-equality capabilities both carry
 `Just "semantic-contract:keiro-dsl/runtime-semantics/2"` (the frozen legacy
-spelling), the contract-ID capability carries `Nothing` (it changes contract
-DTO decoding, not folds — exactly the carve-out 178 hand-coded), and the
-profile-level segment list is the deduplicated ascending union.  Add a test
-registering a synthetic experimental profile with one new `Nothing`-segment
-capability and asserting every fixture fingerprint is unchanged, plus a test
-that a `Just`-segment capability moves them.  Milestone 0's segment and
-fingerprint baselines must pass byte-identical for versions 1-4.
+spelling), the contract-ID and strict-validation capabilities carry `Nothing`,
+and the profile-level segment list is the deduplicated ascending union.  Make
+an incomplete `capabilityFoldSegment` match a build failure with a module-local
+`-Werror=incomplete-patterns`, so a future constructor cannot inherit an
+implicit default.  Tests over the released profiles prove that language 2 to
+3 (the first `Just` contributors) moves fingerprints and language 3 to 4 (only
+`Nothing` contributors) leaves every pinned fixture unchanged.  Milestone 0's
+segment and fingerprint baselines must pass byte-identical for versions 1-4.
 
 Milestone 3 freezes the encoder and makes surfaces total.  Create
 `keiro-dsl/src/Keiro/Dsl/CanonicalEncoding.hs` containing the canonical
@@ -311,43 +426,47 @@ declaring the freeze contract: this module's output feeds persisted identity
 and may change only with an explicit, ADR-recorded migration.  Point every
 `FoldFingerprint.hs` and `ReplayImpact.hs` rendering call at it and remove
 their `PrettyPrint` imports.  Then make the fold surface total: computing a
-surface for a service whose type graph, nominals, guards, or output mappings
-do not resolve becomes an explicit error (`Either FoldSurfaceError`) instead
-of silently dropping segments; the raw-source register fallback and the
-derived-`Show` rendering are removed.  Audit all call sites — CLI, workspace,
-diff, replay, scaffold, tests — so surfaces are computed only for validated
-`CheckedService` values, and thread the error where a caller could previously
-receive a truncated surface.  After this milestone, `PrettyPrint.hs` is free
-presentation surface again; record that in 179's prohibition note if 179 is
-still in flight.
+surface for a service whose type graph, nominals, registers, guards, or output
+mappings do not resolve becomes an explicit error (`Either FoldSurfaceError`)
+instead of silently dropping segments; the raw-source register fallback and
+the derived-`Show` rendering are removed.  Audit all call sites — CLI,
+workspace, diff, replay, scaffold, tests — and propagate the error through
+fingerprint, diff, replay-impact, and scaffold planning rather than assuming
+that a `CheckedService` is already valid.  CLI commands render the error and
+exit non-zero before emitting a partial report or module set.  After this
+milestone, `PrettyPrint.hs` is free presentation surface again; record that in
+179's prohibition note if 179 is still in flight.
 
 Milestone 4 hardens replay pairing and deletes the legacy traps.  In
 `ReplayImpact.hs`, replace text-equality `sameSurface` with comparison of
 canonical-encoder output (identical bytes today, per Milestone 3) and replace
 the greedy `find`-plus-`delete` pairing with a deterministic structural
-pairing: pair transitions on (mode, source state, command, canonical guard
-text), then pair any leftovers within the same (mode, source, command) group
-positionally, so declaration-order permutations of guard-disambiguated
-siblings cannot change classifications; add a permutation test proving it.
-Remove the `Spec`-only wrappers from `FoldFingerprint.hs`, `ReplayImpact.hs`,
+pairing per (mode, source state, command) group: cancel exact canonical
+surfaces as a multiset, then deterministically cancel provable guard-only
+loosenings, then sort both remaining sides by canonical guard and transition
+bytes before positional pairing.  Add tests that independently permute old and
+new guard-disambiguated siblings while preserving the classification.  Remove
+the `Spec`-only wrappers from `FoldFingerprint.hs`, `ReplayImpact.hs`,
 `Diff.hs`, and `NominalType.hs`, update every caller to pass a
-`CheckedService`, and note the removals in the changelog as `0.9.0.0`
-breaking changes.
+`CheckedService`, and note these identity/evolution API removals in the
+changelog as `0.9.0.0` breaking changes.  Do not remove unrelated compatibility
+wrappers incidentally.
 
-Milestone 5 widens the hash.  Replace `fnv1a64` as the fold-fingerprint and
-shape-hash algorithm with a deterministic hash of at least 128 bits, chosen
-during implementation under these constraints: pure and
-dependency-light (a handwritten FNV-1a-128 over the same UTF-8 byte fold is
-acceptable; a well-reviewed existing dependency already in the build plan is
-also acceptable), byte-stable across platforms and GHC versions, and encoded
-in lowercase hex.  This changes every fold fingerprint, every generated
-transducer's embedded fingerprint, ADR 0003's discriminator, and ExecPlan
-179's pinned `d0897c163c958108` — which is why this milestone runs only after
-179's Milestone 3 guarantee ledger has closed and before the coordinated
-`0.9.0.0` release is cut, while no production snapshots exist.  Regenerate all
-conformance trees, update every pinned fingerprint including 179's (recording
-the update in 179's living sections), amend ADR 0003 with the new width and
-the canonical-encoder contract, and update both package changelogs.
+Milestone 5 widens the hash.  Add a dedicated deterministic FNV-1a-128
+aggregate-fold digest over the same UTF-8 byte fold, reducing multiplication
+modulo 2^128 and rendering exactly 32 lowercase hexadecimal characters.  Keep
+`ReadModelShape.fnv1a64`, read-model shape hashes, behavior keys,
+`TypeGraph`'s 64-bit wire fingerprints, and generated identifiers unchanged.
+This changes every fold fingerprint, every generated transducer's embedded
+fingerprint, ADR 0003's discriminator, and ExecPlan 179's pinned
+`d0897c163c958108` — which is why this milestone runs only after 179's
+Milestone 3 guarantee ledger has closed and before the coordinated `0.9.0.0`
+release is cut, while no production snapshots exist.  Regenerate the
+fingerprint-bearing conformance trees, update every pinned fold fingerprint
+including 179's (recording the update in 179's living sections), amend ADR
+0003 with the new width and the canonical-encoder contract, and update both
+package changelogs.  Tests must pin one non-ASCII vector and prove all
+unrelated 64-bit identities retain their Milestone 0 bytes.
 
 
 ## Concrete Steps
@@ -358,12 +477,13 @@ Confirm the current gate and segment behavior before editing (expected values
 shown; record actual output here):
 
 ```bash
-rg -n "runtime-semantics" keiro-dsl/src/Keiro/Dsl/IdDomain.hs keiro-dsl/src/Keiro/Dsl/NominalType.hs keiro-dsl/src/Keiro/Dsl/SemanticContract.hs
+rg -n "runtime-semantics" keiro-dsl/src/Keiro/Dsl/IdDomain.hs keiro-dsl/src/Keiro/Dsl/NominalType.hs keiro-dsl/src/Keiro/Dsl/SemanticContract.hs keiro-dsl/src/Keiro/Dsl/Validate.hs
 ```
 
-Expected: the three string-membership gates described in Context; after
-Milestone 1 this search must return only the registry module's identifier
-definitions.
+Expected before editing: the four string-gated consumers described in Context.
+After Milestone 1, identifier strings remain only in registry definitions,
+serialization compatibility, stable diagnostic prose, and pinned test values;
+no semantic consumer branches on them.
 
 After each milestone, run the focused and full suites:
 
@@ -400,22 +520,27 @@ Acceptance is behavioral and byte-precise:
   byte-for-byte unchanged, proved by the pinned tests — including
   `d0897c163c958108` for the canonical scalar fixture.
 - The registry monotonicity test fails if a hypothetical successor drops a
-  capability; the synthetic-profile tests prove a `Nothing`-segment capability
-  moves no fingerprint and a `Just`-segment capability moves them.
+  capability; exhaustive matching forces every new capability to choose a fold
+  segment explicitly; language 2 to 3 proves a `Just` contributor moves the
+  fingerprints while language 3 to 4 proves the two new `Nothing` contributors
+  do not.
 - No code outside the registry module compares runtime-semantics strings
   (enforced by test); enforcement can no longer silently revert to legacy for
   an unlisted version because there is no list to forget.
 - Computing a fold surface for an unresolvable spec returns an explicit error;
-  a test proves the old silent-truncation path is gone by asserting the error
-  on a deliberately broken spec that previously produced a shorter surface.
-- Reordering guard-disambiguated sibling transitions in a source spec does not
-  change any replay-impact classification (permutation test).
-- The `Spec`-only wrappers no longer exist; `cabal build all` proves every
-  internal caller migrated.
-- After Milestone 5, fingerprints are 32-hex-character (or wider) tokens, all
+  diff, replay-impact, and scaffold planning propagate/refuse that error; tests
+  prove the old silent-truncation path is gone with deliberately broken type
+  graph, nominal, register, guard, and output-mapping inputs.
+- Independently reordering the old or new guard-disambiguated sibling
+  transitions does not change any replay-impact classification (permutation
+  tests).
+- The identity/evolution `Spec`-only wrappers named in Milestone 4 no longer
+  exist; `cabal build all` proves every internal caller migrated.
+- After Milestone 5, fold fingerprints are exactly 32-hex-character tokens, all
   conformance suites pass against regenerated fixtures, ADR 0003 documents
   the width and the frozen-encoder contract, and ExecPlan 179's pinned values
-  are updated with a note in its living sections.
+  are updated with a note in its living sections.  Read-model shape hashes,
+  mapped-wire fingerprints, and behavior keys retain their pinned 64-bit bytes.
 
 The work is accepted only when `cabal test all`, `cabal build all`,
 `nix flake check`, and strict ADR validation all pass at the final state.
@@ -447,26 +572,54 @@ data RuntimeCapability
   = GeneratedIdDomainTypeIdV7
   | NominalEqualityV2
   | ContractIdDomainTypeIdV7
+  | StrictSpecSurfaceValidation
   deriving stock (Eq, Ord, Show)
 
 data RuntimeSemanticsProfile   -- constructor private to the registry module
 runtimeProfileIdentifier :: RuntimeSemanticsProfile -> Text
-profileHasCapability :: RuntimeSemanticsProfile -> RuntimeCapability -> Bool
+runtimeProfileHasCapability :: RuntimeSemanticsProfile -> RuntimeCapability -> Bool
 capabilityFoldSegment :: RuntimeCapability -> Maybe Text
+runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
+
+effectiveRuntimeProfile :: EffectiveLanguageContract -> RuntimeSemanticsProfile
+effectiveRuntimeSemantics :: EffectiveLanguageContract -> Text
 
 -- Keiro.Dsl.CanonicalEncoding (frozen; goldens pin its bytes)
 canonicalExpr :: Expr -> Text
 canonicalTransition :: Transition -> Text
+foldFingerprint128 :: Text -> Text
 
 aggregateFoldSurfaceForService
-  :: CheckedService -> Agg -> Either FoldSurfaceError [Text]
+  :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
+aggregateFoldFingerprintForService
+  :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
+
+diffServices
+  :: CheckedService -> CheckedService -> Either FoldSurfaceError [Change]
+replayImpactServices
+  :: CheckedService -> CheckedService -> Either FoldSurfaceError ReplayImpact
 ```
 
 `LanguageDefinition` carries the profile in place of the raw semantics
 string while continuing to expose the identifier text for records and JSON.
 The `Spec`-only fingerprint, replay-impact, diff, and nominal wrappers are
-removed; `legacyCheckedService` in
-`keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` remains the single explicit
-version-1 bridge.  No new external dependency is required unless the
-Milestone 5 hash decision selects one already in the build plan; the decision
-and its rationale go in this plan's Decision Log and ADR 0003.
+removed; callers that deliberately need legacy/version-1 behavior can construct
+a `CheckedService` with `legacyCheckedService`.  Other pre-existing documented
+compatibility wrappers remain outside this plan's API cleanup.  No new external
+dependency is required: the fold-only FNV-1a-128 implementation is local, and
+its constants, modulo arithmetic, UTF-8 behavior, and golden vectors are pinned
+in tests and documented in ADR 0003.
+
+
+## Revision Note
+
+2026-08-02: Before implementation, re-audited the plan against the current
+working tree and its relevant ADRs.  The revision adds the post-plan
+language-4 strict-validation capability from ExecPlan 180, replaces the still
+order-dependent replay fallback with canonical sorted multiset pairing,
+propagates total fold-surface errors beyond the leaf API, narrows hash widening
+to aggregate fold identity so unrelated persisted 64-bit identities do not
+move, and corrects the claim about the repository's remaining documented
+legacy wrappers.  The untouched 482-example focused suite passed before these
+changes, and ExecPlan 179's guarantee ledger is closed far enough for the final
+coordinated fingerprint invalidation.
