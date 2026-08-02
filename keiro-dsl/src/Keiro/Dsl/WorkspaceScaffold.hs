@@ -55,6 +55,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -138,17 +139,19 @@ planWorkspaceScaffoldWithGoldens ::
   WorkspaceSpec ->
   Either [Refusal] WorkspacePlan
 planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
-  case pureRefusals ctx merged (map fst tagged) of
-    [] ->
-      Right
-        WorkspacePlan
-          { wpWorkspace = workspace,
-            wpCheckedService = service,
-            wpContext = ctx,
-            wpGoldenRoot = goldenRoot,
-            wpModules = tagged
-          }
-    refusals -> Left refusals
+  case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
+    Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
+    Right _ -> case pureRefusals ctx merged (map fst tagged) of
+      [] ->
+        Right
+          WorkspacePlan
+            { wpWorkspace = workspace,
+              wpCheckedService = service,
+              wpContext = ctx,
+              wpGoldenRoot = goldenRoot,
+              wpModules = tagged
+            }
+      refusals -> Left refusals
   where
     service = checkedWorkspace workspace
     merged = checkedSpec service

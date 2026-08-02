@@ -28,12 +28,14 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffServices, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.Diff qualified as CheckedDiff
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.Expression
-import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldFingerprintForService, aggregateFoldSurface, aggregateFoldSurfaceForService)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError (..))
+import Keiro.Dsl.FoldFingerprint qualified as CheckedFold
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
 import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
@@ -59,7 +61,8 @@ import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
 import Keiro.Dsl.WorkspaceAdoption
-import Keiro.Dsl.WorkspaceDiff
+import Keiro.Dsl.WorkspaceDiff hiding (diffWorkspaces)
+import Keiro.Dsl.WorkspaceDiff qualified as CheckedWorkspaceDiff
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
@@ -70,6 +73,33 @@ import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
+
+resolvedFold :: Either FoldSurfaceError value -> value
+resolvedFold = either (error . ("unexpected fold-surface failure in checked fixture: " <>) . show) id
+
+aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> T.Text
+aggregateFoldFingerprintForService service aggregate = resolvedFold (CheckedFold.aggregateFoldFingerprintForService service aggregate)
+
+aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> T.Text
+aggregateFoldSurfaceForService service aggregate = resolvedFold (CheckedFold.aggregateFoldSurfaceForService service aggregate)
+
+aggregateFoldFingerprint :: Spec -> Aggregate -> T.Text
+aggregateFoldFingerprint spec aggregate = aggregateFoldFingerprintForService (legacyCheckedService spec) aggregate
+
+aggregateFoldSurface :: Spec -> Aggregate -> T.Text
+aggregateFoldSurface spec aggregate = aggregateFoldSurfaceForService (legacyCheckedService spec) aggregate
+
+diffServices :: CheckedService -> CheckedService -> [Change]
+diffServices old new = resolvedFold (CheckedDiff.diffServices old new)
+
+diffSources :: ParsedSource -> ParsedSource -> [Change]
+diffSources old new = resolvedFold (CheckedDiff.diffSources old new)
+
+diffSpecs :: Spec -> Spec -> [Change]
+diffSpecs old new = diffServices (legacyCheckedService old) (legacyCheckedService new)
+
+diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
+diffWorkspaces old new = resolvedFold (CheckedWorkspaceDiff.diffWorkspaces old new)
 
 main :: IO ()
 main = hspec $ do
@@ -149,11 +179,56 @@ main = hspec $ do
           message `shouldContain` "keiro-dsl/runtime-semantics/2"
         Right _ -> expectationFailure "expected a runtime-profile mismatch"
 
+    it "reports every formerly silent fold-resolution failure and propagates it" $ do
+      baseService <- checkedServiceOf "test/fixtures/id-domain-migration-v3.keiro"
+      recursiveMapped <- specOf "test/fixtures/mapped-recursive.keiro"
+      brokenNominal <- specOf "test/fixtures/nominal-missing-facts.keiro"
+      missingInitial <- specOf "test/fixtures/mapped-missing-initial.keiro"
+      let contract = checkedLanguageContract baseService
+          baseSpec = checkedSpec baseService
+          baseAggregate = onlyAggregate baseSpec
+          withAggregate transform =
+            baseSpec
+              { specNodes =
+                  [ NAggregate (transform aggregate)
+                  | NAggregate aggregate <- specNodes baseSpec
+                  ]
+              }
+          replaceFirstTransition transform aggregate =
+            aggregate
+              { aggTransitions = case aggTransitions aggregate of
+                  transition : rest -> transform transition : rest
+                  [] -> []
+              }
+          guardSpec = withAggregate (replaceFirstTransition (\transition -> transition {tGuard = Just (EAtom (AName "missingGuardRoot"))}))
+          outputSpec = withAggregate (replaceFirstTransition (\transition -> transition {tEmits = ["MissingEvent"]}))
+          typeGraphSpec = baseSpec {specMapped = specMapped recursiveMapped}
+          nominalSpec = baseSpec {specNominalScalars = specNominalScalars brokenNominal}
+          cases =
+            [ (CheckedService contract typeGraphSpec, baseAggregate, \case FoldTypeGraphResolutionFailed {} -> True; _ -> False),
+              (CheckedService contract nominalSpec, baseAggregate, \case FoldNominalResolutionFailed {} -> True; _ -> False),
+              (CheckedService contract missingInitial, onlyAggregate missingInitial, \case FoldRegisterInitialResolutionFailed {} -> True; _ -> False),
+              (CheckedService contract guardSpec, onlyAggregate guardSpec, \case FoldGuardResolutionFailed {} -> True; _ -> False),
+              (CheckedService contract outputSpec, onlyAggregate outputSpec, \case FoldEventOutputResolutionFailed {} -> True; _ -> False)
+            ]
+      forM_ cases $ \(service, aggregate, matches) -> do
+        CheckedFold.aggregateFoldSurfaceForService service aggregate
+          `shouldSatisfy` either matches (const False)
+        CheckedFold.aggregateFoldFingerprintForService service aggregate
+          `shouldSatisfy` either matches (const False)
+      let brokenService = CheckedService contract guardSpec
+      CheckedDiff.diffServices brokenService baseService `shouldSatisfy` isLeft
+      ReplayImpact.replayImpactServices brokenService baseService `shouldSatisfy` isLeft
+      planServiceScaffold (defaultContext (specContext guardSpec)) brokenService
+        `shouldSatisfy` \case
+          Left refusals -> any (\case FoldSurfaceRefusal {} -> True; _ -> False) refusals
+          Right _ -> False
+
     it "pins representative diff and replay-impact rendering" $ do
       old <- parsedSourceOf "test/fixtures/reservation.keiro"
       new <- parsedSourceOf "test/fixtures/reservation-guard-tightened.keiro"
       let changes = diffSources old new
-          impact = ReplayImpact.replayImpactServices (checkedSource old) (checkedSource new)
+          impact = resolvedFold (ReplayImpact.replayImpactServices (checkedSource old) (checkedSource new))
           actual =
             T.intercalate
               "\n"
@@ -233,7 +308,7 @@ main = hspec $ do
             `shouldBe` aggregateFoldFingerprintForService v2Service v2Aggregate
         other -> expectationFailure ("expected one aggregate per paired source, got " <> show (fmap length other))
       diffServices v1Service v2Service `shouldBe` []
-      ReplayImpact.replayImpactServices v1Service v2Service `shouldBe` ReplayNeutral
+      resolvedFold (ReplayImpact.replayImpactServices v1Service v2Service) `shouldBe` ReplayNeutral
 
     it "retains one effective contract for same-version workspaces and refuses mixed versions" $ do
       let manifest = "service semantic-workspace\nspec domain/a.keiro\nspec domain/b.keiro\n"
@@ -413,7 +488,7 @@ main = hspec $ do
       generatedSurface oldSpec `shouldBe` generatedSurface newSpec
       [aggregateFoldFingerprint oldSpec aggregate | NAggregate aggregate <- specNodes oldSpec]
         `shouldBe` [aggregateFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
-      ReplayImpact.replayImpact oldSpec newSpec `shouldBe` ReplayNeutral
+      resolvedFold (ReplayImpact.replayImpact oldSpec newSpec) `shouldBe` ReplayNeutral
 
     it "exposes stable JSON inspection for a source and canonically ordered workspace members" $ do
       (sourceCode, sourceOut, sourceErr) <- runKeiroDsl ["inspect", "test/fixtures/reservation.keiro", "--format=json"]
@@ -609,7 +684,7 @@ main = hspec $ do
             ]
       fingerprints v4Service `shouldBe` fingerprints v3Service
       diffServices v3Service v4Service `shouldBe` []
-      ReplayImpact.replayImpactServices v3Service v4Service `shouldBe` ReplayNeutral
+      resolvedFold (ReplayImpact.replayImpactServices v3Service v4Service) `shouldBe` ReplayNeutral
 
     it "keeps runtime validation and the exact Keiki text image in agreement" $ do
       let contract = typeIdV7Domain "req"
@@ -722,7 +797,7 @@ main = hspec $ do
       idDomainIdentitiesForService oldService `shouldBe` []
       idDomainIdentitiesForService newService
         `shouldSatisfy` any (T.isInfixOf "contract=keiro-dsl/id-domain/typeid-v7/1")
-      ReplayImpact.replayImpactServices oldService newService `shouldSatisfy` \case
+      resolvedFold (ReplayImpact.replayImpactServices oldService newService) `shouldSatisfy` \case
         ReplayImpact.ReplayAffected impacts ->
           maybe False includeSnapshotStreams (Map.lookup "OrderBook" impacts)
         ReplayImpact.ReplayNeutral -> False
@@ -893,7 +968,7 @@ main = hspec $ do
                            "transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed"
                          ]
             diffServices service service `shouldBe` []
-            ReplayImpact.replayImpactServices service service `shouldBe` ReplayNeutral
+            resolvedFold (ReplayImpact.replayImpactServices service service) `shouldBe` ReplayNeutral
             manifest `shouldSatisfy` (not . T.isInfixOf "Generated.AggregateScalarExpressions.ScalarAccount.Expressions")
             map modulePath modules `shouldSatisfy` all (not . T.isSuffixOf "Expressions.hs" . T.pack)
             map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Transducer.hs" . T.pack)
@@ -1537,7 +1612,22 @@ main = hspec $ do
 
     it "reports bound-ID decoder tightening and makes binding provenance replay-visible" $ do
       current <- specOf "test/fixtures/nominal-scalars.keiro"
-      let unbound = current {specIds = [declaration {idBinding = Nothing} | declaration <- specIds current]}
+      let useGeneratedIdInitial (NAggregate aggregate) =
+            NAggregate
+              aggregate
+                { aggRegs =
+                    [ if regName register == "orderId"
+                        then register {regInitial = RegInitBare "placeholder"}
+                        else register
+                    | register <- aggRegs aggregate
+                    ]
+                }
+          useGeneratedIdInitial node = node
+          unbound =
+            current
+              { specIds = [declaration {idBinding = Nothing} | declaration <- specIds current],
+                specNodes = map useGeneratedIdInitial (specNodes current)
+              }
           adoption = diffSpecs unbound current
           decoderFindings = [kindOfChange change | change <- adoption, changeCode change == NominalIdDecoderTightened]
       map ckSubject decoderFindings `shouldContain` ["NominalLedger event NominalsRecorded .orderId"]
@@ -1553,7 +1643,7 @@ main = hspec $ do
               }
           bindingChanges = diffSpecs current bumped
       map changeCode bindingChanges `shouldContain` [NominalBindingChanged]
-      ReplayImpact.replayImpact current bumped `shouldSatisfy` \case
+      resolvedFold (ReplayImpact.replayImpact current bumped) `shouldSatisfy` \case
         ReplayImpact.ReplayAffected impacts ->
           maybe False (\impact -> Set.member "NominalsRecorded" (ReplayImpact.eventTypes impact) && includeSnapshotStreams impact) (Map.lookup "NominalLedger" impacts)
         ReplayImpact.ReplayNeutral -> False
@@ -3164,7 +3254,7 @@ main = hspec $ do
                         }
                   )
                   old
-          ReplayImpact.replayImpact old new `shouldBe` ReplayNeutral
+          resolvedFold (ReplayImpact.replayImpact old new) `shouldBe` ReplayNeutral
         _ -> expectationFailure "reservation fixture must contain an event and transition"
 
     it "narrows a guard edit to that transition's event types" $ do
@@ -3193,7 +3283,7 @@ main = hspec $ do
                     }
               )
               old
-      ReplayImpact.replayImpact old loosened `shouldBe` ReplayNeutral
+      resolvedFold (ReplayImpact.replayImpact old loosened) `shouldBe` ReplayNeutral
 
     it "marks every existing event when the aggregate wire convention changes" $ do
       impact <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
@@ -3216,7 +3306,7 @@ main = hspec $ do
       changed `shouldSatisfy` (/= ReplayNeutral)
       old <- specOf "test/fixtures/reservation.keiro"
       formatted <- parseInlineSpec "<formatted>" (renderSpec old)
-      ReplayImpact.replayImpact old formatted `shouldBe` ReplayNeutral
+      resolvedFold (ReplayImpact.replayImpact old formatted) `shouldBe` ReplayNeutral
 
     it "names mapped nested event and snapshot roots while ignoring Haskell-only changes" $ do
       nested <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
@@ -3949,7 +4039,7 @@ main = hspec $ do
         Right _ -> expectationFailure "expected an import-cycle refusal"
     it "refuses missing mapped register initials but permits command/event-only use" $ do
       missing <- specOf "test/fixtures/mapped-missing-initial.keiro"
-      planScaffold (defaultContext (specContext missing)) missing `shouldSatisfy` isLoweringRefusal
+      planScaffold (defaultContext (specContext missing)) missing `shouldSatisfy` isFoldSurfaceRefusal
       spec <- specOf "test/fixtures/consumer-types.keiro"
       let commandOnly = removeMappedRegisterRequirements spec
       planScaffold (defaultContext (specContext commandOnly)) commandOnly `shouldSatisfy` isRight
@@ -4880,7 +4970,7 @@ main = hspec $ do
     it "computes one replay-impact value over both aggregates" $ do
       old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
       new <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
-      case ReplayImpact.replayImpact (wsMergedSpec old) (wsMergedSpec new) of
+      case resolvedFold (ReplayImpact.replayImpact (wsMergedSpec old) (wsMergedSpec new)) of
         ReplayAffected affected -> Map.keysSet affected `shouldBe` Set.fromList ["Order", "Shipment"]
         ReplayNeutral -> expectationFailure "shared mapped evolution unexpectedly reported replay-neutral"
 
@@ -5792,7 +5882,7 @@ replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact
 replayImpactFixtures oldPath newPath = do
   old <- specOf oldPath
   new <- specOf newPath
-  pure (ReplayImpact.replayImpact old new)
+  pure (resolvedFold (ReplayImpact.replayImpact old new))
 
 modifyAggregate :: Name -> (Aggregate -> Aggregate) -> Spec -> Spec
 modifyAggregate target update spec =
@@ -6089,12 +6179,12 @@ isImportCycle :: Refusal -> Bool
 isImportCycle ImportCycle {} = True
 isImportCycle _ = False
 
-isLoweringRefusal :: Either [Refusal] modules -> Bool
-isLoweringRefusal (Left refusals) = any isLowering refusals
+isFoldSurfaceRefusal :: Either [Refusal] modules -> Bool
+isFoldSurfaceRefusal (Left refusals) = any isFold refusals
   where
-    isLowering LoweringRefusal {} = True
-    isLowering _ = False
-isLoweringRefusal (Right _) = False
+    isFold FoldSurfaceRefusal {} = True
+    isFold _ = False
+isFoldSurfaceRefusal (Right _) = False
 
 -- | The canonical positive workspace fixture: three members under one context.
 canonicalWorkspacePath :: FilePath

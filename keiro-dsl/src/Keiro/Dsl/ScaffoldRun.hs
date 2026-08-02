@@ -46,6 +46,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -76,6 +77,8 @@ data Refusal
   | MissingGeneratedBanner ![FilePath]
   | ImportCycle ![Text]
   | BehaviorRefusal ![BehaviorDerivationError]
+  | -- | Persisted fold identity could not be resolved canonically.
+    FoldSurfaceRefusal !FoldSurfaceError
   | -- | Source provenance and semantic planning selected different contracts.
     --       This is an internal/API misuse refusal and is detected before writes.
     SemanticContractMismatch !Text
@@ -178,13 +181,15 @@ planServiceScaffold = planServiceScaffoldWithGoldens []
 
 planServiceScaffoldWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
 planServiceScaffoldWithGoldens goldens ctx service =
-  case scaffoldRefusals spec of
-    lowering@(_ : _) -> Left [LoweringRefusal lowering]
-    [] ->
-      let modules = scaffoldServiceModulesWithGoldens goldens ctx service
-       in case pureRefusals ctx spec modules of
-            [] -> Right modules
-            refusals -> Left refusals
+  case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes spec] of
+    Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
+    Right _ -> case scaffoldRefusals spec of
+      lowering@(_ : _) -> Left [LoweringRefusal lowering]
+      [] ->
+        let modules = scaffoldServiceModulesWithGoldens goldens ctx service
+         in case pureRefusals ctx spec modules of
+              [] -> Right modules
+              refusals -> Left refusals
   where
     spec = checkedSpec service
 
@@ -498,6 +503,10 @@ renderRefusals = concatMap render
     render (BehaviorRefusal errors) =
       ["error: behavior obligations cannot be derived soundly -- refusing to scaffold; nothing was written"]
         <> ["  " <> T.pack (show behaviorError) | behaviorError <- errors]
+    render (FoldSurfaceRefusal surfaceError) =
+      [ "error: aggregate fold identity could not be resolved -- refusing to scaffold; nothing was written",
+        "  " <> renderFoldSurfaceError surfaceError
+      ]
     render (SemanticContractMismatch detail) =
       [ "error: semantic language contract mismatch -- refusing to scaffold; nothing was written",
         "  " <> detail

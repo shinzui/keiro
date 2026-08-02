@@ -72,11 +72,16 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-08-02 10:18 PDT: Milestone 2 derives deduplicated fold segments from
   exhaustive per-capability metadata; all pre-hash surfaces, fingerprints, and
   generated/conformance behavior remain byte-identical for languages 1-4.
-- [ ] Milestone 3: extract the frozen canonical fingerprint encoder, make fold
+- [x] Milestone 3: extract the frozen canonical fingerprint encoder, make fold
   surfaces total, and point replay-impact comparison at it.
 - [x] 2026-08-02 10:25 PDT: Milestone 3 encoder extraction is complete:
   fingerprint and replay comparison now consume an independent frozen
   canonical module; explicit fold-surface errors and their propagation remain.
+- [x] 2026-08-02 10:46 PDT: Milestone 3 totality is complete: five formerly
+  silent resolution families return `FoldSurfaceError`; fingerprint, diff,
+  replay, workspace diff, CLI, and both scaffold planners propagate/refuse it;
+  the 489-example focused suite and both targeted conformance suites pass with
+  every pre-hash byte and 64-bit fingerprint unchanged.
 - [ ] Milestone 4: deterministic replay-impact transition pairing and removal
   of the `Spec`-only legacy entry points.
 - [ ] Milestone 5: widen the fingerprint hash beyond 64 bits in one
@@ -160,6 +165,13 @@ implementation. Provide concise evidence.
   `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` for guard, write, and case
   rendering; ExecPlan 179 records the matching prohibition on editing
   `renderExpr`/`renderTransition` until this plan freezes the encoding.
+- Discovery (Milestone 3): released language-1/2 fixtures intentionally retain
+  guards that predate typed scalar-expression validation.  Their fold surface
+  has always hashed canonical syntax while collecting nominal-equality
+  identities only from guards that happen to resolve.  Total guard failure is
+  therefore enforced from the `NominalEqualityV2` capability onward; the
+  legacy profile retains that frozen best-effort collection so the encoder
+  extraction does not retroactively reject or re-identify released fixtures.
 
 
 ## Decision Log
@@ -310,6 +322,13 @@ serialized strings, but all behavior now queries capabilities.  The focused
 suite has 488 passing examples after the monotonicity, source-boundary, and JSON
 mismatch checks; both scalar-expression and ID-domain compiled conformance
 suites pass without regenerating a fixture.
+
+Milestone 3 separates the persisted encoder from presentation rendering and
+makes identity failure explicit across every service-aware consumer.  A new
+negative matrix covers type-graph, nominal, register-initial, guard, and event
+output failures, plus propagation through diff, replay, and scaffold planning.
+The focused suite now has 489 passing examples and both targeted conformance
+suites remain byte-current.
 
 
 ## Context and Orientation

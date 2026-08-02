@@ -17,6 +17,7 @@ import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (bindingObligationsForService, renderBindingObligations)
+import Keiro.Dsl.FoldFingerprint (renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
@@ -319,19 +320,20 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                   newService = checkedSource newSource
                   oldSpec = checkedSpec oldService
                   newSpec = checkedSpec newService
-              written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
-              mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-              let changes = diffSources oldSource newSource
-                  impact = replayImpactServices oldService newService
-                  effectiveGate = gateWith gatedSurfaces
-              mapM_ (TIO.putStrLn . renderFinding) changes
-              when explain $
-                mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
-              TIO.putStrLn (renderReplayImpact impact)
-              mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-              mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
-              coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-              if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
+              case (,) <$> diffSources oldSource newSource <*> replayImpactServices oldService newService of
+                Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
+                Right (changes, impact) -> do
+                  written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
+                  mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
+                  let effectiveGate = gateWith gatedSurfaces
+                  mapM_ (TIO.putStrLn . renderFinding) changes
+                  when explain $
+                    mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
+                  TIO.putStrLn (renderReplayImpact impact)
+                  mapM_ (`Aeson.encodeFile` impact) replayImpactOut
+                  mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                  coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
+                  if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
 -- | @parse@ on a workspace manifest: read it, parse it, and print it back in
 -- canonical form (clauses in order, members codepoint-sorted).
@@ -589,29 +591,30 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                           oldSpec = checkedSpec oldService
                           newSpec = checkedSpec newService
                           goldenRoot = fmap (workspaceGoldenRoot fp) emitGoldensRoot
-                      written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) goldenRoot
-                      mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-                      let workspaceChanges = diffWorkspaces oldWorkspace newWorkspace
-                          changes = map wcChange workspaceChanges
-                          impact = replayImpactServices oldService newService
-                          effectiveGate = gateWith gatedSurfaces
-                          reportMeta =
-                            WorkspaceMeta
-                              { wmIdentity = wsService newWorkspace,
-                                wmManifest = fp,
-                                wmSince = T.pack ref,
-                                wmMembersOld = map wmPath (wsMembers oldWorkspace),
-                                wmMembersNew = map wmPath (wsMembers newWorkspace),
-                                wmAdoptionBaseline = adoptionBaseline
-                              }
-                      mapM_ (TIO.putStrLn . renderWorkspaceFinding) workspaceChanges
-                      when explain $
-                        mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
-                      TIO.putStrLn (renderReplayImpact impact)
-                      mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                      mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReport reportMeta effectiveGate workspaceChanges)) reportOut
-                      coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                      if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
+                      case (,) <$> diffWorkspaces oldWorkspace newWorkspace <*> replayImpactServices oldService newService of
+                        Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
+                        Right (workspaceChanges, impact) -> do
+                          written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) goldenRoot
+                          mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
+                          let changes = map wcChange workspaceChanges
+                              effectiveGate = gateWith gatedSurfaces
+                              reportMeta =
+                                WorkspaceMeta
+                                  { wmIdentity = wsService newWorkspace,
+                                    wmManifest = fp,
+                                    wmSince = T.pack ref,
+                                    wmMembersOld = map wmPath (wsMembers oldWorkspace),
+                                    wmMembersNew = map wmPath (wsMembers newWorkspace),
+                                    wmAdoptionBaseline = adoptionBaseline
+                                  }
+                          mapM_ (TIO.putStrLn . renderWorkspaceFinding) workspaceChanges
+                          when explain $
+                            mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
+                          TIO.putStrLn (renderReplayImpact impact)
+                          mapM_ (`Aeson.encodeFile` impact) replayImpactOut
+                          mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReport reportMeta effectiveGate workspaceChanges)) reportOut
+                          coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
+                          if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
 -- | A @git show@ backed source rooted at a workspace manifest directory.
 gitContentSource :: FilePath -> String -> FilePath -> ContentSource

@@ -55,6 +55,7 @@ module Keiro.Dsl.Diff
 where
 
 import Data.Char (toUpper)
+import Data.Foldable (traverse_)
 import Data.List (find, (\\))
 import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Set (Set)
@@ -62,7 +63,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
-import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface, aggregateFoldSurfaceForService)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurface, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
@@ -650,9 +651,12 @@ familyRegistry =
 -- | Compare two graphs under their effective semantic contracts. The ordinary
 -- graph differ runs first; service-aware admission and fold findings then expose
 -- semantic-profile changes that leave the normalized graph itself unchanged.
-diffServices :: CheckedService -> CheckedService -> [Change]
-diffServices oldService newService =
-  diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> contractTypeIdDomainChanges <> semanticContractFoldChanges
+diffServices :: CheckedService -> CheckedService -> Either FoldSurfaceError [Change]
+diffServices oldService newService = do
+  traverse_ (aggregateFoldSurfaceForService oldService . snd) oldAggregates
+  traverse_ (aggregateFoldSurfaceForService newService . snd) newAggregates
+  semanticContractFoldChanges <- fmap concat (traverse semanticContractFoldChange oldAggregates)
+  pure (diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> contractTypeIdDomainChanges <> semanticContractFoldChanges)
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
@@ -698,18 +702,23 @@ diffServices oldService newService =
         let newContract' = contractFieldIdDomain (checkedLanguageContract newService) newField,
         oldContract /= newContract'
       ]
-    semanticContractFoldChanges =
-      [ advisory
-          name
-          "semantic-contract"
-          name
-          AggFoldSurfaceChanged
-          "effective runtime semantics changed the aggregate fold surface even though the normalized graph is unchanged; re-scaffold, redeploy, and audit replay under the candidate contract"
-      | (name, oldAggregate) <- oldAggregates,
-        Just newAggregate <- [lookup name newAggregates],
-        aggregateFoldSurface oldSpec oldAggregate == aggregateFoldSurface newSpec newAggregate,
-        aggregateFoldSurfaceForService oldService oldAggregate /= aggregateFoldSurfaceForService newService newAggregate
-      ]
+    semanticContractFoldChange (name, oldAggregate) = case lookup name newAggregates of
+      Nothing -> pure []
+      Just newAggregate -> do
+        oldLegacySurface <- aggregateFoldSurfaceForService (legacyCheckedService oldSpec) oldAggregate
+        newLegacySurface <- aggregateFoldSurfaceForService (legacyCheckedService newSpec) newAggregate
+        oldSurface <- aggregateFoldSurfaceForService oldService oldAggregate
+        newSurface <- aggregateFoldSurfaceForService newService newAggregate
+        pure
+          [ advisory
+              name
+              "semantic-contract"
+              name
+              AggFoldSurfaceChanged
+              "effective runtime semantics changed the aggregate fold surface even though the normalized graph is unchanged; re-scaffold, redeploy, and audit replay under the candidate contract"
+          | oldLegacySurface == newLegacySurface,
+            oldSurface /= newSurface
+          ]
 
 renderIdDomainContract :: Maybe IdDomainContract -> Text
 renderIdDomainContract Nothing = "legacy-unchecked"
@@ -745,7 +754,7 @@ renderContractIdDomainChange fieldType oldContract newContract =
 
 -- | Compatibility wrapper for graph-only callers, explicitly using
 -- legacy/version-1 semantics on both sides.
-diffSpecs :: Spec -> Spec -> [Change]
+diffSpecs :: Spec -> Spec -> Either FoldSurfaceError [Change]
 diffSpecs old new =
   diffServices (legacyCheckedService old) (legacyCheckedService new)
 
@@ -757,14 +766,17 @@ diffCheckedSpecs old new =
     env = DiffEnv old new
 
 -- | Compare provenance first, then delegate semantic graphs to 'diffSpecs'.
-diffSources :: ParsedSource -> ParsedSource -> [Change]
-diffSources old new =
-  sourceLanguageChange
-    (specContext (parsedSpec new))
-    "declaration"
-    (parsedSourceLanguage old)
-    (parsedSourceLanguage new)
-    <> diffServices (checkedSource old) (checkedSource new)
+diffSources :: ParsedSource -> ParsedSource -> Either FoldSurfaceError [Change]
+diffSources old new = do
+  semanticChanges <- diffServices (checkedSource old) (checkedSource new)
+  pure
+    ( sourceLanguageChange
+        (specContext (parsedSpec new))
+        "declaration"
+        (parsedSourceLanguage old)
+        (parsedSourceLanguage new)
+        <> semanticChanges
+    )
 
 -- | One all-compatible source-provenance finding, reusable per workspace member.
 sourceLanguageChange :: Name -> Text -> SourceLanguage -> SourceLanguage -> [Change]

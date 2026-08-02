@@ -3,7 +3,9 @@
 -- projections, snapshot policy, and source locations: those inputs do not change
 -- how an existing event log becomes aggregate state.
 module Keiro.Dsl.FoldFingerprint
-  ( aggregateFoldFingerprintForService,
+  ( FoldSurfaceError (..),
+    renderFoldSurfaceError,
+    aggregateFoldFingerprintForService,
     aggregateFoldSurfaceForService,
     aggregateFoldFingerprint,
     aggregateFoldSurface,
@@ -22,19 +24,52 @@ import Keiro.Dsl.CanonicalEncoding (canonicalExpr)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (NominalEqualityV2), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (fnv1a64)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService, runtimeSemanticsFingerprintSegments)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
+
+-- | A checked service can retain language provenance before semantic
+-- validation succeeds. Fold identity therefore reports every resolution
+-- failure instead of silently omitting or inventing canonical segments.
+data FoldSurfaceError
+  = FoldTypeGraphResolutionFailed !Text
+  | FoldNominalResolutionFailed !Text
+  | FoldRegisterTypeResolutionFailed !Name !Text
+  | FoldRegisterInitialResolutionFailed !Name !Text
+  | FoldGuardResolutionFailed !Name !Name !Text
+  | FoldEventOutputResolutionFailed !Name !Name !Name !Text
+  deriving stock (Eq, Show)
+
+renderFoldSurfaceError :: FoldSurfaceError -> Text
+renderFoldSurfaceError = \case
+  FoldTypeGraphResolutionFailed detail -> "aggregate fold type-graph resolution failed: " <> detail
+  FoldNominalResolutionFailed detail -> "aggregate fold nominal resolution failed: " <> detail
+  FoldRegisterTypeResolutionFailed registerName detail ->
+    "aggregate fold register '" <> registerName <> "' type resolution failed: " <> detail
+  FoldRegisterInitialResolutionFailed registerName detail ->
+    "aggregate fold register '" <> registerName <> "' initial resolution failed: " <> detail
+  FoldGuardResolutionFailed aggregateName commandName detail ->
+    "aggregate fold guard resolution failed for '" <> aggregateName <> "." <> commandName <> "': " <> detail
+  FoldEventOutputResolutionFailed aggregateName commandName eventName detail ->
+    "aggregate fold output resolution failed for '"
+      <> aggregateName
+      <> "."
+      <> commandName
+      <> "' emitting '"
+      <> eventName
+      <> "': "
+      <> detail
 
 -- | The sixteen-hex-digit identity of an aggregate's replay fold under the
 -- service's effective runtime semantics.
-aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> Text
-aggregateFoldFingerprintForService service = fnv1a64 . aggregateFoldSurfaceForService service
+aggregateFoldFingerprintForService :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
+aggregateFoldFingerprintForService service = fmap fnv1a64 . aggregateFoldSurfaceForService service
 
 -- | The sixteen-hex-digit identity of an aggregate's replay fold.
 -- This compatibility wrapper selects legacy/version-1 runtime semantics.
-aggregateFoldFingerprint :: Spec -> Aggregate -> Text
+aggregateFoldFingerprint :: Spec -> Aggregate -> Either FoldSurfaceError Text
 aggregateFoldFingerprint spec = aggregateFoldFingerprintForService (legacyCheckedService spec)
 
 -- | Canonical pre-hash text for an aggregate's replay fold.
@@ -42,24 +77,31 @@ aggregateFoldFingerprint spec = aggregateFoldFingerprintForService (legacyChecke
 -- Rules are declarations on 'Spec', not children of 'Aggregate', so the complete
 -- spec is required. Only rules reached from transition guards and writes are
 -- included, transitively, in declaration order.
-aggregateFoldSurface :: Spec -> Aggregate -> Text
+aggregateFoldSurface :: Spec -> Aggregate -> Either FoldSurfaceError Text
 aggregateFoldSurface spec = aggregateFoldSurfaceForService (legacyCheckedService spec)
 
 -- | Canonical pre-hash text under a checked semantic contract. A runtime
 -- discriminator is included only for a contract that can change fold behavior;
 -- source declaration provenance and grammar-only versions never enter it.
-aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> Text
-aggregateFoldSurfaceForService service aggregate =
-  T.intercalate
-    "\n"
-    ( runtimeSemanticsFingerprintSegments (checkedLanguageContract service)
-        ++ map stateSegment (aggStates aggregate)
-        ++ map (registerSegment symbols) (aggRegs aggregate)
-        ++ mappedRegisterSegments
-        ++ nominalSegments
-        ++ nominalEqualitySegments
-        ++ map (transitionSegment spec aggregate) (aggTransitions aggregate)
-        ++ map ruleSegment referencedRules
+aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
+aggregateFoldSurfaceForService service aggregate = do
+  graph <- mapLeft (FoldTypeGraphResolutionFailed . showText) (resolveTypeGraph spec)
+  nominalRegistry <- mapLeft (FoldNominalResolutionFailed . showText) (resolveNominalTypes spec)
+  registerSegments <- traverse (registerSegment symbols) (aggRegs aggregate)
+  equalityUses <- nominalEqualityUses service aggregate
+  transitionSegments <- traverse (transitionSegment spec aggregate) (aggTransitions aggregate)
+  pure
+    ( T.intercalate
+        "\n"
+        ( runtimeSemanticsFingerprintSegments (checkedLanguageContract service)
+            ++ map stateSegment (aggStates aggregate)
+            ++ registerSegments
+            ++ mappedRegisterSegments graph
+            ++ nominalSegments nominalRegistry
+            ++ ["nominal-equality-use:" <> identity | identity <- Set.toAscList equalityUses]
+            ++ transitionSegments
+            ++ map ruleSegment referencedRules
+        )
     )
   where
     spec = checkedSpec service
@@ -69,42 +111,47 @@ aggregateFoldSurfaceForService service aggregate =
       | rule <- specRules spec,
         ruleName rule `Set.member` referencedRuleNames spec aggregate
       ]
-    mappedRegisterSegments = case resolveTypeGraph spec of
-      Left _ -> []
-      Right graph ->
-        [ mappedRegisterSegment graph declaration
-        | register <- aggRegs aggregate,
-          TRef typeName <- [regType register],
-          Just declaration <- [Map.lookup (MappedKey typeName) (tgDeclarations graph)]
-        ]
-    nominalSegments = case resolveNominalTypes spec of
-      Left _ -> []
-      Right registry ->
-        [ nominalUseSegment useSite nominal binding
-        | (useSite, typeName) <- nominalUseNames aggregate,
-          Just nominal <- [lookupNominalType typeName registry],
-          ConsumerNominal binding <- [resolvedNominalOwnership nominal]
-        ]
-    nominalEqualitySegments =
-      [ "nominal-equality-use:" <> identity
-      | identity <- Set.toAscList (nominalEqualityUses service aggregate)
+    mappedRegisterSegments graph =
+      [ mappedRegisterSegment graph declaration
+      | register <- aggRegs aggregate,
+        TRef typeName <- [regType register],
+        Just declaration <- [Map.lookup (MappedKey typeName) (tgDeclarations graph)]
+      ]
+    nominalSegments registry =
+      [ nominalUseSegment useSite nominal binding
+      | (useSite, typeName) <- nominalUseNames aggregate,
+        Just nominal <- [lookupNominalType typeName registry],
+        ConsumerNominal binding <- [resolvedNominalOwnership nominal]
       ]
 
 -- | Equality representation belongs in the fold identity only when a guard
 -- actually compares that declaration. This keeps unrelated binding metadata out
 -- of replay compatibility while ensuring a witness/domain change cannot silently
 -- retain the old fold fingerprint.
-nominalEqualityUses :: CheckedService -> Aggregate -> Set Text
+nominalEqualityUses :: CheckedService -> Aggregate -> Either FoldSurfaceError (Set Text)
 nominalEqualityUses service aggregate =
-  Set.fromList
-    [ identity
-    | transition <- aggTransitions aggregate,
-      guardSyntax <- maybeToList (tGuard transition),
-      Right guardExpression <- [resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax],
-      identity <- equalityIdentities (checkedLanguageContract service) guardExpression
-    ]
+  if runtimeProfileHasCapability (effectiveRuntimeProfile (checkedLanguageContract service)) NominalEqualityV2
+    then fmap (Set.fromList . concat) (traverse transitionIdentities (aggTransitions aggregate))
+    else
+      Right
+        ( Set.fromList
+            [ identity
+            | transition <- aggTransitions aggregate,
+              guardSyntax <- maybeToList (tGuard transition),
+              Right guardExpression <- [resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax],
+              identity <- equalityIdentities (checkedLanguageContract service) guardExpression
+            ]
+        )
   where
     spec = checkedSpec service
+    transitionIdentities transition = case tGuard transition of
+      Nothing -> Right []
+      Just guardSyntax -> do
+        guardExpression <-
+          mapLeft
+            (FoldGuardResolutionFailed (aggName aggregate) (tCommand transition) . showText)
+            (resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax)
+        pure (equalityIdentities (checkedLanguageContract service) guardExpression)
 
 equalityIdentities :: EffectiveLanguageContract -> TypedScalarExpr -> [Text]
 equalityIdentities languageContract expression =
@@ -198,59 +245,56 @@ stateSegment state =
     <> "|terminal="
     <> if stTerminal state then "true" else "false"
 
-registerSegment :: AggregateSymbols -> RegDecl -> Text
-registerSegment symbols register =
-  "reg:"
-    <> regName register
-    <> ":"
-    <> typeExprCanonicalName (regType register)
-    <> "="
-    <> canonicalInitial
-  where
-    canonicalInitial = case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
-      Left _ -> renderInitial (regInitial register)
-      Right resolvedType -> case resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register) of
-        Left _ -> renderInitial (regInitial register)
-        Right resolvedInitial -> registerInitialCanonicalName resolvedInitial
+registerSegment :: AggregateSymbols -> RegDecl -> Either FoldSurfaceError Text
+registerSegment symbols register = do
+  resolvedType <-
+    mapLeft
+      (FoldRegisterTypeResolutionFailed (regName register) . showText)
+      (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
+  resolvedInitial <-
+    mapLeft
+      (FoldRegisterInitialResolutionFailed (regName register) . showText)
+      (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
+  pure
+    ( "reg:"
+        <> regName register
+        <> ":"
+        <> typeExprCanonicalName (regType register)
+        <> "="
+        <> registerInitialCanonicalName resolvedInitial
+    )
 
-renderInitial :: RegInitial -> Text
-renderInitial (RegInitBare value) = value
-renderInitial (RegInitText value) = "\"" <> escapeText value <> "\""
-
-escapeText :: Text -> Text
-escapeText = T.concatMap $ \case
-  '"' -> "\\\""
-  '\\' -> "\\\\"
-  '\n' -> "\\n"
-  '\t' -> "\\t"
-  '\r' -> "\\r"
-  character -> T.singleton character
-
-transitionSegment :: Spec -> Aggregate -> Transition -> Text
-transitionSegment spec aggregate transition =
-  T.intercalate
-    "|"
-    ( [ "transition:" <> renderMode (tMode transition),
-        tSource transition,
-        tCommand transition
-      ]
-        ++ implementationSegment
-        ++ [ "guard=" <> maybe "" canonicalExpr (tGuard transition),
-             "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition)),
-             "emits=" <> T.intercalate "," (tEmits transition)
-           ]
-        ++ outputOwnershipSegment
-        ++ ["goto=" <> tGoto transition]
+transitionSegment :: Spec -> Aggregate -> Transition -> Either FoldSurfaceError Text
+transitionSegment spec aggregate transition = do
+  outputOwnershipSegment <- case tImplementation transition of
+    LegacyHoleImplementation -> Right []
+    GeneratedImplementation -> fmap (pure . ("outputs=" <>) . T.intercalate ",") outputSegments
+    HoleImplementation -> fmap (pure . ("outputs=" <>) . T.intercalate ",") outputSegments
+  pure
+    ( T.intercalate
+        "|"
+        ( [ "transition:" <> renderMode (tMode transition),
+            tSource transition,
+            tCommand transition
+          ]
+            ++ implementationSegment
+            ++ [ "guard=" <> maybe "" canonicalExpr (tGuard transition),
+                 "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition)),
+                 "emits=" <> T.intercalate "," (tEmits transition)
+               ]
+            ++ outputOwnershipSegment
+            ++ ["goto=" <> tGoto transition]
+        )
     )
   where
     renderWrite (registerName, expression) = registerName <> ":=" <> canonicalExpr expression
-    outputSegment emitIndex eventName = case eventOutputMapping spec aggregate transition emitIndex eventName of
-      Right mapping -> eventName <> "=" <> eventOutputCanonical mapping
-      Left problem -> eventName <> "=invalid:" <> T.pack (show problem)
-    outputOwnershipSegment = case tImplementation transition of
-      LegacyHoleImplementation -> []
-      GeneratedImplementation -> ["outputs=" <> T.intercalate "," [outputSegment emitIndex eventName | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)]]
-      HoleImplementation -> ["outputs=" <> T.intercalate "," [outputSegment emitIndex eventName | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)]]
+    outputSegments = traverse (uncurry outputSegment) (zip [1 ..] (tEmits transition))
+    outputSegment emitIndex eventName = do
+      mapping <-
+        mapLeft
+          (FoldEventOutputResolutionFailed (aggName aggregate) (tCommand transition) eventName . showText)
+          (eventOutputMapping spec aggregate transition emitIndex eventName)
+      pure (eventName <> "=" <> eventOutputCanonical mapping)
     implementationSegment = case tImplementation transition of
       LegacyHoleImplementation -> []
       GeneratedImplementation -> ["implementation=generated"]
@@ -310,3 +354,9 @@ exprNames = \case
 maybeToList :: Maybe a -> [a]
 maybeToList Nothing = []
 maybeToList (Just value) = [value]
+
+mapLeft :: (errorValue -> otherError) -> Either errorValue value -> Either otherError value
+mapLeft convert = either (Left . convert) Right
+
+showText :: (Show value) => value -> Text
+showText = T.pack . show

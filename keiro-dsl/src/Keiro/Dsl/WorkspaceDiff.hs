@@ -23,18 +23,22 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffServices, sourceLanguageChange)
 import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError)
 import Keiro.Dsl.Grammar (Loc (..), Name, Placement (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace)
 
 -- | Diff two composed service graphs and cite every participant we can resolve.
-diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
-diffWorkspaces old new =
-  memberLanguageChanges old new
-    <> map annotate (diffServices (checkedWorkspace old) (checkedWorkspace new))
-    <> ownershipMoveChanges old new
-    <> authorityChanges old new
+diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> Either FoldSurfaceError [WorkspaceChange]
+diffWorkspaces old new = do
+  semanticChanges <- diffServices (checkedWorkspace old) (checkedWorkspace new)
+  pure
+    ( memberLanguageChanges old new
+        <> map annotate semanticChanges
+        <> ownershipMoveChanges old new
+        <> authorityChanges old new
+    )
   where
     annotate change =
       WorkspaceChange

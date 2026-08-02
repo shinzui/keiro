@@ -102,7 +102,7 @@ import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (.
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.Expression
-import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFoldSurfaceError)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDomainContractFor, idDomainPrefix, idDomainSampleText)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned))
@@ -449,7 +449,7 @@ resolveAggForService ctx service agg =
       aWire = fromMaybe defaultWire (aggWire agg),
       aProjection = aggProjection agg,
       aSnapshot = aggSnapshot agg,
-      aFoldFingerprint = aggregateFoldFingerprintForService service agg,
+      aFoldFingerprint = either (error . T.unpack . renderFoldSurfaceError) id (aggregateFoldFingerprintForService service agg),
       aReadModels = [readModel | NReadModel readModel <- specNodes spec],
       aTypeGraph = either (const Nothing) Just (resolveTypeGraph spec),
       aSymbols = symbols,

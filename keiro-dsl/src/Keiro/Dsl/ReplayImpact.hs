@@ -19,6 +19,7 @@ module Keiro.Dsl.ReplayImpact
 where
 
 import Data.Aeson (ToJSON (..), object, (.=))
+import Data.Foldable (traverse_)
 import Data.List (delete, find)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
@@ -29,7 +30,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalTransition)
-import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
+import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
@@ -65,9 +66,15 @@ instance ToJSON ReplayImpact where
 
 -- | Compute replay impact for every aggregate that existed under the old
 -- effective semantic contract.
-replayImpactServices :: CheckedService -> CheckedService -> ReplayImpact
-replayImpactServices oldService newService =
-  case Map.filter hasImpact impacts of
+replayImpactServices :: CheckedService -> CheckedService -> Either FoldSurfaceError ReplayImpact
+replayImpactServices oldService newService = do
+  traverse_ (aggregateFoldSurfaceForService oldService . snd) oldAggregates
+  traverse_ (aggregateFoldSurfaceForService newService . snd) (Map.toList newAggregates)
+  resolvedImpacts <-
+    traverse
+      (\(name, oldAggregate) -> fmap ((,) name) (maybe (pure (removedAggregateImpact oldAggregate)) (matchedAggregateImpact oldService newService oldAggregate) (Map.lookup name newAggregates)))
+      oldAggregates
+  pure $ case Map.filter hasImpact (Map.fromList resolvedImpacts) of
     filtered
       | Map.null filtered -> ReplayNeutral
       | otherwise -> ReplayAffected filtered
@@ -76,15 +83,10 @@ replayImpactServices oldService newService =
     newSpec = checkedSpec newService
     oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes oldSpec]
     newAggregates = Map.fromList [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes newSpec]
-    impacts =
-      Map.fromList
-        [ (name, maybe (removedAggregateImpact oldAggregate) (matchedAggregateImpact oldService newService oldAggregate) (Map.lookup name newAggregates))
-        | (name, oldAggregate) <- oldAggregates
-        ]
 
 -- | Compatibility wrapper for graph-only callers. It explicitly compares both
 -- sides under legacy/version-1 runtime semantics.
-replayImpact :: Spec -> Spec -> ReplayImpact
+replayImpact :: Spec -> Spec -> Either FoldSurfaceError ReplayImpact
 replayImpact oldSpec newSpec =
   replayImpactServices (legacyCheckedService oldSpec) (legacyCheckedService newSpec)
 
@@ -100,15 +102,22 @@ removedAggregateImpact aggregate =
       includeSnapshotStreams = True
     }
 
-matchedAggregateImpact :: CheckedService -> CheckedService -> Aggregate -> Aggregate -> AggregateImpact
-matchedAggregateImpact oldService newService oldAggregate newAggregate =
-  AggregateImpact
-    { eventTypes =
-        decodeAffected
-          <> transitionAffected
-          <> if nonTransitionFoldChanged then oldEventTypes else Set.empty,
-      includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
-    }
+matchedAggregateImpact :: CheckedService -> CheckedService -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
+matchedAggregateImpact oldService newService oldAggregate newAggregate = do
+  oldSurface <- aggregateFoldSurfaceForService oldService oldAggregate
+  newNonTransitionSurface <-
+    aggregateFoldSurfaceForService
+      newService
+      newAggregate {aggTransitions = aggTransitions oldAggregate}
+  let nonTransitionFoldChanged = oldSurface /= newNonTransitionSurface
+  pure
+    AggregateImpact
+      { eventTypes =
+          decodeAffected
+            <> transitionAffected
+            <> if nonTransitionFoldChanged then oldEventTypes else Set.empty,
+        includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
+      }
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
@@ -119,13 +128,6 @@ matchedAggregateImpact oldService newService oldAggregate newAggregate =
         /= mappedRegisterSurface newSpec newAggregate
     (transitionAffected, transitionFoldChanged) =
       changedTransitionEvents (aggTransitions oldAggregate) (aggTransitions newAggregate)
-    nonTransitionFoldChanged =
-      aggregateFoldSurfaceForService oldService oldAggregate
-        /= aggregateFoldSurfaceForService
-          newService
-          newAggregate
-            { aggTransitions = aggTransitions oldAggregate
-            }
 
 decodeSurfaceAffected :: Spec -> Spec -> Aggregate -> Aggregate -> Set Name
 decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate =
