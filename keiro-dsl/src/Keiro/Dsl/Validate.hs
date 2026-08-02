@@ -359,6 +359,12 @@ data DiagnosticCode
   | ContractTopicNameInvalid
   | ReadModelIdentifierInvalid
   | ReadModelDuplicateColumn
+  | IntakeBindUnresolved
+  | IntakeDedupeKeyUnresolved
+  | IntakeEnvelopePolicyUnknown
+  | IntakeDecodeSchemaVersionMismatch
+  | ContractTopicAliasUnresolved
+  | WireClauseUnsupported
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -1389,7 +1395,7 @@ validateNode languageContract spec (NAggregate agg) = validateAggregate language
 validateNode _languageContract spec (NProcess p) = validateProcess spec p
 validateNode _languageContract spec (NRouter router) = validateRouter spec router
 validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
-validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling spec i
+validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
 validateNode languageContract spec (NEmit e) = validateEmit languageContract spec e
 validateNode languageContract spec (NPublisher p) = validatePublisher languageContract spec p
 validateNode _languageContract _spec (NWorkqueue w) = validateWorkqueue w
@@ -1407,6 +1413,7 @@ validateContract languageContract contract =
     <> duplicateTopicAliases
     <> duplicateFields
     <> discriminatorShadows
+    <> unresolvedTopicAliases
   where
     typeIdPrefixErrors =
       [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
@@ -1468,6 +1475,13 @@ validateContract languageContract contract =
         event <- ctrEvents contract,
         field <- ceFields event,
         cfName field == ctrDiscriminator contract
+      ]
+    unresolvedTopicAliases =
+      [ mkErr (locLine (ctrLoc contract)) ContractTopicAliasUnresolved $
+          "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' names undeclared topic alias '" <> ceTopic event <> "'"
+      | enforcesSpecSurfaceClosures languageContract,
+        event <- ctrEvents contract,
+        ceTopic event `notElem` map fst (ctrTopics contract)
       ]
 
 -- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
@@ -1851,8 +1865,8 @@ specContracts :: Spec -> [ContractNode]
 specContracts spec = [c | NContract c <- specNodes spec]
 
 -- | EP-4 cross-node coupling: an intake's contract/topic/accepted-events resolve.
-intakeCoupling :: Spec -> IntakeNode -> [Diagnostic]
-intakeCoupling spec i = case lookupContract (inkContract i) of
+intakeCoupling :: EffectiveLanguageContract -> Spec -> IntakeNode -> [Diagnostic]
+intakeCoupling languageContract spec i = case lookupContract (inkContract i) of
   Nothing ->
     [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
   Just c ->
@@ -1869,8 +1883,39 @@ intakeCoupling spec i = case lookupContract (inkContract i) of
            ceName event `elem` inkAccept i,
            ceTopic event /= inkTopic i
          ]
+      ++ [ mkErr (locLine (inkLoc i)) IntakeBindUnresolved $
+             "intake '" <> inkName i <> "' binds undeclared envelope or accepted-event field '" <> brField binding <> "'"
+         | enforcesSpecSurfaceClosures languageContract,
+           binding <- inkBinds i,
+           brField binding `Set.notMember` resolvableFields c
+         ]
+      ++ [ mkErr (locLine (inkLoc i)) IntakeDedupeKeyUnresolved $
+             "intake '" <> inkName i <> "' dedupe key '" <> inkDedupeKey i <> "' is not an envelope or accepted-event field"
+         | enforcesSpecSurfaceClosures languageContract,
+           inkDedupeKey i `Set.notMember` resolvableFields c
+         ]
+      ++ [ mkErr (locLine (inkLoc i)) IntakeDecodeSchemaVersionMismatch $
+             "intake '"
+               <> inkName i
+               <> "' decode schemaVersion "
+               <> tInt (decBodySchemaVersion (inkDecode i))
+               <> " does not match contract '"
+               <> ctrName c
+               <> "' schemaVersion "
+               <> tInt (ctrSchemaVersion c)
+         | enforcesSpecSurfaceClosures languageContract,
+           decBodySchemaVersion (inkDecode i) /= ctrSchemaVersion c
+         ]
   where
     lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
+    resolvableFields contract =
+      canonicalIntakeEnvelopeFields
+        <> Set.fromList
+          [ cfName field
+          | event <- ctrEvents contract,
+            ceName event `elem` inkAccept i,
+            field <- ceFields event
+          ]
 
 validateEmit :: EffectiveLanguageContract -> Spec -> EmitNode -> [Diagnostic]
 validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
@@ -1963,7 +2008,7 @@ validationWindowSeconds window = case T.unsnoc window of
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.
 validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
-validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor]
+validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary]
   where
     il = locLine (inkLoc i)
     rows = inkDisposition i
@@ -1995,6 +2040,12 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
       | enforcesSpecSurfaceClosures languageContract,
         decBodySchemaVersion (inkDecode i) < 1
       ]
+    envelopeVocabulary =
+      [ mkErr il IntakeEnvelopePolicyUnknown $
+          "intake '" <> inkName i <> "' has unsupported envelope policy " <> T.pack (show (decEnvelope (inkDecode i))) <> "; expected \"strict-required lenient-optional\""
+      | enforcesSpecSurfaceClosures languageContract,
+        decEnvelope (inkDecode i) /= "strict-required lenient-optional"
+      ]
     firstRow outcome = case [row | row <- rows, drOutcome row == outcome] of
       (row : _) -> Just row
       [] -> Nothing
@@ -2018,6 +2069,28 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
 
 intakeDedupePolicies :: Set Name
 intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSourceEventIdentity", "KafkaDeliveryIdentity"]
+
+canonicalIntakeEnvelopeFields :: Set Name
+canonicalIntakeEnvelopeFields =
+  Set.fromList
+    [ "messageId",
+      "source",
+      "destination",
+      "key",
+      "eventType",
+      "schemaVersion",
+      "contentType",
+      "schemaReference",
+      "sourceEventId",
+      "sourceGlobalPosition",
+      "payloadBytes",
+      "occurredAt",
+      "causationId",
+      "correlationId",
+      "traceContext",
+      "attributes",
+      "idempotencyKey"
+    ]
 
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]
@@ -2331,7 +2404,8 @@ validateAggregate languageContract spec agg =
       evolutionRules,
       snapshotRules,
       replayOnlyRules,
-      eventlessStateChangeRules
+      eventlessStateChangeRules,
+      wirePolicyRules
     ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -2356,6 +2430,21 @@ validateAggregate languageContract spec agg =
                  "aggregate '" <> aggName agg <> "': snapshot state-codec version must be at least 1 and shape-hash must be non-empty"
              | snapCodecVersion snapshot < 1 || T.null (snapShapeHash snapshot)
              ]
+
+    wirePolicyRules = case aggWire agg of
+      Just wire
+        | enforcesSpecSurfaceClosures languageContract,
+          wireKind wire /= "ctorName" || wireFields wire /= "camelCase" ->
+            [ mkErr (locLine (aggLoc agg)) WireClauseUnsupported $
+                "aggregate '"
+                  <> aggName agg
+                  <> "' wire clause describes kind="
+                  <> wireKind wire
+                  <> " fields="
+                  <> wireFields wire
+                  <> "; generated bytes currently support only kind=ctorName fields=camelCase"
+            ]
+      _ -> []
 
     duplicateMembers =
       [ mkErr (locLine (cmdLoc c)) DuplicateCommandName $

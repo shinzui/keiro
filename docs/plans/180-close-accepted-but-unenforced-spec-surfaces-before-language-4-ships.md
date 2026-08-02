@@ -59,8 +59,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-02 15:13Z) Milestone 3: stable-identity and external-name
   constraints.  `cabal test keiro-dsl-test --test-show-details=direct` passed
   480 examples.
-- [ ] Milestone 4: language-4 semantic couplings for the intake envelope,
-  contract topology, and wire clause.
+- [x] (2026-08-02 15:20Z) Milestone 4: language-4 semantic couplings for the
+  intake envelope, contract topology, and wire clause.  `cabal test all
+  --test-show-details=direct` passed, including 481 DSL examples and 378 runtime
+  examples.
 - [ ] Milestone 5: dead-grammar removal, negative-test coverage for previously
   untested diagnostics, documentation, and ADR amendments.
 - [x] (2026-08-02 06:42Z) Revalidated the plan against the post-ExecPlan-178
@@ -227,6 +229,14 @@ Record every decision made while working on the plan.
   kiroku's `category-id` split.  Both forms still reject empty, `$all`,
   whitespace/control, and colon-bearing identities consistently.
   Date: 2026-08-02
+- Decision: Keep `emit source`, `emit key`, and the `emit map` discriminant name
+  descriptive-only in language 4, while validating the map's event targets and
+  duplicate discriminant values as before.
+  Rationale: no current semantic graph identifies a source read model or typed
+  field namespace for an emit node, so resolving these words would invent an
+  authority the runtime and generated API do not possess.  The language
+  reference must state this limitation explicitly rather than imply a check.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -256,6 +266,12 @@ this section into docs/adr/. Keep task-local execution details here.
   Empty Kafka topics are rejected under every language contract; the other
   constraints preserve language-3 acceptance.  The focused DSL suite passes
   all 480 examples.
+- Milestone 4 outcome: language 4 now resolves intake binds and dedupe keys
+  against the canonical envelope plus accepted contract-event fields, requires
+  the one supported envelope policy and matching contract schema version,
+  resolves contract event topic aliases, and rejects aggregate wire words the
+  emitter ignores.  The same graphs retain language-3 acceptance.  The full
+  project test suite passes, including all 481 focused DSL examples.
 
 
 ## Context and Orientation

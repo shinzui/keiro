@@ -2147,6 +2147,41 @@ main = hspec $ do
         serviceErrorCodes 4 candidate `shouldContain` [expected]
       serviceErrorCodes 3 emptyTopic `shouldContain` [ContractTopicNameInvalid]
       serviceErrorCodes 4 emptyTopic `shouldContain` [ContractTopicNameInvalid]
+    it "gates declared integration and wire couplings on language 4" $ do
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      reservation <- specOf "test/fixtures/reservation.keiro"
+      let unresolvedBind =
+            mapIntake
+              (\intake -> intake {inkBinds = updateFirst (\binding -> binding {brField = "ghost"}) (inkBinds intake)})
+              intakeSpec
+          acceptedEventBind =
+            mapIntake
+              (\intake -> intake {inkBinds = updateFirst (\binding -> binding {brField = "region"}) (inkBinds intake)})
+              intakeSpec
+          unresolvedDedupe = mapIntake (\intake -> intake {inkDedupeKey = "ghost"}) intakeSpec
+          unknownEnvelope = mapIntake (\intake -> intake {inkDecode = (inkDecode intake) {decEnvelope = "banana policy"}}) intakeSpec
+          mismatchedSchema = mapIntake (\intake -> intake {inkDecode = (inkDecode intake) {decBodySchemaVersion = 2}}) intakeSpec
+          unresolvedAlias =
+            mapContract
+              (\contract -> contract {ctrEvents = updateFirst (\event -> event {ceTopic = "ghost"}) (ctrEvents contract)})
+              intakeSpec
+          unsupportedWire =
+            modifyAggregate
+              "Reservation"
+              (\aggregate -> aggregate {aggWire = fmap (\wire -> wire {wireKind = "banana"}) (aggWire aggregate)})
+              reservation
+          cases =
+            [ (unresolvedBind, IntakeBindUnresolved),
+              (unresolvedDedupe, IntakeDedupeKeyUnresolved),
+              (unknownEnvelope, IntakeEnvelopePolicyUnknown),
+              (mismatchedSchema, IntakeDecodeSchemaVersionMismatch),
+              (unresolvedAlias, ContractTopicAliasUnresolved),
+              (unsupportedWire, WireClauseUnsupported)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+      serviceErrorCodes 4 acceptedEventBind `shouldNotContain` [IntakeBindUnresolved]
     it "rejects a missing status-map as StatusMapNotTotal" $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
       codes `shouldContain` [StatusMapNotTotal]
