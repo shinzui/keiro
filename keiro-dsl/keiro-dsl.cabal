@@ -618,6 +618,7 @@ test-suite keiro-dsl-conformance-intake-runtime
   build-depends:
     , base   >=4.21 && <5
     , keiro
+    , text   >=2.1  && <2.2
 
 -- EP-4 M5 full-service conformance: a complete integration service — scaffolded
 -- inbox dedupe + a filled inbox transaction runner and outbox IntegrationProducer
@@ -637,6 +638,7 @@ test-suite keiro-dsl-conformance-intake-full
     , hasql-transaction
     , keiro
     , kiroku-store       >=0.3  && <0.4
+    , text               >=2.1  && <2.2
 
 -- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
 -- against the LIVE Keiro.Outbox.Types (OrderingPolicy / BackoffSchedule).

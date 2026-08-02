@@ -7,7 +7,8 @@
 -- producer republish) become observable as duplicates instead of
 -- re-running the handler.
 module Keiro.Inbox.Types
-  ( InboxDedupePolicy (..),
+  ( RetryDelay (..),
+    InboxDedupePolicy (..),
     InboxPersistence (..),
     InboxStatus (..),
     InboxResult (..),
@@ -25,6 +26,7 @@ import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent)
 import Keiro.Prelude
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
+import Shibuya.Core.Ack (RetryDelay (..))
 
 -- | Which identity is used as the inbox primary key for an
 -- 'IntegrationEvent'.

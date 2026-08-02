@@ -2660,11 +2660,12 @@ emitPayloadAdt languageContract tyName events =
 
 -- | Emit the inbox node's deterministic disposition wiring compiled against the
 -- LIVE @Keiro.Inbox.Types@: the dedupe policy (a real 'InboxDedupePolicy') and a
--- disposition function over the real @InboxResult@ (Processed\/Duplicate\/
--- InProgress\/PreviouslyFailed). This pins the dangerous inversions
+-- disposition function over the real @InboxResult@ (including handler
+-- failures). This pins the dangerous inversions
 -- (duplicate ⇒ ackOk, previouslyFailed ⇒ deadLetter) as compiled code over the
--- runtime types. The handler-level decode\/dedupe\/store failures are noted but not
--- part of @InboxResult@. Firewall holds (no keiki symbolic operator).
+-- runtime types. The complete declared classification table is also available
+-- to handler holes through a closed generated outcome type. Firewall holds (no
+-- keiki symbolic operator).
 scaffoldIntake :: Context -> IntakeNode -> [ScaffoldModule]
 scaffoldIntake ctx i =
   [ ScaffoldModule
@@ -2679,62 +2680,87 @@ scaffoldIntake ctx i =
 
 emitIntakeGen :: Text -> IntakeNode -> Text
 emitIntakeGen genPrefix i =
-  nl
-    [ "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
+  nl $
+    [ "{-# LANGUAGE OverloadedStrings #-}",
+      "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
       generatedBanner,
       "module " <> genPrefix <> ".Inbox",
-      "  ( InboxAck (..)",
+      "  ( InboxFailure (..)",
+      "  , " <> outcomeType <> " (..)",
+      "  , " <> dispositionType <> " (..)",
       "  , inboxDedupePolicy",
       "  , inboxPersistence",
+      "  , inboxDispositionFor",
       "  , inboxDisposition",
       "  ) where",
       "",
-      "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..))",
+      "import Data.Text (Text)",
+      "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..), RetryDelay (..))",
       "",
       "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
       "inboxDedupePolicy :: InboxDedupePolicy",
       "inboxDedupePolicy = " <> inkDedupePolicy i,
       "",
-      "{- | Success-path envelope retention passed to runInboxTransactionWith.",
-      "Failures always retain their full operator-facing dead-letter envelope.",
-      "Dedupe-only success rows decode with an empty payload.",
-      "-}",
+      "-- | Success-path envelope retention passed to runInboxTransactionWith.",
+      "-- Failures always retain their full operator-facing dead-letter envelope.",
+      "-- Dedupe-only success rows decode with an empty payload.",
       "inboxPersistence :: InboxPersistence",
       "inboxPersistence = " <> persistenceCtor (inkPersist i),
       "",
-      "-- The service's ack decision for each inbox classification.",
-      "data InboxAck = InboxAckOk | InboxRetry | InboxDeadLetter",
+      "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
+      "data InboxFailure = InboxFailure",
+      "  { inboxFailureReason :: !Text",
+      "  , inboxFailureAttempt :: !(Maybe Int)",
+      "  }",
       "  deriving stock (Eq, Show)",
       "",
-      "-- The disposition table (hole-kind 2) over the LIVE Keiro.Inbox.Types.InboxResult.",
-      "-- duplicate => ackOk and previouslyFailed => deadLetter are the dangerous",
-      "-- inversions the spec states explicitly.",
-      "inboxDisposition :: InboxResult a -> InboxAck",
-      "inboxDisposition r = case r of",
-      "  InboxProcessed _ -> " <> ackFor "processed",
-      "  InboxDuplicate -> " <> ackFor "duplicate",
-      "  InboxInProgress -> " <> ackFor "inProgress",
-      "  InboxPreviouslyFailed _ -> " <> ackFor "previouslyFailed",
+      "-- Every classification named by the spec. Keeping this closed makes the",
+      "-- generated table exhaustive and gives handler holes typed inputs.",
+      "data " <> outcomeType,
+      "  = " <> T.intercalate "\n  | " outcomeConstructors,
+      "  deriving stock (Eq, Show)",
       "",
-      "-- handler-level failures (not InboxResult): decodeFailed => "
-        <> ackText "decodeFailed"
-        <> ", dedupeFailed => "
-        <> ackText "dedupeFailed"
-        <> ", storeFailed => "
-        <> ackText "storeFailed"
+      "-- The service's declared acknowledgement decision, including its details.",
+      "data " <> dispositionType,
+      "  = InboxAccept",
+      "  | InboxRetryAfter !RetryDelay !(Maybe InboxFailure)",
+      "  | InboxDeadLetter !(Maybe Text) !(Maybe InboxFailure)",
+      "  deriving stock (Eq, Show)",
+      "",
+      "-- The complete disposition table (hole-kind 2).",
+      "inboxDispositionFor :: " <> outcomeType <> " -> " <> dispositionType,
+      "inboxDispositionFor outcome = case outcome of"
     ]
+      ++ ["  " <> outcomeConstructor (drOutcome row) <> " -> " <> actionExpression (drAction row) | row <- inkDisposition i]
+      ++ [ "",
+           "-- Lower the LIVE Keiro.Inbox.Types.InboxResult without an open fallback.",
+           "inboxDisposition :: InboxResult a -> " <> dispositionType,
+           "inboxDisposition r = case r of",
+           "  InboxProcessed _ -> inboxDispositionFor " <> outcomeConstructor "processed",
+           "  InboxDuplicate -> inboxDispositionFor " <> outcomeConstructor "duplicate",
+           "  InboxInProgress -> inboxDispositionFor " <> outcomeConstructor "inProgress",
+           "  InboxPreviouslyFailed failureReason ->",
+           "    maybe (inboxDispositionFor " <> outcomeConstructor "previouslyFailed" <> ")",
+           "      (\\reason -> attachFailure (InboxFailure reason Nothing) (inboxDispositionFor " <> outcomeConstructor "previouslyFailed" <> "))",
+           "      failureReason",
+           "  InboxHandlerFailed reason attempts ->",
+           "    attachFailure (InboxFailure reason (Just attempts)) (inboxDispositionFor " <> outcomeConstructor "storeFailed" <> ")",
+           "",
+           "attachFailure :: InboxFailure -> " <> dispositionType <> " -> " <> dispositionType,
+           "attachFailure failure disposition = case disposition of",
+           "  InboxRetryAfter delay _ -> InboxRetryAfter delay (Just failure)",
+           "  InboxDeadLetter reason _ -> InboxDeadLetter reason (Just failure)",
+           "  InboxAccept -> InboxAccept"
+         ]
   where
-    act o = lookup o [(drOutcome r, drAction r) | r <- inkDisposition i]
-    ackFor o = case act o of
-      Just IAckOk -> "InboxAckOk"
-      Just (IRetry _) -> "InboxRetry"
-      Just (IDeadLetter _) -> "InboxDeadLetter"
-      Nothing -> "InboxRetry"
-    ackText o = case act o of
-      Just IAckOk -> "ackOk"
-      Just (IRetry _) -> "retry"
-      Just (IDeadLetter _) -> "deadLetter"
-      Nothing -> "retry"
+    stem = pascal (inkName i)
+    outcomeType = stem <> "Outcome"
+    dispositionType = stem <> "Disposition"
+    outcomeConstructor = (stem <>) . pascal
+    outcomeConstructors = map (outcomeConstructor . drOutcome) (inkDisposition i)
+    actionExpression IAckOk = "InboxAccept"
+    actionExpression (IRetry win) = "InboxRetryAfter (RetryDelay " <> windowText win <> ") Nothing"
+    actionExpression (IDeadLetter mr) = "InboxDeadLetter " <> maybe "Nothing" (\reason -> "(Just " <> tshow reason <> ")") mr <> " Nothing"
     persistenceCtor InkPersistFull = "PersistFullEnvelope"
     persistenceCtor InkPersistDedupeOnly = "PersistDedupeOnly"
 
@@ -2955,11 +2981,11 @@ emitQueuePolicy genPrefix w =
   nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".QueuePolicy",
-      "  ( retryPolicy, jobOutcomeFor",
+      "  ( " <> outcomeType <> " (..)",
+      "  , retryPolicy, jobOutcomeFor",
       "  , jobOrdering, jobTuningFor, queueProvision",
       "  ) where",
       "",
-      "import Data.Text (Text)",
       "import Keiro.PGMQ.Job (JobOrdering (..), JobOutcome (..), JobTuning, PartitionSpec (..), QueueProvision, RetryDelay (..), RetryPolicy (..), partitionedProvision, standardProvision, unloggedProvision, withFifoIndexProvision, withOrdering)",
       "",
       "jobOrdering :: JobOrdering",
@@ -2983,12 +3009,16 @@ emitQueuePolicy genPrefix w =
       "",
       "-- The consumer JobOutcome disposition over the spec's named domain outcomes,",
       "-- lowered to the live Keiro.PGMQ.Job.JobOutcome.",
-      "jobOutcomeFor :: Text -> JobOutcome",
+      "data " <> outcomeType,
+      "  = " <> T.intercalate "\n  | " (map (pascal . wqdOutcome) (wqDisposition w)),
+      "  deriving stock (Eq, Show)",
+      "",
+      "jobOutcomeFor :: " <> outcomeType <> " -> JobOutcome",
       "jobOutcomeFor o = case o of"
     ]
-      ++ ["  " <> tshow (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
-      ++ ["  _ -> Retry (RetryDelay " <> windowText (wqDelay w) <> ")"]
+      ++ ["  " <> pascal (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
   where
+    outcomeType = T.concat (map pascal (T.splitOn "_" (wqName w))) <> "Outcome"
     orderingCtor = case wqOrdering w of
       WqUnordered -> "Unordered"
       WqFifoThroughput -> "FifoThroughput"

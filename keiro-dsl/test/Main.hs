@@ -2966,6 +2966,12 @@ main = hspec $ do
           renderSpec ordinary `shouldNotSatisfy` T.isInfixOf "persist ="
           let inbox = generatedTextEndingIn "Inbox.hs" (scaffoldIntake (defaultContext (specContext spec)) intake)
           inbox `shouldSatisfy` T.isInfixOf "inboxPersistence = PersistDedupeOnly"
+          inbox `shouldSatisfy` T.isInfixOf "data IncidentInboxOutcome"
+          inbox `shouldSatisfy` T.isInfixOf "data IncidentInboxDisposition"
+          inbox `shouldSatisfy` T.isInfixOf "InboxRetryAfter !RetryDelay !(Maybe InboxFailure)"
+          inbox `shouldSatisfy` T.isInfixOf "InboxDeadLetter !(Maybe Text) !(Maybe InboxFailure)"
+          inbox `shouldSatisfy` T.isInfixOf "InboxHandlerFailed reason attempts ->"
+          inbox `shouldNotSatisfy` T.isInfixOf "Nothing -> InboxRetry"
         (intakes, defaultIntakes) ->
           expectationFailure ("expected one intake in each fixture, got " <> show (length intakes, length defaultIntakes))
     it "rejects duplicate => retry (inversion 1)" $ do
@@ -3068,6 +3074,10 @@ main = hspec $ do
           queue `shouldSatisfy` T.isInfixOf "groupKeyFor payload = payload.reservationId"
           policy `shouldSatisfy` T.isInfixOf "jobOrdering = FifoThroughput"
           policy `shouldSatisfy` T.isInfixOf "withFifoIndexProvision (standardProvision)"
+          policy `shouldSatisfy` T.isInfixOf "data ReservationWorkOutcome"
+          policy `shouldSatisfy` T.isInfixOf "jobOutcomeFor :: ReservationWorkOutcome -> JobOutcome"
+          policy `shouldNotSatisfy` T.isInfixOf "jobOutcomeFor :: Text -> JobOutcome"
+          policy `shouldNotSatisfy` T.isInfixOf "  _ -> Retry"
           firewallBreaches modules `shouldBe` []
         [] -> expectationFailure "reservation-work fixture has no workqueue"
 

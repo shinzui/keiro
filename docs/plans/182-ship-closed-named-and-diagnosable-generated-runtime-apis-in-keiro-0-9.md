@@ -54,7 +54,12 @@ This section must always reflect the actual current state of the work.
   accepted/rejected-outcome invariance across the queue, inbox, contract, and
   event-codec conformance suites while retaining the aggregate
   fold-fingerprint pin.  All five focused compiled suites passed.
-- [ ] Milestone 1: closed disposition types for workqueues and inboxes.
+- [x] 2026-08-02 12:23 PDT: Milestone 1 replaced stringly queue outcomes and
+  lossy inbox acknowledgements with closed generated outcome/disposition
+  types, covered every live `InboxResult` constructor, preserved runtime
+  failure detail, regenerated affected fixtures through the scaffolder, and
+  passed the unit, queue, inbox, contract, typed-contract, and full integration
+  suites.
 - [ ] Milestone 2: readable structural-projection witness names.
 - [ ] Milestone 3: diagnosable decode failures.
 - [ ] Milestone 4: provenance-stamped generated banners with migration-safe
@@ -133,6 +138,13 @@ implementation. Provide concise evidence.
   so pinning only the process module would leave target-category mixups
   typable.  Both generated category surfaces must name their concrete raw
   event-stream definition types.
+- Discovery (Milestone 1, 2026-08-02): live `InboxResult` has five constructors,
+  not the four documented by the old emitter and Milestone 0 description.
+  `InboxHandlerFailed !Text !Int`, added by the poison-message retry path, was
+  absent from generated `inboxDisposition`, so the supposedly total runtime
+  table had an incomplete pattern.  Evidence: `Keiro.Inbox.Types` and the
+  pre-change four-arm `emitIntakeGen`.  The closed replacement now maps it via
+  the declared `storeFailed` row and retains its reason and attempt count.
 
 
 ## Decision Log
@@ -219,6 +231,18 @@ Record every decision made while working on the plan.
   unify with an expected target stream.  Both sides are required for the
   compile-time guarantee.
   Date: 2026-08-02
+- Decision: Generate both a closed, intake-named classification type and a
+  closed, intake-named detailed disposition type.  Keep
+  `inboxDisposition :: InboxResult a -> ...` as the runtime bridge and expose
+  `inboxDispositionFor` for all seven spec classifications.
+  Rationale: `InboxResult` cannot represent decode/dedupe failures, while the
+  spec table is deliberately complete across those handler boundaries.  Two
+  closed layers make every declared row observable without inventing runtime
+  constructors, and they eliminate the emitter's missing-row retry default.
+  Re-exporting Shibuya's existing `RetryDelay` through `Keiro.Inbox.Types`
+  gives generated applications the live retry type without a new direct
+  package dependency.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -237,6 +261,16 @@ and the aggregate event is pinned to exact bytes plus known/unknown event-type
 outcomes.  The inbox suite continues to exercise all four runtime result
 constructors.  The focused queue, inbox, contract, typed-contract, and
 aggregate suites all passed before generator changes.
+
+Milestone 1 completed on 2026-08-02.  Queue policy modules now export a
+queue-named sum such as `ReservationWorkOutcome` and a total
+`jobOutcomeFor :: ReservationWorkOutcome -> JobOutcome`; the open `Text`
+input and retry catch-all are gone.  Inbox modules now export all seven
+declared classifications, a detailed disposition carrying the live
+`RetryDelay`, declared dead-letter reason, and optional runtime failure
+detail, plus a total bridge over all five live `InboxResult` constructors.
+The exact queue wire bytes and all focused decode acceptance/rejection pins
+remained green, confirming that the change is Haskell-API-only.
 
 
 ## Context and Orientation
@@ -473,8 +507,8 @@ jobOutcomeFor :: ReservationWorkOutcome -> JobOutcome
 
 -- inbox module
 data IncidentInboxDisposition
-  = InboxRetryAfter !RetryDelay
-  | InboxDeadLetter !(Maybe Text)
+  = InboxRetryAfter !RetryDelay !(Maybe InboxFailure)
+  | InboxDeadLetter !(Maybe Text) !(Maybe InboxFailure)
   | InboxAccept
 
 -- structural projections module
