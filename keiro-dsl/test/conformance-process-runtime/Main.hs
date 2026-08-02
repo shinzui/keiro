@@ -12,15 +12,17 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Generated.HospitalCapacity.HospitalSurge.Process (
+    hospitalSurgeCategory,
     hospitalSurgeFireOutcome,
     hospitalSurgeProcessName,
     hospitalSurgeProcessWorkerOptions,
     hospitalSurgeTimerRequest,
  )
+import Generated.HospitalCapacity.Surge.EventStream (SurgeEventStreamDef)
 import Keiro.Command (CommandError (..))
 import Keiro.Dsl.Validate (sagaCategoryError)
 import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))
-import Keiro.Stream (CategoryError, StreamCategory, category)
+import Keiro.Stream (CategoryError, Stream, StreamCategory, category, entityStream)
 import Keiro.Timer (TimerRequest (..))
 import System.Exit (exitFailure)
 
@@ -35,6 +37,8 @@ main = do
         ambiguousOk = hospitalSurgeFireOutcome (Left (CommandAmbiguous [0, 1]) :: Either CommandError ()) == Nothing
         rejectedPolicyOk = rejectedCommandPolicy hospitalSurgeProcessWorkerOptions == RejectedHalt
         poisonPolicyOk = poisonIsHalt hospitalSurgeProcessWorkerOptions
+        sagaStream = entityStream hospitalSurgeCategory "hosp-1" :: Stream SurgeEventStreamDef
+        sagaCategoryTyped = sagaStream `seq` True
         categoryMirrorOk = all categoryAgreement ["hospitalSurge", "surge", "", "$all", "hospital-surge", "hospital surge", "bad\NULcategory"]
         colonReservedOk = sagaCategoryError "wf:surge" /= Nothing && not (runtimeRejectsCategory "wf:surge")
     putStrLn ("process name: " <> show nameOk)
@@ -44,9 +48,10 @@ main = do
     putStrLn ("on-ambiguous => Retry: " <> show ambiguousOk)
     putStrLn ("rejected policy lowered: " <> show rejectedPolicyOk)
     putStrLn ("poison policy lowered: " <> show poisonPolicyOk)
+    putStrLn ("saga category carries its event-stream phantom: " <> show sagaCategoryTyped)
     putStrLn ("DSL saga category mirror agrees with Keiro.Stream.category: " <> show categoryMirrorOk)
     putStrLn ("DSL additionally reserves ':' for workflow streams: " <> show colonReservedOk)
-    unless (nameOk && reqOk && okOk && rejectOk && ambiguousOk && rejectedPolicyOk && poisonPolicyOk && categoryMirrorOk && colonReservedOk) exitFailure
+    unless (nameOk && reqOk && okOk && rejectOk && ambiguousOk && rejectedPolicyOk && poisonPolicyOk && sagaCategoryTyped && categoryMirrorOk && colonReservedOk) exitFailure
 
 categoryAgreement :: Text -> Bool
 categoryAgreement value = (sagaCategoryError value /= Nothing) == runtimeRejectsCategory value

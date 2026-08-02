@@ -19,7 +19,8 @@ module SurgeDemo.SurgeFlow.Manager (
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Generated.SurgeDemo.Hospital.Domain qualified as H
-import Generated.SurgeDemo.Hospital.EventStream (hospitalCategory, hospitalEventStream)
+import Generated.SurgeDemo.Hospital.EventStream (hospitalCommandCategory, hospitalEventStream)
+import Generated.SurgeDemo.Nominals qualified as N
 import Generated.SurgeDemo.Surge.Domain qualified as S
 import Generated.SurgeDemo.Surge.EventStream (surgeEventStream)
 import Generated.SurgeDemo.SurgeFlow.Process (surgeFlowCategory, surgeFlowTimerRequest)
@@ -55,11 +56,11 @@ surgeManager =
         , targetProjections = const []
         , handle = \i ->
             ProcessManagerAction
-                { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData (S.HospitalId (hospitalId i)))
+                { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData (N.HospitalId (hospitalId i)))
                 , commands =
                     [ PMCommand
-                        { target = entityStream hospitalCategory (hospitalId i)
-                        , command = H.ActivateSurge (H.ActivateSurgeData (H.HospitalId (hospitalId i)))
+                        { target = entityStream hospitalCommandCategory (hospitalId i)
+                            , command = H.ActivateSurge (H.ActivateSurgeData (N.HospitalId (hospitalId i)))
                         }
                     ]
                 , timers = [surgeFlowTimerRequest (hospitalId i) (observedAt i)]

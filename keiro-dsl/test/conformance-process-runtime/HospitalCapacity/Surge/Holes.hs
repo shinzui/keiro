@@ -27,7 +27,7 @@ surgeTransducer ::
         SurgeCommand
         SurgeEvent
 surgeTransducer =
-    B.buildTransducer SurgeIdle initialSurgeRegs isTerminal do
+    B.buildTransducer SurgeIdle initialSurgeRegs isTerminal (pure ())
   where
     isTerminal = \case
         _ -> False

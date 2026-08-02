@@ -60,7 +60,11 @@ main = do
             "expirationDeadline" .= ("2026-01-01" :: Text)
           ]
       checks =
-        [ ( "IncidentTransferNeedDeclared round-trip",
+        [ ( "topic constants exported",
+            incidentEventsTopic == "emergency.incident.events"
+              && hospitalEventsTopic == "emergency.hospital.events"
+          ),
+          ( "IncidentTransferNeedDeclared round-trip",
             encodeEmergencyPayload incidentPayload == validIncidentJson
               && parseEmergencyPayload validIncidentJson == Right incidentPayload
           ),

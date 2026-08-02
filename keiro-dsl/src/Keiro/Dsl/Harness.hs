@@ -219,13 +219,12 @@ emitProcessHarness genPrefix p =
     [ generatedBanner,
       "module " <> genPrefix <> ".ProcessHarness (processHarnessValues) where",
       "",
-      "{- | (label, value): the spec's deterministic process/timer decisions,",
-      "lowered to plain values so a driver can assert them against a committed",
-      "expectation. The driver's expectation is hand-written (not generated), so a",
-      "spec change that alters a decision diverges from it and turns a specific",
-      "assertion red — the spec->behaviour pin. (Live-runtime behavioural",
-      "conformance of the filled ProcessManager is the M5 step.)",
-      "-}",
+      "-- | (label, value): the spec's deterministic process/timer decisions,",
+      "-- lowered to plain values so a driver can assert them against a committed",
+      "-- expectation. The driver's expectation is hand-written (not generated), so a",
+      "-- spec change that alters a decision diverges from it and turns a specific",
+      "-- assertion red — the spec->behaviour pin. (Live-runtime behavioural",
+      "-- conformance of the filled ProcessManager is the M5 step.)",
       "processHarnessValues :: [(String, String)]",
       "processHarnessValues =",
       "  [ (\"fireAtField\", " <> hs (faField (tmFireAt timer)) <> ")",
@@ -269,7 +268,7 @@ showPolicy PolSkip = "skip"
 -- pinning the spec's deterministic decisions: the stable name, the WorkflowId
 -- derivation, the ordered body (step/await/sleep/child by label), and the await
 -- labels (whose ids the signal operations must match). Exposes
--- @workflowFacts :: [(String, String)]@ so a driver asserts them against a
+-- a typed @WorkflowFacts@ record so a driver asserts it against a
 -- hand-written expectation — a spec change (e.g. renaming an await label) diverges
 -- and reddens a specific assertion. Workflows intentionally have no domain scaffold
 -- or hole stub: their behaviour-bearing body remains hand-written, while these facts
@@ -301,24 +300,35 @@ emitWorkflowFacts :: Text -> WorkflowNode -> Text
 emitWorkflowFacts genPrefix w =
   nl
     [ generatedBanner,
-      "module " <> genPrefix <> ".WorkflowFacts (workflowFacts) where",
+      "module " <> genPrefix <> ".WorkflowFacts (WorkflowFacts (..), workflowFacts) where",
       "",
-      "{- | (label, value): the workflow's deterministic decisions, pinned as pure",
-      "facts. A driver asserts them against a hand-written expectation, so a spec",
-      "change (e.g. renaming an await) reddens a specific assertion.",
-      "-}",
-      "workflowFacts :: [(String, String)]",
+      "-- | The workflow's deterministic decisions, pinned as typed pure facts.",
+      "-- A driver asserts them against a hand-written expectation, so a spec",
+      "-- change (e.g. renaming an await) reddens a specific assertion.",
+      "data WorkflowFacts = WorkflowFacts",
+      "  { workflowFactName :: !String",
+      "  , workflowFactIdVia :: !String",
+      "  , workflowFactIdField :: !String",
+      "  , workflowFactBody :: ![String]",
+      "  , workflowFactAwaitLabels :: ![String]",
+      "  , workflowFactPatchIds :: ![String]",
+      "  }",
+      "  deriving stock (Eq, Show)",
+      "",
+      "workflowFacts :: WorkflowFacts",
       "workflowFacts =",
-      "  [ (\"name\", " <> hs (wfStable w) <> ")",
-      "  , (\"idVia\", " <> hs (wfIdVia w) <> ")",
-      "  , (\"idField\", " <> hs (maybe "input" id (wfIdField w)) <> ")",
-      "  , (\"body\", " <> hs (T.intercalate "," (map bodyTag (wfBody w))) <> ")",
-      "  , (\"awaits\", " <> hs (T.intercalate "," (workflowAwaitLabels (wfBody w))) <> ")",
-      "  , (\"patches\", " <> hs (T.intercalate "," (workflowPatchIds (wfBody w))) <> ")",
-      "  ]"
+      "  WorkflowFacts",
+      "    { workflowFactName = " <> hs (wfStable w),
+      "    , workflowFactIdVia = " <> hs (wfIdVia w),
+      "    , workflowFactIdField = " <> hs (maybe "input" id (wfIdField w)),
+      "    , workflowFactBody = " <> stringList (map bodyTag (wfBody w)),
+      "    , workflowFactAwaitLabels = " <> stringList (workflowAwaitLabels (wfBody w)),
+      "    , workflowFactPatchIds = " <> stringList (workflowPatchIds (wfBody w)),
+      "    }"
     ]
   where
     hs = tshow
+    stringList values = "[" <> T.intercalate ", " (map hs values) <> "]"
     bodyTag (WfStep l _ _) = "step:" <> l
     bodyTag (WfAwait l _ _) = "await:" <> l
     bodyTag (WfSleep l _ _) = "sleep:" <> l
@@ -410,10 +420,9 @@ emitHarness goldens a =
       ++ aggregateHarnessImports a
       ++ goldenImports
       ++ [ "",
-           "{- | (label, passed). A driver runs these and exits non-zero on any False,",
-           "naming the failing assertion. Filling a hole wrongly turns a specific",
-           "entry False; the scaffold cannot.",
-           "-}",
+           "-- | (label, passed). A driver runs these and exits non-zero on any False,",
+           "-- naming the failing assertion. Filling a hole wrongly turns a specific",
+           "-- entry False; the scaffold cannot.",
            "harnessAssertions :: [(String, Bool)]",
            "harnessAssertions =",
            "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))",

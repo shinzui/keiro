@@ -44,8 +44,12 @@ main = do
       missingFieldRejected = case parseEmergencyPayload (object ["messageType" .= ("IncidentTransferNeedDeclared" :: Text)]) of
         Left problem -> "incidentId" `T.isInfixOf` problem
         Right _ -> False
+      topicsExported =
+        incidentEventsTopic == "emergency.incident.events"
+          && hospitalEventsTopic == "emergency.hospital.events"
   forM_ results $ \(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
   let failed = [label | (label, ok) <- results, not ok]
   putStrLn ("unknown discriminator is diagnosed at its field: " <> show unknownTagRejected)
   putStrLn ("missing field is named: " <> show missingFieldRejected)
-  unless (null failed && unknownTagRejected && missingFieldRejected) $ putStrLn ("contract: failed " <> show failed) >> exitFailure
+  putStrLn ("topic constants are exported: " <> show topicsExported)
+  unless (null failed && unknownTagRejected && missingFieldRejected && topicsExported) $ putStrLn ("contract: failed " <> show failed) >> exitFailure

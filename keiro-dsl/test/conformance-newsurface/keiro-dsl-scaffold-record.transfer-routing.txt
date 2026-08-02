@@ -1,7 +1,10 @@
 keiro-dsl scaffold record v1
-spec: test/fixtures/transfer-routing.keiro
+spec: keiro-dsl/test/fixtures/transfer-routing.keiro
 module-root: (none)
 layout: prefixed
+source-language {"declaredLanguageVersion":1,"effectiveLanguageVersion":1,"sourceForm":"declared"}
+semantic-contract {"languageVersion":1,"runtimeSemantics":"keiro-dsl/runtime-semantics/1"}
+generated Generated/TransferRouting/ReplayAudit.hs
 generated Generated/TransferRouting/Hospital_load/ReadModelTable.hs
 generated Generated/TransferRouting/Hospital_load/ReadModel.hs
 hole TransferRouting/Hospital_load/ReadModelHoles.hs
@@ -15,3 +18,4 @@ generated Generated/TransferRouting/Hospital/EventStream.hs
 generated Generated/TransferRouting/Hospital/Projection.hs
 hole TransferRouting/Hospital/Holes.hs
 generated Generated/TransferRouting/Hospital/Harness.hs
+behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"legacy-runtime-witness","key":"behavior-v1-b25ef0eb11ffe88b","kind":"live-transition","outputs":[{"obligation":"event-output-v1/Hospital/live/Accepting/RouteAcceptedTransferNeed/unguarded//AcceptedTransferNeedRouted/Accepting/1/AcceptedTransferNeedRouted","ownership":"hand-owned"}],"source":"Accepting"}

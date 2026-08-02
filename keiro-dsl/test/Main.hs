@@ -2588,7 +2588,7 @@ main = hspec $ do
       errorCodesOf "test/fixtures/reservation-snapshot.keiro" `shouldReturn` []
       parseSpec "<snapshot-round-trip>" (renderSpec spec) `shouldBe` Right spec
       case [aggregate | NAggregate aggregate <- specNodes spec] of
-        [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc" noLoc)
+        [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10" noLoc)
         aggregates -> expectationFailure ("expected one snapshot aggregate, got " <> show (length aggregates))
     it "rejects disabled intervals and invalid codec fixtures" $ do
       source <- readTestText "test/fixtures/reservation-snapshot.keiro"
@@ -2596,7 +2596,7 @@ main = hspec $ do
       map code (validateSpec interval) `shouldContain` [SnapshotIntervalInvalid]
       version <- parseInlineSpec "<snapshot-version-zero>" (T.replace "state-codec version=1" "state-codec version=0" source)
       map code (validateSpec version) `shouldContain` [SnapshotCodecFixtureInvalid]
-      emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc\"" "shape-hash=\"\"" source)
+      emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\"" "shape-hash=\"\"" source)
       map code (validateSpec emptyHash) `shouldContain` [SnapshotCodecFixtureInvalid]
     it "conditionally lowers JSON instances and the live defaultStateCodec" $ do
       snapshot <- specOf "test/fixtures/reservation-snapshot.keiro"
@@ -2614,7 +2614,7 @@ main = hspec $ do
           snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (withFoldFingerprint"
           snapshotStream `shouldSatisfy` T.isInfixOf "Spec-visible fold changes invalidate old"
           snapshotStream `shouldSatisfy` T.isInfixOf "module are invisible here"
-          snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc\")"
+          snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\")"
           ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
           ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
           ordinaryStream `shouldSatisfy` T.isInfixOf "stateCodec = Nothing"
@@ -2841,6 +2841,8 @@ main = hspec $ do
           -- the worker uses the spec's ceiling, never the dangerous default
           moduleText generatedModule `shouldSatisfy` T.isInfixOf "max-attempts = 5"
           moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeProcessWorkerOptions"
+          moduleText generatedModule `shouldSatisfy` T.isInfixOf "import Generated.HospitalCapacity.Surge.EventStream (SurgeEventStreamDef)"
+          moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeCategory :: Stream.StreamCategory SurgeEventStreamDef"
           moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeCategory = Stream.categoryUnsafe \"hospitalSurge\""
           moduleText generatedModule `shouldSatisfy` T.isInfixOf "confirmBenignDuplicate"
           moduleText generatedModule `shouldSatisfy` T.isInfixOf "StreamName -> EventId -> CommandError -> Eff es Bool"
@@ -2853,6 +2855,17 @@ main = hspec $ do
       a <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       b <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       map moduleText a `shouldBe` map moduleText b
+    it "separates aggregate event-stream and command-target categories and emits honest empty sums" $ do
+      spec <- specOf "test/fixtures/hospital-surge.keiro"
+      let ctx = defaultContext (specContext spec)
+          modules = concat [scaffoldAggregate ctx spec aggregate | NAggregate aggregate <- specNodes spec]
+          surgeStream = generatedTextEndingIn "Surge/EventStream.hs" modules
+          surgeDomain = generatedTextEndingIn "Surge/Domain.hs" modules
+      surgeStream `shouldSatisfy` T.isInfixOf "surgeCategory :: Stream.StreamCategory SurgeEventStreamDef"
+      surgeStream `shouldSatisfy` T.isInfixOf "surgeCommandCategory :: Stream.StreamCategory SurgeCommand"
+      surgeDomain `shouldSatisfy` T.isInfixOf "{-# LANGUAGE EmptyDataDecls #-}"
+      surgeDomain `shouldSatisfy` T.isInfixOf "data SurgeEvent\n"
+      surgeDomain `shouldSatisfy` (not . T.isInfixOf "data SurgeEvent = ()")
 
   describe "contract (EP-4)" $ do
     it "parses the emergency contract (topics + events-on-topic + typed fields)" $ do
@@ -2888,12 +2901,15 @@ main = hspec $ do
           identities = idDomainIdentitiesForService service
           manifestText = renderManifestForService "contract-v4.keiro" [typedModule] service
       committed <- readTestText "test/conformance-contract-typeid/Generated/HospitalCapacity/Emergency/Contract.hs"
-      moduleText typedModule `shouldBe` committed
+      normalizeGenerated (moduleText typedModule) `shouldBe` normalizeGenerated committed
       moduleText legacyModule `shouldSatisfy` T.isInfixOf "incidentId :: !Text"
       moduleText legacyModule `shouldSatisfy` (not . T.isInfixOf "KindID")
       moduleText typedModule `shouldSatisfy` T.isInfixOf "incidentId :: !(KindID \"inc\")"
       moduleText typedModule `shouldSatisfy` T.isInfixOf "KindID.toText payload.incidentId"
       moduleText typedModule `shouldSatisfy` T.isInfixOf "explicitParseField (parseKindIdV7Value @\"inc\") o \"incidentId\""
+      moduleText typedModule `shouldSatisfy` T.isInfixOf "  , incidentEventsTopic"
+      moduleText typedModule `shouldSatisfy` T.isInfixOf "  , hospitalEventsTopic"
+      moduleText typedModule `shouldSatisfy` (not . T.isInfixOf "Wno-unused-top-binds")
       dependencies `shouldBe` ["aeson", "base", "keiro-core", "mmzk-typeid", "text"]
       manifestDependencies spec `shouldBe` ["aeson", "base", "text"]
       forM_ dependencies $ \dependency -> manifestText `shouldSatisfy` T.isInfixOf ("    , " <> dependency)
@@ -3245,7 +3261,10 @@ main = hspec $ do
               runtime = generatedTextEndingIn "WorkflowRuntime.hs" modules
           facts `shouldSatisfy` T.isInfixOf "patch:fraud-check-v2(step:fraud-check)"
           facts `shouldSatisfy` T.isInfixOf "continueAsNew:RolloverSeed"
-          facts `shouldSatisfy` T.isInfixOf "(\"patches\", \"fraud-check-v2\")"
+          facts `shouldSatisfy` T.isInfixOf "data WorkflowFacts = WorkflowFacts"
+          facts `shouldSatisfy` T.isInfixOf "workflowFactBody = [\"step:create-transfer-hold\", \"patch:fraud-check-v2(step:fraud-check)\""
+          facts `shouldSatisfy` T.isInfixOf "workflowFactAwaitLabels = [\"reservation-confirmation\"]"
+          facts `shouldSatisfy` T.isInfixOf "workflowFactPatchIds = [\"fraud-check-v2\"]"
           runtime `shouldSatisfy` T.isInfixOf "declaredPatches = Set.fromList [PatchId \"fraud-check-v2\"]"
           runtime `shouldSatisfy` T.isInfixOf "opts{activePatches = declaredPatches}"
         workflows -> expectationFailure ("expected one workflow, got " <> show (length workflows))
@@ -6807,7 +6826,11 @@ normalizeGenerated text =
     -- fail the pin.
     isOrderInsensitive line = isImport line || "{-# LANGUAGE " `T.isPrefixOf` line
     normalizeBody =
-      T.replace "( " "("
+      -- Fourmolu parenthesizes a single class constraint while the emitter's
+      -- compact spelling remains valid Haskell.  Treat that formatter-only
+      -- rewrite like the whitespace and comma placement normalized below.
+      T.replace "(Show value) =>" "Show value =>"
+        . T.replace "( " "("
         . T.replace " )" ")"
         . T.replace " , )" " )"
         . T.unwords

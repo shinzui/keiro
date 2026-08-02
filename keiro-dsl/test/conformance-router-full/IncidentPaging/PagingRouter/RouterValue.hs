@@ -11,7 +11,7 @@ module IncidentPaging.PagingRouter.RouterValue (
 import Data.Text (Text)
 import Effectful (Eff)
 import Generated.IncidentPaging.Page.Domain qualified as Page
-import Generated.IncidentPaging.Page.EventStream (pageCategory, pageEventStream)
+import Generated.IncidentPaging.Page.EventStream (pageCommandCategory, pageEventStream)
 import Generated.IncidentPaging.PagingRouter.Router (pagingRouterName)
 import Keiki.Core (HsPred)
 import Keiro.ProcessManager (PMCommand (..))
@@ -28,11 +28,11 @@ resolveTargets :: IncidentRaised -> Eff '[] [PMCommand Page.PageCommand]
 resolveTargets input =
     pure
         [ PMCommand
-            { target = entityStream pageCategory (input.incidentId <> "-responder-a")
+            { target = entityStream pageCommandCategory (input.incidentId <> "-responder-a")
             , command = Page.SendPage (Page.SendPageData input.incidentId "responder-a")
             }
         , PMCommand
-            { target = entityStream pageCategory (input.incidentId <> "-responder-b")
+            { target = entityStream pageCommandCategory (input.incidentId <> "-responder-b")
             , command = Page.SendPage (Page.SendPageData input.incidentId "responder-b")
             }
         ]

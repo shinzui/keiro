@@ -77,8 +77,15 @@ This section must always reflect the actual current state of the work.
   formats across overwrite, stale, and workspace-adoption paths; and passed
   495 unit/workspace examples including legacy migration, repeated-run byte
   stability, and ownership-move invariance.
-- [ ] Milestone 5: module hygiene — exports, warnings, formatter conformance,
-  typed workflow facts, and concrete stream-category phantoms.
+- [x] 2026-08-02 14:19 PDT: Milestone 5 exported contract topics, removed the
+  now-unnecessary unused-top-binding suppressions, emitted field-per-line
+  decode arms and honest empty sums, split aggregate event-stream and
+  command-target category phantoms, pinned process categories to their saga
+  event-stream definitions, replaced packed workflow pairs with typed facts,
+  made the touched record/comment emitters formatter-stable, and formatted 247
+  regenerated Generated modules.  The 496-example generator suite and all 17
+  affected compiled conformance closures passed after updating the intentional
+  nominal-module snapshot shape capture.
 - [ ] Milestone 6: full regeneration, migration guide, and `0.9.0.0`
   changelog entries.
 - [x] 2026-08-02 12:00 PDT: validated the plan against the clean `master`
@@ -163,8 +170,34 @@ implementation. Provide concise evidence.
   supplies the phantom type of the `Stream a` it constructs.  Both process
   saga categories and aggregate target categories are currently polymorphic,
   so pinning only the process module would leave target-category mixups
-  typable.  Both generated category surfaces must name their concrete raw
-  event-stream definition types.
+  typable.  Both generated category surfaces must become concrete; the
+  Milestone 5 discovery below refines the distinct phantoms their runtime
+  boundaries require.
+- Discovery (Milestone 5, 2026-08-02): the runtime deliberately uses two
+  different stream phantoms at its boundaries.  `runCommand` and
+  `EventStream.resolveStreamName` consume `Stream EventStreamDef`, while
+  `PMCommand` and router targets consume `Stream Command` and retarget them
+  internally.  Closing the one formerly-polymorphic aggregate category over
+  either phantom alone would break the other valid path.  Generated aggregates
+  therefore need separate event-stream and command-target categories carrying
+  the same validated category text.
+- Discovery (Milestone 5, 2026-08-02): formatting the regenerated tree exposed
+  three source-level formatter instabilities that whitespace normalization did
+  not hide: a record field's leading comma moved across an attached comment,
+  generated Haddock block comments became line comments, and Fourmolu added
+  parentheses around a single class constraint.  Event-stream/worker records
+  and generated harness documentation now emit the formatter-stable form; the
+  freshness comparator treats only the redundant single-constraint
+  parentheses as formatting.
+- Discovery (Milestone 5 regeneration, 2026-08-02): current aggregate
+  generation centralizes nominal declarations in a context-level `Nominals`
+  module.  Regenerating the older snapshot fixture therefore moved the nominal
+  type identities used by its register file and changed Keiki's derived
+  register-layout hash from
+  `7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc`
+  to
+  `27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10`.
+  Event JSON, the state shape, and the fold fingerprint stayed unchanged.
 - Discovery (Milestone 1, 2026-08-02): live `InboxResult` has five constructors,
   not the four documented by the old emitter and Milestone 0 description.
   `InboxHandlerFailed !Text !Int`, added by the poison-message retry path, was
@@ -261,12 +294,15 @@ Record every decision made while working on the plan.
   still returns the exact write set, while execution safely stamps callers that
   supply a legacy raw module list.
   Date: 2026-08-02
-- Decision: Pin both aggregate and process-manager stream categories to their
-  concrete generated event-stream definition phantoms.
-  Rationale: a process category alone protects its saga stream, while a
-  polymorphic aggregate category still permits the wrong target category to
-  unify with an expected target stream.  Both sides are required for the
-  compile-time guarantee.
+- Decision: Pin process-manager saga categories and aggregate primary
+  categories to their concrete generated event-stream definition phantoms, and
+  generate a second `<aggregate>CommandCategory` pinned to the aggregate's
+  command type for `PMCommand` and router targets.
+  Rationale: process `streamFor` and direct aggregate command execution use the
+  raw event-stream phantom, but dispatched command envelopes intentionally use
+  the command phantom.  Two named values preserve both runtime contracts and
+  reject a category from the wrong aggregate on either path without changing
+  Keiro's runtime API.
   Date: 2026-08-02
 - Decision: Generate both a closed, intake-named classification type and a
   closed, intake-named detailed disposition type.  Keep
@@ -279,6 +315,14 @@ Record every decision made while working on the plan.
   Re-exporting Shibuya's existing `RetryDelay` through `Keiro.Inbox.Types`
   gives generated applications the live retry type without a new direct
   package dependency.
+  Date: 2026-08-02
+- Decision: Accept the regenerated nominal-module move as a one-time snapshot
+  cache invalidation and update the captured register-layout hash rather than
+  weakening snapshot conformance.
+  Rationale: ADR 0003 explicitly treats the register-layout hash as a snapshot
+  compatibility component.  The live derived value and captured fixture now
+  agree, persisted events remain authoritative, and all wire-byte and fold
+  identity pins remain green.
   Date: 2026-08-02
 - Decision: Name a structural projection from its root declaration and every
   normalized JSON-pointer segment (for example
@@ -351,6 +395,20 @@ stale evidence, and workspace adoption recognize only the exact historical
 line or this stamped shape.  Tests prove legacy migration, strict rejection of
 unrelated marker comments, repeat-run byte stability, and no generated churn
 when ownership or source line changes.
+
+Milestone 5 completed on 2026-08-02.  Generated contracts expose their topic
+constants; queue, intake, contract, publisher, and domain emitters no longer
+hide unused private bindings with `-Wno-unused-top-binds`; event codecs render
+readable field-per-line decoders; empty command/event sets are real empty
+datatypes; workflow facts expose separate list fields; and stream categories
+are closed over the runtime phantom they actually serve.  Aggregates expose
+both `<aggregate>Category :: StreamCategory <Aggregate>EventStreamDef` and
+`<aggregate>CommandCategory :: StreamCategory <Aggregate>Command`, while a
+process category is fixed to its saga event-stream definition.  Unit
+freshness, Fourmolu, the focused wire pins, and all affected compile proofs are
+green.  Full regeneration also made the prerequisite nominal-module move
+visible to the snapshot fixture; its register-layout capture was deliberately
+updated while its event bytes and fold fingerprint stayed fixed.
 
 
 ## Context and Orientation
@@ -466,9 +524,10 @@ Milestone 5 is focused module hygiene, in one regeneration pass: export
 contract topic constants and remove `-Wno-unused-top-binds` from every module
 kind that becomes warning-clean; break event-codec decode arms to one field
 per line; replace `emitSum []` with an explicit empty datatype and the needed
-language pragma; pin aggregate and process `StreamCategory` phantoms to their
-concrete raw event-stream definition types so mismatched saga and target
-categories stop unifying; and replace `WorkflowFacts`' `[(String, String)]`
+  language pragma; pin aggregate and process `StreamCategory` phantoms to their
+  concrete raw event-stream definition types, with a separately typed aggregate
+  command-target category for `PMCommand` and routers, so mismatched saga and
+  target categories stop unifying; and replace `WorkflowFacts`' `[(String, String)]`
 with a small generated record whose body, await labels, and patch identifiers
 are real lists rather than comma-packed strings.  Run Fourmolu with
 `-XImportQualifiedPost` over the regenerated fixture files changed by this
@@ -479,8 +538,9 @@ pins and the full test suite, runs Fourmolu check over generated fixtures
 changed by this plan,
 and writes the `0.9.0.0` migration guide section covering: disposition sum
 migration for hole authors, witness rename mapping (old mangled name to new
-readable name per fixture), banner recognition, read-model hole signature
-change, and the new exported topic constants.  Update
+readable name per fixture), banner recognition, the explicitly deferred
+read-model Hole typing (its `RecordedEvent` signature does not change in this
+release), and the new exported topic constants.  Update
 `keiro-dsl/CHANGELOG.md` (and `keiro-core/CHANGELOG.md` if any runtime
 support type moves), amend ADR 0015 with the stamped-banner contract, and run
 the ADR distillation pass.

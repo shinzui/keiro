@@ -5,7 +5,7 @@ module Main (main) where
 import Control.Monad (unless)
 import Effectful (runPureEff)
 import Generated.TransferRouting.Hospital.Domain qualified as Hospital
-import Generated.TransferRouting.Hospital.EventStream (hospitalCategory, hospitalEventStream)
+import Generated.TransferRouting.Hospital.EventStream (hospitalCommandCategory, hospitalEventStream)
 import Generated.TransferRouting.Hospital.Harness (harnessAssertions)
 import Generated.TransferRouting.HospitalTransferRouter.RouterHarness (routerHarnessValues)
 import Generated.TransferRouting.Hospital_load.ReadModelHarness (runReadModelFacts)
@@ -43,7 +43,7 @@ main = do
                        )
                    ,
                        ( "resolver targets the selected hospital aggregate"
-                       , map target commands == [entityStream hospitalCategory "north-general"]
+                       , map target commands == [entityStream hospitalCommandCategory "north-general"]
                        )
                    ,
                        ( "resolver dispatches the accepted need"

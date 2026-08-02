@@ -12,7 +12,7 @@ import Data.Text (Text)
 import Effectful (Eff)
 import Generated.TransferRouting.Hospital.Domain qualified as Hospital
 import Generated.TransferRouting.Hospital.EventStream (
-    hospitalCategory,
+    hospitalCommandCategory,
     hospitalEventStream,
  )
 import Generated.TransferRouting.HospitalTransferRouter.Router (hospitalTransferRouterName)
@@ -50,7 +50,7 @@ resolveTargets input = do
     rows <- resolveHospitalLoad input
     pure
         [ PMCommand
-            { target = entityStream hospitalCategory row.hospitalId
+            { target = entityStream hospitalCommandCategory row.hospitalId
             , command =
                 Hospital.RouteAcceptedTransferNeed
                     (Hospital.RouteAcceptedTransferNeedData input.transferNeedId row.hospitalId)

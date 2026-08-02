@@ -464,6 +464,7 @@ test-suite keiro-dsl-conformance-snapshot
   hs-source-dirs: test/conformance-snapshot
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
@@ -566,6 +567,7 @@ test-suite keiro-dsl-conformance-coldstart
   main-is:        Main.hs
   other-modules:
     Billing.Subscription.Holes
+    Generated.Billing.Nominals
     Generated.Billing.ReplayAudit
     Generated.Billing.Subscription.Codec
     Generated.Billing.Subscription.Domain
@@ -781,6 +783,7 @@ test-suite keiro-dsl-conformance-process-full
     Generated.SurgeDemo.Hospital.Domain
     Generated.SurgeDemo.Hospital.EventStream
     Generated.SurgeDemo.Hospital.Projection
+    Generated.SurgeDemo.Nominals
     Generated.SurgeDemo.ReplayAudit
     Generated.SurgeDemo.Surge.Codec
     Generated.SurgeDemo.Surge.Domain
@@ -829,10 +832,18 @@ test-suite keiro-dsl-conformance-process-runtime
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process-runtime
   main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.HospitalSurge.Process
+  other-modules:
+    Generated.HospitalCapacity.HospitalSurge.Process
+    Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Surge.Codec
+    Generated.HospitalCapacity.Surge.Domain
+    Generated.HospitalCapacity.Surge.EventStream
+    HospitalCapacity.Surge.Holes
+
   build-depends:
     , aeson         >=2.2  && <2.3
     , base          >=4.21 && <5
+    , keiki         >=0.7  && <0.8
     , keiro
     , keiro-dsl
     , shibuya-core
@@ -957,6 +968,7 @@ test-suite keiro-dsl-conformance-v2
   hs-source-dirs: test/conformance-v2
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain

@@ -2545,7 +2545,6 @@ emitContractGen :: EffectiveLanguageContract -> Text -> ContractNode -> Text
 emitContractGen languageContract genPrefix c =
   ( nl $
       pragmas
-        ++ ["{-# OPTIONS_GHC -Wno-unused-top-binds #-}"]
         ++ ["" | hasTypedTypeIds]
         ++ [generatedBanner]
         ++ moduleHeader
@@ -2609,27 +2608,17 @@ emitContractGen languageContract genPrefix c =
     typedKindIdImports
       | hasTypedTypeIds = ["import Data.KindID (KindID)", "import qualified Data.KindID as KindID"]
       | otherwise = []
-    moduleHeader
-      | hasTypedTypeIds =
-          [ "module " <> genPrefix <> ".Contract",
-            "  ( " <> payloadTy <> " (..),"
-          ]
-            ++ ["    " <> ceName event <> "Data (..)," | event <- ctrEvents c]
-            ++ [ "    messageTypeOf,",
-                 "    encode" <> payloadTy <> ",",
-                 "    parse" <> payloadTy <> ",",
-                 "  )",
-                 "where"
-               ]
-      | otherwise =
-          [ "module " <> genPrefix <> ".Contract",
-            "  ( " <> payloadTy <> " (..)",
-            nl ["  , " <> ceName event <> "Data (..)" | event <- ctrEvents c],
-            "  , messageTypeOf",
-            "  , encode" <> payloadTy,
-            "  , parse" <> payloadTy,
-            "  ) where"
-          ]
+    moduleHeader =
+      [ "module " <> genPrefix <> ".Contract",
+        "  ( " <> payloadTy <> " (..)"
+      ]
+        ++ ["  , " <> ceName event <> "Data (..)" | event <- ctrEvents c]
+        ++ ["  , " <> lowerFirst alias <> "Topic" | (alias, _) <- ctrTopics c]
+        ++ [ "  , messageTypeOf",
+             "  , encode" <> payloadTy,
+             "  , parse" <> payloadTy,
+             "  ) where"
+           ]
     topicConstants
       | hasTypedTypeIds =
           [ T.intercalate
@@ -2657,11 +2646,17 @@ emitContractGen languageContract genPrefix c =
           ]
       | otherwise = [lead index entry | (index, entry) <- zip [(0 :: Int) ..] entries]
     decodeArm e =
-      [ "        " <> tshow (ceName e) <> " ->",
-        "          " <> ceName e <> " <$> (" <> ceName e <> "Data" <> fieldApps (ceFields e) <> ")"
-      ]
-    fieldApps [] = ""
-    fieldApps fs = " <$> " <> T.intercalate " <*> " (map decodeField fs)
+      ["        " <> tshow (ceName e) <> " ->"]
+        ++ case ceFields e of
+          [] -> ["          pure (" <> ceName e <> " " <> ceName e <> "Data)"]
+          fields ->
+            [ "          " <> ceName e,
+              "            <$> ( " <> ceName e <> "Data"
+            ]
+              ++ [ (if index == 0 then "                    <$> " else "                    <*> ") <> decodeField field
+                 | (index, field) <- zip [(0 :: Int) ..] fields
+                 ]
+              ++ ["                )"]
     encodeField field =
       tshow (cfName field)
         <> " .= "
@@ -2733,7 +2728,6 @@ emitIntakeGen :: Text -> IntakeNode -> Text
 emitIntakeGen genPrefix i =
   nl $
     [ "{-# LANGUAGE OverloadedStrings #-}",
-      "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
       generatedBanner,
       "module " <> genPrefix <> ".Inbox",
       "  ( InboxFailure (..)",
@@ -2837,8 +2831,7 @@ scaffoldPublisher ctx pb =
 emitPublisherGen :: Text -> PublisherNode -> Text
 emitPublisherGen genPrefix pb =
   nl
-    [ "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".Publisher",
       "  ( publisherOrdering",
       "  , publisherBackoff",
@@ -2905,7 +2898,6 @@ emitWorkqueueGen :: Text -> WorkqueueNode -> Text
 emitWorkqueueGen genPrefix w =
   nl $
     [ "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
       generatedBanner,
       "module " <> genPrefix <> ".Queue",
       "  ( " <> payloadTy <> " (..)",
@@ -2989,15 +2981,14 @@ emitQueueCodec :: Text -> WorkqueueNode -> Text
 emitQueueCodec genPrefix w =
   nl
     [ generatedBanner,
-      "{- | Versioned job payload envelope: @{\\\"v\\\",\\\"t\\\",\\\"data\\\"}@.",
-      "",
-      "Deploy workers before producers when raising its schema version. Do not",
-      "adopt this codec on a non-empty bare-payload queue without draining it",
-      "(or supplying a transitional codec), or in-flight messages will",
-      "dead-letter. This is telemetry-neutral:",
-      "docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md owns",
-      "spans and acknowledgement vocabulary.",
-      "-}",
+      "-- | Versioned job payload envelope: @{\\\"v\\\",\\\"t\\\",\\\"data\\\"}@.",
+      "--",
+      "-- Deploy workers before producers when raising its schema version. Do not",
+      "-- adopt this codec on a non-empty bare-payload queue without draining it",
+      "-- (or supplying a transitional codec), or in-flight messages will",
+      "-- dead-letter. This is telemetry-neutral:",
+      "-- docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md owns",
+      "-- spans and acknowledgement vocabulary.",
       "module " <> genPrefix <> ".QueueCodec (" <> stem <> "PayloadCodec, " <> stem <> "JobCodec) where",
       "",
       "import Data.List.NonEmpty (NonEmpty (..))",
@@ -3398,10 +3389,10 @@ workerOptionsLines valueName rejected poison =
   [ valueName <> signature,
     valueName <> argument <> " =",
     "  WorkerOptions",
-    "    { poisonPolicy = " <> poisonExpr,
-    "    , rejectedCommandPolicy = " <> rejectedExpr rejected,
-    "    , transientRetryDelay = RetryDelay 5 -- matches defaultWorkerOptions; runtime tuning",
-    "    , metrics = Nothing                  -- runtime configuration; install at call site",
+    "    { poisonPolicy = " <> poisonExpr <> ",",
+    "      rejectedCommandPolicy = " <> rejectedExpr rejected <> ",",
+    "      transientRetryDelay = RetryDelay 5, -- matches defaultWorkerOptions; runtime tuning",
+    "      metrics = Nothing -- runtime configuration; install at call site",
     "    }"
   ]
   where
@@ -3435,7 +3426,7 @@ scaffoldProcess :: Context -> ProcessNode -> [ScaffoldModule]
 scaffoldProcess ctx p =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs"),
-        moduleText = emitProcessGen ctxPascal genPrefix holePrefix p,
+        moduleText = emitProcessGen sagaGenPrefix genPrefix holePrefix p,
         kind = Generated,
         origin = nodeOrigin "process" (procId p) (procLoc p)
       },
@@ -3447,12 +3438,12 @@ scaffoldProcess ctx p =
       }
   ]
   where
-    ctxPascal = pascalFromKebab (contextName ctx)
     genPrefix = genPrefixFor ctx (procId p)
     holePrefix = holePrefixFor ctx (procId p)
+    sagaGenPrefix = genPrefixFor ctx (pascal (sagaAgg (procSaga p)))
 
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
-emitProcessGen _ctxPascal genPrefix _holePrefix p =
+emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
   nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".Process",
@@ -3469,6 +3460,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
       "import Data.Time (UTCTime)",
       "import Data.UUID (UUID)",
       "import qualified Data.UUID.V5 as UUID.V5",
+      "import " <> sagaGenPrefix <> ".EventStream (" <> sagaEventStreamType <> ")",
       "import Keiro.Command (CommandError (..))",
       "import Keiro.Stream qualified as Stream",
       "import Keiro.Timer (TimerId (..), TimerRequest (..))"
@@ -3482,7 +3474,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
            "-- The validated saga stream category (hole-kind 5: referenced, never retyped).",
            "-- Saga streams are '<category>-<correlationId>' via Keiro.Stream.entityStream.",
            "-- categoryUnsafe is safe here because keiro-dsl check proved the literal legal.",
-           lo <> "Category :: Stream.StreamCategory a",
+           lo <> "Category :: Stream.StreamCategory " <> sagaEventStreamType,
            lo <> "Category = Stream.categoryUnsafe " <> tshow categoryName,
            "",
            "-- Node-level worker policy lowered from the spec. Pass this value to",
@@ -3526,6 +3518,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
          ]
   where
     lo = lowerFirst (procId p)
+    sagaEventStreamType = pascal (sagaAgg (procSaga p)) <> "EventStreamDef"
     categoryName = staticCategory ("process " <> procId p) (sagaCategory (procSaga p))
     timer = procTimer p
     fd = fireDisposition (tmFire timer)
@@ -3560,7 +3553,7 @@ emitProcessHoles _genPrefix holePrefix p =
       "-- HOLE handle: build the ProcessManagerAction (the self-advance",
       "--   '" <> advCommand (hAdvance (procHandle p)) <> "', the dispatch(es), and the timer) from the input.",
       "-- HOLE streams: build streamFor with entityStream " <> lowerFirst (procId p) <> "Category;",
-      "--   build target streams with entityStream " <> lowerFirst (procTarget p) <> "Category. Never concatenate raw stream names.",
+      "--   build target streams with entityStream " <> lowerFirst (procTarget p) <> "CommandCategory. Never concatenate raw stream names.",
       "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime;",
       "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED).",
       "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,",
@@ -3585,10 +3578,10 @@ emitDomain a =
     [ "{-# LANGUAGE DataKinds #-}"
     ]
       ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
+      ++ ["{-# LANGUAGE EmptyDataDecls #-}" | null (aCommands a) || null (aEvents a)]
       ++ [ "{-# LANGUAGE DuplicateRecordFields #-}",
            "{-# LANGUAGE TemplateHaskell #-}",
            "{-# LANGUAGE TypeApplications #-}",
-           "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
            generatedBanner,
            "module " <> aGenPrefix a <> ".Domain where",
            ""
@@ -3665,7 +3658,7 @@ emitSum tyName ctors =
     arm rc = rc' rc
     rc' rc = rcName rc <> " !" <> rcName rc <> "Data"
     (firstLine, restLines) = case ctors of
-      [] -> ("data " <> tyName <> " = ()", [])
+      [] -> ("data " <> tyName, [])
       (c : cs) ->
         ( "data " <> tyName <> " = " <> arm c,
           ["  | " <> arm c2 | c2 <- cs]
@@ -4058,13 +4051,17 @@ emitDecode a =
       ++ ["        _ -> " <> renderUnknownFailure "event type" "tag" (map rcName (aEvents a))]
   where
     decodeArm e =
-      [ "        " <> tshow (rcName e) <> " ->",
-        "          " <> rcName e <> " <$> (" <> rcName e <> "Data" <> fieldApps (rcFields e) <> ")"
-      ]
-    fieldApps [] = ""
-    fieldApps fs = " <$> " <> T.intercalate " <*> " (map decodeField fs)
-    -- The first field uses <$> (handled above), the rest <*>. We instead build
-    -- a uniform list and join; for an empty record there are no fields.
+      ["        " <> tshow (rcName e) <> " ->"]
+        ++ case rcFields e of
+          [] -> ["          pure (" <> rcName e <> " " <> rcName e <> "Data)"]
+          fields ->
+            [ "          " <> rcName e,
+              "            <$> ( " <> rcName e <> "Data"
+            ]
+              ++ [ (if index == 0 then "                    <$> " else "                    <*> ") <> decodeField field
+                 | (index, field) <- zip [(0 :: Int) ..] fields
+                 ]
+              ++ ["                )"]
     decodeField (n, ty) = case ty of
       AggregateNominal nominal -> decodeNominalField n nominal
       _ -> case fieldCat a ty of
@@ -5279,6 +5276,7 @@ emitEventStream a =
     [ generatedBanner,
       "module " <> aGenPrefix a <> ".EventStream",
       "  ( " <> lowerFirst (aName a) <> "Category",
+      "  , " <> lowerFirst (aName a) <> "CommandCategory",
       "  , " <> lowerFirst (aName a) <> "EventStream",
       "  , " <> lowerFirst (aName a) <> "EventStreamDef",
       "  , " <> aName a <> "EventStream",
@@ -5301,8 +5299,12 @@ emitEventStream a =
            "-- The validated aggregate stream category (hole-kind 5: referenced, never retyped).",
            "-- Entity streams are '<category>-<id>' via Keiro.Stream.entityStream.",
            "-- categoryUnsafe is safe here because this generated literal passed the DSL category proof.",
-           lowerFirst (aName a) <> "Category :: Stream.StreamCategory a",
+           lowerFirst (aName a) <> "Category :: Stream.StreamCategory " <> aName a <> "EventStreamDef",
            lowerFirst (aName a) <> "Category = Stream.categoryUnsafe " <> tshow categoryName,
+           "",
+           "-- The same category text, typed for command envelopes such as PMCommand.",
+           lowerFirst (aName a) <> "CommandCategory :: Stream.StreamCategory " <> aName a <> "Command",
+           lowerFirst (aName a) <> "CommandCategory = Stream.categoryUnsafe " <> tshow categoryName,
            "",
            "type " <> aName a <> "EventStreamDef =",
            "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event",
@@ -5313,12 +5315,12 @@ emitEventStream a =
            lowerFirst (aName a) <> "EventStreamDef :: " <> aName a <> "EventStreamDef",
            lowerFirst (aName a) <> "EventStreamDef =",
            "  EventStream",
-           "    { transducer = " <> lowerFirst (aName a) <> "Transducer",
-           "    , initialState = " <> initialVertex a,
-           "    , initialRegisters = initial" <> aName a <> "Regs",
-           "    , eventCodec = " <> lowerFirst (aName a) <> "Codec",
-           "    , resolveStreamName = Stream.streamName",
-           "    , snapshotPolicy = " <> snapshotPolicyExpr a
+           "    { transducer = " <> lowerFirst (aName a) <> "Transducer,",
+           "      initialState = " <> initialVertex a <> ",",
+           "      initialRegisters = initial" <> aName a <> "Regs,",
+           "      eventCodec = " <> lowerFirst (aName a) <> "Codec,",
+           "      resolveStreamName = Stream.streamName,",
+           "      snapshotPolicy = " <> snapshotPolicyExpr a <> ","
          ]
       ++ stateCodecFieldLines a
       ++ [ "    }",
@@ -5373,29 +5375,29 @@ foldFingerprintValue aggregate
 
 stateCodecFieldLines :: Agg -> [Text]
 stateCodecFieldLines aggregate = case aSnapshot aggregate of
-  Nothing -> ["    , stateCodec = Nothing"]
+  Nothing -> ["      stateCodec = Nothing"]
   Just _
     | hasVersion2Ownership aggregate ->
-        [ "    -- The snapshot discriminator composes: the spec's state-codec version (bump it",
-          "    -- in the spec's `state-codec version=` clause), keiki's register and",
-          "    -- control-state shape hashes, and this fold fingerprint derived from the",
-          "    -- spec's transition surface (guards, writes, emits, states, register",
-          "    -- initials, referenced rules). Spec-visible fold changes invalidate old",
-          "    -- snapshots automatically. Version-2 Hole-owned transitions additionally",
-          "    -- compose their explicit hand-owned FoldVersion tokens here; bump the",
-          "    -- corresponding token whenever that Hole behavior changes.",
-          "    , stateCodec = " <> stateCodecExpr aggregate
+        [ "      -- The snapshot discriminator composes: the spec's state-codec version (bump it",
+          "      -- in the spec's `state-codec version=` clause), keiki's register and",
+          "      -- control-state shape hashes, and this fold fingerprint derived from the",
+          "      -- spec's transition surface (guards, writes, emits, states, register",
+          "      -- initials, referenced rules). Spec-visible fold changes invalidate old",
+          "      -- snapshots automatically. Version-2 Hole-owned transitions additionally",
+          "      -- compose their explicit hand-owned FoldVersion tokens here; bump the",
+          "      -- corresponding token whenever that Hole behavior changes.",
+          "      stateCodec = " <> stateCodecExpr aggregate
         ]
     | otherwise ->
-        [ "    -- The snapshot discriminator composes: the spec's state-codec version (bump it",
-          "    -- in the spec's `state-codec version=` clause), keiki's register and",
-          "    -- control-state shape hashes, and this fold fingerprint derived from the",
-          "    -- spec's transition surface (guards, writes, emits, states, register",
-          "    -- initials, referenced rules). Spec-visible fold changes invalidate old",
-          "    -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes",
-          "    -- module are invisible here: bump `state-codec version=` manually or old",
-          "    -- snapshots will be served stale.",
-          "    , stateCodec = " <> stateCodecExpr aggregate
+        [ "      -- The snapshot discriminator composes: the spec's state-codec version (bump it",
+          "      -- in the spec's `state-codec version=` clause), keiki's register and",
+          "      -- control-state shape hashes, and this fold fingerprint derived from the",
+          "      -- spec's transition surface (guards, writes, emits, states, register",
+          "      -- initials, referenced rules). Spec-visible fold changes invalidate old",
+          "      -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes",
+          "      -- module are invisible here: bump `state-codec version=` manually or old",
+          "      -- snapshots will be served stale.",
+          "      stateCodec = " <> stateCodecExpr aggregate
         ]
 
 snapshotFixtureLines :: Agg -> [Text]

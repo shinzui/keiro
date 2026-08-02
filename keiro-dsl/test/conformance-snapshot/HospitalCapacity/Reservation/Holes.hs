@@ -8,57 +8,59 @@
 -- overwrites it. Its transducer body has been filled by hand to match the
 -- captured HospitalCapacity/Reservation reference, against the generated
 -- signatures. The harness pins this behaviour.
-module HospitalCapacity.Reservation.Holes (
-    reservationTransducer,
+module HospitalCapacity.Reservation.Holes
+  ( reservationTransducer,
     applyTransfer_decisions,
-) where
+  )
+where
 
+import Generated.HospitalCapacity.Nominals (DivertStatus (..))
 import Generated.HospitalCapacity.Reservation.Domain
 import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer, lit, (./=), (.==), (.||))
 
 reservationTransducer ::
-    SymTransducer
-        (HsPred ReservationRegs ReservationCommand)
-        ReservationRegs
-        ReservationVertex
-        ReservationCommand
-        ReservationEvent
+  SymTransducer
+    (HsPred ReservationRegs ReservationCommand)
+    ReservationRegs
+    ReservationVertex
+    ReservationCommand
+    ReservationEvent
 reservationTransducer =
-    B.buildTransducer ReservationUnrequested initialReservationRegs isTerminal do
-        B.from ReservationUnrequested do
-            B.onCmd inCtorRequestTransferReservation $ \d -> B.do
-                B.requireGuard (d.divertStatus ./= lit TotalDivert .|| d.lifeCriticalOverride .== lit True)
-                B.slot @"reservationState" =: lit ReservationHeld
-                B.emit
-                    wireTransferReservationCreated
-                    TransferReservationCreatedTermFields
-                        { reservationId = d.reservationId
-                        , hospitalId = d.hospitalId
-                        , commandId = d.commandId
-                        , patientAcuity = d.patientAcuity
-                        , divertStatus = d.divertStatus
-                        , lifeCriticalOverride = d.lifeCriticalOverride
-                        }
-                B.goto ReservationHeld
-        B.from ReservationHeld do
-            B.onCmd inCtorConfirmReservation $ \d -> B.do
-                B.slot @"reservationState" =: lit ReservationConfirmed
-                B.emit
-                    wireTransferReservationConfirmed
-                    TransferReservationConfirmedTermFields
-                        { reservationId = d.reservationId
-                        , hospitalId = d.hospitalId
-                        , commandId = d.commandId
-                        }
-                B.goto ReservationConfirmed
+  B.buildTransducer ReservationUnrequested initialReservationRegs isTerminal do
+    B.from ReservationUnrequested do
+      B.onCmd inCtorRequestTransferReservation $ \d -> B.do
+        B.requireGuard (d.divertStatus ./= lit TotalDivert .|| d.lifeCriticalOverride .== lit True)
+        B.slot @"reservationState" =: lit ReservationHeld
+        B.emit
+          wireTransferReservationCreated
+          TransferReservationCreatedTermFields
+            { reservationId = d.reservationId,
+              hospitalId = d.hospitalId,
+              commandId = d.commandId,
+              patientAcuity = d.patientAcuity,
+              divertStatus = d.divertStatus,
+              lifeCriticalOverride = d.lifeCriticalOverride
+            }
+        B.goto ReservationHeld
+    B.from ReservationHeld do
+      B.onCmd inCtorConfirmReservation $ \d -> B.do
+        B.slot @"reservationState" =: lit ReservationConfirmed
+        B.emit
+          wireTransferReservationConfirmed
+          TransferReservationConfirmedTermFields
+            { reservationId = d.reservationId,
+              hospitalId = d.hospitalId,
+              commandId = d.commandId
+            }
+        B.goto ReservationConfirmed
   where
     isTerminal = \case
-        ReservationExpired -> True
-        ReservationAdmitted -> True
-        ReservationReleased -> True
-        _ -> False
+      ReservationExpired -> True
+      ReservationAdmitted -> True
+      ReservationReleased -> True
+      _ -> False
 
 -- HOLE (DB-coupled, out of scope for EP-1): the read-model SQL for the
 -- transfer_decisions projection. The pure event->status mapping is generated as
