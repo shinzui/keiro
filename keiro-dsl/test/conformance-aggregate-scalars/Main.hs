@@ -11,6 +11,7 @@ import Control.Monad (forM_, unless)
 import Data.Aeson (Result (..), Value (..), object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Proxy (Proxy (..))
+import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 import Generated.AggregateScalars.ScalarLedger.Codec (encodeScalarLedgerEvent, parseScalarLedgerEvent, scalarLedgerCodec)
@@ -20,7 +21,7 @@ import Generated.AggregateScalars.ScalarLedger.Harness (harnessAssertions)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer, TransducerValidationWarning (..), ValidationOptions (..), defaultValidationOptions, lit, tadd, validateTransducer, (!), (.>=))
 import Keiki.Shape (CanonicalTypeName (..))
-import Keiro.Codec (eventType)
+import Keiro.Codec (EventType (..), eventType)
 import Keiro.EventStream (EventStream (..), StateCodec (..))
 import Numeric.Natural (Natural)
 import System.Exit (exitFailure)
@@ -39,6 +40,7 @@ main = do
                    , ("Natural JSON rejects a fractional number", naturalJsonRejects (Number 1.5))
                    , ("Natural canonical type name is stable", canonicalTypeName (Proxy @Natural) == "Natural")
                    , ("Natural arithmetic is structural in Keiki", naturalArithmeticIsStructural)
+                   , ("unknown event types name the value and expected set", unknownEventTypeIsDiagnosable)
                    ]
     forM_ checks $ \(label, passed) ->
         putStrLn ((if passed then "PASS  " else "FAIL  ") <> label)
@@ -65,6 +67,14 @@ exactEventJson =
             , "observedAt" .= sampleTime
             , "revision" .= (7 :: Natural)
             ]
+
+unknownEventTypeIsDiagnosable :: Bool
+unknownEventTypeIsDiagnosable =
+    case parseScalarLedgerEvent (EventType "ScalarRecorded") (object []) of
+        Left problem ->
+            "ScalarRecorded" `T.isInfixOf` problem
+                && "ScalarsRecorded" `T.isInfixOf` problem
+        Right _ -> False
 
 snapshotRoundTrip :: Bool
 snapshotRoundTrip = case stateCodec scalarLedgerEventStreamDef of

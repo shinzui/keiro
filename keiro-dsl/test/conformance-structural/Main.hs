@@ -4,11 +4,14 @@ module Main (main) where
 
 import Conformance.Structural.Bindings qualified as Bindings
 import Control.Monad (forM_, unless)
+import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.List.NonEmpty qualified as NonEmpty
-import Generated.StructuralConformance.ArtifactCatalog.Codec (encodeArtifactCatalogEvent)
+import Data.Text qualified as T
+import Generated.StructuralConformance.ArtifactCatalog.Codec (decodeArtifactInfoMapped, decodeArtifactKindMapped, decodeArtifactLocationMapped, encodeArtifactCatalogEvent, encodeArtifactInfoMapped)
 import Generated.StructuralConformance.ArtifactCatalog.Domain (ArtifactCatalogCommand, ArtifactCatalogEvent (..), ArtifactCatalogRegs, ArtifactRecordedData (..), inCtorObserveArtifact)
 import Generated.StructuralConformance.ArtifactCatalog.Harness (harnessAssertions)
 import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
@@ -20,7 +23,7 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
     goldenAssertions <- loadGoldenAssertions
-    let assertions = harnessAssertions <> projectionAssertions <> goldenAssertions
+    let assertions = harnessAssertions <> projectionAssertions <> decodeDiagnosticAssertions <> goldenAssertions
     forM_ assertions $ \(label, ok) ->
         putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
     let failed = [label | (label, ok) <- assertions, not ok]
@@ -41,6 +44,37 @@ projectionAssertions =
     ]
   where
     artifactKeyWitness = StructuralProjections.artifactInfoArtifactKeyWitness
+
+decodeDiagnosticAssertions :: [(String, Bool)]
+decodeDiagnosticAssertions =
+    [ ( "mapped enum failure names the value and expected set"
+      , leftContains ["unlisted", "guide", "reference"] (decodeArtifactKindMapped (String "unlisted"))
+      )
+    , ( "mapped union failure points at the tag and names every arm"
+      , leftContains
+            ["$.tag", "remote", "local_file", "local_dir", "repo_path", "url", "canonical"]
+            (decodeArtifactLocationMapped (object ["tag" .= ("remote" :: T.Text)]))
+      )
+    , ( "nested mapped failure retains the complete field path"
+      , leftContains ["$.location.contents"] nestedFailure
+      )
+    ]
+  where
+    artifact = snd (NonEmpty.head (fixtureCases Bindings.artifactInfoCases))
+    nestedFailure = case encodeArtifactInfoMapped artifact of
+        Object fields ->
+            decodeArtifactInfoMapped
+                ( Object
+                    ( KeyMap.insert
+                        "location"
+                        (object ["tag" .= ("local_file" :: T.Text), "contents" .= (7 :: Int)])
+                        fields
+                    )
+                )
+        _ -> error "ArtifactInfo mapped encoder did not produce an object"
+    leftContains fragments result = case result of
+        Left problem -> all (`T.isInfixOf` problem) fragments
+        Right _ -> False
 
 loadGoldenAssertions :: IO [(String, Bool)]
 loadGoldenAssertions = do

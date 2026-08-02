@@ -8,8 +8,8 @@ module SkelProcess.Generated.MyService.Surge.Codec (
 
 import SkelProcess.Generated.MyService.Surge.Domain
 import SkelProcess.Generated.MyService.Nominals (HospitalId (..), hospitalIdText)
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -58,7 +58,7 @@ parseSurgeEvent (EventType tag) = mapLeftText . parseEither (withObject "SurgeEv
           SurgeThresholdNoted <$> (SurgeThresholdNotedData <$> (HospitalId <$> o .: "hospitalId") <*> o .: "availableIcuBeds" <*> o .: "redDemand" <*> o .: "timerId")
         "SurgeTimerMarked" ->
           SurgeTimerMarked <$> (SurgeTimerMarkedData <$> (HospitalId <$> o .: "hospitalId") <*> o .: "timerId")
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: SurgeThresholdNoted, SurgeTimerMarked")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

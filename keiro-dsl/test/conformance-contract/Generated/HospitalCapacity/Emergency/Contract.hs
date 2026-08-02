@@ -11,8 +11,8 @@ module Generated.HospitalCapacity.Emergency.Contract
   , parseEmergencyPayload
   ) where
 
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -61,13 +61,18 @@ parseEmergencyPayload :: Value -> Either Text EmergencyPayload
 parseEmergencyPayload = mapLeftText . parseEither (withObject "EmergencyPayload" go)
   where
     go o = do
-      kind <- o .: "messageType" :: Parser Text
+      kind <- explicitParseField (withText "messageType" validateMessageType) o "messageType"
       case kind of
         "IncidentTransferNeedDeclared" ->
           IncidentTransferNeedDeclared <$> (IncidentTransferNeedDeclaredData <$> o .: "incidentId" <*> o .: "triageRecordId" <*> o .: "region" <*> o .: "redCount")
         "TransferReservationAccepted" ->
           TransferReservationAccepted <$> (TransferReservationAcceptedData <$> o .: "incidentId" <*> o .: "reservationId" <*> o .: "hospitalId" <*> o .: "expirationDeadline")
-        _ -> fail "unknown message type"
+        _ -> fail "validated message type was not handled"
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+validateMessageType :: Text -> Parser Text
+validateMessageType kind
+  | kind `elem` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"] = pure kind
+  | otherwise = fail ("unknown message type " <> show kind <> "; expected one of: IncidentTransferNeedDeclared, TransferReservationAccepted")

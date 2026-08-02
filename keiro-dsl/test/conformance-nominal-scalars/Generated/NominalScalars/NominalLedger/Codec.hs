@@ -10,8 +10,8 @@ module Generated.NominalScalars.NominalLedger.Codec (
 ) where
 
 import Generated.NominalScalars.NominalLedger.Domain
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -39,7 +39,7 @@ parseOrderStatusNominal :: Text -> Parser NominalConformance.Domain.OrderStatus
 parseOrderStatusNominal = \case
   "draft" -> pure (nominalFromRepresentation NominalConformance.Bindings.orderStatusBinding Generated.NominalScalars.Nominal.Shape.OrderStatus.Draft)
   "submitted" -> pure (nominalFromRepresentation NominalConformance.Bindings.orderStatusBinding Generated.NominalScalars.Nominal.Shape.OrderStatus.Submitted)
-  _ -> fail "unknown OrderStatus wire value"
+  tag -> fail ("unknown OrderStatus wire value " <> show tag <> "; expected one of: draft, submitted")
 
 
 
@@ -77,8 +77,8 @@ parseNominalLedgerEvent (EventType tag) = mapLeftText . parseEither (withObject 
     go o = do
       case tag of
         "NominalsRecorded" ->
-          NominalsRecorded <$> (NominalsRecordedData <$> (o .: "orderId" >>= parseOrderIdNominal) <*> (o .: "status" >>= parseOrderStatusNominal) <*> (nominalFromRepresentation NominalConformance.Bindings.accountNumberBinding <$> o .: "accountNumber") <*> (nominalFromRepresentation NominalConformance.Bindings.riskScoreBinding <$> o .: "riskScore") <*> (nominalFromRepresentation NominalConformance.Bindings.sequenceNumberBinding <$> o .: "sequenceNumber") <*> (nominalFromRepresentation NominalConformance.Bindings.featureFlagBinding <$> o .: "featureFlag") <*> (nominalFromRepresentation NominalConformance.Bindings.observedAtBinding <$> o .: "observedAt"))
-        _ -> fail "unknown event type"
+          NominalsRecorded <$> (NominalsRecordedData <$> explicitParseField (withText "OrderId" parseOrderIdNominal) o "orderId" <*> explicitParseField (withText "OrderStatus" parseOrderStatusNominal) o "status" <*> (nominalFromRepresentation NominalConformance.Bindings.accountNumberBinding <$> o .: "accountNumber") <*> (nominalFromRepresentation NominalConformance.Bindings.riskScoreBinding <$> o .: "riskScore") <*> (nominalFromRepresentation NominalConformance.Bindings.sequenceNumberBinding <$> o .: "sequenceNumber") <*> (nominalFromRepresentation NominalConformance.Bindings.featureFlagBinding <$> o .: "featureFlag") <*> (nominalFromRepresentation NominalConformance.Bindings.observedAtBinding <$> o .: "observedAt"))
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: NominalsRecorded")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

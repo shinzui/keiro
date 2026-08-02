@@ -8,8 +8,8 @@ module SkelAggregate.Generated.MyService.Thing.Codec (
 
 import SkelAggregate.Generated.MyService.Thing.Domain
 import SkelAggregate.Generated.MyService.Nominals (ThingId (..), thingIdText)
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -47,7 +47,7 @@ parseThingEvent (EventType tag) = mapLeftText . parseEither (withObject "ThingEv
       case tag of
         "ThingCompleted" ->
           ThingCompleted <$> (ThingCompletedData <$> (ThingId <$> o .: "thingId") <*> o .: "attempt")
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ThingCompleted")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

@@ -32,13 +32,20 @@ main = do
         | (label, p, expectedBytes) <- samples
         ]
       unknownTagRejected = case parseEmergencyPayload (object ["messageType" .= ("UnknownMessage" :: Text)]) of
-        Left _ -> True
+        Left problem ->
+          all
+            (`T.isInfixOf` problem)
+            [ "$.messageType",
+              "UnknownMessage",
+              "IncidentTransferNeedDeclared",
+              "TransferReservationAccepted"
+            ]
         Right _ -> False
       missingFieldRejected = case parseEmergencyPayload (object ["messageType" .= ("IncidentTransferNeedDeclared" :: Text)]) of
-        Left _ -> True
+        Left problem -> "incidentId" `T.isInfixOf` problem
         Right _ -> False
   forM_ results $ \(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
   let failed = [label | (label, ok) <- results, not ok]
-  putStrLn ("unknown discriminator rejected: " <> show unknownTagRejected)
-  putStrLn ("missing field rejected: " <> show missingFieldRejected)
+  putStrLn ("unknown discriminator is diagnosed at its field: " <> show unknownTagRejected)
+  putStrLn ("missing field is named: " <> show missingFieldRejected)
   unless (null failed && unknownTagRejected && missingFieldRejected) $ putStrLn ("contract: failed " <> show failed) >> exitFailure

@@ -14,7 +14,7 @@ import Control.Monad (unless)
 import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -49,8 +49,8 @@ parseStartPayloadShape :: Value -> Parser Generated.BehaviorComplete.Structural.
 parseStartPayloadShape = withObject "StartPayloadShape" $ \objectValue -> do
   rejectUnknownFields "StartPayload" ["display_label", "optional_note"] objectValue
   Generated.BehaviorComplete.Structural.Shape.StartPayload.StartPayload
-    <$> ((objectValue .: "display_label" :: Parser Value) >>= (parseJSON))
-    <*> (case KeyMap.lookup (Key.fromText "optional_note") objectValue of Nothing -> pure Nothing; Just presentValue -> (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) presentValue)
+    <$> explicitParseField (parseJSON) objectValue "display_label"
+    <*> (case KeyMap.lookup (Key.fromText "optional_note") objectValue of Nothing -> pure Nothing; Just _ -> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "optional_note")
 
 journeyCodec :: Codec JourneyEvent
 journeyCodec =
@@ -99,14 +99,14 @@ parseJourneyEvent (EventType tag) = mapLeftText . parseEither (withObject "Journ
     go o = do
       case tag of
         "Started" ->
-          Started <$> (StartedData <$> (RequestId <$> o .: "requestId") <*> o .: "observedAt" <*> o .: "amount" <*> (o .: "details" >>= parseStartPayloadMapped))
+          Started <$> (StartedData <$> (RequestId <$> o .: "requestId") <*> o .: "observedAt" <*> o .: "amount" <*> explicitParseField parseStartPayloadMapped o "details")
         "DecisionRecorded" ->
           DecisionRecorded <$> (DecisionRecordedData <$> o .: "amount")
         "Retired" ->
           Retired <$> (RetiredData <$> o .: "amount")
         "RetirementAudited" ->
           RetirementAudited <$> (RetirementAuditedData <$> o .: "amount")
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: Started, DecisionRecorded, Retired, RetirementAudited")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

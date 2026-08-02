@@ -14,6 +14,7 @@ import qualified Data.KindID as KindID
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
+import Data.Text qualified as T
 import qualified Generated.NominalScalars.Nominal.Shape.OrderStatus as Representation
 import Generated.NominalScalars.NominalLedger.Codec
 import Generated.NominalScalars.NominalLedger.Domain
@@ -194,7 +195,10 @@ malformedIdRejected :: Bool
 malformedIdRejected = rejects (replace "orderId" (String "not-a-typeid") expectedEventJson)
 
 unknownEnumRejected :: Bool
-unknownEnumRejected = rejects (replace "status" (String "retired") expectedEventJson)
+unknownEnumRejected =
+    case parseNominalLedgerEvent (EventType "NominalsRecorded") (replace "status" (String "retired") expectedEventJson) of
+        Left problem -> all (`T.isInfixOf` problem) ["$.status", "retired", "draft", "submitted"]
+        Right _ -> False
 
 rejects :: Value -> Bool
 rejects value = case parseNominalLedgerEvent (EventType "NominalsRecorded") value of

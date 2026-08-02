@@ -9,8 +9,8 @@ module Generated.HospitalCapacity.Reservation.Codec (
 
 import Generated.HospitalCapacity.Reservation.Domain
 import Generated.HospitalCapacity.Nominals (CommandId (..), commandIdText, DivertStatus (..), divertStatusText, HospitalId (..), hospitalIdText, PatientAcuity (..), patientAcuityText, TransferReservationId (..), transferReservationIdText)
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -22,14 +22,14 @@ parseDivertStatus = \case
   "open" -> pure Open
   "partial-divert" -> pure PartialDivert
   "total-divert" -> pure TotalDivert
-  _ -> fail "unknown DivertStatus"
+  tag -> fail ("unknown DivertStatus " <> show tag <> "; expected one of: open, partial-divert, total-divert")
 
 parsePatientAcuity :: Text -> Parser PatientAcuity
 parsePatientAcuity = \case
   "red" -> pure RedTag
   "yellow" -> pure YellowTag
   "green" -> pure GreenTag
-  _ -> fail "unknown PatientAcuity"
+  tag -> fail ("unknown PatientAcuity " <> show tag <> "; expected one of: red, yellow, green")
 
 
 reservationCodec :: Codec ReservationEvent
@@ -71,10 +71,10 @@ parseReservationEvent (EventType tag) = mapLeftText . parseEither (withObject "R
     go o = do
       case tag of
         "TransferReservationCreated" ->
-          TransferReservationCreated <$> (TransferReservationCreatedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId") <*> (o .: "patientAcuity" >>= parsePatientAcuity) <*> (o .: "divertStatus" >>= parseDivertStatus) <*> o .: "lifeCriticalOverride")
+          TransferReservationCreated <$> (TransferReservationCreatedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId") <*> explicitParseField (withText "PatientAcuity" parsePatientAcuity) o "patientAcuity" <*> explicitParseField (withText "DivertStatus" parseDivertStatus) o "divertStatus" <*> o .: "lifeCriticalOverride")
         "TransferReservationConfirmed" ->
           TransferReservationConfirmed <$> (TransferReservationConfirmedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId"))
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: TransferReservationCreated, TransferReservationConfirmed")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

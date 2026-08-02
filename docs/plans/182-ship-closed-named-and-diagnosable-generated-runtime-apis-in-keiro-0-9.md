@@ -65,7 +65,12 @@ This section must always reflect the actual current state of the work.
   collision-only suffix allocation, resolved transducer use sites through the
   same global table, migrated hand-owned fixture consumers, and passed the
   structural, scalar-expression, and behavior-complete suites.
-- [ ] Milestone 3: diagnosable decode failures.
+- [x] 2026-08-02 12:59 PDT: Milestone 3 made every emitted unknown
+  discriminator/tag failure name the offending value and complete expected
+  set, moved custom object-field decoders onto Aeson's path-preserving parser
+  boundary, regenerated the byte-current codec/contract fixtures, and passed
+  the unit plus focused contract, aggregate, nominal, structural, behavior,
+  workspace, skeleton, and new-surface suites.
 - [ ] Milestone 4: provenance-stamped generated banners with migration-safe
   recognition of the legacy banner.
 - [ ] Milestone 5: module hygiene — exports, warnings, formatter conformance,
@@ -104,6 +109,14 @@ implementation. Provide concise evidence.
   (contract discriminator, near line 2541), `fail "unknown event type"` (event
   codec, near line 3978), and enum/nominal equivalents name neither the
   offending value nor the expected set.
+- Discovery (Milestone 3, 2026-08-02): decoding a field as `Value` with `.:`
+  and then binding a custom parser loses the owning JSON key because the
+  custom parser runs after Aeson's path annotation has completed.  The
+  path-preserving form is `explicitParseField customParser object key`; text
+  parsers additionally need `withText` at that boundary.  Evidence: the
+  scalar-expression enum initially failed to typecheck when its `Text ->
+  Parser a` parser was passed directly, and the structural diagnostic now
+  reports `$.location.contents` rather than only the nested key.
 - Discovery: seven generated module kinds carry
   `{-# OPTIONS_GHC -Wno-unused-top-binds #-}` partly to hide unexported
   generated bindings such as contract topic constants, which consumers then
@@ -299,6 +312,15 @@ eight-hex suffixes while `/key` remains the unsuffixed
 `artifactInfoKeyWitness`.  Structural, scalar-expression, and behavior
 conformance remained green, proving that witness values and projection
 semantics did not change.
+
+Milestone 3 completed on 2026-08-02.  Contract discriminators and mapped
+union tags are validated inside their owning Aeson field parser, while
+generated/consumer nominals, mapped records, optional fields, and union
+contents use `explicitParseField`.  Unknown values now render the rejected
+value and stable complete expected set; the representative proofs cover
+`$.messageType`, `$.tag`, `$.location.contents`, a root mapped enum, and an
+out-of-band aggregate `EventType`.  Exact accepted wire bytes and all prior
+rejection outcomes remained green.
 
 
 ## Context and Orientation

@@ -2544,7 +2544,7 @@ emitContractGen languageContract genPrefix c =
         ++ [generatedBanner]
         ++ moduleHeader
         ++ [ "",
-             "import Data.Aeson (Value, object, withObject, (.:), (.=))",
+             "import Data.Aeson (Value, object, withObject, withText, (.:), (.=))",
              aesonTypesImport
            ]
         ++ typedKindIdImports
@@ -2575,14 +2575,19 @@ emitContractGen languageContract genPrefix c =
              "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
              "  where",
              "    go o = do",
-             "      kind <- o .: " <> tshow (ctrDiscriminator c) <> " :: Parser Text",
+             "      kind <- explicitParseField (withText " <> tshow (ctrDiscriminator c) <> " validateMessageType) o " <> tshow (ctrDiscriminator c),
              "      case kind of"
            ]
         ++ concatMap decodeArm (ctrEvents c)
-        ++ [ "        _ -> fail \"unknown message type\"",
+        ++ [ "        _ -> fail \"validated message type was not handled\"",
              "",
              "mapLeftText :: Either String b -> Either Text b",
-             "mapLeftText = either (Left . T.pack) Right"
+             "mapLeftText = either (Left . T.pack) Right",
+             "",
+             "validateMessageType :: Text -> Parser Text",
+             "validateMessageType kind",
+             "  | kind `elem` " <> renderTextList (map ceName (ctrEvents c)) <> " = pure kind",
+             "  | otherwise = " <> renderUnknownFailure "message type" "kind" (map ceName (ctrEvents c))
            ]
   )
     <> if hasTypedTypeIds then "\n" else ""
@@ -2628,9 +2633,7 @@ emitContractGen languageContract genPrefix c =
       | otherwise = [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- ctrTopics c]
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isTypedTypeId _ = False
-    aesonTypesImport
-      | hasTypedTypeIds = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
-      | otherwise = "import Data.Aeson.Types (Parser, parseEither)"
+    aesonTypesImport = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
     encodeArm e =
       [ "  " <> ceName e <> " payload ->",
         "    object"
@@ -3778,9 +3781,9 @@ emitCodec a =
                  "import Data.Aeson.Key qualified as Key",
                  "import Data.Aeson.KeyMap qualified as KeyMap"
                ]
-             else ["import Data.Aeson (Value, object, withObject, (.:), (.=))"]
+             else ["import Data.Aeson (Value, object, withObject, withText, (.:), (.=))"]
          )
-      ++ [ "import Data.Aeson.Types (Parser, parseEither)",
+      ++ [ "import Data.Aeson.Types (Parser, explicitParseField, parseEither)",
            "import Data.List.NonEmpty (NonEmpty (..))"
          ]
       ++ ( if hasMappedCodec a
@@ -3873,7 +3876,7 @@ emitEnumParser nominal = case resolvedNominalRepresentation nominal of
         "parse" <> name <> " = \\case"
       ]
         ++ ["  " <> tshow wire <> " -> pure " <> constructor | (constructor, wire) <- NE.toList constructors]
-        ++ ["  _ -> fail " <> tshow ("unknown " <> name)]
+        ++ ["  tag -> " <> renderUnknownFailure name "tag" (map snd (NE.toList constructors))]
   _ -> error "non-enum reached generated enum parser emission"
   where
     name = resolvedNominalName nominal
@@ -3905,7 +3908,7 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
                    <> ")"
                | (constructor, wire) <- NE.toList constructors
                ]
-            <> ["  _ -> fail " <> tshow ("unknown " <> resolvedNominalName nominal <> " wire value")]
+            <> ["  tag -> " <> renderUnknownFailure (resolvedNominalName nominal <> " wire value") "tag" (map snd (NE.toList constructors))]
       _ -> ""
     parserName nominal = "parse" <> resolvedNominalName nominal <> "Nominal"
     validationPrefix prefix = case idDomainContractFor (aLanguageContract aggregate) prefix of
@@ -4046,7 +4049,7 @@ emitDecode a =
       "      case tag of"
     ]
       ++ concatMap decodeArm (aEvents a)
-      ++ ["        _ -> fail \"unknown event type\""]
+      ++ ["        _ -> " <> renderUnknownFailure "event type" "tag" (map rcName (aEvents a))]
   where
     decodeArm e =
       [ "        " <> tshow (rcName e) <> " ->",
@@ -4059,7 +4062,7 @@ emitDecode a =
     decodeField (n, ty) = case ty of
       AggregateNominal nominal -> decodeNominalField n nominal
       _ -> case fieldCat a ty of
-        MappedStructuralCat declaration _ -> "(o .: " <> tshow n <> " >>= parse" <> sdName declaration <> "Mapped)"
+        MappedStructuralCat declaration _ -> "explicitParseField parse" <> sdName declaration <> "Mapped o " <> tshow n
         MappedOpaqueCat {} -> "o .: " <> tshow n
         _ -> "o .: " <> tshow n
     decodeNominalField name nominal = case resolvedNominalOwnership nominal of
@@ -4067,12 +4070,25 @@ emitDecode a =
         IdRepresentation prefix -> case idDomainContractFor (aLanguageContract a) prefix of
           Nothing -> "(" <> resolvedNominalName nominal <> " <$> o .: " <> tshow name <> ")"
           Just _ -> "(" <> legacyNominalConstructorName nominal <> " <$> o .: " <> tshow name <> ")"
-        EnumRepresentation {} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> ")"
+        EnumRepresentation {} ->
+          "explicitParseField (withText "
+            <> tshow (resolvedNominalName nominal)
+            <> " parse"
+            <> resolvedNominalName nominal
+            <> ") o "
+            <> tshow name
         ScalarRepresentation {} -> "o .: " <> tshow name
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
-        IdRepresentation {} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> "Nominal)"
-        EnumRepresentation {} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> "Nominal)"
+        IdRepresentation {} -> consumerNominalFieldParser name nominal
+        EnumRepresentation {} -> consumerNominalFieldParser name nominal
         ScalarRepresentation {} -> "(nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " <$> o .: " <> tshow name <> ")"
+    consumerNominalFieldParser fieldName nominal =
+      "explicitParseField (withText "
+        <> tshow (resolvedNominalName nominal)
+        <> " parse"
+        <> resolvedNominalName nominal
+        <> "Nominal) o "
+        <> tshow fieldName
 
 codecConsumerNominals :: Agg -> [ResolvedNominalType]
 codecConsumerNominals aggregate =
@@ -4262,15 +4278,21 @@ emitShapeDecoder a graph declaration =
             [ "parse" <> name <> "Shape = withText " <> tshow (name <> "Shape") <> " $ \\tag -> case tag of"
             ]
               <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeModuleName <> "." <> weCtor entry | entry <- entries]
-              <> ["  _ -> fail " <> tshow ("unknown " <> name <> " wire value")],
+              <> ["  tag -> " <> renderUnknownFailure (name <> " wire value") "tag" (map weTag entries)],
         onUnion = \encoding arms ->
           nl $
             [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do",
-              "  tag <- objectValue .: " <> tshow (ueTagField encoding) <> " :: Parser Text",
+              "  tag <- explicitParseField (withText " <> tshow (name <> " tag") <> " validate" <> name <> "Tag) objectValue " <> tshow (ueTagField encoding),
               "  case tag of"
             ]
               <> concatMap (unionDecodeArm encoding) arms
-              <> ["    _ -> fail " <> tshow ("unknown " <> name <> " union tag")]
+              <> [ "    _ -> fail \"validated union tag was not handled\"",
+                   "",
+                   "validate" <> name <> "Tag :: Text -> Parser Text",
+                   "validate" <> name <> "Tag tag",
+                   "  | tag `elem` " <> renderTextList (map rwaTag arms) <> " = pure tag",
+                   "  | otherwise = " <> renderUnknownFailure (name <> " union tag") "tag" (map rwaTag arms)
+                 ]
       }
   where
     name = sdName declaration
@@ -4288,11 +4310,10 @@ emitShapeDecoder a graph declaration =
                    <> shapeModuleName
                    <> "."
                    <> rwaCtor arm
-                   <> " <$> (objectValue .: "
-                   <> tshow (ueContentsField encoding)
-                   <> " >>= ("
+                   <> " <$> explicitParseField ("
                    <> decodeShapeExpr a graph payload
-                   <> "))"
+                   <> ") objectValue "
+                   <> tshow (ueContentsField encoding)
            ]
       where
         allowed = ueTagField encoding : [ueContentsField encoding | rwaPayload arm /= Nothing]
@@ -4300,16 +4321,17 @@ emitShapeDecoder a graph declaration =
 decodeRecordField :: Agg -> TypeGraph -> ResolvedWireField -> Text
 decodeRecordField a graph field = case rwfPresence field of
   PRequired ->
-    "((objectValue .: " <> key <> " :: Parser Value) >>= (" <> decoder <> "))"
+    "explicitParseField (" <> decoder <> ") objectValue " <> key
   POptional ->
     "(case KeyMap.lookup (Key.fromText "
       <> key
       <> ") objectValue of Nothing -> "
       <> missing
-      <> "; Just presentValue -> "
-      <> "("
+      <> "; Just _ -> explicitParseField ("
       <> decoder
-      <> ") presentValue)"
+      <> ") objectValue "
+      <> key
+      <> ")"
   where
     key = tshow (rwfKey field)
     decoder = decodeShapeExpr a graph (rwfType field)
@@ -4383,6 +4405,22 @@ objectEntries entries =
 
 renderTextList :: [Text] -> Text
 renderTextList values = "[" <> T.intercalate ", " (map tshow values) <> "]"
+
+-- | Emit a parser failure that names the rejected runtime value and the full,
+-- deterministic wire set accepted at that point.
+renderUnknownFailure :: Text -> Text -> [Text] -> Text
+renderUnknownFailure label variable expected =
+  "fail ("
+    <> tshow ("unknown " <> label <> " ")
+    <> " <> show "
+    <> variable
+    <> " <> "
+    <> tshow ("; expected one of: " <> expectedText)
+    <> ")"
+  where
+    expectedText = case expected of
+      [] -> "<none>"
+      values -> T.intercalate ", " values
 
 --------------------------------------------------------------------------------
 -- Authoritative version-2 expressions and transducer

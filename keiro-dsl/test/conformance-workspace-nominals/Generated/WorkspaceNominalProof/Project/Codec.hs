@@ -9,8 +9,8 @@ module Generated.WorkspaceNominalProof.Project.Codec (
 
 import Generated.WorkspaceNominalProof.Project.Domain
 import Generated.WorkspaceNominalProof.Nominals (ProjectId (..), projectIdText, ProjectPhase (..), projectPhaseText)
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -21,7 +21,7 @@ parseProjectPhase :: Text -> Parser ProjectPhase
 parseProjectPhase = \case
   "draft" -> pure Draft
   "active" -> pure Active
-  _ -> fail "unknown ProjectPhase"
+  tag -> fail ("unknown ProjectPhase " <> show tag <> "; expected one of: draft, active")
 
 
 projectCodec :: Codec ProjectEvent
@@ -58,10 +58,10 @@ parseProjectEvent (EventType tag) = mapLeftText . parseEither (withObject "Proje
     go o = do
       case tag of
         "ProjectRegistered" ->
-          ProjectRegistered <$> (ProjectRegisteredData <$> (ProjectId <$> o .: "projectId") <*> (o .: "phase" >>= parseProjectPhase))
+          ProjectRegistered <$> (ProjectRegisteredData <$> (ProjectId <$> o .: "projectId") <*> explicitParseField (withText "ProjectPhase" parseProjectPhase) o "phase")
         "ArchivalRecorded" ->
-          ArchivalRecorded <$> (ArchivalRecordedData <$> (ProjectId <$> o .: "projectId") <*> (o .: "phase" >>= parseProjectPhase))
-        _ -> fail "unknown event type"
+          ArchivalRecorded <$> (ArchivalRecordedData <$> (ProjectId <$> o .: "projectId") <*> explicitParseField (withText "ProjectPhase" parseProjectPhase) o "phase")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ProjectRegistered, ArchivalRecorded")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

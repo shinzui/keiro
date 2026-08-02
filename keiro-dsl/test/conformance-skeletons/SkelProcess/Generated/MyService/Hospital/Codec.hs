@@ -8,8 +8,8 @@ module SkelProcess.Generated.MyService.Hospital.Codec (
 
 import SkelProcess.Generated.MyService.Hospital.Domain
 import SkelProcess.Generated.MyService.Nominals (HospitalId (..), hospitalIdText)
-import Data.Aeson (Value, object, withObject, (.:), (.=))
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -46,7 +46,7 @@ parseHospitalEvent (EventType tag) = mapLeftText . parseEither (withObject "Hosp
       case tag of
         "SurgeActivated" ->
           SurgeActivated <$> (SurgeActivatedData <$> (HospitalId <$> o .: "hospitalId"))
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: SurgeActivated")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

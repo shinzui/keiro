@@ -15,7 +15,7 @@ import Control.Monad (unless)
 import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -32,7 +32,7 @@ parseAccountMode :: Text -> Parser AccountMode
 parseAccountMode = \case
   "normal" -> pure Normal
   "restricted" -> pure Restricted
-  _ -> fail "unknown AccountMode"
+  tag -> fail ("unknown AccountMode " <> show tag <> "; expected one of: normal, restricted")
 
 encodeLimitsMapped :: ScalarExpressions.Domain.Limits -> Value
 encodeLimitsMapped = encodeLimitsShape . bindingToShape ScalarExpressions.Bindings.limitsBinding
@@ -54,8 +54,8 @@ parseLimitsShape :: Value -> Parser Generated.AggregateScalarExpressions.Structu
 parseLimitsShape = withObject "LimitsShape" $ \objectValue -> do
   rejectUnknownFields "Limits" ["minimum", "ceiling"] objectValue
   Generated.AggregateScalarExpressions.Structural.Shape.Limits.Limits
-    <$> ((objectValue .: "minimum" :: Parser Value) >>= (parseJSON))
-    <*> ((objectValue .: "ceiling" :: Parser Value) >>= (parseJSON))
+    <$> explicitParseField (parseJSON) objectValue "minimum"
+    <*> explicitParseField (parseJSON) objectValue "ceiling"
 
 scalarAccountCodec :: Codec ScalarAccountEvent
 scalarAccountCodec =
@@ -97,10 +97,10 @@ parseScalarAccountEvent (EventType tag) = mapLeftText . parseEither (withObject 
     go o = do
       case tag of
         "Adjusted" ->
-          Adjusted <$> (AdjustedData <$> o .: "balance" <*> o .: "requested" <*> o .: "machine" <*> o .: "label" <*> o .: "active" <*> (o .: "mode" >>= parseAccountMode) <*> (RequestId <$> o .: "requestId") <*> o .: "observedAt" <*> (o .: "limits" >>= parseLimitsMapped))
+          Adjusted <$> (AdjustedData <$> o .: "balance" <*> o .: "requested" <*> o .: "machine" <*> o .: "label" <*> o .: "active" <*> explicitParseField (withText "AccountMode" parseAccountMode) o "mode" <*> (RequestId <$> o .: "requestId") <*> o .: "observedAt" <*> explicitParseField parseLimitsMapped o "limits")
         "ClosedEvent" ->
           ClosedEvent <$> (ClosedEventData <$> o .: "balance")
-        _ -> fail "unknown event type"
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: Adjusted, ClosedEvent")
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
