@@ -240,9 +240,9 @@ machinery is "sequence of generic steps". A loan application — *applied*
 → *underwriting* → *approved* | *rejected* — is expressible as a DAG, but
 the *business semantics* (which states allow which commands; which
 transitions can fire which events; what timer to start when entering
-*underwriting*) live in code attached to nodes, not in the diagram itself.
-Reading the diagram tells you the topology; understanding the workflow
-requires reading the attached code too.
+*underwriting*) commonly live in code attached to nodes rather than in the
+diagram itself. Reading that diagram shows topology while understanding the
+workflow still requires the attached code.
 
 Durable-execution engines render workflows as imperative functions. The
 business semantics are spread across `if` branches and `await` calls. A
@@ -253,13 +253,16 @@ Keiki's `SymTransducer` *is* the state machine. The control vertex `s` is
 a Haskell sum — `Applied | Underwriting | Approved | Rejected` — that the
 compiler enumerates. The `edgesOut` function at each vertex lists every
 admissible transition with its guard, its register-file update, and its
-emitted event. The diagram and the code are the same artifact, derivable
-from each other.
+emitted event. Keiki's primary Mermaid renderer exposes those guards, complete
+register assignments, ordinary literal values, event constructors, and target
+states directly from the executable transducer. An explicit topology renderer
+remains available when a deliberately compact picture is the goal.
 
 The understanding consequence: a product manager and an engineer can
-literally point at the same `SymTransducer` definition and agree on what
-the workflow does. There is no diagram-vs-code drift, because there is no
-diagram separate from the code.
+literally point at the same `SymTransducer` definition and its generated
+behavior-readable diagram and agree on what the workflow does. There is no
+hand-maintained diagram-vs-code drift because the rendered artifact is derived
+from the executable tree.
 
 ### 4.2 Process managers and aggregates use the same mental model
 

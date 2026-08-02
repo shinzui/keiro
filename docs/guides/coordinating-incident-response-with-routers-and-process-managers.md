@@ -72,11 +72,11 @@ even after an acknowledgement (more below).
 ```mermaid
 stateDiagram-v2
     [*] --> Unreported
-    Unreported --> Triaging : RaiseIncident / IncidentRaised
-    Triaging --> Acknowledged : AcknowledgeIncident / IncidentAcknowledged
-    Triaging --> Escalated : EscalateIncident / IncidentEscalated
-    Acknowledged --> Resolved : ResolveIncident / IncidentResolved
-    Escalated --> Resolved : ResolveIncident / IncidentResolved
+    Unreported --> Triaging : RaiseIncident / IncidentRaised<br/>u: (keep)<br/>g: RaiseIncident
+    Triaging --> Acknowledged : AcknowledgeIncident / IncidentAcknowledged<br/>u: (keep)<br/>g: AcknowledgeIncident
+    Triaging --> Escalated : EscalateIncident / IncidentEscalated<br/>u: (keep)<br/>g: EscalateIncident
+    Acknowledged --> Resolved : ResolveIncident / IncidentResolved<br/>u: (keep)<br/>g: ResolveIncident
+    Escalated --> Resolved : ResolveIncident / IncidentResolved<br/>u: (keep)<br/>g: ResolveIncident
     Resolved --> [*]
 ```
 <!-- jitsurei-diagram: incident-stream end -->
@@ -88,8 +88,8 @@ acknowledged:
 ```mermaid
 stateDiagram-v2
     [*] --> AwaitingSend
-    AwaitingSend --> Pending : SendPage / PageSent
-    Pending --> Acked : AcknowledgePage / PageAcknowledged
+    AwaitingSend --> Pending : SendPage / PageSent<br/>u: (keep)<br/>g: SendPage
+    Pending --> Acked : AcknowledgePage / PageAcknowledged<br/>u: (keep)<br/>g: AcknowledgePage
 ```
 <!-- jitsurei-diagram: page-stream end -->
 
@@ -148,8 +148,8 @@ state stream (`esc-<incident>`):
 ```mermaid
 stateDiagram-v2
     [*] --> EscalationIdle
-    EscalationIdle --> Awaiting : NoteRaised / RaiseNoted
-    Awaiting --> Settled : NoteAcknowledged / AcknowledgeNoted
+    EscalationIdle --> Awaiting : NoteRaised / RaiseNoted<br/>u: (keep)<br/>g: NoteRaised
+    Awaiting --> Settled : NoteAcknowledged / AcknowledgeNoted<br/>u: (keep)<br/>g: NoteAcknowledged
     Settled --> [*]
 ```
 <!-- jitsurei-diagram: escalation-stream end -->

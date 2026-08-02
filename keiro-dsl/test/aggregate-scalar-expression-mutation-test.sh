@@ -5,6 +5,7 @@ set -euo pipefail
 TRANSDUCER="keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs"
 HOLES="keiro-dsl/test/conformance-scalar-expressions/AggregateScalarExpressions/ScalarAccount/Holes.hs"
 FIXTURE="keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro"
+CONFORMANCE_ROOT="keiro-dsl/test/conformance-scalar-expressions"
 
 BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/keiro-scalar-mutation.XXXXXX")"
 case "$BACKUP_DIR" in
@@ -15,15 +16,16 @@ esac
 cp "$TRANSDUCER" "$BACKUP_DIR/Transducer.hs"
 cp "$HOLES" "$BACKUP_DIR/Holes.hs"
 cp "$FIXTURE" "$BACKUP_DIR/fixture.keiro"
+cp -R "$CONFORMANCE_ROOT" "$BACKUP_DIR/conformance-root"
 
 restore_all() {
-  cp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
-  cp "$BACKUP_DIR/Holes.hs" "$HOLES"
+  cp -R "$BACKUP_DIR/conformance-root/." "$CONFORMANCE_ROOT/"
   cp "$BACKUP_DIR/fixture.keiro" "$FIXTURE"
 }
 
 cleanup() {
   restore_all
+  rm -rf "$BACKUP_DIR/conformance-root"
   rm -f "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/fixture.keiro" "$BACKUP_DIR/mutation.log"
   rmdir "$BACKUP_DIR"
 }

@@ -64,8 +64,16 @@ This section must always reflect the actual current state of the work.
   migration widened the independently pinned fold digest to FNV-1a-128. The
   canonical scalar surface is unchanged and its current fingerprint pin is
   `11a9e61719371a436e984a2aeee1a2b0`.
-- [ ] Milestone 4: adopt released Keiki `0.8`, make committed diagrams semantic,
-  and refresh generated documentation.
+- [x] 2026-08-02 14:51 PDT: Milestone 4 release gate independently confirmed
+  `keiki-0.8.0.0` and `keiki-codec-json-0.8.0.0` on Hackage plus upstream tag
+  `v0.8.0.0`, which peels to
+  `9ee8de0fece845bf12dda861604b77856782d90b` in the Mori-resolved checkout.
+- [x] 2026-08-02 15:17 PDT: Milestone 4 implementation adopted released Keiki
+  `0.8`, regenerated the committed diagrams with guards, complete assignments,
+  literal values, emissions, and targets, and passed the diagram, focused scalar,
+  compiled scalar-conformance, and eight-mutation gates.
+- [ ] Milestone 4 remaining: run the complete repository validation matrix and
+  distill the final adoption outcome into this plan and any affected ADRs.
 - [ ] Milestone 5: prepare and, with explicit operator approval, publish the
   coordinated Keiro `0.9.0.0` breaking release and verify its tags and registry
   artifacts.
@@ -197,6 +205,34 @@ implementation. Provide concise evidence.
   migration changed `d0897c163c958108` to
   `11a9e61719371a436e984a2aeee1a2b0`; read-model, mapped-wire, and behavior-key
   64-bit identities stayed pinned.
+- Discovery: Keiki `0.8.0.0` is now authoritative on both Hackage and upstream.
+  Hackage also publishes `keiki-codec-json-0.8.0.0`; its package metadata names
+  the same `shinzui/keiki` repository and requires `keiki ^>=0.8`, so the one
+  upstream `v0.8.0.0` tag is the source tag for both released artifacts.
+  Evidence: Hackage preferred-version documents, the released codec Cabal file,
+  upstream tag `v0.8.0.0`, and the Mori-resolved Keiki checkout at peeled commit
+  `9ee8de0fece845bf12dda861604b77856782d90b`.
+- Discovery: Keiki `0.8` changes the canonical pretty rendering of ordinary
+  `K.lit` nodes from `<lit>` to their `Show` values.  The scalar conformance pin
+  now exposes `-100`, `False`, `2`, the written timestamp, text, nominal ID,
+  enum, and Boolean assignment values while retaining the same predicate/update
+  tree and passing the existing runtime, replay, and symbolic assertions.
+  Evidence: `keiro-dsl/test/conformance-scalar-expressions/Main.hs` and the
+  passing compiled conformance suite.
+- Discovery: refreshing the Cabal index selected the already-compatible
+  `mmzk-typeid-0.7.1.1` release.  Its more explicit `ValidPrefix` constraints made
+  one previously inferred `KindID.toText` test application ambiguous under GHC
+  9.12.4; applying the already-known `@"req"` prefix restores inference without
+  changing the accepted TypeID domain.
+  Evidence: Hackage `0.7.1.1`, upstream tag `v0.7.1.1`, and the Mori-resolved
+  `mori://MMZK1526/mmzk-typeid` source signature for `KindID.toText`.
+- Discovery: the scalar mutation script's scaffold-repair step overwrote every
+  generated sibling but backed up only the intentionally mutated transducer.
+  The semantic checks passed, yet the command left formatter-only fixture diffs.
+  Backing up and restoring the complete conformance tree makes the advertised
+  exact restoration true and preserves pre-existing local edits.
+  Evidence: the first Keiki `0.8` mutation run's Git diff and a second passing
+  run whose post-command generated-tree diff is empty.
 
 
 ## Decision Log
@@ -330,6 +366,24 @@ Record every decision made while working on the plan.
   without altering the typed expression tree or adding redundant parentheses to
   tighter expressions.
   Date: 2026-08-02
+- Decision: Raise every direct Keiki and Keiki JSON codec bound in the coordinated
+  workspace during Milestone 4, not only the repeated `keiro-dsl` component
+  bounds named in the original step.
+  Rationale: Jitsurei must compile against Keiki `0.8` to exercise the new primary
+  renderer, while Cabal selects one Keiki version for the workspace.  Leaving
+  `keiro-core`, `keiro`, or `jitsurei` constrained below `0.8` would make the
+  release-backed diagram milestone unsatisfiable rather than preserve a useful
+  compatibility mode.
+  Date: 2026-08-02
+- Decision: Validate committed semantic diagrams structurally with Keiki while
+  disabling only the default 80-character label limit, and separately assert the
+  scalar proof's command, guard literals, complete writes, event, and target
+  tokens.
+  Rationale: readable semantic labels are intentionally longer than topology
+  labels.  Keiki's structural safety checks should remain authoritative, while
+  explicit content assertions prevent a valid topology-only diagram from passing
+  the documentation gate.
+  Date: 2026-08-02
 
 
 ## Outcomes & Retrospective
@@ -369,6 +423,17 @@ blocked by the external Keiki `0.8` release/tag and separate publication approva
 Final validation also passed `cabal build all`, `cabal sdist all`, the complete
 Cabal test matrix, strict ADR validation, the repository extension-policy check,
 and `nix flake check`.
+
+Milestone 4 implementation completed on 2026-08-02.  All coordinated workspace
+components now require released Keiki `0.8`; the primary Jitsurei renderer emits
+semantic diagrams without local renderer-option reconstruction.  A committed
+credit-limit aggregate demonstrates a guarded scalar command, `-100` and Boolean
+literals, complete register assignments, emitted event, and target.  Existing
+guide diagrams were regenerated from the same primary renderer, and the normal
+diagram check now combines Keiki structural validation with semantic-content
+assertions.  The focused 15-example unit suite, compiled scalar suite, and all
+eight mutation sentinels pass.  Complete repository validation and release
+preparation remain.
 
 
 ## Context and Orientation
@@ -978,3 +1043,15 @@ the Fourmolu parser configuration, removed redundant inline declarations, and
 kept self-contained pragmas only in generated/scaffolded consumer artifacts.
 Added a repository check to prevent any of those three policy surfaces from
 drifting again.
+
+2026-08-02 (Keiki release gate): Resumed Milestone 4 after Hackage and the
+Mori-resolved upstream checkout independently confirmed Keiki `0.8.0.0`.  Added
+the matching codec release evidence and made the coordinated workspace-bound
+update explicit before changing code.
+
+2026-08-02 (Keiki adoption): Adopted Keiki `0.8` across the coordinated workspace,
+updated the scalar pretty-tree pin for readable literal values, added and checked
+a semantic scalar Mermaid artifact, regenerated the guide diagrams, and hardened
+the scalar mutation harness to restore the complete generated fixture tree.  The
+focused adoption gates pass; the complete validation matrix remains before
+Milestone 4 is closed.

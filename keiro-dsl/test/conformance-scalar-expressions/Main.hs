@@ -41,14 +41,14 @@ main = do
           <> [ ("finite scalar oracle agrees with generated execution", finiteOracleAgreement)
              , ("Natural 2 - 5 is total monus zero", naturalMonusExample)
              , ("Integer/Natural oracle, concrete terms, and symbolic formulas agree", arithmeticAgreement)
-             , ("Keiki 0.7 pretty predicate/update pin the authoritative tree", scalarTreeBaseline)
+             , ("Keiki 0.8 pretty predicate/update pin the authoritative tree", scalarTreeBaseline)
              , ("one-way projected scalar paths remain conservatively unverified", repeatedPathAgreement)
              , ("one-way generated projection and opaque Hole remain unverified", verificationReport == expectedVerificationReport)
              , ("same-declaration nominal guards take both concrete branches", nominalGuardBranches)
              , ("finite generated enum equality is exact symbolically", exactEnumProof)
              , ("generated enum exactness laws hold and legacy ID claims no inverse", generatedNominalProjectionLaws)
              , ("legacy Text-backed generated ID equality stays conservative symbolically", conservativeIdProof)
-             , ("Keiki 0.7 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
+             , ("Keiki 0.8 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
              , ("generated behavior contract reconciles its create-once pending rows", length (Behavior.reportPending behaviorReport) == 6 && null (Behavior.reportMissing behaviorReport))
              , ("Hole envelope preserves declared event and target", holeEnvelopeAgreement)
              , ("encoded replay and full replay after snapshot invalidation agree", fullReplayAgreement)
@@ -63,9 +63,9 @@ scalarTreeBaseline =
   case K.edgesOut scalarAccountTransducer ScalarAccountOpen of
     K.Edge predicate update _ _ _ : _ ->
       Pretty.prettyPred predicate
-        == "(Adjust && (((((((Adjust.balance + balance) >= <lit> && (reserved + Adjust.requested) <= capacity) && Adjust.observedAt >= openedAt) && Adjust.limits./minimum >= limits./minimum) && Adjust.active == <lit>) && Adjust.mode.AccountMode == mode.AccountMode) && Adjust.requestId.RequestId == requestId.RequestId))"
+        == "(Adjust && (((((((Adjust.balance + balance) >= -100 && (reserved + Adjust.requested) <= capacity) && Adjust.observedAt >= openedAt) && Adjust.limits./minimum >= limits./minimum) && Adjust.active == False) && Adjust.mode.AccountMode == mode.AccountMode) && Adjust.requestId.RequestId == requestId.RequestId))"
         && Pretty.prettyUpdate update
-          == "limits := Adjust.limits, openedAt := <lit>, requestId := <lit>, mode := <lit>, active := <lit>, label := <lit>, machine := <lit>, reserved := (reserved + (Adjust.requested - capacity)), balance := (balance + (Adjust.balance * <lit>)), (keep)"
+          == "limits := Adjust.limits, openedAt := 2026-02-03 04:05:06 UTC, requestId := RequestId \"req_00041061050r3gg28a1c60t3gf\", mode := Restricted, active := True, label := \"adjusted\", machine := -7, reserved := (reserved + (Adjust.requested - capacity)), balance := (balance + (Adjust.balance * 2)), (keep)"
     [] -> False
 
 expectedVerificationReport :: [(T.Text, BehaviorOwnership, S.PredicateVerification)]

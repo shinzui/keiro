@@ -1,5 +1,6 @@
 module Jitsurei
   ( module Jitsurei.AgentQualRouter,
+    module Jitsurei.CreditLimit,
     module Jitsurei.Database,
     module Jitsurei.Diagrams,
     module Jitsurei.Domain,
@@ -19,6 +20,7 @@ module Jitsurei
 where
 
 import Jitsurei.AgentQualRouter
+import Jitsurei.CreditLimit
 import Jitsurei.Database
 import Jitsurei.Diagrams
 import Jitsurei.Domain

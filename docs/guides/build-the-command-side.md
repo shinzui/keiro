@@ -163,15 +163,36 @@ cabal run jitsurei:exe:jitsurei-diagrams -- --check
 ```mermaid
 stateDiagram-v2
     [*] --> NotStarted
-    NotStarted --> Placed : PlaceOrder / OrderPlaced
-    Placed --> Paid : ApprovePayment / PaymentApproved
-    Placed --> Cancelled : CancelOrder / OrderCancelled
-    Paid --> Packed : MarkPacked / OrderPacked
-    Packed --> Shipped : ShipOrder / OrderShipped
+    NotStarted --> Placed : PlaceOrder / OrderPlaced<br/>u: (keep)<br/>g: PlaceOrder
+    Placed --> Paid : ApprovePayment / PaymentApproved<br/>u: (keep)<br/>g: ApprovePayment
+    Placed --> Cancelled : CancelOrder / OrderCancelled<br/>u: (keep)<br/>g: CancelOrder
+    Paid --> Packed : MarkPacked / OrderPacked<br/>u: (keep)<br/>g: MarkPacked
+    Packed --> Shipped : ShipOrder / OrderShipped<br/>u: (keep)<br/>g: ShipOrder
     Shipped --> [*]
     Cancelled --> [*]
 ```
 <!-- jitsurei-diagram: order-stream end -->
+
+### Read the decision, assignments, and result in one diagram
+
+Keiki `0.8` makes executable behavior the default diagram surface. The compact
+order aggregate has no scalar registers, so `Jitsurei.CreditLimit` provides a
+focused scalar example: one command is admitted only while the account is active
+and its requested delta is at least `-100`; the accepted edge updates both
+registers, emits `CreditAdjusted`, and enters `CreditReviewed`.
+
+The block below is generated from that exact transducer with
+`Keiki.Render.Mermaid.toMermaid`. Its guard, assignment right-hand sides, ordinary
+literal values, event constructor, and target state are all renderer output.
+
+<!-- jitsurei-diagram: credit-limit begin -->
+```mermaid
+stateDiagram-v2
+    [*] --> CreditOpen
+    CreditOpen --> CreditReviewed : AdjustCredit / CreditAdjusted<br/>u: active := False, balance := (balance + AdjustCredit.delta), (keep)<br/>g: (AdjustCredit &amp;&amp; (AdjustCredit.delta ＞= -100 &amp;&amp; active == True))
+    CreditReviewed --> [*]
+```
+<!-- jitsurei-diagram: credit-limit end -->
 
 That rejection behavior is tested in
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs) under

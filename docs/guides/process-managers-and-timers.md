@@ -28,7 +28,7 @@ cabal run jitsurei:exe:jitsurei-diagrams -- --check
 ```mermaid
 stateDiagram-v2
     [*] --> FulfillmentIdle
-    FulfillmentIdle --> FulfillmentIdle : ObserveFulfillmentEvent / FulfillmentObserved
+    FulfillmentIdle --> FulfillmentIdle : ObserveFulfillmentEvent / FulfillmentObserved<br/>u: (keep)<br/>g: ObserveFulfillmentEvent
 ```
 <!-- jitsurei-diagram: fulfillment-stream end -->
 

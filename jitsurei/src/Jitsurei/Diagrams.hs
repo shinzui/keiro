@@ -1,5 +1,6 @@
 module Jitsurei.Diagrams
-  ( fulfillmentStreamMermaid,
+  ( creditLimitMermaid,
+    fulfillmentStreamMermaid,
     orderStreamMermaid,
     incidentStreamMermaid,
     pageStreamMermaid,
@@ -8,12 +9,16 @@ module Jitsurei.Diagrams
 where
 
 import Data.Text (Text)
+import Jitsurei.CreditLimit (creditLimitTransducer)
 import Jitsurei.EscalationProcess (escalationTransducer)
 import Jitsurei.FulfillmentProcess (fulfillmentTransducer)
 import Jitsurei.Incident (incidentTransducer)
 import Jitsurei.OrderStream (orderTransducer)
 import Jitsurei.Paging (pageTransducer)
 import Keiki.Render.Mermaid (toMermaid)
+
+creditLimitMermaid :: Text
+creditLimitMermaid = toMermaid creditLimitTransducer
 
 orderStreamMermaid :: Text
 orderStreamMermaid = toMermaid orderTransducer

@@ -9,11 +9,17 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Jitsurei.Diagrams
-  ( escalationStreamMermaid,
+  ( creditLimitMermaid,
+    escalationStreamMermaid,
     fulfillmentStreamMermaid,
     incidentStreamMermaid,
     orderStreamMermaid,
     pageStreamMermaid,
+  )
+import Keiki.Render.Validate
+  ( MermaidValidationOptions (..),
+    defaultMermaidValidationOptions,
+    validateMermaidDiagram,
   )
 import System.Environment (getArgs)
 import System.Exit (die, exitFailure)
@@ -32,6 +38,7 @@ data Diagram = Diagram
 main :: IO ()
 main = do
   mode <- parseMode =<< getArgs
+  validateDiagrams diagrams
   stale <- applyDiagrams mode diagrams
   unless (null stale) do
     putStrLn ("Stale generated diagrams: " <> intercalate ", " stale)
@@ -49,6 +56,11 @@ parseMode = \case
 diagrams :: [Diagram]
 diagrams =
   [ Diagram
+      { name = "credit-limit",
+        path = "docs/guides/build-the-command-side.md",
+        body = creditLimitMermaid
+      },
+    Diagram
       { name = "order-stream",
         path = "docs/guides/build-the-command-side.md",
         body = orderStreamMermaid
@@ -77,6 +89,45 @@ diagrams =
   where
     incidentGuide =
       "docs/guides/coordinating-incident-response-with-routers-and-process-managers.md"
+
+validateDiagrams :: [Diagram] -> IO ()
+validateDiagrams generated = do
+  let requiredCreditLimitTokens =
+        [ "AdjustCredit",
+          "CreditAdjusted",
+          "CreditReviewed",
+          "u: active := False",
+          "balance := (balance + AdjustCredit.delta)",
+          "g:",
+          "-100",
+          "True"
+        ]
+      missingTokens =
+        [ token
+        | token <- requiredCreditLimitTokens,
+          not (token `Text.isInfixOf` creditLimitMermaid)
+        ]
+  unless (null missingTokens) $
+    die
+      ( "The credit-limit diagram no longer exposes complete scalar behavior; missing: "
+          <> intercalate ", " (map Text.unpack missingTokens)
+      )
+  mapM_ validateDiagram generated
+  where
+    validateDiagram diagram = do
+      let warnings = validateMermaidDiagram validationOptions diagram.body
+      unless (null warnings) $
+        die
+          ( "Generated diagram failed Keiki validation: "
+              <> Text.unpack diagram.name
+              <> ": "
+              <> intercalate ", " (map show warnings)
+          )
+
+    validationOptions =
+      defaultMermaidValidationOptions
+        { maxLabelLength = Nothing
+        }
 
 applyDiagrams :: Mode -> [Diagram] -> IO [String]
 applyDiagrams mode =

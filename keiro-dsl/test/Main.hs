@@ -643,7 +643,7 @@ main = hspec $ do
       let valid = "req_01h455vb4pex5vsknk084sn02q"
           uppercase = "req_01H455VB4PEX5VSKNK084SN02Q"
           nonV7 = "req_00041061050r3gg28a1c60t3gf"
-      (KindID.toText <$> parseKindIdV7Text @"req" valid) `shouldBe` Right valid
+      (KindID.toText @"req" <$> parseKindIdV7Text @"req" valid) `shouldBe` Right valid
       parseKindIdV7Text @"req" "req-1" `shouldSatisfy` \case
         Left IdDomainMalformed {} -> True
         _ -> False

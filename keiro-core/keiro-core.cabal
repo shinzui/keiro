@@ -61,7 +61,7 @@ library
     , bytestring    >=0.11 && <0.13
     , deepseq       >=1.5  && <1.6
     , generic-lens  >=2.2  && <2.4
-    , keiki         >=0.7  && <0.8
+    , keiki         >=0.8  && <0.9
     , kiroku-store  >=0.3  && <0.4
     , lens          >=5.2  && <5.4
     , mmzk-typeid   >=0.7  && <0.8
