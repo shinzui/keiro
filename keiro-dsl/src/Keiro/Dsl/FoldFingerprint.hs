@@ -18,11 +18,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.CanonicalEncoding (canonicalExpr)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
@@ -235,7 +235,7 @@ transitionSegment spec aggregate transition =
         tCommand transition
       ]
         ++ implementationSegment
-        ++ [ "guard=" <> maybe "" renderExpr (tGuard transition),
+        ++ [ "guard=" <> maybe "" canonicalExpr (tGuard transition),
              "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition)),
              "emits=" <> T.intercalate "," (tEmits transition)
            ]
@@ -243,7 +243,7 @@ transitionSegment spec aggregate transition =
         ++ ["goto=" <> tGoto transition]
     )
   where
-    renderWrite (registerName, expression) = registerName <> ":=" <> renderExpr expression
+    renderWrite (registerName, expression) = registerName <> ":=" <> canonicalExpr expression
     outputSegment emitIndex eventName = case eventOutputMapping spec aggregate transition emitIndex eventName of
       Right mapping -> eventName <> "=" <> eventOutputCanonical mapping
       Left problem -> eventName <> "=invalid:" <> T.pack (show problem)
@@ -270,7 +270,7 @@ ruleSegment rule =
       "cases=" <> T.intercalate ";" (map renderCase (ruleCases rule))
     ]
   where
-    renderCase (constructorName, expression) = constructorName <> "=>" <> renderExpr expression
+    renderCase (constructorName, expression) = constructorName <> "=>" <> canonicalExpr expression
 
 referencedRuleNames :: Spec -> Aggregate -> Set Name
 referencedRuleNames spec aggregate = close directNames

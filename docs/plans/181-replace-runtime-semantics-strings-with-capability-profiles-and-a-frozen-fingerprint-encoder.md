@@ -74,6 +74,9 @@ This section must always reflect the actual current state of the work.
   generated/conformance behavior remain byte-identical for languages 1-4.
 - [ ] Milestone 3: extract the frozen canonical fingerprint encoder, make fold
   surfaces total, and point replay-impact comparison at it.
+- [x] 2026-08-02 10:25 PDT: Milestone 3 encoder extraction is complete:
+  fingerprint and replay comparison now consume an independent frozen
+  canonical module; explicit fold-surface errors and their propagation remain.
 - [ ] Milestone 4: deterministic replay-impact transition pairing and removal
   of the `Spec`-only legacy entry points.
 - [ ] Milestone 5: widen the fingerprint hash beyond 64 bits in one

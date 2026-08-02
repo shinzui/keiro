@@ -28,10 +28,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.CanonicalEncoding (canonicalTransition)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.PrettyPrint (renderTransition)
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
 
@@ -247,7 +247,7 @@ changedTransitionEvents oldTransitions newTransitions =
                 (affected <> emittedBy oldTransition)
                 True
 
-    sameSurface left right = renderTransition left == renderTransition right
+    sameSurface left right = canonicalTransition left == canonicalTransition right
     sameIdentity left right =
       tMode left == tMode right
         && tSource left == tSource right
