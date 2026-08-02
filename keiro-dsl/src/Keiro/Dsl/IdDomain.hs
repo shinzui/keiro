@@ -19,14 +19,15 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Codec.IdDomain
 import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractType (..), IdDecl (..), Node (..), Spec (..))
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeSemantics)
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile)
 
 -- | Versions 1 and 2 intentionally return 'Nothing': their generated IDs
 -- admitted arbitrary text. Runtime-semantics generation 2 is the first
 -- enforcing contract.
 idDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 idDomainContractFor languageContract prefix
-  | effectiveRuntimeSemantics languageContract `elem` ["keiro-dsl/runtime-semantics/2", "keiro-dsl/runtime-semantics/3"] =
+  | runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) GeneratedIdDomainTypeIdV7 =
       Just (typeIdV7Domain prefix)
   | otherwise = Nothing
 
@@ -34,7 +35,7 @@ idDomainContractFor languageContract prefix
 -- in runtime semantics 3. Aggregate IDs retain the independent selector above.
 contractIdDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 contractIdDomainContractFor languageContract prefix
-  | effectiveRuntimeSemantics languageContract == "keiro-dsl/runtime-semantics/3" = Just (typeIdV7Domain prefix)
+  | runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) ContractIdDomainTypeIdV7 = Just (typeIdV7Domain prefix)
   | otherwise = Nothing
 
 -- | Durable identity for the runtime admission domain of one declaration.

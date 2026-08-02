@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Werror=incomplete-patterns #-}
+
 -- | The released-language contract selected by a @.keiro@ source.
 --
 -- Source-language provenance deliberately wraps the semantic 'Spec' rather than
@@ -17,7 +19,14 @@ module Keiro.Dsl.LanguageVersion
     SyntaxProfile,
     syntaxProfileIdentifier,
     syntaxProfileSupportsFeature,
+    RuntimeSemanticsProfile,
+    runtimeProfileIdentifier,
+    runtimeProfileHasCapability,
+    runtimeProfileFoldSegments,
+    RuntimeCapability (..),
+    capabilityFoldSegment,
     LanguageDefinition (..),
+    definitionRuntimeSemantics,
     languageRegistry,
     supportedLanguageVersions,
     lookupLanguageDefinition,
@@ -113,6 +122,52 @@ syntaxProfileIdentifier SyntaxProfile {profileIdentifier} = profileIdentifier
 syntaxProfileSupportsFeature :: SyntaxProfile -> LanguageFeature -> Bool
 syntaxProfileSupportsFeature SyntaxProfile {profileFeatures} feature = Set.member feature profileFeatures
 
+-- | One independently selectable runtime behavior in a released language
+-- contract.  Constructors are append-only: registry profiles are monotone, and
+-- 'capabilityFoldSegment' must make an explicit fingerprint decision for every
+-- new constructor.
+data RuntimeCapability
+  = GeneratedIdDomainTypeIdV7
+  | NominalEqualityV2
+  | ContractIdDomainTypeIdV7
+  | StrictSpecSurfaceValidation
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+-- | An immutable, explicitly named set of runtime capabilities.  The
+-- constructor stays private so callers select only an authoritative registry
+-- profile rather than widening runtime behavior ad hoc.
+data RuntimeSemanticsProfile = RuntimeSemanticsProfile
+  { runtimeSemanticsIdentifier :: !Text,
+    runtimeSemanticsCapabilities :: !(Set RuntimeCapability)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+runtimeProfileIdentifier :: RuntimeSemanticsProfile -> Text
+runtimeProfileIdentifier RuntimeSemanticsProfile {runtimeSemanticsIdentifier} = runtimeSemanticsIdentifier
+
+runtimeProfileHasCapability :: RuntimeSemanticsProfile -> RuntimeCapability -> Bool
+runtimeProfileHasCapability RuntimeSemanticsProfile {runtimeSemanticsCapabilities} capability =
+  Set.member capability runtimeSemanticsCapabilities
+
+-- | Optional replay-fold identity contributed by one capability.  Duplicate
+-- tokens intentionally collapse at the profile boundary so the two coupled
+-- language-3 behaviors preserve their historical single segment.
+capabilityFoldSegment :: RuntimeCapability -> Maybe Text
+capabilityFoldSegment GeneratedIdDomainTypeIdV7 = Just "semantic-contract:keiro-dsl/runtime-semantics/2"
+capabilityFoldSegment NominalEqualityV2 = Just "semantic-contract:keiro-dsl/runtime-semantics/2"
+capabilityFoldSegment ContractIdDomainTypeIdV7 = Nothing
+capabilityFoldSegment StrictSpecSurfaceValidation = Nothing
+
+runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
+runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities} =
+  Set.toAscList
+    ( Set.fromList
+        [ segment
+        | capability <- Set.toAscList runtimeSemanticsCapabilities,
+          Just segment <- [capabilityFoldSegment capability]
+        ]
+    )
+
 -- | One append-only released-language registry entry.
 data LanguageDefinition = LanguageDefinition
   { definitionVersion :: !LanguageVersion,
@@ -121,9 +176,14 @@ data LanguageDefinition = LanguageDefinition
     -- dispatch uses 'definitionSyntaxProfile', never this historical tag.
     definitionBodyParser :: !LanguageBodyParser,
     definitionSyntaxProfile :: !SyntaxProfile,
-    definitionRuntimeSemantics :: !Text
+    definitionRuntimeSemanticsProfile :: !RuntimeSemanticsProfile
   }
   deriving stock (Eq, Show, Generic)
+
+-- | Stable compatibility projection used by serialized records and diagnostic
+-- text.  Runtime behavior must query 'definitionRuntimeSemanticsProfile'.
+definitionRuntimeSemantics :: LanguageDefinition -> Text
+definitionRuntimeSemantics = runtimeProfileIdentifier . definitionRuntimeSemanticsProfile
 
 version1 :: LanguageVersion
 version1 = LanguageVersion 1
@@ -140,10 +200,10 @@ version4 = LanguageVersion 4
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
-  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 "keiro-dsl/runtime-semantics/1"
-    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/1",
-         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/2",
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/3"
+  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1
+    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1,
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2,
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 runtimeProfileV3
        ]
 
 profileV1 :: SyntaxProfile
@@ -158,6 +218,30 @@ profileV2 =
           IntegerScalarSyntax,
           TypedAggregateExpressionSyntax,
           ExplicitTransitionImplementationSyntax
+        ]
+    )
+
+runtimeProfileV1 :: RuntimeSemanticsProfile
+runtimeProfileV1 =
+  RuntimeSemanticsProfile
+    "keiro-dsl/runtime-semantics/1"
+    Set.empty
+
+runtimeProfileV2 :: RuntimeSemanticsProfile
+runtimeProfileV2 =
+  RuntimeSemanticsProfile
+    "keiro-dsl/runtime-semantics/2"
+    (Set.fromList [GeneratedIdDomainTypeIdV7, NominalEqualityV2])
+
+runtimeProfileV3 :: RuntimeSemanticsProfile
+runtimeProfileV3 =
+  RuntimeSemanticsProfile
+    "keiro-dsl/runtime-semantics/3"
+    ( Set.fromList
+        [ GeneratedIdDomainTypeIdV7,
+          NominalEqualityV2,
+          ContractIdDomainTypeIdV7,
+          StrictSpecSurfaceValidation
         ]
     )
 

@@ -37,9 +37,10 @@ import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
 import Text.Read (readMaybe)
@@ -418,7 +419,7 @@ validateCheckedSpec languageContract spec =
 -- released acceptance; runtime semantics 3 is the unreleased tightening gate.
 enforcesSpecSurfaceClosures :: EffectiveLanguageContract -> Bool
 enforcesSpecSurfaceClosures languageContract =
-  effectiveRuntimeSemantics languageContract == "keiro-dsl/runtime-semantics/3"
+  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) StrictSpecSurfaceValidation
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors

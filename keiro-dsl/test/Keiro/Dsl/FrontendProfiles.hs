@@ -3,6 +3,7 @@
 module Keiro.Dsl.FrontendProfiles (frontendProfilesSpec) where
 
 import Control.Monad (forM_)
+import Data.List (tails)
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -26,6 +27,24 @@ frontendProfilesSpec = do
                      (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2"),
                      (4, Just 3, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/3")
                    ]
+      map definitionCapabilities (NE.toList languageRegistry)
+        `shouldBe` [ [],
+                     [],
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation]
+                   ]
+      map (runtimeProfileFoldSegments . definitionRuntimeSemanticsProfile) (NE.toList languageRegistry)
+        `shouldBe` [ [],
+                     [],
+                     ["semantic-contract:keiro-dsl/runtime-semantics/2"],
+                     ["semantic-contract:keiro-dsl/runtime-semantics/2"]
+                   ]
+      forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
+        forM_ allRuntimeCapabilities $ \capability ->
+          runtimeProfileHasCapability (definitionRuntimeSemanticsProfile predecessor) capability
+            `shouldSatisfy` \wasSupported ->
+              not wasSupported
+                || runtimeProfileHasCapability (definitionRuntimeSemanticsProfile successor) capability
       forM_ allFeatures $ \feature -> do
         languageFeatureMinimumVersion feature `shouldBe` version 2
         languageSupportsFeature (version 1) feature `shouldBe` False
@@ -41,6 +60,16 @@ frontendProfilesSpec = do
       semanticPolicy <- readRepoText "keiro-dsl/src/Keiro/Dsl/SemanticContract.hs"
       languageVersionPolicy `shouldNotSatisfy` T.isInfixOf "version >="
       semanticPolicy `shouldNotSatisfy` T.isInfixOf "version >="
+
+    it "keeps runtime identifier strings out of semantic gates" $ do
+      forM_
+        [ "keiro-dsl/src/Keiro/Dsl/IdDomain.hs",
+          "keiro-dsl/src/Keiro/Dsl/NominalType.hs",
+          "keiro-dsl/src/Keiro/Dsl/Validate.hs"
+        ]
+        $ \path -> do
+          policy <- readRepoText path
+          policy `shouldNotSatisfy` T.isInfixOf "keiro-dsl/runtime-semantics/"
 
     it "checks every real feature marker against the exact selected profile" $ do
       forM_ featureCases $ \FeatureCase {feature, marker, body} ->
@@ -153,6 +182,19 @@ featureBody = \case
 
 allFeatures :: [LanguageFeature]
 allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax]
+
+allRuntimeCapabilities :: [RuntimeCapability]
+allRuntimeCapabilities = [minBound .. maxBound]
+
+definitionCapabilities :: LanguageDefinition -> [RuntimeCapability]
+definitionCapabilities definition =
+  [ capability
+  | capability <- allRuntimeCapabilities,
+    runtimeProfileHasCapability (definitionRuntimeSemanticsProfile definition) capability
+  ]
+
+adjacent :: [a] -> [(a, a)]
+adjacent values = [(left, right) | left : right : _ <- tails values]
 
 preamble :: Int -> Text
 preamble versionNumber = "language keiro-dsl " <> T.pack (show versionNumber) <> "\n"

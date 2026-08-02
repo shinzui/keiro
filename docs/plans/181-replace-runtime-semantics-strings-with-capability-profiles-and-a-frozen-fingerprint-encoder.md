@@ -65,10 +65,13 @@ This section must always reflect the actual current state of the work.
   all four gate/segment projections, representative diff/replay rendering, and
   the unrelated read-model, wire, and behavior-key 64-bit identities; all 486
   focused examples pass.
-- [ ] Milestone 1: introduce `RuntimeCapability` and `RuntimeSemanticsProfile`,
-  rewrite every string gate, and add registry monotonicity tests.
-- [ ] Milestone 2: derive the fold-surface version segment from declared fold
-  segments on capabilities, byte-identical for versions 1-4.
+- [x] 2026-08-02 10:18 PDT: Milestone 1 introduced private runtime profiles
+  with four explicit capabilities, migrated every semantic string gate
+  including strict validation, improved JSON mismatch diagnostics, and added
+  registry monotonicity/source-boundary tests.
+- [x] 2026-08-02 10:18 PDT: Milestone 2 derives deduplicated fold segments from
+  exhaustive per-capability metadata; all pre-hash surfaces, fingerprints, and
+  generated/conformance behavior remain byte-identical for languages 1-4.
 - [ ] Milestone 3: extract the frozen canonical fingerprint encoder, make fold
   surfaces total, and point replay-impact comparison at it.
 - [ ] Milestone 4: deterministic replay-impact transition pairing and removal
@@ -297,6 +300,13 @@ goldens now pin the full pre-hash fold bytes plus representative diff/replay
 rendering, while focused assertions pin every released runtime gate and the
 three unrelated 64-bit identity families that Milestone 5 must preserve.  The
 focused suite grew from 482 to 486 examples and passes in full.
+
+Milestones 1 and 2 completed together because the profile and its fold metadata
+form one registry invariant.  Runtime profile identifiers remain the exact
+serialized strings, but all behavior now queries capabilities.  The focused
+suite has 488 passing examples after the monotonicity, source-boundary, and JSON
+mismatch checks; both scalar-expression and ID-domain compiled conformance
+suites pass without regenerating a fixture.
 
 
 ## Context and Orientation

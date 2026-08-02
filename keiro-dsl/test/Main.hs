@@ -128,18 +128,26 @@ main = hspec $ do
         pure
           ( number,
             effectiveRuntimeSemantics contract,
-            runtimeSemanticsFingerprintSegment contract,
+            runtimeSemanticsFingerprintSegments contract,
             hasAggregateIdDomain,
             hasContractIdDomain,
             nominalContract,
             hasStrictValidation
           )
       rows
-        `shouldBe` [ (1, "keiro-dsl/runtime-semantics/1", Nothing, False, False, Just "keiro-dsl/nominal-equality/1", False),
-                     (2, "keiro-dsl/runtime-semantics/1", Nothing, False, False, Just "keiro-dsl/nominal-equality/1", False),
-                     (3, "keiro-dsl/runtime-semantics/2", Just "semantic-contract:keiro-dsl/runtime-semantics/2", True, False, Just "keiro-dsl/nominal-equality/2", False),
-                     (4, "keiro-dsl/runtime-semantics/3", Just "semantic-contract:keiro-dsl/runtime-semantics/2", True, True, Just "keiro-dsl/nominal-equality/2", True)
+        `shouldBe` [ (1, "keiro-dsl/runtime-semantics/1", [], False, False, Just "keiro-dsl/nominal-equality/1", False),
+                     (2, "keiro-dsl/runtime-semantics/1", [], False, False, Just "keiro-dsl/nominal-equality/1", False),
+                     (3, "keiro-dsl/runtime-semantics/2", ["semantic-contract:keiro-dsl/runtime-semantics/2"], True, False, Just "keiro-dsl/nominal-equality/2", False),
+                     (4, "keiro-dsl/runtime-semantics/3", ["semantic-contract:keiro-dsl/runtime-semantics/2"], True, True, Just "keiro-dsl/nominal-equality/2", True)
                    ]
+
+    it "explains a serialized runtime-profile mismatch" $ do
+      case (Aeson.eitherDecode "{\"languageVersion\":4,\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/2\"}" :: Either String EffectiveLanguageContract) of
+        Left message -> do
+          message `shouldContain` "runtimeSemantics does not match language version 4"
+          message `shouldContain` "keiro-dsl/runtime-semantics/3"
+          message `shouldContain` "keiro-dsl/runtime-semantics/2"
+        Right _ -> expectationFailure "expected a runtime-profile mismatch"
 
     it "pins representative diff and replay-impact rendering" $ do
       old <- parsedSourceOf "test/fixtures/reservation.keiro"

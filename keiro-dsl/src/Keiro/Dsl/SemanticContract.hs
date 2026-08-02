@@ -8,10 +8,11 @@
 module Keiro.Dsl.SemanticContract
   ( EffectiveLanguageContract,
     effectiveContractLanguageVersion,
+    effectiveRuntimeProfile,
     effectiveRuntimeSemantics,
     effectiveLanguageContract,
     effectiveLanguageContractForVersion,
-    runtimeSemanticsFingerprintSegment,
+    runtimeSemanticsFingerprintSegments,
     CheckedService (..),
     checkedSource,
     checkedService,
@@ -19,7 +20,6 @@ module Keiro.Dsl.SemanticContract
   )
 where
 
-import Control.Monad (guard)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -27,12 +27,15 @@ import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
   ( LanguageVersion,
     ParsedSource (..),
+    RuntimeSemanticsProfile,
     SourceLanguage (..),
-    definitionRuntimeSemantics,
+    definitionRuntimeSemanticsProfile,
     effectiveLanguageVersion,
     languageVersion,
     languageVersionNumber,
     lookupLanguageDefinition,
+    runtimeProfileFoldSegments,
+    runtimeProfileIdentifier,
   )
 
 -- | One effective released-language selection plus the runtime-semantics
@@ -43,9 +46,14 @@ import Keiro.Dsl.LanguageVersion
 -- than re-deriving policy from source text.
 data EffectiveLanguageContract = EffectiveLanguageContract
   { effectiveContractLanguageVersion :: !LanguageVersion,
-    effectiveRuntimeSemantics :: !Text
+    effectiveRuntimeProfile :: !RuntimeSemanticsProfile
   }
   deriving stock (Eq, Ord, Show)
+
+-- | Stable compatibility projection for records, JSON, and diagnostics.
+-- Runtime behavior queries 'effectiveRuntimeProfile' capabilities instead.
+effectiveRuntimeSemantics :: EffectiveLanguageContract -> Text
+effectiveRuntimeSemantics = runtimeProfileIdentifier . effectiveRuntimeProfile
 
 instance ToJSON EffectiveLanguageContract where
   toJSON contract =
@@ -60,8 +68,17 @@ instance FromJSON EffectiveLanguageContract where
     runtimeSemantics <- fields .: "runtimeSemantics"
     version <- maybe (fail "semantic contract language version must be positive") pure (languageVersion rawVersion)
     contract <- maybe (fail "semantic contract language version is unsupported") pure (effectiveLanguageContractForVersion version)
-    guard (effectiveRuntimeSemantics contract == runtimeSemantics)
-    pure contract
+    if effectiveRuntimeSemantics contract == runtimeSemantics
+      then pure contract
+      else
+        fail
+          ( "semantic contract runtimeSemantics does not match language version "
+              <> show rawVersion
+              <> ": expected "
+              <> show (effectiveRuntimeSemantics contract)
+              <> ", received "
+              <> show (runtimeSemantics :: Text)
+          )
 
 -- | Resolve source provenance to the semantic contract used by every
 -- downstream planner. This function is total for parsed sources: the parser has
@@ -81,17 +98,14 @@ effectiveLanguageContractForVersion version = do
   pure
     EffectiveLanguageContract
       { effectiveContractLanguageVersion = version,
-        effectiveRuntimeSemantics = definitionRuntimeSemantics definition
+        effectiveRuntimeProfile = definitionRuntimeSemanticsProfile definition
       }
 
--- | Fold/replay discriminator for runtime semantics newer than the historical
--- baseline. Grammar-only language changes deliberately contribute no segment.
-runtimeSemanticsFingerprintSegment :: EffectiveLanguageContract -> Maybe Text
-runtimeSemanticsFingerprintSegment contract
-  | effectiveRuntimeSemantics contract == "keiro-dsl/runtime-semantics/1" = Nothing
-  | effectiveRuntimeSemantics contract `elem` ["keiro-dsl/runtime-semantics/2", "keiro-dsl/runtime-semantics/3"] =
-      Just "semantic-contract:keiro-dsl/runtime-semantics/2"
-  | otherwise = Just ("semantic-contract:" <> effectiveRuntimeSemantics contract)
+-- | Deduplicated, stable replay-fold segments explicitly declared by the
+-- effective runtime capabilities. Grammar-, validation-, and codec-only
+-- changes deliberately contribute no segment.
+runtimeSemanticsFingerprintSegments :: EffectiveLanguageContract -> [Text]
+runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . effectiveRuntimeProfile
 
 -- | A normalized service graph paired with the effective contract under which
 -- it was checked. Member-level declared/legacy provenance intentionally stays

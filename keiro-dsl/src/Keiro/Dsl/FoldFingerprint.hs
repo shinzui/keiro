@@ -24,7 +24,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService, runtimeSemanticsFingerprintSegment)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, legacyCheckedService, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
 
 -- | The sixteen-hex-digit identity of an aggregate's replay fold under the
@@ -52,7 +52,7 @@ aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> Text
 aggregateFoldSurfaceForService service aggregate =
   T.intercalate
     "\n"
-    ( maybe [] pure (runtimeSemanticsFingerprintSegment (checkedLanguageContract service))
+    ( runtimeSemanticsFingerprintSegments (checkedLanguageContract service)
         ++ map stateSegment (aggStates aggregate)
         ++ map (registerSegment symbols) (aggRegs aggregate)
         ++ mappedRegisterSegments

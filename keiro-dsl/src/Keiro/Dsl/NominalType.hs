@@ -41,9 +41,9 @@ import Data.Text qualified as T
 import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
-import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract)
+import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), SourceLanguage (..), runtimeProfileHasCapability)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveLanguageContract, effectiveRuntimeProfile)
 import Keiro.Dsl.TypeGraph
 
 data NominalScalarRepresentation
@@ -135,14 +135,16 @@ nominalEqualityContractForService languageContract nominal = case resolvedNomina
     Just
       CheckedNominalEquality
         { equalityKeyRepresentation = NominalTextEqualityKey,
-          equalityDomain = case idDomainContractFor languageContract prefix of
-            Just contract -> EnforcedTypeIdV7TextDomain prefix (idDomainVersion contract)
-            Nothing -> case resolvedNominalOwnership nominal of
-              GeneratedNominal -> LegacyUnrestrictedTextDomain
-              ConsumerNominal {} -> TypeIdTextDomain prefix,
-          equalityContractVersion = case idDomainContractFor languageContract prefix of
-            Just _ -> "keiro-dsl/nominal-equality/2"
-            Nothing -> nominalEqualityContractVersion
+          equalityDomain =
+            if enforcesNominalEqualityV2
+              then EnforcedTypeIdV7TextDomain prefix enforcedIdDomainVersion
+              else case resolvedNominalOwnership nominal of
+                GeneratedNominal -> LegacyUnrestrictedTextDomain
+                ConsumerNominal {} -> TypeIdTextDomain prefix,
+          equalityContractVersion =
+            if enforcesNominalEqualityV2
+              then "keiro-dsl/nominal-equality/2"
+              else nominalEqualityContractVersion
         }
   EnumRepresentation constructors ->
     Just
@@ -152,6 +154,9 @@ nominalEqualityContractForService languageContract nominal = case resolvedNomina
           equalityContractVersion = nominalEqualityContractVersion
         }
   ScalarRepresentation {} -> Nothing
+  where
+    enforcesNominalEqualityV2 =
+      runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) NominalEqualityV2
 
 -- | Stable, checked identity used by generated projection tags, fingerprints,
 -- scaffold history, and explain output. It includes the existing binding
