@@ -115,6 +115,33 @@ main = hspec $ do
   frontendSurfaceSpec
   frontendProfilesSpec
 
+  describe "language support" $ do
+    it "serializes support from the registered version and decodes older records" $ do
+      v1Contract <- maybe (expectationFailure "missing v1 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 1)
+      v4Contract <- maybe (expectationFailure "missing v4 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 4)
+      effectiveLanguageSupport v1Contract `shouldBe` CompatibilityOnly
+      effectiveLanguageSupport v4Contract `shouldBe` Stable
+      Aeson.toJSON v4Contract
+        `shouldBe` object
+          [ "languageVersion" .= (4 :: Int),
+            "runtimeSemantics" .= ("keiro-dsl/runtime-semantics/3" :: T.Text),
+            "languageSupport" .= ("stable" :: T.Text)
+          ]
+      Aeson.eitherDecode "{\"languageVersion\":1,\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\"}"
+        `shouldBe` Right v1Contract
+
+    it "reports stable and compatibility-only support through source inspection" $ do
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
+      stableCode `shouldBe` ExitSuccess
+      stableErr `shouldBe` ""
+      stableOut `shouldContain` "\"languageVersion\":4"
+      stableOut `shouldContain` "\"languageSupport\":\"stable\""
+      (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/language-v1.keiro", "--format=json"]
+      compatibilityCode `shouldBe` ExitSuccess
+      compatibilityErr `shouldBe` ""
+      compatibilityOut `shouldContain` "\"languageVersion\":1"
+      compatibilityOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
+
   describe "runtime capability and fold identity baseline (plan 181)" $ do
     it "pins the fold-only FNV-1a-128 UTF-8 encoding" $ do
       foldFingerprint128 "" `shouldBe` "6c62272e07bb014262b821756295c58d"
@@ -513,12 +540,14 @@ main = hspec $ do
       sourceOut `shouldContain` "\"effectiveLanguageVersion\":1"
       sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
       sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\""
+      sourceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
       workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
+      workspaceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
 
     it "keeps only the named source-version compatibility fixtures outside canonical v1" $ do
@@ -575,6 +604,7 @@ main = hspec $ do
       legacyOut `shouldContain` "\"sourceForm\":\"legacy-unversioned\""
       legacyOut `shouldContain` "\"declaredLanguageVersion\":null"
       legacyOut `shouldContain` "\"effectiveLanguageVersion\":1"
+      legacyOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
 
     it "checks and scaffolds contextual language identifiers through the CLI" $ do
       forM_ ["language-identifier-v1.keiro", "language-identifier-v2.keiro"] $ \fixture -> do
@@ -4252,12 +4282,15 @@ main = hspec $ do
       dependencies `shouldNotContain` ["shibuya"]
 
   describe "new <kind> skeletons (M5)" $ do
+    forM_ skeletonKinds $ \skeletonKind ->
+      it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the registered stable language") $
+        assertSkeletonUsesStableLanguage skeletonKind
     it "every skeleton parses and validates with zero error diagnostics" $
       mapM_ assertSkeletonValid skeletonKinds
     it "every skeleton passes the scaffold refusal gates" $
       mapM_ assertSkeletonScaffoldable skeletonKinds
-    it "fresh skeleton scaffolds match the committed compiling modules" $
-      mapM_ (uncurry assertSkeletonMatchesCommitted) skeletonModuleRoots
+    it "legacy compatibility skeleton scaffolds match the committed compiling modules" $
+      mapM_ (uncurry assertLegacySkeletonMatchesCommitted) skeletonModuleRoots
     it "rejects an unknown kind with a helpful message" $
       case skeletonFor "bogus" of
         Left msg -> ("Valid kinds:" `T.isInfixOf` msg) `shouldBe` True
@@ -6222,6 +6255,20 @@ assertSkeletonValid kind = case skeletonFor kind of
       [code d | d <- validateSpec spec, severity d == Error]
         `shouldBe` ([] :: [DiagnosticCode])
 
+assertSkeletonUsesStableLanguage :: T.Text -> IO ()
+assertSkeletonUsesStableLanguage kind = case skeletonFor kind of
+  Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
+  Right source -> case parseSource ("new:" <> T.unpack kind) source of
+    Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+    Right parsed -> do
+      let service = checkedSource parsed
+      effectiveContractLanguageVersion (checkedLanguageContract service) `shouldBe` currentStableLanguageVersion
+      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Stable
+      [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
+        `shouldBe` ([] :: [DiagnosticCode])
+      scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service
+        `shouldSatisfy` (not . null)
+
 assertSkeletonScaffoldable :: T.Text -> IO ()
 assertSkeletonScaffoldable kind = case skeletonFor kind of
   Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
@@ -6241,10 +6288,10 @@ skeletonModuleRoots =
     ("workflow", "SkelWorkflow")
   ]
 
-assertSkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
-assertSkeletonMatchesCommitted kind root = case skeletonFor kind of
+assertLegacySkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
+assertLegacySkeletonMatchesCommitted kind root = case skeletonFor kind of
   Left err -> expectationFailure (T.unpack err)
-  Right source -> case parseSpec ("new:" <> T.unpack kind) source of
+  Right source -> case parseSpec ("new-legacy:" <> T.unpack kind) (withLegacyPreamble source) of
     Left err -> expectationFailure (T.unpack err)
     Right spec -> do
       let ctx = (defaultContext (specContext spec)) {moduleRoot = root}
@@ -6253,6 +6300,7 @@ assertSkeletonMatchesCommitted kind root = case skeletonFor kind of
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
   where
     kindOf = Keiro.Dsl.Scaffold.kind
+    withLegacyPreamble source = T.unlines ("language keiro-dsl 1" : drop 1 (T.lines source))
 
 bumpArtifactBindingVersion :: MappedDecl -> MappedDecl
 bumpArtifactBindingVersion declaration@MappedStructural {msName = "ArtifactInfo"} =

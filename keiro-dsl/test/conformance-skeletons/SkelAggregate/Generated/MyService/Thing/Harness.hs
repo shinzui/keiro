@@ -49,8 +49,7 @@ forwardReplayDoThing =
             Left _ -> [(prefix <> "replay succeeds", False)]
             Right (replayVertex, replayRegs) ->
               [ (prefix <> "final vertex", replayVertex == forwardVertex),
-                (prefix <> "register thingId", (replayRegs ! #thingId) == (forwardRegs ! #thingId)),
-                (prefix <> "register state", (replayRegs ! #state) == (forwardRegs ! #state))
+                (prefix <> "register thingId", (replayRegs ! #thingId) == (forwardRegs ! #thingId))
               ]
   where
     prefix = "forward/replay equality: DoThing from ThingPending -- "

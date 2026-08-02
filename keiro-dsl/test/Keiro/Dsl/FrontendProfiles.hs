@@ -39,6 +39,18 @@ frontendProfilesSpec = do
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"]
                    ]
+      map definitionSupport (NE.toList languageRegistry)
+        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
+      currentStableLanguageVersion `shouldBe` version 4
+      languageSupportForVersion (version 1) `shouldBe` Just CompatibilityOnly
+      languageSupportForVersion (version 2) `shouldBe` Just CompatibilityOnly
+      languageSupportForVersion (version 3) `shouldBe` Just CompatibilityOnly
+      languageSupportForVersion (version 4) `shouldBe` Just Stable
+      languageSupportForVersion (version 5) `shouldBe` Nothing
+      [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable]
+        `shouldBe` [currentStableLanguageVersion]
+      definitionVersion (NE.last languageRegistry) `shouldBe` currentStableLanguageVersion
+      definitionPredecessor (NE.last languageRegistry) `shouldBe` Just (version 3)
       forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
         forM_ allRuntimeCapabilities $ \capability ->
           runtimeProfileHasCapability (definitionRuntimeSemanticsProfile predecessor) capability

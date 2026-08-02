@@ -10,6 +10,7 @@ module Keiro.Dsl.SemanticContract
     effectiveContractLanguageVersion,
     effectiveRuntimeProfile,
     effectiveRuntimeSemantics,
+    effectiveLanguageSupport,
     effectiveLanguageContract,
     effectiveLanguageContractForVersion,
     runtimeSemanticsFingerprintSegments,
@@ -25,12 +26,15 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
-  ( LanguageVersion,
+  ( LanguageSupport,
+    LanguageVersion,
     ParsedSource (..),
     RuntimeSemanticsProfile,
     SourceLanguage (..),
     definitionRuntimeSemanticsProfile,
     effectiveLanguageVersion,
+    languageSupportForVersion,
+    languageSupportText,
     languageVersion,
     languageVersionNumber,
     lookupLanguageDefinition,
@@ -55,11 +59,19 @@ data EffectiveLanguageContract = EffectiveLanguageContract
 effectiveRuntimeSemantics :: EffectiveLanguageContract -> Text
 effectiveRuntimeSemantics = runtimeProfileIdentifier . effectiveRuntimeProfile
 
+-- | Lifecycle classification derived from the authoritative language registry.
+effectiveLanguageSupport :: EffectiveLanguageContract -> LanguageSupport
+effectiveLanguageSupport contract =
+  fromMaybe
+    (error "keiro-dsl internal invariant: effective contract selected an unregistered language version")
+    (languageSupportForVersion (effectiveContractLanguageVersion contract))
+
 instance ToJSON EffectiveLanguageContract where
   toJSON contract =
     object
       [ "languageVersion" .= languageVersionNumber (effectiveContractLanguageVersion contract),
-        "runtimeSemantics" .= effectiveRuntimeSemantics contract
+        "runtimeSemantics" .= effectiveRuntimeSemantics contract,
+        "languageSupport" .= languageSupportText (effectiveLanguageSupport contract)
       ]
 
 instance FromJSON EffectiveLanguageContract where

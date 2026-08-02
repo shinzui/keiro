@@ -35,14 +35,11 @@ data ThingEvent = ThingCompleted !ThingCompletedData
   deriving stock (Generic, Eq, Show)
 
 type ThingRegs =
-  '[ '("thingId", ThingId),
-     '("state", ThingVertex)
-   ]
+  '[ '("thingId", ThingId)]
 
 initialThingRegs :: RegFile ThingRegs
 initialThingRegs =
-  RCons (Proxy @"thingId") (ThingId "") $
-    RCons (Proxy @"state") ThingPending RNil
+  RCons (Proxy @"thingId") (ThingId "") RNil
 
 $(deriveAggregateCtorsAll ''ThingCommand ''ThingRegs)
 

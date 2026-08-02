@@ -25,10 +25,14 @@ module Keiro.Dsl.LanguageVersion
     runtimeProfileFoldSegments,
     RuntimeCapability (..),
     capabilityFoldSegment,
+    LanguageSupport (..),
+    languageSupportText,
     LanguageDefinition (..),
     definitionRuntimeSemantics,
     languageRegistry,
     supportedLanguageVersions,
+    currentStableLanguageVersion,
+    languageSupportForVersion,
     lookupLanguageDefinition,
     LanguageFeature (..),
     languageFeatureMinimumVersion,
@@ -168,6 +172,17 @@ runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities
         ]
     )
 
+-- | Whether a released language is recommended for new authoring or retained
+-- only so historical sources keep their released meaning.
+data LanguageSupport
+  = CompatibilityOnly
+  | Stable
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+languageSupportText :: LanguageSupport -> Text
+languageSupportText CompatibilityOnly = "compatibility-only"
+languageSupportText Stable = "stable"
+
 -- | One append-only released-language registry entry.
 data LanguageDefinition = LanguageDefinition
   { definitionVersion :: !LanguageVersion,
@@ -176,7 +191,8 @@ data LanguageDefinition = LanguageDefinition
     -- dispatch uses 'definitionSyntaxProfile', never this historical tag.
     definitionBodyParser :: !LanguageBodyParser,
     definitionSyntaxProfile :: !SyntaxProfile,
-    definitionRuntimeSemanticsProfile :: !RuntimeSemanticsProfile
+    definitionRuntimeSemanticsProfile :: !RuntimeSemanticsProfile,
+    definitionSupport :: !LanguageSupport
   }
   deriving stock (Eq, Show, Generic)
 
@@ -200,10 +216,10 @@ version4 = LanguageVersion 4
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
-  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1
-    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1,
-         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2,
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 runtimeProfileV3
+  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly
+    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly,
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly,
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 runtimeProfileV3 Stable
        ]
 
 profileV1 :: SyntaxProfile
@@ -248,6 +264,16 @@ runtimeProfileV3 =
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
 supportedLanguageVersions = definitionVersion <$> languageRegistry
+
+-- | The one registry entry recommended for newly-authored sources.
+currentStableLanguageVersion :: LanguageVersion
+currentStableLanguageVersion =
+  case [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable] of
+    [version] -> version
+    _ -> error "keiro-dsl internal invariant: language registry must contain exactly one stable version"
+
+languageSupportForVersion :: LanguageVersion -> Maybe LanguageSupport
+languageSupportForVersion version = definitionSupport <$> lookupLanguageDefinition version
 
 lookupLanguageDefinition :: LanguageVersion -> Maybe LanguageDefinition
 lookupLanguageDefinition version =
