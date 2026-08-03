@@ -6,8 +6,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.9.0.0 — 2026-08-02
+
 ### Breaking Changes
 
+- Requires `keiki >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8` bound,
+  in lockstep with `keiro-core` and `keiro`.
 - Aggregate fold fingerprints widen from 16-hex-digit FNV-1a-64 to
   32-lowercase-hex-digit FNV-1a-128. This intentionally invalidates snapshots
   produced with the old fold discriminator; re-scaffold generated transducers

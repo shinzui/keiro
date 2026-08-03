@@ -6,6 +6,14 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.9.0.0 — 2026-08-02
+
+### Breaking Changes
+
+- Requires `keiki >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8` bound.
+  Consumers must solve for the same Keiki major; verification results and
+  rendering may differ from the 0.7 line.
+
 ### New Features
 
 - Adds `parseKindIdV7Text` and `parseKindIdV7Value` to

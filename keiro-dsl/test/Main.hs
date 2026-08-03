@@ -21,6 +21,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as LazyText
 import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
+import Data.Version (showVersion)
 import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
@@ -67,6 +68,7 @@ import Keiro.Dsl.WorkspaceDiff hiding (diffWorkspaces)
 import Keiro.Dsl.WorkspaceDiff qualified as CheckedWorkspaceDiff
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
+import Paths_keiro_dsl qualified as Package
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -4370,7 +4372,12 @@ main = hspec $ do
             let recognized = filter isGeneratedBannerLine (T.lines (moduleText moduleValue))
                 expected = generatedBannerFor (checkedLanguageContract service) (origin moduleValue)
             recognized `shouldBe` [expected]
-            expected `shouldSatisfy` T.isInfixOf "keiro-dsl 0.8.0.0 (language keiro-dsl 4) from contract emergency"
+            expected
+              `shouldSatisfy` T.isInfixOf
+                ( "keiro-dsl "
+                    <> T.pack (showVersion Package.version)
+                    <> " (language keiro-dsl 4) from contract emergency"
+                )
       workspace <- shouldComposeWorkspace canonicalWorkspacePath
       workspacePlan <- shouldPlanWorkspaceSpec workspace
       forM_ [moduleValue | (moduleValue, _) <- wpModules workspacePlan, kind moduleValue == Generated] $ \moduleValue ->

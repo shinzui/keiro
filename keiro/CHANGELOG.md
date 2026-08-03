@@ -6,6 +6,21 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.9.0.0 — 2026-08-02
+
+### Breaking Changes
+
+- Requires `keiki >=0.8 && <0.9` and `keiki-codec-json >=0.8 && <0.9`,
+  replacing the previous `>=0.7 && <0.8` bounds. Consumers must solve for the
+  same Keiki major; verification results and rendering may differ from the 0.7
+  line.
+
+### New Features
+
+- `Keiro.Inbox.Types` re-exports `RetryDelay` from `Shibuya.Core.Ack`, so
+  generated inbox dispositions carrying retry delays need only the `keiro`
+  import.
+
 ## 0.8.0.0 — 2026-08-01
 
 No changes this release. Version moves with the package set.

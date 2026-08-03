@@ -42,6 +42,10 @@ haskell-build:
 haskell-test:
     cabal test keiro-test
     cabal test keiro-pgmq-test
+    # The whole keiro-dsl package: keiro-dsl-test plus every
+    # keiro-dsl-conformance-* suite. `cabal build all` only compiles these, so
+    # naming the package target is what actually runs their assertions.
+    cabal test keiro-dsl
     cabal test jitsurei-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 

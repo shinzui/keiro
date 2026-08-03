@@ -6,6 +6,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.9.0.0 — 2026-08-02
+
+No changes this release. Released with the package set for the `keiro-dsl`
+0.9.0.0 work.
+
 ## 0.8.0.0 — 2026-08-01
 
 No changes this release. Version moves with the package set.

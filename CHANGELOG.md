@@ -6,13 +6,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.9.0.0 — 2026-08-02
+
+All published packages move to 0.9.0.0 together. The cycle designates
+`language keiro-dsl 4` as the sole stable authoring contract, closes the
+accepted-but-unenforced spec surfaces behind check-time diagnostics, and
+tightens the generated runtime API. The whole set also moves to the Keiki 0.8
+line.
+
 ### Breaking Changes
 
+- **keiro-core**, **keiro**, **keiro-dsl**: require `keiki >=0.8 && <0.9` (and
+  `keiki-codec-json >=0.8 && <0.9` in `keiro`), replacing the `>=0.7 && <0.8`
+  bounds. Consumers must solve for the same Keiki major; verification results
+  and rendering may differ from the 0.7 line.
 - **keiro-dsl**: aggregate fold fingerprints widen from 16-hex-digit
   FNV-1a-64 to 32-lowercase-hex-digit FNV-1a-128, intentionally invalidating
-  snapshots created with the earlier discriminator before the coordinated
-  `0.9.0.0` release. Generated transducers must be refreshed; unrelated
-  read-model, mapped-wire, and behavior-key 64-bit identities do not move.
+  snapshots created with the earlier discriminator. Generated transducers must
+  be refreshed; unrelated read-model, mapped-wire, and behavior-key 64-bit
+  identities do not move.
 - **keiro-dsl**: aggregate fold, diff, replay-impact, and workspace-diff
   service APIs now return `Either FoldSurfaceError`; scaffold planning refuses
   the same error before module generation. The misleading `Spec`-only
@@ -21,14 +33,73 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `nominalEqualityIdentities` legacy/version-1 wrappers are removed. Callers
   must retain and pass a `CheckedService` (or explicitly construct one with
   `legacyCheckedService`).
+- **keiro-dsl**: `DiagnosticCode` gains append-only constructors for contract
+  TypeID admission and for closed policy, numeric, duplicate, identity,
+  external-name, intake-coupling, topic-alias, and wire-clause validation;
+  `RolloutConstraint` gains `RolloutProducerFirst`. Exhaustive matches must be
+  extended.
+- **keiro-dsl**: removes the unreachable exported grammar types `Derivation`,
+  `DerivStrategy`, `Disposition`, `DispAction`, `EnvelopeBinding`, and
+  `EnvelopeLayer`, which no parser, renderer, validator, or generator ever
+  constructed.
+- **keiro-dsl**: generated runtime surfaces close over `Text`. Workqueue
+  `jobOutcomeFor` takes a queue-named closed outcome sum; inbox generation
+  exposes closed outcome and detailed disposition sums; aggregate stream
+  categories are fixed to their generated event-stream phantom (`PMCommand`
+  and router consumers use the new `<aggregate>CommandCategory`); and
+  `workflowFacts` becomes the generated `WorkflowFacts` record.
+- **keiro-dsl**: structural projection witnesses are renamed from hex-mangled
+  identifiers to deterministic owner-and-JSON-pointer names. Re-scaffold and
+  update hand-owned imports; witness values and semantics are unchanged.
+
+### New Features
+
+- **keiro-dsl**: adds `language keiro-dsl 4` (syntax profile 2,
+  `keiro-dsl/runtime-semantics/3`) and designates it the sole stable authoring
+  contract. `inspect` reports language 4 as `stable` and 1–3 as
+  `compatibility-only`; every `new <kind>` skeleton starts at language 4.
+  Historical and unversioned sources keep their released semantics and are
+  never silently upgraded.
+- **keiro-dsl**: closes accepted-but-unenforced service surfaces. Values that
+  cannot lower to working generated code are rejected under every language
+  version; language 4 additionally enforces numeric floors, duplicate and
+  shadowing rules, stable runtime identity uniqueness, Kafka and PostgreSQL
+  naming, intake envelope and schema coupling, contract topic aliases, and the
+  aggregate wire convention.
+- **keiro-dsl**: language-4 public contract fields declared `typeid "inc"`
+  scaffold as `KindID "inc"`, with field-path-aware decoders enforcing Keiro's
+  frozen TypeID-v7 admission policy. Diffing an unchanged such field from
+  language 3 to 4 emits `ContractTypeIdDomainChanged` with producer-first and
+  drain-required rollout.
+- **keiro-dsl**: runtime semantics is selected by private monotone capability
+  profiles rather than consumer-maintained identifier lists. Fold identity and
+  replay transition comparison use a total frozen canonical encoder
+  independent of presentation pretty-printing, and replay pairing of
+  guard-disambiguated sibling transitions is declaration-order invariant.
+- **keiro-dsl**: adds service-aware `scaffoldContractForService`,
+  `manifestDependenciesForService`, and `renderManifestForService`; exports
+  generated contract topic constants; reports the rejected value, complete
+  expected set, and Aeson field path from generated decoders; and stamps
+  package version, effective language version, and node origin into the
+  generated provenance banner.
+- **keiro-core**: adds `parseKindIdV7Text` and `parseKindIdV7Value` to
+  `Keiro.Codec.IdDomain`, constructing a prefix-indexed `KindID` only after the
+  frozen TypeID-v7 policy succeeds and preserving the owning JSON field path on
+  failure.
+- **keiro**: `Keiro.Inbox.Types` re-exports `RetryDelay` from
+  `Shibuya.Core.Ack`, so generated inbox dispositions carrying retry delays
+  need only the `keiro` import.
 
 ### Other Changes
 
-- **keiro-dsl**: runtime behavior is selected by monotone capability profiles,
-  and persisted fold/replay comparison bytes come from a total frozen canonical
-  encoder independent of presentation pretty-printing. Replay pairing of
-  guard-disambiguated sibling transitions is declaration-order invariant; fold
-  identity hashes the frozen UTF-8 surface with standard FNV-1a-128.
+- **keiro-dsl**: moves the primary conformance baseline to language 4 — 226
+  stable fixtures and 30 stable-primary compiled suites enforced against 14
+  named source exceptions, two compatibility suites, and one version-independent
+  suite. `keiro-dsl-conformance-contract` owns the typed TypeID contract proof,
+  the permissive target is renamed `keiro-dsl-conformance-contract-v1-compat`,
+  and the redundant `keiro-dsl-conformance-contract-typeid` target is removed.
+- **keiro-pgmq**, **keiro-migrations**: no user-facing changes beyond the
+  lockstep version and `keiro-core ^>=0.9.0.0` bound.
 
 ## 0.8.0.0 — 2026-08-01
 
