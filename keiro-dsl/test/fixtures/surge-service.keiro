@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context surge-demo
 
 id HospitalId prefix=hosp
@@ -33,7 +33,6 @@ process SurgeFlow
 
 aggregate Surge
   regs
-    surgeState SurgeVertex = Watching
   states Watching Noted Fired!
 
   command NoteSurgeThreshold { hospitalId }
@@ -50,7 +49,6 @@ aggregate Surge
 
 aggregate Hospital
   regs
-    hospitalState HospitalVertex = Idle
   states Idle Surging!
 
   command ActivateSurge { hospitalId }

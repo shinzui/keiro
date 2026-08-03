@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context workspace-diff
 
 aggregate Shipment
@@ -10,7 +10,7 @@ aggregate Shipment
   event ShipmentCompleted = fields(CompleteShipment)
 
   PendingShipment -- CompleteShipment -->
-    write status := finalStatus
+    write status := cmd.finalStatus
     emit  ShipmentCompleted
     goto  CompletedShipment
 

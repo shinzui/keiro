@@ -2,8 +2,8 @@ keiro-dsl scaffold record v1
 spec: keiro-dsl/test/fixtures/transfer-routing.keiro
 module-root: (none)
 layout: prefixed
-source-language {"declaredLanguageVersion":1,"effectiveLanguageVersion":1,"sourceForm":"declared"}
-semantic-contract {"languageVersion":1,"runtimeSemantics":"keiro-dsl/runtime-semantics/1"}
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 generated Generated/TransferRouting/ReplayAudit.hs
 generated Generated/TransferRouting/Hospital_load/ReadModelTable.hs
 generated Generated/TransferRouting/Hospital_load/ReadModel.hs
@@ -14,8 +14,10 @@ hole TransferRouting/HospitalTransferRouter/RouterHoles.hs
 generated Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs
 generated Generated/TransferRouting/Hospital/Domain.hs
 generated Generated/TransferRouting/Hospital/Codec.hs
+generated Generated/TransferRouting/Hospital/Transducer.hs
+generated Generated/TransferRouting/Hospital/BehaviorContract.hs
+hole TransferRouting/Hospital/BehaviorHoles.hs
 generated Generated/TransferRouting/Hospital/EventStream.hs
 generated Generated/TransferRouting/Hospital/Projection.hs
-hole TransferRouting/Hospital/Holes.hs
 generated Generated/TransferRouting/Hospital/Harness.hs
-behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"legacy-runtime-witness","key":"behavior-v1-b25ef0eb11ffe88b","kind":"live-transition","outputs":[{"obligation":"event-output-v1/Hospital/live/Accepting/RouteAcceptedTransferNeed/unguarded//AcceptedTransferNeedRouted/Accepting/1/AcceptedTransferNeedRouted","ownership":"hand-owned"}],"source":"Accepting"}
+behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"generated-authoritative","key":"behavior-v1-8c1612ae6464bb11","kind":"live-transition","outputs":[{"command":"RouteAcceptedTransferNeed","ownership":"generated-command-identity"}],"source":"Accepting"}

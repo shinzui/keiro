@@ -54,11 +54,16 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-02T23:26:01Z) Milestone 2: separated the current conformance corpus from the
   frozen frontend-compatibility corpus, made semantic test helpers service-aware by default, and
   added an enforced baseline manifest with explicit transitional migration rows for Milestone 3.
-- [ ] Milestone 3: migrate coherent fixture families and primary compiled conformance components
-  to version 4, regenerate their generated modules, and repair consumers against the complete
-  version-4 API.
-- [ ] Milestone 4: update authoring and release documentation, amend the language ADR, run the
-  mutation and repository-wide gates, and record the final v4/compatibility inventory.
+- [ ] (2026-08-03T00:01:35Z) Milestone 3 in progress: migrated all 225 ordinary fixture sources
+  and coherent workspace/diff families to version 4, repaired strict expression and lifecycle
+  surfaces, refreshed the first nine generated aggregate/workspace trees and fold goldens, and
+  reduced the complete 512-example unit suite from 97 failures to one repaired provenance
+  assertion. Remaining: regenerate the other stable compiled components, promote the typed
+  contract target, enforce fresh-scaffold inventory, and make `cabal test all` green.
+- [x] (2026-08-02T23:57:00Z) Milestone 4 user-guide slice: replaced the mixed-version typed-spec
+  page with a comprehensive Language 4 reference and updated the user, guide, and root indexes.
+- [ ] Milestone 4 remaining: update agent authoring and release documentation, amend the language
+  ADR, run the mutation and repository-wide gates, and record the final v4/compatibility inventory.
 
 
 ## Surprises & Discoveries
@@ -82,6 +87,20 @@ implementation. Provide concise evidence.
   names. Those examples remain explicitly routed through locally named `legacy...` helpers until
   their fixture families are repaired together in Milestone 3; the full 512-example unit suite is
   green at this checkpoint.
+
+- Surprise: Stable strict validation exposed a repository-wide family of redundant lifecycle
+  mirrors: aggregates wrote a `...Vertex` register to the same state selected by `goto`. Removing
+  those registers and writes retained the actual state-machine meaning and eliminated ambiguous
+  unqualified constructors. It also made generated replay harnesses compare only domain registers.
+  Evidence: all 225 ordinary fixtures now declare language 4, CLI checks report only the intended
+  negative-fixture diagnostics, and the stable reservation harness compares `reservationId`,
+  `hospitalId`, and `patientAcuity` without a `reservationState` mirror.
+
+- Surprise: A workspace aggregate ownership move is byte-neutral for wire and fold surfaces but
+  not for every generated v4 artifact. Stable behavior contracts retain source-line attribution,
+  so the moved aggregate's two attributed modules are rewritten while unrelated modules and the
+  build manifest remain byte-identical. The ownership test now distinguishes that expected
+  provenance rewrite from stale-file churn.
 
 
 ## Decision Log
@@ -138,6 +157,14 @@ Record every decision made while working on the plan.
   components, with no prefix-wide exemption.
   Date: 2026-08-02
 
+- Decision: Replace the existing mixed-version typed-spec guide in place with the Language 4
+  reference instead of adding a second DSL page.
+  Rationale: Existing user and guide indexes already identify that page as the primary DSL entry,
+  and other documents link to its mapped-type and generated-ownership anchors. Reusing the path
+  and preserving those anchors makes Language 4 the unambiguous authoring contract without
+  breaking durable repository-local navigation.
+  Date: 2026-08-02
+
 
 ## Outcomes & Retrospective
 
@@ -165,6 +192,12 @@ stable contract fixture to version 1 named its path in two baseline failures, an
 scaffold helper through `legacyCheckedService` changed the generated fields to `Text` and failed
 the capability assertion. Restoring both mutations returned the focused groups and the complete
 512-example unit suite to green.
+
+The user-guide slice of Milestone 4 now presents only Language 4 and covers the source envelope,
+shared and consumer-owned types, expression rules, all twelve node families, workspaces,
+generated-versus-hand-owned boundaries, every CLI command, validation, and evolution. The eleven
+current Language 4 starters all pass `check`; the remaining Milestone-4 authoring/release corpus,
+ADR, mutation, and repository-wide work stays open.
 
 
 ## Context and Orientation
@@ -687,3 +720,7 @@ status of the checked-in skeleton conformance tree.
 2026-08-02: Recorded the completed Milestone-2 compatibility-oracle split, enforced transitional
 inventory, service-aware helper boundary, mutation evidence, and exact remaining Milestone-3
 migration counts.
+
+2026-08-02: Recorded the completed Milestone-4 user-guide slice: the primary DSL guide now teaches
+only the stable Language 4 contract while preserving established cross-document anchors; broader
+authoring/release documentation and final gates remain pending.

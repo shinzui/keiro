@@ -17,10 +17,9 @@ are adopting:
   `ValidatedEventStream` boundary, and `runCommand`.
 - [Replayability Safety](../user/replay-safety.md) explains the validation
   guarantee that keeps unchecked streams out of command runners.
-- [Typed Specifications With `keiro-dsl`](../user/typed-spec-toolchain.md)
-  covers structural/opaque consumer mappings, binding authoring, the
-  spec/check/scaffold loop, compatibility vectors, coverage reports, and
-  historical comparison tooling.
+- [Keiro DSL Language 4 Reference](../user/typed-spec-toolchain.md) covers the
+  complete stable language, the spec/check/scaffold loop, generated ownership,
+  compatibility vectors, coverage reports, and historical comparison tooling.
 - [Choosing `keiro-dsl`](choosing-keiro-dsl.md) compares the benefits, costs,
   escape hatches, and best-fit service shapes after the language, nominal,
   workspace, behavioral-conformance, and ID-domain repairs in MasterPlan 27.

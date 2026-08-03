@@ -1,4 +1,4 @@
-language keiro-dsl 2
+language keiro-dsl 4
 context workspace-nominal-proof
 
 id ProjectId prefix=proj

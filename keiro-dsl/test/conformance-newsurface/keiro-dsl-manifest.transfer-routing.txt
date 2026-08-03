@@ -4,18 +4,20 @@
 -- create-if-absent (filled by hand).
 
 other-modules:
+    Generated.TransferRouting.Hospital.BehaviorContract
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain
     Generated.TransferRouting.Hospital.EventStream
     Generated.TransferRouting.Hospital.Harness
     Generated.TransferRouting.Hospital.Projection
+    Generated.TransferRouting.Hospital.Transducer
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
     Generated.TransferRouting.Hospital_load.ReadModel
     Generated.TransferRouting.Hospital_load.ReadModelHarness
     Generated.TransferRouting.Hospital_load.ReadModelTable
     Generated.TransferRouting.ReplayAudit
-    TransferRouting.Hospital.Holes
+    TransferRouting.Hospital.BehaviorHoles
     TransferRouting.HospitalTransferRouter.RouterHoles
     TransferRouting.Hospital_load.ReadModelHoles
 

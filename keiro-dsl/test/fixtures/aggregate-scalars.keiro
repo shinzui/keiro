@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context aggregate-scalars
 
 aggregate ScalarLedger
@@ -11,9 +11,9 @@ aggregate ScalarLedger
   event ScalarsRecorded { observedAt:Time revision:Natural }
 
   Empty -- Record -->
-    guard observedAt >= observedAt && revision >= revision
-    write observedAt := observedAt
-    write revision := revision
+    guard cmd.observedAt >= reg.observedAt && cmd.revision >= reg.revision
+    write observedAt := cmd.observedAt
+    write revision := cmd.revision
     emit ScalarsRecorded
     goto Recorded
 

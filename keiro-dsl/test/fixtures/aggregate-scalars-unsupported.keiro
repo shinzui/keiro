@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context aggregate-scalars-unsupported
 
 aggregate BrokenScalars
@@ -11,6 +11,6 @@ aggregate BrokenScalars
   event Recorded { observedAt:Time revision:Natural }
 
   Empty -- Record -->
-    guard observedAt == revision
+    guard cmd.observedAt == cmd.revision
     emit Recorded
     goto Done

@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context demo-project
 
 readmodel project_activity {
@@ -24,7 +24,7 @@ aggregate ProjectArtifact
   event  ArtifactRecorded = fields(RecordArtifact)
 
   Empty -- RecordArtifact -->
-    write phase := Active
+    write phase := ProjectPhase.Active
     emit  ArtifactRecorded
     goto  Recorded
 

@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context demo-project
 layout prefixed
 
@@ -7,14 +7,12 @@ id BetaId prefix=bet
 aggregate Beta
   regs
     betaId BetaId = placeholder
-    state BetaVertex = Pending
   states Pending Done!
 
   command DoThing { betaId attempt:Int }
   event ThingCompleted { betaId attempt:Int }
 
   Pending -- DoThing -->
-    write state := Done
     emit ThingCompleted
     goto Done
 

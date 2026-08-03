@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context hospital-capacity
 
 operation QueryTransferDecisions

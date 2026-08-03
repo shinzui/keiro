@@ -83,7 +83,7 @@ frontendSurfaceSpec = do
             let fields = [(name, spanText aggregateSource fieldSpan) | Located {span = fieldSpan, value = SurfaceField name} <- elements]
                 expressions = [spanText aggregateSource expressionSpan | Located {span = expressionSpan, value = SurfaceExpression _} <- elements]
             fields `shouldContain` [("observedAt", "observedAt:Time")]
-            expressions `shouldContain` ["observedAt >= observedAt && revision >= revision"]
+            expressions `shouldContain` ["cmd.observedAt >= reg.observedAt && cmd.revision >= reg.revision"]
         other -> expectationFailure ("unexpected aggregate surface shape: " <> show other)
       emptySurface <- parseSurfaceRight "empty.keiro" "context empty   # trailing\n"
       case emptySurface of

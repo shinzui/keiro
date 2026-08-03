@@ -1,251 +1,227 @@
-# Typed Specifications With `keiro-dsl`
+# Keiro DSL Language 4 Reference
 
-`keiro-dsl` turns a checked `.keiro` service specification into generated
-Haskell modules, create-once typed holes and consumer binding skeletons,
-conformance harnesses, and persistence-aware evolution reports. It is a
-build-time toolchain, not a runtime interpreter: generated code uses the same
-public Keiro APIs as hand-written services.
+`keiro-dsl` is Keiro's build-time language for describing an event-sourced
+service. A checked `.keiro` source can generate Haskell domain types, codecs,
+transducers, runtime wiring, conformance harnesses, and create-once modules for
+the behavior that remains application-owned. The generated application uses
+ordinary Keiro APIs; the DSL is not interpreted in production.
 
-## Source language contract
-
-Every newly authored complete source declares its released language before the
-semantic graph:
+This reference describes **Language 4 only**. Language 4 is the stable language
+for all new specifications and the only language users should author against.
+Every source in this guide therefore begins with:
 
 ```text
-language keiro-dsl 1
-context hospital-capacity
+language keiro-dsl 4
 ```
 
-The preamble is recognized only in that grammar position: after leading comments
-and whitespace and immediately before `context`. A nested field, declaration,
-wire key, or string named `language` remains ordinary domain data. Version 1 is
-frozen at this repository state. Language version 2
-registers consumer-owned bindings for direct IDs, direct enums, and nominal
-scalars, and adds authoritative typed scalar aggregate expressions with
-explicit generated-or-Hole transition ownership. Sources that do not use those
-forms can remain on version 1. To adopt version 2, change the preamble,
-canonicalize the source with `pretty`, run `check --explain-bindings`,
-re-scaffold, and run the generated compiled harness. Version 1 and
-legacy-unversioned sources reject successor syntax at the language boundary;
-the tool never silently upgrades a file. Those gates are attached to the owning
-grammar productions, so spellings such as `using`, `Integer`, `implementation
-hole`, `reg.`, and `cmd.` inside comments, strings, wire keys, or legal names do
-not select a feature by accident.
+Use this page as both an introduction and a syntax reference. The shortest path
+is [Quick start](#quick-start), followed by the node family you need. The
+[command reference](#command-reference) and [authoring checklist](#authoring-checklist)
+cover the normal development and CI loop.
 
-Existing sources without a preamble remain readable as `legacy-unversioned` and
-select effective version 1. Parse and pretty-print preserve that source form:
-they do not silently declare v1. Inspect either a source or a workspace to audit
-the distinction:
+## What the language describes
+
+A `.keiro` source describes one service context. It can contain shared type
+declarations and any combination of these node families:
+
+| Node | Purpose |
+| --- | --- |
+| `aggregate` | Event-sourced state machine with commands, events, transitions, projections, and snapshots. |
+| `process` | Stateful coordination across aggregates, including a durable timer. |
+| `router` | Stateless, effectful one-to-many command routing. |
+| `contract` | Public integration-event schema and Kafka topics. |
+| `intake` | Kafka-to-inbox decoding, deduplication, and disposition policy. |
+| `emit` | Private-state-to-contract-event mapping for the outbox. |
+| `publisher` | Outbox ordering, retry, and stable identity policy. |
+| `workqueue` | PGMQ payload, ordering, provisioning, retry, and DLQ policy. |
+| `dispatch` | Read-model-driven fan-out and deduplicated queue enqueueing. |
+| `readmodel` | Registered SQL read-model identity, shape, feed, and consistency. |
+| `workflow` | Durable named steps, waits, sleeps, children, patches, and rotation. |
+| `operation` | Named command, query, signal, or workflow-run entry point. |
+
+The language deliberately separates declarative facts from hand-owned behavior.
+For example, an aggregate transition can declare a guard and register writes
+that Keiro can generate, while a router resolver, read-model SQL body, workflow
+body, or explicitly opaque transition stays in a create-once Haskell module.
+
+## Quick start
+
+Generate a valid starter, check it, and scaffold it:
 
 ```bash
-cabal run keiro-dsl -- inspect service.keiro --format=json
+cabal run -v0 keiro-dsl -- new aggregate > service.keiro
+cabal run -v0 keiro-dsl -- check service.keiro
+cabal run -v0 keiro-dsl -- scaffold service.keiro --out src
 ```
 
-The library preserves two separate facts after parsing. `ParsedSource` (and each
-workspace member) retains declared-versus-legacy provenance. `CheckedService`
-pairs the normalized `Spec` with the one effective semantic contract used by
-validation, generation, harnesses, fold fingerprints, diff, and replay-impact
-planning. A workspace proves that all members select the same effective version
-before constructing that value. The older `Spec`-only library functions remain
-compatibility bridges and explicitly use legacy/version-1 runtime semantics; new
-source-aware integrations should call `checkedSource` or `checkedWorkspace` and
-then use the contract-aware entry points.
-
-Scaffold records persist both source provenance and the effective semantic
-contract as additive rows. Old records without the new row derive it from their
-historical source-language row (or legacy version 1 when that row is also absent).
-The parser rejects duplicate, malformed, unsupported, or provenance-inconsistent
-contract rows rather than accepting ambiguous history.
-
-A well-formed unsupported future version is rejected before its body is parsed.
-Automated sequential upgrades and Mori-aware fleet rewriting remain deferred to
-[IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).
-
-### Frontend stages and library APIs
-
-Every released registry entry explicitly selects both a named syntax profile and a runtime-
-semantics identity. Version 1 selects syntax profile 1/runtime semantics 1; version 2 selects
-profile 2/runtime semantics 1; version 3 deliberately reuses profile 2 while selecting runtime
-semantics 2. Feature availability comes from exact profile membership, never from comparing
-version numbers, so registering a future version does not silently enable older features.
-
-The library source path has three explicit stages:
+The aggregate starter has this shape:
 
 ```text
-.keiro Text -> located SurfaceSource -> lowerSurfaceSource -> ParsedSource/Spec -> semantic check
-```
+language keiro-dsl 4
+context my-service
 
-Ordinary integrations use `Keiro.Dsl.Parser.parseSource`, `parseSpec`, or `parseSpecText`. These
-compatibility functions retain the 0.7 signatures and rendered diagnostics. Source-aware tooling
-uses `Keiro.Dsl.Frontend.parseSurfaceSource`, inspects half-open `SourceSpan` values, and calls
-`lowerSurfaceSource` to obtain the same `ParsedSource`. Advanced failures carry a source-selection,
-body-parsing, or lowering phase; stable code; exact primary span; message; and optional expected-
-token or supported-version data. They expose no Megaparsec type.
+id ThingId prefix=thing
 
-`SurfaceSource` preserves document order and syntax ownership, but deliberately discards comments
-and whitespace. `pretty` renders the canonical semantic spelling after lowering; it is not a
-lossless formatter and should not be used to preserve hand-formatted trivia.
-
-### Language 4 admission rules
-
-Language 4 selects `keiro-dsl/runtime-semantics/3`. It retains language 3's
-syntax and aggregate runtime behavior while making accepted service
-configuration honest before generation. Rules for values that cannot produce a
-working service also apply to released languages; rules that tighten a usable
-but ambiguous graph begin at language 4.
-
-For every language version, `check` now enforces these closed lowering and
-generation surfaces:
-
-- publisher `ordering` is one of `PerKeyHeadOfLine`, `PerSourceStream`,
-  `StopTheLine`, or `BestEffort`; backoff kind is `constant` or a complete,
-  internally valid `exponential` policy; intake dedupe policy is one of
-  `PreferIntegrationMessageId`, `PreferSourceEventIdentity`, or
-  `KafkaDeliveryIdentity`;
-- command, aggregate-event, and contract-event fields are unique; aggregate
-  states, contract events, and contract topic aliases are unique; and no two
-  live unguarded transitions share the same source state and command; and
-- a Kafka topic string is non-empty. Non-empty topic grammar is tightened by
-  language 4 as described below.
-
-Language 4 additionally requires:
-
-- publisher attempts, contract and intake schema versions, and read-model
-  versions to be at least one;
-- unique registers, same-category nominal declarations, emit-map values, and
-  read-model columns; a guarded transition cannot have an unguarded sibling for
-  the same source and command; and a contract field cannot shadow its event
-  discriminator;
-- workflow, process, and router stable identities to be non-empty, free of
-  the reserved name `$all`, whitespace/control characters, and `:`, and
-  unique across all three node families. Kebab case remains valid for these
-  stable names; saga categories still reject `-` because it is kiroku's
-  category/id boundary;
-- Kafka topics to be 1–249 ASCII characters from `[A-Za-z0-9._-]`, excluding
-  `.` and `..`; read-model schemas, tables, and columns to match PostgreSQL's
-  unquoted form `[a-z_][a-z0-9_]{0,62}`;
-- every contract event's topic alias to resolve; every intake bind and dedupe
-  key to resolve against the canonical `IntegrationEvent` envelope plus fields
-  of its accepted contract events; intake envelope policy to be exactly
-  `strict-required lenient-optional`; and intake decode schema version to equal
-  the referenced contract schema version; and
-- an explicit aggregate wire clause to say exactly `kind=ctorName
-  fields=camelCase`, the only convention current generation implements.
-
-The canonical intake envelope namespace is `messageId`, `source`,
-`destination`, `key`, `eventType`, `schemaVersion`, `contentType`,
-`schemaReference`, `sourceEventId`, `sourceGlobalPosition`, `payloadBytes`,
-`occurredAt`, `causationId`, `correlationId`, `traceContext`, `attributes`, plus
-the DSL extension `idempotencyKey`. An intake may also bind a field declared by
-any contract event in its `accept` list.
-
-An emit node's `source`, `key`, and map discriminant name remain descriptive:
-the current graph has no source read-model or typed field namespace against
-which to resolve them. `check` does resolve the contract, topic alias, mapped
-event targets, topic affinity, and duplicate map values. Treat the three
-descriptive words as documentation, not as a checked field-selection program.
-
-## Supported node families
-
-A specification continues with `context <name>` and may declare shared ids, enums,
-rules, and consumer-owned mapped types. The current grammar covers:
-
-- aggregates, event versions/upcasters, projections, and snapshot policies;
-- process managers, timers, worker rejection/poison policies, and target inline
-  projections;
-- effectful routers backed by a read model or a typed resolver hole;
-- integration contracts, inbox intake, outbox emits, and publishers;
-- PGMQ work queues, ordering/group keys, provisioning, retry/DLQ policy, and
-  read-model-driven dispatch (see [Work Queues](work-queues.md));
-- first-class read models, schemas, columns, consistency, scope, and feed;
-- durable workflows, named operations, patches, and continue-as-new; and
-- structural and opaque mappings from private aggregate payloads to existing
-  consumer-owned Haskell types.
-
-Use `keiro-dsl new <kind>` to print a minimal valid node skeleton. The CLI
-accepts `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
-`publisher`, `workqueue`, `dispatch`, `workflow`, and `operation`.
-
-## Direct aggregate scalar types
-
-Aggregate commands, events, and registers share one checked type model. Direct
-scalars are `Text`, `Int`, `Integer`, `Bool`, `Time`, and `Natural`. Under
-language version 2, guards and writes use explicit `reg.` and `cmd.` roots and
-are compiled into the generated Keiki transducer:
-
-```text
-language keiro-dsl 2
-context accounting
-
-aggregate Account
+aggregate Thing
   regs
-    balance Integer = 0
-    reserved Natural = 0
-    capacity Natural = 5
-    openedAt Time = "2026-01-02T03:04:05.123456789012Z"
-  states Open Adjusted!
-  command Adjust { amount:Integer requested:Natural observedAt:Time }
-  event AccountAdjusted = fields(Adjust)
-  Open -- Adjust -->
-    guard cmd.amount + reg.balance >= -100
-      && reg.reserved + cmd.requested <= reg.capacity
-      && cmd.observedAt >= reg.openedAt
-    write balance := reg.balance + cmd.amount * 2
-    write reserved := reg.reserved + (cmd.requested - reg.capacity)
-    emit AccountAdjusted
-    goto Adjusted
+    thingId ThingId = placeholder
+  states Pending Done!
+
+  command DoThing { thingId attempt:Int }
+  event ThingCompleted { thingId attempt:Int }
+
+  Pending -- DoThing -->
+    emit ThingCompleted
+    goto Done
+
   wire kind=ctorName fields=camelCase schemaVersion=1
 ```
 
-`Integer` arithmetic is exact for `+`, `-`, and `*`. `Natural` supports the
-same operators, with subtraction defined as total monus:
-`a - b = max 0 (a - b)`, so `2 - 5` is `0`. `Int` remains available for
-literals, equality, ordering, and whole-value writes, but its arithmetic is
-rejected because the symbolic domain does not model machine-width overflow.
-Division, remainder, mixed numeric types, implicit coercion, and Time
-arithmetic are also rejected by `check`.
+`check` prints `OK` and exits zero for a valid source. `scaffold` validates
+again before writing. It emits replaceable files bearing an exact `@generated`
+banner, create-once hand-owned modules, a conformance harness, a build manifest,
+and a scaffold record. Add the manifest's `other-modules` and `build-depends`
+entries to the consuming Cabal component, fill the create-once modules, and run
+the generated harness in CI.
 
-Equality is solver-visible for all six direct scalar types. Ordering is
-solver-visible for `Int`, `Integer`, `Time`, and `Natural`; it is rejected for
-`Text` and `Bool`. Quoted literals resolve contextually as `Text` or ISO-8601
-UTC `Time`; integral literals resolve contextually as `Int`, `Integer`, or
-`Natural`; Bool literals are `true` and `false`. Qualified `Enum.Constructor`
-and `IdType("prefix_...")` literals are checked for whole-value writes, but ID
-and enum comparisons remain unavailable until their nominal symbolic encoding
-is structural. Predicate-valued expressions cannot be written to a Bool
-register because Keiki predicates and Bool terms are distinct.
+After changing a deployed specification, run a compatibility diff before
+scaffolding:
 
-An unqualified name is accepted only when exactly one active command field or
-register matches it. If both match, use `cmd.name` or `reg.name`. Dotted paths
-may cross required `mapped structural record` fields and must end at a
-supported scalar leaf. Optional, union, collection, `Json`, and opaque
-boundaries fail before scaffolding. Multiplication binds above
-addition/subtraction, which bind above a non-associative comparison;
-comparisons bind above `&&`, and `&&` binds above `||`.
+```bash
+cabal run -v0 keiro-dsl -- diff service.keiro --since HEAD^ --explain
+```
 
-`UTCTime` is an accepted source type alias but canonical output spells `Time`.
-Checking parses a quoted ISO-8601 register initial once; generated Haskell uses
-an explicit `UTCTime` value and preserves picosecond precision through event
-JSON, snapshots, forward execution, and replay. A `Natural` initial must be a
-non-negative integral value, and its JSON codec rejects negative or fractional
-values.
+## Source file structure
 
-A bare field keeps the established inference order: exactly matching register,
-PascalCase id/enum/vertex/mapped declaration, then `Text`. Direct `Json`,
-`Optional`, `List`, and `Map` aggregate fields are not supported; express those
-wire shapes through a `mapped structural` declaration. Stable diagnostics make
-the boundary actionable. Type errors retain the `AggregateType*` codes;
-expression errors use the `AggregateExpression*` family for roots, paths,
-literals, operands, operators, Boolean contexts, and writes. Collection
-spellings reserved for
-[plan 166](../plans/166-evaluate-bounded-aggregate-collection-membership-and-quantification.md)
-fail as `CollectionExpressionUnsupported`. All come from `check`, before
-scaffolding can write output.
+### Preamble and context
 
-## Consumer-owned mapped types
+A complete source has this outer form:
 
-Language version 2 can keep an application's existing nominal type in direct
-aggregate commands, events, and registers:
+```text
+language keiro-dsl 4
+context hospital-capacity
+module Acme.Services
+layout collocated
+
+# Shared declarations and nodes follow in any order.
+```
+
+The language declaration must be the first non-comment content and must appear
+immediately before `context`. `module` and `layout`, when present, must follow
+`context` and precede all declarations and nodes.
+
+`context` takes a wire word: an ASCII letter or digit followed by ASCII letters,
+digits, underscores, or hyphens. It is the service namespace used in generated
+module and durable identity derivation.
+
+`module` is an optional Haskell module prefix made from one or more PascalCase
+segments. `layout` controls generated-module placement:
+
+| Layout | Generated modules | Hand-owned modules |
+| --- | --- | --- |
+| `prefixed` (default) | `<Module>.Generated.<Context>.<Node>...` | `<Module>.<Context>.<Node>...` |
+| `collocated` | `<Module>.<Context>.<Node>.Generated...` | `<Module>.<Context>.<Node>...` |
+
+`scaffold --module-root PREFIX` overrides `module`, and `--collocate` overrides
+the layout for that run. Prefer declaring stable project-wide placement in the
+source or workspace manifest rather than relying on repeated CLI flags.
+
+### Lexical rules
+
+- `#` begins a line comment.
+- Spaces, blank lines, and indentation are generally insignificant; keywords
+  give the document its structure. Indentation is still strongly recommended.
+- Identifiers contain ASCII letters, digits, and underscores and cannot contain
+  hyphens. Generated Haskell type and constructor names must begin with an
+  uppercase ASCII letter; fields and registers must begin with a lowercase
+  ASCII letter or underscore. Haskell keywords are rejected.
+- A *wire word* may also contain hyphens. Context names, ID prefixes, enum wire
+  values, state-map values, and workflow labels use this form.
+- Double-quoted strings support `\"`, `\\`, `\n`, `\t`, and `\r`. Raw newlines
+  and unknown escapes are errors.
+- A duration is decimal digits followed by exactly `s`, `m`, or `h`, such as
+  `30s`, `5m`, or `2h`.
+- Keywords are case-sensitive. In particular, aggregate register initials use
+  `True` and `False`, while expressions use `true` and `false`.
+- `parse` and `pretty` produce canonical syntax but do not preserve comments or
+  original whitespace.
+
+Top-level declarations in the same category must have unique names. Node names
+must be unique within their node family. Generated Haskell names must also avoid
+case-folded path collisions and constructor collisions.
+
+## Shared declarations
+
+Shared declarations are visible to all nodes in the source or composed
+workspace.
+
+### IDs
+
+```text
+id TransferReservationId prefix=rsv
+id HospitalId prefix=hosp
+```
+
+An `id` declares a generated nominal identifier. Language 4 admits current
+TypeID-v7 values and generates a distinct Haskell type for each declaration.
+The prefix is at most 63 characters, uses lowercase ASCII letters and
+underscores, and cannot begin or end with an underscore. Prefixes must be unique
+within the service.
+
+An unbound ID register begins at the sentinel `placeholder`:
+
+```text
+regs
+  reservationId TransferReservationId = placeholder
+```
+
+Use a checked TypeID literal in a transition write:
+
+```text
+write requestId := RequestId("req_00041061050r3gg28a1c60t3gf")
+```
+
+The literal must be canonical, have the declared prefix, and carry a UUID-v7
+suffix. Application code should use the safe constructors exposed by the
+generated/current ID API rather than constructing raw text wrappers.
+
+### Enums
+
+```text
+enum PatientAcuity {
+  RedTag=red
+  YellowTag=yellow
+  GreenTag=green
+}
+```
+
+The left side is the Haskell constructor; the right side is its stable wire
+spelling. Constructor names and wire spellings must each be unique. Enum
+registers start at a declared constructor, and expression literals are
+qualified:
+
+```text
+regs
+  acuity PatientAcuity = GreenTag
+
+guard cmd.acuity == PatientAcuity.RedTag
+```
+
+### Rules
+
+```text
+rule lifeCriticalOverride : PatientAcuity -> Bool
+  ex RedTag => true ; YellowTag => false ; GreenTag => false
+```
+
+A `rule` is a total, deterministic lookup over one declared enum. Every enum
+constructor must appear exactly once. Bodies can refer only to enum constructors
+and Boolean values and may not sample a clock. Rules can be used as Boolean
+atoms in aggregate guards.
+
+### Consumer-owned nominal declarations
+
+Use `using` when an ID or enum already has an application-owned Haskell type:
 
 ```text
 id OrderId prefix=ord using {
@@ -254,6 +230,7 @@ id OrderId prefix=ord using {
   binding-version = "1"
   canonical-type = "orders.OrderId.v1"
   fixtures = "Orders.KeiroBindings.orderIdFixtures"
+  initial = "Orders.KeiroBindings.initialOrderId"
 }
 
 enum OrderStatus { Draft=draft Submitted=submitted } using {
@@ -262,8 +239,13 @@ enum OrderStatus { Draft=draft Submitted=submitted } using {
   binding-version = "1"
   canonical-type = "orders.OrderStatus.v1"
   fixtures = "Orders.KeiroBindings.orderStatusFixtures"
+  initial = "Orders.KeiroBindings.initialOrderStatus"
 }
+```
 
+Use `mapped nominal` for an application-owned scalar wrapper:
+
+```text
 mapped nominal AccountNumber : Text {
   haskell package=orders-domain module=Orders.Account type=AccountNumber
   binding = "Orders.KeiroBindings.accountNumberBinding"
@@ -274,122 +256,958 @@ mapped nominal AccountNumber : Text {
 }
 ```
 
-`NominalBinding domain representation` has total conversions in both
-directions. Bound IDs cross a typed `KindID "prefix"`; bound enums cross a
-generated closed representation; nominal scalars cross exactly one of `Text`,
-`Int`, `Natural`, `Bool`, or `Time`. The event decoder validates ID text and its
-prefix before consumer construction, while enum decoding admits only declared
-wire spellings. A consumer constructor that rejects or normalizes a valid
-representation is refined, not nominal, and must use `mapped opaque`.
+Nominal scalar representations are `Text`, `Int`, `Natural`, `Bool`, and
+`Time`. The binding must be a total isomorphism: converting to the declared
+representation and back must preserve the value, and the reverse direction
+must also preserve the representation. A validating, normalizing, or otherwise
+partial constructor is not nominal; represent it as `mapped opaque` instead.
 
-The generated domain imports the application type rather than declaring a
-second wrapper. Expected-wire fixtures and both binding laws run in the
-consumer-compiled harness; finite fixtures remain evidence, not universal
-proof. A register additionally requires an `initial` symbol and consumer
-`ToJSON`, `FromJSON`, and `CanonicalTypeName` instances because snapshots remain
-consumer-JSON caches. Bound scalar registers expose a generated
-`NominalProjections` facade: equality is symbolic for all five representations,
-ordering only for `Int`, `Natural`, and `Time`, and nominal arithmetic is not
-introduced.
+`haskell`, `binding`, `binding-version`, `canonical-type`, and `fixtures` are
+required. `initial` is required when the type is used by a register. A
+consumer-owned register starts with the bare token `initial`, which selects the
+declared symbol:
 
-A structural mapping keeps the application type while making the `.keiro`
-declaration the single authority for its private event wire shape. The
-declaration names the consumer type, a total `StructuralBinding`, a stable
-binding version and canonical type identity, deterministic fixture cases, and
-the complete JSON policy:
+```text
+regs
+  orderId OrderId = initial
+  status OrderStatus = initial
+  accountNumber AccountNumber = initial
+```
+
+The first scaffold creates a binding skeleton. Fill it and its fixture cases;
+do not duplicate wire spellings or defaults in the binding. Those remain owned
+by the `.keiro` declaration.
+
+## Types
+
+### Direct aggregate types
+
+Aggregate registers and explicit command/event fields accept:
+
+| DSL type | Haskell meaning | Notes |
+| --- | --- | --- |
+| `Text` | `Text` | Quoted initial. Equality only. |
+| `Int` | machine-width `Int` | Signed integral initial. Equality and ordering; no arithmetic. |
+| `Integer` | arbitrary-precision `Integer` | Signed integral initial. Equality, ordering, and exact arithmetic. |
+| `Bool` | `Bool` | Initial is `True` or `False`; equality only. |
+| `Time` | `UTCTime` | Quoted ISO-8601 UTC initial; equality and ordering. |
+| `Natural` | `Natural` | Non-negative integral initial; equality, ordering, and total arithmetic. |
+| declared `id` or `enum` | nominal generated or consumer type | Equality and whole-value writes. |
+| `mapped` type | consumer-owned type | Whole-value fields/registers/writes; scalar projection depends on shape. |
+| `<Aggregate>Vertex` | aggregate lifecycle vertex | Register use is opaque; `goto` normally owns lifecycle state. |
+
+`UTCTime` is accepted as an input alias and canonicalizes to `Time`.
+
+`Json`, `Optional`, `List`, and `Map` are not legal as direct aggregate fields
+or registers. Put those shapes behind a named `mapped structural` or
+`mapped opaque` declaration.
+
+### Field inference
+
+A field without `:Type` is inferred in this order:
+
+1. A register with exactly the same field name.
+2. A declared ID, enum, aggregate vertex, or mapped type matching the field's
+   PascalCase name.
+3. `Text`.
+
+For public and persisted shapes, explicit field types are easier to review and
+safer during evolution:
+
+```text
+command Adjust { amount:Integer requestId:RequestId observedAt:Time }
+event Adjusted { amount:Integer requestId:RequestId observedAt:Time }
+```
+
+### Mapped type expressions
+
+Structural mapped fields support these recursive expressions:
+
+```text
+Text
+Int
+Integer
+Bool
+Natural
+Time
+Json
+Optional Text
+List Text
+List (Optional Text)
+Map Text
+OtherMappedType
+```
+
+`Map T` means a JSON object with text keys and values of type `T`.
+
+## Consumer-owned mapped types
+
+A mapped declaration keeps an existing Haskell type at the application
+boundary. A structural mapping gives the DSL complete authority over its JSON
+shape; an opaque mapping delegates JSON authority to the consumer type.
+
+### Structural records
 
 ```text
 mapped structural record ArtifactInfo {
-  haskell package=my-service module=MyService.Domain type=ArtifactInfo
-  binding = "MyService.KeiroBindings.artifactInfoBinding"
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactInfo
+  binding = "Example.Artifact.KeiroBindings.artifactInfoBinding"
   binding-version = "1"
-  canonical-type = "my-service.ArtifactInfo.v1"
-  fixtures = "MyService.KeiroBindings.artifactInfoCases"
-  initial = "MyService.KeiroBindings.emptyArtifactInfo"
+  canonical-type = "example.artifact.ArtifactInfo.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactInfoCases"
+  initial = "Example.Artifact.KeiroBindings.emptyArtifactInfo"
   wire object constructor=ArtifactInfo unknown-fields=reject {
-    artifactKey  as "artifact_key"  : Text          required
-    artifactHash as "artifact_hash" : Optional Text optional on-missing=null
-    active       as "active"        : Bool          optional on-missing=false
+    key         as "key"         : Text          required
+    description as "description" : Optional Text optional on-missing=null
+    active      as "active"      : Bool          optional on-missing=false
+    tags        as "tags"        : List Text     optional on-missing=[]
+    attributes  as "attributes"  : Map Text      optional on-missing={}
   }
 }
 ```
 
-Structural records, string enums, and tagged unions may contain supported
-scalars, `Optional`, `List`, text-keyed `Map` values, nested mapped types, and
-explicit `Json` leaves. Optional fields require an `on-missing` policy;
-records and tagged unions require an `unknown-fields=reject|ignore` policy.
-The checker rejects recursive mappings, ambiguous names, ill-typed defaults,
-and non-injective shapes such as `Optional Json` where JSON `null` cannot
-distinguish the outer and inner cases.
+Each row gives the Haskell selector, JSON key, type, and presence. JSON keys and
+Haskell field names must be unique. `unknown-fields` is `reject` or `ignore`.
+Optional fields need a type-correct `on-missing` value:
 
-`StructuralBinding domain shape` is deliberately only a total conversion in
-both directions. It cannot supply wire keys, tags, defaults, or validation
-that the declaration cannot see. Generated harnesses exercise both binding
-laws and the declared fixture branches, but those finite cases remain evidence
-rather than a proof for every possible consumer value.
+| Default syntax | Intended type |
+| --- | --- |
+| `null` | `Optional T` |
+| `"text"` | `Text` |
+| integer literal | `Int`, `Integer`, or `Natural` as valid |
+| `true`, `false` | `Bool` |
+| `[]` | `List T` |
+| `{}` | `Map T` |
+| constructor name | structural enum |
 
-Use an opaque mapping when the consumer codec must remain authoritative or a
-total structural binding cannot honestly be written:
+The checker rejects recursive mappings, unresolved or ambiguous names,
+ill-typed defaults, and non-injective nullability such as `Optional Json` when
+JSON `null` cannot distinguish the cases.
+
+### Structural string enums
 
 ```text
-mapped opaque VendorGeometry {
-  haskell package=my-service module=MyService.Domain type=Geometry
-  codec = "vendor.geometry.json"
-  version = "3"
-  fixtures = "MyService.KeiroBindings.geometryCases"
+mapped structural enum ArtifactKind {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactKind
+  binding = "Example.Artifact.KeiroBindings.artifactKindBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactKind.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactKindCases"
+  wire string {
+    Guide as "guide"
+    Reference as "reference"
+  }
 }
 ```
 
-Keiro delegates to the consumer's `ToJSON`/`FromJSON` instances only at that
-declared boundary and makes no nested compatibility claim below it. Passing
-fixtures or a historical comparison never upgrades an opaque declaration to a
-structural guarantee.
+Constructor names and JSON string values must each be unique.
 
-The mapped graph currently covers private aggregate event payloads and mapped
-registers. Public contracts and queue payloads retain their separately owned
-grammars and appear as unsupported or not applicable in mapped-coverage
-reports. Mapped register snapshots remain a consumer-JSON cache boundary; the
-mapping fingerprint invalidates the cache but the generated private-event
-codec is not the snapshot codec.
+### Structural tagged unions
 
-## Authoring loop
-
-```bash
-cabal run keiro-dsl -- new aggregate > service.keiro
-cabal run keiro-dsl -- parse service.keiro
-cabal run keiro-dsl -- check service.keiro --explain-bindings
-cabal run keiro-dsl -- inspect service.keiro --format=json
-cabal run keiro-dsl -- scaffold service.keiro --out src
-cabal run keiro-dsl -- diff service.keiro --since HEAD^ --explain
+```text
+mapped structural union ArtifactLocation {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactLocation
+  binding = "Example.Artifact.KeiroBindings.artifactLocationBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactLocation.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactLocationCases"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    LocalFile as "local_file" : Text
+    RepoPath as "repo_path" : Text
+    Unknown as "unknown"
+  }
+}
 ```
 
-Every file-taking command also accepts a `.keiro-workspace` manifest. A single
-`.keiro` file keeps the unchanged path and behaves as a one-member workspace.
+An arm may omit its payload. Arm constructor names and tag values must each be
+unique, and the tag and contents keys must not collide.
 
-- `parse` pretty-prints the parsed specification and catches notation errors.
-- `check` resolves cross-node and mapped-type references and rejects unsafe or
-  incomplete policy. Add `--emit` to print the normalized spec, or
-  `--explain-bindings` to list every required binding, fixture, and
-  register-initial symbol with its expected signature and owner.
-- `inspect --format=json` reports whether the source declared a language version
-  and which registered version is effective. Workspace inspection reports the
-  same provenance for every member in canonical path order.
-- `scaffold` validates before writing, emits the generated layer and create-once
-  hole/binding modules, then reports every created, overwritten, skipped, stale,
-  or newly required path and obligation.
-- `diff` loads the earlier spec from Git and reports a six-surface compatibility
-  vector for each finding. `--explain` adds containing paths, failing
-  directions, rollout constraints, and remedies; `--report-out FILE` writes the
-  stable `keiro-dsl/diff-report/1` JSON report.
+### Opaque mappings
 
-Run commands from the repository containing the spec because `diff` resolves
-`--since` with `git show`.
+```text
+mapped opaque VendorGeometry {
+  haskell package=vendor-geometry module=Vendor.Geometry type=Geometry
+  codec = "vendor.geometry.json"
+  version = "3"
+  fixtures = "Vendor.Geometry.KeiroBindings.geometryCases"
+  initial = "Vendor.Geometry.KeiroBindings.emptyGeometry"
+}
+```
+
+An opaque mapping requires `haskell`, `codec`, `version`, and `fixtures`.
+`initial` is required for register use. Keiro delegates to the consumer type's
+codec and makes no compatibility claim about fields below the opaque boundary.
+Use coverage reports to keep these boundaries visible.
+
+### Structural binding obligations
+
+Run:
+
+```bash
+cabal run -v0 keiro-dsl -- check service.keiro --explain-bindings
+```
+
+The output names every required binding, fixture, and initial symbol with its
+owner. Generated harnesses check both structural binding directions, declared
+wire branches, fixture coverage, aggregate payload round trips, and replay
+agreement. Fixtures are finite evidence, not proof for all consumer values.
+
+## Aggregate expressions
+
+Guards and register writes use a typed scalar expression language.
+
+### Roots and paths
+
+- `reg.name` selects a register.
+- `cmd.name` selects a field of the transition's command.
+- An unqualified `name` is allowed only when exactly one of those scopes
+  contains it. Qualify ambiguous names.
+- `cmd.details.amount` and `reg.details.amount` can traverse required fields of
+  structural records to a supported scalar leaf.
+
+Paths cannot cross an optional field, collection, union, `Json`, or opaque
+mapping. They must end at `Text`, `Int`, `Integer`, `Bool`, `Natural`, `Time`,
+or an eligible nominal scalar.
+
+### Literals
+
+```text
+"text"
+-100
+true
+false
+OrderStatus.Submitted
+OrderId("ord_00041061050r3gg28a1c60t3gf")
+```
+
+Quoted literals resolve as `Text` or `Time` from context. Integral literals
+resolve as `Int`, `Integer`, or `Natural` from context. Enum and ID literals
+must be qualified. No implicit numeric or nominal coercion exists.
+
+### Operators and precedence
+
+From highest to lowest precedence:
+
+1. `*`
+2. `+`, `-`
+3. `==`, `!=`, `<`, `<=`, `>`, `>=`
+4. `&&`
+5. `||`
+
+Comparisons are non-associative. Use parentheses to make mixed expressions
+obvious.
+
+`Integer` supports exact `+`, `-`, and `*`. `Natural` supports the same
+operators, with subtraction defined as monus: `a - b` is never below zero.
+`Int` arithmetic is rejected because overflow is not modeled. Division,
+remainder, mixed numeric types, Time arithmetic, and collection operators are
+not supported.
+
+Equality is available for direct scalars, generated or consumer-owned IDs and
+enums, and nominal scalars. Ordering is available for `Int`, `Integer`,
+`Natural`, `Time`, and nominal `Int`, `Natural`, or `Time`. It is not available
+for `Text`, `Bool`, IDs, or enums. Nominal arithmetic is not supported.
+
+Comparisons and Boolean combinations produce guard predicates; they cannot be
+written into a `Bool` register as scalar values.
+
+Example:
+
+```text
+Open -- Adjust -->
+  guard cmd.amount + reg.balance >= -100
+    && reg.reserved + cmd.requested <= reg.capacity
+    && cmd.observedAt >= reg.openedAt
+    && cmd.mode == reg.mode
+  write balance := reg.balance + cmd.amount * 2
+  write reserved := reg.reserved + (cmd.requested - reg.capacity)
+  write mode := AccountMode.Restricted
+  emit Adjusted
+  goto Reviewed
+```
+
+## Aggregates
+
+An aggregate is an event-sourced consistency boundary.
+
+```text
+aggregate Reservation
+  regs
+    reservationId TransferReservationId = placeholder
+    attempts Integer = 0
+  states Unrequested Held Confirmed!
+
+  command Request { reservationId amount:Integer }
+  command Confirm { reservationId }
+
+  event Requested = fields(Request)
+  event ConfirmedEvent { reservationId }
+
+  Unrequested -- Request -->
+    guard cmd.amount > 0
+    write attempts := reg.attempts + 1
+    emit Requested
+    goto Held
+
+  Held -- Confirm -->
+    emit ConfirmedEvent
+    goto Confirmed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+```
+
+### Registers and states
+
+`regs` is mandatory but may be empty. Each row is `name Type = initial`.
+Register names are unique. Initial values must follow the type rules in
+[Direct aggregate types](#direct-aggregate-types).
+
+`states` is followed by one or more lifecycle states. The first is the initial
+state. A trailing `!` marks a terminal state, which may not have outgoing
+transitions. Every non-terminal state must be reachable from the initial state.
+
+Use lifecycle states and `goto` for the aggregate's main state machine. A
+parallel `<Aggregate>Vertex` register is rarely needed and can obscure the
+single lifecycle authority.
+
+### Commands and events
+
+```text
+command Request { reservationId amount:Integer }
+event Requested = fields(Request)
+event Rejected { reservationId reason:Text }
+```
+
+Command names, event names, and fields within each constructor are unique.
+`fields(Command)` declares an exact, type-identical copy. When a transition
+emits that event, it must consume the named command; the generated transducer
+then owns the identity output. An event with an explicit field block needs a
+hand-owned output constructor because the source-to-event transformation is not
+fully expressed.
+
+### Transitions
+
+```text
+Source -- Command -->
+  guard <Boolean expression>
+  write register := <scalar expression>
+  emit Event
+  goto Target
+```
+
+A transition must contain exactly one `goto`. It may have multiple guards,
+writes, and emits; multiple guards are combined with `&&`, write and emit order
+is preserved, and every reference must resolve. A live transition that changes
+state or writes a register must emit persisted evidence. An eventless
+transition is valid only as a no-op self-loop with no writes.
+
+At most one live unguarded transition may use the same source state and command.
+A guarded transition may not have an unguarded sibling for the same pair.
+Multiple guarded siblings must be mutually exclusive; generated behavior
+verification and the conformance harness expose ambiguity.
+
+By default, Language 4 generates transition behavior from its guard, writes,
+emits, and target. Use an explicit hole when the predicate or updates cannot be
+expressed:
+
+```text
+Reviewed -- Close -->
+  implementation hole
+  emit ClosedEvent
+  goto Closed
+```
+
+An implementation-hole transition may not also declare DSL `guard` or `write`
+clauses. Its create-once module supplies the implementation and a `FoldVersion`.
+Bump that token whenever hand-owned predicate or update behavior changes so
+snapshots and replay audits can detect the new fold.
+
+### Replay-only transitions and event retirement
+
+A replay-only transition participates in hydration but never accepts a new
+command:
+
+```text
+replay-only Held -- Confirm -->
+  emit LegacyConfirmed
+  goto Confirmed
+```
+
+It must emit at least one event. Use it to preserve inversion of stored events
+after their live behavior has been retired.
+
+Event retirement is two-stage:
+
+1. Mark `retiring event Name ...` while a live transition still emits it.
+   Terminalize or truncate affected streams.
+2. Change it to `deprecated event Name ...`, remove it from live emitters, and
+   retain an equivalent replay-only emitter until no stored stream needs it.
+
+`check` warns throughout the protocol and errors when a retiring event has no
+live emitter or a deprecated event is still emitted live.
+
+### Event versions and upcasters
+
+```text
+event ReservationConfirmed v2 { reservationId note:Text }
+  upcast from v1 = HOLE
+```
+
+Version 1 is implicit. Every `vN` above 1 needs an `upcast from v(N-1) = HOLE`.
+Across the aggregate, the upcaster chain from version 1 through the highest
+event version must remain contiguous. Once shipped, a rung remains available
+for old payloads.
+
+The aggregate's `wire schemaVersion` should equal its maximum event version.
+`diff` detects field additions, removals, type changes, version decreases,
+missing bumps, and retirement mistakes. Use `--emit-goldens DIR` to create
+non-overwriting old-shape fixtures for version bumps.
+
+### Wire policy
+
+Language 4 supports exactly:
+
+```text
+wire kind=ctorName fields=camelCase schemaVersion=1
+```
+
+Other `kind` or `fields` values are rejected because generation implements no
+other byte convention.
+
+### Aggregate projections
+
+```text
+projection transfer_decisions key=reservationId
+  status-map {
+    Requested=>held
+    ConfirmedEvent=>confirmed
+  }
+```
+
+`key` names the source field used by the projection. Status-map keys are exact
+event names. They must be unique and resolve to events in the aggregate. The map
+is total by default; use `status-map partial { ... }` when some events
+intentionally do not change projected status.
+
+Prefer declaring a matching `readmodel` node. It then owns schema identity,
+feed, consistency, and rebuild metadata. An optional
+`consistency=Strong|Eventual` on `projection` must agree with the read model.
+A projection without a read-model node remains usable but produces a warning
+and has no registered schema or rebuild authority.
+
+### Snapshots
+
+```text
+snapshot every 100
+  state-codec version=1 shape-hash="<captured-live-hash>"
+```
+
+or:
+
+```text
+snapshot on-terminal
+  state-codec version=1 shape-hash="<captured-live-hash>"
+```
+
+Intervals and codec versions start at 1, and the hash must be non-empty. The
+hash captures the live Haskell state shape; it is independent of event JSON.
+Scaffold with a placeholder, run the generated snapshot conformance component,
+copy its reported live hash into the specification, scaffold again, and rerun
+the harness. Snapshots are advisory caches: a changed codec version, shape hash,
+fold identity, or mapped-register identity invalidates stale caches and falls
+back to replay.
+
+## Processes and timers
+
+A `process` coordinates a saga aggregate, target aggregates, command dispatches,
+and one durable timer.
+
+```text
+process HospitalSurge
+  name "hospital-surge"
+  input SurgeInput { hospitalId availableIcuBeds:Int observedAt:Time }
+  correlate input.hospitalId via idText
+  saga Surge category "hospitalSurge"
+  target Hospital
+  projections [ ]
+
+  on SurgeInput
+    advance NoteSurgeThreshold { hospitalId timerId=timer.id }
+    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
+      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    schedule surgeFollowUp
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+  rejected => halt
+  poison => halt
+
+  timer surgeFollowUp
+    id uuidv5 "hospital-surge-timer:" <> correlationId
+    fireAt input.observedAt + 5m
+    payload { kind="hospital-surge-follow-up" hospitalId }
+    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
+      fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+    max-attempts 5 dead-letter "surge timer exceeded ceiling"
+```
+
+The block identifier (`HospitalSurge`) selects generated modules. `name` is a
+stable durable identity shared with the process runtime; it must be non-empty,
+must not be `$all`, whitespace, control characters, or contain `:`, and must be
+unique across all processes, routers, and workflows.
+
+`saga` and `target` resolve to aggregates. The saga category is a validated
+stream category: it must not contain `-`, whitespace, control characters, or
+`:`, and cannot be `$all`. Use camelCase for compound categories.
+
+Bindings are either bare field copies, dotted references such as
+`input.hospitalId` or `timer.id`, or quoted literals. Advance, dispatch, timer,
+command, target, field, projection, and scheduled-timer references are checked.
+Do not bind `commandId` or `id`; dispatch identities are runtime-owned.
+
+`fireAt` must reference an injected `:Time` input field. The notation has no
+clock-sampling form. `max-attempts` is at least 1. `on-ambiguous` must be
+`Retry`: command ambiguity is an aggregate-definition defect, never benign
+success, and the ceiling provides a durable dead-letter witness.
+
+`rejected` and `poison` are each `halt`, `deadLetter`, or `skip`. Align the
+node-level rejected policy with every dispatch's `on-failed` action. Mapping a
+duplicate append to `AckOk` is an explicit benign inversion and produces a
+warning; generated runtime code confirms the attempted event ID against the
+target stream before acknowledging it.
+
+## Routers
+
+A router resolves zero or more target rows for an input and dispatches one
+command per row without keeping its own event-sourced state.
+
+```text
+router HospitalTransferRouter
+  name "hospital-transfer-router"
+  input AcceptedTransferNeed { transferNeedId region }
+  key input.transferNeedId via idText
+  resolve stable via read-model hospital_load row { hospitalId }
+  target Hospital
+  projections [ ]
+  dispatch-each RouteAcceptedTransferNeed {
+    transferNeedId=input.transferNeedId
+    hospitalId=resolved.hospitalId
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+```
+
+`name` follows the stable identity rules described for processes. `key` must
+name an input field. A resolver is either `via read-model Name` for a declared
+read model or `via hole` for another typed effectful implementation. `row`
+declares the fields available under `resolved.*`.
+
+The mandatory `resolve stable` phrase acknowledges retry semantics: later
+attempts deduplicate targets already dispatched, but a resolver whose result
+changes can accumulate the union of targets seen across attempts.
+
+Dispatch binding values may be quoted literals, `input.*`, or `resolved.*`.
+Bare bindings copy an input field of the same name. Target aggregate, command,
+command fields, read model, and projection references are checked. The
+dispatch-ID expression is fixed runtime policy and must be written exactly as
+shown.
+
+## Integration contracts
+
+A contract owns public event names, topic aliases, and payload fields:
+
+```text
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+
+  topic incidentEvents "emergency.incident.events"
+  topic hospitalEvents "emergency.hospital.events"
+
+  event TransferReservationAccepted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hsp"
+    expirationDeadline: text
+  }
+}
+```
+
+`schemaVersion` starts at 1. Topic aliases and event names are unique, and every
+event's alias must resolve. A Kafka topic is 1–249 ASCII characters from
+`A-Z`, `a-z`, `0-9`, `.`, `_`, and `-`, excluding `.` and `..`.
+
+Contract field types are:
+
+| Syntax | Generated type |
+| --- | --- |
+| `typeid "prefix"` | `KindID "prefix"` with current TypeID-v7 decoding |
+| `text` | `Text` |
+| `int` | `Int` |
+
+Field names are unique within an event and cannot equal the contract
+discriminator. TypeID prefixes follow the same validity rules as shared IDs.
+The generated decoder rejects malformed, non-canonical, non-v7, and
+wrong-prefix values at the field path.
+
+## Intakes
+
+An intake connects one contract topic to the inbox:
+
+```text
+intake incidentInbox {
+  contract emergency
+  topic incidentEvents
+  accept IncidentTransferNeedDeclared
+
+  bind source from header "keiro-source" required
+  bind schemaVersion from header "keiro-schema-version" required cross-check body
+  bind messageId from header "keiro-message-id" required cross-check body
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key messageId policy PreferIntegrationMessageId
+  persist = dedupe-only
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}
+```
+
+`contract`, `topic`, and every accepted event must resolve, and accepted events
+must belong to the intake topic. One or more event names follow `accept`.
+
+Bind sources are `header "name"`, `body`, `kafka-key`, and `kafka-cursor`.
+`required` and `cross-check body` are optional flags. A bound name and the
+dedupe key must resolve to either a field on an accepted contract event or one
+of the canonical envelope names:
+
+```text
+messageId source destination key eventType schemaVersion contentType
+schemaReference sourceEventId sourceGlobalPosition payloadBytes occurredAt
+causationId correlationId traceContext attributes idempotencyKey
+```
+
+Dedupe policies are `PreferIntegrationMessageId`,
+`PreferSourceEventIdentity`, and `KafkaDeliveryIdentity`.
+
+`persist` is optional and defaults to `full-envelope`. Use `dedupe-only` only
+when a successfully processed payload is re-fetchable or no longer valuable;
+failed rows keep the full envelope for operators regardless of this choice.
+
+The envelope policy is exactly `strict-required lenient-optional`. Body mode is
+`strict` or `lenient`, and its schema version must equal the contract version.
+The disposition table is mandatory and contains each of the seven rows exactly
+once. Duplicates acknowledge success, a previous terminal failure does not
+retry, poison decode failures dead-letter, and transient/in-progress outcomes
+use bounded retries according to the declared action.
+
+## Emits and publishers
+
+An emit maps a private discriminant to public contract events:
+
+```text
+emit reservationResponse {
+  contract emergency
+  topic hospitalEvents
+  source "hospital-capacity"
+  key incidentId
+  map status {
+    "confirmed" => TransferReservationAccepted
+    "rejected" => TransferReservationRejected
+    _ => skip
+  }
+  messageId derive "msg" hole
+  idempotencyKey derive hole
+}
+```
+
+The contract, topic, and mapped events must resolve, and every mapped event must
+belong to the selected topic. Discriminant strings are unique. The explicit
+`_ => skip` catch-all is mandatory. `source`, `key`, and the map's discriminant
+name are descriptive because no typed source read-model namespace is declared;
+their values are not field-resolution programs.
+
+`derive ["prefix"] hole` creates a typed hand-owned derivation point. Its
+implementation must be deterministic so retries reproduce the same IDs.
+
+A publisher owns delivery policy for one emit:
+
+```text
+publisher hospitalPublisher {
+  emit reservationResponse
+  ordering PerKeyHeadOfLine
+  maxAttempts 10
+  backoff exponential 2s max=60s multiplier=2.0
+  outboxId stable from messageId
+}
+```
+
+`emit` must resolve and `maxAttempts` starts at 1. Ordering is one of:
+
+- `PerKeyHeadOfLine`
+- `PerSourceStream`
+- `StopTheLine`
+- `BestEffort`
+
+Backoff is either `constant <duration>` or
+`exponential <initial> max=<duration> multiplier=<decimal>`. Exponential
+backoff requires both options, a positive initial delay, a maximum at least as
+large as the initial delay, and a multiplier of at least 1. `outboxId stable
+from <field>` declares the identity that coalesces retries.
+
+## Work queues and dispatch
+
+### Work queues
+
+```text
+workqueue reservation_work {
+  queue logical = "hospital_capacity.reservation_work"
+  derive physical = "hospital_capacity_reservation_work"
+         dlq = "hospital_capacity_reservation_work_dlq"
+         table = "pgmq.q_hospital_capacity_reservation_work"
+
+  ordering fifo-throughput
+  group key from reservationId via raw
+  provision standard
+
+  payload ReservationWorkItem {
+    reservationId -> "reservation_id" text required
+    hospitalId -> "hospital_id" text required
+    attempts -> "attempts" int required
+    urgent -> "urgent" bool required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+```
+
+The logical queue name is the durable source identity. The physical queue, DLQ,
+and backing table are captured fixtures; `check` re-derives them and rejects
+drift. Long or otherwise non-simple logical names may use a stable hashed
+physical derivation; copy the values reported by the checker or a generated
+starter rather than inventing them.
+
+Payload rows are `field -> "wire_key" type [required]`. Use `text`, `int`, and
+`bool`, which lower to `Text`, `Int`, and `Bool`. Queue payload evolution is a
+persisted wire change and must go through `diff`.
+
+Ordering is `unordered` (the default), `fifo-throughput`, or
+`fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
+`via raw` requires a `text` field. An opaque derivation uses:
+
+```text
+group key from reservationId via reservationGroup
+  fixture "rsv_... => group-a"
+```
+
+The fixture captures the expected hand-owned derivation.
+
+Provisioning is `standard` (the default), `unlogged`, or:
+
+```text
+provision partitioned(interval="daily", retention="7 days")
+```
+
+Unlogged queues are truncated after a PostgreSQL crash and produce a warning;
+use them only for regenerable work. Partition interval and retention must be
+non-empty and are create-time settings. Changing provisioning does not migrate
+an existing queue.
+
+`dlq=on` requires `maxRetries >= 1`. The disposition table contains all four
+named outcomes exactly once. `storeFailure` is transient and retries;
+`decodeFailure` is poison and dead-letters. Generated policy uses a closed
+queue-specific outcome type, so new rows and spelling mistakes become compile
+errors in hand-owned handlers.
+
+### Read-model-driven dispatch
+
+```text
+dispatch reservation_work_dispatch {
+  source readModel = accepted_transfer_needs key = reservationId
+  fanout body = resolveTransferCandidates
+  dedup key = reservationId
+        seenIn readModel = transfer_decisions field = reservation_id
+        seenIn queue = reservation_work field = reservation_id
+  enqueue to = reservation_work
+}
+```
+
+The source and dedupe read models, dedupe column, dedupe queue, queue payload
+field, and enqueue target must resolve. `fanout body` is a hand-owned effectful
+one-to-many function. The queue-side dedupe check is a hand-owned SQL boundary;
+keep it consistent with the declared wire key and read-model check.
+
+## Read models
+
+```text
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+    status text required
+    decided_at timestamptz
+  }
+  version = 1
+  shape = "fnv1a:3717f6d9e3c44bd6"
+  consistency = Strong
+  scope = category "reservation"
+  feed = subscription
+  subscription = "hospital-capacity-transfer-decisions-sub"
+}
+```
+
+`schema`, `table`, and column names must be unquoted PostgreSQL identifiers:
+`[a-z_][a-z0-9_]{0,62}`. Column names are unique. Supported SQL types are
+`text`, `int`, `bigint`, `bool`, `timestamptz`, `jsonb`, and `numeric`.
+`required` means non-null.
+
+`version` starts at 1. `shape` is a captured FNV-1a-64 identity derived from
+the table and ordered column surface. If it drifts, `check` prints the expected
+value. Update the hash and bump `version` when the real table shape changes.
+
+Consistency is `Strong` or `Eventual`. A strong model requires
+`feed = subscription`; it cannot be inline-only because a strong read waits for
+a subscription cursor. `scope` is legal only for a strong model and is either
+`entire-log` or `category "name"`; omitted strong scope defaults to the entire
+log. Feed is `inline` or `subscription`. An inline model must be referenced by
+an aggregate projection of the same name. A subscription name is optional; the
+tool derives a stable default when omitted.
+
+The SQL table remains application-migration-owned. The scaffold generates
+schema-qualified table facts and create-once apply/query functions. Use the
+generated table constant in SQL rather than depending on PostgreSQL
+`search_path`.
+
+## Workflows
+
+```text
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput {
+    reservationId:Id
+    coolingOffDelay:Duration
+  }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    step create-transfer-hold -> ReservationHold
+    patch fraud-check-v2 {
+      step fraud-check -> FraudCheckResult
+    }
+    await reservation-confirmation -> ReservationConfirmation
+    sleep cooling-off after coolingOffDelay
+    child ship-order id input via shipChildId -> Text
+    continueAsNew RolloverSeed
+```
+
+`name` is the stable workflow identity and follows the same rules and
+cross-family uniqueness constraint as process and router names. `in` declares
+an input type and optional field inventory; `out` declares the output type.
+`id from input via fn` derives from the whole input, while
+`id from input.field via fn` requires that field to exist.
+
+The body is ordered, but replay matches journal records by label. Labels across
+steps, waits, sleeps, children, and nested patches must be unique. A sleep's
+delay names an input field, so time is injected rather than sampled. Child IDs
+come from the named hand-owned derivation function.
+
+`patch id { ... }` journals a durable branch decision for an in-flight
+evolution. Patch IDs are unique across nested blocks and cannot contain `:`.
+Do not reuse an old ID. Use a patch for a coordinated multi-step change; a
+single changed step can usually receive a new label.
+
+`continueAsNew SeedType` rotates an unbounded workflow to a new journal
+generation. It may appear only as the final top-level body item, never inside a
+patch.
+
+Workflow behavior remains hand-owned. The scaffold generates durable facts and
+runtime wiring, not the workflow's business body.
+
+## Operations
+
+Operations name application entry points. Four shapes are supported.
+
+### Command operation
+
+```text
+operation ConfirmReservation
+  command on Reservation
+    stream from reservationId via reservationStream
+    project [ transferDecision ]
+```
+
+The aggregate, stream field, and projections must resolve. `via` names the
+hand-owned stream derivation.
+
+### Query operation
+
+```text
+operation QueryTransferDecision
+  query transferDecision
+    input TransferReservationId
+    result Maybe TransferDecision
+    consistency Strong
+```
+
+The read model must resolve. Consistency is `Strong`, `Eventual`, or
+`PositionWait`; omitted consistency defaults to `Strong`. The result is kept as
+a Haskell type phrase and can contain multiple identifiers.
+
+### Signal operation
+
+```text
+operation SignalReservationConfirmation
+  signal reservation-confirmation of HospitalTransferReservation
+    key from reservationId via reservationWorkflowId
+    value ReservationConfirmation
+```
+
+The workflow and await label must resolve, and `value` must equal the await's
+result type. A mismatch would create a different awakeable identity or payload
+and leave the workflow waiting.
+
+### Run operation
+
+```text
+operation RunReservationWorkflow
+  run HospitalTransferReservation
+    input ReservationWorkflowInput
+    outcome -> ReservationWorkflowRun
+```
+
+The workflow must resolve. The input and outcome names define the hand-owned
+application boundary.
 
 ## Service workspaces
 
-Use a workspace when one service keeps complete aggregates in separate files. The
-manifest is versioned with the members, names the stable service identity, owns the
-module/layout policy, and lists members relative to its own directory:
+Use a `.keiro-workspace` manifest when one service is split across several
+complete `.keiro` files:
 
 ```text
 service demo-project
@@ -400,441 +1218,289 @@ spec domain/project.keiro
 spec domain/shared.keiro
 ```
 
-Every member remains a complete `.keiro` file, declares `language keiro-dsl 1`,
-and uses the same `context`.
-Shared ids, enums, rules, and mapped declarations have exactly one owning member;
-even byte-identical duplicates are refused. `spec` membership is a set: parse,
-check, scaffold, and generated bytes use canonical path order rather than source
-order.
+Each member remains a complete source beginning with `language keiro-dsl 4`
+and declaring the same `context`. The workspace manifest itself has no language
+preamble.
 
-The checked-in fleet-style example is
-`keiro-dsl/test/fixtures/workspace/service.keiro-workspace`. These transcripts were
-captured from that fixture; re-run them whenever workspace behavior changes. The
-same fixture is exercised by `keiro-dsl-test`, so a contradictory behavior change
-fails the acceptance suite first.
+`service` is the stable workspace identity. Optional `module` and `layout` are
+workspace authority: member clauses must be absent or exactly equal. At least
+one `spec` path is required. Paths are manifest-relative, must stay beneath the
+manifest directory, use forward slashes, and end in `.keiro`.
 
-```text
-$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace
-OK
-```
-
-```text
-$ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/demo-project
-workspace: demo-project (…) -> /tmp/demo-project (module-root=Demo.Modules.Project, layout=collocated)
-members:  domain/project-artifact.keiro, domain/project.keiro, domain/shared.keiro
-  generated  …StructuralProjections  (overwritten)  (context-level)
-  generated  …Generated.Nominals     (overwritten)  (context-level)
-  generated  …ProjectArtifact.Generated.Domain  (overwritten)  domain/project-artifact.keiro
-  generated  …Project.Generated.Domain          (overwritten)  domain/project.keiro
-record:   /tmp/demo-project/keiro-dsl-scaffold-record.workspace.demo-project.txt
-
-$ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/demo-project
-  generated  …StructuralProjections  (unchanged)  (context-level)
-  generated  …ProjectArtifact.Generated.Domain  (unchanged)  domain/project-artifact.keiro
-  generated  …Project.Generated.Domain          (unchanged)  domain/project.keiro
-```
-
-The first run plans every member before writing, emits one context-level structural
-facade, one `Nominals` authority, and one replay-audit assembly, and writes
-workspace-keyed record/manifest files. The second run reports generated modules as
-`unchanged`, holes as `skipped`, and no stale section. Any member parse error,
-validation error, collision, or banner refusal stops before the first output byte
-changes.
-
-Every generated service-level `id` and `enum` is declared once in
-`<root>.Generated.<Context>.Nominals` (prefixed layout) or
-`<root>.<Context>.Generated.Nominals` (collocated layout). Aggregate rings import
-only their resolved uses from that module; an unused declaration remains available
-at the service authority but is absent from unrelated aggregate imports. A
-declaration's member file remains its diagnostic owner, not its Haskell type owner,
-so moving or reordering members does not change nominal identity.
-
-Whole-workspace `diff` reconstructs the manifest and its member set at `--since`
-and emits one compatibility, replay-impact, and coverage view. A shared mapped-type
-change is cited at every owned use site:
-
-```text
-BREAKING: Order mapped-event Order event OrderClosed .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
-    vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
-    declared: domain/shared.keiro:5
-    use-site: Order event OrderClosed .details : SharedDetails .field label["label"].type (domain/order.keiro:3)
-BREAKING: Shipment mapped-event Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
-    declared: domain/shared.keiro:5
-    use-site: Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type (domain/shipment.keiro:3)
-```
+Membership is a set and is canonically sorted by normalized path, so reordering
+`spec` lines changes neither meaning nor generated bytes. Shared IDs, enums,
+rules, mapped declarations, and nodes have one owning member; identical
+duplicates are still errors. All file-taking commands accept a workspace and
+validate the composed service before acting.
 
 ## Generated and hand-owned files
 
-Generated modules carry an `-- @generated` banner and may be replaced on every
-scaffold. Hole and binding-skeleton modules are create-once: a later run skips
-them so filled domain logic is preserved. Never edit generated modules; change
-the spec and scaffold again.
+Scaffolding has two ownership classes:
 
-For structural mappings, generated files include one private shape leaf module
-per declaration, aggregate codecs derived from the declared wire policy, and a
-`StructuralProjections` facade containing eligible scalar `FieldWitness`
-values. Version-2 generated transducers use those witnesses for checked dotted
-paths through required structural records. Hand-written Hole implementations
-may use the same witnesses with Keiki's `regProj` and `inpProj`.
+- Generated modules carry the exact Keiro generated banner. A later scaffold
+  may replace them.
+- Hole, behavior-evidence, router-value, process-manager, read-model, workflow,
+  and binding modules are create-once. A later scaffold skips them so filled
+  behavior survives.
 
-For nominal bindings, generated files include private enum-representation leaf
-modules as needed, a context-level `NominalProjections` facade for eligible
-scalars, and create-once binding skeletons. Scaffold records persist these as
-separate `nominal-mapping` rows so older readers can ignore them without
-changing existing `mapping` JSON. Consumer packages are added to the manifest;
-bound IDs also add `mmzk-typeid`.
+Never edit a generated module. Change the specification and scaffold again.
+If generated code does not represent the checked declaration faithfully, that
+is a toolchain defect rather than an invitation to patch the output.
 
-For generated (unbound) IDs and enums, the context-level `Nominals` module owns
-the Haskell declaration, JSON and `CanonicalTypeName` instances, and textual wire
-helpers. Generated domain, codec, transducer, and harness modules import it
-directly. Because aggregate `Domain` modules no longer declare or implicitly
-export these constructors, a hand-owned Hole or application module that constructs
-one must also import it explicitly, for example:
+Before writing, scaffold plans the whole service and checks validation,
+case-folded module/path collisions, import cycles, generated-name safety,
+lowering support, and existing-file ownership. One refusal stops the write.
+`--force-generated-overwrite` bypasses only the missing-banner protection for
+a generated target; it does not overwrite create-once hand code.
 
-```haskell
-import Demo.Modules.Project.DemoProject.Generated.Nominals
-  ( ProjectId (..), ProjectPhase (..) )
+Every successful run writes:
+
+- a `keiro-dsl-manifest.<context>.txt`, or workspace-keyed equivalent, with
+  Cabal module and dependency entries;
+- a scaffold record with source language, generated paths, mapped provenance,
+  and ownership; and
+- a report classifying created, overwritten, unchanged, skipped, and stale
+  paths.
+
+Stale paths are informational and are never deleted. Review them against
+version control or a fresh disposable scaffold. A stale generated file with an
+exact banner is a deletion candidate; a missing banner or any create-once path
+must be preserved for review.
+
+### Aggregate behavior evidence
+
+Inspect the finite behavior inventory before filling consumer code:
+
+```bash
+cabal run -v0 keiro-dsl -- behavior-obligations service.keiro --format=text
 ```
 
-The first re-scaffold from the original 0.6 layout adds `Nominals` and overwrites
-only generated aggregate files to replace embedded declarations with imports. It
-does not edit hand-owned modules or change event wire bytes, canonical nominal
-identity, or fold behavior.
+The report includes live transitions reachable from the initial state,
+reachable state/command rejection cells, replay-only transitions, stable keys,
+and evidence ownership. Scaffolding emits a generated `BehaviorContract` and a
+create-once `BehaviorHoles` module. Fill live, rejection, and replay witnesses
+with real histories, commands, expected events, or expected rejections.
 
-For each version-2 aggregate, generated ownership adds one `Transducer` module.
-Each generated-owned command block keeps the declared predicate, ordered writes,
-emits, target, and transition mode adjacent. Checked structural and nominal
-projections are transition-local `let` aliases; guard and write behavior is never
-hidden behind generated helper functions. Generated ownership is the default. An event declared as
-`fields(Command)` is also generated-owned: after checking that it names the
-transition's command and is a total type-identical copy, the transducer builds
-the event term directly. Wire aliases remain codec policy and do not create a
-runtime callback. Only events with explicit fields retain a create-once output
-hook because their value transformation is not expressed by the DSL.
+The compiled conformance report fails missing, pending, duplicate, stale, or
+behaviorally false evidence. Opaque predicates and one-way projections remain
+honestly unverified unless the consuming CI chooses a stricter policy.
 
-Use `implementation hole` on a transition whose predicate or updates cannot be
-expressed by the scalar language:
+## Command reference
+
+The examples below use Cabal from the Keiro repository. If
+`keiro-dsl/bin` is on `PATH`, replace `cabal run -v0 keiro-dsl --` with
+`keiro-dsl`.
+
+Every command that accepts `FILE` accepts a `.keiro` source, a
+`.keiro-workspace` manifest, or `/dev/stdin`.
+
+### `new`
+
+```bash
+cabal run -v0 keiro-dsl -- new KIND
+```
+
+Valid kinds are `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
+`publisher`, `workqueue`, `dispatch`, `workflow`, and `operation`. Every starter
+is a complete, checked Language 4 service. Coupled kinds include the nodes they
+need; for example, the publisher starter includes a contract and emit. There is
+no standalone read-model starter; the workqueue starter includes read models.
+
+### `parse` and `pretty`
+
+```bash
+cabal run -v0 keiro-dsl -- parse service.keiro
+cabal run -v0 keiro-dsl -- pretty service.keiro
+```
+
+Both parse and print canonical source. They catch grammar errors but do not run
+semantic validation. Canonical output discards comments and formatting.
+
+### `check`
+
+```bash
+cabal run -v0 keiro-dsl -- check service.keiro
+cabal run -v0 keiro-dsl -- check service.keiro --emit
+cabal run -v0 keiro-dsl -- check service.keiro --explain-bindings
+cabal run -v0 keiro-dsl -- check service.keiro \
+  --coverage-report build/keiro-coverage.json \
+  --fail-on-opaque
+```
+
+`--emit` prints canonical source after successful validation.
+`--explain-bindings` lists consumer-owned binding obligations.
+`--coverage-report` inventories structural, opaque, explicit-`Json`, and
+consumer-JSON register boundaries. `--fail-on-opaque` turns named private
+persisted opaque boundaries into a CI gate.
+
+### `inspect`
+
+```bash
+cabal run -v0 keiro-dsl -- inspect service.keiro --format=json
+```
+
+The report records declared Language 4 provenance, its effective semantic
+contract, and `languageSupport: "stable"`. Workspace output lists every member
+in canonical path order.
+
+### `behavior-obligations`
+
+```bash
+cabal run -v0 keiro-dsl -- behavior-obligations service.keiro --format=text
+cabal run -v0 keiro-dsl -- behavior-obligations service.keiro --format=json
+```
+
+Use text while authoring and the stable JSON schema for CI or other tooling.
+
+### `scaffold`
+
+```bash
+cabal run -v0 keiro-dsl -- scaffold service.keiro --out src \
+  --module-root Acme.Services \
+  --collocate \
+  --goldens test/golden-payloads
+```
+
+Options:
+
+- `--out DIR` is required.
+- `--module-root PREFIX` overrides the source module clause.
+- `--collocate` selects collocated generated placement.
+- `--force-generated-overwrite` allows replacement of a generated target that
+  lacks the expected banner. Use only after proving the target is disposable.
+- `--goldens DIR` selects aggregate golden-payload input.
+- `--codec-comparison MAPPED-NAME --comparison-out FILE` emits a
+  non-production historical codec comparison module for one structural mapped
+  type.
+
+For historical comparison, compile the emitted module in a consumer-owned test
+and supply the old codec explicitly. The tool does not discover or fall back to
+an old application instance at runtime.
+
+### `diff`
+
+```bash
+cabal run -v0 keiro-dsl -- diff service.keiro --since HEAD^ --explain \
+  --report-out build/keiro-diff.json \
+  --replay-impact-out build/replay-impact.json
+```
+
+`diff` reconstructs the old source or workspace from Git and classifies every
+finding across six compatibility surfaces:
 
 ```text
-Reviewed -- Close -->
-  implementation hole
-  emit ClosedEvent
-  goto Closed
+private-history-read
+old-binary-read-new-events
+snapshot-hydration
+public-consumer
+persisted-identity
+consumer-build
 ```
 
-That transition may not also contain DSL `guard` or `write` clauses. Its
-create-once Holes module supplies one stable transition function and one
-`FoldVersion`; generated code still owns command matching, live/replay mode,
-event kinds, and target state. Bump the token whenever the Hole predicate or
-updates change. The generated aggregate fold fingerprint incorporates it, so a
-token change invalidates stale snapshots. Changing Hole behavior without the
-bump is a contract violation.
+The headline is `ADDITIVE`, `WARNING`, or `BREAKING`. The default gate includes
+all surfaces except `old-binary-read-new-events`; repeat `--gate SURFACE` to add
+that or any future optional gate. `--explain` prints paths, failing directions,
+rollout constraints, and remedies. `--report-out` writes the stable
+`keiro-dsl/diff-report/1` JSON report.
 
-The generated transducer exports `BehaviorOwnership` and an aggregate-specific
-`...PredicateVerifications` action. Run it in conformance CI. Generated terms
-are checked through the conservative verifier from
-`mori://shinzui/keiki/packages/keiki`; an opaque Hole remains
-`UnverifiedOpaque` rather than being reported as verified. Version-1
-whole-transducer Holes are unchanged. Migration to version 2 is manual because
-the scaffolder never overwrites or claims to translate consumer behavior.
+Other options:
 
-Keiki 0.7 applies the same conservative rule when a predicate crosses a
-one-way generated projection. The machine still steps and replays with that
-projection; only the symbolic proof is downgraded to `UnverifiedOpaque`.
-Provide an exact projection with a reverse witness when a `Verified*` result is
-required, and never treat the downgrade as either a runtime failure or proof.
+- `--emit-goldens DIR` writes old-shape payloads for event version bumps
+  without overwriting existing files.
+- `--replay-impact-out FILE` writes the replay-neutral or replay-affected audit
+  input.
+- `--coverage-report FILE` writes the mapped-boundary delta.
+- `--fail-on-opaque-increase` fails when the change adds a named opaque
+  boundary; it requires `--coverage-report`.
 
-## Complete finite behavior obligations
+Run `diff` from the Git repository containing the source because `--since`
+uses `git show`.
 
-For a validated spec or service workspace, inspect the finite witness inventory
-before compiling consumer code:
+## Validation model
 
-```bash
-cabal run keiro-dsl -- behavior-obligations service.keiro --format=json
-```
+The tool separates three failure classes:
 
-The `keiro-dsl/behavior-obligations/1` report includes every live transition
-from a live-reachable state, every reachable state/command rejection cell, and
-every replay-only transition. It includes terminal-state cells, owning workspace
-members, stable semantic keys, evidence ownership, and conservative guard
-coverage. It deliberately makes no claim about which Haskell witnesses are
-filled.
+1. A parse failure means the source does not match Language 4 grammar.
+2. An `error[Code]` means the graph parses but cannot safely or faithfully
+   lower. `check` exits non-zero, and scaffold writes nothing.
+3. A `warning[Code]` calls out a risky but explicit policy, incomplete
+   operational proof, or adoption state. Warnings are printed but do not make
+   `check` fail.
 
-Scaffolding generates an aggregate-specific `BehaviorContract` and creates a
-separate create-once `BehaviorHoles.hs`. Fill its typed `LiveWitness` and
-`ReplayWitness` rows with real histories, commands, exact events, or structured
-rejection expectations. Re-scaffolding never parses or overwrites that file; it
-reports newly required and removed keys and prints paste-ready `Pending` rows.
+Language 4 validates local syntax and whole-service coupling. Important closed
+surfaces include:
 
-The consumer-compiled `keiro/behavior-conformance/1` report reconciles required,
-filled, pending, missing, duplicate, stale, failed, verified, and unverified
-keys. It decodes witness history through the generated codec, checks exact
-forward edge attribution, and replays decoded emissions to compare the final
-vertex and every register. Replay-only witnesses must attribute the complete
-observed chunk to the declared replay-only edge. An accepted empty emission is
-a `NoOp` only when the vertex and all registers are unchanged.
+- unique declarations, fields, states, registers, map cases, topic aliases,
+  columns, and durable identities;
+- valid TypeID prefixes and current TypeID-v7 admission;
+- typed aggregate expressions, initial values, transition ownership,
+  event-sourced state changes, reachability, terminal states, upcaster chains,
+  wire policy, projection maps, and snapshot fixtures;
+- process/router aggregate, command, field, projection, resolver, timer, and
+  worker-policy references;
+- contract topic syntax and topology; intake binding, schema, dedupe, decode,
+  persistence, and complete disposition policy; emit topic affinity; publisher
+  ordering/backoff/attempt policy;
+- queue identity fixtures, FIFO/group/provisioning rules, complete disposition,
+  and dispatch read-model/queue references;
+- PostgreSQL read-model names, types, shape fixtures, feed, scope, consistency,
+  and projection ownership; and
+- workflow label, input, patch, rotation, signal, operation, and stable identity
+  rules.
 
-The default completeness gate fails pending, missing, duplicate, stale, or
-behaviorally false evidence while keeping honest Hole, guard-unknown, and
-one-way-projection surfaces under `unverified`. Use `--fail-on-unverified` only
-when that stronger proof policy is intentional.
+Diagnostics include a source line. Fix the specification first. If a generated
+harness later fails, fix the create-once behavior or evidence named by that
+harness; do not weaken the generated runtime boundary.
 
-The scaffolder plans the complete write before touching disk. It refuses
-invalid specs, module-path/case-fold collisions, scaffold-unsafe identifiers,
-unsupported lowering, an import cycle between consumer modules and the
-generated namespace, or an existing generated path without the expected
-banner. `--force-generated-overwrite` bypasses only the missing-banner check
-and should be used only after confirming the file is disposable.
+## Evolution workflow
 
-Each successful run writes a manifest containing Cabal `other-modules`,
-dependencies, and consumer package/module requirements, plus a scaffold record
-containing generated paths and mapping provenance. A later run reports mapping
-drift and obligations newly required by a changed structural declaration but
-never edits the hand-owned binding module. When a spec emits fewer modules, the
-report marks old paths as stale but never deletes them.
+For any persisted or public change:
 
-Stale reporting is deliberately provenance-only. For a recorded generated path,
-`exact generated banner present` means the exact keiro-dsl banner was found; it
-does not prove that the remaining bytes are unchanged. Delete a stale generated
-file only after a clean version-control comparison, or after comparing it byte for
-byte with output regenerated from the same source into a disposable directory.
-`exact generated banner missing` means preserve the file and review it. Hole paths
-are always preserved for review.
+1. Edit the Language 4 source.
+2. Run `check` and resolve every error.
+3. Run `diff --since <deployed-ref> --explain`.
+4. For private event changes, bump event versions, preserve contiguous
+   upcasters, and capture goldens as directed.
+5. For read-model shape changes, bump the model version and update the reported
+   shape fixture together.
+6. For snapshot or hand-owned fold changes, bump the corresponding codec,
+   shape, or `FoldVersion` identity.
+7. Scaffold into a clean tree, reconcile the generated manifest and stale
+   report, then compile all hand-owned modules.
+8. Run generated codec, binding, behavior, snapshot, forward/replay, and
+   service integration conformance tests.
+9. Follow the rollout constraints from `diff`; run the real-log replay gate
+   when replay impact is reported.
 
-The 0.8 aggregate-layout migration removes every generated `Expressions` module,
-including the empty module formerly emitted for Hole-only aggregates. Re-scaffold,
-then treat the regenerated `keiro-dsl-manifest.<context>.txt` (or workspace
-manifest) as the authoritative module list and remove the obsolete `Expressions`
-entry from the consuming Cabal stanza manually. If a previous scaffold record
-exists, the old file appears in the stale report under the evidence rules above.
-If no record exists, locate it by reconciling the old Cabal/module tree against the
-new manifest; absence from a report is not deletion evidence. When neither a clean
-version-control comparison nor a same-source disposable regeneration is available,
-preserve the file. Keiro never deletes it or edits Cabal automatically.
+Do not treat a green parse as semantic validation, a green check as proof of
+hand-owned behavior, or finite fixtures as proof of every possible consumer
+value. The toolchain makes each remaining obligation explicit so CI and rollout
+policy can own it at the correct boundary.
 
-## Upgrading generated services to 0.9
+## Authoring checklist
 
-Keiro 0.9 closes several generated Haskell APIs without changing event,
-contract, queue, or inbox wire bytes. Upgrade one service at a time:
+Before committing a new or changed service specification:
 
-1. Run `keiro-dsl check`, then scaffold the complete service or workspace with
-   the 0.9 executable.
-2. Treat the regenerated manifest as the authoritative module and dependency
-   list. Add newly shared `Generated.<Context>.Nominals` modules and remove
-   stale entries only after the provenance checks above.
-3. Compile the hand-owned modules. The type errors identify each migration
-   below; do not copy old generated declarations back into a Hole.
-4. Run every generated harness and the service's wire-byte, replay, and
-   snapshot conformance tests before deployment.
+- The first non-comment line is exactly `language keiro-dsl 4`.
+- `check` exits zero for the whole source or workspace.
+- Every public/persisted field has an intentional type and wire spelling.
+- Aggregate time comes from command/input data, never a sampled clock.
+- Every state change emits an event; guarded siblings are mutually exclusive.
+- Event changes have a version, contiguous upcaster chain, and payload goldens.
+- Mapped structural bindings are total; opaque boundaries are intentional and
+  visible in coverage.
+- Intake and queue disposition tables contain every required outcome and keep
+  transient failures separate from poison or terminal failures.
+- Stable process, router, workflow, queue, read-model, topic, patch, and outbox
+  identities will not change accidentally.
+- `diff` is green under the service's chosen compatibility gates and its
+  rollout constraints are recorded.
+- Scaffold output, the Cabal manifest, create-once holes, behavior evidence,
+  and generated conformance harnesses are all reconciled and green.
 
-Workqueue policy is now closed. `jobOutcomeFor` accepts the generated
-queue-named outcome sum instead of `Text`. For example, replace string values
-such as `"storeFailure"` and `"decodeFailure"` with the constructors exported
-by `ReservationWorkOutcome` (`StoreFailure`, `DecodeFailure`, and the other
-rows declared by that queue). There is no catch-all retry: a misspelling or a
-new disposition row is a compile error.
-
-Inbox policy now has two closed layers. `IncidentInboxOutcome` names every
-spec classification, `inboxDispositionFor` maps it exhaustively, and
-`IncidentInboxDisposition` carries the declared `RetryDelay`, dead-letter
-reason, and any runtime `InboxFailure`. Replace matches on the former bare
-acknowledgement value with `InboxAccept`, `InboxRetryAfter delay failure`, or
-`InboxDeadLetter reason failure`. `inboxDisposition` remains the bridge from
-the live `InboxResult` type and retains handler reason/attempt detail.
-
-Aggregate categories are no longer polymorphic. Use
-`<aggregate>Category :: StreamCategory <Aggregate>EventStreamDef` for
-`entityStream` values passed to the aggregate event-stream/runtime boundary.
-Use the new
-`<aggregate>CommandCategory :: StreamCategory <Aggregate>Command` when
-constructing a `PMCommand` or router target. A generated process category is
-fixed to its saga's `EventStreamDef`; importing a category from the wrong saga
-or target no longer unifies.
-
-`workflowFacts` is now a `WorkflowFacts` record rather than
-`[(String, String)]`. Read `workflowFactBody`, `workflowFactAwaitLabels`, and
-`workflowFactPatchIds` as real lists; the name, ID derivation, and ID field have
-their own record fields. Contract topic constants such as
-`incidentEventsTopic` and `hospitalEventsTopic` are exported, so delete local
-copies and import the generated authority. Generated decoders now include the
-rejected value, the complete expected set, and Aeson field paths in failures;
-accepted bytes are unchanged.
-
-Structural projection witnesses use owner-and-JSON-pointer names. The committed
-fixture migrations are exact examples of the rename rule:
-
-- `behavior-complete`:
-  `structuralProjectionC53ZC74ZC61ZC72ZC74ZC50ZC61ZC79ZC6cZC6fZC61ZC64ZC2fZC64ZC69ZC73ZC70ZC6cZC61ZC79ZC5fZC6cZC61ZC62ZC65ZC6cZWitness`
-  becomes `startPayloadDisplayLabelWitness`.
-- `aggregate-scalar-expressions`:
-  `structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC63ZC65ZC69ZC6cZC69ZC6eZC67ZWitness`
-  becomes `limitsCeilingWitness`, and
-  `structuralProjectionC4cZC69ZC6dZC69ZC74ZC73ZC2fZC6dZC69ZC6eZC69ZC6dZC75ZC6dZWitness`
-  becomes `limitsMinimumWitness`.
-- `structural-conformance`:
-  `structuralProjectionC41ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC49ZC6eZC66ZC6fZC2fZC61ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC5fZC6bZC65ZC79ZWitness`
-  becomes `artifactInfoArtifactKeyWitness`, and
-  `structuralProjectionC41ZC72ZC74ZC69ZC66ZC61ZC63ZC74ZC49ZC6eZC66ZC6fZC2fZC64ZC69ZC73ZC70ZC6cZC61ZC79ZC5fZC6eZC61ZC6dZC65ZWitness`
-  becomes `artifactInfoDisplayNameWitness`.
-
-The generated provenance line is now
-`-- @generated by keiro-dsl <package-version> (language keiro-dsl
-<effective-version>) from <stable-node-origin>; do not edit.`. The scaffolder
-recognizes both that exact shape and the historical banner during migration;
-comments that merely contain `@generated` are not overwrite authority. Future
-recognizers must extend this set rather than stop accepting either shipped
-form.
-
-The read-model Hole boundary deliberately does not change in 0.9:
-`applyTransferDecisions :: RecordedEvent -> Tx.Transaction ()` remains raw.
-The language does not yet declare an aggregate/event-codec source for every
-read model, so selecting a decoder from a free-text category would be
-unsound. A later language feature can introduce typed read-model dispatch with
-validated source authority.
-
-Finally, moving shared nominal declarations into
-`Generated.<Context>.Nominals` changes Keiki's register-layout identity for an
-older snapshot fixture even though its event bytes and fold fingerprint are
-unchanged. Snapshot caches are advisory: update the captured live shape hash,
-expect old cache rows to miss once, and reconstruct state from the event log.
-
-## Binding authoring and conformance
-
-The first scaffold creates a binding skeleton in the module named by each
-structural declaration. Fill the semantic construction/destruction holes and
-the `FixtureCases` value; do not copy wire keys, tags, presence, nullability, or
-defaults into the binding.
-
-When the consumer and generated shape have identical constructor names and
-order, selector names and order, arity, and field types, the binding may be:
-
-```haskell
-import Keiro.Codec.Structural.Generic (genericStructuralBinding)
-
-artifactInfoBinding :: StructuralBinding ArtifactInfo ArtifactInfoShape
-artifactInfoBinding = genericStructuralBinding
-```
-
-Any mismatch fails at compile time and directs the author back to the explicit
-skeleton. There is no prefix stripping, coercion, or positional guess.
-
-The generated aggregate harness validates the filled transducer and includes
-current payload round trips, historical upcaster goldens, both structural
-binding laws, missing/default/null/unknown-field wire-policy cases, enum/union
-and optional fixture coverage, generated projection-witness agreement, and
-forward-versus-replay equality over the final vertex and every register. An
-opaque mapping receives boundary round trips only; the harness makes no nested
-claim about its JSON.
-
-For the full binding workflow, see
-[Brownfield Migration And Transducer Modeling](../guides/brownfield-migration-and-transducer-modeling.md#author-structural-bindings-from-create-once-skeletons).
-
-## Module placement
-
-The default layout puts generated code under `Generated.<Context>...` and holes
-under `<Context>...`. A spec may choose a namespace and collocated layout:
-
-```text
-language keiro-dsl 1
-context hospital-capacity
-module Acme.Services
-layout collocated
-```
-
-The equivalent CLI flags are `--module-root Acme.Services --collocate`; CLI
-values override the spec. Collocation places generated modules below
-`Acme.Services.<Context>.<Node>.Generated` while keeping holes beside them in
-the domain namespace.
-
-## Important checked contracts
-
-The checker owns the cross-node and persistence contracts that are dangerous to
-reconstruct from prose:
-
-- Aggregate status maps are exact and total unless explicitly marked
-  `partial`; event evolution needs contiguous upcasters; snapshot policies need
-  a valid codec version and captured live shape hash.
-- Aggregate commands, events, registers, guards, writes, codecs, snapshots,
-  samples, imports, and build dependencies consume one resolved type and
-  capability policy. Invalid scalar syntax or an unsupported use is rejected
-  by `check`, rather than becoming an unrepresentable generated field.
-- Structural mappings require qualified consumer/binding/fixture identities,
-  non-empty canonical and binding versions, total/injective wire shapes, and an
-  initial value whenever a mapped register needs one. Opaque mappings require
-  explicit codec identity and version.
-- Process and router references resolve to declared aggregates, commands, read
-  models, and fields. `CommandAmbiguous` follows the declared rejection policy
-  and may not be treated as a benign timer outcome.
-- Inbox and work-queue disposition tables are complete. Duplicates acknowledge,
-  transient store failures retry, poison decode failures dead-letter, and
-  previously failed inbox rows do not become an unbounded retry loop.
-- FIFO queues require a group key; unordered queues reject one. Captured
-  physical queue, DLQ, and table names must match the logical-name derivation.
-- Strong read models use a subscription feed and may declare category scope;
-  inline models must be owned by a matching aggregate projection. Captured
-  shape changes require a version bump.
-- Workflow step/patch labels are unique, signals match awaits, field references
-  resolve, and `continueAsNew` is terminal.
-
-Warnings remain visible but do not fail `check`; errors do. Diagnostics include
-the source row so the specification, rather than generated Haskell, is the
-place to fix the contract.
-
-## Evolution and structural coverage
-
-`diff` keeps the `ADDITIVE`, `WARNING`, and `BREAKING` headline, but derives it
-from a compatibility vector over `private-history-read`,
-`old-binary-read-new-events`, `snapshot-hydration`, `public-consumer`,
-`persisted-identity`, and `consumer-build`. The default gate preserves the
-previous blocking policy and leaves the rolling-deployment direction visible
-without blocking it; repeat `--gate SURFACE` to opt into additional surfaces.
-
-Mapped declarations are classified recursively at every containing command,
-event, and register path. A binding symbol/version change cannot be inspected
-from spec text, so its remedy points to the binding-law, codec, fixture, and
-historical-comparison evidence instead of claiming compatibility.
-
-Coverage is a separate, reporting-first inventory:
-
-```bash
-cabal run keiro-dsl -- check service.keiro \
-  --coverage-report build/keiro-coverage.json
-
-cabal run keiro-dsl -- diff service.keiro --since HEAD^ \
-  --coverage-report build/keiro-coverage-diff.json
-```
-
-It names structural, opaque, and explicit-`Json` private-event boundaries and
-consumer-JSON register cache boundaries; it does not manufacture one aggregate
-percentage. Add `--fail-on-opaque` to `check` or
-`--fail-on-opaque-increase` to `diff` only when that named-root policy is an
-intentional operator gate.
-
-## Historical codec comparison
-
-For a brownfield migration, capture historical JSON first. Scaffold an explicit
-non-production comparison module for one persisted structural mapped type:
-
-```bash
-cabal run keiro-dsl -- scaffold service.keiro --out src \
-  --codec-comparison ArtifactInfo \
-  --comparison-out src/Generated/MyService/Structural/CodecCompare/ArtifactInfo.hs
-```
-
-Compile that module in a consumer-owned test or executable and pass an explicit
-`HistoricalCodec a`; the `keiro-dsl` process cannot and does not discover old
-Haskell instances. The report compares RFC 8785-canonical JSON meaning, decode
-outcomes, and historical/typed branch coverage. Every observation is either
-parity or explicit version/upcaster work. A passing report is finite migration
-evidence only: after cutover the generated structural codec remains the sole
-wire authority and the historical codec is never a runtime fallback.
-
-See the complete
-[shadow-comparison procedure](../guides/brownfield-migration-and-transducer-modeling.md#shadow-comparison-of-old-and-new-codecs)
-and [Evolution And Replayability](../guides/evolution-and-replayability.md) for
-deployment and real-log replay gates.
-
-The executable fixture and conformance index is
-[Keiro DSL Corpus](../corpus/keiro-dsl-corpus.md). It links valid and negative
-specs, generated runtime modules, full hand-filled examples, mutation tests,
-and cold-start conformance packages.
+For deciding whether a service should use the DSL at all, see
+[Choosing `keiro-dsl`](../guides/choosing-keiro-dsl.md). For runtime concepts
+behind the declarations, see [Core Concepts](core-concepts.md),
+[Codecs And Event Evolution](codecs-and-event-evolution.md),
+[Process Managers And Timers](process-managers-and-timers.md),
+[Durable Workflows](durable-workflows.md), and [Work Queues](work-queues.md).

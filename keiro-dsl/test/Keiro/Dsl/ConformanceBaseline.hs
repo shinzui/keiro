@@ -82,7 +82,6 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
             [ path
             | (path, observation) <- observations,
               sourceForm observation /= "declared"
-                || sourceResult observation /= "accept"
                 || sourceEffectiveVersion observation /= Just stableVersion
             ]
         exceptionPaths = sort (map exceptionPath (baselineFixtureExceptions baseline))

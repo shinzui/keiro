@@ -70,7 +70,7 @@ import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
-import System.FilePath (takeDirectory, takeExtension, (</>))
+import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
 import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
 import Test.Hspec hiding (Spec)
@@ -529,7 +529,7 @@ main = hspec $ do
       featureFailureAt 9 (aggregateWith "implementation hole")
 
     it "reports a declaration-only rewrite without semantic, generated, fold, or replay impact" $ do
-      fixture <- readTestText "test/fixtures/reservation.keiro"
+      fixture <- readTestText "test/fixtures/language-v1.keiro"
       let legacyFixture = T.unlines (drop 1 (T.lines fixture))
       legacySource <- parseRight "legacy.keiro" legacyFixture
       declaredSource <- parseRight "declared.keiro" fixture
@@ -562,56 +562,44 @@ main = hspec $ do
       sourceOut `shouldContain` "\"schema\":\"keiro-dsl/source-inspection/1\""
       sourceOut `shouldContain` "\"kind\":\"source\""
       sourceOut `shouldContain` "\"sourceForm\":\"declared\""
-      sourceOut `shouldContain` "\"declaredLanguageVersion\":1"
-      sourceOut `shouldContain` "\"effectiveLanguageVersion\":1"
+      sourceOut `shouldContain` "\"declaredLanguageVersion\":4"
+      sourceOut `shouldContain` "\"effectiveLanguageVersion\":4"
       sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
-      sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\""
-      sourceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
+      sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/3\""
+      sourceOut `shouldContain` "\"languageSupport\":\"stable\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
       workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
-      workspaceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
+      workspaceOut `shouldContain` "\"languageSupport\":\"stable\""
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
 
-    it "keeps only the named source-version compatibility fixtures outside canonical v1" $ do
+    it "keeps only the named source-version compatibility fixtures outside stable v4" $ do
       fixtureTree <- treeSnapshot "test/fixtures"
-      let withoutCanonicalV1 =
+      let outsideStableV4 =
             sort
               [ path
               | (path, contents) <- fixtureTree,
                 takeExtension path == ".keiro",
-                "language keiro-dsl 1" `notElem` T.lines contents
+                "language keiro-dsl 4" `notElem` T.lines contents
               ]
-      withoutCanonicalV1
+      outsideStableV4
         `shouldBe` sort
-          [ "language-duplicate.keiro",
-            "aggregate-collection-expressions-v2-rejects.keiro",
-            "aggregate-scalar-expressions-v2.keiro",
-            "behavior-complete-workspace/declarations.keiro",
-            "behavior-complete-workspace/journey.keiro",
-            "behavior-complete.keiro",
-            "contract-v4.keiro",
+          [ "aggregate-collection-expressions-v2-rejects.keiro",
+            "aggregate-scalar-expressions-v1-rejects.keiro",
             "id-domain-migration-v3.keiro",
+            "language-duplicate.keiro",
             "language-future.keiro",
             "language-identifier-v1.keiro",
             "language-identifier-v2.keiro",
             "language-legacy.keiro",
             "language-malformed.keiro",
             "language-misplaced.keiro",
+            "language-v1.keiro",
             "language-zero.keiro",
-            "nominal-bad-qualified.keiro",
-            "nominal-invalid-prefix.keiro",
-            "nominal-missing-facts.keiro",
-            "nominal-missing-initial.keiro",
-            "nominal-name-collision.keiro",
-            "nominal-scalars.keiro",
-            "nominal-unsupported-representation.keiro",
-            "workspace-nominals/domain/project-artifact.keiro",
-            "workspace-nominals/domain/project.keiro",
-            "workspace-nominals/domain/shared.keiro"
+            "nominal-v1.keiro"
           ]
 
     it "checks v1, rejects a future contract once, and inspects legacy explicitly" $ do
@@ -989,7 +977,7 @@ main = hspec $ do
       firewallBreaches modules `shouldBe` []
 
   describe "scalar expressions" $ do
-    it "parses, validates, and round-trips the authoritative v2 scalar fixture" $ do
+    it "parses, validates, and round-trips the authoritative stable scalar fixture" $ do
       source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
       parsed <- case parseSource "aggregate-scalar-expressions-v2.keiro" source of
         Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
@@ -1007,16 +995,17 @@ main = hspec $ do
                 typedScalarType resolved `shouldBe` AggregateNatural
                 show (typedScalarNode resolved) `shouldContain` "TotalNaturalArithmetic"
               Nothing -> expectationFailure "reserved write did not resolve"
-            let modules = scaffoldAggregate (defaultContext (specContext (parsedSpec parsed))) (parsedSpec parsed) aggregate
+            let service = checkedSource parsed
+                modules = scaffoldServiceModules (defaultContext (specContext (parsedSpec parsed))) service
                 transducer = generatedTextEndingIn "Transducer.hs" modules
                 holes = holeTextEndingIn "Holes.hs" modules
-                service = checkedSource parsed
                 surface = aggregateFoldSurfaceForService service aggregate
                 manifest = renderManifestForService "aggregate-scalar-expressions-v2.keiro" modules service
                 readableTransducer = T.unwords (T.words transducer)
-            aggregateFoldFingerprintForService service aggregate `shouldBe` "11a9e61719371a436e984a2aeee1a2b0"
+            aggregateFoldFingerprintForService service aggregate `shouldBe` "0ce18e34ee6cdd4432500e7c4ca1ba68"
             T.lines surface
-              `shouldBe` [ "state:Open|terminal=false",
+              `shouldBe` [ "semantic-contract:keiro-dsl/runtime-semantics/2",
+                           "state:Open|terminal=false",
                            "state:Reviewed|terminal=false",
                            "state:Closed|terminal=true",
                            "reg:balance:Integer=0",
@@ -1031,7 +1020,7 @@ main = hspec $ do
                            "reg:limits:Limits=initial",
                            "mapped-register:Limits|wire=4463db782a5b9924|canonical=scalar-expressions.Limits.v1|binding=ScalarExpressions.Bindings.limitsBinding|binding-version=1|initial=ScalarExpressions.Bindings.initialLimits",
                            "nominal-equality-use:nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated",
-                           "nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/1|key=Text|domain=legacy-unrestricted-text|owner=generated",
+                           "nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:req:keiro-dsl/id-domain/typeid-v7/1|owner=generated",
                            "transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:=\"adjusted\";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId(\"req_00041061050r3gg28a1c60t3gf\");openedAt:=\"2026-02-03T04:05:06Z\";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed",
                            "transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed"
                          ]
@@ -1395,8 +1384,7 @@ main = hspec $ do
       complementExpr (complementExpr predicate) `shouldBe` predicate
 
     it "keeps the committed scalar-expression conformance tree fresh" $ do
-      spec <- specOf "test/fixtures/aggregate-scalar-expressions-v2.keiro"
-      let modules = scaffoldModules (defaultContext (specContext spec)) spec
+      modules <- scaffoldFixture "test/fixtures/aggregate-scalar-expressions-v2.keiro"
       forM_ [generatedModule | generatedModule <- modules, kind generatedModule == Generated] $ \generatedModule -> do
         committed <- readTestText ("test/conformance-scalar-expressions/" <> modulePath generatedModule)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
@@ -1597,7 +1585,7 @@ main = hspec $ do
       missing <- errorCodesOf "test/fixtures/nominal-missing-facts.keiro"
       missing `shouldBe` replicate 5 NominalMissingIngredient
       errorCodesOf "test/fixtures/nominal-bad-qualified.keiro" `shouldReturn` [NominalInvalidQualifiedName]
-      errorCodesOf "test/fixtures/nominal-invalid-prefix.keiro" `shouldReturn` [NominalInvalidIdPrefix]
+      errorCodesOf "test/fixtures/nominal-invalid-prefix.keiro" `shouldReturn` replicate 2 NominalInvalidIdPrefix
       errorCodesOf "test/fixtures/nominal-unsupported-representation.keiro" `shouldReturn` [NominalUnsupportedRepresentation]
       errorCodesOf "test/fixtures/nominal-missing-initial.keiro" `shouldReturn` [NominalMissingInitialValue]
       errorCodesOf "test/fixtures/nominal-name-collision.keiro" `shouldReturn` [NominalNameCollision, NominalNameCollision]
@@ -1911,7 +1899,7 @@ main = hspec $ do
     it "round-trips the canonical structural and opaque consumer fixture" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
       spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
-      parseSpec "<consumer-types-round-trip>" (renderSpec spec) `shouldBe` Right spec
+      parseStableRenderedSpec "<consumer-types-round-trip>" spec `shouldBe` Right spec
       length (specMapped spec) `shouldBe` 4
     it "preserves every missing-value policy, nested type expression, and unit union arm" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
@@ -1948,7 +1936,7 @@ main = hspec $ do
               ("mapped-empty-identity.keiro", MappedInvalidIdentity),
               ("mapped-import-conflict.keiro", MappedImportConflict),
               ("mapped-illtyped-default.keiro", MappedDefaultIllTyped),
-              ("mapped-guard.keiro", AggregateGuardCapabilityUnsupported)
+              ("mapped-guard.keiro", AggregateExpressionOperatorUnsupported)
             ]
       forM_ cases $ \(fixture, expected) ->
         errorCodesOf ("test/fixtures/" <> fixture) `shouldReturn` [expected]
@@ -2048,8 +2036,7 @@ main = hspec $ do
       legacyAggregateFoldSurface canonical (onlyAggregate canonical)
         `shouldBe` legacyAggregateFoldSurface alias (onlyAggregate alias)
     it "keeps the committed scalar conformance generated tree fresh" $ do
-      spec <- specOf "test/fixtures/aggregate-scalars.keiro"
-      let modules = scaffoldModules (defaultContext (specContext spec)) spec
+      modules <- scaffoldFixture "test/fixtures/aggregate-scalars.keiro"
       forM_ [generatedModule | generatedModule <- modules, Keiro.Dsl.Scaffold.kind generatedModule == Generated] $ \generatedModule -> do
         committed <- readTestText ("test/conformance-aggregate-scalars/" <> modulePath generatedModule)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
@@ -2075,16 +2062,15 @@ main = hspec $ do
         `shouldBe` [ (AggregateRegisterInitialInvalid, 6),
                      (AggregateRegisterInitialInvalid, 7),
                      (AggregateTypeUnsupportedAtUse, 10),
-                     (AggregateGuardTypeMismatch, 13)
+                     (AggregateExpressionOperandTypeMismatch, 14)
                    ]
       map message diagnostics `shouldSatisfy` any (T.isInfixOf "non-negative integral literals")
       map message diagnostics `shouldSatisfy` any (T.isInfixOf "ISO-8601 UTC timestamps")
       map message diagnostics `shouldSatisfy` any (T.isInfixOf "mapped structural declaration")
-    it "rejects aggregate arithmetic at the operator" $ do
-      source <- readTestText "test/fixtures/aggregate-scalars-arithmetic.keiro"
-      err <- parseErrorOf "test/fixtures/aggregate-scalars-arithmetic.keiro" source
-      err `shouldSatisfy` T.isInfixOf "aggregate arithmetic operator '+' is unsupported"
-      err `shouldSatisfy` T.isInfixOf "aggregate-scalars-arithmetic.keiro:12:39:"
+    it "accepts Natural aggregate arithmetic in the stable language" $ do
+      diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-arithmetic.keiro"
+      [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
+        `shouldBe` []
     it "covers unknown, container, fractional, out-of-range, and ordering failures" $ do
       diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-invalid-capabilities.keiro"
       [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
@@ -2094,7 +2080,7 @@ main = hspec $ do
                      (AggregateTypeUnsupportedAtUse, 10),
                      (AggregateTypeUnsupportedAtUse, 10),
                      (AggregateTypeUnsupportedAtUse, 10),
-                     (AggregateGuardCapabilityUnsupported, 13)
+                     (AggregateExpressionOperatorUnsupported, 13)
                    ]
     it "keeps one-member workspace diagnostics identical to the single file" $ do
       direct <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
@@ -2520,7 +2506,7 @@ main = hspec $ do
         `shouldContain` [EventRetirementInProgress]
     it "rejects a retiring event after its live emitting transition disappears" $ do
       source <- readTestText "test/fixtures/reservation-retiring.keiro"
-      spec <- parseInlineSpec "<retiring-without-emitter>" (T.replace " ; emit TransferReservationConfirmed" "" source)
+      spec <- parseInlineSpec "<retiring-without-emitter>" (T.replace "emit TransferReservationConfirmed ; " "" source)
       [code d | d <- validateSpec spec, severity d == Error]
         `shouldContain` [EventRetirementInProgress]
     it "warns when a deprecated event has no replay-only emitting transition" $ do
@@ -2552,7 +2538,7 @@ main = hspec $ do
         ]
     it "rejects aggregate-local references that do not resolve" $ do
       codes <- errorCodesOf "test/fixtures/aggregate-bad-refs.keiro"
-      codes `shouldContain` [RegisterInitialOutOfScope, UndeclaredCommand, WriteTargetNotRegister]
+      mapM_ (\expected -> codes `shouldContain` [expected]) [RegisterInitialOutOfScope, UndeclaredCommand, WriteTargetNotRegister]
     it "anchors UnreachableState on the state row" $ do
       let src =
             T.unlines
@@ -2630,7 +2616,7 @@ main = hspec $ do
           [] -> expectationFailure "TransferReservationCreated not found"
     it "round-trips the retiring marker" $ do
       spec <- specOf "test/fixtures/reservation-retiring.keiro"
-      parseSpec "<retiring-round-trip>" (renderSpec spec) `shouldBe` Right spec
+      parseStableRenderedSpec "<retiring-round-trip>" spec `shouldBe` Right spec
       [evRetiring event | NAggregate aggregate <- specNodes spec, event <- aggEvents aggregate, evName event == "TransferReservationConfirmed"]
         `shouldBe` [True]
     it "rejects an event marked both retiring and deprecated" $ do
@@ -2642,7 +2628,7 @@ main = hspec $ do
     it "parses, validates, and round-trips a snapshot policy with codec fixture" $ do
       spec <- specOf "test/fixtures/reservation-snapshot.keiro"
       errorCodesOf "test/fixtures/reservation-snapshot.keiro" `shouldReturn` []
-      parseSpec "<snapshot-round-trip>" (renderSpec spec) `shouldBe` Right spec
+      parseStableRenderedSpec "<snapshot-round-trip>" spec `shouldBe` Right spec
       case [aggregate | NAggregate aggregate <- specNodes spec] of
         [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10" noLoc)
         aggregates -> expectationFailure ("expected one snapshot aggregate, got " <> show (length aggregates))
@@ -2655,12 +2641,14 @@ main = hspec $ do
       emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\"" "shape-hash=\"\"" source)
       map code (validateSpec emptyHash) `shouldContain` [SnapshotCodecFixtureInvalid]
     it "conditionally lowers JSON instances and the live defaultStateCodec" $ do
-      snapshot <- specOf "test/fixtures/reservation-snapshot.keiro"
-      ordinary <- specOf "test/fixtures/reservation.keiro"
+      snapshotService <- checkedServiceOf "test/fixtures/reservation-snapshot.keiro"
+      ordinaryService <- checkedServiceOf "test/fixtures/reservation.keiro"
+      let snapshot = checkedSpec snapshotService
+          ordinary = checkedSpec ordinaryService
       case ([aggregate | NAggregate aggregate <- specNodes snapshot], [aggregate | NAggregate aggregate <- specNodes ordinary]) of
         ([snapshotAggregate], [ordinaryAggregate]) -> do
-          let snapshotModules = scaffoldAggregate (defaultContext (specContext snapshot)) snapshot snapshotAggregate
-              ordinaryModules = scaffoldAggregate (defaultContext (specContext ordinary)) ordinary ordinaryAggregate
+          let snapshotModules = scaffoldServiceModules (defaultContext (specContext snapshot)) snapshotService
+              ordinaryModules = scaffoldServiceModules (defaultContext (specContext ordinary)) ordinaryService
               snapshotDomain = generatedTextEndingIn "Domain.hs" snapshotModules
               snapshotStream = generatedTextEndingIn "EventStream.hs" snapshotModules
               ordinaryDomain = generatedTextEndingIn "Domain.hs" ordinaryModules
@@ -2669,7 +2657,6 @@ main = hspec $ do
           snapshotStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Every 100"
           snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (withFoldFingerprint"
           snapshotStream `shouldSatisfy` T.isInfixOf "Spec-visible fold changes invalidate old"
-          snapshotStream `shouldSatisfy` T.isInfixOf "module are invisible here"
           snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\")"
           ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
           ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
@@ -2682,27 +2669,27 @@ main = hspec $ do
     it "is deterministic across repeated parses and formatting-only changes" $ do
       source <- readTestText "test/fixtures/reservation.keiro"
       first <- parseInlineSpec "<first>" source
-      second <- parseInlineSpec "<second>" ("\n\n" <> renderSpec first <> "\n")
-      legacyAggregateFoldFingerprint first (onlyAggregate first)
-        `shouldBe` legacyAggregateFoldFingerprint second (onlyAggregate second)
+      second <- shouldParseStableRenderedSpec "<second>" first
+      aggregateFoldFingerprint first (onlyAggregate first)
+        `shouldBe` aggregateFoldFingerprint second (onlyAggregate second)
     it "changes for transition writes, guards, and referenced rule bodies" $ do
       base <- specOf "test/fixtures/reservation.keiro"
       writeChanged <- specOf "test/fixtures/reservation-foldchange.keiro"
       guardChanged <- specOf "test/fixtures/reservation-guard-tightened.keiro"
       source <- readTestText "test/fixtures/reservation.keiro"
       ruleChanged <- parseInlineSpec "<rule-change>" (T.replace "RedTag => true" "RedTag => false" source)
-      let baseFingerprint = legacyAggregateFoldFingerprint base (onlyAggregate base)
-      legacyAggregateFoldFingerprint writeChanged (onlyAggregate writeChanged) `shouldNotBe` baseFingerprint
-      legacyAggregateFoldFingerprint guardChanged (onlyAggregate guardChanged) `shouldNotBe` baseFingerprint
-      legacyAggregateFoldFingerprint ruleChanged (onlyAggregate ruleChanged) `shouldNotBe` baseFingerprint
+      let baseFingerprint = aggregateFoldFingerprint base (onlyAggregate base)
+      aggregateFoldFingerprint writeChanged (onlyAggregate writeChanged) `shouldNotBe` baseFingerprint
+      aggregateFoldFingerprint guardChanged (onlyAggregate guardChanged) `shouldNotBe` baseFingerprint
+      aggregateFoldFingerprint ruleChanged (onlyAggregate ruleChanged) `shouldNotBe` baseFingerprint
     it "ignores wire and projection changes" $ do
       base <- specOf "test/fixtures/reservation.keiro"
       wireChanged <- specOf "test/fixtures/reservation-wire.keiro"
       source <- readTestText "test/fixtures/reservation.keiro"
       projectionChanged <- parseInlineSpec "<projection-change>" (T.replace "projection transfer_decisions" "projection renamed_projection" source)
-      let surface = legacyAggregateFoldSurface base (onlyAggregate base)
-      legacyAggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
-      legacyAggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
+      let surface = aggregateFoldSurface base (onlyAggregate base)
+      aggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
+      aggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
     it "invalidates mapped-register snapshots when binding or wire identity changes" $ do
       base <- specOf "test/fixtures/consumer-types.keiro"
       bindingChanged <- specOf "test/fixtures/consumer-types-binding-change.keiro"
@@ -2732,7 +2719,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/hospital-surge.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
       codes <- errorCodesOf "test/fixtures/hospital-surge.keiro"
       codes `shouldBe` []
@@ -2781,7 +2768,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/incident-paging/incident-paging.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the incident-paging router with warnings only" $ do
       codes <- errorCodesOf "test/fixtures/incident-paging/incident-paging.keiro"
       codes `shouldBe` []
@@ -3172,7 +3159,7 @@ main = hspec $ do
           rmScope inlineModel `shouldBe` Nothing
           rmFeed inlineModel `shouldBe` RmInline
         nodes -> expectationFailure ("expected two readmodel nodes, got " <> show (length nodes))
-      parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+      parseStableRenderedSpec "in" spec `shouldBe` Right spec
     it "accepts an aggregate projection without a consistency clause" $ do
       spec <- parseInlineSpec "<projection-without-consistency>" projectionWithoutConsistencySpec
       case [projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]] of
@@ -3266,7 +3253,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/workflow.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the workflow spec (await<->signal matches, run resolves)" $ do
       codes <- errorCodesOf "test/fixtures/workflow.keiro"
       codes `shouldBe` []
@@ -3351,7 +3338,7 @@ main = hspec $ do
                         }
                   )
                   old
-          legacyReplayImpactSpecs old new `shouldBe` ReplayNeutral
+          replayImpactSpecs old new `shouldBe` ReplayNeutral
         _ -> expectationFailure "reservation fixture must contain an event and transition"
 
     it "narrows a guard edit to that transition's event types" $ do
@@ -3380,7 +3367,7 @@ main = hspec $ do
                     }
               )
               old
-      legacyReplayImpactSpecs old loosened `shouldBe` ReplayNeutral
+      replayImpactSpecs old loosened `shouldBe` ReplayNeutral
 
     it "pairs guard-disambiguated siblings independently of both declaration orders" $ do
       base <- specOf "test/fixtures/reservation.keiro"
@@ -3393,11 +3380,12 @@ main = hspec $ do
                     tEmits = [eventName],
                     tLoc = noLoc
                   }
+              commandOverride = EPath noLoc CommandRoot ["lifeCriticalOverride"]
               exact = sibling (Just (EAtom (ABool True))) (evName firstEvent)
-              loosenedOld = sibling (Just (EAtom (AName "legacyGuard"))) (evName firstEvent)
+              loosenedOld = sibling (Just commandOverride) (evName firstEvent)
               loosenedNew = sibling Nothing (evName firstEvent)
-              changedOld = sibling (Just (EAtom (AName "oldGuard"))) (evName secondEvent)
-              changedNew = sibling (Just (EAtom (AName "newGuard"))) (evName firstEvent)
+              changedOld = sibling (Just (ECmp OpEq commandOverride (ELiteral noLoc (LiteralBool False)))) (evName secondEvent)
+              changedNew = sibling (Just (ECmp OpEq commandOverride (ELiteral noLoc (LiteralBool True)))) (evName firstEvent)
               oldSiblings = [exact, loosenedOld, changedOld]
               newSiblings = [exact, loosenedNew, changedNew]
               withTransitions transitions =
@@ -3406,7 +3394,7 @@ main = hspec $ do
                   (\candidate -> candidate {aggTransitions = transitions})
                   base
               impacts =
-                [ legacyReplayImpactSpecs (withTransitions oldOrder) (withTransitions newOrder)
+                [ replayImpactSpecs (withTransitions oldOrder) (withTransitions newOrder)
                 | oldOrder <- permutations oldSiblings,
                   newOrder <- permutations newSiblings
                 ]
@@ -3437,8 +3425,8 @@ main = hspec $ do
       changed <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v2.keiro"
       changed `shouldSatisfy` (/= ReplayNeutral)
       old <- specOf "test/fixtures/reservation.keiro"
-      formatted <- parseInlineSpec "<formatted>" (renderSpec old)
-      legacyReplayImpactSpecs old formatted `shouldBe` ReplayNeutral
+      formatted <- shouldParseStableRenderedSpec "<formatted>" old
+      replayImpactSpecs old formatted `shouldBe` ReplayNeutral
 
     it "names mapped nested event and snapshot roots while ignoring Haskell-only changes" $ do
       nested <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
@@ -3687,13 +3675,17 @@ main = hspec $ do
                                 [ event
                                 | event <- aggEvents aggregate,
                                   evName event /= "TransferReservationConfirmed"
+                                ],
+                              aggTransitions =
+                                [ transition {tEmits = filter (/= "TransferReservationConfirmed") (tEmits transition)}
+                                | transition <- aggTransitions aggregate
                                 ]
                             }
                       _ -> node
                   | node <- specNodes old
                   ]
               }
-          removals = [change | change@(Breaking kind) <- legacyDiffSpecs old new, ckCode kind == EvtRemovedNotDeprecated]
+          removals = [change | change@(Breaking kind) <- diffSpecs old new, ckCode kind == EvtRemovedNotDeprecated]
       removals `shouldSatisfy` (not . null)
       [ckDetail kind | Breaking kind <- removals]
         `shouldSatisfy` all (not . T.isInfixOf "so old payloads still decode")
@@ -3716,7 +3708,7 @@ main = hspec $ do
         Right pastedSpec -> do
           [code d | d <- validateSpec pastedSpec, severity d == Error] `shouldBe` []
           base <- specOf "test/fixtures/reservation.keiro"
-          [k | Advisory k <- legacyDiffSpecs base pastedSpec, ckCode k == AggGuardTightened]
+          [k | Advisory k <- diffSpecs base pastedSpec, ckCode k == AggGuardTightened]
             `shouldBe` []
     it "omits the twin advisory when the twin is already present (plan 143)" $ do
       cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened-twin.keiro"
@@ -4288,12 +4280,16 @@ main = hspec $ do
       expectedNames
         `shouldBe` sort
           [ "Generated.HospitalCapacity.Reservation.Codec",
+            "Generated.HospitalCapacity.Reservation.BehaviorContract",
             "Generated.HospitalCapacity.Reservation.Domain",
             "Generated.HospitalCapacity.Reservation.EventStream",
             "Generated.HospitalCapacity.Reservation.Harness",
             "Generated.HospitalCapacity.Reservation.Projection",
+            "Generated.HospitalCapacity.Reservation.Transducer",
             "Generated.HospitalCapacity.Nominals",
+            "Generated.HospitalCapacity.Nominals.Internal",
             "Generated.HospitalCapacity.ReplayAudit",
+            "HospitalCapacity.Reservation.BehaviorHoles",
             "HospitalCapacity.Reservation.Holes"
           ]
     it "derives the dependency set from the node kinds present (aggregate)" $ do
@@ -4671,13 +4667,13 @@ main = hspec $ do
             TIO.readFile target `shouldReturn` goldenJson golden
         goldens -> expectationFailure ("expected one nested synthesized golden, got " <> show goldens)
     it "dispatches shared-version upcasters by wire event type and passes foreign kinds through" $ do
-      source <- readTestText "test/fixtures/reservation-dup-upcast-source.keiro"
-      spec <- parseInlineSpec "<shared-upcaster-source>" source
+      parsed <- parsedSourceOf "test/fixtures/reservation-dup-upcast-source.keiro"
+      let spec = parsedSpec parsed
       case [aggregate | NAggregate aggregate <- specNodes spec] of
         [aggregate] -> do
-          let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+          let modules = scaffoldServiceModules (defaultContext (specContext spec)) (checkedSource parsed)
               codec = generatedTextEndingIn "Codec.hs" modules
-              holes = case [moduleText m | m <- modules, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)] of
+              holes = case [moduleText m | m <- modules, "/Holes.hs" `T.isSuffixOf` T.pack (modulePath m)] of
                 [text] -> text
                 _ -> ""
           codec `shouldSatisfy` T.isInfixOf "upcasters = [(1, upcastRungV1)]"
@@ -4715,10 +4711,10 @@ main = hspec $ do
       firewallBreaches mods `shouldBe` []
     it "marks the Holes module HoleStub and the rest Generated" $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
-      let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
-      map kind holes `shouldBe` [HoleStub]
-      -- Context nominals/replay plus Domain, Codec, EventStream, Projection, Harness.
-      length [m | m <- mods, kind m == Generated] `shouldBe` 7
+      let holes = [m | m <- mods, kind m == HoleStub]
+      map (takeFileName . modulePath) holes `shouldBe` ["BehaviorHoles.hs", "Holes.hs"]
+      -- Context nominals/internal/replay plus the stable aggregate surface.
+      length [m | m <- mods, kind m == Generated] `shouldBe` 10
     it "is deterministic (re-scaffolding yields byte-identical text)" $ do
       a <- scaffoldFixture "test/fixtures/reservation.keiro"
       b <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -4732,15 +4728,14 @@ main = hspec $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
       mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
     it "matches every committed new-surface Generated module (modulo formatting)" $ do
-      spec <- specOf "test/fixtures/transfer-routing.keiro"
-      let modules = scaffoldModules (defaultContext (specContext spec)) spec
+      modules <- scaffoldFixture "test/fixtures/transfer-routing.keiro"
       forM_ [m | m <- modules, kind m == Generated] $ \m -> do
         committed <- readTestText ("test/conformance-newsurface/" <> modulePath m)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
     it "scaffolds the register-free OrderStream smoke target without error" $ do
       mods <- scaffoldFixture "test/fixtures/order.keiro"
-      -- Context nominals/replay + 5 aggregate Generated modules + 1 Holes.
-      length mods `shouldBe` 8
+      -- Stable context and aggregate modules plus both hand-owned hole surfaces.
+      length mods `shouldBe` 12
       firewallBreaches mods `shouldBe` []
       let harness = generatedTextEndingIn "Harness.hs" mods
       harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: PlaceOrder from OrderNotStarted -- \""
@@ -4760,16 +4755,17 @@ main = hspec $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
       let harness = generatedTextEndingIn "Harness.hs" mods
       harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: RequestTransferReservation from ReservationUnrequested -- \""
-      harness `shouldSatisfy` T.isInfixOf "prefix <> \"register reservationState\""
+      harness `shouldSatisfy` T.isInfixOf "prefix <> \"register reservationId\""
+      harness `shouldSatisfy` T.isInfixOf "prefix <> \"register hospitalId\""
+      harness `shouldSatisfy` T.isInfixOf "prefix <> \"register patientAcuity\""
+      harness `shouldNotSatisfy` T.isInfixOf "prefix <> \"register reservationState\""
     it "lowers a replay-only transition to B.replayOnly in the holes skeleton (plan 143)" $ do
       twinMods <- scaffoldFixture "test/fixtures/reservation-guard-tightened-twin.keiro"
-      let twinHoles = [moduleText m | m <- twinMods, kind m == HoleStub]
-      twinHoles `shouldSatisfy` any (T.isInfixOf "B.replayOnly")
+      map moduleText twinMods `shouldSatisfy` any (T.isInfixOf "B.replayOnly")
       let twinHarness = generatedTextEndingIn "Harness.hs" twinMods
       T.count "forwardReplayRequestTransferReservation ::" twinHarness `shouldBe` 1
       plainMods <- scaffoldFixture "test/fixtures/reservation.keiro"
-      let plainHoles = [moduleText m | m <- plainMods, kind m == HoleStub]
-      plainHoles `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
+      map moduleText plainMods `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
 
   describe "service workspace (EP-153)" $ do
     describe "manifest grammar" $ do
@@ -5041,7 +5037,7 @@ main = hspec $ do
         (exitCode, _, err) <-
           runKeiroDsl ["check", "test/fixtures/workspace-unresolved/service.keiro-workspace"]
         exitCode `shouldBe` ExitFailure 1
-        err `shouldContain` "workspace-unresolved/domain/project.keiro:13: error[GuardAtomOutOfScope]"
+        err `shouldContain` "workspace-unresolved/domain/project.keiro:12: error[GuardAtomOutOfScope]"
       it "produces byte-identical output for a manifest whose members are listed in reverse" $ do
         (canonicalCode, canonicalOut, _) <- runKeiroDsl ["check", canonicalWorkspacePath, "--emit"]
         (reorderedCode, reorderedOut, _) <- runKeiroDsl ["check", reorderedWorkspacePath, "--emit"]
@@ -5080,7 +5076,7 @@ main = hspec $ do
       project <- readTestText "test/fixtures/workspace/domain/project.keiro"
       artifact <- readTestText "test/fixtures/workspace/domain/project-artifact.keiro"
       shared <- readTestText "test/fixtures/workspace/domain/shared.keiro"
-      let extra = "context demo-project\n\nid ExtraId prefix=extra\n"
+      let extra = "language keiro-dsl 4\ncontext demo-project\n\nid ExtraId prefix=extra\n"
           manifest members =
             T.unlines
               ( ["service demo-project", "module Demo.Modules.Project", "layout collocated"]
@@ -5306,7 +5302,7 @@ main = hspec $ do
           `shouldBe` Just record
         [row | row <- wrModules record, wrmOwner row == Nothing]
           `shouldSatisfy` (not . null)
-      it "derives absent language rows and rejects partial, duplicate, malformed, or inconsistent contracts" $ do
+      it "rejects absent stable language rows and partial, duplicate, malformed, or inconsistent contracts" $ do
         workspace <- shouldComposeWorkspace canonicalWorkspacePath
         let record = sampleWorkspaceRecord workspace
             rendered = renderWorkspaceRecord record
@@ -5314,9 +5310,7 @@ main = hspec $ do
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines rendered))
             semanticRows = filter ("semantic-contract " `T.isPrefixOf`) (T.lines rendered)
             withoutSemanticRows = T.unlines (filter (not . T.isPrefixOf "semantic-contract ") (T.lines rendered))
-            legacyRows = [WorkspaceSourceLanguageRow path LegacyUnversioned | path <- wrMembers record]
-        parseWorkspaceRecord withoutSourceRows
-          `shouldBe` Just record {wrSourceLanguages = legacyRows}
+        parseWorkspaceRecord withoutSourceRows `shouldBe` Nothing
         case sourceRows of
           firstRow : secondRow : _ -> do
             parseWorkspaceRecord (T.unlines (filter (/= secondRow) (T.lines rendered))) `shouldBe` Nothing
@@ -5328,7 +5322,7 @@ main = hspec $ do
           [semanticRow] -> do
             parseWorkspaceRecord (T.replace semanticRow (semanticRow <> "\n" <> semanticRow) rendered) `shouldBe` Nothing
             parseWorkspaceRecord (T.replace semanticRow "semantic-contract {malformed}" rendered) `shouldBe` Nothing
-            parseWorkspaceRecord (T.replace "\"languageVersion\":1" "\"languageVersion\":2" rendered) `shouldBe` Nothing
+            parseWorkspaceRecord (T.replace "\"languageVersion\":4" "\"languageVersion\":3" rendered) `shouldBe` Nothing
           _ -> expectationFailure "expected one workspace semantic-contract row"
       it "rejects unsafe module, owner, member, and adoption paths" $ do
         workspace <- shouldComposeWorkspace canonicalWorkspacePath
@@ -5376,14 +5370,20 @@ main = hspec $ do
         let ctx = wpContext plan
             modules = map fst (wpModules plan)
             nominalModules = [m | m <- modules, modulePath m == T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs")]
+            internalNominalModules = [m | m <- modules, modulePath m == T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> "/Internal.hs")]
             domainFor suffix = case [m | m <- modules, suffix `isSuffixOfPath` m] of
               [m] -> pure m
               found -> expectationFailure ("expected one domain ending in " <> suffix <> ", got " <> show (map modulePath found)) >> fail "unreachable"
         ownerModule <- case nominalModules of
           [m] -> pure m
           found -> expectationFailure ("expected one generated nominal owner, got " <> show (map modulePath found)) >> fail "unreachable"
+        internalOwnerModule <- case internalNominalModules of
+          [m] -> pure m
+          found -> expectationFailure ("expected one generated internal nominal owner, got " <> show (map modulePath found)) >> fail "unreachable"
         let nominalText = moduleText ownerModule
-        T.count "newtype ProjectId" nominalText `shouldBe` 1
+            internalNominalText = moduleText internalOwnerModule
+        T.count "newtype ProjectId" nominalText `shouldBe` 0
+        T.count "newtype ProjectId" internalNominalText `shouldBe` 1
         T.count "data ProjectPhase =" nominalText `shouldBe` 1
         T.count "data WorkspaceVisibility =" nominalText `shouldBe` 1
         projectDomain <- domainFor "Project/Generated/Domain.hs"
@@ -5391,9 +5391,9 @@ main = hspec $ do
         forM_ [projectDomain, artifactDomain] $ \domain -> do
           moduleText domain `shouldSatisfy` (not . T.isInfixOf "newtype ProjectId")
           moduleText domain `shouldSatisfy` (not . T.isInfixOf "data ProjectPhase")
-          moduleText domain `shouldSatisfy` T.isInfixOf (generatedNominalModule ctx <> " (ProjectId (..), ProjectPhase (..))")
+          moduleText domain `shouldSatisfy` T.isInfixOf (generatedNominalModule ctx <> " (ProjectId, parseProjectId, ProjectPhase (..))")
           moduleText domain `shouldSatisfy` (not . T.isInfixOf "WorkspaceVisibility")
-        singleFileModules <- case planScaffold ctx (wsMergedSpec (wpWorkspace plan)) of
+        singleFileModules <- case planServiceScaffold ctx (stableCheckedService (wsMergedSpec (wpWorkspace plan))) of
           Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
           Right values -> pure values
         let withoutOrigin m = (modulePath m, moduleText m, kind m)
@@ -5551,9 +5551,10 @@ main = hspec $ do
               -- else names the member that produced it.
               [wrmPath row | row <- wrModules record, wrmOwner row == Nothing]
                 `shouldSatisfy` \ownerless ->
-                  length ownerless == 3
+                  length ownerless == 4
                     && any (T.isSuffixOf "StructuralProjections.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "Nominals.hs" . T.pack) ownerless
+                    && any (T.isSuffixOf "Nominals/Internal.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "ReplayAudit.hs" . T.pack) ownerless
               [ wrmOwner row
                 | row <- wrModules record,
@@ -5635,14 +5636,21 @@ main = hspec $ do
               )
           map omPath moves
             `shouldSatisfy` any (T.isInfixOf "ProjectArtifact" . T.pack)
-          -- An ownership move is not a content change: every module's
-          -- bytes, and the build manifest, are untouched.
+          -- Stable behavior contracts retain source-line attribution, so
+          -- moving a declaration may rewrite only those attributed modules.
+          -- Every unaffected module and the build manifest remain untouched.
           map thd3 (wsrDispositions second)
-            `shouldSatisfy` all (`elem` [Unchanged, Skipped])
+            `shouldSatisfy` all (`elem` [Unchanged, Skipped, Overwritten])
+          let overwrittenPaths =
+                [modulePath generatedModule | (generatedModule, _, Overwritten) <- wsrDispositions second]
+          length overwrittenPaths `shouldBe` 2
+          overwrittenPaths `shouldSatisfy` all (T.isSuffixOf "/Generated/BehaviorContract.hs" . T.pack)
           after <- treeSnapshot out
           map fst after `shouldBe` map fst before
-          [(path, text) | (path, text) <- after, not ("scaffold-record" `T.isInfixOf` T.pack path)]
-            `shouldBe` [(path, text) | (path, text) <- before, not ("scaffold-record" `T.isInfixOf` T.pack path)]
+          let unaffected (path, _) =
+                not ("scaffold-record" `T.isInfixOf` T.pack path)
+                  && path `notElem` overwrittenPaths
+          filter unaffected after `shouldBe` filter unaffected before
           renderWorkspaceScaffoldReport second
             `shouldSatisfy` any (T.isInfixOf "changed owning member")
       it "leaves the tree, record, and manifest untouched when any member refuses" $
@@ -5727,6 +5735,7 @@ main = hspec $ do
                   found -> expectationFailure ("expected one path ending in " <> suffix <> ", got " <> show found) >> fail "unreachable"
           domainPath <- pathEndingIn "Project/Generated/Domain.hs" Generated
           nominalPath <- pathEndingIn "Generated/Nominals.hs" Generated
+          internalNominalPath <- pathEndingIn "Generated/Nominals/Internal.hs" Generated
           holePath <- pathEndingIn "Project/Holes.hs" HoleStub
           writeFileWithParents
             (out </> domainPath)
@@ -5741,10 +5750,12 @@ main = hspec $ do
             `shouldBe` [Overwritten]
           newDomain <- TIO.readFile (out </> domainPath)
           newDomain `shouldSatisfy` (not . T.isInfixOf "newtype ProjectId")
-          newDomain `shouldSatisfy` T.isInfixOf "Generated.Nominals (ProjectId (..), ProjectPhase (..))"
+          newDomain `shouldSatisfy` T.isInfixOf "Generated.Nominals (ProjectId, parseProjectId, ProjectPhase (..))"
           newNominals <- TIO.readFile (out </> nominalPath)
-          T.count "newtype ProjectId" newNominals `shouldBe` 1
+          T.count "newtype ProjectId" newNominals `shouldBe` 0
           T.count "data ProjectPhase =" newNominals `shouldBe` 1
+          newInternalNominals <- TIO.readFile (out </> internalNominalPath)
+          T.count "newtype ProjectId" newInternalNominals `shouldBe` 1
           TIO.readFile (out </> holePath) `shouldReturn` "-- hand-owned 0.6 implementation\n"
       it "adopts an overwritten same-context record pair by record and by banner" $
         withInlineWorkspace "keiro-dsl-workspace-adopt" adoptionMembers $ \_ out workspace -> do
@@ -6960,6 +6971,24 @@ parseInlineSpec :: FilePath -> T.Text -> IO Spec
 parseInlineSpec sourceName src = case parseSpec sourceName src of
   Left err -> expectationFailure (T.unpack err) >> error "unreachable"
   Right spec -> pure spec
+
+parseStableRenderedSpec :: FilePath -> Spec -> Either T.Text Spec
+parseStableRenderedSpec sourceName spec =
+  case parseSource sourceName stableSource of
+    Left failure -> Left (renderParseFailure failure)
+    Right parsed -> Right (parsedSpec parsed)
+  where
+    stableSource =
+      "language keiro-dsl "
+        <> T.pack (show (languageVersionNumber currentStableLanguageVersion))
+        <> "\n"
+        <> renderSpec spec
+
+shouldParseStableRenderedSpec :: FilePath -> Spec -> IO Spec
+shouldParseStableRenderedSpec sourceName spec =
+  case parseStableRenderedSpec sourceName spec of
+    Left failure -> expectationFailure (T.unpack failure) >> fail "unreachable"
+    Right reparsed -> pure reparsed
 
 shouldResolveTypeGraph :: Spec -> IO TypeGraph
 shouldResolveTypeGraph spec = case resolveTypeGraph spec of

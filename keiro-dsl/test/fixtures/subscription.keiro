@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context billing
 
 id SubscriptionId prefix=sub
@@ -9,7 +9,6 @@ enum Plan { Paid=paid Free=free }
 aggregate Subscription
   regs
     plan              Plan              = Free
-    subscriptionState SubscriptionVertex = Inactive
   states Inactive Active Closed!
 
   command ActivateSubscription { subscriptionId customerId plan }
@@ -19,11 +18,10 @@ aggregate Subscription
   event SubscriptionCancelled { subscriptionId customerId }
 
   Inactive -- ActivateSubscription -->
-    guard plan != Free
-    write subscriptionState := Active
+    guard cmd.plan != Plan.Free
     emit  SubscriptionActivated
     goto  Active
-  Active -- CancelSubscription --> write subscriptionState := Closed ; emit SubscriptionCancelled ; goto Closed
+  Active -- CancelSubscription --> emit SubscriptionCancelled ; goto Closed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection subscriptions key=subscriptionId

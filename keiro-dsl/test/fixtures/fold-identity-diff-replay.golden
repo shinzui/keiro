@@ -2,8 +2,7 @@ diff:
 WARNING: Reservation transition Unrequested -- RequestTransferReservation: guard changed on Unrequested -- RequestTransferReservation. Stored events appended under the old guard may no longer invert: the next command on any stream containing one fails hydration with no inverting edge. Either confirm via the replay audit that no stored stream exercises the removed region, or keep history replayable by adding the computed replay-only twin (the removed region with the old transition's writes/emits/goto):
 
 replay-only Unrequested -- RequestTransferReservation -->
-  guard (divertStatus != TotalDivert || lifeCriticalOverride) && (divertStatus == TotalDivert && lifeCriticalOverride == false || patientAcuity == RedTag)
-  write reservationState := Held
+  guard (cmd.divertStatus != DivertStatus.TotalDivert || cmd.lifeCriticalOverride) && (cmd.divertStatus == DivertStatus.TotalDivert && cmd.lifeCriticalOverride == false || cmd.patientAcuity == PatientAcuity.RedTag)
   emit TransferReservationCreated
   goto Held [AggGuardTightened]
     vector: private-history-read=advisory old-binary-read-new-events=compatible

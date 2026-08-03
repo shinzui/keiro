@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context workspace-diff
 
 aggregate Order
@@ -11,8 +11,8 @@ aggregate Order
   event OrderClosed = fields(CloseOrder)
 
   Open -- CloseOrder -->
-    write status  := finalStatus
-    write details := details
+    write status := cmd.finalStatus
+    write details := cmd.details
     emit  OrderClosed
     goto  Closed
 
@@ -27,7 +27,7 @@ aggregate Shipment
   event ShipmentCompleted = fields(CompleteShipment)
 
   PendingShipment -- CompleteShipment -->
-    write status := finalStatus
+    write status := cmd.finalStatus
     emit  ShipmentCompleted
     goto  CompletedShipment
 

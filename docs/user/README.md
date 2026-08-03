@@ -18,9 +18,9 @@ pieces those modules import.
   projections, process managers, and timers.
 - [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
   hidden-input rejection, and what replay safety does and does not guarantee.
-- [Typed Specifications With `keiro-dsl`](typed-spec-toolchain.md): structural
-  and opaque consumer mappings, check, scaffold, generated harnesses,
-  compatibility vectors, and migration-evidence tooling.
+- [Keiro DSL Language 4 Reference](typed-spec-toolchain.md): the complete
+  Language 4 grammar, type and expression rules, every node family, workspaces,
+  generated ownership, CLI commands, validation, and evolution workflow.
 - [Choosing `keiro-dsl`](../guides/choosing-keiro-dsl.md): benefits, costs,
   granular escape hatches, and the service shapes that favor a typed
   specification, hybrid ownership, or hand-written Keiro.

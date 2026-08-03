@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context demo-project
 
 id RunId prefix=run
@@ -6,14 +6,12 @@ id RunId prefix=run
 aggregate Run
   regs
     runId RunId = placeholder
-    state RunVertex = Pending
   states Pending Done!
 
   command DoThing { runId attempt:Int }
   event ThingCompleted { runId attempt:Int }
 
   Pending -- DoThing -->
-    write state := Done
     emit ThingCompleted
     goto Done
 

@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context demo-project
 
 id ProjectId prefix=proj
@@ -6,14 +6,12 @@ id ProjectId prefix=proj
 aggregate Project
   regs
     projectId ProjectId = placeholder
-    state ProjectVertex = Pending
   states Pending Done!
 
   command DoThing { projectId attempt:Int }
   event ThingCompleted { projectId attempt:Int }
 
   Pending -- DoThing -->
-    write state := Done
     emit ThingCompleted
     goto Done
 

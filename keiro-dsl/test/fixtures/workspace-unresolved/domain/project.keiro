@@ -1,10 +1,9 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context demo-project
 
 aggregate Project
   regs
     projectId ProjectId    = placeholder
-    state     ProjectVertex = Pending
   states Pending Done!
 
   command DoProject       { projectId attempt:Int }
@@ -12,7 +11,6 @@ aggregate Project
 
   Pending -- DoProject -->
     guard MissingPhase
-    write state := Done
     emit  ProjectCompleted
     goto  Done
 

@@ -1,4 +1,4 @@
-language keiro-dsl 1
+language keiro-dsl 4
 context repro
 
 enum Color { Red=red Green=green }
@@ -6,14 +6,13 @@ enum Color { Red=red Green=green }
 aggregate Thing
   regs
     tint Color = NotAColor
-    thingState ThingVertex = Pending
   states Pending Done!
 
   command DoThing { thingId }
   event ThingDone = fields(NoSuchCommand)
 
   Pending -- DoThing -->
-    write ghostRegister := Done
+    write ghostRegister := Color.Red
     emit ThingDone
     goto Done
 
