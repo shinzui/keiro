@@ -6,6 +6,11 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.10.0.0 — 2026-08-03
+
+No user-facing changes beyond the lockstep `keiro-core ^>=0.10.0.0` bound.
+Released with the package set for the `keiro-dsl` 0.10.0.0 work.
+
 ## 0.9.0.0 — 2026-08-02
 
 No user-facing changes beyond the lockstep `keiro-core ^>=0.9.0.0` bound.

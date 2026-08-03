@@ -6,8 +6,61 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.10.0.0 — 2026-08-03
+
+### Breaking Changes
+
+- `Keiro.Dsl.AggregateType` no longer exports `aggregateHaskellType` or
+  `aggregateImports`. A resolved aggregate type now yields the typed
+  `AggregateHaskellSource` returned by `aggregateConsumerHaskellSource`, read
+  through `aggregateSourceReferences` and `aggregateSourceStaticImports` and
+  rendered with `renderAggregateHaskellSource`, so consumer-owned types flow
+  into the import planner instead of being flattened into module-qualified
+  text.
+- `Keiro.Dsl.ScaffoldRun`'s `Refusal` gained the `DuplicateConformanceFactKeys`
+  and `ConformancePackageRefusal` constructors, and `ScaffoldReport` gained the
+  `reportConformancePackage` field. Exhaustive matches and literal report
+  construction must be updated.
+- `Keiro.Dsl.Workspace`'s `WorkspaceManifest` gained the `wmfRuntimePackage`
+  and `wmfRuntimePackageLoc` fields.
+- The generated build manifest now emits the complete Cabal fragment: a
+  `default-language: GHC2024` line, an `OverloadedStrings` `default-extensions`
+  block, and — when a service conformance facade is generated — an
+  `exposed-modules` block that removes the facade from `other-modules`.
+  Consumers must repaste the fragment rather than merging only the module and
+  dependency blocks.
+
+### New Features
+
+- A configured Keiro service now generates at most one local conformance
+  package. `scaffold` emits a service-level conformance facade
+  (`<Generated prefix>.Conformance`) in the consumer's runtime package and a
+  separate runnable conformance package whose runner imports only that facade,
+  so per-node harness modules stay out of the consumer's public API. See
+  ADR 20.
+- The runtime Cabal package is now explicit build metadata. A workspace
+  manifest may carry an optional `runtime-package <cabal-name>` clause, and
+  `keiro-dsl scaffold` accepts `--runtime-package PACKAGE`, which takes
+  precedence over the manifest value. The name is validated against Cabal's
+  package-name grammar and is never inferred from the service name, directory,
+  or nearby Cabal files. New module `Keiro.Dsl.RuntimePackage` exports
+  `RuntimePackageName`, `mkRuntimePackageName`, and `isCabalPackageName`.
+- New modules `Keiro.Dsl.ServiceHarness` and `Keiro.Dsl.ConformancePackage`
+  expose the facade and package planning surfaces.
+- Generated Haskell now has an explicit, checked language contract. The
+  manifest owns the `GHC2024` + `OverloadedStrings` baseline, and overwriteable
+  generated modules declare specialized pragmas locally only when their emitted
+  syntax needs them, drawn from a closed set (`BlockArguments`,
+  `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels`,
+  `OverloadedRecordDot`, `QualifiedDo`, `TemplateHaskell`, `TypeFamilies`).
+  Tracked generated output is independently checked against that set. See
+  ADR 19.
+
 ### Other Changes
 
+- Generated event codecs now derive one named event-type allow-list per
+  aggregate and render unknown-event diagnostics from that same value, so the
+  diagnostic text can no longer drift from the accepted set.
 - Generated structural record fields and union payloads now use minimal
   precedence-correct parentheses without changing schema or wire semantics.
 - Generated Haskell now plans consumer-owned imports once per module. Unique

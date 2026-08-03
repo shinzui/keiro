@@ -6,8 +6,53 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.10.0.0 — 2026-08-03
+
+All published packages move to 0.10.0.0 together. The cycle is entirely
+`keiro-dsl` work: generated Haskell gains an explicit, checked compilation
+contract, consumer-owned types are imported idiomatically instead of being
+flattened into module-qualified text, and a configured service now scaffolds a
+runnable conformance package behind one runtime-owned facade.
+`keiro-core`, `keiro`, `keiro-pgmq`, and `keiro-migrations` have no source
+changes; they move only to keep the set on one version.
+
+### Breaking Changes
+
+- **keiro-dsl**: `Keiro.Dsl.AggregateType` replaced `aggregateHaskellType` and
+  `aggregateImports` with the typed `AggregateHaskellSource` surface
+  (`aggregateConsumerHaskellSource`, `aggregateSourceReferences`,
+  `aggregateSourceStaticImports`, `renderAggregateHaskellSource`).
+- **keiro-dsl**: `Refusal` gained `DuplicateConformanceFactKeys` and
+  `ConformancePackageRefusal`; `ScaffoldReport` gained
+  `reportConformancePackage`; `WorkspaceManifest` gained `wmfRuntimePackage`
+  and `wmfRuntimePackageLoc`.
+- **keiro-dsl**: the generated build manifest now emits the complete Cabal
+  fragment, including `default-language`, `default-extensions`, and an
+  `exposed-modules` block for the conformance facade. Consumers must repaste
+  the fragment.
+
+### New Features
+
+- **keiro-dsl**: a configured service generates at most one local conformance
+  package, whose runner imports a single generated
+  `<Generated prefix>.Conformance` facade compiled in the consumer's runtime
+  package (ADR 20).
+- **keiro-dsl**: the runtime Cabal package is explicit build metadata — an
+  optional `runtime-package <cabal-name>` workspace clause and a
+  `scaffold --runtime-package PACKAGE` override, validated against Cabal's
+  package-name grammar and never inferred. New modules
+  `Keiro.Dsl.RuntimePackage`, `Keiro.Dsl.ServiceHarness`, and
+  `Keiro.Dsl.ConformancePackage`.
+- **keiro-dsl**: generated Haskell has an explicit language contract — the
+  manifest owns the `GHC2024` + `OverloadedStrings` baseline while
+  overwriteable modules declare specialized pragmas locally, only when needed,
+  from a closed checked set (ADR 19).
+
 ### Other Changes
 
+- **keiro-dsl**: generated event codecs derive one named event-type allow-list
+  per aggregate and render unknown-event diagnostics from that same value, so
+  the diagnostic text cannot drift from the accepted set.
 - **keiro-dsl**: generated structural record fields and union payloads now use
   minimal precedence-correct parentheses without changing schema or wire
   semantics.
