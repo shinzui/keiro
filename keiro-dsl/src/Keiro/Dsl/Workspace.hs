@@ -36,6 +36,9 @@ module Keiro.Dsl.Workspace
   ( -- * The workspace manifest
     WorkspaceManifest (..),
     WorkspaceMemberRef (..),
+    RuntimePackageName (..),
+    mkRuntimePackageName,
+    effectiveRuntimePackage,
     parseWorkspaceManifest,
     renderWorkspaceManifest,
 
@@ -99,6 +102,7 @@ import GHC.Generics
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), SourceLanguageDiagnostic, effectiveLanguageVersion, languageVersionText)
 import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSource, renderParseFailure)
+import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
 import Keiro.Dsl.ScaffoldRun (Refusal (..), planServiceScaffoldWithGoldens)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
@@ -123,6 +127,10 @@ data WorkspaceManifest = WorkspaceManifest
   { -- | The stable workspace identity, e.g. @demo-project@.
     wmfService :: !Text,
     wmfServiceLoc :: !Loc,
+    -- | The optional Cabal package that compiles this service's runtime.
+    wmfRuntimePackage :: !(Maybe RuntimePackageName),
+    -- | Meaningful only when 'wmfRuntimePackage' is 'Just'.
+    wmfRuntimePackageLoc :: !Loc,
     -- | The optional @module@ clause: the workspace's module-root authority.
     wmfModuleRoot :: !(Maybe Text),
     -- | Meaningful only when 'wmfModuleRoot' is 'Just'.
@@ -210,12 +218,14 @@ parseWorkspaceManifest src input =
 -- | One source clause, tagged with the offset used to position its diagnostics.
 data Clause
   = ClService !Int !Loc !Text
+  | ClRuntimePackage !Int !Loc !Text
   | ClModule !Int !Loc !Text
   | ClLayout !Int !Loc !Placement
   | ClSpec !Int !Loc !Text
 
 clauseOffset :: Clause -> Int
 clauseOffset (ClService o _ _) = o
+clauseOffset (ClRuntimePackage o _ _) = o
 clauseOffset (ClModule o _ _) = o
 clauseOffset (ClLayout o _ _) = o
 clauseOffset (ClSpec o _ _) = o
@@ -244,6 +254,7 @@ pClause :: WP Clause
 pClause =
   choice
     [ mk ClService "service" pServiceName,
+      mk ClRuntimePackage "runtime-package" pPathToken,
       mk ClModule "module" pModulePrefix,
       mk ClLayout "layout" pPlacement,
       mk ClSpec "spec" pPathToken
@@ -306,6 +317,12 @@ buildManifest startOffset clauses = do
   (service, serviceLoc) <- case [(name, loc) | ClService _ loc name <- clauses] of
     [one] -> pure one
     _ -> failAt (secondOffset [c | c@ClService {} <- clauses]) "duplicate 'service' clause: a workspace has exactly one identity"
+  (runtimePackage, runtimePackageLoc) <- case [(offset, loc, raw) | ClRuntimePackage offset loc raw <- clauses] of
+    [] -> pure (Nothing, Loc 0)
+    [(offset, loc, raw)] -> case mkRuntimePackageName raw of
+      Left reason -> failAt offset (T.unpack reason)
+      Right runtimeName -> pure (Just runtimeName, loc)
+    _ -> failAt (secondOffset [c | c@ClRuntimePackage {} <- clauses]) "duplicate 'runtime-package' clause"
   (moduleRoot, moduleLoc) <- case [(root, loc) | ClModule _ loc root <- clauses] of
     [] -> pure (Nothing, Loc 0)
     [(root, loc)] -> pure (Just root, loc)
@@ -325,6 +342,8 @@ buildManifest startOffset clauses = do
     WorkspaceManifest
       { wmfService = service,
         wmfServiceLoc = serviceLoc,
+        wmfRuntimePackage = runtimePackage,
+        wmfRuntimePackageLoc = runtimePackageLoc,
         wmfModuleRoot = moduleRoot,
         wmfModuleRootLoc = moduleLoc,
         wmfLayout = layout,
@@ -381,6 +400,7 @@ renderWorkspaceManifest :: WorkspaceManifest -> Text
 renderWorkspaceManifest manifest =
   T.intercalate "\n" $
     ["service " <> wmfService manifest]
+      ++ maybe [] (\runtimeName -> ["runtime-package " <> unRuntimePackageName runtimeName]) (wmfRuntimePackage manifest)
       ++ maybe [] (\root -> ["module " <> root]) (wmfModuleRoot manifest)
       ++ maybe [] (\placement -> ["layout " <> renderPlacement placement]) (wmfLayout manifest)
       ++ [ "spec " <> T.pack (wmrPath member)
@@ -390,6 +410,13 @@ renderWorkspaceManifest manifest =
 renderPlacement :: Placement -> Text
 renderPlacement GeneratedPrefix = "prefixed"
 renderPlacement CollocatedLeaf = "collocated"
+
+-- | Select the CLI runtime-package override when present, otherwise the
+-- workspace's persisted setting.
+effectiveRuntimePackage :: Maybe RuntimePackageName -> WorkspaceManifest -> Maybe RuntimePackageName
+effectiveRuntimePackage cli manifest = case cli of
+  Just runtimeName -> Just runtimeName
+  Nothing -> wmfRuntimePackage manifest
 
 --------------------------------------------------------------------------------
 -- Generic line relocation
@@ -636,6 +663,7 @@ data WorkspaceSpec = WorkspaceSpec
     wsLanguageContract :: !EffectiveLanguageContract,
     -- | The members' unanimous @context@.
     wsContext :: !Name,
+    wsRuntimePackage :: !(Maybe RuntimePackageName),
     wsModuleRoot :: !(Maybe Text),
     wsLayout :: !(Maybe Placement),
     -- | Canonical order.
@@ -675,6 +703,7 @@ oneMemberParsedWorkspace path parsedSource =
       wsManifestPath = path,
       wsLanguageContract = checkedLanguageContract service,
       wsContext = specContext spec,
+      wsRuntimePackage = Nothing,
       wsModuleRoot = specModuleRoot spec,
       wsLayout = specLayout spec,
       wsMembers =
@@ -1075,6 +1104,7 @@ composeWorkspace manifestPath manifest supplied
           wsManifestPath = manifestPath,
           wsLanguageContract = effectiveLanguageContract effectiveSourceLanguage,
           wsContext = effectiveContext,
+          wsRuntimePackage = wmfRuntimePackage manifest,
           wsModuleRoot = effectiveModuleRoot,
           wsLayout = effectiveLayout,
           wsMembers = members,

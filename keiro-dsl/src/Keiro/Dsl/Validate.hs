@@ -40,6 +40,7 @@ import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
+import Keiro.Dsl.RuntimePackage (isCabalPackageName)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
@@ -744,7 +745,7 @@ mappedLexicalRules spec = concatMap declarationRules (specMapped spec)
 
     haskellRules declaration source =
       [ invalid declaration $ "Haskell package '" <> hsPackage source <> "' does not follow Cabal package-name grammar"
-      | not (cabalPackageName (hsPackage source))
+      | not (isCabalPackageName (hsPackage source))
       ]
         ++ [ invalid declaration $ "Haskell module '" <> hsModule source <> "' must be dot-separated Upper identifiers"
            | not (moduleNameSafe (hsModule source))
@@ -1060,16 +1061,6 @@ mappedRegisterInitialRules spec graph =
 mappedGuardRules :: Spec -> TypeGraph -> [Diagnostic]
 mappedGuardRules _spec _graph = []
 
-cabalPackageName :: Text -> Bool
-cabalPackageName packageName =
-  not (null components) && all validComponent components
-  where
-    components = T.splitOn "-" packageName
-    validComponent component =
-      not (T.null component)
-        && T.all asciiAlphaNum component
-        && T.any asciiLetter component
-
 moduleNameSafe :: Text -> Bool
 moduleNameSafe moduleName =
   not (null components) && all constructorSafe components
@@ -1088,12 +1079,6 @@ lowerIdentifierSafe :: Text -> Bool
 lowerIdentifierSafe name = case T.uncons name of
   Just (first, rest) -> asciiLower first && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` haskellKeywords
   Nothing -> False
-
-asciiAlphaNum :: Char -> Bool
-asciiAlphaNum c = asciiLetter c || (c >= '0' && c <= '9')
-
-asciiLetter :: Char -> Bool
-asciiLetter c = asciiUpper c || asciiLower c
 
 asciiControl :: Char -> Bool
 asciiControl c = ord c < 32 || ord c == 127

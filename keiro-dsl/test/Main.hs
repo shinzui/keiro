@@ -4989,6 +4989,7 @@ main = hspec $ do
         source <- readTestText canonicalWorkspacePath
         manifest <- shouldParseManifest canonicalWorkspacePath source
         wmfService manifest `shouldBe` "demo-project"
+        wmfRuntimePackage manifest `shouldBe` Nothing
         wmfModuleRoot manifest `shouldBe` Just "Demo.Modules.Project"
         wmfLayout manifest `shouldBe` Just CollocatedLeaf
         map wmrPath (NE.toList (wmfMembers manifest))
@@ -5006,6 +5007,32 @@ main = hspec $ do
               "spec domain/project.keiro",
               "spec domain/shared.keiro"
             ]
+      it "round-trips runtime-package canonically immediately after service" $ do
+        manifest <-
+          shouldParseManifest "<runtime-package>" $
+            T.unlines
+              [ "service mori",
+                "module Mori.Modules",
+                "spec domain/mori.keiro",
+                "runtime-package mori-core",
+                "layout collocated"
+              ]
+        wmfRuntimePackage manifest `shouldBe` Just (RuntimePackageName "mori-core")
+        effectiveRuntimePackage Nothing manifest `shouldBe` Just (RuntimePackageName "mori-core")
+        effectiveRuntimePackage (Just (RuntimePackageName "mori-dev")) manifest
+          `shouldBe` Just (RuntimePackageName "mori-dev")
+        renderWorkspaceManifest manifest
+          `shouldBe` T.intercalate
+            "\n"
+            [ "service mori",
+              "runtime-package mori-core",
+              "module Mori.Modules",
+              "layout collocated",
+              "spec domain/mori.keiro"
+            ]
+      it "validates runtime package names with the mapped-source Cabal grammar" $ do
+        mkRuntimePackageName "mori-core" `shouldBe` Right (RuntimePackageName "mori-core")
+        mkRuntimePackageName "mori_core" `shouldBe` Left "runtime package 'mori_core' does not follow Cabal package-name grammar"
       it "treats membership as a set: source order changes neither the AST nor the bytes" $ do
         canonical <- readTestText canonicalWorkspacePath >>= shouldParseManifest canonicalWorkspacePath
         reordered <-
@@ -5064,6 +5091,15 @@ main = hspec $ do
         "a duplicate module clause"
         "service demo\nmodule Demo\nmodule Demo\nspec domain/a.keiro\n"
         "duplicate 'module' clause"
+      rejects
+        "a duplicate runtime-package clause"
+        "service demo\nruntime-package demo-core\nruntime-package demo-api\nspec domain/a.keiro\n"
+        "duplicate 'runtime-package' clause"
+      it "locates a malformed runtime-package at its manifest line" $ case parseWorkspaceManifest "<manifest>" "service demo\nspec domain/a.keiro\nruntime-package demo_core\n" of
+        Right _ -> expectationFailure "expected a malformed runtime package refusal"
+        Left err -> do
+          T.unpack err `shouldContain` "<manifest>:3:1"
+          T.unpack err `shouldContain` "does not follow Cabal package-name grammar"
       rejects
         "a duplicate layout clause"
         "service demo\nlayout prefixed\nlayout prefixed\nspec domain/a.keiro\n"
@@ -5942,6 +5978,14 @@ main = hspec $ do
           secondCode `shouldBe` ExitSuccess
           secondErr `shouldSatisfy` (not . isInfixOfString "(overwritten)")
           treeSnapshot out `shouldReturn` tree
+      it "accepts a validated runtime-package override without changing the M1 package set" $
+        withTempDirectory "keiro-dsl-workspace-runtime-package-cli" $ \out -> do
+          (exitCode, stdoutText, stderrText) <-
+            runKeiroDsl ["scaffold", canonicalWorkspacePath, "--out", out, "--runtime-package", "demo-runtime"]
+          unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
+          tree <- treeSnapshot out
+          [path | (path, _) <- tree, "keiro-dsl-conformance" `isInfixOfString` path]
+            `shouldBe` []
 
     describe "workspace adoption" $ do
       it "replaces embedded 0.6 nominal declarations only in generated files" $
@@ -7052,6 +7096,7 @@ shouldParseManifest path source = case parseWorkspaceManifest path source of
 genWorkspaceManifest :: Gen WorkspaceManifest
 genWorkspaceManifest = do
   service <- elements ["demo-project", "mori", "kotei", "a1", "svc-2"]
+  runtimePackage <- elements [Nothing, Just (RuntimePackageName "demo-core"), Just (RuntimePackageName "mori2")]
   moduleRoot <- elements [Nothing, Just "Demo", Just "Demo.Modules.Project"]
   layout <- elements [Nothing, Just GeneratedPrefix, Just CollocatedLeaf]
   chosen <-
@@ -7067,6 +7112,8 @@ genWorkspaceManifest = do
     WorkspaceManifest
       { wmfService = service,
         wmfServiceLoc = Loc 1,
+        wmfRuntimePackage = runtimePackage,
+        wmfRuntimePackageLoc = Loc 2,
         wmfModuleRoot = moduleRoot,
         wmfModuleRootLoc = Loc 2,
         wmfLayout = layout,

@@ -63,6 +63,7 @@ library
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.ReadModelShape
     Keiro.Dsl.ReplayImpact
+    Keiro.Dsl.RuntimePackage
     Keiro.Dsl.Scaffold
     Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun

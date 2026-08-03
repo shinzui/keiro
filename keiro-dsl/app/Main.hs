@@ -24,6 +24,7 @@ import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLan
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
+import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
 import Keiro.Dsl.ScaffoldRun (executeServiceScaffold, planServiceScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
@@ -45,7 +46,7 @@ data Command
   | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
   | Inspect FilePath InspectionFormat
   | BehaviorObligations FilePath BehaviorFormat
-  | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
+  | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
   | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
   | New String
 
@@ -91,7 +92,7 @@ commands =
           (info (BehaviorObligations <$> fileArg <*> behaviorFormatOpt <**> helper) (progDesc "List static aggregate behavior obligations for a .keiro file or workspace"))
         <> command
           "scaffold"
-          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
         <> command
           "diff"
           (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
@@ -105,6 +106,15 @@ outOpt = strOption (long "out" <> metavar "DIR" <> help "Output directory for th
 
 moduleRootOpt :: Parser String
 moduleRootOpt = strOption (long "module-root" <> metavar "PREFIX" <> help "Namespace prefix for emitted modules, e.g. Acme or Acme.Services (overrides the spec's module clause)")
+
+runtimePackageOpt :: Parser RuntimePackageName
+runtimePackageOpt =
+  option
+    ( eitherReader $ \raw -> case mkRuntimePackageName (T.pack raw) of
+        Left message -> Left (T.unpack message)
+        Right packageName -> Right packageName
+    )
+    (long "runtime-package" <> metavar "PACKAGE" <> help "Cabal package that compiles the generated service runtime (overrides the workspace manifest)")
 
 collocateSwitch :: Parser Bool
 collocateSwitch = switch (long "collocate" <> help "Place the generated layer as a leaf under the domain (<Ctx>.<Node>.Generated) instead of a parallel Generated.* tree")
@@ -202,8 +212,8 @@ run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
 run (BehaviorObligations fp format)
   | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
-run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
-  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
+  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
   | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
@@ -238,7 +248,7 @@ run (Check fp emit explainBindings coverageOptions) = do
           coverageOk <- runCheckCoverage fp spec coverageOptions
           when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
           when (not coverageOk) exitFailure
-run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
   case parseSource fp input of
     Left failure -> do
@@ -253,6 +263,7 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens com
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       when (any ((== Error) . severity) diags) exitFailure
       let ctx = mkContext cliRoot cliCollocate spec
+          _effectiveRuntimePackage = cliRuntimePackage
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
       case (planServiceScaffoldWithGoldens goldens ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
@@ -478,12 +489,13 @@ runWorkspaceScaffold ::
   FilePath ->
   FilePath ->
   Maybe String ->
+  Maybe RuntimePackageName ->
   Bool ->
   Bool ->
   Maybe FilePath ->
   Maybe (String, FilePath) ->
   IO ()
-runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest = do
+runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest = do
   loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
   case loaded of
     Left failure -> do
@@ -497,6 +509,9 @@ runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGold
       when (any ((== Error) . wdSeverity) diags) exitFailure
       let spec = checkedSpec (checkedWorkspace workspace)
           ctx = workspaceContext cliRoot cliCollocate workspace
+          _effectiveRuntimePackage = case cliRuntimePackage of
+            Just packageName -> Just packageName
+            Nothing -> wsRuntimePackage workspace
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
       case ( planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace,
