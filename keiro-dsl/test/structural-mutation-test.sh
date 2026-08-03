@@ -3,21 +3,21 @@
 set -euo pipefail
 
 BINDINGS="keiro-dsl/test/conformance-structural/Conformance/Structural/Bindings.hs"
-HOLES="keiro-dsl/test/conformance-structural/StructuralConformance/ArtifactCatalog/Holes.hs"
+TRANSDUCER="keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Transducer.hs"
 BINDINGS_BACKUP="$(mktemp)"
-HOLES_BACKUP="$(mktemp)"
+TRANSDUCER_BACKUP="$(mktemp)"
 cp "$BINDINGS" "$BINDINGS_BACKUP"
-cp "$HOLES" "$HOLES_BACKUP"
+cp "$TRANSDUCER" "$TRANSDUCER_BACKUP"
 
 restore() {
   cp "$BINDINGS_BACKUP" "$BINDINGS"
-  cp "$HOLES_BACKUP" "$HOLES"
-  rm -f "$BINDINGS_BACKUP" "$HOLES_BACKUP"
+  cp "$TRANSDUCER_BACKUP" "$TRANSDUCER"
+  rm -f "$BINDINGS_BACKUP" "$TRANSDUCER_BACKUP"
 }
 trap restore EXIT
 
 restore_bindings() { cp "$BINDINGS_BACKUP" "$BINDINGS"; }
-restore_holes() { cp "$HOLES_BACKUP" "$HOLES"; }
+restore_transducer() { cp "$TRANSDUCER_BACKUP" "$TRANSDUCER"; }
 
 run_suite() {
   cabal test keiro-dsl-conformance-structural --test-show-details=direct 2>&1
@@ -63,10 +63,11 @@ expect_red "missing union fixture" '^FAIL  fixture coverage: conformance\.struct
 restore_bindings
 
 echo "== mutate event stream: omit the mapped-state event =="
-sed -i.sed-bak '/^[[:space:]]*B\.emit wireArtifactRecorded /d' "$HOLES"
-rm -f "$HOLES.sed-bak"
+sed -i.sed-bak '/^        B\.emit wireArtifactRecorded /,/^          })$/c\
+        B.noEmit' "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
 expect_red "mapped-state event omission" '^FAIL  validateTransducer is empty$|^FAIL  forward/replay equality: ObserveArtifact from ArtifactCatalogEmpty -- replay succeeds$'
-restore_holes
+restore_transducer
 
 echo "== restored baseline: structural conformance is green =="
 run_suite >/dev/null

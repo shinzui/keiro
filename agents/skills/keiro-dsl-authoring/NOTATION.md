@@ -4,17 +4,20 @@ A `.keiro` file begins with the released language contract, then `context <name>
 top-level declarations and nodes:
 
 ```text
-language keiro-dsl 1
+language keiro-dsl 4
 context hospital-capacity
 ```
 
 The preamble is recognized only after leading comments and whitespace and immediately before
 `context`. Nested fields, declarations, wire keys, and strings named `language` remain domain
-data. Version 1 is frozen. Language version 2 adds consumer-owned nominal aggregate types; other
-version-1 notation remains unchanged. Its feature gates live at their grammar productions, so
+data. Language 4 is the sole stable authoring version. It includes the syntax introduced by
+language 2, the generated TypeID/current-constructor behavior introduced by language 3, and typed
+public-contract TypeID admission plus strict service-surface validation. Feature gates live at
+their grammar productions, so
 `using`, `Integer`, `implementation hole`, `reg.`, and `cmd.` are inert inside comments, strings,
-wire keys, and legal names. A missing preamble remains readable as
-`legacy-unversioned` with effective version 1, but parse/pretty never adds a declaration. Use
+wire keys, and legal names. Versions 1 through 3 remain accepted compatibility-only contracts. A
+missing preamble remains readable as `legacy-unversioned` with effective version 1, but
+parse/pretty never changes or adds a declaration. Use
 `keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions. Upgrade
 and fleet-rewrite automation is deferred to
 `docs/improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md`.
@@ -36,26 +39,29 @@ exactly one `goto`; duplicates are positioned parse errors.
 ## Shared declarations
 
 ```text
-language keiro-dsl 1
+language keiro-dsl 4
 context hospital-capacity
 
-id   TransferReservationId  prefix=rsv          # an id newtype over Text
+id   TransferReservationId  prefix=rsv          # a current TypeID-v7 value with prefix rsv
+id   HospitalId             prefix=hosp
+id   CommandId              prefix=cmd
 enum DivertStatus { Open=open TotalDivert=total-divert }   # Ctor=wire-spelling
+enum PatientAcuity { RedTag=red YellowTag=yellow GreenTag=green }
 rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
 
-### Consumer-owned nominal declarations (language version 2)
+### Consumer-owned nominal declarations
 
-Change the preamble to `language keiro-dsl 2` only when the source needs one of these forms.
-Version 1 and legacy-unversioned sources reject them at the language boundary. The source rewrite
-is otherwise mechanical: change the preamble, add the binding block, run `pretty`, then run
+These forms were introduced in language 2 and are part of the stable language-4 contract. Version
+1 and legacy-unversioned sources still reject them at the language boundary. When adopting a
+binding, add the block to a language-4 source, run `parse`, then run
 `check --explain-bindings` and fill the create-once binding skeleton. Do not remove the old
 generated wrapper from consumer code until the generated tree and compiled conformance harness
 are green.
 
 ```text
-language keiro-dsl 2
+language keiro-dsl 4
 context orders
 
 id OrderId prefix=ord using {
@@ -115,7 +121,7 @@ Two optional clauses may follow `context <name>` to control where the emitted mo
 are optional; a spec that omits them scaffolds exactly as today.
 
 ```text
-language keiro-dsl 1
+language keiro-dsl 4
 context hospital-capacity
 module Acme.Services        # optional PascalCase namespace prefix for every emitted module
 layout collocated          # placement style: `prefixed` (default) or `collocated`
@@ -135,7 +141,6 @@ override the spec clauses (precedence: CLI flag > spec clause > default).
 ```text
 aggregate Reservation
   regs
-    reservationState ReservationVertex = Unrequested      # name Type = initial
     note Text = "not requested"                            # Text initials are quoted
     reservationId TransferReservationId = placeholder     # required sentinel for id registers
     attempts Int = 0                                      # signed integer literals are supported
@@ -150,8 +155,7 @@ aggregate Reservation
   deprecated event LegacyOpened { reservationId }         # removed from write path, still decodable
 
   Unrequested -- RequestTransferReservation -->
-    guard divertStatus != TotalDivert || lifeCriticalOverride   # a typed Expr, scope-checked
-    write reservationState := Held
+    guard cmd.divertStatus != DivertStatus.TotalDivert || cmd.lifeCriticalOverride
     emit  TransferReservationCreated
     goto  Held
 
@@ -162,8 +166,9 @@ aggregate Reservation
     # Or: status-map partial { TransferReservationCreated=>held }
 ```
 
-Holes (you fill): the transducer body (guards/writes/emits via keiki operators), the
-projection SQL `apply`, any `upcast<Event>V<n>` upcaster body.
+Language-4 scaffolding generates transitions whose expressions are completely represented by the
+spec. Holes (you fill) remain for behavior explicitly declared as `implementation hole`, the
+projection SQL `apply`, and any `upcast<Event>V<n>` upcaster body.
 `status-map partial { … }` opts out of the totality check for events that do not change
 the projected status. Every key must still name exactly one declared event constructor;
 suffixes such as `Created` do not match `TransferReservationCreated`, and duplicate or
@@ -182,8 +187,9 @@ integer literal; `Natural` uses a non-negative integral literal; and `Time` uses
 ISO-8601 value such as `"2026-01-02T03:04:05.123456789012Z"`. Time initials are parsed by
 `check` and emitted as explicit `UTCTime` calendar/clock constructors, so generated code
 does not parse them or consult a clock at runtime. Enum/state registers use an in-domain
-constructor, and an id-typed register uses the bare `placeholder` sentinel (lowered to the
-id newtype's empty-text placeholder).
+constructor, and an id-typed register uses the bare `placeholder` source sentinel. Language-4
+scaffolding lowers that sentinel to a deterministic valid current TypeID-v7 sample; it does not
+construct an invalid empty-text ID.
 
 A bare aggregate field first inherits an exactly matching register type, then tries the
 PascalCase field name as a declared id, enum, aggregate vertex, or mapped type, and finally
@@ -192,9 +198,10 @@ declared id or enum. Enum literals must be qualified as `Type.Constructor`; cros
 nominal-to-`Text`, unqualified enum, and vertex equality are rejected. Consumer `KindID` IDs and
 all enums have exact symbolic domains. Legacy generated IDs execute concrete equality but remain
 symbolically `UnverifiedOpaque` because their public wrapper admits unrestricted `Text`. Ordered
-comparison is supported only for `Int`, `Time`, and `Natural`. Aggregate arithmetic is not part
-of the expression grammar: `+`, `-`, `*`, or `/` fails at the operator with a remedy to compare or
-copy whole values.
+comparison is supported for `Int`, `Integer`, `Time`, and `Natural`. `Integer` supports exact
+`+`, `-`, and `*`; `Natural` supports the same operators with total monus subtraction. `Int`
+arithmetic, division, remainder, mixed numeric types, Time arithmetic, collection arithmetic, and
+nominal arithmetic are rejected.
 
 Direct aggregate `Json`, `Optional`, `List`, and `Map` shapes are deliberately unsupported.
 Declare a `mapped structural` type when an aggregate payload needs one of those shapes.
@@ -538,7 +545,7 @@ keiro-dsl diff     --since <git-ref> <service.keiro-workspace>
 ### Workspace manifest
 
 A multi-file service uses a separate `.keiro-workspace` file. Each member is still a
-complete `.keiro` spec, starts with `language keiro-dsl 1`, and declares the same context.
+complete `.keiro` spec, starts with `language keiro-dsl 4`, and declares the same context.
 
 ```text
 service demo-project
@@ -579,5 +586,6 @@ declarations have exactly one owning member; identical duplicates do not merge.
 
 The workspace manifest itself is unversioned. `inspect <service.keiro-workspace>
 --format=json` loads its members and reports each member's source form and effective version in
-canonical path order. Legacy and declared-v1 members may compose because both select v1; members
-with different effective versions are refused before semantic graph merge.
+canonical path order. New workspaces use language 4 consistently. Historical legacy and
+declared-v1 members may still compose because both select effective version 1; members with
+different effective versions are refused before semantic graph merge and are not upgraded.

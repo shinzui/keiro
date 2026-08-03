@@ -6,7 +6,8 @@
 -- against keiki/keiro; running it proves the filled transducer is valid, every
 -- event round-trips, and the guarded transition behaves as specified.
 --
--- The mutation check (flip @./=@ to @.==@ in Holes, rebuild) turns the
+-- The mutation check (temporarily flip @./=@ to @.==@ in the generated
+-- transducer, rebuild, then restore) turns the
 -- "accepts RequestTransferReservation …" assertion red, proving the harness —
 -- not the scaffold — pins behaviour.
 module Main (main) where

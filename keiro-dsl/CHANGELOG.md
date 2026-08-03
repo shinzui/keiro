@@ -61,6 +61,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `keiro-dsl/runtime-semantics/3`. Relative to language 3, aggregate ID
   admission, fold fingerprints, and replay classification remain unchanged;
   versions 1 through 3 retain their released semantics.
+- Designates language 4 as the sole stable authoring contract. `inspect` now
+  reports language 4 as `stable` and versions 1 through 3 as
+  `compatibility-only`; every `new <kind>` skeleton starts at language 4.
+  Historical and unversioned sources remain accepted with their released
+  semantics and are never silently upgraded.
+- Moves the primary conformance baseline to language 4: 226 stable fixtures and
+  30 stable-primary compiled suites are enforced against 14 named source
+  exceptions, two compatibility suites, and one version-independent suite.
+  `keiro-dsl-conformance-contract` now owns the typed TypeID contract proof;
+  the former permissive target is explicitly
+  `keiro-dsl-conformance-contract-v1-compat`, and the redundant
+  `keiro-dsl-conformance-contract-typeid` target is removed.
 - Closes accepted-but-unenforced service surfaces. Values that cannot lower to
   working generated code are rejected under every language version; language 4
   additionally enforces numeric floors, duplicate/shadowing rules, stable

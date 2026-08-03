@@ -61,8 +61,10 @@ This section must always reflect the actual current state of the work.
   Cabal module inventories, and made `cabal test all --test-show-details=direct` green.
 - [x] (2026-08-02T23:57:00Z) Milestone 4 user-guide slice: replaced the mixed-version typed-spec
   page with a comprehensive Language 4 reference and updated the user, guide, and root indexes.
-- [ ] Milestone 4 remaining: update agent authoring and release documentation, amend the language
-  ADR, run the mutation and repository-wide gates, and record the final v4/compatibility inventory.
+- [x] (2026-08-03T01:51:30Z) Milestone 4: updated every agent authoring entry point, the corpus
+  matrix, the planned-0.9 changelog, ADR 16, and the ADR log; repaired and passed all ten mutation
+  scripts; re-exercised both baseline red/green mutations; and passed formatting, strict OKF,
+  all-package build/test, native flake, and diff gates.
 
 
 ## Surprises & Discoveries
@@ -111,6 +113,22 @@ implementation. Provide concise evidence.
   nested `case` expressions. The permissive text path never emitted this branch, while the
   Language-4 TypeID path did. Rendering the nested cases as explicit multiline layout fixed the
   generated module without weakening TypeID validation.
+
+- Surprise: Five mutation scripts retained assumptions that no longer matched Language-4 output.
+  The reservation, replay, and structural scripts mutated obsolete identity-copy transducers; the
+  behavior-complete script matched the old used command binder instead of generated `_d`; and the
+  scalar persistence script called `B.lit`, which is not exported from `Keiki.Builder`.
+  Retargeting them to the generated authority and current term API made the intended assertions
+  red again. The scalar persistence mutation now fails earlier and more strongly at
+  `mkEventStreamOrThrow` with `revision` named in the replay-safety warning.
+
+- Surprise: The scalar-expression mutation script formatted a freshly scaffolded transducer with
+  Fourmolu before comparing it with the checked-in raw scaffold bytes. Language-4 transducers are
+  deliberately the generated symbolic-operator exception and the repository treefmt policy
+  excludes conformance generated trees, so that extra formatting step manufactured a large byte
+  difference even though fresh scaffold output exactly matched the committed file. Removing the
+  formatter from that regeneration oracle restored the intended exact-byte proof; `nix fmt` still
+  validates all hand-owned files in scope.
 
 
 ## Decision Log
@@ -184,6 +202,14 @@ Record every decision made while working on the plan.
   makes those distinctions reviewable while keeping the check deterministic and non-mutating.
   Date: 2026-08-03
 
+- Decision: Treat raw, deterministic scaffold output as the formatting authority for generated
+  conformance trees and apply repository formatters only to hand-owned files.
+  Rationale: The generator's exact-byte baseline is stronger for regeneration drift, while running
+  Fourmolu after scaffolding changes bytes the generator does not emit and makes a successful
+  regeneration look stale. The treefmt and pre-commit configurations already encode this boundary
+  by excluding `keiro-dsl/test/conformance*` generated output.
+  Date: 2026-08-03
+
 
 ## Outcomes & Retrospective
 
@@ -222,11 +248,24 @@ distinct skeleton plan. The main contract suite owns the typed TypeID proof, the
 DTO remains under `contract-v1-compat`, the complete 514-example DSL unit suite passes, all
 repository test suites pass, and an enabled-tests build reports no missing-home-module drift.
 
-The user-guide slice of Milestone 4 now presents only Language 4 and covers the source envelope,
-shared and consumer-owned types, expression rules, all twelve node families, workspaces,
-generated-versus-hand-owned boundaries, every CLI command, validation, and evolution. The eleven
-current Language 4 starters all pass `check`; the remaining Milestone-4 authoring/release corpus,
-ADR, mutation, and repository-wide work stays open.
+Milestone 4 completed the stable-authoring release surface. The comprehensive user guide and all
+four agent-authoring documents now start new sources and workspace members at Language 4, describe
+versions 1 through 3 as compatibility-only without implicit upgrade, and distinguish generated
+Language-4 transducers from explicit hand-owned holes. The corpus leads with the 226-source/30-suite
+stable matrix and lists the 14-source/two-suite historical lane separately. The planned-0.9
+changelog records the stable designation, skeleton default, component promotion/rename, and
+unchanged predecessor acceptance. ADR 16 now makes support lifecycle and stable-primary
+conformance durable, and `okf log add` recorded that update.
+
+Both required policy mutations failed at the named boundary and returned green after restoration:
+changing `contract-v4.keiro` to language 1 named the path and expected version 4, while routing
+`scaffoldFixture` through `legacyCheckedService` generated `Text` and failed the `KindID`
+assertion. All ten mutation scripts pass after ownership-sensitive repairs. Final validation is
+green: `nix fmt` changed no files; strict ADR validation reports 18 concepts; `cabal build all`
+passes; the complete test closure passes, including 514 DSL examples, 378 core examples, 58 PGMQ
+examples with two existing pending cases, and 26 migration examples; `nix flake check` passes both
+native checks; and `git diff --check` is clean. No package version was bumped and no release was
+tagged or published.
 
 
 ## Context and Orientation
@@ -236,9 +275,10 @@ version selects an immutable syntax profile and a runtime capability profile. A 
 controls which source forms parse. A runtime capability profile controls behavior that can change
 validation, generated Haskell, codecs, fold fingerprints, diff classification, or replay. The
 append-only registry is `languageRegistry` in
-`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`. It currently contains versions 1 through 4 but has
-no lifecycle or stability field: `supportedLanguageVersions` means every registry entry the
-parser accepts. Version 4 selects syntax profile 2 and runtime semantics 3, whose capabilities are
+`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`. It contains versions 1 through 4 and a
+machine-readable `LanguageSupport` field. `supportedLanguageVersions` means every registry entry
+the parser accepts, while `currentStableLanguageVersion` requires exactly one `Stable` entry.
+Version 4 selects syntax profile 2 and runtime semantics 3, whose capabilities are
 `GeneratedIdDomainTypeIdV7`, `NominalEqualityV2`, `ContractIdDomainTypeIdV7`, and
 `StrictSpecSurfaceValidation`.
 
@@ -757,3 +797,7 @@ authoring/release documentation and final gates remain pending.
 2026-08-03: Recorded the completed Milestone-3 fixture and compiled-conformance migration, typed
 contract promotion, deterministic fresh-scaffold inventory, generator repairs, Cabal manifest
 alignment, and repository-wide green test evidence.
+
+2026-08-03: Completed Milestone 4 and plan closeout: aligned authoring, corpus, changelog, ADR, and
+OKF records; repaired mutation scripts for generated Language-4 transition ownership; recorded the
+raw-scaffold formatting boundary; and captured all final green repository gates.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mutation test for the Time/Natural forward-versus-replay assertion (plan 157).
+# Mutation test for the Time/Natural replay-safety boundary (plan 157).
 set -euo pipefail
 
 HOLES="keiro-dsl/test/conformance-aggregate-scalars/AggregateScalars/ScalarLedger/Holes.hs"
@@ -21,11 +21,17 @@ fi
 
 echo "== mutate: replace the emitted Natural with an idempotent dishonest value =="
 sed -i.sed-bak \
-  's/^    , revision = d.revision$/    , revision = B.lit 1/' \
+  '/import Keiki.Builder qualified as B/a\
+import Keiki.Core qualified as K
+' \
+  "$HOLES"
+rm -f "$HOLES.sed-bak"
+sed -i.sed-bak \
+  's/^    , revision = d.revision$/    , revision = K.lit 1/' \
   "$HOLES"
 rm -f "$HOLES.sed-bak"
 
-echo "== rebuild + run conformance (expect exactly the revision register red) =="
+echo "== rebuild + run conformance (expect the revision replay-safety gate red) =="
 if MUTATION_OUTPUT="$(cabal test keiro-dsl-conformance-aggregate-scalars --test-show-details=direct 2>&1)"; then
   echo "$MUTATION_OUTPUT"
   echo "FAIL: the dishonest Natural event value was not caught"
@@ -33,23 +39,13 @@ if MUTATION_OUTPUT="$(cabal test keiro-dsl-conformance-aggregate-scalars --test-
 fi
 echo "$MUTATION_OUTPUT"
 
-FAIL_LINES="$(printf '%s\n' "$MUTATION_OUTPUT" | grep '^FAIL  ' || true)"
-EXPECTED_FAIL="PASS  forward/replay equality: Record from ScalarLedgerEmpty -- register revision"
-if [[ "$FAIL_LINES" != "${EXPECTED_FAIL/PASS/FAIL}" ]]; then
-  echo "FAIL: expected exactly the Natural register assertion to turn red"
+if ! printf '%s\n' "$MUTATION_OUTPUT" | grep -Fq 'is not replay-safe'; then
+  echo "FAIL: expected replay-safety validation to reject the dishonest Natural"
+  exit 1
+fi
+if ! printf '%s\n' "$MUTATION_OUTPUT" | grep -Fq 'revision'; then
+  echo "FAIL: replay-safety failure did not identify the Natural register"
   exit 1
 fi
 
-for EXPECTED_PASS in \
-  "PASS  validateTransducer is empty" \
-  "PASS  golden round-trip: ScalarsRecorded" \
-  "PASS  accepts Record from ScalarLedgerEmpty" \
-  "PASS  forward/replay equality: Record from ScalarLedgerEmpty -- final vertex" \
-  "PASS  forward/replay equality: Record from ScalarLedgerEmpty -- register observedAt"; do
-  if ! printf '%s\n' "$MUTATION_OUTPUT" | grep -Fq "$EXPECTED_PASS"; then
-    echo "FAIL: expected still-green assertion missing: $EXPECTED_PASS"
-    exit 1
-  fi
-done
-
-echo "PASS: scalar forward/replay equality caught dishonest Natural persistence"
+echo "PASS: scalar replay-safety validation caught dishonest Natural persistence"

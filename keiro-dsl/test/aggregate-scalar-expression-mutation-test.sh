@@ -73,11 +73,6 @@ sed -i.sed-bak \
 rm -f "$TRANSDUCER.sed-bak"
 expect_red "generated guard is bypassed" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct
 cabal run -v0 keiro-dsl -- scaffold "$FIXTURE" --out keiro-dsl/test/conformance-scalar-expressions >/dev/null
-nix develop --command fourmolu -i \
-  --ghc-opt -XGHC2024 \
-  --ghc-opt -XImportQualifiedPost \
-  --ghc-opt -XOverloadedLabels \
-  "$TRANSDUCER" >/dev/null
 run_conformance >/dev/null
 cmp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
 restore_file Transducer.hs "$TRANSDUCER"
@@ -99,7 +94,8 @@ expect_red "Hole ownership coexists with a DSL guard" \
 restore_file fixture.keiro "$FIXTURE"
 
 sed -i.sed-bak \
-  's/^          wireClosedEvent$/          wireAdjusted/' \
+  '/^        B.emit wireClosedEvent (ClosedEventTermFields$/,/^          })$/c\
+        B.noEmit' \
   "$TRANSDUCER"
 rm -f "$TRANSDUCER.sed-bak"
 expect_red "Hole transition violates its declared event envelope" cabal test keiro-dsl-conformance-aggregate-scalar-expressions --test-show-details=direct

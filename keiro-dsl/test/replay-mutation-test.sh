@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Mutation test for the generated forward/replay equality assertion (plan 147).
 #
-# The baseline uses the honest generated WireCtor. The mutation switches one
-# hand-owned binding to an idempotent dishonest ctor that duplicates `echo` into
-# both event fields. Static validation, codec round-trips, and the transition's
-# final vertex still pass; only the replayed `note` register diverges.
+# The baseline uses the honest generated WireCtor. The mutation temporarily
+# routes the generated transition through a dormant idempotent dishonest ctor
+# that duplicates `echo` into both event fields. Static validation, codec
+# round-trips, and the transition's final vertex still pass; only the replayed
+# `note` register diverges.
 set -euo pipefail
 
-HOLES="keiro-dsl/test/conformance-replay/ReplayDivergence/Note/Holes.hs"
+TRANSDUCER="keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/Transducer.hs"
 BACKUP="$(mktemp)"
-cp "$HOLES" "$BACKUP"
+cp "$TRANSDUCER" "$BACKUP"
 restore() {
-  cp "$BACKUP" "$HOLES"
+  cp "$BACKUP" "$TRANSDUCER"
   rm -f "$BACKUP"
 }
 trap restore EXIT
@@ -24,11 +25,17 @@ else
   exit 1
 fi
 
-echo "== mutate: switch emitWire to the dishonest wire ctor =="
+echo "== mutate: switch the generated emit to the dishonest wire ctor =="
 sed -i.sed-bak \
-  's/^emitWire = wireNoteWritten$/emitWire = dishonestWireNoteWritten/' \
-  "$HOLES"
-rm -f "$HOLES.sed-bak"
+  '/import Keiki.Symbolic qualified as S/a\
+import ReplayDivergence.Note.Holes (dishonestWireNoteWritten)
+' \
+  "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
+sed -i.sed-bak \
+  's/B.emit wireNoteWritten/B.emit dishonestWireNoteWritten/' \
+  "$TRANSDUCER"
+rm -f "$TRANSDUCER.sed-bak"
 
 echo "== rebuild + run harness (expect the register assertion red) =="
 if MUTATION_OUTPUT="$(cabal test keiro-dsl-conformance-replay --test-show-details=direct 2>&1)"; then

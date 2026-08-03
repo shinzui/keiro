@@ -98,7 +98,7 @@ rm -f "$WITNESSES.sed-bak"
 expect_red "use another rejecting command for a required cell" 'command-mismatch'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
-perl -0pi -e 's/(B\.onCmd inCtorPing \$ \\d -> B\.do\n)/$1        B.slot \@"lastAmount" =: K.lit 1\n/' "$TRANSDUCER"
+perl -0pi -e 's/(B\.onCmd inCtorPing \$ \\_d -> B\.do\n)/$1        B.slot \@"lastAmount" =: K.lit 1\n/' "$TRANSDUCER"
 expect_red "change a no-op register" 'noop-register-change'
 restore_file Transducer.hs "$TRANSDUCER"
 
@@ -121,7 +121,7 @@ rm -f "$WITNESSES.sed-bak"
 expect_red "truncate a multi-event replay chunk" 'replay-chunk-failed'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
-sed -i.sed-bak 's/Retired <$> (RetiredData <$> o \.: "amount")/Retired <$> (RetiredData . (+ 1) <$> o .: "amount")/' "$CODEC"
+sed -i.sed-bak '/"Retired" ->/,/"RetirementAudited" ->/ s/<\$> o \.: "amount"/<$> ((+ 1) <$> o .: "amount")/' "$CODEC"
 rm -f "$CODEC.sed-bak"
 expect_red "make codec replay diverge" 'emitted-replay-failed'
 restore_file Codec.hs "$CODEC"

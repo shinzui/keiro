@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-03
+* **Update**: Make language 4 the stable authoring and primary conformance contract (plan 183).
+
 ## 2026-08-02
 * **Update**: Record stamped generated banners and the 0.9 generated-API hygiene contract (plan 182).
 * **Update**: Record runtime capability profiles, the frozen canonical fingerprint encoder, and the widened snapshot hash (plan 181).

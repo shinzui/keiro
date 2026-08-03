@@ -2,42 +2,60 @@
 
 Worked examples of the typed-spec toolchain: the curated `.keiro` fixtures below, every compiled
 conformance component, and every mutation/gate script. Paths are relative to `keiro-dsl/` in the
-keiro repository. Start with the valid fixture for a surface, then use its negative or diff
-variants to see the exact guardrails. The test suite separately enforces that all ordinary
-fixtures use the frozen version-1 contract unless they are explicitly listed as successor-language
-or source-version cases below.
+keiro repository. Start with the stable Language-4 fixture for a surface, then use its negative or
+diff variants to see the exact guardrails.
 
-## Source-language contract fixtures
+## Stable baseline
 
-| Fixture | Role / primary coverage |
+Language 4 is the sole stable authoring contract. The machine-checked baseline contains 240
+fixture sources: 226 declared Language-4 sources and 14 named historical/source-selection
+exceptions. It also accounts for all 33 compiled conformance components: 30 `stable-primary`
+suites, two focused compatibility proofs, and one version-independent codec comparison.
+
+Stable suites exercise syntax profile 2 and runtime semantics 3, including current TypeID-v7
+admission for generated aggregate IDs, typed `KindID` public-contract fields, nominal equality,
+and strict service-surface validation. The baseline checker loads each stable source or workspace,
+checks the selected service, and compares fresh non-writing scaffold plans with the committed
+Language-4 generated banners and exact module inventory. Skeleton coverage uses the union of all
+distinct stable starters.
+
+## Historical source-language lane
+
+Versions 1 through 3 and the unversioned legacy form remain accepted compatibility-only contracts.
+They retain their released syntax and runtime selections and are not silently upgraded. The 14
+fixture exceptions are deliberately smaller than the stable corpus:
+
+| Fixture | Compatibility boundary |
 | --- | --- |
-| `test/fixtures/language-v1.keiro` | valid declared v1 source |
-| `test/fixtures/language-legacy.keiro` | compatible unversioned source with effective version 1 |
-| `test/fixtures/language-future.keiro` | unsupported future version rejected before body parsing |
-| `test/fixtures/language-malformed.keiro` | malformed non-decimal version token |
-| `test/fixtures/language-zero.keiro` | invalid zero version |
+| `test/fixtures/aggregate-collection-expressions-v2-rejects.keiro` | language-2 reserved collection-expression rejection |
+| `test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro` | language-1 scalar-expression predecessor rejection |
+| `test/fixtures/contract-v1-compat.keiro` | language-1 permissive `Text` contract IDs |
+| `test/fixtures/id-domain-migration-v3.keiro` | language-3 current TypeID admission versus historical replay |
 | `test/fixtures/language-duplicate.keiro` | duplicate preamble refusal |
+| `test/fixtures/language-future.keiro` | unsupported future version before body parsing |
+| `test/fixtures/language-identifier-v1.keiro` | `language` retained as an identifier in legacy grammar |
+| `test/fixtures/language-identifier-v2.keiro` | `language` retained as an identifier in language 2 |
+| `test/fixtures/language-legacy.keiro` | unversioned source with effective language 1 |
+| `test/fixtures/language-malformed.keiro` | malformed non-decimal version token |
 | `test/fixtures/language-misplaced.keiro` | preamble-after-context refusal |
-| `test/fixtures/id-domain-migration-v3.keiro` | language-3 enforced generated ID with split current admission and historical replay |
+| `test/fixtures/language-v1.keiro` | valid declared language-1 source |
+| `test/fixtures/language-zero.keiro` | invalid zero version |
+| `test/fixtures/nominal-v1.keiro` | language-1 nominal-syntax predecessor rejection |
 
-Version 1 is frozen. Version 2 adds nominal bindings and authoritative scalar expressions while
-retaining runtime semantics 1. Version 3 selects runtime semantics 2 and enforces prefix-bearing
-TypeID-v7 admission without tightening historical generated-event replay. A later syntax feature
-must add a successor registry entry and a fixture showing that the released v1 parser still rejects
-the new syntax. General source/workspace upgrade automation remains deferred to
+General source/workspace upgrade automation remains deferred to
 [IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).
 
 ## Core fixture inventory
 
-This curated inventory covers the primary feature, negative, and evolution surfaces. Every path
-below resolves; the complete machine-checked fixture set contains 238 `.keiro` files as of
-2026-08-01. Successor-language fixtures are named explicitly and remain separate from the frozen
-version-1 corpus.
+This curated inventory covers the primary feature, negative, and evolution surfaces. Every
+ordinary source below declares Language 4; names such as `reservation-v2.keiro` describe event
+schema evolution or historical fixture naming, not the source-language version. The complete
+machine-checked fixture set contains 240 `.keiro` files as of 2026-08-03.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
 | `test/fixtures/aggregate-bad-refs.keiro` | negative aggregate register, command, and write references |
-| `test/fixtures/behavior-complete.keiro` | version-2 complete finite behavior inventory: later/terminal cells, guarded siblings, no-op, generated command identity, and replay-only twin |
+| `test/fixtures/behavior-complete.keiro` | stable complete finite behavior inventory: later/terminal cells, guarded siblings, no-op, generated command identity, and replay-only twin |
 | `test/fixtures/behavior-complete-workspace/service.keiro-workspace` | the same behavior inventory split across attributable workspace members |
 | `test/fixtures/contract-bump-fieldadd.keiro` | additive contract field with schema-version bump |
 | `test/fixtures/contract-discriminator.keiro` | contract discriminator evolution |
@@ -160,26 +178,24 @@ version-1 corpus.
 | `test/fixtures/workqueue-table-divergent.keiro` | negative captured backing-table drift |
 | `test/fixtures/workqueue-uppercase-logical.keiro` | uppercase logical name normalization parity |
 
-## Compiled conformance and harness components
+## Stable primary compiled suites
 
-The 32 current `keiro-dsl-conformance*` Cabal components are all indexed here.
+These 30 components compile generated Language-4 code and form the primary product baseline.
 
 | Component | Proves |
 | --- | --- |
 | `test/conformance/` (`keiro-dsl-conformance`) | canonical generated aggregate plus filled transducer, replay validation, codec round-trips, and behavior |
-| `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.7 attribution; 13 verify and one conservative guard surface remains unverified |
+| `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.8 attribution; 13 verify and one conservative guard surface remains unverified |
 | `test/conformance-aggregate-scalars/` (`keiro-dsl-conformance-aggregate-scalars`) | generated direct scalar aggregate codecs, snapshots, and transition behavior compile and execute |
-| `test/conformance-scalar-expressions/` (`keiro-dsl-conformance-aggregate-scalar-expressions`) | generated version-2 scalar terms agree across concrete, symbolic, replay, and snapshot surfaces |
+| `test/conformance-scalar-expressions/` (`keiro-dsl-conformance-aggregate-scalar-expressions`) | generated stable scalar terms agree across concrete, symbolic, replay, and snapshot surfaces |
 | `test/conformance-nominal-scalars/` (`keiro-dsl-conformance-nominal-scalars`) | consumer nominal binding laws, ID/enum exact equality, wire rejection, snapshots, and forward/replay parity |
 | `test/conformance-structural/` (`keiro-dsl-conformance-structural`) | structural binding laws, branch coverage, generated codec bytes, projection witnesses, and mapped-register replay |
-| `test/conformance-codec-compare/` (`keiro-dsl-conformance-codec-compare`) | historical and generated structural codecs classify canonical JSON parity and migration differences |
 | `test/conformance-replay/` (`keiro-dsl-conformance-replay`) | generated replay audit targets and seeded/full replay divergence gates compile and execute |
-| `test/conformance-id-domain-migration/` (`keiro-dsl-conformance-id-domain-migration`) | identical malformed generated-ID text replays through the internal legacy event seam and fails current field-located admission |
 | `test/conformance-workspace-nominals/` (`keiro-dsl-conformance-workspace-nominals`) | two workspace aggregate domains import one generated ID/enum authority, exchange those exact types, and round-trip both event codecs |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |
 | `test/conformance-skeletons/` (`keiro-dsl-conformance-skeletons`) | every distinct `new <kind>` starter scaffolds to compiling Haskell |
 | `test/conformance-coldstart/` (`keiro-dsl-conformance-coldstart`) | the original fresh-agent aggregate cold-start closes from skill to green harness |
-| `test/conformance-contract/` (`keiro-dsl-conformance-contract`) | generated contract payload ADTs and codecs round-trip |
+| `test/conformance-contract/` (`keiro-dsl-conformance-contract`) | distinct typed `KindID "inc"`, `KindID "rsv"`, and `KindID "hsp"` fields round-trip canonical JSON and reject invalid current inputs |
 | `test/conformance-intake-runtime/` (`keiro-dsl-conformance-intake-runtime`) | generated inbox disposition/dedupe policy compiles against live inbox types |
 | `test/conformance-intake-full/` (`keiro-dsl-conformance-intake-full`) | filled inbox transaction and outbox producer compile as a full integration service |
 | `test/conformance-publisher-runtime/` (`keiro-dsl-conformance-publisher-runtime`) | generated publisher ordering/backoff compiles against live outbox types |
@@ -197,17 +213,29 @@ The 32 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 | `test/conformance-router-full/` (`keiro-dsl-conformance-router-full`) | filled resolver/router value and target aggregate compile against live APIs |
 | `test/conformance-newsurface/` (`keiro-dsl-conformance-newsurface`) | fresh-agent aggregate/readmodel/router artifact passes 12 scaffold and live-router assertions |
 | `test/conformance-process/` (`keiro-dsl-conformance-process`) | generated process facts are firewall-clean and mutation-pinnable |
-| `test/conformance-v2/` (`keiro-dsl-conformance-v2`) | generated v2 codec and filled upcaster migrate v1 payloads through the chain |
+| `test/conformance-v2/` (`keiro-dsl-conformance-v2`) | historically named stable suite whose event-schema-v2 codec and filled upcaster migrate v1 payloads through the chain |
+
+## Historical and version-independent compiled lanes
+
+| Component | Role / unique proof |
+| --- | --- |
+| `test/conformance-contract-v1-compat/` (`keiro-dsl-conformance-contract-v1-compat`) | compatibility-only language-1 permissive `Text` contract DTO and `inc-1` sample |
+| `test/conformance-id-domain-migration/` (`keiro-dsl-conformance-id-domain-migration`) | compatibility-only language-3 malformed generated-ID replay through the internal historical seam, with current admission rejection |
+| `test/conformance-codec-compare/` (`keiro-dsl-conformance-codec-compare`) | version-independent historical/generated structural codec parity and migration comparison, with no source-language fixture |
 
 ## Mutation and gate scripts
 
 | Script | Shows |
 | --- | --- |
+| `test/aggregate-scalar-expression-mutation-test.sh` | arithmetic, generated guard/write, explicit-Hole envelope/fold, and verification mutations fail while fresh scaffolding restores exact bytes |
+| `test/aggregate-scalars-mutation-test.sh` | dishonest `Natural` event persistence fails the named replay-safety register boundary |
 | `test/behavior-complete-mutation-test.sh` | twelve missing, dishonest, wrong-command, misattributed, codec, register, and generated-output mutations fail exact behavior obligations while an obsolete output hook stays unable to affect execution |
-| `test/mutation-test.sh` | flipping the filled aggregate guard reddens a specific behavior assertion |
+| `test/mutation-test.sh` | temporarily flipping the stable generated aggregate guard reddens a specific behavior assertion and restores the file |
 | `test/diff-test.sh` | unsafe evolution is BREAKING while versioned/upcast evolution is ADDITIVE |
 | `test/process-mutation-test.sh` | changing the timer rejection inversion reddens its process fact |
+| `test/replay-mutation-test.sh` | routing a generated emit through a dishonest wire constructor reddens only the forward/replay register assertion |
 | `test/router-mutation-test.sh` | changing target-keyed router identity reddens its router fact |
+| `test/structural-mutation-test.sh` | binding, fixture coverage, and generated mapped-state event omissions fail their structural/replay gates |
 | `test/workflow-mutation-test.sh` | changing ordered workflow notation reddens its workflow fact |
 | `test/id-domain-migration-mutation-test.sh` | replacing the internal legacy replay seam with the current parser reddens the exact migration assertion and restores the generated codec |
 
@@ -217,7 +245,8 @@ Generated trees under each `test/conformance*/Generated/` directory are raw scaf
 and are pinned byte-for-byte where the suite supports regeneration. Hand-owned modules next
 to those trees are the worked fills. The most useful starting points are:
 
-- `test/conformance/HospitalCapacity/Reservation/Holes.hs` for a keiki transducer.
+- `test/conformance/HospitalCapacity/Reservation/Holes.hs` for a typed transition-output mapping
+  and projection apply boundary beside a generated Language-4 transducer.
 - `test/conformance-behavior-complete/BehaviorComplete/Journey/BehaviorHoles.hs` for a complete
   typed behavior-witness list spanning later states, terminal rejections, and replay-only history.
 - `test/conformance-process-full/SurgeDemo/SurgeFlow/Manager.hs` for category-safe process

@@ -2,8 +2,8 @@
 name: keiro-dsl-authoring
 description: >
   Author a keiro service as a typed `.keiro` specification and drive the keiro-dsl toolchain
-  end to end: write the spec, `check` it, `scaffold` the symbol-free deterministic layer plus
-  typed holes, fill the holes and the transducer body against the GENERATED signatures, run
+  end to end: write the spec, `check` it, `scaffold` the deterministic layer plus explicit
+  typed holes, fill those holes against the GENERATED signatures, run
   the harness, and `diff` the spec to gate unsafe evolution. TRIGGER when: building or changing
   a keiro service (aggregate/snapshot, process manager + timer, router, Kafka
   inbox/outbox/contract, pgmq workqueue/dispatch, read model, durable workflow/operation) and
@@ -22,20 +22,21 @@ edit a `-- @generated` module.
 
 ## The load-bearing rules (read these first)
 
-1. **Declare the released language contract.** Every new complete source starts with
-   `language keiro-dsl 1`, before `context`. Version 1 is frozen: do not add later syntax to its
-   parser. Unversioned sources are accepted only as the explicit legacy form whose effective
-   version is 1; ordinary parse/pretty preserves that distinction and does not migrate them.
-   Released syntax is owned by an explicit immutable profile, not numeric version ordering. A new
-   feature belongs to one grammar concern and must be deliberately listed in every profile that
-   accepts it, with predecessor rejection coverage.
+1. **Declare the stable language contract.** Every new complete source starts with
+   `language keiro-dsl 4`, before `context`. Language 4 is the sole stable authoring version;
+   versions 1 through 3 and unversioned sources remain accepted compatibility contracts and are
+   never silently upgraded. Released syntax and runtime behavior are owned by explicit immutable
+   profiles, not numeric version ordering. A new feature belongs to one grammar concern and must
+   be deliberately listed in every profile that accepts it, with predecessor rejection coverage.
 2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
-   Fill only the create-if-absent `Holes.hs` / `ProcessHoles.hs` modules, against the
-   signatures the generated layer exports.
-3. **The firewall invariant.** No `-- @generated` module ever contains a keiki symbolic
-   operator (`./=`, `.==`, `.||`, `lit`, `B.slot`, `B.requireGuard`). Those appear only in
-   the hand-owned hole modules you write. If you find one in a generated module, that's a
-   bug in the scaffolder, not something to "fix" in place.
+   Language 4 generates every transition whose guards, writes, emits, and target are completely
+   expressed in the source. Fill only create-if-absent modules and signatures for explicitly
+   hand-owned behavior such as `implementation hole`, projection SQL, bindings, and upcasters.
+3. **The firewall invariant.** A generated aggregate `Transducer.hs` is the one intentional
+   generated boundary allowed to contain keiki symbolic operators (`./=`, `.==`, `.||`, `lit`,
+   `B.slot`, `B.requireGuard`); it authoritatively lowers Language-4 expressions. Other generated
+   modules remain firewall-clean. If an operator appears elsewhere, fix the scaffolder or the
+   source—never patch the generated output.
 4. **Time is injected, never sampled.** A deadline/sleep is computed from a timestamp carried
    in the input (e.g. `observedAt`), never from a wall-clock read. The validator enforces
    this; don't try to work around it.
@@ -59,7 +60,8 @@ edit a `-- @generated` module.
    replay-safe, and the generated harness's `validateTransducer defaultValidationOptions … ==
    []` assertion is exactly what guarantees it won't. Both bindings live in the `-- @generated`
    module — you never write them; a green harness is what lets them stay green. If it is red,
-   use `TAXONOMY.md` to interpret every warning family and fix the hand-owned transition.
+   use `TAXONOMY.md` to interpret every warning family and fix the source or its explicit
+   hand-owned transition.
 
 ## What to read next
 
@@ -110,7 +112,7 @@ later run no longer produces recorded paths, its exit-0 `stale:` report never de
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
 
 A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
-lines. Each newly authored member declares `language keiro-dsl 1`; inspection reports every
+lines. Each newly authored member declares `language keiro-dsl 4`; inspection reports every
 member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses

@@ -4,9 +4,10 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 1`, or
-select version 2 when the source binds a direct ID, enum, or nominal scalar to a consumer-owned
-type, then write `context <name>` and exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
+Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 4`, then
+write `context <name>` and exactly the nodes the feature needs. Language 4 includes the released
+consumer-owned nominal syntax, generated TypeID admission, typed contract TypeID fields, and the
+strict service surface. Prefer the smallest spec that captures the decisions;
 the deterministic boilerplate is derived, so don't hand-write it.
 
 ### 2. Parse (sanity)
@@ -26,9 +27,10 @@ workspace:
 cabal run keiro-dsl -- inspect service.keiro --format=json
 ```
 
-Declared version 1 is preserved. An unversioned source is reported as `legacy-unversioned` with
-effective version 1 and is not silently rewritten. An unsupported future version is rejected
-before its body is parsed.
+Declared version 4 is reported as `stable`. Versions 1 through 3 are reported as
+`compatibility-only`; an unversioned source is reported as `legacy-unversioned` with effective
+version 1. Inspection and parse/pretty preserve all of those source forms without silently
+rewriting them. An unsupported future version is rejected before its body is parsed.
 
 ### 3. Check (the gate — before any Haskell)
 
@@ -62,8 +64,8 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   `NominalInvalidHaskellSource`, `NominalInvalidQualifiedName`,
   `NominalInvalidIdentity`, `NominalInvalidIdPrefix`,
   `NominalUnsupportedRepresentation`, `NominalEmptyEnumRepresentation`,
-  `NominalMissingInitialValue`, and `NominalNameCollision`. Using nominal syntax under version 1
-  is rejected earlier as `LanguageFeatureRequiresVersion`.
+  `NominalMissingInitialValue`, and `NominalNameCollision`. Historical version-1 sources still
+  reject nominal syntax at the language boundary as `LanguageFeatureRequiresVersion`.
 - Process, router, and worker policy: `SagaCategoryIllegal`, `ProcessFireAtNotInjected`,
   `ProcessDispatchIdSupplied`, `ProcessUnresolvedRef`, `ProcessFieldBindingUnresolved`,
   `ProcessTimerCeilingInvalid`, `RouterUnresolvedRef`, `RouterKeyFieldUnknown`,
@@ -131,10 +133,11 @@ independently into the same output tree after adoption.
 
 ### 5. Fill the holes
 
-Open the hole modules. Each hole is a typed signature with a `-- HOLE …` annotation carrying
-the spec decision to encode (e.g. `-- HOLE guard: divertStatus != TotalDivert || …`). Fill
-the body against the **generated** names (the TH-produced `inCtor…`/`wire…`/`…TermFields`,
-the `Keiro.Codec`, the `ProcessManager` wiring). Use the corpus
+Open the hole modules. Language 4 generates ordinary transition guards, writes, emits, and
+targets. Each remaining hole is an explicitly hand-owned boundary with a typed signature and a
+`-- HOLE …` annotation—for example an `implementation hole`, projection apply, upcaster,
+consumer binding, or effectful resolver. Fill the body against the **generated** names (the
+TH-produced `inCtor…`/`wire…`/`…TermFields`, the `Keiro.Codec`, the `ProcessManager` wiring). Use the corpus
 (`docs/corpus/keiro-dsl-corpus.md`) to see how a real spec's holes were filled. **Never edit
 a `-- @generated` module** — change the `.keiro` and re-scaffold instead.
 
@@ -154,8 +157,9 @@ the inverse, or move JSON policy into the binding. A refined consumer type belon
 The scaffolder emits a harness (`Harness.hs` for aggregates; a facts harness for processes)
 plus golden round-trips. Compile and run it (via the relevant `cabal test` component). It
 asserts `validateTransducer == []`, codec round-trips, the disposition/time-injection/id
-decisions, and a behavioural accept. A wrong fill turns a **specific** named test red. Green
-harness = your fill matches the spec.
+decisions, and a behavioural accept. A wrong source lowering or hole fill turns a **specific**
+named test red. A green harness shows that the generated behavior and explicit fills agree with
+the checked spec.
 
 If validation is red or startup reports `is not replay-safe`, open `TAXONOMY.md`. It explains
 all eight warning families, including why a `state-changing-epsilon` transition must emit an

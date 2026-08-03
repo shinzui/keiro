@@ -1,92 +1,103 @@
-# Worked walkthrough: the Reservation aggregate
+# Worked walkthrough: the stable Reservation aggregate
 
-This closes the full loop on a real captured fixture, end to end. All paths are repo-relative
+This closes the full loop on a real Language-4 fixture, end to end. All paths are repo-relative
 to `/Users/shinzui/Keikaku/bokuno/keiro`.
 
-## 1. The spec
+## 1. Start from the stable source
 
-`keiro-dsl/test/fixtures/reservation.keiro` starts with `language keiro-dsl 1` and declares one
-`aggregate Reservation`: three id
-types, three enums, a `rule`, four registers, six states (three terminal), two commands, two
-events, two transitions (the first with a guard `divertStatus != TotalDivert ||
-lifeCriticalOverride` and a register write), a `wire` line, and a `projection` with a
-`status-map`.
+`keiro-dsl/test/fixtures/reservation.keiro` starts with `language keiro-dsl 4` and declares one
+`aggregate Reservation`: three ID types, three enums, a rule, three registers, six states (three
+terminal), two commands, two events, two transitions, a wire policy, and a projection.
 
 ```bash
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro   # round-trips
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro   # OK, exit 0
-cabal run keiro-dsl -- inspect keiro-dsl/test/fixtures/reservation.keiro --format=json
+cabal run -v0 keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro
+cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro
+cabal run -v0 keiro-dsl -- inspect keiro-dsl/test/fixtures/reservation.keiro --format=json
 ```
 
-`parse` retains the declaration. `inspect` reports source form `declared` and both declared and
-effective version 1; it is the provenance check to use before syntax evolution work.
+`parse` retains the declaration. `inspect` reports `languageVersion: 4` and
+`languageSupport: stable`. Versions 1 through 3 remain accepted as `compatibility-only`; neither
+inspection nor parse/pretty silently upgrades them.
 
-## 2. Scaffold
+## 2. Scaffold the checked service
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out /tmp/gen
-find /tmp/gen -name '*.hs' | sort
+out_dir="$(mktemp -d)"
+cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out "$out_dir"
+find "$out_dir" -name '*.hs' | sort
 ```
 
-You get four `-- @generated` modules (`Domain`, `Codec`, `EventStream`, `Projection`) + a
-`Harness` + a create-if-absent `HospitalCapacity/Reservation/Holes.hs`. The Domain module has
-the state vertex enum, the command/event records + sums, the `ReservationRegs` type-list,
-`initialReservationRegs`, and the two TH splices — and **no** keiki symbolic operator
-(firewall). The guard you must encode is annotated in `Holes.hs`:
+The stable plan contains context nominal modules, replay audit, aggregate domain, codec,
+transducer, behavior contract, event stream, projection, and harness modules. Generated files
+carry a `language keiro-dsl 4` banner. The create-if-absent `Holes.hs` keeps the projection apply
+function and the one transition output declared as `implementation hole`; `BehaviorHoles.hs`
+keeps consumer-owned behavior witnesses. Re-scaffolding overwrites generated files but not these
+hand-owned modules.
 
-```text
--- HOLE guard: divertStatus != TotalDivert || lifeCriticalOverride
-```
+The lifecycle vertex is not mirrored in a register: `goto ReservationHeld` owns the state change.
+The generated transducer lowers the source guard and emit directly, while the filled output hole
+constructs `TransferReservationConfirmedTermFields` against its generated signature.
 
-## 3. Fill the transducer hole
+## 3. Observe Language-4 ID admission
 
-The committed reference fill lives at
-`keiro-dsl/test/conformance/HospitalCapacity/Reservation/Holes.hs`. It encodes the guard with
-keiki operators against the generated names:
+The three source declarations generate distinct `TransferReservationId`, `HospitalId`, and
+`CommandId` types. Their public constructors validate current TypeID-v7 text:
 
 ```haskell
-B.requireGuard (d.divertStatus ./= lit TotalDivert .|| d.lifeCriticalOverride .== lit True)
-B.slot @"reservationState" =: lit ReservationHeld
-B.emit wireTransferReservationCreated TransferReservationCreatedTermFields { … }
-B.goto ReservationHeld
+transferReservationIdValue :: TransferReservationId
+transferReservationIdValue =
+  either (error . show) id
+    (parseTransferReservationId "rsv_01h455vb4pex5vsknk084sn02q")
 ```
 
-Note: these symbolic operators live **only** here, never in a `-- @generated` module.
+The generated harness uses the same `parse…Id` constructors for every command, event, and initial
+register sample. Wrong prefixes, malformed text, non-canonical spellings, and non-v7 UUIDs cannot
+enter through these current constructors or JSON decoders. The internal
+`unsafe…FromLegacyText` functions exist only for historical event replay; authoring code must not
+import `Generated.…Nominals.Internal`.
 
-## 4. Harness green
+## 4. Compile and run the harness
 
-The `keiro-dsl-conformance` cabal component compiles the generated modules + this filled
-`Holes.hs` against keiki/keiro and runs the generated harness:
+The checked-in reference component compiles the generated tree with the hand-owned fills and runs
+the generated assertions:
 
 ```bash
-cabal test keiro-dsl-conformance
-# PASS  validateTransducer is empty
-# PASS  clock-free: spec samples no wall clock
-# PASS  golden round-trip: TransferReservationCreated
-# PASS  golden round-trip: TransferReservationConfirmed
-# PASS  accepts RequestTransferReservation from ReservationUnrequested
+cabal test keiro-dsl-conformance --test-show-details=direct
 ```
 
-If `validateTransducer` is not empty, use `TAXONOMY.md` to start from the named vertex and
-repair the corresponding hand-owned edge. In particular, an output-free edge that changes
-state is `state-changing-epsilon`; emitting a real event is the preferred fix.
+It proves replay validation is empty, both events round-trip through the persisted codec, a valid
+current-ID command reaches `ReservationHeld`, and forward execution agrees with replay for the
+final vertex and all three domain registers. Its driver also pins canonical event JSON bytes and
+unknown-event rejection.
 
-## 5. The harness pins behaviour (mutation)
+If replay validation is red, use `TAXONOMY.md` to start from the named vertex and repair the source
+or corresponding hand-owned implementation. Do not edit a generated module or bypass the gate
+with `mkEventStreamUnchecked`.
 
-`bash keiro-dsl/test/mutation-test.sh` flips the filled guard `./=` to `.==` and shows the
-specific `accepts RequestTransferReservation …` assertion turn **red** — proving the harness,
-not the scaffold, is what guarantees your fill matches the spec. Restoring returns it to
-green.
+## 5. Prove the harness catches behavior drift
 
-## 6. Evolution (diff)
+```bash
+bash keiro-dsl/test/mutation-test.sh
+```
 
-`keiro-dsl/test/fixtures/reservation-v2.keiro` evolves `TransferReservationCreated` to v2 with
-`upcast from v1 = HOLE`. `bash keiro-dsl/test/diff-test.sh` shows that adding a field WITHOUT
-the version bump is `BREAKING` (exit non-zero), while the v2 + upcaster form is `ADDITIVE`
-(exit 0) — the merge gate. The `keiro-dsl-conformance-v2` component proves the v2 codec
-(`schemaVersion = 2`, `upcasters = [(1, …)]`) compiles and the filled upcaster migrates a
-v1-tagged payload through the chain.
+The script temporarily flips the stable generated guard from inequality to equality, confirms the
+named acceptance assertion turns red, and restores the file. This demonstrates that the harness,
+not successful scaffolding by itself, pins the checked behavior.
 
-That is the whole loop: write → check → scaffold → fill → harness → diff, with the agent
-never touching a generated module and never being told the answer — only the generated
-signatures and the corpus examples.
+## 6. Gate event evolution
+
+`keiro-dsl/test/fixtures/reservation-v2.keiro` uses event `v2` and `upcast from v1 = HOLE` clauses;
+those numbers are event schema versions, not source-language versions. The fixture itself remains
+a Language-4 source.
+
+```bash
+bash keiro-dsl/test/diff-test.sh
+```
+
+Adding a field without the event-version bump is `BREAKING`; the contiguous event-v2/upcaster form
+is `ADDITIVE`. The `keiro-dsl-conformance-v2` component compiles that codec and proves a v1-tagged
+payload traverses the upcast chain.
+
+That is the stable loop: write Language 4 → check → scaffold → fill explicit holes → run the
+harness → diff. The `.keiro` source owns deterministic behavior and current admission; hand-owned
+modules own only the boundaries that the notation marks as holes.

@@ -45,6 +45,16 @@ declaration unless a later upgrade operation rewrites the file. Once a language 
 released, new syntax or semantics must be registered under a successor version with its
 predecessor relation. Existing version parsers and their rejection fixtures are not widened.
 
+**Accepted language versions and the stable authoring version are distinct registry facts.** Each
+`LanguageDefinition` carries a `LanguageSupport` lifecycle value. Exactly one registered entry is
+`Stable`; every other released entry is `CompatibilityOnly`. `supportedLanguageVersions` continues
+to enumerate every accepted source contract, while `currentStableLanguageVersion` selects the
+sole stable entry and fails if the registry has zero or multiple stable entries. New skeletons,
+authoring examples, and primary conformance derive their source version from that stable entry.
+Language 4 is currently stable; versions 1 through 3 and `LegacyUnversioned` remain readable with
+their immutable released meaning and are never silently rewritten. A later stable designation
+changes the authoring and primary-test baseline, not the behavior of any predecessor.
+
 **Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
 Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
@@ -85,6 +95,14 @@ bytes. Because aggregate fold behavior is unchanged, runtime semantics 3 reuses
 the predecessor's aggregate fingerprint segment; service-aware scaffold,
 manifest, durable ID-domain, and diff consumers still observe the new contract
 capability through `CheckedService`.
+
+**Primary conformance follows the stable registry entry; historical behavior uses named lanes.**
+Ordinary feature, negative-validation, diff, workspace, and skeleton fixtures declare the current
+stable language. Every compiled stable-primary component is checked against a fresh service-aware
+scaffold plan and must carry the stable language banner. Released predecessor syntax, permissive
+decoders, and migration-only replay seams remain covered by an explicit, small compatibility
+inventory whose source version and unique rationale are machine-checked. Version-independent
+comparisons are named separately rather than presented as either stable or historical authoring.
 
 **Parsing and semantic graph construction are separated by located surface syntax.** After source
 selection, Megaparsec produces a non-lossless `SurfaceSource`. Its document clauses and ordered
@@ -142,6 +160,9 @@ fleet planning remain in
   operation; commands that load its members apply the source gate to each member.
 - Existing unversioned sources keep working, while inspection can distinguish intentional version
   declarations from compatibility fallback.
+- Accepted does not mean recommended for new work: inspection reports `stable` or
+  `compatibility-only`, skeletons emit the sole stable version, and neither path upgrades old
+  sources as a side effect.
 - Workspace composition preserves truthful member provenance without contaminating the merged
   semantic graph, while exposing one checked contract to every semantic planner.
 - Exact source evidence is available before lowering without adding spans or trivia to `Spec`.
@@ -156,6 +177,9 @@ fleet planning remain in
   predecessor's aggregate-fold projection while changing another checked
   semantic consumer. Fingerprint equality is explicit and does not authorize
   scaffold or diff code to discard `CheckedService`.
+- A stable-language release requires migrating the primary conformance inventory in the same
+  change. Historical assertions remain executable through named compatibility components instead
+  of holding the ordinary corpus on an older source contract.
 - Source-aware tools can branch on frontend phase, stable code, and exact span without parsing
   human-readable Megaparsec output; compatibility callers retain the released text.
 - A version-2 expression is not accepted merely because its tokens parse. Its
