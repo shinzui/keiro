@@ -121,6 +121,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   private-binding warning suppression, and generated workflow facts expose
   typed list structure.
 
+### Other Changes
+
+- Generated build manifests now declare the complete consumer compilation
+  contract: `default-language: GHC2024` and `OverloadedStrings` as the sole
+  default extension, followed by the module and dependency blocks. Generated
+  modules emit specialized local LANGUAGE pragmas only when their syntax needs
+  them. Re-scaffold before compiling under the narrower advertised profile;
+  create-once hand-owned files keep their existing local pragmas.
+
 ## 0.8.0.0 — 2026-08-01
 
 ### Breaking Changes

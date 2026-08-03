@@ -45,8 +45,8 @@ and retain their own pragmas.
 - [x] (2026-08-03) Milestone 3: added policy and conditional-emission regressions, regenerated only
   overwriteable conformance files, and compiled all conformance components under the
   narrow generated-output profile.
-- [ ] Milestone 4: document the consumer contract, record the durable decision in the
-  ADR bundle, run the full validation matrix, and complete the retrospective.
+- [x] (2026-08-03) Milestone 4: documented the consumer contract, recorded the durable decision in the
+  ADR bundle, ran the full validation matrix, and completed the retrospective.
 
 
 ## Surprises & Discoveries
@@ -198,6 +198,15 @@ and retain their own pragmas.
   switched to and compiled under `common generated-output`; no additional hand-owned
   extension dependency appeared beyond the four planned `OverloadedLabels` drivers.
 
+- Observation: all four mutation checks failed at their intended independent
+  boundaries. Injecting `DataKinds` into a nominal-projection emitter made the focused
+  Hspec group report `disallowed local extensions ["DataKinds"]`; removing
+  `TypeFamilies` produced GHC-06206 illegal family-instance errors; removing
+  `QualifiedDo` produced GHC-40280 on the generated `B.do` blocks; and removing the
+  shared `OverloadedStrings` default produced repeated `[Char]` versus `Text` errors in
+  generated nominal parsing. Each mutation target was restored byte-for-byte before
+  continuing.
+
 - Decision: preserve and integrate the in-progress import-planning work described by
   [ExecPlan 184](184-generate-idiomatic-haskell-imports-for-consumer-owned-types.md).
   Rationale: both plans touch `Keiro.Dsl.Scaffold` and generated fixtures. This plan may
@@ -258,10 +267,22 @@ compile needed only the four planned local `OverloadedLabels` declarations in ha
 drivers, so the emitted GHC2024 plus `OverloadedStrings` contract is sufficient for the
 complete generated corpus.
 
-Before marking the plan complete, compare a freshly scaffolded manifest and generated
-tree with the purpose above. Then distill the final language contract, local-exception
-rule, and generated-versus-hand-owned boundary into a new ADR under `docs/adr/`, update
-`docs/adr/log.md`, and record the resulting ADR link here.
+[ADR 0019](../adr/0019-generated-haskell-has-an-explicit-edition-and-local-extension-contract.md)
+now records the manifest-owned GHC2024 plus `OverloadedStrings` baseline, the closed
+usage-driven local extension rule, the independent conformance profile, and the
+overwriteable-versus-create-once ownership boundary.
+
+Milestone 4 is complete. The user guide now tells consumers to copy the language,
+default-extension, module, and dependency blocks; the `0.9.0.0` changelog carries the
+same compatibility guidance. All four mutation checks failed for the expected reason
+and were restored byte-for-byte. Final validation passed with `nix fmt`, `cabal build
+all`, `just verify`, `nix flake check`, strict ADR profile/log enforcement, the extension
+policy, and `git diff --check`.
+
+The result matches the purpose: manifests expose one sufficient compilation contract,
+overwriteable modules retain only syntax-driven exceptions, the complete generated
+corpus compiles independently from the generator's broader defaults, and create-once
+hand-owned files remain untouched by regeneration and pragma cleanup.
 
 
 ## Context and Orientation
@@ -851,3 +872,12 @@ cleanup when Keiro adopts that edition, not preemptively broaden the GHC2024 con
 Documented the inverse promotion procedure and clarified that an extension supplied by a
 new language edition is removed from local pragmas without also being repeated in Cabal's
 `default-extensions`.
+
+
+## Revision Note (2026-08-03, implementation)
+
+Implemented the four milestones against the live post-Plan-184 emitter and 34-component
+conformance inventory. Recorded the separately generated codec-comparison path, the
+final 224-line pragma inventory, mutation evidence, ADR 0019, and the complete validation
+matrix. No dependency bounds, package versions, DSL syntax, runtime behavior, or
+create-once ownership rules changed.

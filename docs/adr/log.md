@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-03
+* **Add**: Record the generated Haskell language and local-extension contract (plan 185).
 * **Update**: Record deterministic module-level Haskell import planning: unique consumer types use explicit unqualified imports, collisions and external APIs use stable short aliases, complete identities remain semantic provenance, and create-once modules stay untouched (plan 184).
 * **Update**: Make language 4 the stable authoring and primary conformance contract (plan 183).
 

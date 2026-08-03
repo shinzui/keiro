@@ -80,9 +80,16 @@ aggregate Thing
 `check` prints `OK` and exits zero for a valid source. `scaffold` validates
 again before writing. It emits replaceable files bearing an exact `@generated`
 banner, create-once hand-owned modules, a conformance harness, a build manifest,
-and a scaffold record. Add the manifest's `other-modules` and `build-depends`
-entries to the consuming Cabal component, fill the create-once modules, and run
-the generated harness in CI.
+and a scaffold record. Copy the manifest's `default-language`,
+`default-extensions`, `other-modules`, and `build-depends` blocks into the
+consuming Cabal component, fill the create-once modules, and run the generated
+harness in CI.
+
+The generated Haskell contract is GHC2024 with `OverloadedStrings` as its one
+shared default extension. Generated modules declare specialized extensions
+locally, and only when their emitted syntax needs them. Create-once hand-owned
+modules are outside that cleanup boundary and retain the pragmas they owned when
+they were created.
 
 After changing a deployed specification, run a compatibility diff before
 scaffolding:
