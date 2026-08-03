@@ -5,6 +5,6 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 
 data ArtifactMetadataShape = ArtifactMetadata
-  { note :: !(Maybe (Text))
+  { note :: !(Maybe Text)
   }
   deriving stock (Eq, Generic, Show)

@@ -8,6 +8,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Other Changes
 
+- **keiro-dsl**: generated structural record fields and union payloads now use
+  minimal precedence-correct parentheses without changing schema or wire
+  semantics.
 - **keiro-dsl**: generated Haskell plans consumer-owned imports once per
   module. Unique type names use explicit unqualified imports; collisions,
   external values, constructors, generated shapes, and binding APIs use

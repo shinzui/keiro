@@ -44,8 +44,18 @@ unchanged.
   record and union-payload regressions.
 - [x] (2026-08-03) Completed Milestone 1 validation with the corrected Hspec
   argument-forwarding command: 12 focused examples passed with zero failures.
-- [ ] Milestone 2: regenerate the affected overwriteable shape modules, update
-  changelogs, and pass focused plus package-wide validation.
+- [x] (2026-08-03) Regenerated both conformance fixtures; exactly the three
+  expected overwriteable shape modules changed, and both scaffold-record files
+  remained byte-identical.
+- [x] (2026-08-03) Added presentation-only entries to the root and `keiro-dsl`
+  changelogs.
+- [x] (2026-08-03) Completed Milestone 2 validation: both affected conformance
+  suites passed, the full Hspec suite passed 519 examples, `cabal test keiro-dsl`
+  passed every package target, `nix fmt` made no changes, and whitespace plus
+  obsolete-pattern checks passed.
+- [x] (2026-08-03) Completed the ADR distillation pass and confirmed that ADR 12
+  already captures the relevant schema-authority boundary; no durable decision
+  changed and no ADR update is needed.
 
 
 ## Surprises & Discoveries
@@ -109,6 +119,12 @@ unchanged.
   `nix/treefmt.nix`, which already declares those options. The earlier full `nix fmt`
   run had succeeded with the current formatter configuration.
 
+- Observation: fresh scaffolding changed only
+  `ArtifactInfo.hs`, `ArtifactMetadata.hs`, and `StartPayload.hs` in the two
+  conformance roots. The resulting evidence includes `artifactHash :: !(Maybe Text)`,
+  `tags :: ![Text]`, and `note :: !(Maybe Text)`, while both scaffold-record diffs were
+  empty and every create-once Hole or binding module was reported as skipped.
+
 
 ## Decision Log
 
@@ -162,16 +178,34 @@ unchanged.
   match phrase.
   Date: 2026-08-03.
 
+- Decision: complete the plan without creating or revising an ADR.
+  Rationale: final implementation and validation confirmed a private renderer-only
+  presentation change. It did not alter schema authority, wire identity, binding
+  compatibility, public APIs, dependencies, or the generated-language contract already
+  covered by ADR 12.
+  Date: 2026-08-03.
+
 
 ## Outcomes & Retrospective
 
-Milestone 1 is complete. `renderShapeType` now distinguishes atomic types from type
-applications, and the focused structural scaffold group passes 12 examples with zero
-failures. The regression surface covers exact fixture spellings, nested record fields,
-and strict union payloads. Milestone 2 still needs to regenerate committed output,
-update changelogs, and run package-wide validation. Before marking the plan complete,
-confirm that no decision or discovery needs promotion to `docs/adr/`, then summarize
-the final generated spellings and validation results here.
+The plan is complete. `renderShapeType` now carries atomic-versus-application precedence
+through its total `foldTypeExpr`, grouping applications only after a strictness bang or
+when nested as another application's argument. Lists use their brackets as the complete
+type delimiter. Focused regressions cover the consumer fixture, nested record fields,
+and strict union payloads.
+
+Fresh scaffolding changed only the three predicted shape modules. Representative output
+is now `artifactHash :: !(Maybe Text)`, `tags :: ![Text]`, and
+`note :: !(Maybe Text)`. Scaffold records and create-once modules remained unchanged,
+and both changelogs describe the result as presentation-only.
+
+Validation passed at every planned level: 12 focused examples, both compiled affected
+conformance suites, 519 full `keiro-dsl-test` examples, every target selected by
+`cabal test keiro-dsl`, formatting, whitespace, and the obsolete-pattern scan. No work
+remains. The only operational lesson was to use repeated singular `--test-option`
+arguments with the current Cabal version; the renderer design itself matched the safety
+model from planning. Final ADR distillation found no new durable architectural context
+beyond ADR 12.
 
 
 ## Context and Orientation
@@ -457,3 +491,11 @@ The implementation is expected to modify
 and this plan as a living document. `Keiro.Dsl.ExplainBindings`,
 `Keiro.Dsl.ScaffoldRun`, scaffold-record schemas, package dependencies, and public exposed
 modules are out of scope.
+
+
+## Revision Note
+
+Revision note (2026-08-03): implemented both milestones, recorded the Cabal focused-test
+argument correction and stale local hook refresh, regenerated the exact three expected
+shape modules, added both changelog entries, captured all validation evidence, and
+completed ADR distillation without an ADR change because the result is presentation-only.

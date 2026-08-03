@@ -6,6 +6,6 @@ import GHC.Generics (Generic)
 
 data StartPayloadShape = StartPayload
   { label :: !Text
-  , note :: !(Maybe (Text))
+  , note :: !(Maybe Text)
   }
   deriving stock (Eq, Generic, Show)

@@ -10,11 +10,11 @@ import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata qualifi
 data ArtifactInfoShape = ArtifactInfo
   { artifactKey :: !Text
   , displayName :: !Text
-  , artifactHash :: !(Maybe (Text))
+  , artifactHash :: !(Maybe Text)
   , artifactKind :: !ArtifactKind.ArtifactKindShape
   , location :: !ArtifactLocation.ArtifactLocationShape
   , metadata :: !ArtifactMetadata.ArtifactMetadataShape
   , active :: !Bool
-  , tags :: !([Text])
+  , tags :: ![Text]
   }
   deriving stock (Eq, Generic, Show)

@@ -8,6 +8,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Generated structural record fields and union payloads now use minimal
+  precedence-correct parentheses without changing schema or wire semantics.
 - Generated Haskell now plans consumer-owned imports once per module. Unique
   type names use explicit unqualified imports; collisions, external values,
   constructors, generated shapes, and binding APIs use deterministic short
