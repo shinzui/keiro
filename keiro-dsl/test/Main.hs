@@ -55,7 +55,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -4084,6 +4084,20 @@ main = hspec $ do
           facade = generatedTextEndingIn "StructuralProjections.hs" modules
       shape `shouldSatisfy` T.isInfixOf "data ArtifactInfoShape = ArtifactInfo"
       shape `shouldSatisfy` T.isInfixOf "ArtifactKind.ArtifactKindShape"
+      mapM_
+        (shape `shouldSatisfy`)
+        [ T.isInfixOf "description :: !(Maybe Text)",
+          T.isInfixOf "tags :: ![Text]",
+          T.isInfixOf "labels :: ![Maybe Text]",
+          T.isInfixOf "attributes :: !(Map Text Text)"
+        ]
+      mapM_
+        (shape `shouldNotSatisfy`)
+        [ T.isInfixOf "description :: !(Maybe (Text))",
+          T.isInfixOf "tags :: !([Text])",
+          T.isInfixOf "labels :: !([(Maybe (Text))])",
+          T.isInfixOf "attributes :: !(Map Text (Text))"
+        ]
       shape `shouldSatisfy` (not . T.isInfixOf "KeiroBindings")
       facade `shouldSatisfy` T.isInfixOf "type FieldName"
       facade `shouldSatisfy` T.isInfixOf "= \"/key\""
@@ -4118,6 +4132,45 @@ main = hspec $ do
       collidedWitnesses `shouldSatisfy` all (T.isPrefixOf "artifactInfoFooBar")
       collidedWitnesses `shouldSatisfy` all (T.isSuffixOf "Witness")
       collidedWitnesses `shouldSatisfy` all ((== 8) . T.length . T.dropEnd (T.length ("Witness" :: T.Text)) . T.drop (T.length ("artifactInfoFooBar" :: T.Text)))
+    it "uses only precedence-required parentheses in nested record field types" $ do
+      let spec =
+            mappedSpec
+              [ completeStructural
+                  "Nested"
+                  ( recordShape
+                      [ TMap (TOptional TText),
+                        TOptional (TList TText),
+                        TOptional (TMap TText)
+                      ]
+                  )
+              ]
+          shape = generatedTextEndingIn "Structural/Shape/Nested.hs" (scaffoldStructural (defaultContext (specContext spec)) spec)
+      mapM_
+        (shape `shouldSatisfy`)
+        [ T.isInfixOf "field1 :: !(Map Text (Maybe Text))",
+          T.isInfixOf "field2 :: !(Maybe [Text])",
+          T.isInfixOf "field3 :: !(Maybe (Map Text Text))"
+        ]
+    it "uses the same precedence rules for strict union payloads" $ do
+      let spec =
+            mappedSpec
+              [ completeStructural
+                  "Payload"
+                  ( ShapeUnion
+                      (TaggedObject "tag" "contents" RejectUnknown)
+                      [ WireArm "OptionalPayload" "optional" (Just (TOptional TText)) noLoc,
+                        WireArm "ListPayload" "list" (Just (TList (TOptional TText))) noLoc,
+                        WireArm "MapPayload" "map" (Just (TMap (TOptional TText))) noLoc
+                      ]
+                  )
+              ]
+          shape = generatedTextEndingIn "Structural/Shape/Payload.hs" (scaffoldStructural (defaultContext (specContext spec)) spec)
+      mapM_
+        (shape `shouldSatisfy`)
+        [ T.isInfixOf "OptionalPayload !(Maybe Text)",
+          T.isInfixOf "ListPayload ![Maybe Text]",
+          T.isInfixOf "MapPayload !(Map Text (Maybe Text))"
+        ]
 
   describe "structural manifest" $ do
     it "lists consumer packages and every domain, binding, fixture, and initial module" $ do

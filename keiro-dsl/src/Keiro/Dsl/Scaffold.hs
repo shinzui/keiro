@@ -1906,27 +1906,49 @@ exprRequirements ctx graph =
 
 renderShapeType :: HaskellImportPlan -> Context -> TypeGraph -> ResolvedTypeExpr -> Text
 renderShapeType importPlan ctx graph =
-  foldTypeExpr
-    TypeExprAlgebra
-      { onText = "Text",
-        onInt = "Int",
-        onInteger = "Integer",
-        onBool = "Bool",
-        onNatural = "Natural",
-        onTime = "UTCTime",
-        onJson = "Value",
-        onOptional = \value -> "(Maybe (" <> value <> "))",
-        onList = \value -> "([" <> value <> "])",
-        onMap = \value -> "(Map Text (" <> value <> "))",
-        onRef = \key -> case Map.lookup key (tgDeclarations graph) of
-          Just (ResolvedStructural nested _) ->
-            renderReferenceOrDie
-              importPlan
-              (HaskellReference (structuralShapeModule ctx (sdName nested)) (sdName nested <> "Shape") TypeNamespace RequireQualified)
-          Just (ResolvedOpaque opaque) ->
-            renderReferenceOrDie importPlan (haskellTypeReference (odHaskell opaque))
-          Nothing -> "()"
-      }
+  renderStrictOrApplicationArgument
+    . foldTypeExpr
+      TypeExprAlgebra
+        { onText = atomicShapeType "Text",
+          onInt = atomicShapeType "Int",
+          onInteger = atomicShapeType "Integer",
+          onBool = atomicShapeType "Bool",
+          onNatural = atomicShapeType "Natural",
+          onTime = atomicShapeType "UTCTime",
+          onJson = atomicShapeType "Value",
+          onOptional = applicationShapeType . ("Maybe " <>) . renderStrictOrApplicationArgument,
+          onList = atomicShapeType . ("[" <>) . (<> "]") . renderedShapeTypeText,
+          onMap = applicationShapeType . ("Map Text " <>) . renderStrictOrApplicationArgument,
+          onRef =
+            atomicShapeType . \key -> case Map.lookup key (tgDeclarations graph) of
+              Just (ResolvedStructural nested _) ->
+                renderReferenceOrDie
+                  importPlan
+                  (HaskellReference (structuralShapeModule ctx (sdName nested)) (sdName nested <> "Shape") TypeNamespace RequireQualified)
+              Just (ResolvedOpaque opaque) ->
+                renderReferenceOrDie importPlan (haskellTypeReference (odHaskell opaque))
+              Nothing -> "()"
+        }
+
+data ShapeTypePrecedence
+  = AtomicShapeType
+  | ApplicationShapeType
+
+data RenderedShapeType = RenderedShapeType
+  { renderedShapeTypePrecedence :: !ShapeTypePrecedence,
+    renderedShapeTypeText :: !Text
+  }
+
+atomicShapeType :: Text -> RenderedShapeType
+atomicShapeType = RenderedShapeType AtomicShapeType
+
+applicationShapeType :: Text -> RenderedShapeType
+applicationShapeType = RenderedShapeType ApplicationShapeType
+
+renderStrictOrApplicationArgument :: RenderedShapeType -> Text
+renderStrictOrApplicationArgument rendered = case renderedShapeTypePrecedence rendered of
+  AtomicShapeType -> renderedShapeTypeText rendered
+  ApplicationShapeType -> "(" <> renderedShapeTypeText rendered <> ")"
 
 data StructuralProjection = StructuralProjection
   { spTag :: !Text,

@@ -40,8 +40,10 @@ unchanged.
   by the surrounding Haskell syntax.
 - [x] (2026-08-03) Ran `cabal test keiro-dsl-conformance-structural`; the suite passed
   while compiling hand-owned fields already written as `!(Maybe Text)` and `![Text]`.
-- [ ] Milestone 1: add precedence-aware structural type rendering and focused record
-  and union-payload regressions.
+- [x] (2026-08-03) Added precedence-aware structural type rendering and focused
+  record and union-payload regressions.
+- [x] (2026-08-03) Completed Milestone 1 validation with the corrected Hspec
+  argument-forwarding command: 12 focused examples passed with zero failures.
 - [ ] Milestone 2: regenerate the affected overwriteable shape modules, update
   changelogs, and pass focused plus package-wide validation.
 
@@ -92,6 +94,21 @@ unchanged.
   explicitly tolerates that formatter-only historical spelling, so there is no current
   generator change to make for it here.
 
+- Observation: Cabal 3.16.1.0 splits the plan's quoted
+  `--test-options='--match structural scaffold'` value before Hspec receives it, so
+  the first focused run exited with `unexpected argument 'scaffold'`. Passing
+  `--test-option=--match --test-option='structural scaffold'` preserves the match
+  phrase as one argument.
+  Evidence: the renderer and test module compiled before the test executable rejected
+  the command line, so this did not indicate an implementation failure.
+
+- Observation: the first commit attempt used a stale installed pre-commit hook whose
+  Fourmolu command omitted the repository's `GHC2024` and `ImportQualifiedPost` parser
+  options, so it could not parse the test module's existing postpositive qualified
+  imports. Entering `nix develop` refreshed the generated hook from
+  `nix/treefmt.nix`, which already declares those options. The earlier full `nix fmt`
+  run had succeeded with the current formatter configuration.
+
 
 ## Decision Log
 
@@ -139,12 +156,20 @@ unchanged.
   already establishes the resolved structural graph as the single generation authority.
   Date: 2026-08-03.
 
+- Decision: use Cabal's singular, repeated `--test-option` form for focused Hspec
+  validation in this checkout.
+  Rationale: it forwards the two Hspec arguments without splitting the space-bearing
+  match phrase.
+  Date: 2026-08-03.
+
 
 ## Outcomes & Retrospective
 
-Planning and the safety audit are complete; implementation has not begun. At each
-milestone, record the exact tests run, the generated files changed, and any output that
-did not fit the precedence model described below. Before marking the plan complete,
+Milestone 1 is complete. `renderShapeType` now distinguishes atomic types from type
+applications, and the focused structural scaffold group passes 12 examples with zero
+failures. The regression surface covers exact fixture spellings, nested record fields,
+and strict union payloads. Milestone 2 still needs to regenerate committed output,
+update changelogs, and run package-wide validation. Before marking the plan complete,
 confirm that no decision or discovery needs promotion to `docs/adr/`, then summarize
 the final generated spellings and validation results here.
 
@@ -292,7 +317,7 @@ tests:
 
 ```bash
 nix fmt
-cabal test keiro-dsl-test --test-options='--match structural scaffold'
+cabal test keiro-dsl-test --test-option=--match --test-option='structural scaffold'
 ```
 
 The relevant end of the test output must have this shape:
