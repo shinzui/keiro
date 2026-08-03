@@ -40,6 +40,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
@@ -402,10 +403,7 @@ workflowPatchIds = concatMap go
 emitHarness :: [GoldenPayload] -> Agg -> Text
 emitHarness goldens a =
   nl $
-    [ "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE OverloadedLabels #-}"
-    ]
-      ++ ["{-# LANGUAGE TypeApplications #-}" | hasMappedHarness a]
+    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null replayTransitions) && not (null (aRegs a))]
       ++ [ generatedBanner,
            "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where",
            ""

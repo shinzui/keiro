@@ -4281,6 +4281,121 @@ main = hspec $ do
       harness `shouldNotSatisfy` T.isInfixOf "fixture coverage: vendor.geometry"
       codec `shouldNotSatisfy` T.isInfixOf "encodeVendorGeometryShape"
 
+  describe "generated Haskell language contract" $ do
+    it "limits every representative generated module to the closed local extension set" $ do
+      let allowed =
+            Set.fromList
+              [ "BlockArguments",
+                "DeriveAnyClass",
+                "DuplicateRecordFields",
+                "OverloadedLabels",
+                "OverloadedRecordDot",
+                "QualifiedDo",
+                "TemplateHaskell",
+                "TypeFamilies"
+              ]
+          fixtures =
+            [ "test/fixtures/aggregate-scalar-expressions-v2.keiro",
+              "test/fixtures/nominal-scalars.keiro",
+              "test/fixtures/structural-conformance.keiro",
+              "test/fixtures/reservation.keiro",
+              "test/fixtures/contract-v4.keiro",
+              "test/fixtures/intake.keiro",
+              "test/fixtures/reservation-work.keiro",
+              "test/fixtures/readmodel-runtime.keiro"
+            ]
+      forM_ fixtures $ \fixture -> do
+        modules <- scaffoldFixture fixture
+        forM_ [generatedModule | generatedModule <- modules, kind generatedModule == Generated] $ \generatedModule -> do
+          let actual = Set.fromList (generatedLocalExtensions generatedModule)
+          unless (actual `Set.isSubsetOf` allowed) $
+            expectationFailure (fixture <> ":" <> modulePath generatedModule <> ": disallowed local extensions " <> show (Set.toList (actual `Set.difference` allowed)))
+
+    it "retains specialized syntax extensions and removes GHC2024-covered pragmas" $ do
+      scalar <- scaffoldFixture "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      structural <- scaffoldFixture "test/fixtures/structural-conformance.keiro"
+      reservation <- scaffoldFixture "test/fixtures/reservation.keiro"
+      contract <- scaffoldFixture "test/fixtures/contract-v4.keiro"
+      intake <- scaffoldFixture "test/fixtures/intake.keiro"
+      queue <- scaffoldFixture "test/fixtures/reservation-work.keiro"
+      readModel <- scaffoldFixture "test/fixtures/readmodel-runtime.keiro"
+      generatedExtensionsEndingIn "ScalarAccount/Domain.hs" scalar
+        `shouldBe` ["DeriveAnyClass", "DuplicateRecordFields", "TemplateHaskell"]
+      generatedExtensionsEndingIn "ScalarAccount/Transducer.hs" scalar
+        `shouldBe` ["BlockArguments", "OverloadedLabels", "OverloadedRecordDot", "QualifiedDo"]
+      generatedExtensionsEndingIn "Nominals.hs" scalar `shouldContain` ["DeriveAnyClass", "TypeFamilies"]
+      generatedExtensionsEndingIn "Nominals/Internal.hs" scalar `shouldBe` []
+      generatedExtensionsEndingIn "StructuralProjections.hs" structural `shouldBe` ["TypeFamilies"]
+      let structuralShapeExtensions =
+            [ generatedLocalExtensions generatedModule
+            | generatedModule <- structural,
+              "/Structural/Shape/" `T.isInfixOf` T.pack (modulePath generatedModule)
+            ]
+      structuralShapeExtensions `shouldSatisfy` all null
+      generatedExtensionsEndingIn "Projection.hs" reservation `shouldBe` []
+      generatedExtensionsEndingIn "ReplayAudit.hs" reservation `shouldBe` []
+      generatedExtensionsEndingIn "Contract.hs" contract `shouldBe` ["DuplicateRecordFields", "OverloadedRecordDot"]
+      generatedExtensionsEndingIn "Inbox.hs" intake `shouldBe` []
+      generatedExtensionsEndingIn "Queue.hs" queue `shouldBe` ["OverloadedRecordDot"]
+      generatedExtensionsEndingIn "ReadModel.hs" readModel `shouldBe` ["OverloadedRecordDot"]
+
+    it "conditions record, label, derivation, and duplicate-selector extensions on emitted syntax" $ do
+      mappedGuardSource <- readTestText "test/fixtures/mapped-guard.keiro"
+      mappedGuardParsed <- case parseSource "mapped-guard-no-expression.keiro" (T.replace "guard current == current ; " "" mappedGuardSource) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right parsed -> pure parsed
+      let mappedGuardService = checkedSource mappedGuardParsed
+          mappedGuard = scaffoldServiceModules (defaultContext (specContext (checkedSpec mappedGuardService))) mappedGuardService
+      registerFree <- scaffoldFixture "test/fixtures/order.keiro"
+      readModels <- scaffoldFixture "test/fixtures/readmodel.keiro"
+      snapshot <- scaffoldFixture "test/fixtures/reservation-snapshot.keiro"
+      ordinary <- scaffoldFixture "test/fixtures/reservation.keiro"
+      generatedExtensionsEndingIn "Holder/Domain.hs" mappedGuard `shouldBe` ["TemplateHaskell"]
+      generatedExtensionsEndingIn "Holder/Codec.hs" mappedGuard `shouldBe` []
+      generatedExtensionsEndingIn "Holder/Transducer.hs" mappedGuard
+        `shouldBe` ["BlockArguments", "QualifiedDo"]
+      generatedExtensionsEndingIn "Holder/Harness.hs" mappedGuard `shouldBe` ["OverloadedLabels"]
+      generatedExtensionsEndingIn "Order/Harness.hs" registerFree `shouldBe` []
+      generatedExtensionsEndingIn "Transfer_decisions/ReadModel.hs" readModels `shouldBe` ["OverloadedRecordDot"]
+      generatedExtensionsEndingIn "Subscriptions/ReadModel.hs" readModels `shouldBe` []
+      generatedExtensionsEndingIn "Reservation/Domain.hs" snapshot `shouldContain` ["DeriveAnyClass"]
+      generatedExtensionsEndingIn "Reservation/Domain.hs" ordinary `shouldNotContain` ["DeriveAnyClass"]
+
+      disjoint <-
+        parseInlineSpec "<disjoint-contract>" $
+          T.unlines
+            [ "language keiro-dsl 4",
+              "context language-contract",
+              "contract disjoint {",
+              "  schemaVersion 1",
+              "  discriminator kind",
+              "  topic events \"events\"",
+              "  event First on events { first: text }",
+              "  event Second on events { second: text }",
+              "}"
+            ]
+      emptyPayload <-
+        parseInlineSpec "<empty-contract>" $
+          T.unlines
+            [ "language keiro-dsl 4",
+              "context language-contract",
+              "contract empty {",
+              "  schemaVersion 1",
+              "  discriminator kind",
+              "  topic events \"events\"",
+              "  event Empty on events { }",
+              "}"
+            ]
+      let contractExtensions spec =
+            generatedExtensionsEndingIn
+              "Contract.hs"
+              [ generatedModule
+              | contractNode <- [contractNode | NContract contractNode <- specNodes spec],
+                generatedModule <- scaffoldContract (defaultContext (specContext spec)) contractNode
+              ]
+      contractExtensions disjoint `shouldBe` ["OverloadedRecordDot"]
+      contractExtensions emptyPayload `shouldBe` []
+
   describe "manifest (M2)" $ do
     it "lists exactly the modules the scaffolder produced" $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -5916,6 +6031,22 @@ generatedTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
 generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == Generated, suffix `T.isSuffixOf` T.pack (modulePath m)] of
   contents : _ -> contents
   [] -> ""
+
+generatedExtensionsEndingIn :: T.Text -> [ScaffoldModule] -> [T.Text]
+generatedExtensionsEndingIn suffix modules = case [generatedModule | generatedModule <- modules, kind generatedModule == Generated, suffix `T.isSuffixOf` T.pack (modulePath generatedModule)] of
+  [generatedModule] -> generatedLocalExtensions generatedModule
+  matches -> error ("expected one generated module ending in " <> T.unpack suffix <> ", got " <> show (map modulePath matches))
+
+generatedLocalExtensions :: ScaffoldModule -> [T.Text]
+generatedLocalExtensions generatedModule =
+  [ extension
+  | line <- takeWhile (T.isPrefixOf languagePrefix) (T.lines (moduleText generatedModule)),
+    Just extensionWithSuffix <- [T.stripPrefix languagePrefix line],
+    Just extension <- [T.stripSuffix languageSuffix extensionWithSuffix]
+  ]
+  where
+    languagePrefix = "{-# LANGUAGE "
+    languageSuffix = " #-}"
 
 holeTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
 holeTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == HoleStub, suffix `T.isSuffixOf` T.pack (modulePath m), not ("BehaviorHoles.hs" `T.isSuffixOf` T.pack (modulePath m))] of

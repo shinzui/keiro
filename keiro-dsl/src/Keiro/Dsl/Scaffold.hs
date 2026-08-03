@@ -108,6 +108,7 @@ import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFoldSurfaceError)
+import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDomainContractFor, idDomainPrefix, idDomainSampleText)
@@ -1230,11 +1231,8 @@ generatedNominalInternalModule ctx = generatedNominalModule ctx <> ".Internal"
 emitGeneratedNominals :: EffectiveLanguageContract -> Context -> [NominalGenerationOwner] -> Text
 emitGeneratedNominals languageContract ctx owners =
   nl
-    ( equalityPragmas
-        <> [ "{-# LANGUAGE DeriveAnyClass #-}",
-             "{-# LANGUAGE DeriveGeneric #-}",
-             "{-# LANGUAGE LambdaCase #-}",
-             generatedBanner,
+    ( renderGeneratedLanguagePragmas localExtensions
+        <> [ generatedBanner,
              moduleHeader,
              "",
              "import Data.Aeson (FromJSON, ToJSON)",
@@ -1280,14 +1278,9 @@ emitGeneratedNominals languageContract ctx owners =
           if nominalEqualityUsed owner
             then [nominalEqualityTagName nominal, nominalEqualityWitnessName nominal]
             else []
-    equalityPragmas =
-      if usesEquality
-        then
-          [ "{-# LANGUAGE DataKinds #-}",
-            "{-# LANGUAGE TypeApplications #-}",
-            "{-# LANGUAGE TypeFamilies #-}"
-          ]
-        else []
+    localExtensions =
+      [ExtDeriveAnyClass | any (nominalUsesDeriveAnyClass . nominalDeclaration) owners]
+        <> [ExtTypeFamilies | usesEquality]
     equalityImports =
       ["import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)" | usesEquality]
         <> ["import Data.List.NonEmpty (NonEmpty (..))" | usesExactEquality]
@@ -1308,6 +1301,10 @@ emitGeneratedNominals languageContract ctx owners =
     exactOwner nominal = case resolvedNominalRepresentation nominal of
       EnumRepresentation {} -> True
       IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
+      ScalarRepresentation {} -> False
+    nominalUsesDeriveAnyClass nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> not (isJust (idDomainContractFor languageContract prefix))
+      EnumRepresentation {} -> True
       ScalarRepresentation {} -> False
 
 emitGeneratedNominal :: EffectiveLanguageContract -> Bool -> ResolvedNominalType -> Text
@@ -1400,8 +1397,7 @@ emitGeneratedNominalEquality languageContract nominal =
 emitGeneratedNominalInternals :: Context -> [(ResolvedNominalType, IdDomainContract)] -> Text
 emitGeneratedNominalInternals ctx nominals =
   nl
-    [ "{-# LANGUAGE DeriveGeneric #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> generatedNominalInternalModule ctx,
       "  ( " <> T.intercalate "\n  , " (concatMap exportsFor nominals),
       "  ) where",
@@ -1551,9 +1547,7 @@ nominalRepresentationModuleValue ctx nominal constructors =
     { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
       moduleText =
         nl
-          [ "{-# LANGUAGE DeriveGeneric #-}",
-            "{-# LANGUAGE LambdaCase #-}",
-            generatedBanner,
+          [ generatedBanner,
             "module " <> moduleName <> " (" <> representationType <> " (..), " <> encoderName <> ") where",
             "",
             "import Data.Text (Text)",
@@ -1621,13 +1615,11 @@ nominalProjectionTypes spec =
 emitNominalProjections :: EffectiveLanguageContract -> Context -> [ResolvedNominalType] -> Text
 emitNominalProjections languageContract ctx nominals =
   nl $
-    [ "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE TypeApplications #-}",
-      "{-# LANGUAGE TypeFamilies #-}",
-      generatedBanner,
-      "module " <> moduleName <> " where",
-      ""
-    ]
+    renderGeneratedLanguagePragmas [ExtTypeFamilies]
+      <> [ generatedBanner,
+           "module " <> moduleName <> " where",
+           ""
+         ]
       <> map ("import " <>) imports
       <> T.lines (renderPlannedImports importPlan)
       <> [""]
@@ -1823,9 +1815,7 @@ emitShape ctx graph declaration shape =
     moduleName = structuralShapeModule ctx (sdName declaration)
     shapeType = sdName declaration <> "Shape"
     requirements = shapeRequirements ctx graph shape
-    languagePragmas =
-      ["{-# LANGUAGE DeriveGeneric #-}"]
-        <> ["{-# LANGUAGE DuplicateRecordFields #-}" | shapeHasRecord shape]
+    languagePragmas = renderGeneratedLanguagePragmas []
     imports =
       sort . nub $
         ["Data.Aeson (Value)" | ReqJson `elem` requirements]
@@ -1876,15 +1866,6 @@ data ShapeRequirement
   | ReqNatural
   | ReqReference !HaskellReference
   deriving stock (Eq, Ord, Show)
-
-shapeHasRecord :: ResolvedMappedShape -> Bool
-shapeHasRecord =
-  foldMappedShape
-    MappedShapeAlgebra
-      { onRecord = \_ _ _ -> True,
-        onEnum = const False,
-        onUnion = \_ _ -> False
-      }
 
 shapeRequirements :: Context -> TypeGraph -> ResolvedMappedShape -> [ShapeRequirement]
 shapeRequirements ctx graph =
@@ -2085,22 +2066,20 @@ projectionWitnessName graph owner pointer = do
 emitStructuralProjections :: Context -> TypeGraph -> Text
 emitStructuralProjections ctx graph =
   nl $
-    [ "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE TypeApplications #-}",
-      "{-# LANGUAGE TypeFamilies #-}",
-      generatedBanner,
-      "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime.",
-      "-- Int, Natural, and UTCTime belong to Keiki's ordered subset.",
-      "module " <> moduleName,
-      "  ( " <> T.intercalate "\n  , " (map spWitness specs),
-      "  ) where",
-      "",
-      "import Data.Text (Text)",
-      "import Data.Time (UTCTime)",
-      "import Numeric.Natural (Natural)",
-      "import Keiro.Codec.Structural (bindingToShape)",
-      "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
-    ]
+    renderGeneratedLanguagePragmas [ExtTypeFamilies]
+      <> [ generatedBanner,
+           "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime.",
+           "-- Int, Natural, and UTCTime belong to Keiki's ordered subset.",
+           "module " <> moduleName,
+           "  ( " <> T.intercalate "\n  , " (map spWitness specs),
+           "  ) where",
+           "",
+           "import Data.Text (Text)",
+           "import Data.Time (UTCTime)",
+           "import Numeric.Natural (Natural)",
+           "import Keiro.Codec.Structural (bindingToShape)",
+           "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
+         ]
       <> T.lines (renderPlannedImports importPlan)
       <> concatMap renderProjection specs
   where
@@ -2255,119 +2234,118 @@ aggregateNeedsHoleModule aggregate
 emitBehaviorContract :: Agg -> Text
 emitBehaviorContract aggregate =
   nl $
-    [ "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE OverloadedLabels #-}",
-      "{-# OPTIONS_GHC -Wno-missing-signatures -Wno-name-shadowing #-}",
-      generatedBanner,
-      "module " <> aGenPrefix aggregate <> ".BehaviorContract where",
-      "",
-      "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
-      "import " <> aGenPrefix aggregate <> ".Domain",
-      "import " <> aGenPrefix aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
-      "import Data.Aeson (ToJSON (..), object, (.=))",
-      "import Data.List (sortOn)",
-      "import Data.List.NonEmpty (NonEmpty)",
-      "import Data.List.NonEmpty qualified as NonEmpty",
-      "import Data.Map.Strict qualified as Map",
-      "import Data.Text (Text)",
-      "import Data.Text qualified as T",
-      "import Keiki.Core qualified as K (EdgeMode (..), EdgeRef (..), RegFile, ReplayAttribution (..), ReplayEventSpan (..), ReplaySuccess (..), StepFailure (..), StepSuccess (..), applyEventsDetailedEither, stepDetailedEither, (!))",
-      "import Keiro.Codec qualified as Codec (Codec (eventType), EventType (..))",
-      "",
-      "newtype BehaviorKey = BehaviorKey { unBehaviorKey :: Text }",
-      "  deriving stock (Eq, Ord, Show)",
-      "",
-      "data ObligationKind = LiveTransition | RequiredRejection | ReplayTransition",
-      "  deriving stock (Eq, Ord, Show)",
-      "",
-      "data EvidenceLevel = GeneratedAuthoritative | HoleWitnessed | LegacyRuntimeWitness",
-      "  deriving stock (Eq, Ord, Show)",
-      "",
-      "data GuardCoverage = GuardTotal | GuardPartial | GuardUnknown | GuardNotApplicable",
-      "  deriving stock (Eq, Ord, Show)",
-      "",
-      "data BehaviorRequirement = BehaviorRequirement",
-      "  { requirementKey :: !BehaviorKey",
-      "  , requirementKind :: !ObligationKind",
-      "  , requirementEvidence :: !EvidenceLevel",
-      "  , requirementGuardCoverage :: !GuardCoverage",
-      "  , requirementSource :: !" <> aVertexType aggregate,
-      "  , requirementCommandName :: !Text",
-      "  , requirementExpectedEdge :: !(Maybe (K.EdgeRef " <> aVertexType aggregate <> "))",
-      "  , requirementTarget :: !(Maybe " <> aVertexType aggregate <> ")",
-      "  , requirementEventKinds :: ![Text]",
-      "  , requirementLine :: !Int",
-      "  }",
-      "  deriving stock (Eq, Show)",
-      "",
-      "data RejectionClass = RejectNoOutgoingEdges | RejectNoMatchingEdge",
-      "  deriving stock (Eq, Show)",
-      "",
-      "data LiveExpectation",
-      "  = Emits (NonEmpty " <> name <> "Event)",
-      "  | Rejects RejectionClass",
-      "  | NoOp",
-      "  deriving stock (Eq, Show)",
-      "",
-      "data BehaviorWitness",
-      "  = Pending BehaviorKey",
-      "  | LiveWitness",
-      "      { witnessKey :: BehaviorKey",
-      "      , witnessHistory :: [" <> name <> "Event]",
-      "      , witnessCommand :: " <> name <> "Command",
-      "      , witnessExpected :: LiveExpectation",
-      "      }",
-      "  | ReplayWitness",
-      "      { witnessKey :: BehaviorKey",
-      "      , witnessHistoryPrefix :: [" <> name <> "Event]",
-      "      , witnessObservedChunk :: [" <> name <> "Event]",
-      "      }",
-      "  deriving stock (Eq, Show)",
-      "",
-      "data BehaviorFailure = BehaviorFailure",
-      "  { failureKey :: !BehaviorKey",
-      "  , failureCode :: !Text",
-      "  , failureDetail :: !Text",
-      "  }",
-      "  deriving stock (Eq, Show)",
-      "",
-      "instance ToJSON BehaviorFailure where",
-      "  toJSON failure = object",
-      "    [ \"key\" .= unBehaviorKey (failureKey failure)",
-      "    , \"code\" .= failureCode failure",
-      "    , \"detail\" .= failureDetail failure",
-      "    ]",
-      "",
-      "data BehaviorConformanceReport = BehaviorConformanceReport",
-      "  { reportRequired :: ![BehaviorKey]",
-      "  , reportFilled :: ![BehaviorKey]",
-      "  , reportPending :: ![BehaviorKey]",
-      "  , reportMissing :: ![BehaviorKey]",
-      "  , reportDuplicate :: ![BehaviorKey]",
-      "  , reportStale :: ![BehaviorKey]",
-      "  , reportFailed :: ![BehaviorFailure]",
-      "  , reportVerified :: ![BehaviorKey]",
-      "  , reportUnverified :: ![BehaviorKey]",
-      "  }",
-      "  deriving stock (Eq, Show)",
-      "",
-      "instance ToJSON BehaviorConformanceReport where",
-      "  toJSON report = object",
-      "    [ \"schema\" .= (\"keiro/behavior-conformance/1\" :: Text)",
-      "    , \"required\" .= keyTexts (reportRequired report)",
-      "    , \"filled\" .= keyTexts (reportFilled report)",
-      "    , \"pending\" .= keyTexts (reportPending report)",
-      "    , \"missing\" .= keyTexts (reportMissing report)",
-      "    , \"duplicate\" .= keyTexts (reportDuplicate report)",
-      "    , \"stale\" .= keyTexts (reportStale report)",
-      "    , \"failed\" .= reportFailed report",
-      "    , \"verified\" .= keyTexts (reportVerified report)",
-      "    , \"unverified\" .= keyTexts (reportUnverified report)",
-      "    ]",
-      "",
-      "behaviorRequirements :: [BehaviorRequirement]",
-      "behaviorRequirements ="
-    ]
+    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null (aRegs aggregate))]
+      <> [ "{-# OPTIONS_GHC -Wno-missing-signatures -Wno-name-shadowing #-}",
+           generatedBanner,
+           "module " <> aGenPrefix aggregate <> ".BehaviorContract where",
+           "",
+           "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
+           "import " <> aGenPrefix aggregate <> ".Domain",
+           "import " <> aGenPrefix aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
+           "import Data.Aeson (ToJSON (..), object, (.=))",
+           "import Data.List (sortOn)",
+           "import Data.List.NonEmpty (NonEmpty)",
+           "import Data.List.NonEmpty qualified as NonEmpty",
+           "import Data.Map.Strict qualified as Map",
+           "import Data.Text (Text)",
+           "import Data.Text qualified as T",
+           "import Keiki.Core qualified as K (EdgeMode (..), EdgeRef (..), RegFile, ReplayAttribution (..), ReplayEventSpan (..), ReplaySuccess (..), StepFailure (..), StepSuccess (..), applyEventsDetailedEither, stepDetailedEither, (!))",
+           "import Keiro.Codec qualified as Codec (Codec (eventType), EventType (..))",
+           "",
+           "newtype BehaviorKey = BehaviorKey { unBehaviorKey :: Text }",
+           "  deriving stock (Eq, Ord, Show)",
+           "",
+           "data ObligationKind = LiveTransition | RequiredRejection | ReplayTransition",
+           "  deriving stock (Eq, Ord, Show)",
+           "",
+           "data EvidenceLevel = GeneratedAuthoritative | HoleWitnessed | LegacyRuntimeWitness",
+           "  deriving stock (Eq, Ord, Show)",
+           "",
+           "data GuardCoverage = GuardTotal | GuardPartial | GuardUnknown | GuardNotApplicable",
+           "  deriving stock (Eq, Ord, Show)",
+           "",
+           "data BehaviorRequirement = BehaviorRequirement",
+           "  { requirementKey :: !BehaviorKey",
+           "  , requirementKind :: !ObligationKind",
+           "  , requirementEvidence :: !EvidenceLevel",
+           "  , requirementGuardCoverage :: !GuardCoverage",
+           "  , requirementSource :: !" <> aVertexType aggregate,
+           "  , requirementCommandName :: !Text",
+           "  , requirementExpectedEdge :: !(Maybe (K.EdgeRef " <> aVertexType aggregate <> "))",
+           "  , requirementTarget :: !(Maybe " <> aVertexType aggregate <> ")",
+           "  , requirementEventKinds :: ![Text]",
+           "  , requirementLine :: !Int",
+           "  }",
+           "  deriving stock (Eq, Show)",
+           "",
+           "data RejectionClass = RejectNoOutgoingEdges | RejectNoMatchingEdge",
+           "  deriving stock (Eq, Show)",
+           "",
+           "data LiveExpectation",
+           "  = Emits (NonEmpty " <> name <> "Event)",
+           "  | Rejects RejectionClass",
+           "  | NoOp",
+           "  deriving stock (Eq, Show)",
+           "",
+           "data BehaviorWitness",
+           "  = Pending BehaviorKey",
+           "  | LiveWitness",
+           "      { witnessKey :: BehaviorKey",
+           "      , witnessHistory :: [" <> name <> "Event]",
+           "      , witnessCommand :: " <> name <> "Command",
+           "      , witnessExpected :: LiveExpectation",
+           "      }",
+           "  | ReplayWitness",
+           "      { witnessKey :: BehaviorKey",
+           "      , witnessHistoryPrefix :: [" <> name <> "Event]",
+           "      , witnessObservedChunk :: [" <> name <> "Event]",
+           "      }",
+           "  deriving stock (Eq, Show)",
+           "",
+           "data BehaviorFailure = BehaviorFailure",
+           "  { failureKey :: !BehaviorKey",
+           "  , failureCode :: !Text",
+           "  , failureDetail :: !Text",
+           "  }",
+           "  deriving stock (Eq, Show)",
+           "",
+           "instance ToJSON BehaviorFailure where",
+           "  toJSON failure = object",
+           "    [ \"key\" .= unBehaviorKey (failureKey failure)",
+           "    , \"code\" .= failureCode failure",
+           "    , \"detail\" .= failureDetail failure",
+           "    ]",
+           "",
+           "data BehaviorConformanceReport = BehaviorConformanceReport",
+           "  { reportRequired :: ![BehaviorKey]",
+           "  , reportFilled :: ![BehaviorKey]",
+           "  , reportPending :: ![BehaviorKey]",
+           "  , reportMissing :: ![BehaviorKey]",
+           "  , reportDuplicate :: ![BehaviorKey]",
+           "  , reportStale :: ![BehaviorKey]",
+           "  , reportFailed :: ![BehaviorFailure]",
+           "  , reportVerified :: ![BehaviorKey]",
+           "  , reportUnverified :: ![BehaviorKey]",
+           "  }",
+           "  deriving stock (Eq, Show)",
+           "",
+           "instance ToJSON BehaviorConformanceReport where",
+           "  toJSON report = object",
+           "    [ \"schema\" .= (\"keiro/behavior-conformance/1\" :: Text)",
+           "    , \"required\" .= keyTexts (reportRequired report)",
+           "    , \"filled\" .= keyTexts (reportFilled report)",
+           "    , \"pending\" .= keyTexts (reportPending report)",
+           "    , \"missing\" .= keyTexts (reportMissing report)",
+           "    , \"duplicate\" .= keyTexts (reportDuplicate report)",
+           "    , \"stale\" .= keyTexts (reportStale report)",
+           "    , \"failed\" .= reportFailed report",
+           "    , \"verified\" .= keyTexts (reportVerified report)",
+           "    , \"unverified\" .= keyTexts (reportUnverified report)",
+           "    ]",
+           "",
+           "behaviorRequirements :: [BehaviorRequirement]",
+           "behaviorRequirements ="
+         ]
       <> renderBehaviorRequirementList aggregate
       <> [ "",
            "behaviorCoverageReport :: [BehaviorWitness] -> BehaviorConformanceReport",
@@ -2682,18 +2660,18 @@ scaffoldReplayAudit ctx spec
       CollocatedLeaf -> rootPrefix context <> ctxPascalOf context <> ".Generated"
     emitReplayAudit =
       nl $
-        [ "{-# LANGUAGE GADTs #-}",
-          generatedBanner,
-          "--",
-          "-- Deployment contract:",
-          "--   * replay-neutral diff: no data audit is required;",
-          "--   * affected diff: run AuditTargeted with the emitted affected set",
-          "--     against a production copy under the candidate binary;",
-          "--   * one-time runtime cutover: run AuditFull;",
-          "--   * any non-zero audit exit blocks deployment.",
-          "module " <> moduleName <> " (auditTargets) where",
-          ""
-        ]
+        renderGeneratedLanguagePragmas []
+          <> [ generatedBanner,
+               "--",
+               "-- Deployment contract:",
+               "--   * replay-neutral diff: no data audit is required;",
+               "--   * affected diff: run AuditTargeted with the emitted affected set",
+               "--     against a production copy under the candidate binary;",
+               "--   * one-time runtime cutover: run AuditFull;",
+               "--   * any non-zero audit exit blocks deployment.",
+               "module " <> moduleName <> " (auditTargets) where",
+               ""
+             ]
           ++ [ "import " <> genPrefixFor ctx (aggName aggregate) <> ".EventStream qualified as " <> aggName aggregate
              | aggregate <- aggregates
              ]
@@ -2768,7 +2746,6 @@ emitContractGen :: EffectiveLanguageContract -> Text -> ContractNode -> Text
 emitContractGen languageContract genPrefix c =
   ( nl $
       pragmas
-        ++ ["" | hasTypedTypeIds]
         ++ [generatedBanner]
         ++ moduleHeader
         ++ [ "",
@@ -2823,11 +2800,10 @@ emitContractGen languageContract genPrefix c =
     payloadTy = pascal (ctrName c) <> "Payload"
     hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) (ctrEvents c)
     pragmas =
-      ["{-# LANGUAGE DataKinds #-}" | hasTypedTypeIds]
-        ++ [ "{-# LANGUAGE DuplicateRecordFields #-}",
-             "{-# LANGUAGE OverloadedRecordDot #-}"
-           ]
-        ++ ["{-# LANGUAGE TypeApplications #-}" | hasTypedTypeIds]
+      renderGeneratedLanguagePragmas
+        ( [ExtDuplicateRecordFields | contractNeedsDuplicateRecordFields c]
+            <> [ExtOverloadedRecordDot | contractUsesRecordDot c]
+        )
     typedKindIdImports
       | hasTypedTypeIds = ["import Data.KindID (KindID)", "import qualified Data.KindID as KindID"]
       | otherwise = []
@@ -2893,6 +2869,12 @@ emitContractGen languageContract genPrefix c =
             "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow (cfName field)
       _ -> "o .: " <> tshow (cfName field)
 
+contractNeedsDuplicateRecordFields :: ContractNode -> Bool
+contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map cfName . ceFields) . ctrEvents
+
+contractUsesRecordDot :: ContractNode -> Bool
+contractUsesRecordDot = any (not . null . ceFields) . ctrEvents
+
 emitPayloadAdt :: EffectiveLanguageContract -> Text -> [ContractEvent] -> Text
 emitPayloadAdt languageContract tyName events =
   sectionsOf [map dataRecord events, [sumDecl]]
@@ -2950,55 +2932,55 @@ scaffoldIntake ctx i =
 emitIntakeGen :: Text -> IntakeNode -> Text
 emitIntakeGen genPrefix i =
   nl $
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
-      "module " <> genPrefix <> ".Inbox",
-      "  ( InboxFailure (..)",
-      "  , " <> outcomeType <> " (..)",
-      "  , " <> dispositionType <> " (..)",
-      "  , inboxDedupePolicy",
-      "  , inboxPersistence",
-      "  , inboxDispositionFor",
-      "  , inboxDisposition",
-      "  ) where",
-      "",
-      "import Data.Text (Text)",
-      "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..), RetryDelay (..))",
-      "",
-      "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
-      "inboxDedupePolicy :: InboxDedupePolicy",
-      "inboxDedupePolicy = " <> inkDedupePolicy i,
-      "",
-      "-- | Success-path envelope retention passed to runInboxTransactionWith.",
-      "-- Failures always retain their full operator-facing dead-letter envelope.",
-      "-- Dedupe-only success rows decode with an empty payload.",
-      "inboxPersistence :: InboxPersistence",
-      "inboxPersistence = " <> persistenceCtor (inkPersist i),
-      "",
-      "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
-      "data InboxFailure = InboxFailure",
-      "  { inboxFailureReason :: !Text",
-      "  , inboxFailureAttempt :: !(Maybe Int)",
-      "  }",
-      "  deriving stock (Eq, Show)",
-      "",
-      "-- Every classification named by the spec. Keeping this closed makes the",
-      "-- generated table exhaustive and gives handler holes typed inputs.",
-      "data " <> outcomeType,
-      "  = " <> T.intercalate "\n  | " outcomeConstructors,
-      "  deriving stock (Eq, Show)",
-      "",
-      "-- The service's declared acknowledgement decision, including its details.",
-      "data " <> dispositionType,
-      "  = InboxAccept",
-      "  | InboxRetryAfter !RetryDelay !(Maybe InboxFailure)",
-      "  | InboxDeadLetter !(Maybe Text) !(Maybe InboxFailure)",
-      "  deriving stock (Eq, Show)",
-      "",
-      "-- The complete disposition table (hole-kind 2).",
-      "inboxDispositionFor :: " <> outcomeType <> " -> " <> dispositionType,
-      "inboxDispositionFor outcome = case outcome of"
-    ]
+    renderGeneratedLanguagePragmas []
+      <> [ generatedBanner,
+           "module " <> genPrefix <> ".Inbox",
+           "  ( InboxFailure (..)",
+           "  , " <> outcomeType <> " (..)",
+           "  , " <> dispositionType <> " (..)",
+           "  , inboxDedupePolicy",
+           "  , inboxPersistence",
+           "  , inboxDispositionFor",
+           "  , inboxDisposition",
+           "  ) where",
+           "",
+           "import Data.Text (Text)",
+           "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..), RetryDelay (..))",
+           "",
+           "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
+           "inboxDedupePolicy :: InboxDedupePolicy",
+           "inboxDedupePolicy = " <> inkDedupePolicy i,
+           "",
+           "-- | Success-path envelope retention passed to runInboxTransactionWith.",
+           "-- Failures always retain their full operator-facing dead-letter envelope.",
+           "-- Dedupe-only success rows decode with an empty payload.",
+           "inboxPersistence :: InboxPersistence",
+           "inboxPersistence = " <> persistenceCtor (inkPersist i),
+           "",
+           "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
+           "data InboxFailure = InboxFailure",
+           "  { inboxFailureReason :: !Text",
+           "  , inboxFailureAttempt :: !(Maybe Int)",
+           "  }",
+           "  deriving stock (Eq, Show)",
+           "",
+           "-- Every classification named by the spec. Keeping this closed makes the",
+           "-- generated table exhaustive and gives handler holes typed inputs.",
+           "data " <> outcomeType,
+           "  = " <> T.intercalate "\n  | " outcomeConstructors,
+           "  deriving stock (Eq, Show)",
+           "",
+           "-- The service's declared acknowledgement decision, including its details.",
+           "data " <> dispositionType,
+           "  = InboxAccept",
+           "  | InboxRetryAfter !RetryDelay !(Maybe InboxFailure)",
+           "  | InboxDeadLetter !(Maybe Text) !(Maybe InboxFailure)",
+           "  deriving stock (Eq, Show)",
+           "",
+           "-- The complete disposition table (hole-kind 2).",
+           "inboxDispositionFor :: " <> outcomeType <> " -> " <> dispositionType,
+           "inboxDispositionFor outcome = case outcome of"
+         ]
       ++ ["  " <> outcomeConstructor (drOutcome row) <> " -> " <> actionExpression (drAction row) | row <- inkDisposition i]
       ++ [ "",
            "-- Lower the LIVE Keiro.Inbox.Types.InboxResult without an open fallback.",
@@ -3120,27 +3102,27 @@ scaffoldWorkqueue ctx w =
 emitWorkqueueGen :: Text -> WorkqueueNode -> Text
 emitWorkqueueGen genPrefix w =
   nl $
-    [ "{-# LANGUAGE OverloadedRecordDot #-}",
-      generatedBanner,
-      "module " <> genPrefix <> ".Queue",
-      "  ( " <> payloadTy <> " (..)",
-      "  , encode" <> payloadTy,
-      "  , parse" <> payloadTy,
-      "  , queuePhysical, queueDlq, queueTable",
-      groupKeyExport,
-      "  ) where",
-      "",
-      "import Data.Aeson (Value, object, withObject, (.:), (.=))",
-      "import Data.Aeson.Types (parseEither)",
-      "import Data.Text (Text)",
-      "import qualified Data.Text as T",
-      "",
-      "queuePhysical, queueDlq, queueTable :: Text",
-      "queuePhysical = " <> tshow (wqPhysical w),
-      "queueDlq = " <> tshow (wqDlq w),
-      "queueTable = " <> tshow (wqTable w),
-      ""
-    ]
+    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | workqueueUsesRecordDot w]
+      <> [ generatedBanner,
+           "module " <> genPrefix <> ".Queue",
+           "  ( " <> payloadTy <> " (..)",
+           "  , encode" <> payloadTy,
+           "  , parse" <> payloadTy,
+           "  , queuePhysical, queueDlq, queueTable",
+           groupKeyExport,
+           "  ) where",
+           "",
+           "import Data.Aeson (Value, object, withObject, (.:), (.=))",
+           "import Data.Aeson.Types (parseEither)",
+           "import Data.Text (Text)",
+           "import qualified Data.Text as T",
+           "",
+           "queuePhysical, queueDlq, queueTable :: Text",
+           "queuePhysical = " <> tshow (wqPhysical w),
+           "queueDlq = " <> tshow (wqDlq w),
+           "queueTable = " <> tshow (wqTable w),
+           ""
+         ]
       ++ groupKeyLines
       ++ [ "data " <> payloadTy <> " = " <> payloadTy,
            "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> hsType (wqfType f) | f <- wqPayload w],
@@ -3196,6 +3178,11 @@ emitWorkqueueGen genPrefix w =
     lead _ kv = "    , " <> kv
     fieldApps [] = ""
     fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (wqfWire f) | f <- fs]
+
+workqueueUsesRecordDot :: WorkqueueNode -> Bool
+workqueueUsesRecordDot workqueue =
+  not (null (wqPayload workqueue))
+    || maybe False ((== "raw") . gkVia) (wqGroupKey workqueue)
 
 -- | Emit the versioned PGMQ envelope adapter.  The payload record remains
 -- symbol-free and dependency-light in Queue.hs; this runtime-facing module is
@@ -3363,17 +3350,17 @@ emitReadModelTable tableModule stem readModel =
 emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
   nl $
-    [ "{-# LANGUAGE OverloadedRecordDot #-}",
-      generatedBanner,
-      "module " <> readModelModule <> ".ReadModel",
-      "  ( " <> T.intercalate "\n  , " exports,
-      "  ) where",
-      "",
-      "import Data.Functor (void)",
-      "import Effectful (Eff, (:>))",
-      "import " <> tableModule <> " (" <> qualifiedName <> ")",
-      "import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"
-    ]
+    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | rmFeed readModel == RmSubscription]
+      <> [ generatedBanner,
+           "module " <> readModelModule <> ".ReadModel",
+           "  ( " <> T.intercalate "\n  , " exports,
+           "  ) where",
+           "",
+           "import Data.Functor (void)",
+           "import Effectful (Eff, (:>))",
+           "import " <> tableModule <> " (" <> qualifiedName <> ")",
+           "import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"
+         ]
       ++ asyncImports
       ++ [ "import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), ReadModelMetadata, StrongScope (..), registerReadModel)",
            "import Keiro.ReadModel.Rebuild qualified as Rebuild",
@@ -3798,14 +3785,12 @@ emitProcessHoles _genPrefix holePrefix p =
 emitDomain :: Agg -> Text
 emitDomain a =
   nl $
-    [ "{-# LANGUAGE DataKinds #-}"
-    ]
-      ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
-      ++ ["{-# LANGUAGE EmptyDataDecls #-}" | null (aCommands a) || null (aEvents a)]
-      ++ [ "{-# LANGUAGE DuplicateRecordFields #-}",
-           "{-# LANGUAGE TemplateHaskell #-}",
-           "{-# LANGUAGE TypeApplications #-}",
-           generatedBanner,
+    renderGeneratedLanguagePragmas
+      ( [ExtDeriveAnyClass | hasSnapshot a]
+          <> [ExtDuplicateRecordFields | domainNeedsDuplicateRecordFields a]
+          <> [ExtTemplateHaskell]
+      )
+      ++ [ generatedBanner,
            "module " <> aGenPrefix a <> ".Domain where",
            ""
          ]
@@ -3836,6 +3821,19 @@ emitDomain a =
          ]
   where
     importPlan = domainImportPlan a
+
+domainNeedsDuplicateRecordFields :: Agg -> Bool
+domainNeedsDuplicateRecordFields aggregate = hasDuplicateNames selectorNames
+  where
+    commandSelectors = concatMap (map fst . rcFields) (aCommands aggregate)
+    eventSelectors = concatMap (map fst . rcFields) (aEvents aggregate)
+    registerSelectors = map rrName (aRegs aggregate)
+    -- deriveWireCtorsAll creates one event TermFields record that repeats each
+    -- payload selector, so every field-bearing event contributes twice.
+    selectorNames = commandSelectors <> eventSelectors <> eventSelectors <> registerSelectors
+
+hasDuplicateNames :: [Text] -> Bool
+hasDuplicateNames names = length names /= Set.size (Set.fromList names)
 
 hasSnapshot :: Agg -> Bool
 hasSnapshot = maybe False (const True) . aSnapshot
@@ -4014,11 +4012,8 @@ maybeToListText = maybe [] pure
 emitCodec :: Agg -> Text
 emitCodec a =
   nl $
-    ["{-# LANGUAGE DataKinds #-}" | hasConsumerNominalIdCodec a]
-      ++ ["{-# LANGUAGE TypeApplications #-}" | hasConsumerNominalIdCodec a]
-      ++ ["{-# LANGUAGE LambdaCase #-}" | hasConsumerNominalCodec a || hasGeneratedNominalEnumCodec a]
-      ++ [ "{-# LANGUAGE OverloadedRecordDot #-}",
-           generatedBanner,
+    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | codecUsesRecordDot a]
+      ++ [ generatedBanner,
            "module " <> aGenPrefix a <> ".Codec (",
            "    " <> lowerFirst (aName a) <> "Codec,",
            "    parse" <> aName a <> "Event,",
@@ -4093,6 +4088,9 @@ emitCodec a =
       ]
     mappedExports ResolvedOpaque {} = []
 
+codecUsesRecordDot :: Agg -> Bool
+codecUsesRecordDot = any (not . null . rcFields) . aEvents
+
 hasMappedCodec :: Agg -> Bool
 hasMappedCodec = not . null . codecMappedDeclarations
 
@@ -4113,12 +4111,6 @@ hasEnforcedConsumerNominalIdCodec aggregate =
         _ -> False
     )
     (codecConsumerNominals aggregate)
-
-hasGeneratedNominalEnumCodec :: Agg -> Bool
-hasGeneratedNominalEnumCodec aggregate =
-  any
-    (\nominal -> case resolvedNominalRepresentation nominal of EnumRepresentation {} -> True; _ -> False)
-    (codecGeneratedNominals aggregate)
 
 emitEnumParsers :: Agg -> Text
 emitEnumParsers a =
@@ -5192,15 +5184,12 @@ generatedIdSampleHaskell aggregate nominal = do
 emitGeneratedTransducer :: Agg -> Text
 emitGeneratedTransducer aggregate =
   nl $
-    [ "{-# LANGUAGE BlockArguments #-}",
-      "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE GADTs #-}",
-      "{-# LANGUAGE OverloadedRecordDot #-}"
-    ]
-      ++ ["{-# LANGUAGE OverloadedLabels #-}" | not (null projectionAliases)]
-      ++ [ "{-# LANGUAGE QualifiedDo #-}",
-           "{-# LANGUAGE TypeApplications #-}",
-           generatedBanner,
+    renderGeneratedLanguagePragmas
+      ( [ExtBlockArguments, ExtQualifiedDo]
+          <> [ExtOverloadedLabels | not (null projectionAliases)]
+          <> [ExtOverloadedRecordDot | transducerUsesRecordDot aggregate]
+      )
+      ++ [ generatedBanner,
            "module " <> aGenPrefix aggregate <> ".Transducer",
            "  ( " <> lowerFirst (aName aggregate) <> "Transducer",
            "  , " <> lowerFirst (aName aggregate) <> "FoldFingerprint",
@@ -5306,6 +5295,24 @@ emitGeneratedTransducer aggregate =
       _ -> False
     isIdRepresentation IdRepresentation {} = True
     isIdRepresentation _ = False
+
+transducerUsesRecordDot :: Agg -> Bool
+transducerUsesRecordDot aggregate =
+  any expressionUsesCommandRoot (resolvedGeneratedExpressions aggregate)
+    || any generatedOutputUsesCommandField generatedOutputs
+  where
+    generatedOutputs =
+      [ outputMappingFor aggregate transitionIndex emitIndex
+      | (transitionIndex, transition) <- transitionEntries aggregate,
+        tImplementation transition == GeneratedImplementation,
+        emitIndex <- [1 .. length (tEmits transition)]
+      ]
+    generatedOutputUsesCommandField (GeneratedCommandIdentity _ fields) = not (null fields)
+    generatedOutputUsesCommandField HandOwnedEventOutput {} = False
+    expressionUsesCommandRoot = anyTypedExpression isCommandRoot
+    isCommandRoot expression = case typedScalarNode expression of
+      TypedRoot ScalarCommandRoot {} -> True
+      _ -> False
 
 transducerImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
 transducerImportPlan aggregate importedTypes literalNominals =
@@ -5697,11 +5704,10 @@ snapshotFixtureLines aggregate = case aSnapshot aggregate of
 
 emitProjection :: Agg -> Text
 emitProjection a = case aProjection a of
-  Nothing -> nl [generatedBanner, "module " <> aGenPrefix a <> ".Projection () where"]
+  Nothing -> nl (renderGeneratedLanguagePragmas [] <> [generatedBanner, "module " <> aGenPrefix a <> ".Projection () where"])
   Just p ->
     nl
-      [ "{-# LANGUAGE OverloadedRecordDot #-}",
-        generatedBanner,
+      [ generatedBanner,
         "module " <> aGenPrefix a <> ".Projection",
         "  ( " <> lowerFirst (projTable p) <> "Projection",
         "  , " <> lowerFirst (projTable p) <> "StatusFor",

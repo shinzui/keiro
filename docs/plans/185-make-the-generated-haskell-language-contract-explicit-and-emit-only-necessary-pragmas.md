@@ -40,7 +40,7 @@ and retain their own pragmas.
   specialized extensions, and excluded create-once `HoleStub` output.
 - [x] (2026-08-03) Milestone 1: centralized and published the generated-Haskell compilation contract in
   the manifest and Cabal conformance profile.
-- [ ] Milestone 2: route generated emitters through the restricted pragma renderer and
+- [x] (2026-08-03) Milestone 2: routed generated emitters through the restricted pragma renderer and
   remove or condition every redundant pragma identified in the audit.
 - [ ] Milestone 3: add policy and conditional-emission regressions, regenerate only
   overwriteable conformance files, and compile all conformance components under the
@@ -95,6 +95,12 @@ and retain their own pragmas.
   `common shared`. The policy now exempts exactly the four named narrow-profile drivers
   from the `OverloadedLabels` redundancy check while continuing to reject
   `ImportQualifiedPost` there and both global defaults everywhere else.
+
+- Observation: the merged import-planning emitter renders mapped structural selectors
+  as qualified ordinary functions such as `Shape.field shape`, not record-dot syntax.
+  Consequently mapped structural codecs do not by themselves require
+  `OverloadedRecordDot`; aggregate event encoders still require it whenever an event has
+  fields. This is the current-tree result of preserving the work from ExecPlan 184.
 
 
 ## Decision Log
@@ -173,6 +179,14 @@ and retain their own pragmas.
   contract.
   Date: 2026-08-03.
 
+- Decision: make `codecUsesRecordDot` follow the concrete syntax emitted by the merged
+  import planner: it is true for field-bearing aggregate event encoders and false for a
+  codec that only invokes module-qualified mapped-shape selectors.
+  Rationale: `Shape.field shape` is ordinary module qualification and compiles without
+  `OverloadedRecordDot`. Retaining the pragma for that case would contradict the plan's
+  necessary-only contract and discard a useful consequence of ExecPlan 184.
+  Date: 2026-08-03.
+
 - Decision: preserve and integrate the in-progress import-planning work described by
   [ExecPlan 184](184-generate-idiomatic-haskell-imports-for-consumer-owned-types.md).
   Rationale: both plans touch `Keiro.Dsl.Scaffold` and generated fixtures. This plan may
@@ -204,6 +218,21 @@ Validation completed on 2026-08-03 with `cabal build keiro-dsl`, the 514-example
 emitted `default-language: GHC2024` followed by the single `OverloadedStrings` default.
 The scalar-expression driver was the first hand-owned file to need its planned additive
 `OverloadedLabels` pragma after leaving `common shared`.
+
+Milestone 2 is complete. Every raw LANGUAGE string left in
+`Keiro.Dsl.Scaffold` belongs to a `HoleStub` create-once emitter; overwriteable modules
+request extensions through `renderGeneratedLanguagePragmas`. The renderer deduplicates
+and orders the closed extension set, and modules with no exceptions begin directly with
+their generated banner. Source-local predicates now follow duplicate selectors,
+record-dot reads, register comparisons, snapshot derivation, projection labels, and
+read-model feed mode.
+
+The focused command `cabal test keiro-dsl-test --test-option=--match
+--test-option='generated Haskell language contract' --test-show-details=direct` passed
+three examples covering the eight representative fixtures and positive/negative
+conditional cases. `cabal build keiro-dsl` also passed. Committed generated fixtures have
+not yet been changed; their freshness assertions will be restored by the controlled
+Milestone 3 regeneration.
 
 Before marking the plan complete, compare a freshly scaffolded manifest and generated
 tree with the purpose above. Then distill the final language contract, local-exception
