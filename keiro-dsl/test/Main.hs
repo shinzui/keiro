@@ -30,6 +30,7 @@ import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CanonicalEncoding (foldFingerprint128)
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
+import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
@@ -57,7 +58,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -70,7 +71,7 @@ import Keiro.Dsl.WorkspaceDiff qualified as CheckedWorkspaceDiff
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import Paths_keiro_dsl qualified as Package
-import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
+import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
@@ -4588,6 +4589,191 @@ main = hspec $ do
           duplicated = service {checkedSpec = spec {specNodes = processes <> processes}}
       serviceHarnessModule (defaultContext (specContext spec)) duplicated `shouldSatisfy` isLeft
 
+  describe "runnable service conformance package (plan 188 M3)" $ do
+    it "uses readable ordinary names and collision-safe punctuation encoding" $ do
+      cabaliseConformanceService "mori" `shouldBe` "mori"
+      cabaliseConformanceService "mori_core" `shouldNotBe` cabaliseConformanceService "mori-core"
+      cabaliseConformanceService "Mori" `shouldNotBe` cabaliseConformanceService "mori"
+      conformancePackageDirectory (WorkspaceConformanceService "mori") `shouldBe` "keiro-dsl-conformance.workspace.mori"
+      conformancePackageDirectory (StandaloneConformanceService "mori") `shouldBe` "keiro-dsl-conformance.mori"
+    it "plans one base-only package and round-trips its complete generated record" $ do
+      service <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
+      let runtimePackage = RuntimePackageName "hospital-runtime"
+          facade = "Generated.HospitalSurge.Conformance"
+      plan <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planConformancePackage (StandaloneConformanceService "hospital-surge") runtimePackage facade service)
+      cppPackageName plan `shouldBe` "keiro-hospital-surge-conformance"
+      length [file | file <- cppFiles plan, takeExtension (conformanceFilePath file) == ".cabal"] `shouldBe` 1
+      cabalFile <- case [file | file <- cppFiles plan, takeExtension (conformanceFilePath file) == ".cabal"] of
+        [file] -> pure file
+        files -> expectationFailure ("expected one Cabal file, got " <> show (map conformanceFilePath files)) >> fail "unreachable"
+      let cabalText = conformanceFileText cabalFile
+      cabalText `shouldSatisfy` T.isInfixOf "base >=4.18 && <5"
+      T.lines cabalText `shouldSatisfy` (\lines' -> case lines' of first : _ -> first == "cabal-version: 3.0"; [] -> False)
+      cabalText `shouldSatisfy` T.isInfixOf "hospital-runtime"
+      cabalText `shouldNotSatisfy` T.isInfixOf "    , keiro-dsl\n"
+      recordFile <- case [file | file <- cppFiles plan, conformanceFilePath file == conformanceRecordFileName] of
+        [file] -> pure file
+        files -> expectationFailure ("expected one package record, got " <> show (map conformanceFilePath files)) >> fail "unreachable"
+      let recordText = conformanceFileText recordFile
+      parseConformancePackageRecord recordText
+        `shouldBe` Just
+          ConformancePackageRecord
+            { cprSchema = 1,
+              cprServiceKey = cppServiceKey plan,
+              cprRuntimePackage = runtimePackage,
+              cprFacadeModule = facade,
+              cprFiles = [(conformanceFileKind file, conformanceFilePath file) | file <- cppFiles plan]
+            }
+    it "compares unique facts by key and distinguishes mismatch, missing, and unexpected" $ do
+      compareConformanceFacts [("a", "1"), ("b", "2"), ("d", "4")] [("c", "3"), ("a", "1"), ("b", "9")]
+        `shouldBe` Right
+          [ ConformanceFactMatch "a" "1",
+            ConformanceFactMismatch "b" "2" "9",
+            ConformanceFactUnexpected "c" "3",
+            ConformanceFactMissing "d" "4"
+          ]
+      compareConformanceFacts [("a", "1"), ("a", "2")] []
+        `shouldBe` Left [DuplicateFactKey ExpectedFact "a"]
+    it "creates once, reports generated files unchanged, and preserves accepted expectations" $ do
+      withTempDirectory "keiro-dsl-conformance-package" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            runtimePackage = RuntimePackageName "hospital-runtime"
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffoldWithRuntimePackage (Just runtimePackage) ctx service)
+        first <- executeServiceScaffoldWithRuntimePackage (Just runtimePackage) out False "hospital-surge.keiro" (parsedSourceLanguage parsed) ctx service modules
+        firstReport <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure first
+        firstPackage <- maybe (expectationFailure "expected conformance package report" >> fail "unreachable") pure (reportConformancePackage firstReport)
+        let packageRoot = out </> conformancePackageDirectory (StandaloneConformanceService (contextName ctx))
+            expectationsPath = packageRoot </> "src/KeiroConformance/Expectations.hs"
+            accepted = "module KeiroConformance.Expectations where\n-- accepted by the application\n"
+        map snd (conformanceReportDispositions firstPackage) `shouldContain` [ConformanceCreated]
+        TIO.writeFile expectationsPath accepted
+        second <- executeServiceScaffoldWithRuntimePackage (Just runtimePackage) out True "hospital-surge.keiro" (parsedSourceLanguage parsed) ctx service modules
+        secondReport <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure second
+        secondPackage <- maybe (expectationFailure "expected conformance package report" >> fail "unreachable") pure (reportConformancePackage secondReport)
+        TIO.readFile expectationsPath `shouldReturn` accepted
+        [ disposition
+          | (file, disposition) <- conformanceReportDispositions secondPackage,
+            conformanceFileKind file == Generated
+          ]
+          `shouldSatisfy` all (== ConformanceUnchanged)
+        [ disposition
+          | (file, disposition) <- conformanceReportDispositions secondPackage,
+            conformanceFileKind file == HoleStub
+          ]
+          `shouldBe` [ConformanceSkipped]
+    it "refuses a bannerless package file before changing any runtime byte" $ do
+      withTempDirectory "keiro-dsl-conformance-atomic" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            runtimePackage = RuntimePackageName "hospital-runtime"
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffoldWithRuntimePackage (Just runtimePackage) ctx service)
+        executeServiceScaffoldWithRuntimePackage (Just runtimePackage) out False "hospital-surge.keiro" (parsedSourceLanguage parsed) ctx service modules
+          >>= either (\failure -> expectationFailure (show failure)) (const (pure ()))
+        facade <- case [moduleValue | moduleValue <- modules, ".Conformance" `T.isSuffixOf` moduleNameOf (modulePath moduleValue)] of
+          [moduleValue] -> pure moduleValue
+          values -> expectationFailure ("expected one facade, got " <> show (map modulePath values)) >> fail "unreachable"
+        let facadePath = out </> modulePath facade
+            serviceKey = contextName ctx
+            cabalPath = out </> conformancePackageDirectory (StandaloneConformanceService serviceKey) </> T.unpack ("keiro-" <> cabaliseConformanceService serviceKey <> "-conformance.cabal")
+        TIO.appendFile facadePath "-- would be overwritten if runtime execution began\n"
+        TIO.writeFile cabalPath "hand-owned cabal file\n"
+        packageTree <- treeSnapshot out
+        refused <- executeServiceScaffoldWithRuntimePackage (Just runtimePackage) out False "hospital-surge.keiro" (parsedSourceLanguage parsed) ctx service modules
+        refused `shouldSatisfy` isLeft
+        treeSnapshot out `shouldReturn` packageTree
+    it "keeps a two-aggregate workspace at exactly one Cabal package" $ do
+      withTempDirectory "keiro-dsl-conformance-workspace" $ \out -> do
+        workspace <- shouldComposeWorkspace canonicalWorkspacePath
+        let runtimePackage = Just (RuntimePackageName "workspace-runtime")
+        plan <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planWorkspaceScaffoldWithRuntimePackageAndGoldens [] runtimePackage "goldens" (workspaceContext workspace) workspace)
+        length [() | NAggregate {} <- specNodes (checkedSpec (checkedWorkspace workspace))] `shouldBe` 2
+        executeWorkspaceScaffold out False plan >>= either (\failure -> expectationFailure (show failure)) (const (pure ()))
+        packageDirectories <- filter (T.isPrefixOf "keiro-dsl-conformance.workspace." . T.pack) <$> listDirectory out
+        packageDirectories `shouldBe` ["keiro-dsl-conformance.workspace.demo-project"]
+        case packageDirectories of
+          [packageDirectory] -> do
+            cabalFiles <- filter ((== ".cabal") . takeExtension) <$> listDirectory (out </> packageDirectory)
+            length cabalFiles `shouldBe` 1
+          _ -> expectationFailure "expected one package directory"
+    it "scaffolds the multi-member proof idempotently through the public CLI" $ do
+      withTempDirectory "keiro-dsl-conformance-proof-cli" $ \base -> do
+        let fixture = "test/conformance-service-package"
+            copied = base </> "fixture"
+            out = copied </> "runtime/src"
+            sourcePaths =
+              [ "service.keiro-workspace",
+                "domain/alpha.keiro",
+                "domain/beta.keiro",
+                "domain/evidence.keiro",
+                "domain/shared.keiro"
+              ]
+        fixtureManifest <- resolveTestPath (fixture </> "service.keiro-workspace") >>= canonicalizePath
+        let fixtureRoot = takeDirectory fixtureManifest
+        forM_ sourcePaths $ \relative -> TIO.readFile (fixtureRoot </> relative) >>= writeFileWithParents (copied </> relative)
+        (firstCode, firstOut, firstErr) <- runKeiroDsl ["scaffold", copied </> "service.keiro-workspace", "--out", out]
+        unless (firstCode == ExitSuccess) (expectationFailure (firstOut <> firstErr))
+        firstTree <- treeSnapshot out
+        length [path | (path, _) <- firstTree, takeExtension path == ".cabal"] `shouldBe` 1
+        length [path | (path, _) <- firstTree, "Generated/Conformance.hs" `T.isSuffixOf` T.pack path] `shouldBe` 1
+        let recordPath = out </> "keiro-dsl-conformance.workspace.workspace-proof/keiro-dsl-conformance-record.txt"
+        record <- parseConformancePackageRecord <$> TIO.readFile recordPath
+        cprServiceKey <$> record `shouldBe` Just (WorkspaceConformanceService "workspace-proof")
+        (secondCode, secondOut, secondErr) <- runKeiroDsl ["scaffold", copied </> "service.keiro-workspace", "--out", out]
+        unless (secondCode == ExitSuccess) (expectationFailure (secondOut <> secondErr))
+        secondErr `shouldSatisfy` isInfixOfString "keiro-workspace-proof-conformance.cabal (unchanged)"
+        secondErr `shouldSatisfy` isInfixOfString "Expectations.hs (skipped: already present)"
+        secondErr `shouldSatisfy` isInfixOfString "Generated.Conformance"
+        treeSnapshot out `shouldReturn` firstTree
+    it "keeps Expectations fixed and turns the generated target red for a changed workflow fact" $ do
+      withTempDirectory "keiro-dsl-conformance-proof-mutation" $ \base -> do
+        fixtureManifest <- resolveTestPath "test/conformance-service-package/service.keiro-workspace" >>= canonicalizePath
+        let fixtureRoot = takeDirectory fixtureManifest
+        let copied = base </> "fixture"
+            out = copied </> "runtime/src"
+            evidencePath = copied </> "domain/evidence.keiro"
+            expectationsPath = out </> "keiro-dsl-conformance.workspace.workspace-proof/src/KeiroConformance/Expectations.hs"
+        copyTextTree fixtureRoot copied
+        acceptedExpectations <- TIO.readFile expectationsPath
+        TIO.readFile evidencePath
+          >>= TIO.writeFile evidencePath . T.replace "name \"workspace-proof-workflow\"" "name \"workspace-proof-workflow-v2\""
+        (scaffoldCode, scaffoldOut, scaffoldErr) <- runKeiroDsl ["scaffold", copied </> "service.keiro-workspace", "--out", out]
+        unless (scaffoldCode == ExitSuccess) (expectationFailure (scaffoldOut <> scaffoldErr))
+        TIO.readFile expectationsPath `shouldReturn` acceptedExpectations
+        let repositoryRoot = takeDirectory (takeDirectory (takeDirectory fixtureRoot))
+            projectPath = base </> "mutation.project"
+            buildDirectory = base </> "dist-newstyle"
+            packageRoot = out </> "keiro-dsl-conformance.workspace.workspace-proof"
+        TIO.writeFile
+          projectPath
+          ( T.unlines
+              [ "packages:",
+                "  " <> T.pack (repositoryRoot </> "keiro"),
+                "  " <> T.pack (repositoryRoot </> "keiro-core"),
+                "  " <> T.pack (copied </> "runtime"),
+                "  " <> T.pack packageRoot,
+                "",
+                "allow-newer:",
+                "  haxl:time"
+              ]
+          )
+        (testCode, testOut, testErr) <-
+          readProcessWithExitCode
+            "cabal"
+            [ "test",
+              "--project-file=" <> projectPath,
+              "--builddir=" <> buildDirectory,
+              "keiro-workspace-proof-conformance"
+            ]
+            ""
+        testCode `shouldNotBe` ExitSuccess
+        (testOut <> testErr)
+          `shouldSatisfy` isInfixOfString "FAIL  workflow/WorkspaceProofWorkflow/name expected=\"workspace-proof-workflow\" actual=\"workspace-proof-workflow-v2\""
+
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->
       it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the registered stable language") $
@@ -6062,14 +6248,15 @@ main = hspec $ do
           secondCode `shouldBe` ExitSuccess
           secondErr `shouldSatisfy` (not . isInfixOfString "(overwritten)")
           treeSnapshot out `shouldReturn` tree
-      it "accepts a validated runtime-package override without changing the M1 package set" $
+      it "accepts a validated runtime-package override and generates exactly one service package" $
         withTempDirectory "keiro-dsl-workspace-runtime-package-cli" $ \out -> do
           (exitCode, stdoutText, stderrText) <-
             runKeiroDsl ["scaffold", canonicalWorkspacePath, "--out", out, "--runtime-package", "demo-runtime"]
           unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
           tree <- treeSnapshot out
-          [path | (path, _) <- tree, "keiro-dsl-conformance" `isInfixOfString` path]
-            `shouldBe` []
+          length [path | (path, _) <- tree, takeExtension path == ".cabal", "keiro-dsl-conformance.workspace.demo-project" `isInfixOfString` path]
+            `shouldBe` 1
+          stderrText `shouldSatisfy` isInfixOfString "conformance-target: cabal test keiro-demo-project-conformance"
 
     describe "workspace adoption" $ do
       it "replaces embedded 0.6 nominal declarations only in generated files" $
@@ -7116,6 +7303,10 @@ treeSnapshot root = do
           else do
             contents <- TIO.readFile (root </> child)
             pure [(child, contents)]
+
+copyTextTree :: FilePath -> FilePath -> IO ()
+copyTextTree source destination =
+  treeSnapshot source >>= mapM_ (\(relative, contents) -> writeFileWithParents (destination </> relative) contents)
 
 thd3 :: (a, b, c) -> c
 thd3 (_, _, value) = value

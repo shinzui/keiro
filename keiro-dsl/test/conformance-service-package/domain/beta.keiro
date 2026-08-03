@@ -1,0 +1,13 @@
+language keiro-dsl 4
+context workspace-proof
+
+aggregate Beta
+  regs
+  states Active
+
+  command PingBeta { proofId }
+  event BetaPinged = fields(PingBeta)
+
+  Active -- PingBeta --> emit BetaPinged ; goto Active
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

@@ -1218,6 +1218,7 @@ complete `.keiro` files:
 
 ```text
 service demo-project
+runtime-package demo-project-runtime
 module Demo.Modules.Project
 layout collocated
 spec domain/project-artifact.keiro
@@ -1229,9 +1230,11 @@ Each member remains a complete source beginning with `language keiro-dsl 4`
 and declaring the same `context`. The workspace manifest itself has no language
 preamble.
 
-`service` is the stable workspace identity. Optional `module` and `layout` are
-workspace authority: member clauses must be absent or exactly equal. At least
-one `spec` path is required. Paths are manifest-relative, must stay beneath the
+`service` is the stable workspace identity. Optional `runtime-package` names the
+consumer Cabal library that compiles the generated service modules; it is build
+metadata and need not match `service`. Optional `module` and `layout` are
+workspace authority: member clauses must be absent or exactly equal. At least one
+`spec` path is required. Paths are manifest-relative, must stay beneath the
 manifest directory, use forward slashes, and end in `.keiro`.
 
 Membership is a set and is canonically sorted by normalized path, so reordering
@@ -1239,6 +1242,66 @@ Membership is a set and is canonically sorted by normalized path, so reordering
 rules, mapped declarations, and nodes have one owning member; identical
 duplicates are still errors. All file-taking commands accept a workspace and
 validate the composed service before acting.
+
+### One runnable conformance package per service
+
+When a workspace declares `runtime-package`, scaffolding generates one local
+Cabal package for the complete `service` under the same output root:
+
+```text
+src/keiro-dsl-conformance.workspace.demo-project/
+  keiro-demo-project-conformance.cabal
+  keiro-dsl-conformance-record.txt
+  src/Main.hs
+  src/KeiroConformance/Expectations.hs
+```
+
+The member and node counts do not change the package count. A standalone
+`.keiro` source opts in with `scaffold --runtime-package PACKAGE` and uses the
+distinct `keiro-dsl-conformance.<context>` slot. The explicit package name is
+required because a service such as `mori` may be implemented by a differently
+named library such as `mori-core`.
+
+The runtime build manifest exposes one generated service facade and keeps all
+per-node modules internal. Add the facade to the runtime library exactly as the
+manifest says. Then add one stable glob to the repository's root
+`cabal.project`:
+
+```cabal
+optional-packages:
+  service-runtime/src/keiro-dsl-conformance.workspace.*/*.cabal
+```
+
+The normal developer and CI command is now stable across member and node
+changes:
+
+```bash
+cabal test keiro-demo-project-conformance
+```
+
+The runner executes every aggregate and read-model self-check. Process, router,
+and workflow facts are compared by qualified key with the create-once
+`KeiroConformance.Expectations` module. Keiro populates that module only on the
+first scaffold. Later scaffolds never overwrite it, including under
+`--force-generated-overwrite`; review and edit it to accept an intentional fact
+change. Added, removed, duplicate, or changed facts make the generated target
+fail until reviewed.
+
+The package record makes repeat runs observable: byte-identical generated files
+are reported `unchanged`, Expectations is reported `skipped: already present`,
+and removed package files are reported stale but never deleted. Package and
+runtime ownership checks both finish before either tree is written, so a
+bannerless generated Cabal or runner file refuses the complete scaffold.
+
+The text `keiro-dsl-manifest.*.txt` remains authoritative for runtime-library
+modules and dependencies. The generated package replaces hand-written harness
+drivers and test stanzas; it does not remove the need to reconcile that runtime
+manifest when generated modules or dependencies change.
+
+To migrate an existing hand-written harness driver, configure the runtime
+package, expose the generated facade from the runtime library, add the stable
+project glob, and run the old and generated targets together once. Remove the
+old driver and stanza only after their results agree.
 
 ## Generated and hand-owned files
 
@@ -1285,6 +1348,10 @@ Every successful run writes:
   and ownership; and
 - a report classifying created, overwritten, unchanged, skipped, and stale
   paths.
+
+With an effective runtime package, the same run also writes the one
+service-keyed conformance package described above and prints its exact
+`cabal test` target.
 
 Stale paths are informational and are never deleted. Review them against
 version control or a fresh disposable scaffold. A stale generated file with an
@@ -1380,6 +1447,7 @@ Use text while authoring and the stable JSON schema for CI or other tooling.
 
 ```bash
 cabal run -v0 keiro-dsl -- scaffold service.keiro --out src \
+  --runtime-package acme-service-runtime \
   --module-root Acme.Services \
   --collocate \
   --goldens test/golden-payloads
@@ -1389,6 +1457,8 @@ Options:
 
 - `--out DIR` is required.
 - `--module-root PREFIX` overrides the source module clause.
+- `--runtime-package PACKAGE` enables the runnable conformance package and
+  overrides a workspace manifest's `runtime-package` value.
 - `--collocate` selects collocated generated placement.
 - `--force-generated-overwrite` allows replacement of a generated target that
   lacks the expected banner. Use only after proving the target is disposable.

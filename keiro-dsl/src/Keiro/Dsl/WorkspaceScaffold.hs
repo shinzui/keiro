@@ -55,6 +55,15 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.ConformancePackage
+  ( ConformancePackagePlan,
+    ConformancePackageReport,
+    ConformanceServiceKey (WorkspaceConformanceService),
+    executePreparedConformancePackage,
+    planConformancePackage,
+    preflightConformancePackage,
+    renderConformancePackageReport,
+  )
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
@@ -117,6 +126,7 @@ data WorkspacePlan = WorkspacePlan
     wpCheckedService :: !CheckedService,
     wpContext :: !Context,
     wpRuntimePackage :: !(Maybe RuntimePackageName),
+    wpConformancePackage :: !(Maybe ConformancePackagePlan),
     -- | The one golden-payload root for the whole workspace. Carried here so
     --     execution can refuse a member-adjacent fixture the root lacks before it
     --     writes anything.
@@ -154,23 +164,30 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens ::
   Either [Refusal] WorkspacePlan
 planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenRoot ctx workspace = case workspaceModules goldens runtimePackage ctx workspace of
   Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
-  Right tagged -> case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
-    Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
-    Right _ -> case pureRefusals ctx merged (map fst tagged) of
-      [] ->
-        Right
-          WorkspacePlan
-            { wpWorkspace = workspace,
-              wpCheckedService = service,
-              wpContext = ctx,
-              wpRuntimePackage = runtimePackage,
-              wpGoldenRoot = goldenRoot,
-              wpModules = tagged
-            }
-      refusals -> Left refusals
+  Right tagged -> case packagePlan of
+    Left failures -> Left (map ConformancePackageRefusal failures)
+    Right plannedPackage -> case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
+      Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
+      Right _ -> case pureRefusals ctx merged (map fst tagged) of
+        [] ->
+          Right
+            WorkspacePlan
+              { wpWorkspace = workspace,
+                wpCheckedService = service,
+                wpContext = ctx,
+                wpRuntimePackage = runtimePackage,
+                wpConformancePackage = plannedPackage,
+                wpGoldenRoot = goldenRoot,
+                wpModules = tagged
+              }
+        refusals -> Left refusals
   where
     service = checkedWorkspace workspace
     merged = checkedSpec service
+    packagePlan =
+      traverse
+        (\packageName -> planConformancePackage (WorkspaceConformanceService (wsService workspace)) packageName (serviceConformanceModuleName ctx) service)
+        runtimePackage
 
 -- | The tagged module set, in exactly the order
 -- 'Keiro.Dsl.ScaffoldRun.scaffoldModulesWithGoldens' produces for the merged spec.
@@ -344,6 +361,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrAddedBehavior :: ![BehaviorRecordRow],
     wsrRemovedBehavior :: ![BehaviorRecordRow],
     wsrObsoleteOutputHooks :: ![(Text, Text)],
+    wsrConformancePackage :: !(Maybe ConformancePackageReport),
     -- | Present only on the run that adopted pre-workspace scaffold output.
     wsrMigration :: !(Maybe MigrationReport)
   }
@@ -372,7 +390,11 @@ executeWorkspaceScaffold :: FilePath -> Bool -> WorkspacePlan -> IO (Either [Ref
 executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
   stranded <- goldenRootDivergence (wpGoldenRoot plan) workspace
   bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
-  case stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] of
+  packagePreflight <- case wpConformancePackage plan of
+    Nothing -> pure (Right Nothing)
+    Just packagePlan -> fmap (fmap Just) (preflightConformancePackage out forceGeneratedOverwrite packagePlan)
+  let packageRefusals = either (map ConformancePackageRefusal) (const []) packagePreflight
+  case stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] <> packageRefusals of
     refusals@(_ : _) -> pure (Left refusals)
     [] -> do
       previous <- readWorkspaceRecord recordPath
@@ -400,6 +422,9 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
             Just report -> adoptedRows report
             Nothing -> maybe [] wrAdopted previous
       TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted))
+      packageReport <- case packagePreflight of
+        Right prepared -> traverse executePreparedConformancePackage prepared
+        Left _ -> pure Nothing
       case migration of
         Nothing -> pure ()
         Just report -> do
@@ -431,6 +456,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
               wsrAddedBehavior = addedBehavior,
               wsrRemovedBehavior = removedBehavior,
               wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
+              wsrConformancePackage = packageReport,
               wsrMigration = migration
             }
   where
@@ -595,6 +621,7 @@ renderWorkspaceScaffoldReport report =
     <> obsoleteOutputSection
     <> ownershipSection
     <> staleSection
+    <> maybe [] renderConformancePackageReport (wsrConformancePackage report)
   where
     ctx = wsrContext report
     dispositions = wsrDispositions report

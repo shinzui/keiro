@@ -1,0 +1,56 @@
+cabal-version: 3.0
+name: keiro-dsl-conformance-service-runtime
+version: 0.0.0.0
+synopsis: Runtime library for the generated service-package conformance proof
+license: BSD-3-Clause
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules:
+    Proof.WorkspaceProof.Generated.Conformance
+  other-modules:
+    Proof.WorkspaceProof.Alpha.BehaviorHoles
+    Proof.WorkspaceProof.Alpha.Generated.BehaviorContract
+    Proof.WorkspaceProof.Alpha.Generated.Codec
+    Proof.WorkspaceProof.Alpha.Generated.Domain
+    Proof.WorkspaceProof.Alpha.Generated.EventStream
+    Proof.WorkspaceProof.Alpha.Generated.Harness
+    Proof.WorkspaceProof.Alpha.Generated.Projection
+    Proof.WorkspaceProof.Alpha.Generated.Transducer
+    Proof.WorkspaceProof.Alpha_view.Generated.ReadModel
+    Proof.WorkspaceProof.Alpha_view.Generated.ReadModelHarness
+    Proof.WorkspaceProof.Alpha_view.Generated.ReadModelTable
+    Proof.WorkspaceProof.Alpha_view.ReadModelHoles
+    Proof.WorkspaceProof.Beta.BehaviorHoles
+    Proof.WorkspaceProof.Beta.Generated.BehaviorContract
+    Proof.WorkspaceProof.Beta.Generated.Codec
+    Proof.WorkspaceProof.Beta.Generated.Domain
+    Proof.WorkspaceProof.Beta.Generated.EventStream
+    Proof.WorkspaceProof.Beta.Generated.Harness
+    Proof.WorkspaceProof.Beta.Generated.Projection
+    Proof.WorkspaceProof.Beta.Generated.Transducer
+    Proof.WorkspaceProof.Beta_view.Generated.ReadModel
+    Proof.WorkspaceProof.Beta_view.Generated.ReadModelHarness
+    Proof.WorkspaceProof.Beta_view.Generated.ReadModelTable
+    Proof.WorkspaceProof.Beta_view.ReadModelHoles
+    Proof.WorkspaceProof.Generated.Nominals
+    Proof.WorkspaceProof.Generated.Nominals.Internal
+    Proof.WorkspaceProof.Generated.ReplayAudit
+    Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts
+    Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowRuntime
+  build-depends:
+      aeson
+    , base
+    , containers
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , kiroku-store
+    , text
+  default-language: GHC2024
+  default-extensions:
+    ImportQualifiedPost
+    OverloadedLabels
+    OverloadedStrings

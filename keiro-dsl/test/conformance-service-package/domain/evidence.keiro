@@ -1,0 +1,38 @@
+language keiro-dsl 4
+context workspace-proof
+
+readmodel alpha_view {
+  table = "alpha_view"
+  schema = "workspace_proof"
+  columns {
+    proof_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:ebb780a44ff297c1"
+  consistency = Eventual
+  feed = subscription
+  subscription = "workspace-proof-alpha-view-sub"
+}
+
+readmodel beta_view {
+  table = "beta_view"
+  schema = "workspace_proof"
+  columns {
+    proof_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:b20d797cf7a278b5"
+  consistency = Eventual
+  feed = subscription
+  subscription = "workspace-proof-beta-view-sub"
+}
+
+workflow WorkspaceProofWorkflow
+  name "workspace-proof-workflow"
+  in WorkspaceProofInput { proofId:Id }
+  out WorkspaceProofSummary
+  id from input.proofId via idText
+  body
+    step summarize-proof -> WorkspaceProofSummary

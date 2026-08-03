@@ -4,6 +4,7 @@ module Keiro.Dsl.ServiceHarness
   ( DuplicateServiceFactKey (..),
     serviceConformanceModuleName,
     serviceConformanceFactKeys,
+    serviceConformanceFactValues,
     serviceHarnessModule,
   )
 where
@@ -12,6 +13,7 @@ import Data.List (group, sort, sortOn)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValues, workflowHarnessFactValues)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.Validate (nodeIdentity)
@@ -30,7 +32,12 @@ serviceConformanceModuleName ctx = contextGeneratedPrefix ctx <> ".Conformance"
 -- | Every normalized expectation key in stable node-identity order.
 serviceConformanceFactKeys :: CheckedService -> [Text]
 serviceConformanceFactKeys service =
-  concatMap factKeysForNode (serviceHarnessNodes service)
+  map fst (serviceConformanceFactValues service)
+
+-- | The create-once expectation baseline for all facts-producing nodes.
+serviceConformanceFactValues :: CheckedService -> [(Text, Text)]
+serviceConformanceFactValues service =
+  concatMap valuesForNode (serviceHarnessNodes service)
 
 -- | Emit exactly one facade, including an empty facade for a service with no
 -- harness-producing nodes. Duplicate normalized expectation keys are refused
@@ -157,44 +164,13 @@ producesFacts NRouter {} = True
 producesFacts NWorkflow {} = True
 producesFacts _ = False
 
-factKeysForNode :: Node -> [Text]
-factKeysForNode node =
-  [kindName <> "/" <> nodeName <> "/" <> factName | factName <- factNames]
+valuesForNode :: Node -> [(Text, Text)]
+valuesForNode node =
+  [(kindName <> "/" <> nodeName <> "/" <> factName, value) | (factName, value) <- factValues]
   where
     (kindName, nodeName, _) = nodeIdentity node
-    factNames = case node of
-      NProcess {} -> processFactNames
-      NRouter {} -> routerFactNames
-      NWorkflow {} -> workflowFactNames
+    factValues = case node of
+      NProcess process -> processHarnessFactValues process
+      NRouter router -> routerHarnessFactValues router
+      NWorkflow workflow -> workflowHarnessFactValues workflow
       _ -> []
-
-processFactNames :: [Text]
-processFactNames =
-  [ "fireAtField",
-    "timerIdPrefix",
-    "firedEventIdPrefix",
-    "dispatchIdUserField",
-    "onReject",
-    "onAmbiguous",
-    "onFailed",
-    "rejectedPolicy",
-    "poisonPolicy",
-    "maxAttempts"
-  ]
-
-routerFactNames :: [Text]
-routerFactNames =
-  [ "routerName",
-    "keyField",
-    "resolveSource",
-    "resolveRow",
-    "dispatchCommand",
-    "dispatchIdInputs",
-    "onDuplicate",
-    "onFailed",
-    "rejectedPolicy",
-    "poisonPolicy"
-  ]
-
-workflowFactNames :: [Text]
-workflowFactNames = ["name", "idVia", "idField", "body", "awaits", "patches"]

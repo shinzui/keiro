@@ -48,6 +48,16 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.ConformancePackage
+  ( ConformancePackageFailure,
+    ConformancePackageReport,
+    ConformanceServiceKey (StandaloneConformanceService),
+    executePreparedConformancePackage,
+    planConformancePackage,
+    preflightConformancePackage,
+    renderConformancePackageFailure,
+    renderConformancePackageReport,
+  )
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
@@ -91,6 +101,7 @@ data Refusal
     --       workspace golden root does not have. Raised only by the workspace path.
     GoldenRootDivergence !FilePath ![FilePath]
   | DuplicateConformanceFactKeys ![DuplicateServiceFactKey]
+  | ConformancePackageRefusal !ConformancePackageFailure
   deriving stock (Eq, Show)
 
 -- | What one module write did. 'Unchanged' is produced only by the workspace
@@ -141,7 +152,8 @@ data ScaffoldReport = ScaffoldReport
     reportNewHoles :: ![BindingHole],
     reportAddedBehavior :: ![BehaviorRecordRow],
     reportRemovedBehavior :: ![BehaviorRecordRow],
-    reportObsoleteOutputHooks :: ![(Text, Text)]
+    reportObsoleteOutputHooks :: ![(Text, Text)],
+    reportConformancePackage :: !(Maybe ConformancePackageReport)
   }
   deriving stock (Eq, Show)
 
@@ -317,14 +329,25 @@ executeServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> FilePath
 executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
   | effectiveLanguageContract sourceLanguage /= checkedLanguageContract service =
       pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
-  | otherwise = executeCheckedScaffold
+  | otherwise = case packagePlan of
+      Left failures -> pure (Left (map ConformancePackageRefusal failures))
+      Right Nothing -> executeCheckedScaffold Nothing
+      Right (Just plannedPackage) -> do
+        prepared <- preflightConformancePackage out forceGeneratedOverwrite plannedPackage
+        case prepared of
+          Left failures -> pure (Left (map ConformancePackageRefusal failures))
+          Right packageReady -> executeCheckedScaffold (Just packageReady)
   where
     spec = checkedSpec service
     modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
     facadeModule = case runtimePackage of
       Nothing -> Nothing
       Just _ -> Just (serviceConformanceModuleName ctx)
-    executeCheckedScaffold =
+    packagePlan =
+      traverse
+        (\packageName -> planConformancePackage (StandaloneConformanceService (contextName ctx)) packageName (serviceConformanceModuleName ctx) service)
+        runtimePackage
+    executeCheckedScaffold preparedPackage =
       case deriveBehaviorRequirements spec of
         Left errors -> pure (Left [BehaviorRefusal errors])
         Right requirements -> do
@@ -351,6 +374,7 @@ executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwr
               let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
               TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
               TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
+              packageReport <- traverse executePreparedConformancePackage preparedPackage
               pure $
                 Right
                   ScaffoldReport
@@ -369,7 +393,8 @@ executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwr
                       reportNewHoles = newHoles,
                       reportAddedBehavior = addedBehavior,
                       reportRemovedBehavior = removedBehavior,
-                      reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec
+                      reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
+                      reportConformancePackage = packageReport
                     }
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
@@ -549,6 +574,7 @@ renderRefusals = concatMap render
     render (DuplicateConformanceFactKeys duplicates) =
       ["error: duplicate normalized service conformance fact keys -- refusing to scaffold; nothing was written"]
         <> ["  " <> duplicateServiceFactKey duplicate | duplicate <- duplicates]
+    render (ConformancePackageRefusal failure) = renderConformancePackageFailure failure
 
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
@@ -569,6 +595,7 @@ renderScaffoldReport report =
     <> behaviorDriftSection
     <> obsoleteOutputSection
     <> staleSection
+    <> maybe [] renderConformancePackageReport (reportConformancePackage report)
   where
     ctx = reportContext report
     dispositions = reportDispositions report

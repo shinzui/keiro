@@ -55,10 +55,13 @@ This section must always reflect the actual current state of the work.
   normalizes every current harness family into executable checks and review-owned facts. The
   focused facade tests passed 6 examples and the compiled conformance fixture passed all 25
   runtime checks.
-- [ ] M3: Generate, preflight, write, and report exactly one local Cabal conformance package per
-  workspace service or standalone service.
-- [ ] M4: Prove the complete workflow with a Mori-shaped multi-member fixture, update the user
-  documentation, and validate the repository and ADR bundle.
+- [x] (2026-08-03 19:22Z) M3: Generated, preflighted, wrote, and reported exactly one local Cabal
+  conformance package per workspace service or standalone service. Package planning, record
+  round-trips, idempotence, create-once preservation, keyed comparison, and whole-scaffold
+  refusal are covered by focused tests.
+- [x] (2026-08-03 19:22Z) M4: Proved the complete workflow with a collocated, Mori-shaped
+  multi-member fixture containing two aggregates, two read models, and workflow facts; updated
+  the user and authoring-loop documentation; and completed every repository and ADR validation.
 
 
 ## Surprises & Discoveries
@@ -76,6 +79,24 @@ implementation. Provide concise evidence.
   Evidence: the baseline now records `source-with-conformance-facade`; the renderer-equivalence
   test compares the emitted facade with the compiled fixture, and
   `cabal test keiro-dsl-conformance-newsurface` passed all 25 checks.
+
+- Observation: Cabal 2.2 and newer require `cabal-version` to be the first field, so a generated
+  provenance comment cannot precede it even though comments are otherwise accepted.
+  Evidence: the first fixture build refused the generated Cabal file at line 2; moving
+  `cabal-version: 3.0` to line 1 and the recognized Keiro banner to line 2 made
+  `cabal test keiro-workspace-proof-conformance` compile and pass.
+
+- Observation: A trustworthy mutation proof must isolate both source and Expectations, not only
+  restore a tracked file after the test.
+  Evidence: the test copies the complete fixture to a temporary tree, changes the workflow fact,
+  scaffolds through the public CLI, verifies Expectations byte-for-byte, and builds through a
+  temporary Cabal project; the generated target exits non-zero with the qualified mismatch.
+
+- Observation: The repository extension-policy hook applies its global Cabal defaults to every
+  tracked package, while generated conformance packages are portable outputs governed by ADR 0019's
+  narrower GHC2024 plus `OverloadedStrings` contract.
+  Evidence: the hook now explicitly excludes `keiro-dsl-conformance.*` package paths while still
+  enforcing `ImportQualifiedPost` and `OverloadedLabels` on the repository-authored fixture runtime.
 
 
 ## Decision Log
@@ -142,6 +163,26 @@ implementation. Provide concise evidence.
   importing application internals directly.
   Date: 2026-08-03
 
+- Decision: Preserve already-valid lowercase Cabal service spellings, including hyphens, and
+  encode every character only when the service spelling is not itself a valid lowercase Cabal
+  package fragment.
+  Rationale: This keeps targets such as `keiro-workspace-proof-conformance` readable while making
+  `_` versus `-`, case, and otherwise invalid spellings non-aliasing and deterministic.
+  Date: 2026-08-03
+
+- Decision: Treat the service key as package-record authority while allowing the recorded runtime
+  package and facade module to evolve within the same service-keyed slot.
+  Rationale: A runtime library rename or module-placement migration must safely rewrite recognized
+  generated package files while preserving Expectations. A different service cannot reach the
+  slot through normal naming and is still refused if its record is copied there manually.
+  Date: 2026-08-03
+
+- Decision: Preflight the generated package before entering the existing runtime writer, then
+  execute the prepared package only after the runtime preflight and writes succeed.
+  Rationale: Both ownership checks finish before either tree changes, satisfying detection-before-
+  write atomicity without duplicating or weakening the established runtime scaffold pipeline.
+  Date: 2026-08-03
+
 
 ## Outcomes & Retrospective
 
@@ -161,6 +202,26 @@ this section into docs/adr/. Keep task-local execution details here.
   refused during pure planning, empty services retain a stable facade, unconfigured output stays
   compatible, and the checked-in generated facade compiles and runs under the advertised
   language contract.
+
+- Milestone 3 added pure service-key/path naming, collision-safe Cabal naming, a base-only runner,
+  create-once service Expectations, unique-key fact comparison, a complete package record, safe
+  preflight/prepared execution, stale reporting, and additive report integration. An identical
+  second run leaves generated package bytes untouched, force overwrite still skips Expectations,
+  and a bannerless Cabal file refuses the runtime and package trees together.
+
+- Milestone 4 checked in a public-CLI-generated service fixture whose one runtime library exposes
+  only `Proof.WorkspaceProof.Generated.Conformance`. Its one generated target runs 28 qualified
+  checks across two aggregate harnesses, two read-model harnesses, and workflow facts. A temporary
+  workflow-name mutation preserves the accepted baseline and fails with the exact expected/actual
+  key. The user guide and authoring loop now document the workspace setting, project glob,
+  developer/CI command, create-once review boundary, retained runtime manifest, and migration from
+  hand-written drivers.
+
+- Final validation passed `nix fmt`, `git diff --check`, 539 `keiro-dsl-test` examples,
+  `cabal test keiro-workspace-proof-conformance`, `cabal build all`, Dhall typing of the ADR
+  profile, and strict validation of all 20 ADR concepts. The original goal is complete: configured
+  services now produce one runnable, safely maintained conformance package without per-node test
+  plumbing, while unconfigured services retain their existing output.
 
 
 ## Context and Orientation
@@ -712,3 +773,7 @@ name from `check-adr` to the repository's `adr-validate`.
 Revision note (2026-08-03 18:45Z): Milestone 2 implementation recorded the service-facade API,
 additive per-node fact projections, configured scaffold/manifest integration, duplicate-key
 refusal, and compiled conformance evidence.
+
+Revision note (2026-08-03 19:22Z): Milestones 3 and 4 recorded the package planner and safe writer,
+collision-free naming and fact comparison, atomic runtime/package integration, the checked-in
+multi-member compile and mutation proof, the complete documented workflow, and final validation.

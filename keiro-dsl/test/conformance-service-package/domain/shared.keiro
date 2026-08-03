@@ -1,0 +1,4 @@
+language keiro-dsl 4
+context workspace-proof
+
+id ProofId prefix=proof

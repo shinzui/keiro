@@ -42,6 +42,7 @@ library
     Keiro.Dsl.BehaviorCoverage
     Keiro.Dsl.CanonicalEncoding
     Keiro.Dsl.CodecCompare
+    Keiro.Dsl.ConformancePackage
     Keiro.Dsl.Coverage
     Keiro.Dsl.Diff
     Keiro.Dsl.DiffReport

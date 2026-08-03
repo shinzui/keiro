@@ -7,6 +7,12 @@ cd "$repo_root"
 failed=0
 
 while IFS= read -r cabal_file; do
+  # Generated conformance packages are portable outputs governed by ADR 0019,
+  # not repository-authored components: their sole shared extension remains
+  # OverloadedStrings, and specialized syntax stays local to generated modules.
+  case "$cabal_file" in
+    */keiro-dsl-conformance.*/*.cabal) continue ;;
+  esac
   for extension in ImportQualifiedPost OverloadedLabels; do
     if ! rg -q "^[[:space:]]+${extension}[[:space:]]*$" "$cabal_file"; then
       echo "extension policy: $cabal_file does not declare $extension in shared Cabal defaults" >&2

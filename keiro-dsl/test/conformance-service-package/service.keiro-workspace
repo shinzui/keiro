@@ -1,0 +1,10 @@
+# One durable service assembled from several ownership members. The generated
+# conformance package is keyed by this service, never by a member or node.
+service workspace-proof
+runtime-package keiro-dsl-conformance-service-runtime
+module Proof
+layout collocated
+spec domain/alpha.keiro
+spec domain/beta.keiro
+spec domain/evidence.keiro
+spec domain/shared.keiro

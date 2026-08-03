@@ -131,6 +131,23 @@ the complete member set before writing, emits context-level modules once, and st
 workspace-keyed history with per-module ownership. Never scaffold workspace members
 independently into the same output tree after adoption.
 
+For a runnable whole-service conformance target, declare the Cabal library that
+owns the generated runtime in the workspace manifest:
+
+```text
+service my-service
+runtime-package my-service-runtime
+spec domain/a.keiro
+spec domain/b.keiro
+```
+
+For a standalone source, pass `--runtime-package my-service-runtime`. The run
+generates one `keiro-dsl-conformance.workspace.<service>` package (or the
+standalone context-keyed equivalent), exposes one service facade in the runtime
+manifest, and prints `conformance-target: cabal test
+keiro-<service>-conformance`. Add a stable optional-package glob for these Cabal
+files to the root project once; do not add a hand-written stanza per node.
+
 ### 5. Fill the holes
 
 Open the hole modules. Language 4 generates ordinary transition guards, writes, emits, and
@@ -152,14 +169,26 @@ both total directions and the declared fixture corpus. Do not return `Either`, h
 the inverse, or move JSON policy into the binding. A refined consumer type belongs behind
 `mapped opaque`.
 
-### 6. Run the harness (pin behaviour)
+### 6. Run the service conformance package (pin behaviour)
 
-The scaffolder emits a harness (`Harness.hs` for aggregates; a facts harness for processes)
-plus golden round-trips. Compile and run it (via the relevant `cabal test` component). It
-asserts `validateTransducer == []`, codec round-trips, the disposition/time-injection/id
-decisions, and a behavioural accept. A wrong source lowering or hole fill turns a **specific**
-named test red. A green harness shows that the generated behavior and explicit fills agree with
-the checked spec.
+The scaffolder emits per-node harnesses plus one service facade. With
+`runtime-package` configured, run the generated target printed by the scaffold
+report, for example `cabal test keiro-my-service-conformance`. It asserts
+`validateTransducer == []`, codec round-trips, read-model derivations,
+disposition/time-injection/id decisions, and behavioural acceptance across the
+complete service. A wrong source lowering or hole fill turns a **specific**
+qualified test red.
+
+Process, router, and workflow values are pinned in the create-once
+`KeiroConformance.Expectations` module. Re-scaffolding never overwrites it. When
+an intentional fact changes, inspect the focused expected/actual failure and
+edit that one hand-owned baseline; do not copy the generated actual value
+without review. Missing and unexpected keys fail too, so deleting or adding a
+node cannot silently reduce coverage.
+
+The runtime `keiro-dsl-manifest.*.txt` still needs reconciliation when generated
+modules or dependencies change. The runnable package removes the manual driver
+and test stanza, not the runtime library's ownership of generated code.
 
 If validation is red or startup reports `is not replay-safe`, open `TAXONOMY.md`. It explains
 all eight warning families, including why a `state-changing-epsilon` transition must emit an

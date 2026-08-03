@@ -30,6 +30,9 @@ module Keiro.Dsl.Harness
     harnessRouter,
     harnessReadModel,
     harnessWorkflow,
+    processHarnessFactValues,
+    routerHarnessFactValues,
+    workflowHarnessFactValues,
   )
 where
 
@@ -129,26 +132,29 @@ harnessRouter ctx router =
 
 emitRouterHarness :: Text -> RouterNode -> Text
 emitRouterHarness genPrefix router =
-  nl
+  nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".RouterHarness (routerHarnessValues) where",
       "",
       "routerHarnessValues :: [(String, String)]",
-      "routerHarnessValues =",
-      "  [ (\"routerName\", " <> hs (rtName router) <> ")",
-      "  , (\"keyField\", " <> hs (corrField (rtKey router)) <> ")",
-      "  , (\"resolveSource\", " <> hs resolveSource <> ")",
-      "  , (\"resolveRow\", " <> hs (T.intercalate "," (rvRow (rtResolve router))) <> ")",
-      "  , (\"dispatchCommand\", " <> hs (rdCommand dispatch) <> ")",
-      "  , (\"dispatchIdInputs\", \"(name, key, sourceEventId, targetStreamName, occurrence)\")",
-      "  , (\"onDuplicate\", " <> hs (showDisp (onDuplicate disposition)) <> ")",
-      "  , (\"onFailed\", " <> hs (showDisp (onFailed disposition)) <> ")",
-      "  , (\"rejectedPolicy\", " <> hs (showPolicy (rtRejected router)) <> ")",
-      "  , (\"poisonPolicy\", " <> hs (showPolicy (rtPoison router)) <> ")",
-      "  ]"
+      "routerHarnessValues ="
     ]
+      <> renderFactValues (routerHarnessFactValues router)
+
+routerHarnessFactValues :: RouterNode -> [(Text, Text)]
+routerHarnessFactValues router =
+  [ ("routerName", rtName router),
+    ("keyField", corrField (rtKey router)),
+    ("resolveSource", resolveSource),
+    ("resolveRow", T.intercalate "," (rvRow (rtResolve router))),
+    ("dispatchCommand", rdCommand dispatch),
+    ("dispatchIdInputs", "(name, key, sourceEventId, targetStreamName, occurrence)"),
+    ("onDuplicate", showDisp (onDuplicate disposition)),
+    ("onFailed", showDisp (onFailed disposition)),
+    ("rejectedPolicy", showPolicy (rtRejected router)),
+    ("poisonPolicy", showPolicy (rtPoison router))
+  ]
   where
-    hs = tshow
     dispatch = rtDispatch router
     disposition = rdDisposition dispatch
     resolveSource = case rvSource (rtResolve router) of
@@ -221,7 +227,7 @@ emitReadModelHarness genPrefix ctx readModel =
 
 emitProcessHarness :: Text -> ProcessNode -> Text
 emitProcessHarness genPrefix p =
-  nl
+  nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".ProcessHarness (processHarnessValues) where",
       "",
@@ -232,24 +238,27 @@ emitProcessHarness genPrefix p =
       "-- assertion red — the spec->behaviour pin. (Live-runtime behavioural",
       "-- conformance of the filled ProcessManager is the M5 step.)",
       "processHarnessValues :: [(String, String)]",
-      "processHarnessValues =",
-      "  [ (\"fireAtField\", " <> hs (faField (tmFireAt timer)) <> ")",
-      "  , (\"timerIdPrefix\", " <> hs (idePrefix (tmId timer)) <> ")",
-      "  , (\"firedEventIdPrefix\", " <> hs (idePrefix (fireFiredEventId timer')) <> ")",
-      "  , (\"dispatchIdUserField\", \"none\")",
-      "  , (\"onReject\", " <> hs (showFireOutcome (onReject fd)) <> ")",
-      "  , (\"onAmbiguous\", " <> hs (showFireOutcome (onAmbiguous fd)) <> ")",
-      "  , (\"onFailed\", " <> hs (showDisp (onFailed (firstDispDisposition p))) <> ")",
-      "  , (\"rejectedPolicy\", " <> hs (showPolicy (procRejected p)) <> ")",
-      "  , (\"poisonPolicy\", " <> hs (showPolicy (procPoison p)) <> ")",
-      "  , (\"maxAttempts\", " <> hs (tInt (tmMaxAttempts timer)) <> ")",
-      "  ]"
+      "processHarnessValues ="
     ]
+      <> renderFactValues (processHarnessFactValues p)
+
+processHarnessFactValues :: ProcessNode -> [(Text, Text)]
+processHarnessFactValues p =
+  [ ("fireAtField", faField (tmFireAt timer)),
+    ("timerIdPrefix", idePrefix (tmId timer)),
+    ("firedEventIdPrefix", idePrefix (fireFiredEventId timer')),
+    ("dispatchIdUserField", "none"),
+    ("onReject", showFireOutcome (onReject fd)),
+    ("onAmbiguous", showFireOutcome (onAmbiguous fd)),
+    ("onFailed", showDisp (onFailed (firstDispDisposition p))),
+    ("rejectedPolicy", showPolicy (procRejected p)),
+    ("poisonPolicy", showPolicy (procPoison p)),
+    ("maxAttempts", tInt (tmMaxAttempts timer))
+  ]
   where
     timer = procTimer p
     timer' = tmFire timer
     fd = fireDisposition timer'
-    hs = tshow
 
 firstDispDisposition :: ProcessNode -> DispatchDisposition
 firstDispDisposition p = case hDispatch (procHandle p) of
@@ -352,6 +361,30 @@ emitWorkflowFacts genPrefix w =
     bodyTag (WfChild l _ _ _) = "child:" <> l
     bodyTag (WfPatch patchId items _) = "patch:" <> patchId <> "(" <> T.intercalate "," (map bodyTag items) <> ")"
     bodyTag (WfContinueAsNew seedType _) = "continueAsNew:" <> seedType
+
+workflowHarnessFactValues :: WorkflowNode -> [(Text, Text)]
+workflowHarnessFactValues workflow =
+  [ ("name", wfStable workflow),
+    ("idVia", wfIdVia workflow),
+    ("idField", maybe "input" id (wfIdField workflow)),
+    ("body", T.pack (show (map (T.unpack . bodyTag) (wfBody workflow)))),
+    ("awaits", T.pack (show (map T.unpack (workflowAwaitLabels (wfBody workflow))))),
+    ("patches", T.pack (show (map T.unpack (workflowPatchIds (wfBody workflow)))))
+  ]
+  where
+    bodyTag (WfStep label _ _) = "step:" <> label
+    bodyTag (WfAwait label _ _) = "await:" <> label
+    bodyTag (WfSleep label _ _) = "sleep:" <> label
+    bodyTag (WfChild label _ _ _) = "child:" <> label
+    bodyTag (WfPatch patchId items _) = "patch:" <> patchId <> "(" <> T.intercalate "," (map bodyTag items) <> ")"
+    bodyTag (WfContinueAsNew seedType _) = "continueAsNew:" <> seedType
+
+renderFactValues :: [(Text, Text)] -> [Text]
+renderFactValues facts =
+  [ (if index == (0 :: Int) then "  [ " else "  , ") <> "(" <> tshow label <> ", " <> tshow value <> ")"
+  | (index, (label, value)) <- zip [0 ..] facts
+  ]
+    <> ["  ]"]
 
 -- | Emit the workflow's deterministic id derivation compiled against the LIVE
 -- @Keiro.Workflow@: the 'WorkflowName' and the awakeable-id function (the actual

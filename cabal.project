@@ -8,6 +8,8 @@ packages:
   keiro-dsl
   keiro-dsl/test
   keiro-dsl/test/conformance-behavior-complete
+  keiro-dsl/test/conformance-service-package/runtime
+  keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof
 
 source-repository-package
   type: git
