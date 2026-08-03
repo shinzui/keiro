@@ -76,6 +76,7 @@ library
 
   other-modules:
     Keiro.Dsl.Frontend.Internal
+    Keiro.Dsl.HaskellImport
     Keiro.Dsl.Parser.Aggregate
     Keiro.Dsl.Parser.Coordination
     Keiro.Dsl.Parser.Core
@@ -148,6 +149,18 @@ test-suite keiro-dsl-test
     , process      >=1.6  && <1.7
     , QuickCheck   >=2.14
     , text         >=2.1  && <2.2
+
+test-suite keiro-dsl-import-planning-test
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/import-planning src
+  main-is:        Main.hs
+  other-modules:  Keiro.Dsl.HaskellImport
+  build-depends:
+    , base        >=4.21 && <5
+    , containers  >=0.6  && <0.8
+    , hspec       >=2.11
+    , text        >=2.1  && <2.2
 
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
 -- Holes.hs compile against keiki/keiro and that the filled transducer passes

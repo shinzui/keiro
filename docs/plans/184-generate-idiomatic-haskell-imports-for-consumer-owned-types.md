@@ -49,7 +49,9 @@ remain identical on a second scaffold run.
 
 ## Progress
 
-- [ ] Milestone 0: record the presentation contract and add failing rendering tests.
+- [x] (2026-08-03T13:34:16Z) Milestone 0: recorded the presentation contract in
+      seven intentionally failing planner examples, added the checked collision fixture, and
+      confirmed all 514 pre-existing unit examples still pass.
 - [ ] Milestone 1: implement the central Haskell import and reference planner.
 - [ ] Milestone 2: migrate every Haskell emitter and new-file skeleton to the planner.
 - [ ] Milestone 3: add compiled collision conformance coverage and regenerate baselines.
@@ -81,6 +83,13 @@ remain identical on a second scaffold run.
 - Observation: Hackage and the upstream `keiro-dsl-0.9.0.0` tag both identify 0.9.0.0
   as the current release, and Mori pins that version. This plan makes Keiro release-ready
   and proves downstream compatibility without changing Mori's pin or publishing a release.
+
+- Observation: a test component cannot import a library module listed under `other-modules`,
+  while adding the complete `src` directory to the existing `keiro-dsl-test` source roots
+  makes every library module a test home module and exposes undeclared transitive dependencies.
+  Evidence: the attempted shared source root produced `-Wmissing-home-modules` followed by
+  hidden-package errors for `prettyprinter`, `megaparsec`, and `time`. The focused tests now
+  compile only `Keiro.Dsl.HaskellImport` beside a small test driver.
 
 
 ## Decision Log
@@ -135,13 +144,28 @@ remain identical on a second scaffold run.
   disposable Mori copy. Release and downstream upgrade are separate reversible operations.
   Date: 2026-08-03.
 
+- Decision: exercise the internal planner through the private
+  `keiro-dsl-import-planning-test` Cabal component rather than expose it or add `src` to the
+  existing test component.
+  Rationale: this keeps `Keiro.Dsl.HaskellImport` out of the package API while giving its
+  deterministic allocation rules direct white-box coverage without recompiling the full
+  library as test-owned modules.
+  Date: 2026-08-03.
+
 
 ## Outcomes & Retrospective
 
-No implementation has started. At each milestone, record the files changed, tests run,
-and any deviation from the import contract here. Before completion, distill the final
-presentation rules into ADR-0012 and summarize whether the disposable Mori proof removed
-the 1,461 baseline references without changing semantic artifacts.
+Milestone 0 added `keiro-dsl/test/import-planning/Main.hs`, the internal-module stub at
+`keiro-dsl/src/Keiro/Dsl/HaskellImport.hs`, and
+`keiro-dsl/test/fixtures/import-planning-collisions.keiro`. The seven new examples fail with
+`HaskellImportPlanningUnavailable "Generated.Example"`, which is the expected pre-implementation
+state. `cabal test keiro-dsl-test` passes all 514 pre-existing examples, and `cabal run keiro-dsl
+-- check keiro-dsl/test/fixtures/import-planning-collisions.keiro` reports `OK`.
+
+At each later milestone, record the files changed, tests run, and any deviation from the import
+contract here. Before completion, distill the final presentation rules into ADR-0012 and summarize
+whether the disposable Mori proof removed the 1,461 baseline references without changing semantic
+artifacts.
 
 
 ## Context and Orientation
@@ -203,8 +227,10 @@ generated Haskell as an accepted goal.
 
 ### Milestone 0: Freeze the presentation contract
 
-Add focused unit tests to `keiro-dsl/test/Spec.hs` around a small public-to-tests rendering
-seam. The tests must describe the desired result before implementation: a unique external
+Add focused unit tests to `keiro-dsl/test/import-planning/Main.hs` in the private
+`keiro-dsl-import-planning-test` component. The component compiles only the internal planner
+module beside the test driver, keeping the planner out of the package API. The tests must describe
+the desired result before implementation: a unique external
 type is explicitly imported and unqualified; duplicate occurrence names are qualified by
 different short aliases; value and constructor references are short-qualified; imports are
 deduplicated and sorted; local and reserved names force qualification; input declaration
@@ -328,13 +354,13 @@ should identify the same source revision. If the registry name changes, rediscov
 During Milestones 0 and 1, run the focused unit test:
 
 ```bash
-cabal test keiro-dsl-test --test-options='--match=haskell import planning'
+cabal test keiro-dsl-import-planning-test
 ```
 
 Expected final transcript includes:
 
 ```text
-Test suite keiro-dsl-test: PASS
+Test suite keiro-dsl-import-planning-test: PASS
 ```
 
 Exercise existing generator surfaces during Milestone 2:
@@ -589,3 +615,6 @@ released baseline. The Mori project remains referenced canonically as
   `intention_01kz3vdgp7ecttr8wnsrr8p66f` after tracing all Haskell emitters, inspecting the
   current Mori adoption, verifying the 0.9.0.0 release baseline, and reviewing ADR-0012,
   ADR-0014, ADR-0015, and ADR-0016.
+- 2026-08-03: Recorded Milestone 0 evidence and moved direct planner coverage into a dedicated
+  private Cabal test component after Cabal proved that the hidden library module could not be
+  imported safely through the existing test component.

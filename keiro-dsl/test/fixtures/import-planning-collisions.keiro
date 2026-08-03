@@ -1,0 +1,53 @@
+language keiro-dsl 4
+context import-planning-collisions
+
+mapped nominal OrderStatus : Text {
+  haskell package=keiro-dsl module=ImportPlanning.Consumer.Order.Types type=Status
+  binding = "ImportPlanning.Bindings.orderStatusBinding"
+  binding-version = "1"
+  canonical-type = "import-planning.OrderStatus.v1"
+  fixtures = "ImportPlanning.Bindings.orderStatusFixtures"
+}
+
+mapped nominal InvoiceStatus : Text {
+  haskell package=keiro-dsl module=ImportPlanning.Consumer.Invoice.Types type=Status
+  binding = "ImportPlanning.Bindings.invoiceStatusBinding"
+  binding-version = "1"
+  canonical-type = "import-planning.InvoiceStatus.v1"
+  fixtures = "ImportPlanning.Bindings.invoiceStatusFixtures"
+}
+
+mapped nominal LocalCollision : Text {
+  haskell package=keiro-dsl module=ImportPlanning.Consumer.Domain type=CollisionLedger
+  binding = "ImportPlanning.Bindings.localCollisionBinding"
+  binding-version = "1"
+  canonical-type = "import-planning.LocalCollision.v1"
+  fixtures = "ImportPlanning.Bindings.localCollisionFixtures"
+}
+
+mapped structural record Details {
+  haskell package=keiro-dsl module=ImportPlanning.Consumer.Shared.Types type=Details
+  binding = "ImportPlanning.Bindings.detailsBinding"
+  binding-version = "1"
+  canonical-type = "import-planning.Details.v1"
+  fixtures = "ImportPlanning.Bindings.detailsFixtures"
+  wire object constructor=Details unknown-fields=reject {
+    label as "label" : Text required
+  }
+}
+
+aggregate CollisionLedger
+  regs
+  states Empty Recorded!
+
+  command Record {
+    orderStatus:OrderStatus invoiceStatus:InvoiceStatus
+    localCollision:LocalCollision details:Details
+  }
+  event RecordedValues = fields(Record)
+
+  Empty -- Record -->
+    emit RecordedValues
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
