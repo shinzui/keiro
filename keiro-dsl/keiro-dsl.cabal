@@ -159,12 +159,14 @@ test-suite keiro-dsl-conformance
   main-is:        Main.hs
   other-modules:
     Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
     Generated.HospitalCapacity.Reservation.EventStream
     Generated.HospitalCapacity.Reservation.Harness
     Generated.HospitalCapacity.Reservation.Projection
+    Generated.HospitalCapacity.Reservation.Transducer
     HospitalCapacity.Reservation.Holes
 
   build-depends:
@@ -191,6 +193,7 @@ test-suite keiro-dsl-conformance-aggregate-scalars
     Generated.AggregateScalars.ScalarLedger.EventStream
     Generated.AggregateScalars.ScalarLedger.Harness
     Generated.AggregateScalars.ScalarLedger.Projection
+    Generated.AggregateScalars.ScalarLedger.Transducer
 
   build-depends:
     , aeson  >=2.2  && <2.3
@@ -212,6 +215,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
     Generated.AggregateScalarExpressions.Nominals
+    Generated.AggregateScalarExpressions.Nominals.Internal
     Generated.AggregateScalarExpressions.ReplayAudit
     Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract
     Generated.AggregateScalarExpressions.ScalarAccount.Codec
@@ -253,6 +257,7 @@ test-suite keiro-dsl-conformance-behavior-complete
     Generated.BehaviorComplete.Journey.Projection
     Generated.BehaviorComplete.Journey.Transducer
     Generated.BehaviorComplete.Nominals
+    Generated.BehaviorComplete.Nominals.Internal
     Generated.BehaviorComplete.ReplayAudit
     Generated.BehaviorComplete.Structural.Shape.StartPayload
     Generated.BehaviorComplete.StructuralProjections
@@ -310,6 +315,7 @@ test-suite keiro-dsl-conformance-workspace-nominals
   main-is:        Main.hs
   other-modules:
     Generated.WorkspaceNominalProof.Nominals
+    Generated.WorkspaceNominalProof.Nominals.Internal
     Generated.WorkspaceNominalProof.Project.BehaviorContract
     Generated.WorkspaceNominalProof.Project.Codec
     Generated.WorkspaceNominalProof.Project.Domain
@@ -352,6 +358,7 @@ test-suite keiro-dsl-conformance-structural
     Generated.StructuralConformance.ArtifactCatalog.EventStream
     Generated.StructuralConformance.ArtifactCatalog.Harness
     Generated.StructuralConformance.ArtifactCatalog.Projection
+    Generated.StructuralConformance.ArtifactCatalog.Transducer
     Generated.StructuralConformance.ReplayAudit
     Generated.StructuralConformance.Structural.Shape.ArtifactInfo
     Generated.StructuralConformance.Structural.Shape.ArtifactKind
@@ -420,6 +427,7 @@ test-suite keiro-dsl-conformance-replay
     Generated.ReplayDivergence.Note.EventStream
     Generated.ReplayDivergence.Note.Harness
     Generated.ReplayDivergence.Note.Projection
+    Generated.ReplayDivergence.Note.Transducer
     Generated.ReplayDivergence.ReplayAudit
     ReplayDivergence.Note.Holes
 
@@ -466,10 +474,12 @@ test-suite keiro-dsl-conformance-snapshot
   main-is:        Main.hs
   other-modules:
     Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
     Generated.HospitalCapacity.Reservation.EventStream
+    Generated.HospitalCapacity.Reservation.Transducer
     HospitalCapacity.Reservation.Holes
 
   build-depends:
@@ -489,12 +499,16 @@ test-suite keiro-dsl-conformance-skeletons
   main-is:        Main.hs
   other-modules:
     SkelAggregate.Generated.MyService.Nominals
+    SkelAggregate.Generated.MyService.Nominals.Internal
     SkelAggregate.Generated.MyService.ReplayAudit
+    SkelAggregate.Generated.MyService.Thing.BehaviorContract
     SkelAggregate.Generated.MyService.Thing.Codec
     SkelAggregate.Generated.MyService.Thing.Domain
     SkelAggregate.Generated.MyService.Thing.EventStream
     SkelAggregate.Generated.MyService.Thing.Harness
     SkelAggregate.Generated.MyService.Thing.Projection
+    SkelAggregate.Generated.MyService.Thing.Transducer
+    SkelAggregate.MyService.Thing.BehaviorHoles
     SkelAggregate.MyService.Thing.Holes
     SkelContract.Generated.MyService.MyContract.Contract
     SkelEmit.Generated.MyService.MyContract.Contract
@@ -506,15 +520,18 @@ test-suite keiro-dsl-conformance-skeletons
     SkelProcess.Generated.MyService.Hospital.EventStream
     SkelProcess.Generated.MyService.Hospital.Harness
     SkelProcess.Generated.MyService.Hospital.Projection
+    SkelProcess.Generated.MyService.Hospital.Transducer
     SkelProcess.Generated.MyService.HospitalSurge.Process
     SkelProcess.Generated.MyService.HospitalSurge.ProcessHarness
     SkelProcess.Generated.MyService.Nominals
+    SkelProcess.Generated.MyService.Nominals.Internal
     SkelProcess.Generated.MyService.ReplayAudit
     SkelProcess.Generated.MyService.Surge.Codec
     SkelProcess.Generated.MyService.Surge.Domain
     SkelProcess.Generated.MyService.Surge.EventStream
     SkelProcess.Generated.MyService.Surge.Harness
     SkelProcess.Generated.MyService.Surge.Projection
+    SkelProcess.Generated.MyService.Surge.Transducer
     SkelProcess.MyService.Hospital.Holes
     SkelProcess.MyService.HospitalSurge.ProcessHoles
     SkelProcess.MyService.Surge.Holes
@@ -534,6 +551,7 @@ test-suite keiro-dsl-conformance-skeletons
     SkelRouter.Generated.MyService.Page.EventStream
     SkelRouter.Generated.MyService.Page.Harness
     SkelRouter.Generated.MyService.Page.Projection
+    SkelRouter.Generated.MyService.Page.Transducer
     SkelRouter.Generated.MyService.PagingRouter.Router
     SkelRouter.Generated.MyService.PagingRouter.RouterHarness
     SkelRouter.Generated.MyService.ReplayAudit
@@ -553,6 +571,7 @@ test-suite keiro-dsl-conformance-skeletons
     , keiro-core
     , keiro-pgmq
     , kiroku-store
+    , mmzk-typeid        >=0.7  && <0.8
     , shibuya-core
     , text               >=2.1  && <2.2
     , time
@@ -569,12 +588,14 @@ test-suite keiro-dsl-conformance-coldstart
   other-modules:
     Billing.Subscription.Holes
     Generated.Billing.Nominals
+    Generated.Billing.Nominals.Internal
     Generated.Billing.ReplayAudit
     Generated.Billing.Subscription.Codec
     Generated.Billing.Subscription.Domain
     Generated.Billing.Subscription.EventStream
     Generated.Billing.Subscription.Harness
     Generated.Billing.Subscription.Projection
+    Generated.Billing.Subscription.Transducer
 
   build-depends:
     , aeson  >=2.2  && <2.3
@@ -583,26 +604,13 @@ test-suite keiro-dsl-conformance-coldstart
     , keiro
     , text   >=2.1  && <2.2
 
--- Contract codec conformance (EP-4): the scaffolded self-contained contract
--- payload ADT + codec, compiled + round-tripped per event type.
+-- Stable language-4 contract conformance: prefix-indexed KindID fields,
+-- canonical text JSON, field-path-aware rejection, and the complete generated
+-- dependency set.
 test-suite keiro-dsl-conformance-contract
   import:         warnings, shared
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-contract
-  main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.Emergency.Contract
-  build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , text        >=2.1  && <2.2
-
--- Language-4 contract conformance: prefix-indexed KindID fields, canonical
--- text JSON, field-path-aware rejection, and the complete generated dependency set.
-test-suite keiro-dsl-conformance-contract-typeid
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test/conformance-contract-typeid
   main-is:        Main.hs
   other-modules:  Generated.HospitalCapacity.Emergency.Contract
   build-depends:
@@ -611,6 +619,20 @@ test-suite keiro-dsl-conformance-contract-typeid
     , keiro-core
     , mmzk-typeid  >=0.7  && <0.8
     , text         >=2.1  && <2.2
+
+-- Language-1 compatibility proof: the historical permissive Text contract DTO
+-- still accepts pre-TypeID-v7 samples and retains its released JSON image.
+test-suite keiro-dsl-conformance-contract-v1-compat
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-contract-v1-compat
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.Emergency.Contract
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , bytestring  >=0.12 && <0.13
+    , text        >=2.1  && <2.2
 
 -- EP-4 intake runtime conformance: the scaffolded Inbox disposition + dedupe
 -- policy compiled against the LIVE Keiro.Inbox.Types (InboxResult / dedupe).
@@ -784,12 +806,15 @@ test-suite keiro-dsl-conformance-process-full
     Generated.SurgeDemo.Hospital.Domain
     Generated.SurgeDemo.Hospital.EventStream
     Generated.SurgeDemo.Hospital.Projection
+    Generated.SurgeDemo.Hospital.Transducer
     Generated.SurgeDemo.Nominals
+    Generated.SurgeDemo.Nominals.Internal
     Generated.SurgeDemo.ReplayAudit
     Generated.SurgeDemo.Surge.Codec
     Generated.SurgeDemo.Surge.Domain
     Generated.SurgeDemo.Surge.EventStream
     Generated.SurgeDemo.Surge.Projection
+    Generated.SurgeDemo.Surge.Transducer
     Generated.SurgeDemo.SurgeFlow.Process
     SurgeDemo.Hospital.Holes
     SurgeDemo.Surge.Holes
@@ -836,9 +861,11 @@ test-suite keiro-dsl-conformance-process-runtime
   other-modules:
     Generated.HospitalCapacity.HospitalSurge.Process
     Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.Surge.Codec
     Generated.HospitalCapacity.Surge.Domain
     Generated.HospitalCapacity.Surge.EventStream
+    Generated.HospitalCapacity.Surge.Transducer
     HospitalCapacity.Surge.Holes
 
   build-depends:
@@ -891,6 +918,7 @@ test-suite keiro-dsl-conformance-router-full
     Generated.IncidentPaging.Page.Codec
     Generated.IncidentPaging.Page.Domain
     Generated.IncidentPaging.Page.EventStream
+    Generated.IncidentPaging.Page.Transducer
     Generated.IncidentPaging.PagingRouter.Router
     Generated.IncidentPaging.PagingRouter.RouterHarness
     Generated.IncidentPaging.ReplayAudit
@@ -921,6 +949,7 @@ test-suite keiro-dsl-conformance-newsurface
     Generated.TransferRouting.Hospital.EventStream
     Generated.TransferRouting.Hospital.Harness
     Generated.TransferRouting.Hospital.Projection
+    Generated.TransferRouting.Hospital.Transducer
     Generated.TransferRouting.Hospital_load.ReadModel
     Generated.TransferRouting.Hospital_load.ReadModelHarness
     Generated.TransferRouting.Hospital_load.ReadModelTable
@@ -970,12 +999,14 @@ test-suite keiro-dsl-conformance-v2
   main-is:        Main.hs
   other-modules:
     Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
     Generated.HospitalCapacity.Reservation.EventStream
     Generated.HospitalCapacity.Reservation.Harness
     Generated.HospitalCapacity.Reservation.Projection
+    Generated.HospitalCapacity.Reservation.Transducer
     HospitalCapacity.Reservation.Holes
 
   build-depends:

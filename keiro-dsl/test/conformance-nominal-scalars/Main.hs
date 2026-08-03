@@ -120,7 +120,7 @@ changedScalarWireParity =
     toJSON (nominalToRepresentation Bindings.riskScoreBinding (RiskScore 7)) == toJSON (8 :: Int)
 
 oneDirectionIdLaw :: Bool
-oneDirectionIdLaw = case KindID.parseText @"ord" "ord_00041061050r3gg28a1c60t3ge" of
+oneDirectionIdLaw = case KindID.parseText @"ord" "ord_01h455vb4pex5vsknk084sn02r" of
     Left _ -> False
     Right changed ->
         nominalDomainRoundTrip
@@ -348,7 +348,7 @@ nominalGuardBranches =
     setStatus value (RecordNominals command) = RecordNominals command{status = value}
 
 alternateOrderId :: OrderId
-alternateOrderId = case KindID.parseText @"ord" "ord_00041061050r3gg28a1c60t3ge" of
+alternateOrderId = case KindID.parseText @"ord" "ord_01h455vb4pex5vsknk084sn02r" of
     Left reason -> error ("invalid alternate conformance TypeID: " <> show reason)
     Right value -> OrderId value
 

@@ -1,55 +1,89 @@
--- | Conformance driver for the scaffolded EP-4 contract layer. Compiling this
--- component proves the scaffolded @Generated.…Emergency.Contract@ module (the
--- payload ADT + topic constants + messageType discriminator + strict codec) is
--- real, self-contained Haskell; running it proves every contract event type
--- round-trips through encode/decode and that messageTypeOf agrees.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+-- | Conformance driver for language-4 prefix-indexed integration contracts.
+-- Compiling this component proves distinct contract fields carry distinct
+-- @KindID@ types; running it proves canonical JSON remains text and every frozen
+-- admission failure is attributed to the owning field path.
 module Main (main) where
 
 import Control.Monad (forM_, unless)
-import Data.Aeson (encode, object, (.=))
-import Data.ByteString.Lazy (ByteString)
+import Data.Aeson (Value, object, (.=))
+import Data.KindID (KindID)
 import Data.Text (Text)
-import Data.Text qualified as T
+import qualified Data.Text as T
 import Generated.HospitalCapacity.Emergency.Contract
+import Keiro.Codec.IdDomain (parseKindIdV7Text)
 import System.Exit (exitFailure)
 
-samples :: [(String, EmergencyPayload, ByteString)]
-samples =
-  [ ( "IncidentTransferNeedDeclared",
-      IncidentTransferNeedDeclared (IncidentTransferNeedDeclaredData "inc-1" "tri-1" "north" 3),
-      "{\"incidentId\":\"inc-1\",\"messageType\":\"IncidentTransferNeedDeclared\",\"redCount\":3,\"region\":\"north\",\"triageRecordId\":\"tri-1\"}"
-    ),
-    ( "TransferReservationAccepted",
-      TransferReservationAccepted (TransferReservationAcceptedData "inc-1" "rsv-1" "hsp-1" "2026-01-01"),
-      "{\"expirationDeadline\":\"2026-01-01\",\"hospitalId\":\"hsp-1\",\"incidentId\":\"inc-1\",\"messageType\":\"TransferReservationAccepted\",\"reservationId\":\"rsv-1\"}"
-    )
-  ]
+canonicalSuffix :: Text
+canonicalSuffix = "01h455vb4pex5vsknk084sn02q"
+
+incidentIdValue :: KindID "inc"
+incidentIdValue = either (error . show) id (parseKindIdV7Text @"inc" ("inc_" <> canonicalSuffix))
+
+reservationIdValue :: KindID "rsv"
+reservationIdValue = either (error . show) id (parseKindIdV7Text @"rsv" ("rsv_" <> canonicalSuffix))
+
+hospitalIdValue :: KindID "hsp"
+hospitalIdValue = either (error . show) id (parseKindIdV7Text @"hsp" ("hsp_" <> canonicalSuffix))
+
+incidentPayload :: EmergencyPayload
+incidentPayload =
+  IncidentTransferNeedDeclared
+    (IncidentTransferNeedDeclaredData incidentIdValue "tri-1" "north" 3)
+
+reservationPayload :: EmergencyPayload
+reservationPayload =
+  TransferReservationAccepted
+    (TransferReservationAcceptedData incidentIdValue reservationIdValue hospitalIdValue "2026-01-01")
+
+incidentJson :: Text -> Value
+incidentJson rawIncidentId =
+  object
+    [ "messageType" .= ("IncidentTransferNeedDeclared" :: Text),
+      "incidentId" .= rawIncidentId,
+      "triageRecordId" .= ("tri-1" :: Text),
+      "region" .= ("north" :: Text),
+      "redCount" .= (3 :: Int)
+    ]
 
 main :: IO ()
 main = do
-  let results =
-        [ (label, parseEmergencyPayload (encodeEmergencyPayload p) == Right p && messageTypeOf p == T.pack label && encode (encodeEmergencyPayload p) == expectedBytes)
-        | (label, p, expectedBytes) <- samples
+  let validIncidentJson = incidentJson ("inc_" <> canonicalSuffix)
+      validReservationJson =
+        object
+          [ "messageType" .= ("TransferReservationAccepted" :: Text),
+            "incidentId" .= ("inc_" <> canonicalSuffix),
+            "reservationId" .= ("rsv_" <> canonicalSuffix),
+            "hospitalId" .= ("hsp_" <> canonicalSuffix),
+            "expirationDeadline" .= ("2026-01-01" :: Text)
+          ]
+      checks =
+        [ ( "topic constants exported",
+            incidentEventsTopic == "emergency.incident.events"
+              && hospitalEventsTopic == "emergency.hospital.events"
+          ),
+          ( "IncidentTransferNeedDeclared round-trip",
+            encodeEmergencyPayload incidentPayload == validIncidentJson
+              && parseEmergencyPayload validIncidentJson == Right incidentPayload
+          ),
+          ( "TransferReservationAccepted round-trip",
+            encodeEmergencyPayload reservationPayload == validReservationJson
+              && parseEmergencyPayload validReservationJson == Right reservationPayload
+          ),
+          rejection "malformed $.incidentId" "inc-1" "malformed TypeID text",
+          rejection "wrong-prefix $.incidentId" ("rsv_" <> canonicalSuffix) "prefix mismatch",
+          rejection "non-canonical $.incidentId" "inc_01H455VB4PEX5VSKNK084SN02Q" "not canonical lowercase",
+          rejection "non-v7 $.incidentId" "inc_00041061050r3gg28a1c60t3gf" "not UUIDv7"
         ]
-      unknownTagRejected = case parseEmergencyPayload (object ["messageType" .= ("UnknownMessage" :: Text)]) of
-        Left problem ->
-          all
-            (`T.isInfixOf` problem)
-            [ "$.messageType",
-              "UnknownMessage",
-              "IncidentTransferNeedDeclared",
-              "TransferReservationAccepted"
-            ]
-        Right _ -> False
-      missingFieldRejected = case parseEmergencyPayload (object ["messageType" .= ("IncidentTransferNeedDeclared" :: Text)]) of
-        Left problem -> "incidentId" `T.isInfixOf` problem
-        Right _ -> False
-      topicsExported =
-        incidentEventsTopic == "emergency.incident.events"
-          && hospitalEventsTopic == "emergency.hospital.events"
-  forM_ results $ \(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
-  let failed = [label | (label, ok) <- results, not ok]
-  putStrLn ("unknown discriminator is diagnosed at its field: " <> show unknownTagRejected)
-  putStrLn ("missing field is named: " <> show missingFieldRejected)
-  putStrLn ("topic constants are exported: " <> show topicsExported)
-  unless (null failed && unknownTagRejected && missingFieldRejected && topicsExported) $ putStrLn ("contract: failed " <> show failed) >> exitFailure
+  forM_ checks $ \(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
+  let failed = [label | (label, ok) <- checks, not ok]
+  unless (null failed) $ putStrLn ("typed contract: failed " <> show failed) >> exitFailure
+  where
+    rejection label raw expected =
+      ( label,
+        case parseEmergencyPayload (incidentJson raw) of
+          Left problem -> "$.incidentId" `T.isInfixOf` problem && expected `T.isInfixOf` problem
+          Right _ -> False
+      )

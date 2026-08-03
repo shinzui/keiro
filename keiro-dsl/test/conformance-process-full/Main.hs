@@ -17,10 +17,11 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
-    let input = SurgeInput{hospitalId = "hosp-1", observedAt = posixSecondsToUTCTime 0}
+    let hospitalIdValue = "hosp_01h455vb4pex5vsknk084sn02q"
+        input = SurgeInput{hospitalId = hospitalIdValue, observedAt = posixSecondsToUTCTime 0}
         action = surgeManager.handle input
         nameOk = surgeManager.name == "surge-demo"
-        corrOk = surgeManager.correlate input == "hosp-1"
+        corrOk = surgeManager.correlate input == hospitalIdValue
         dispatchOk = length action.commands == 1
         timerOk = length action.timers == 1
         duplicateContractOk = dispatchOk

@@ -5,7 +5,7 @@ import Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract
 
 behaviorWitnesses :: [BehaviorWitness]
 behaviorWitnesses =
-  [ Pending (BehaviorKey "behavior-v1-78f2c698e2ec1dc0"),
+  [ Pending (BehaviorKey "behavior-v1-e9c863d5daf20011"),
     Pending (BehaviorKey "behavior-v1-1de91883b9e3f8bc"),
     Pending (BehaviorKey "behavior-v1-5c58e0aafeb5f400"),
     Pending (BehaviorKey "behavior-v1-a19a8e94d935493f"),

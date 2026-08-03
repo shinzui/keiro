@@ -1,6 +1,6 @@
 fixture=aggregate-scalar-expressions-v2
 aggregate=ScalarAccount
-fingerprint=0ce18e34ee6cdd4432500e7c4ca1ba68
+fingerprint=60f4f059f718b2ee2bca06360ea20221
 surface-begin
 semantic-contract:keiro-dsl/runtime-semantics/2
 state:Open|terminal=false
@@ -19,7 +19,7 @@ reg:limits:Limits=initial
 mapped-register:Limits|wire=4463db782a5b9924|canonical=scalar-expressions.Limits.v1|binding=ScalarExpressions.Bindings.limitsBinding|binding-version=1|initial=ScalarExpressions.Bindings.initialLimits
 nominal-equality-use:nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated
 nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:req:keiro-dsl/id-domain/typeid-v7/1|owner=generated
-transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:="adjusted";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId("req_00041061050r3gg28a1c60t3gf");openedAt:="2026-02-03T04:05:06Z";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed
+transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:="adjusted";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId("req_01h455vb4pex5vsknk084sn02q");openedAt:="2026-02-03T04:05:06Z";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed
 transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed
 surface-end
 

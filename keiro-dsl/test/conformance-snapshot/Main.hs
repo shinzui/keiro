@@ -8,6 +8,7 @@ import Control.Monad (unless)
 import Data.Proxy (Proxy (..))
 import Generated.HospitalCapacity.Reservation.Domain (ReservationRegs, ReservationVertex)
 import Generated.HospitalCapacity.Reservation.EventStream (reservationEventStream, reservationEventStreamDef, reservationSnapshotFixture)
+import Generated.HospitalCapacity.Reservation.Transducer (reservationFoldFingerprint)
 import Keiki.Shape qualified as Shape
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..), StateCodec (..))
 import System.Exit (exitFailure)
@@ -26,7 +27,7 @@ main = do
                 hashDerived = shapeHash liveCodec == Shape.regFileShapeHash (Proxy @ReservationRegs)
                 stateShapeDerived =
                     stateShapeHash liveCodec
-                        == Shape.stateShapeHash (Proxy @ReservationVertex) <> ";fold=22688643ff47ac19f59230f0be196521"
+                        == Shape.stateShapeHash (Proxy @ReservationVertex) <> ";fold=" <> reservationFoldFingerprint
                 policyOk = case snapshotPolicy reservationEventStreamDef of
                     Every interval -> interval == 100
                     _ -> False

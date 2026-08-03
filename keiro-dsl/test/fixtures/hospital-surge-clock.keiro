@@ -38,9 +38,17 @@ aggregate Surge
 
   command NoteSurgeThreshold { hospitalId availableIcuBeds:Int redDemand:Int timerId }
   command MarkSurgeTimerFired { hospitalId timerId }
+  event SurgeThresholdNoted = fields(NoteSurgeThreshold)
+  event SurgeTimerMarked = fields(MarkSurgeTimerFired)
+
+  Idle -- NoteSurgeThreshold --> emit SurgeThresholdNoted ; goto Idle
+  Idle -- MarkSurgeTimerFired --> emit SurgeTimerMarked ; goto Idle
 
 aggregate Hospital
   regs
   states Operational
 
   command ActivateSurge { hospitalId }
+  event SurgeActivated = fields(ActivateSurge)
+
+  Operational -- ActivateSurge --> emit SurgeActivated ; goto Operational

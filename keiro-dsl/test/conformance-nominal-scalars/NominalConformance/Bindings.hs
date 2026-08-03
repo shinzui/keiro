@@ -46,7 +46,7 @@ observedAtBinding :: NominalBinding ObservedAt UTCTime
 observedAtBinding = NominalBinding unObservedAt ObservedAt
 
 validOrderIdText :: Text
-validOrderIdText = "ord_00041061050r3gg28a1c60t3gf"
+validOrderIdText = "ord_01h455vb4pex5vsknk084sn02q"
 
 sampleOrderId :: OrderId
 sampleOrderId = case KindID.parseText @"ord" validOrderIdText of

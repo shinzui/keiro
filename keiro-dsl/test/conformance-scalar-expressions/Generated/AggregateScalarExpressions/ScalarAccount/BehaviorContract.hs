@@ -112,10 +112,10 @@ behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
   [ BehaviorRequirement (BehaviorKey "behavior-v1-1de91883b9e3f8bc") RequiredRejection GeneratedAuthoritative GuardNotApplicable ScalarAccountOpen "Close" Nothing Nothing [] 32
   , BehaviorRequirement (BehaviorKey "behavior-v1-5c58e0aafeb5f400") RequiredRejection GeneratedAuthoritative GuardNotApplicable ScalarAccountReviewed "Adjust" Nothing Nothing [] 32
-  , BehaviorRequirement (BehaviorKey "behavior-v1-78f2c698e2ec1dc0") LiveTransition GeneratedAuthoritative GuardUnknown ScalarAccountOpen "Adjust" (Just (K.EdgeRef ScalarAccountOpen 0)) (Just ScalarAccountReviewed) ["Adjusted"] 42
   , BehaviorRequirement (BehaviorKey "behavior-v1-a19a8e94d935493f") RequiredRejection GeneratedAuthoritative GuardNotApplicable ScalarAccountClosed "Adjust" Nothing Nothing [] 32
   , BehaviorRequirement (BehaviorKey "behavior-v1-b7db52f28632d8da") LiveTransition HoleWitnessed GuardTotal ScalarAccountReviewed "Close" (Just (K.EdgeRef ScalarAccountReviewed 0)) (Just ScalarAccountClosed) ["ClosedEvent"] 62
   , BehaviorRequirement (BehaviorKey "behavior-v1-dbf483c868dd6d34") RequiredRejection GeneratedAuthoritative GuardNotApplicable ScalarAccountClosed "Close" Nothing Nothing [] 32
+  , BehaviorRequirement (BehaviorKey "behavior-v1-e9c863d5daf20011") LiveTransition GeneratedAuthoritative GuardUnknown ScalarAccountOpen "Adjust" (Just (K.EdgeRef ScalarAccountOpen 0)) (Just ScalarAccountReviewed) ["Adjusted"] 42
   ]
 
 behaviorCoverageReport :: [BehaviorWitness] -> BehaviorConformanceReport

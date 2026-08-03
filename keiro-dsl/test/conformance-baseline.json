@@ -2,329 +2,54 @@
   "schema": "keiro-dsl/conformance-baseline/1",
   "stableLanguageVersion": 4,
   "fixtureExceptions": [
-    {
-      "path": "test/fixtures/aggregate-collection-expressions-v2-rejects.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 2,
-      "role": "compatibility-proof",
-      "reason": "version-2 grammar rejection vector"
-    },
-    {
-      "path": "test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 1,
-      "role": "compatibility-proof",
-      "reason": "version-1 predecessor feature rejection vector"
-    },
-    {
-      "path": "test/fixtures/id-domain-migration-v3.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 3,
-      "role": "compatibility-proof",
-      "reason": "version-3 historical replay admission boundary"
-    },
-    {
-      "path": "test/fixtures/language-duplicate.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": null,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-future.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 5,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-identifier-v1.keiro",
-      "sourceForm": "legacy-unversioned",
-      "effectiveVersion": 1,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-identifier-v2.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 2,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-legacy.keiro",
-      "sourceForm": "legacy-unversioned",
-      "effectiveVersion": 1,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-malformed.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": null,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-misplaced.keiro",
-      "sourceForm": "legacy-unversioned",
-      "effectiveVersion": null,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-v1.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 1,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/language-zero.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": null,
-      "role": "compatibility-proof",
-      "reason": "released source-selection compatibility vector"
-    },
-    {
-      "path": "test/fixtures/nominal-v1.keiro",
-      "sourceForm": "declared",
-      "effectiveVersion": 1,
-      "role": "compatibility-proof",
-      "reason": "version-1 nominal-syntax rejection vector"
-    }
+    {"path": "test/fixtures/aggregate-collection-expressions-v2-rejects.keiro", "sourceForm": "declared", "effectiveVersion": 2, "role": "compatibility-proof", "reason": "version-2 grammar rejection vector"},
+    {"path": "test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 predecessor feature rejection vector"},
+    {"path": "test/fixtures/contract-v1-compat.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 permissive Text contract compatibility proof"},
+    {"path": "test/fixtures/id-domain-migration-v3.keiro", "sourceForm": "declared", "effectiveVersion": 3, "role": "compatibility-proof", "reason": "version-3 historical replay admission boundary"},
+    {"path": "test/fixtures/language-duplicate.keiro", "sourceForm": "declared", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-future.keiro", "sourceForm": "declared", "effectiveVersion": 5, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-identifier-v1.keiro", "sourceForm": "legacy-unversioned", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-identifier-v2.keiro", "sourceForm": "declared", "effectiveVersion": 2, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-legacy.keiro", "sourceForm": "legacy-unversioned", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-malformed.keiro", "sourceForm": "declared", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-misplaced.keiro", "sourceForm": "legacy-unversioned", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-v1.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/language-zero.keiro", "sourceForm": "declared", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
+    {"path": "test/fixtures/nominal-v1.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 nominal-syntax rejection vector"}
   ],
   "compiledSuites": [
-    {
-      "component": "keiro-dsl-conformance",
-      "directory": "test/conformance",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-aggregate-scalars",
-      "directory": "test/conformance-aggregate-scalars",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-aggregate-scalar-expressions",
-      "directory": "test/conformance-scalar-expressions",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-behavior-complete",
-      "directory": "test/conformance-behavior-complete",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-nominal-scalars",
-      "directory": "test/conformance-nominal-scalars",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-workspace-nominals",
-      "directory": "test/conformance-workspace-nominals",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-structural",
-      "directory": "test/conformance-structural",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-codec-compare",
-      "directory": "test/conformance-codec-compare",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-replay",
-      "directory": "test/conformance-replay",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-snapshot",
-      "directory": "test/conformance-snapshot",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-skeletons",
-      "directory": "test/conformance-skeletons",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-coldstart",
-      "directory": "test/conformance-coldstart",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-contract",
-      "directory": "test/conformance-contract",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-contract-typeid",
-      "directory": "test/conformance-contract-typeid",
-      "source": "test/fixtures/contract-v4.keiro",
-      "role": "stable-primary",
-      "reason": "current version-4 typed contract proof before the main contract target adopts it"
-    },
-    {
-      "component": "keiro-dsl-conformance-intake-runtime",
-      "directory": "test/conformance-intake-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-intake-full",
-      "directory": "test/conformance-intake-full",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-publisher-runtime",
-      "directory": "test/conformance-publisher-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-queue",
-      "directory": "test/conformance-queue",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-queue-runtime",
-      "directory": "test/conformance-queue-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-readmodel-runtime",
-      "directory": "test/conformance-readmodel-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-dispatch-full",
-      "directory": "test/conformance-dispatch-full",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-workflow",
-      "directory": "test/conformance-workflow",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-workflow-runtime",
-      "directory": "test/conformance-workflow-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-process-full",
-      "directory": "test/conformance-process-full",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-workflow-full",
-      "directory": "test/conformance-workflow-full",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-process-runtime",
-      "directory": "test/conformance-process-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-router-runtime",
-      "directory": "test/conformance-router-runtime",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-router",
-      "directory": "test/conformance-router",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-router-full",
-      "directory": "test/conformance-router-full",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-newsurface",
-      "directory": "test/conformance-newsurface",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-process",
-      "directory": "test/conformance-process",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-v2",
-      "directory": "test/conformance-v2",
-      "source": null,
-      "role": "migration-pending",
-      "reason": "compiled suite awaiting coherent version-4 regeneration in Milestone 3"
-    },
-    {
-      "component": "keiro-dsl-conformance-id-domain-migration",
-      "directory": "test/conformance-id-domain-migration",
-      "source": "test/fixtures/id-domain-migration-v3.keiro",
-      "role": "compatibility-proof",
-      "reason": "version-3 historical replay admission proof"
-    }
+    {"component": "keiro-dsl-conformance", "directory": "test/conformance", "source": "test/fixtures/reservation.keiro", "generation": "source", "role": "stable-primary", "reason": "canonical reservation aggregate proof"},
+    {"component": "keiro-dsl-conformance-aggregate-scalars", "directory": "test/conformance-aggregate-scalars", "source": "test/fixtures/aggregate-scalars.keiro", "generation": "source", "role": "stable-primary", "reason": "aggregate scalar transition proof"},
+    {"component": "keiro-dsl-conformance-aggregate-scalar-expressions", "directory": "test/conformance-scalar-expressions", "source": "test/fixtures/aggregate-scalar-expressions-v2.keiro", "generation": "source", "role": "stable-primary", "reason": "aggregate scalar expression proof"},
+    {"component": "keiro-dsl-conformance-behavior-complete", "directory": "test/conformance-behavior-complete", "source": "test/fixtures/behavior-complete.keiro", "generation": "source", "role": "stable-primary", "reason": "complete behavior ownership proof"},
+    {"component": "keiro-dsl-conformance-nominal-scalars", "directory": "test/conformance-nominal-scalars", "source": "test/fixtures/nominal-scalars.keiro", "generation": "source", "role": "stable-primary", "reason": "nominal scalar codec proof"},
+    {"component": "keiro-dsl-conformance-workspace-nominals", "directory": "test/conformance-workspace-nominals", "source": "test/fixtures/workspace-nominals/service.keiro-workspace", "generation": "workspace", "role": "stable-primary", "reason": "workspace-owned nominal proof"},
+    {"component": "keiro-dsl-conformance-structural", "directory": "test/conformance-structural", "source": "test/fixtures/structural-conformance.keiro", "generation": "source", "role": "stable-primary", "reason": "structural mapping proof"},
+    {"component": "keiro-dsl-conformance-codec-compare", "directory": "test/conformance-codec-compare", "source": null, "generation": "none", "role": "version-independent", "reason": "codec comparison helper proof has no source-language fixture"},
+    {"component": "keiro-dsl-conformance-replay", "directory": "test/conformance-replay", "source": "test/fixtures/replay-divergence.keiro", "generation": "source", "role": "stable-primary", "reason": "replay divergence proof"},
+    {"component": "keiro-dsl-conformance-snapshot", "directory": "test/conformance-snapshot", "source": "test/fixtures/reservation-snapshot.keiro", "generation": "source", "role": "stable-primary", "reason": "snapshot compatibility proof"},
+    {"component": "keiro-dsl-conformance-skeletons", "directory": "test/conformance-skeletons", "source": null, "generation": "skeletons", "role": "stable-primary", "reason": "union of all built-in stable skeleton scaffolds"},
+    {"component": "keiro-dsl-conformance-coldstart", "directory": "test/conformance-coldstart", "source": "test/fixtures/subscription.keiro", "generation": "source", "role": "stable-primary", "reason": "cold-start subscription proof"},
+    {"component": "keiro-dsl-conformance-contract", "directory": "test/conformance-contract", "source": "test/fixtures/contract-v4.keiro", "generation": "source", "role": "stable-primary", "reason": "stable typed contract proof"},
+    {"component": "keiro-dsl-conformance-contract-v1-compat", "directory": "test/conformance-contract-v1-compat", "source": "test/fixtures/contract-v1-compat.keiro", "generation": "none", "role": "compatibility-proof", "reason": "version-1 permissive Text contract compatibility proof"},
+    {"component": "keiro-dsl-conformance-intake-runtime", "directory": "test/conformance-intake-runtime", "source": "test/fixtures/intake.keiro", "generation": "source", "role": "stable-primary", "reason": "intake runtime proof"},
+    {"component": "keiro-dsl-conformance-intake-full", "directory": "test/conformance-intake-full", "source": "test/fixtures/intake.keiro", "generation": "source", "role": "stable-primary", "reason": "complete intake scaffold proof"},
+    {"component": "keiro-dsl-conformance-publisher-runtime", "directory": "test/conformance-publisher-runtime", "source": "test/fixtures/emit.keiro", "generation": "source", "role": "stable-primary", "reason": "publisher runtime proof"},
+    {"component": "keiro-dsl-conformance-queue", "directory": "test/conformance-queue", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "workqueue scaffold proof"},
+    {"component": "keiro-dsl-conformance-queue-runtime", "directory": "test/conformance-queue-runtime", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "workqueue runtime proof"},
+    {"component": "keiro-dsl-conformance-readmodel-runtime", "directory": "test/conformance-readmodel-runtime", "source": "test/fixtures/readmodel-runtime.keiro", "generation": "source", "role": "stable-primary", "reason": "read-model runtime proof"},
+    {"component": "keiro-dsl-conformance-dispatch-full", "directory": "test/conformance-dispatch-full", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "complete dispatch scaffold proof"},
+    {"component": "keiro-dsl-conformance-workflow", "directory": "test/conformance-workflow", "source": "test/fixtures/workflow-evolution.keiro", "generation": "source", "role": "stable-primary", "reason": "workflow scaffold proof"},
+    {"component": "keiro-dsl-conformance-workflow-runtime", "directory": "test/conformance-workflow-runtime", "source": "test/fixtures/workflow-evolution.keiro", "generation": "source", "role": "stable-primary", "reason": "workflow runtime proof"},
+    {"component": "keiro-dsl-conformance-process-full", "directory": "test/conformance-process-full", "source": "test/fixtures/surge-service.keiro", "generation": "source", "role": "stable-primary", "reason": "complete process scaffold proof"},
+    {"component": "keiro-dsl-conformance-workflow-full", "directory": "test/conformance-workflow-full", "source": "test/fixtures/workflow-evolution.keiro", "generation": "source", "role": "stable-primary", "reason": "complete workflow scaffold proof"},
+    {"component": "keiro-dsl-conformance-process-runtime", "directory": "test/conformance-process-runtime", "source": "test/fixtures/hospital-surge.keiro", "generation": "source", "role": "stable-primary", "reason": "process runtime proof"},
+    {"component": "keiro-dsl-conformance-router-runtime", "directory": "test/conformance-router-runtime", "source": "test/fixtures/incident-paging/incident-paging.keiro", "generation": "source", "role": "stable-primary", "reason": "router runtime proof"},
+    {"component": "keiro-dsl-conformance-router", "directory": "test/conformance-router", "source": "test/fixtures/incident-paging/incident-paging.keiro", "generation": "source", "role": "stable-primary", "reason": "router scaffold proof"},
+    {"component": "keiro-dsl-conformance-router-full", "directory": "test/conformance-router-full", "source": "test/fixtures/incident-paging/incident-paging.keiro", "generation": "source", "role": "stable-primary", "reason": "complete router scaffold proof"},
+    {"component": "keiro-dsl-conformance-newsurface", "directory": "test/conformance-newsurface", "source": "test/fixtures/transfer-routing.keiro", "generation": "source", "role": "stable-primary", "reason": "new surface integration proof"},
+    {"component": "keiro-dsl-conformance-process", "directory": "test/conformance-process", "source": "test/fixtures/hospital-surge.keiro", "generation": "source", "role": "stable-primary", "reason": "process scaffold proof"},
+    {"component": "keiro-dsl-conformance-v2", "directory": "test/conformance-v2", "source": "test/fixtures/reservation-v2.keiro", "generation": "source", "role": "stable-primary", "reason": "historically named target now proving the stable reservation fixture"},
+    {"component": "keiro-dsl-conformance-id-domain-migration", "directory": "test/conformance-id-domain-migration", "source": "test/fixtures/id-domain-migration-v3.keiro", "generation": "none", "role": "compatibility-proof", "reason": "version-3 historical replay admission proof"}
   ]
 }

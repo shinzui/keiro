@@ -54,12 +54,11 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-02T23:26:01Z) Milestone 2: separated the current conformance corpus from the
   frozen frontend-compatibility corpus, made semantic test helpers service-aware by default, and
   added an enforced baseline manifest with explicit transitional migration rows for Milestone 3.
-- [ ] (2026-08-03T00:01:35Z) Milestone 3 in progress: migrated all 225 ordinary fixture sources
-  and coherent workspace/diff families to version 4, repaired strict expression and lifecycle
-  surfaces, refreshed the first nine generated aggregate/workspace trees and fold goldens, and
-  reduced the complete 512-example unit suite from 97 failures to one repaired provenance
-  assertion. Remaining: regenerate the other stable compiled components, promote the typed
-  contract target, enforce fresh-scaffold inventory, and make `cabal test all` green.
+- [x] (2026-08-03T01:08:30Z) Milestone 3: migrated all 225 previously old ordinary fixture
+  sources and their coherent workspace/diff families, regenerated every stable compiled tree,
+  promoted the typed contract target, retained named v1 and v3 compatibility targets, made the
+  baseline compare fresh checked scaffold module sets with committed generated banners, aligned
+  Cabal module inventories, and made `cabal test all --test-show-details=direct` green.
 - [x] (2026-08-02T23:57:00Z) Milestone 4 user-guide slice: replaced the mixed-version typed-spec
   page with a comprehensive Language 4 reference and updated the user, guide, and root indexes.
 - [ ] Milestone 4 remaining: update agent authoring and release documentation, amend the language
@@ -101,6 +100,17 @@ implementation. Provide concise evidence.
   so the moved aggregate's two attributed modules are rewritten while unrelated modules and the
   build manifest remain byte-identical. The ownership test now distinguishes that expected
   provenance rewrite from stale-file churn.
+
+- Surprise: Stable harness generation reused a register initial as a command sample even for an
+  inequality guard. The cold-start subscription fixture therefore generated an input that could
+  not satisfy its own transition. Sampling now reuses an initial only for an explicit equality
+  guard and otherwise chooses a distinct fallback; focused unit coverage pins both inequality and
+  consumer-owned nominal equality cases.
+
+- Surprise: The stable contract nominal decoder exposed a latent Haskell-layout bug in generated
+  nested `case` expressions. The permissive text path never emitted this branch, while the
+  Language-4 TypeID path did. Rendering the nested cases as explicit multiline layout fixed the
+  generated module without weakening TypeID validation.
 
 
 ## Decision Log
@@ -165,6 +175,15 @@ Record every decision made while working on the plan.
   breaking durable repository-local navigation.
   Date: 2026-08-02
 
+- Decision: Give each compiled-suite baseline row an explicit generation mode (`source`,
+  `workspace`, `skeletons`, or `none`) and compare the committed stable-banner paths with the pure
+  checked scaffold plan for that mode.
+  Rationale: Several targets intentionally reuse one source, workspace composition has different
+  loading semantics, skeleton aliases share three distinct bodies, and compatibility or
+  version-independent targets must not masquerade as stable regeneration inputs. An explicit mode
+  makes those distinctions reviewable while keeping the check deterministic and non-mutating.
+  Date: 2026-08-03
+
 
 ## Outcomes & Retrospective
 
@@ -192,6 +211,16 @@ stable contract fixture to version 1 named its path in two baseline failures, an
 scaffold helper through `legacyCheckedService` changed the generated fields to `Text` and failed
 the capability assertion. Restoring both mutations returned the focused groups and the complete
 512-example unit suite to green.
+
+Milestone 3 moved the product corpus to the stable contract without expanding historical
+semantics. The final inventory contains 240 fixture sources: 226 declared Language 4 sources and
+14 precisely named compatibility vectors. Its 33 compiled components are 30 stable-primary, two
+compatibility proofs (the Language-1 contract and Language-3 ID-domain migration), and one
+version-independent codec comparison. Every stable row now verifies its source selection,
+Language-4 banner, and exact generated module set against a fresh checked source, workspace, or
+distinct skeleton plan. The main contract suite owns the typed TypeID proof, the old permissive
+DTO remains under `contract-v1-compat`, the complete 514-example DSL unit suite passes, all
+repository test suites pass, and an enabled-tests build reports no missing-home-module drift.
 
 The user-guide slice of Milestone 4 now presents only Language 4 and covers the source envelope,
 shared and consumer-owned types, expression rules, all twelve node families, workspaces,
@@ -724,3 +753,7 @@ migration counts.
 2026-08-02: Recorded the completed Milestone-4 user-guide slice: the primary DSL guide now teaches
 only the stable Language 4 contract while preserving established cross-document anchors; broader
 authoring/release documentation and final gates remain pending.
+
+2026-08-03: Recorded the completed Milestone-3 fixture and compiled-conformance migration, typed
+contract promotion, deterministic fresh-scaffold inventory, generator repairs, Cabal manifest
+alignment, and repository-wide green test evidence.

@@ -19,9 +19,9 @@ else
   exit 1
 fi
 
-echo "== mutate: switch emission to the idempotent dishonest Natural wire ctor =="
+echo "== mutate: replace the emitted Natural with an idempotent dishonest value =="
 sed -i.sed-bak \
-  's/^emitWire = wireScalarsRecorded$/emitWire = dishonestWireScalarsRecorded/' \
+  's/^    , revision = d.revision$/    , revision = B.lit 1/' \
   "$HOLES"
 rm -f "$HOLES.sed-bak"
 

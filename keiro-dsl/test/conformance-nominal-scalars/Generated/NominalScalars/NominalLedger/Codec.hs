@@ -32,9 +32,11 @@ import NominalConformance.Domain qualified
 
 
 parseOrderIdNominal :: Text -> Parser NominalConformance.Domain.OrderId
-parseOrderIdNominal input = case validateIdDomainText (typeIdV7Domain "ord") input of Left reason -> fail (show reason); Right () -> case KindID.parseText @"ord" input of
+parseOrderIdNominal input = case validateIdDomainText (typeIdV7Domain "ord") input of
   Left reason -> fail (show reason)
-  Right representation -> pure (nominalFromRepresentation NominalConformance.Bindings.orderIdBinding representation)
+  Right () -> case KindID.parseText @"ord" input of
+    Left reason -> fail (show reason)
+    Right representation -> pure (nominalFromRepresentation NominalConformance.Bindings.orderIdBinding representation)
 
 parseOrderStatusNominal :: Text -> Parser NominalConformance.Domain.OrderStatus
 parseOrderStatusNominal = \case

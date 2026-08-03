@@ -9,7 +9,7 @@ import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), secondsToDiffTime)
 import AggregateScalarExpressions.ScalarAccount.BehaviorHoles (behaviorWitnesses)
-import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId (..), accountModeEqualityWitness, requestIdEqualityWitness)
+import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId, accountModeEqualityWitness, parseRequestId, requestIdEqualityWitness, requestIdText)
 import Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract qualified as Behavior
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec)
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
@@ -46,8 +46,8 @@ main = do
              , ("one-way generated projection and opaque Hole remain unverified", verificationReport == expectedVerificationReport)
              , ("same-declaration nominal guards take both concrete branches", nominalGuardBranches)
              , ("finite generated enum equality is exact symbolically", exactEnumProof)
-             , ("generated enum exactness laws hold and legacy ID claims no inverse", generatedNominalProjectionLaws)
-             , ("legacy Text-backed generated ID equality stays conservative symbolically", conservativeIdProof)
+             , ("generated enum and TypeID exactness laws hold", generatedNominalProjectionLaws)
+             , ("generated TypeID equality is exact symbolically", conservativeIdProof)
              , ("Keiki 0.8 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
              , ("generated behavior contract reconciles its create-once pending rows", length (Behavior.reportPending behaviorReport) == 6 && null (Behavior.reportMissing behaviorReport))
              , ("Hole envelope preserves declared event and target", holeEnvelopeAgreement)
@@ -65,7 +65,7 @@ scalarTreeBaseline =
       Pretty.prettyPred predicate
         == "(Adjust && (((((((Adjust.balance + balance) >= -100 && (reserved + Adjust.requested) <= capacity) && Adjust.observedAt >= openedAt) && Adjust.limits./minimum >= limits./minimum) && Adjust.active == False) && Adjust.mode.AccountMode == mode.AccountMode) && Adjust.requestId.RequestId == requestId.RequestId))"
         && Pretty.prettyUpdate update
-          == "limits := Adjust.limits, openedAt := 2026-02-03 04:05:06 UTC, requestId := RequestId \"req_00041061050r3gg28a1c60t3gf\", mode := Restricted, active := True, label := \"adjusted\", machine := -7, reserved := (reserved + (Adjust.requested - capacity)), balance := (balance + (Adjust.balance * 2)), (keep)"
+          == "limits := Adjust.limits, openedAt := 2026-02-03 04:05:06 UTC, requestId := RequestId \"req_01h455vb4pex5vsknk084sn02q\", mode := Restricted, active := True, label := \"adjusted\", machine := -7, reserved := (reserved + (Adjust.requested - capacity)), balance := (balance + (Adjust.balance * 2)), (keep)"
     [] -> False
 
 expectedVerificationReport :: [(T.Text, BehaviorOwnership, S.PredicateVerification)]
@@ -93,7 +93,7 @@ mkAdjust balanceValue requestedValue activeValue observedAtValue minimumValue =
       , label = "input-label"
       , active = activeValue
       , mode = Normal
-      , requestId = RequestId ""
+      , requestId = requestIdValue
       , observedAt = observedAtValue
       , limits = Domain.Limits minimumValue 13
       }
@@ -131,7 +131,7 @@ caseAgrees balanceValue requestedValue activeValue observedAtValue minimumValue 
         && registers K.! #label == "adjusted"
         && registers K.! #active
         && registers K.! #mode == Restricted
-        && registers K.! #requestId == RequestId "req_00041061050r3gg28a1c60t3gf"
+        && registers K.! #requestId == requestIdValue
         && registers K.! #openedAt == writtenTime
         && registers K.! #limits == Domain.Limits minimumValue 13
         && events == expectedEvents
@@ -147,7 +147,7 @@ caseAgrees balanceValue requestedValue activeValue observedAtValue minimumValue 
           , label = "input-label"
           , active = activeValue
           , mode = Normal
-          , requestId = RequestId ""
+          , requestId = requestIdValue
           , observedAt = observedAtValue
           , limits = Domain.Limits minimumValue 13
           }
@@ -168,7 +168,7 @@ nominalGuardBranches :: Bool
 nominalGuardBranches =
   accepts (mkAdjust 0 2 False commandTime 0)
     && not (accepts (withMode Restricted (mkAdjust 0 2 False commandTime 0)))
-    && not (accepts (withRequestId (RequestId "req_other") (mkAdjust 0 2 False commandTime 0)))
+    && not (accepts (withRequestId otherRequestIdValue (mkAdjust 0 2 False commandTime 0)))
   where
     accepts command = case K.step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) command of
       Just {} -> True
@@ -188,13 +188,26 @@ conservativeGeneratedIdProjection :: IO Bool
 conservativeGeneratedIdProjection = do
   let projected = K.regProj requestIdEqualityWitness (#requestId :: K.Index ScalarAccountRegs RequestId)
       contradiction = K.PAnd (K.PEq projected (K.lit ("req_a" :: T.Text))) (K.PEq projected (K.lit ("req_b" :: T.Text)))
-  (== S.UnverifiedOpaque) <$> S.verifyPredicate contradiction
+  (== S.VerifiedUnsatisfiable) <$> S.verifyPredicate contradiction
 
 generatedNominalProjectionLaws :: Bool
 generatedNominalProjectionLaws =
   K.checkFieldProjectionOwner accountModeEqualityWitness Normal == Right ()
     && K.checkFieldProjectionKey accountModeEqualityWitness "restricted" == Right Restricted
-    && K.checkFieldProjectionOwner requestIdEqualityWitness (RequestId "") == Left K.ProjectionWitnessIsUnconstrained
+    && K.checkFieldProjectionOwner requestIdEqualityWitness requestIdValue == Right ()
+    && K.checkFieldProjectionKey requestIdEqualityWitness (requestIdText otherRequestIdValue) == Right otherRequestIdValue
+
+requestIdValue :: RequestId
+requestIdValue = checkedRequestId "req_01h455vb4pex5vsknk084sn02q"
+
+otherRequestIdValue :: RequestId
+otherRequestIdValue = checkedRequestId "req_01h455vb4pex5vsknk084sn02r"
+
+checkedRequestId :: T.Text -> RequestId
+checkedRequestId raw =
+  case parseRequestId raw of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
 
 scalarArithmeticAgreement :: IO Bool
 scalarArithmeticAgreement = do

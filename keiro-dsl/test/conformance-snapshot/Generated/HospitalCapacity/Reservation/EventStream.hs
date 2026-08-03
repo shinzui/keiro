@@ -56,7 +56,7 @@ reservationEventStreamDef =
     }
 
 reservationSnapshotFixture :: (Int, Text)
-reservationSnapshotFixture = (1, "27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10")
+reservationSnapshotFixture = (1, "7a181ceb7d798d883d28c85201c5c1692bd314a7b489da9128bff91e0f38cd28")
 
 reservationEventStream :: ReservationEventStream
 reservationEventStream =

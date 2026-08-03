@@ -7,7 +7,7 @@ import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
 import Generated.BehaviorComplete.Journey.BehaviorContract
 import Generated.BehaviorComplete.Journey.Domain
-import Generated.BehaviorComplete.Nominals (RequestId (..))
+import Generated.BehaviorComplete.Nominals (RequestId, parseRequestId)
 import Numeric.Natural (Natural)
 
 behaviorWitnesses :: [BehaviorWitness]
@@ -65,7 +65,10 @@ retirementAuditedEvent :: Natural -> JourneyEvent
 retirementAuditedEvent amountValue = RetirementAudited (RetirementAuditedData amountValue)
 
 requestIdValue :: RequestId
-requestIdValue = RequestId "req_behavior_complete"
+requestIdValue =
+  case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
 
 observedAtValue :: UTCTime
 observedAtValue = UTCTime (fromGregorian 2026 8 1) 0

@@ -3885,12 +3885,10 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
   where
     emitParser nominal = case (resolvedNominalRepresentation nominal, resolvedNominalOwnership nominal) of
       (IdRepresentation prefix, ConsumerNominal binding) ->
-        nl
-          [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding),
-            parserName nominal <> " input = " <> validationPrefix prefix <> "case KindID.parseText @" <> tshow prefix <> " input of",
-            "  Left reason -> fail (show reason)",
-            "  Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+        nl $
+          [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding)
           ]
+            <> parserBody nominal prefix binding
       (EnumRepresentation constructors, ConsumerNominal binding) ->
         nl $
           [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding),
@@ -3910,12 +3908,19 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
             <> ["  tag -> " <> renderUnknownFailure (resolvedNominalName nominal <> " wire value") "tag" (map snd (NE.toList constructors))]
       _ -> ""
     parserName nominal = "parse" <> resolvedNominalName nominal <> "Nominal"
-    validationPrefix prefix = case idDomainContractFor (aLanguageContract aggregate) prefix of
-      Nothing -> ""
+    parserBody nominal prefix binding = case idDomainContractFor (aLanguageContract aggregate) prefix of
+      Nothing ->
+        [ parserName nominal <> " input = case KindID.parseText @" <> tshow prefix <> " input of",
+          "  Left reason -> fail (show reason)",
+          "  Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+        ]
       Just _ ->
-        "case validateIdDomainText (typeIdV7Domain "
-          <> tshow prefix
-          <> ") input of Left reason -> fail (show reason); Right () -> "
+        [ parserName nominal <> " input = case validateIdDomainText (typeIdV7Domain " <> tshow prefix <> ") input of",
+          "  Left reason -> fail (show reason)",
+          "  Right () -> case KindID.parseText @" <> tshow prefix <> " input of",
+          "    Left reason -> fail (show reason)",
+          "    Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+        ]
 
 emitCodecValue :: Agg -> Text
 emitCodecValue a =

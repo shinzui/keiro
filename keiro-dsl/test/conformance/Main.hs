@@ -14,7 +14,7 @@ module Main (main) where
 import Control.Monad (forM_, unless)
 import Data.Aeson (encode, object)
 import Data.ByteString.Lazy (ByteString)
-import Generated.HospitalCapacity.Nominals (CommandId (..), DivertStatus (..), HospitalId (..), PatientAcuity (..), TransferReservationId (..))
+import Generated.HospitalCapacity.Nominals (CommandId, DivertStatus (..), HospitalId, PatientAcuity (..), TransferReservationId, parseCommandId, parseHospitalId, parseTransferReservationId)
 import Generated.HospitalCapacity.Reservation.Codec (encodeReservationEvent, parseReservationEvent)
 import Generated.HospitalCapacity.Reservation.Domain (ReservationEvent (..), TransferReservationCreatedData (..))
 import Generated.HospitalCapacity.Reservation.Harness (harnessAssertions)
@@ -28,9 +28,9 @@ main = do
   let failed = [label | (label, ok) <- harnessAssertions, not ok]
       sample =
         TransferReservationCreated
-          (TransferReservationCreatedData (TransferReservationId "sample") (HospitalId "sample") (CommandId "sample") RedTag Open False)
+          (TransferReservationCreatedData transferReservationIdValue hospitalIdValue commandIdValue RedTag Open False)
       expectedBytes :: ByteString
-      expectedBytes = "{\"commandId\":\"sample\",\"divertStatus\":\"open\",\"hospitalId\":\"sample\",\"kind\":\"TransferReservationCreated\",\"lifeCriticalOverride\":false,\"patientAcuity\":\"red\",\"reservationId\":\"sample\"}"
+      expectedBytes = "{\"commandId\":\"cmd_01h455vb4pex5vsknk084sn02q\",\"divertStatus\":\"open\",\"hospitalId\":\"hosp_01h455vb4pex5vsknk084sn02q\",\"kind\":\"TransferReservationCreated\",\"lifeCriticalOverride\":false,\"patientAcuity\":\"red\",\"reservationId\":\"rsv_01h455vb4pex5vsknk084sn02q\"}"
       wireBytesOk = encode (encodeReservationEvent sample) == expectedBytes
       acceptedOutcomeOk = parseReservationEvent (EventType "TransferReservationCreated") (encodeReservationEvent sample) == Right sample
       rejectedOutcomeOk = case parseReservationEvent (EventType "UnknownEvent") (object []) of
@@ -41,3 +41,12 @@ main = do
   unless (null failed && wireBytesOk && acceptedOutcomeOk && rejectedOutcomeOk) $ do
     putStrLn ("harness: " <> show (length failed) <> " assertion(s) failed")
     exitFailure
+
+transferReservationIdValue :: TransferReservationId
+transferReservationIdValue = either (error . show) id (parseTransferReservationId "rsv_01h455vb4pex5vsknk084sn02q")
+
+hospitalIdValue :: HospitalId
+hospitalIdValue = either (error . show) id (parseHospitalId "hosp_01h455vb4pex5vsknk084sn02q")
+
+commandIdValue :: CommandId
+commandIdValue = either (error . show) id (parseCommandId "cmd_01h455vb4pex5vsknk084sn02q")

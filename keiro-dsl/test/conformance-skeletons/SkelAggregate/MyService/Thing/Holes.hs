@@ -1,43 +1,22 @@
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE TypeApplications #-}
 
--- This is a HAND-OWNED hole module. keiro-dsl creates it once and never
--- overwrites it. Fill the transducer body (and any other holes) against the
--- generated signatures, then run the harness to confirm behaviour.
+-- HAND-OWNED language-4 hook. The generated transducer owns the transition
+-- lifecycle; this module supplies only the explicit event-field mapping.
 module SkelAggregate.MyService.Thing.Holes
-  ( thingTransducer,
-  -- (no projection)
-  )
-where
+  ( transition1PendingDoThingOutput1ThingCompleted
+  ) where
 
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, SymTransducer)
+import Keiki.Generics (RegFieldsOf)
 import SkelAggregate.Generated.MyService.Thing.Domain
 
--- HOLE: the transducer body. Reproduce the structure below, replacing each
--- `-- HOLE` line with the keiki symbolic operators it describes.
-thingTransducer ::
-  SymTransducer
-    (HsPred ThingRegs ThingCommand)
-    ThingRegs
-    ThingVertex
-    ThingCommand
-    ThingEvent
-thingTransducer =
-  B.buildTransducer ThingPending initialThingRegs isTerminal do
-    B.from ThingPending do
-      B.onCmd inCtorDoThing $ \d -> B.do
-        B.emit
-          wireThingCompleted
-          ThingCompletedTermFields
-            { thingId = d.thingId,
-              attempt = d.attempt
-            }
-        B.goto ThingDone
-  where
-    isTerminal = \case
-      ThingDone -> True
-      _ -> False
+transition1PendingDoThingOutput1ThingCompleted
+  :: B.PayloadProj ThingRegs ThingCommand (RegFieldsOf DoThingData)
+  -> ThingCompletedTermFields ThingRegs ThingCommand (RegFieldsOf DoThingData)
+transition1PendingDoThingOutput1ThingCompleted d =
+  ThingCompletedTermFields
+    { thingId = d.thingId
+    , attempt = d.attempt
+    }

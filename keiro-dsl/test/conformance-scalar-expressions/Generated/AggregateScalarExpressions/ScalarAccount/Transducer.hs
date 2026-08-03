@@ -62,7 +62,7 @@ scalarAccountTransducer =
         B.slot @"label" =: K.lit ("adjusted" :: Text)
         B.slot @"active" =: K.lit True
         B.slot @"mode" =: K.lit Restricted
-        B.slot @"requestId" =: K.lit (case parseRequestId "req_00041061050r3gg28a1c60t3gf" of Right parsed -> parsed; Left _ -> error "validated ID literal failed to parse")
+        B.slot @"requestId" =: K.lit (case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "validated ID literal failed to parse")
         B.slot @"openedAt" =: K.lit (UTCTime (fromGregorian 2026 2 3) (picosecondsToDiffTime 14706000000000000))
         B.slot @"limits" =: d.limits
         B.emit wireAdjusted (AdjustedTermFields
@@ -90,7 +90,7 @@ scalarAccountTransducer =
     _ -> False
 
 scalarAccountFoldFingerprint :: Text
-scalarAccountFoldFingerprint = T.intercalate "|" ("0ce18e34ee6cdd4432500e7c4ca1ba68" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
+scalarAccountFoldFingerprint = T.intercalate "|" ("60f4f059f718b2ee2bca06360ea20221" : [foldToken Holes.transition2ReviewedCloseHoleFoldVersion] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> ":" <> token
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

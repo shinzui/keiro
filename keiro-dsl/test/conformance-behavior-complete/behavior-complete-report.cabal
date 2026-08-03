@@ -11,6 +11,7 @@ executable keiro-dsl-behavior-complete-report
     BehaviorComplete.Journey.BehaviorHoles
     BehaviorComplete.Journey.Holes
     Generated.BehaviorComplete.Nominals
+    Generated.BehaviorComplete.Nominals.Internal
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain

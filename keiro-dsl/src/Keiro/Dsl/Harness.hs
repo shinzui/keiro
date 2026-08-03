@@ -611,7 +611,7 @@ acceptDecl a t =
   ]
   where
     cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
-      (c : _) -> "(" <> commandCtorExpr a c <> ")"
+      (c : _) -> "(" <> commandCtorExpr a t c <> ")"
       [] -> "(error \"no command\")"
 
 forwardReplayDecl :: Agg -> Transition -> [Text]
@@ -649,7 +649,7 @@ forwardReplayDecl a t =
     forwardRegsName = if null (aRegs a) then "_forwardRegs" else "forwardRegs"
     replayRegsName = if null (aRegs a) then "_replayRegs" else "replayRegs"
     cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
-      (c : _) -> "(" <> commandCtorExpr a c <> ")"
+      (c : _) -> "(" <> commandCtorExpr a t c <> ")"
       [] -> "(error \"no command\")"
 
 -- | @(<Ctor> (<Ctor>Data v1 v2 …))@ with positional sample field values.
@@ -660,19 +660,19 @@ ctorExpr a rc =
     args = T.concat [" " <> sampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
 
 -- | A transition command sample prefers the initial value of a same-named,
--- same-typed register. This makes the generated acceptance/replay probes honest
--- for declaration-exact @cmd.field == reg.field@ guards while retaining the
--- field-distinct samples used by standalone event codec probes.
-commandCtorExpr :: Agg -> ResolvedCtor -> Text
-commandCtorExpr a rc =
+-- same-typed register only when the guard explicitly equates those two paths.
+-- Inequality guards retain the ordinary sample so an enum such as @Paid@ does
+-- not accidentally inherit a forbidden @Free@ register initial value.
+commandCtorExpr :: Agg -> Transition -> ResolvedCtor -> Text
+commandCtorExpr a transition rc =
   "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
   where
-    args = T.concat [" " <> commandSampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
+    args = T.concat [" " <> commandSampleValue a transition fieldName ty | (fieldName, ty) <- rcFields rc]
 
-commandSampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
-commandSampleValue aggregate fieldName fieldType = case fieldType of
-  AggregateNominal nominal
-    | nominalEqualityUsedInGeneratedExpressions nominal aggregate -> case find matchesRegister (aRegs aggregate) of
+commandSampleValue :: Agg -> Transition -> Text -> ResolvedAggregateType -> Text
+commandSampleValue aggregate transition fieldName fieldType = case fieldType of
+  AggregateNominal _
+    | guardEquatesCommandAndRegister transition fieldName -> case find matchesRegister (aRegs aggregate) of
         Just register -> regInitialValueForHarness aggregate register
         Nothing -> fallback
   _ -> fallback
@@ -680,8 +680,22 @@ commandSampleValue aggregate fieldName fieldType = case fieldType of
     fallback = sampleValue aggregate fieldName fieldType
     matchesRegister register = rrName register == fieldName && rrType register == fieldType
     regInitialValueForHarness owner register = case rrType register of
-      AggregateNominal nominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
+      AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+        ConsumerNominal {} -> renderRegisterInitial (rrInitial register)
+        GeneratedNominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
       _ -> renderRegisterInitial (rrInitial register)
+
+guardEquatesCommandAndRegister :: Transition -> Text -> Bool
+guardEquatesCommandAndRegister transition fieldName = maybe False containsEquality (tGuard transition)
+  where
+    containsEquality = \case
+      EOr left right -> containsEquality left || containsEquality right
+      EAnd left right -> containsEquality left || containsEquality right
+      ECmp OpEq left right -> matchingPaths left right || matchingPaths right left
+      _ -> False
+    matchingPaths (EPath _ CommandRoot [commandField]) (EPath _ RegisterRoot [registerField]) =
+      commandField == fieldName && registerField == fieldName
+    matchingPaths _ _ = False
 
 sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
 sampleValue a fieldName ty = case ty of

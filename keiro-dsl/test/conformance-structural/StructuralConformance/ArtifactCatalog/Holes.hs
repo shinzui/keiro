@@ -1,45 +1,19 @@
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE TypeApplications #-}
 
--- This is a HAND-OWNED hole module. keiro-dsl creates it once and never
--- overwrites it. Fill the transducer body (and any other holes) against the
--- generated signatures, then run the harness to confirm behaviour.
-module StructuralConformance.ArtifactCatalog.Holes (
-    artifactCatalogTransducer,
-) where
+-- HAND-OWNED language-4 event mapping. Generated code owns the aggregate
+-- lifecycle, guards, writes, and transition envelope.
+module StructuralConformance.ArtifactCatalog.Holes
+  ( transition1EmptyObserveArtifactOutput2ArtifactAccepted
+  ) where
 
 import Generated.StructuralConformance.ArtifactCatalog.Domain
-import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
-import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, SymTransducer, inpProj, lit)
+import Keiki.Generics (RegFieldsOf)
 
--- HOLE: the transducer body. Reproduce the structure below, replacing each
--- `-- HOLE` line with the keiki symbolic operators it describes.
-artifactCatalogTransducer ::
-    SymTransducer
-        (HsPred ArtifactCatalogRegs ArtifactCatalogCommand)
-        ArtifactCatalogRegs
-        ArtifactCatalogVertex
-        ArtifactCatalogCommand
-        ArtifactCatalogEvent
-artifactCatalogTransducer =
-    B.buildTransducer ArtifactCatalogEmpty initialArtifactCatalogRegs isTerminal do
-        B.from ArtifactCatalogEmpty do
-            B.onCmd inCtorObserveArtifact $ \d -> B.do
-                B.requireEq
-                    (inpProj StructuralProjections.artifactInfoArtifactKeyWitness inCtorObserveArtifact #artifact)
-                    (lit "artifact-local-file")
-                B.slot @"currentArtifact" =: d.artifact
-                B.slot @"currentGeometry" =: d.geometry
-                B.slot @"acceptedCount" =: B.reg @"acceptedCount"
-                B.emit wireArtifactRecorded ArtifactRecordedTermFields{artifact = d.artifact, geometry = d.geometry, accepted = d.accepted}
-                B.emit wireArtifactAccepted ArtifactAcceptedTermFields{accepted = d.accepted}
-                B.goto ArtifactCatalogObserved
-  where
-    isTerminal = \case
-        ArtifactCatalogObserved -> True
-        _ -> False
+transition1EmptyObserveArtifactOutput2ArtifactAccepted
+  :: B.PayloadProj ArtifactCatalogRegs ArtifactCatalogCommand (RegFieldsOf ObserveArtifactData)
+  -> ArtifactAcceptedTermFields ArtifactCatalogRegs ArtifactCatalogCommand (RegFieldsOf ObserveArtifactData)
+transition1EmptyObserveArtifactOutput2ArtifactAccepted d =
+  ArtifactAcceptedTermFields {accepted = d.accepted}

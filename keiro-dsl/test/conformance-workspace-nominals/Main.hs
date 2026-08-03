@@ -2,7 +2,8 @@
 
 module Main (main) where
 
-import Generated.WorkspaceNominalProof.Nominals (ProjectId (..), ProjectPhase (..))
+import Data.Text qualified as T
+import Generated.WorkspaceNominalProof.Nominals (ProjectId, ProjectPhase (..), parseProjectId)
 import Generated.WorkspaceNominalProof.Project.Codec qualified as ProjectCodec
 import Generated.WorkspaceNominalProof.Project.Domain qualified as Project
 import Generated.WorkspaceNominalProof.Project.Harness qualified as ProjectHarness
@@ -21,7 +22,7 @@ main =
     else fail "workspace nominal conformance failed"
 
 projectPayload :: Project.ProjectRegisteredData
-projectPayload = Project.ProjectRegisteredData (ProjectId "proj_shared") Active
+projectPayload = Project.ProjectRegisteredData projectIdValue Active
 
 artifactPayload :: Artifact.ArtifactRecordedData
 artifactPayload = toArtifactPayload projectPayload
@@ -34,7 +35,7 @@ sharedNominalIdentity :: Bool
 sharedNominalIdentity =
   case artifactPayload of
     Artifact.ArtifactRecordedData projectId phase ->
-      projectId == ProjectId "proj_shared" && phase == Active
+      projectId == projectIdValue && phase == Active
 
 projectRoundTrip :: Bool
 projectRoundTrip =
@@ -55,11 +56,11 @@ artifactRoundTrip =
 generatedFleetAgreement :: Bool
 generatedFleetAgreement = projectRing && artifactRing
   where
-    matchingId = ProjectId ""
+    matchingId = projectIdValue
     matchingPhase = Draft
     register = Project.RegisterProject (Project.RegisterProjectData matchingId matchingPhase)
     archive = Project.ArchiveProject (Project.ArchiveProjectData matchingId matchingPhase)
-    mismatchedArchive = Project.ArchiveProject (Project.ArchiveProjectData (ProjectId "different") matchingPhase)
+    mismatchedArchive = Project.ArchiveProject (Project.ArchiveProjectData otherProjectIdValue matchingPhase)
     projectRing = case K.step projectTransducer (Project.ProjectEmpty, Project.initialProjectRegs) register of
       Nothing -> False
       Just (live, registers, _) ->
@@ -69,7 +70,7 @@ generatedFleetAgreement = projectRing && artifactRing
             Just (archived, _, _) -> archived == Project.ProjectArchived
             Nothing -> False
     artifactCommand = Artifact.RecordArtifact (Artifact.RecordArtifactData matchingId matchingPhase)
-    artifactMismatch = Artifact.RecordArtifact (Artifact.RecordArtifactData (ProjectId "different") matchingPhase)
+    artifactMismatch = Artifact.RecordArtifact (Artifact.RecordArtifactData otherProjectIdValue matchingPhase)
     artifactRing =
       case K.step projectArtifactTransducer (Artifact.ProjectArtifactEmpty, Artifact.initialProjectArtifactRegs) artifactCommand of
         Just (recorded, _, _) ->
@@ -78,3 +79,15 @@ generatedFleetAgreement = projectRing && artifactRing
         Nothing -> False
     rejects Nothing = True
     rejects Just {} = False
+
+projectIdValue :: ProjectId
+projectIdValue = checkedProjectId "proj_01h455vb4pex5vsknk084sn02q"
+
+otherProjectIdValue :: ProjectId
+otherProjectIdValue = checkedProjectId "proj_01h455vb4pex5vsknk084sn02r"
+
+checkedProjectId :: String -> ProjectId
+checkedProjectId raw =
+  case parseProjectId (T.pack raw) of
+    Right parsed -> parsed
+    Left problem -> error (show problem)

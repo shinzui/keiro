@@ -589,6 +589,7 @@ main = hspec $ do
         `shouldBe` sort
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
+            "contract-v1-compat.keiro",
             "id-domain-migration-v3.keiro",
             "language-duplicate.keiro",
             "language-future.keiro",
@@ -1002,7 +1003,7 @@ main = hspec $ do
                 surface = aggregateFoldSurfaceForService service aggregate
                 manifest = renderManifestForService "aggregate-scalar-expressions-v2.keiro" modules service
                 readableTransducer = T.unwords (T.words transducer)
-            aggregateFoldFingerprintForService service aggregate `shouldBe` "0ce18e34ee6cdd4432500e7c4ca1ba68"
+            aggregateFoldFingerprintForService service aggregate `shouldBe` "60f4f059f718b2ee2bca06360ea20221"
             T.lines surface
               `shouldBe` [ "semantic-contract:keiro-dsl/runtime-semantics/2",
                            "state:Open|terminal=false",
@@ -1021,7 +1022,7 @@ main = hspec $ do
                            "mapped-register:Limits|wire=4463db782a5b9924|canonical=scalar-expressions.Limits.v1|binding=ScalarExpressions.Bindings.limitsBinding|binding-version=1|initial=ScalarExpressions.Bindings.initialLimits",
                            "nominal-equality-use:nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated",
                            "nominal-equality-use:nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:req:keiro-dsl/id-domain/typeid-v7/1|owner=generated",
-                           "transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:=\"adjusted\";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId(\"req_00041061050r3gg28a1c60t3gf\");openedAt:=\"2026-02-03T04:05:06Z\";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed",
+                           "transition:live|Open|Adjust|implementation=generated|guard=cmd.balance + reg.balance >= -100 && reg.reserved + cmd.requested <= reg.capacity && cmd.observedAt >= reg.openedAt && cmd.limits.minimum >= reg.limits.minimum && cmd.active == false && cmd.mode == reg.mode && cmd.requestId == reg.requestId|writes=balance:=reg.balance + cmd.balance * 2;reserved:=reg.reserved + (cmd.requested - reg.capacity);machine:=-7;label:=\"adjusted\";active:=true;mode:=AccountMode.Restricted;requestId:=RequestId(\"req_01h455vb4pex5vsknk084sn02q\");openedAt:=\"2026-02-03T04:05:06Z\";limits:=cmd.limits|emits=Adjusted|outputs=Adjusted=generated-command-identity:Adjust[balance=balance:Integer,requested=requested:Natural,machine=machine:Int,label=label:Text,active=active:Bool,mode=mode:AccountMode,requestId=requestId:RequestId,observedAt=observedAt:Time,limits=limits:Limits]|goto=Reviewed",
                            "transition:live|Reviewed|Close|implementation=hole|guard=|writes=|emits=ClosedEvent|outputs=ClosedEvent=generated-command-identity:Close[balance=balance:Integer]|goto=Closed"
                          ]
             diffServices service service `shouldBe` []
@@ -2630,7 +2631,7 @@ main = hspec $ do
       errorCodesOf "test/fixtures/reservation-snapshot.keiro" `shouldReturn` []
       parseStableRenderedSpec "<snapshot-round-trip>" spec `shouldBe` Right spec
       case [aggregate | NAggregate aggregate <- specNodes spec] of
-        [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10" noLoc)
+        [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "7a181ceb7d798d883d28c85201c5c1692bd314a7b489da9128bff91e0f38cd28" noLoc)
         aggregates -> expectationFailure ("expected one snapshot aggregate, got " <> show (length aggregates))
     it "rejects disabled intervals and invalid codec fixtures" $ do
       source <- readTestText "test/fixtures/reservation-snapshot.keiro"
@@ -2638,7 +2639,7 @@ main = hspec $ do
       map code (validateSpec interval) `shouldContain` [SnapshotIntervalInvalid]
       version <- parseInlineSpec "<snapshot-version-zero>" (T.replace "state-codec version=1" "state-codec version=0" source)
       map code (validateSpec version) `shouldContain` [SnapshotCodecFixtureInvalid]
-      emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\"" "shape-hash=\"\"" source)
+      emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"7a181ceb7d798d883d28c85201c5c1692bd314a7b489da9128bff91e0f38cd28\"" "shape-hash=\"\"" source)
       map code (validateSpec emptyHash) `shouldContain` [SnapshotCodecFixtureInvalid]
     it "conditionally lowers JSON instances and the live defaultStateCodec" $ do
       snapshotService <- checkedServiceOf "test/fixtures/reservation-snapshot.keiro"
@@ -2657,7 +2658,7 @@ main = hspec $ do
           snapshotStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Every 100"
           snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (withFoldFingerprint"
           snapshotStream `shouldSatisfy` T.isInfixOf "Spec-visible fold changes invalidate old"
-          snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10\")"
+          snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"7a181ceb7d798d883d28c85201c5c1692bd314a7b489da9128bff91e0f38cd28\")"
           ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
           ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
           ordinaryStream `shouldSatisfy` T.isInfixOf "stateCodec = Nothing"
@@ -2898,7 +2899,7 @@ main = hspec $ do
       a <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       b <- legacyScaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
       map moduleText a `shouldBe` map moduleText b
-    it "separates aggregate event-stream and command-target categories and emits honest empty sums" $ do
+    it "separates aggregate event-stream and command-target categories and emits stable typed sums" $ do
       spec <- specOf "test/fixtures/hospital-surge.keiro"
       let ctx = defaultContext (specContext spec)
           modules = concat [scaffoldAggregate ctx spec aggregate | NAggregate aggregate <- specNodes spec]
@@ -2906,8 +2907,8 @@ main = hspec $ do
           surgeDomain = generatedTextEndingIn "Surge/Domain.hs" modules
       surgeStream `shouldSatisfy` T.isInfixOf "surgeCategory :: Stream.StreamCategory SurgeEventStreamDef"
       surgeStream `shouldSatisfy` T.isInfixOf "surgeCommandCategory :: Stream.StreamCategory SurgeCommand"
-      surgeDomain `shouldSatisfy` T.isInfixOf "{-# LANGUAGE EmptyDataDecls #-}"
-      surgeDomain `shouldSatisfy` T.isInfixOf "data SurgeEvent\n"
+      surgeDomain `shouldNotSatisfy` T.isInfixOf "{-# LANGUAGE EmptyDataDecls #-}"
+      surgeDomain `shouldSatisfy` T.isInfixOf "data SurgeEvent = SurgeThresholdNoted"
       surgeDomain `shouldSatisfy` (not . T.isInfixOf "data SurgeEvent = ()")
 
   describe "contract (EP-4)" $ do
@@ -2943,7 +2944,7 @@ main = hspec $ do
       let dependencies = manifestDependenciesForService service
           identities = idDomainIdentitiesForService service
           manifestText = renderManifestForService "contract-v4.keiro" [typedModule] service
-      committed <- readTestText "test/conformance-contract-typeid/Generated/HospitalCapacity/Emergency/Contract.hs"
+      committed <- readTestText "test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs"
       normalizeGenerated (moduleText typedModule) `shouldBe` normalizeGenerated committed
       moduleText legacyModule `shouldSatisfy` T.isInfixOf "incidentId :: !Text"
       moduleText legacyModule `shouldSatisfy` (not . T.isInfixOf "KindID")
@@ -3891,7 +3892,7 @@ main = hspec $ do
       [ckCode k | Advisory k <- cs] `shouldBe` [ProcessTimerPayloadChanged]
     it "ignores formatting-only process and timer surface rewrites" $ do
       original <- specOf "test/fixtures/hospital-surge.keiro"
-      formatted <- parseInlineSpec "<formatted-process>" (renderSpec original)
+      formatted <- shouldParseStableRenderedSpec "<formatted-process>" original
       diffSpecs original formatted `shouldBe` []
     it "reports a timer window change as a warning" $ do
       cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-window.keiro"
@@ -4313,8 +4314,8 @@ main = hspec $ do
       mapM_ assertSkeletonValid skeletonKinds
     it "every skeleton passes the scaffold refusal gates" $
       mapM_ assertSkeletonScaffoldable skeletonKinds
-    it "legacy compatibility skeleton scaffolds match the committed compiling modules" $
-      mapM_ (uncurry assertLegacySkeletonMatchesCommitted) skeletonModuleRoots
+    it "stable skeleton scaffolds match the committed compiling modules" $
+      mapM_ (uncurry assertStableSkeletonMatchesCommitted) skeletonModuleRoots
     it "rejects an unknown kind with a helpful message" $
       case skeletonFor "bogus" of
         Left msg -> ("Valid kinds:" `T.isInfixOf` msg) `shouldBe` True
@@ -4751,6 +4752,17 @@ main = hspec $ do
           harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: Bump from CounterPending -- \""
           harness `shouldSatisfy` T.isInfixOf "prefix <> \"register note\""
         [] -> expectationFailure "forward/replay sample spec has no aggregate"
+    it "keeps inequality-guard samples distinct from register initials" $ do
+      mods <- scaffoldFixture "test/fixtures/subscription.keiro"
+      let harness = generatedTextEndingIn "Harness.hs" mods
+      harness `shouldSatisfy` T.isInfixOf "ActivateSubscriptionData"
+      harness `shouldSatisfy` T.isInfixOf "Paid"
+      harness `shouldNotSatisfy` T.isInfixOf "ActivateSubscriptionData (case parseSubscriptionId \"sub_01h455vb4pex5vsknk084sn02q\" of Right parsed -> parsed; Left _ -> error \"generated valid ID sample failed to parse\") (case parseCustomerId \"cust_01h455vb4pex5vsknk084sn02q\" of Right parsed -> parsed; Left _ -> error \"generated valid ID sample failed to parse\") Free"
+    it "uses consumer-owned nominal initials for equality-guard samples" $ do
+      mods <- scaffoldFixture "test/fixtures/nominal-scalars.keiro"
+      let harness = generatedTextEndingIn "Harness.hs" mods
+      harness `shouldSatisfy` T.isInfixOf "NominalConformance.Bindings.initialOrderId"
+      harness `shouldNotSatisfy` T.isInfixOf "case parseOrderId"
     it "emits the canonical reservation register checks" $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
       let harness = generatedTextEndingIn "Harness.hs" mods
@@ -6334,19 +6346,20 @@ skeletonModuleRoots =
     ("workflow", "SkelWorkflow")
   ]
 
-assertLegacySkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
-assertLegacySkeletonMatchesCommitted kind root = case skeletonFor kind of
+assertStableSkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
+assertStableSkeletonMatchesCommitted kind root = case skeletonFor kind of
   Left err -> expectationFailure (T.unpack err)
-  Right source -> case parseSpec ("new-legacy:" <> T.unpack kind) (withLegacyPreamble source) of
-    Left err -> expectationFailure (T.unpack err)
-    Right spec -> do
+  Right source -> case parseSource ("new:" <> T.unpack kind) source of
+    Left err -> expectationFailure (T.unpack (renderParseFailure err))
+    Right parsed -> do
+      let service = checkedSource parsed
+          spec = checkedSpec service
       let ctx = (defaultContext (specContext spec)) {moduleRoot = root}
-      forM_ [m | m <- scaffoldModules ctx spec, kindOf m == Generated] $ \m -> do
+      forM_ [m | m <- scaffoldServiceModules ctx service, kindOf m == Generated] $ \m -> do
         committed <- readTestText ("test/conformance-skeletons/" <> modulePath m)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
   where
     kindOf = Keiro.Dsl.Scaffold.kind
-    withLegacyPreamble source = T.unlines ("language keiro-dsl 1" : drop 1 (T.lines source))
 
 bumpArtifactBindingVersion :: MappedDecl -> MappedDecl
 bumpArtifactBindingVersion declaration@MappedStructural {msName = "ArtifactInfo"} =

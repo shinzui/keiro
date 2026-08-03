@@ -35,4 +35,4 @@ aggregate Reservation
   projection transfer_decisions key=reservationId
     status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }
   snapshot every 100
-    state-codec version=1 shape-hash="27848a14d56e0719c70b0337ef4a9e0e5aefcf16b4a880f6817c4cc4f84cec10"
+    state-codec version=1 shape-hash="7a181ceb7d798d883d28c85201c5c1692bd314a7b489da9128bff91e0f38cd28"

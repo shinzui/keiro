@@ -55,14 +55,21 @@ surgeManager =
         , targetEventStream = hospitalEventStream
         , targetProjections = const []
         , handle = \i ->
+            let checkedId = checkedHospitalId (hospitalId i)
+             in
             ProcessManagerAction
-                { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData (N.HospitalId (hospitalId i)))
+                { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData checkedId)
                 , commands =
                     [ PMCommand
                         { target = entityStream hospitalCommandCategory (hospitalId i)
-                            , command = H.ActivateSurge (H.ActivateSurgeData (N.HospitalId (hospitalId i)))
+                            , command = H.ActivateSurge (H.ActivateSurgeData checkedId)
                         }
                     ]
                 , timers = [surgeFlowTimerRequest (hospitalId i) (observedAt i)]
                 }
         }
+
+checkedHospitalId :: Text -> N.HospitalId
+checkedHospitalId raw = case N.parseHospitalId raw of
+    Right value -> value
+    Left problem -> error (show problem)

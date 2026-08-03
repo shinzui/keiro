@@ -53,7 +53,7 @@ aggregate ScalarAccount
     write label := "adjusted"
     write active := true
     write mode := AccountMode.Restricted
-    write requestId := RequestId("req_00041061050r3gg28a1c60t3gf")
+    write requestId := RequestId("req_01h455vb4pex5vsknk084sn02q")
     write openedAt := "2026-02-03T04:05:06Z"
     write limits := cmd.limits
     emit Adjusted
