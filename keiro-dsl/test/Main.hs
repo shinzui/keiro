@@ -2950,6 +2950,7 @@ main = hspec $ do
       let dependencies = manifestDependenciesForService service
           identities = idDomainIdentitiesForService service
           manifestText = renderManifestForService "contract-v4.keiro" [typedModule] service
+      assertGeneratedHaskellContract "contract-v4.keiro" manifestText
       committed <- readTestText "test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs"
       normalizeGenerated (moduleText typedModule) `shouldBe` normalizeGenerated committed
       moduleText legacyModule `shouldSatisfy` T.isInfixOf "incidentId :: !Text"
@@ -4123,6 +4124,7 @@ main = hspec $ do
       spec <- specOf "test/fixtures/consumer-types.keiro"
       let modules = scaffoldModules (defaultContext (specContext spec)) spec
           manifest = renderManifest "consumer-types.keiro" modules spec
+      assertGeneratedHaskellContract "consumer-types.keiro" manifest
       mapM_ (\packageName -> manifestDependencies spec `shouldContain` [packageName]) ["artifact-domain", "vendor-geometry"]
       manifest `shouldSatisfy` T.isInfixOf "consumer-packages:\n    artifact-domain\n    vendor-geometry"
       mapM_
@@ -4285,6 +4287,7 @@ main = hspec $ do
       service <- checkedServiceOf "test/fixtures/reservation.keiro"
       let manifest = renderManifestForService "reservation.keiro" mods service
           expectedNames = sort (map (moduleNameOf . modulePath) mods)
+      assertGeneratedHaskellContract "reservation.keiro" manifest
       -- every produced module name appears in the manifest…
       mapM_ (\m -> (m `T.isInfixOf` manifest) `shouldBe` True) expectedNames
       -- …and the module list is exactly the scaffolder's output set.
@@ -5565,6 +5568,8 @@ main = hspec $ do
           doesFileExist (out </> recordFileName "demo-project") `shouldReturn` False
           doesFileExist (out </> "keiro-dsl-manifest.demo-project.txt") `shouldReturn` False
           contents <- TIO.readFile (wsrRecordPath report)
+          buildManifest <- TIO.readFile (wsrBuildManifestPath report)
+          assertGeneratedHaskellContract "service.keiro-workspace" buildManifest
           case parseWorkspaceRecord contents of
             Nothing -> expectationFailure ("workspace record did not parse:\n" <> T.unpack contents)
             Just record -> do
@@ -8325,3 +8330,18 @@ genModuleRoot = do
   n <- choose (1, 3 :: Int)
   segs <- vectorOf n (elements ["Acme", "Services", "Hospital", "Domain", "Core"])
   pure (T.intercalate "." segs)
+
+assertGeneratedHaskellContract :: T.Text -> T.Text -> Expectation
+assertGeneratedHaskellContract sourceName manifest =
+  take 10 (T.lines manifest)
+    `shouldBe` [ "-- keiro-dsl build manifest for " <> sourceName,
+                 "-- Paste the complete fragment below into the consuming Cabal stanza.",
+                 "-- The generated layer is overwritten on every scaffold; hole modules are",
+                 "-- create-if-absent (filled by hand).",
+                 "",
+                 "default-language: GHC2024",
+                 "default-extensions:",
+                 "    OverloadedStrings",
+                 "",
+                 "other-modules:"
+               ]

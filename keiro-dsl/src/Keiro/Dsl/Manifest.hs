@@ -40,6 +40,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.GeneratedHaskellLanguage (generatedHaskellDefaultExtensions, generatedHaskellDefaultLanguage)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
@@ -60,12 +61,17 @@ renderManifestForService :: Text -> [ScaffoldModule] -> CheckedService -> Text
 renderManifestForService specName mods service =
   T.unlines $
     [ "-- keiro-dsl build manifest for " <> specName,
-      "-- Paste the two blocks below into the consuming Cabal stanza.",
+      "-- Paste the complete fragment below into the consuming Cabal stanza.",
       "-- The generated layer is overwritten on every scaffold; hole modules are",
       "-- create-if-absent (filled by hand).",
       "",
-      "other-modules:"
+      "default-language: " <> generatedHaskellDefaultLanguage,
+      "default-extensions:"
     ]
+      ++ map ("    " <>) generatedHaskellDefaultExtensions
+      ++ [ "",
+           "other-modules:"
+         ]
       ++ map ("    " <>) (sort (map (moduleNameOf . modulePath) mods))
       ++ [ "",
            "build-depends:"

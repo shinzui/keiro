@@ -25,8 +25,15 @@ done
 while IFS= read -r haskell_file; do
   case "$haskell_file" in
     Generated/* | */Generated/*) continue ;;
+    keiro-dsl/test/conformance-aggregate-scalars/Main.hs | \
+      keiro-dsl/test/conformance-nominal-scalars/Main.hs | \
+      keiro-dsl/test/conformance-scalar-expressions/Main.hs | \
+      keiro-dsl/test/conformance-structural/Main.hs)
+      disallowed_extensions='ImportQualifiedPost'
+      ;;
+    *) disallowed_extensions='ImportQualifiedPost|OverloadedLabels' ;;
   esac
-  if rg -n '^\{-# LANGUAGE (ImportQualifiedPost|OverloadedLabels) #-\}$' "$haskell_file"; then
+  if rg -n "^\\{-# LANGUAGE (${disallowed_extensions}) #-\\}$" "$haskell_file"; then
     echo "extension policy: $haskell_file duplicates a globally configured extension" >&2
     failed=1
   fi

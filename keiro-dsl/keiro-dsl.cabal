@@ -29,6 +29,10 @@ common shared
     OverloadedLabels
     OverloadedStrings
 
+common generated-output
+  default-language:   GHC2024
+  default-extensions: OverloadedStrings
+
 library
   import:          warnings, shared
   hs-source-dirs:  src
@@ -76,6 +80,7 @@ library
 
   other-modules:
     Keiro.Dsl.Frontend.Internal
+    Keiro.Dsl.GeneratedHaskellLanguage
     Keiro.Dsl.HaskellImport
     Keiro.Dsl.Parser.Aggregate
     Keiro.Dsl.Parser.Coordination
@@ -222,7 +227,7 @@ test-suite keiro-dsl-conformance-aggregate-scalars
 -- transition ownership, explicit Hole opacity/fold identity, and concrete,
 -- symbolic, codec-replay, and snapshot-invalidation agreement.
 test-suite keiro-dsl-conformance-aggregate-scalar-expressions
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-scalar-expressions
   main-is:        Main.hs

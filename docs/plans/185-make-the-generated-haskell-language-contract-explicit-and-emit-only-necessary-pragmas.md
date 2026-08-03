@@ -4,6 +4,7 @@ slug: make-the-generated-haskell-language-contract-explicit-and-emit-only-necess
 title: "Make the generated Haskell language contract explicit and emit only necessary pragmas"
 kind: exec-plan
 created_at: 2026-08-03T13:50:54Z
+intention: intention_01kz45h8xtedy8qnsarqhznvbp
 ---
 
 # Make the generated Haskell language contract explicit and emit only necessary pragmas
@@ -37,7 +38,7 @@ and retain their own pragmas.
 - [x] (2026-08-03) Audited every LANGUAGE pragma emitted for overwriteable
   `ScaffoldModule` values of kind `Generated`, distinguished GHC2024 members from
   specialized extensions, and excluded create-once `HoleStub` output.
-- [ ] Milestone 1: centralize and publish the generated-Haskell compilation contract in
+- [x] (2026-08-03) Milestone 1: centralized and published the generated-Haskell compilation contract in
   the manifest and Cabal conformance profile.
 - [ ] Milestone 2: route generated emitters through the restricted pragma renderer and
   remove or condition every redundant pragma identified in the audit.
@@ -75,6 +76,25 @@ and retain their own pragmas.
   `Generated`, so the existing global-extension policy cannot catch this class of
   drift. A generated-output allowlist is needed in addition to the existing hand-owned
   source policy.
+
+- Observation: the live corpus had grown to 203 generated modules with 543 pragma
+  lines before implementation began, compared with the plan-creation counts of 194 and
+  517. The extension vocabulary was unchanged and the current emitter already included
+  the intervening import-planning work, so implementation proceeded from the live tree
+  and will regenerate from that merged emitter.
+
+- Observation: the Milestone 1 pilot component
+  `keiro-dsl-conformance-aggregate-scalar-expressions` immediately exposed the expected
+  hand-owned reliance on `OverloadedLabels`. Adding only that local pragma to
+  `keiro-dsl/test/conformance-scalar-expressions/Main.hs` let the component compile under
+  `common generated-output`; no broad default was added to the consumer contract.
+
+- Observation: refreshing the repository's generated pre-commit configuration caused
+  the existing extension-policy hook to reject that planned local `OverloadedLabels`
+  declaration, because the old policy assumed every hand-owned Haskell file inherited
+  `common shared`. The policy now exempts exactly the four named narrow-profile drivers
+  from the `OverloadedLabels` redundancy check while continuing to reject
+  `ImportQualifiedPost` there and both global defaults everywhere else.
 
 
 ## Decision Log
@@ -144,6 +164,15 @@ and retain their own pragmas.
   an allowlist make future accidental reintroduction fail at review time.
   Date: 2026-08-03.
 
+- Decision: permit a local `OverloadedLabels` pragma only in the four named hand-owned
+  conformance drivers that compile under `common generated-output`; preserve the global
+  redundancy rule for every other hand-owned file.
+  Rationale: those drivers no longer inherit the generator's broad Cabal defaults, so
+  the local declaration is necessary rather than redundant. A four-path exception keeps
+  the existing source policy strict without falsely broadening the generated-output
+  contract.
+  Date: 2026-08-03.
+
 - Decision: preserve and integrate the in-progress import-planning work described by
   [ExecPlan 184](184-generate-idiomatic-haskell-imports-for-consumer-owned-types.md).
   Rationale: both plans touch `Keiro.Dsl.Scaffold` and generated fixtures. This plan may
@@ -161,11 +190,20 @@ and retain their own pragmas.
 
 ## Outcomes & Retrospective
 
-The audit and implementation plan are complete. No generator or fixture implementation
-has been changed by this plan yet. At each milestone, record the files changed, the exact
-test commands and results, the final emitted pragma inventory, and any hand-owned test
-driver that needed an explicit pragma solely because the conformance component stopped
-inheriting `common shared`.
+Milestone 1 is complete. `Keiro.Dsl.GeneratedHaskellLanguage` now owns the GHC2024 plus
+`OverloadedStrings` baseline and the closed local-extension vocabulary. Both single-file
+and workspace manifests emit that contract before their module and dependency blocks,
+and `common generated-output` mirrors it for conformance compilation. The exact manifest
+prefix is covered for ordinary aggregate, typed-contract, consumer-mapping, and workspace
+paths.
+
+Validation completed on 2026-08-03 with `cabal build keiro-dsl`, the 514-example
+`cabal test keiro-dsl-test --test-show-details=direct` suite, and
+`cabal test keiro-dsl-conformance-aggregate-scalar-expressions
+--test-show-details=direct`; all passed. A CLI scaffold of `reservation.keiro` visibly
+emitted `default-language: GHC2024` followed by the single `OverloadedStrings` default.
+The scalar-expression driver was the first hand-owned file to need its planned additive
+`OverloadedLabels` pragma after leaving `common shared`.
 
 Before marking the plan complete, compare a freshly scaffolded manifest and generated
 tree with the purpose above. Then distill the final language contract, local-exception
