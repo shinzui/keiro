@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 module Main (main) where
 
 import Data.Set qualified as Set
@@ -82,6 +80,17 @@ main = hspec $ describe "haskell import planning" $ do
         plan = expectImportPlan defaultImportEnvironment (Set.singleton planned)
     renderPlannedReference plan missing
       `shouldBe` Left (MissingHaskellReference "Generated.Example" missing)
+
+  it "accepts contextual GHC words that remain valid value identifiers" $ do
+    let reference = valueReference "Consumer.Bindings" "role"
+        plan = expectImportPlan defaultImportEnvironment (Set.singleton reference)
+    renderPlannedReference plan reference `shouldBe` Right "Bindings.role"
+
+  it "rejects lexical keywords with target-module context" $ do
+    let reference = valueReference "Consumer.Bindings" "case"
+    case planHaskellImports defaultImportEnvironment (Set.singleton reference) of
+      Left failure -> failure `shouldBe` InvalidHaskellOccurrence "Generated.Example" ValueNamespace "case"
+      Right _ -> expectationFailure "lexical keyword unexpectedly planned"
 
 defaultImportEnvironment :: ImportEnvironment
 defaultImportEnvironment =

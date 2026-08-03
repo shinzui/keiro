@@ -42,6 +42,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
@@ -407,18 +408,9 @@ emitHarness goldens a =
       ++ ["{-# LANGUAGE TypeApplications #-}" | hasMappedHarness a]
       ++ [ generatedBanner,
            "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where",
-           "",
-           "import " <> aGenPrefix a <> ".Domain",
-           "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")",
-           transducerImport a,
-           "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
-           codecDecodeRawImport
+           ""
          ]
-      ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (generatedNominalHarnessTypes a)
-      ++ mappedHarnessImports a
-      ++ nominalHarnessImports a
-      ++ aggregateHarnessImports a
-      ++ goldenImports
+      ++ harnessImports
       ++ [ "",
            "-- | (label, passed). A driver runs these and exits non-zero on any False,",
            "-- naming the failing assertion. Filling a hole wrongly turns a specific",
@@ -491,6 +483,20 @@ emitHarness goldens a =
             "import Data.Text.Encoding (encodeUtf8)"
           ]
         else []
+    harnessImports =
+      unique $
+        [ "import " <> aGenPrefix a <> ".Domain",
+          "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")",
+          transducerImport a,
+          "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
+          codecDecodeRawImport
+        ]
+          ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (generatedNominalHarnessTypes a)
+          ++ mappedHarnessImports a
+          ++ nominalHarnessImports a
+          ++ aggregateHarnessImports a
+          ++ T.lines (renderPlannedImports (harnessImportPlan a))
+          ++ goldenImports
 
     upcastLabel event source =
       case goldenFor goldens event of
@@ -679,11 +685,14 @@ commandSampleValue aggregate transition fieldName fieldType = case fieldType of
   where
     fallback = sampleValue aggregate fieldName fieldType
     matchesRegister register = rrName register == fieldName && rrType register == fieldType
-    regInitialValueForHarness owner register = case rrType register of
-      AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-        ConsumerNominal {} -> renderRegisterInitial (rrInitial register)
-        GeneratedNominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
-      _ -> renderRegisterInitial (rrInitial register)
+    regInitialValueForHarness owner register = case rrInitial register of
+      InitialNominal _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
+      InitialMapped _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
+      _ -> case rrType register of
+        AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+          ConsumerNominal {} -> renderRegisterInitial (rrInitial register)
+          GeneratedNominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
+        _ -> renderRegisterInitial (rrInitial register)
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
 guardEquatesCommandAndRegister transition fieldName = maybe False containsEquality (tGuard transition)
@@ -703,13 +712,18 @@ sampleValue a fieldName ty = case ty of
     | GeneratedNominal <- resolvedNominalOwnership nominal,
       Just sample <- generatedIdSampleHaskell a nominal ->
         sample
+  AggregateNominal nominal
+    | ConsumerNominal binding <- resolvedNominalOwnership nominal ->
+        "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "
+          <> renderHarnessReference a (harnessQualifiedValueReference (consumerNominalFixtures binding))
+          <> ")))"
   _ -> fallback
   where
     fallback = case fieldCat a ty of
       IdCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
       EnumCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
-      MappedStructuralCat declaration _ -> fixtureSample (sdFixtures declaration)
-      MappedOpaqueCat declaration -> fixtureSample (odFixtures declaration)
+      MappedStructuralCat declaration _ -> fixtureSample a (sdFixtures declaration)
+      MappedOpaqueCat declaration -> fixtureSample a (odFixtures declaration)
       OtherCat -> case ty of
         AggregateVertex vertexType
           | vertexType == aVertexType a -> initialVertex a
@@ -721,7 +735,7 @@ aggregateHarnessImports aggregate =
     [ "import " <> imported
     | resolvedType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)),
       AggregateTime <- [resolvedType],
-      imported <- Set.toAscList (aggregateImports (aSymbols aggregate) resolvedType)
+      imported <- Set.toAscList (aggregateSourceStaticImports (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType))
     ]
 
 nominalHarnessImports :: Agg -> [Text]
@@ -735,20 +749,10 @@ nominalHarnessImports aggregate
                then []
                else ["import Data.KindID qualified as KindID", "import Data.Text qualified as T", "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)"]
            )
-        <> ["import " <> moduleName <> " qualified" | moduleName <- unique (fixtureModules <> bindingModules)]
         <> ["import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
   where
     nominals = consumerNominalHarnessTypes aggregate
     enforcedIds = enforcedConsumerNominalIdHarnessTypes aggregate
-    bindings = [binding | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
-    fixtureModules =
-      [ fst (splitQualifiedHarness (unQualifiedValueName (consumerNominalFixtures binding)))
-      | binding <- bindings
-      ]
-    bindingModules =
-      [ fst (splitQualifiedHarness (unQualifiedValueName (consumerNominalBinding binding)))
-      | binding <- bindings
-      ]
 
 hasNominalHarness :: Agg -> Bool
 hasNominalHarness = not . null . consumerNominalHarnessTypes
@@ -817,8 +821,8 @@ nominalHarnessDeclarations aggregate
           <> idDomainAssertions name bindingName fixtures nominal
         where
           name = resolvedNominalName nominal
-          bindingName = unQualifiedValueName (consumerNominalBinding binding)
-          fixtureName = unQualifiedValueName (consumerNominalFixtures binding)
+          bindingName = renderHarnessReference aggregate (harnessQualifiedValueReference (consumerNominalBinding binding))
+          fixtureName = renderHarnessReference aggregate (harnessQualifiedValueReference (consumerNominalFixtures binding))
           fixtures = "(NonEmpty.toList (nominalFixtureCases " <> fixtureName <> "))"
     idDomainAssertions name bindingName fixtures nominal = case resolvedNominalRepresentation nominal of
       IdRepresentation prefix
@@ -891,23 +895,9 @@ mappedHarnessImports aggregate
         "import Keiki.Shape (CanonicalTypeName (..))",
         "import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)"
       ]
-        ++ map (\moduleName -> "import " <> moduleName <> " qualified") (unique (modules <> bindingModules <> shapeModules <> consumerModules))
         ++ ["import " <> structuralProjectionModuleName (aContext aggregate) <> " qualified as StructuralProjections" | not (null (mappedProjectionSpecs aggregate))]
   where
     fixtures = [mappedFixtures declaration | declaration <- mappedHarnessDeclarationsResolved aggregate]
-    modules = unique [fst (splitQualifiedHarness (unQualifiedValueName qualified)) | qualified <- fixtures]
-    bindingModules =
-      [ fst (splitQualifiedHarness (unQualifiedValueName (sdBinding declaration)))
-      | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
-      ]
-    shapeModules =
-      [ structuralShapeModuleName (aContext aggregate) (sdName declaration)
-      | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
-      ]
-    consumerModules =
-      [ hsModule (sdHaskell declaration)
-      | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
-      ]
 
 mappedCodecHarnessExports :: Agg -> Text
 mappedCodecHarnessExports aggregate =
@@ -916,14 +906,130 @@ mappedCodecHarnessExports aggregate =
     | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
     ]
 
-fixtureSample :: QualifiedValueName -> Text
-fixtureSample qualified =
-  "(snd (NonEmpty.head (fixtureCases " <> unQualifiedValueName qualified <> ")))"
+fixtureSample :: Agg -> QualifiedValueName -> Text
+fixtureSample aggregate qualified =
+  "(snd (NonEmpty.head (fixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference qualified) <> ")))"
 
 splitQualifiedHarness :: Text -> (Text, Text)
 splitQualifiedHarness value =
   let (prefix, name) = T.breakOnEnd "." value
    in (T.dropEnd 1 prefix, name)
+
+harnessImportPlan :: Agg -> HaskellImportPlan
+harnessImportPlan aggregate =
+  either
+    (error . ("validated harness import planning failed: " <>) . show)
+    id
+    ( planHaskellImports
+        ImportEnvironment
+          { targetModule = aGenPrefix aggregate <> ".Harness",
+            localNames =
+              Set.fromList
+                [ aName aggregate <> "Command",
+                  aName aggregate <> "Event",
+                  aName aggregate <> "Regs",
+                  aVertexType aggregate
+                ],
+            reservedQualifiers = harnessReservedQualifiers
+          }
+        references
+    )
+  where
+    resolvedTypes =
+      map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
+        <> map rrType (aRegs aggregate)
+    aggregateReferences =
+      Set.unions
+        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
+        | resolvedType <- resolvedTypes
+        ]
+    consumerNominalReferences =
+      Set.fromList
+        [ reference
+        | nominal <- consumerNominalHarnessTypes aggregate,
+          ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+          reference <-
+            harnessTypeReference (consumerNominalHaskell binding)
+              : map
+                harnessQualifiedValueReference
+                ( consumerNominalBinding binding
+                    : consumerNominalFixtures binding
+                    : maybeToListHarness (consumerNominalInitial binding)
+                )
+        ]
+    mappedReferences =
+      Set.fromList
+        [ reference
+        | declaration <- mappedHarnessDeclarationsResolved aggregate,
+          reference <- case declaration of
+            ResolvedStructural structural _ ->
+              harnessTypeReference (sdHaskell structural)
+                : map
+                  harnessQualifiedValueReference
+                  (sdBinding structural : sdFixtures structural : maybeToListHarness (sdInitial structural))
+            ResolvedOpaque opaque ->
+              harnessTypeReference (odHaskell opaque)
+                : map
+                  harnessQualifiedValueReference
+                  (odFixtures opaque : maybeToListHarness (odInitial opaque))
+        ]
+    shapeReferences =
+      Set.fromList
+        [ reference
+        | ResolvedStructural declaration shape <- mappedHarnessDeclarationsResolved aggregate,
+          reference <- structuralShapeHarnessReferences (aContext aggregate) declaration shape
+        ]
+    projectionReferences =
+      Set.fromList
+        [ HaskellReference shapeModule selector ValueNamespace RequireQualified
+        | projection <- mappedProjectionSpecs aggregate,
+          (shapeModule, selector) <- spSelectors projection
+        ]
+    references = aggregateReferences <> consumerNominalReferences <> mappedReferences <> shapeReferences <> projectionReferences
+
+harnessTypeReference :: HaskellSource -> HaskellReference
+harnessTypeReference source =
+  HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified
+
+harnessQualifiedValueReference :: QualifiedValueName -> HaskellReference
+harnessQualifiedValueReference qualified =
+  HaskellReference moduleName valueName ValueNamespace RequireQualified
+  where
+    (moduleName, valueName) = splitQualifiedHarness (unQualifiedValueName qualified)
+
+structuralShapeHarnessReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
+structuralShapeHarnessReferences context declaration =
+  foldMappedShape
+    MappedShapeAlgebra
+      { onRecord = \constructor _ fields -> constructorRef constructor : map (valueRef . rwfHaskell) fields,
+        onEnum = map (constructorRef . weCtor),
+        onUnion = \_ -> map (constructorRef . rwaCtor)
+      }
+  where
+    moduleName = structuralShapeModuleName context (sdName declaration)
+    constructorRef constructor = HaskellReference moduleName constructor ConstructorNamespace RequireQualified
+    valueRef value = HaskellReference moduleName value ValueNamespace RequireQualified
+
+renderHarnessReference :: Agg -> HaskellReference -> Text
+renderHarnessReference aggregate reference =
+  either
+    (error . ("validated harness reference failed: " <>) . show)
+    id
+    (renderPlannedReference (harnessImportPlan aggregate) reference)
+
+harnessReservedQualifiers :: Set.Set Text
+harnessReservedQualifiers =
+  Set.fromList
+    [ "Aeson",
+      "AesonKey",
+      "AesonKeyMap",
+      "KindID",
+      "Map",
+      "NominalProjections",
+      "NonEmpty",
+      "StructuralProjections",
+      "T"
+    ]
 
 unique :: (Eq value) => [value] -> [value]
 unique = foldr (\value values -> if value `elem` values then values else value : values) []
@@ -1017,7 +1123,7 @@ mappedDeclaration aggregate resolvedType = do
   Map.lookup key (tgDeclarations graph)
 
 bindingAssertionDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
-bindingAssertionDecl _aggregate (declaration, _shape) =
+bindingAssertionDecl aggregate (declaration, _shape) =
   [ "",
     valueName <> " :: [(String, Bool)]",
     valueName <> " =",
@@ -1035,12 +1141,12 @@ bindingAssertionDecl _aggregate (declaration, _shape) =
   where
     valueName = lowerFirst (sdName declaration) <> "BindingAssertions"
     canonical = unCanonicalTypeId (sdCanonical declaration)
-    consumerType = hsModule (sdHaskell declaration) <> "." <> hsType (sdHaskell declaration)
-    binding = unQualifiedValueName (sdBinding declaration)
-    fixtures = unQualifiedValueName (sdFixtures declaration)
+    consumerType = renderHarnessReference aggregate (harnessTypeReference (sdHaskell declaration))
+    binding = renderHarnessReference aggregate (harnessQualifiedValueReference (sdBinding declaration))
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
 
 opaqueAssertionDecl :: Agg -> OpaqueDecl -> [Text]
-opaqueAssertionDecl _aggregate declaration =
+opaqueAssertionDecl aggregate declaration =
   [ "",
     valueName <> " :: [(String, Bool)]",
     valueName <> " =",
@@ -1054,7 +1160,7 @@ opaqueAssertionDecl _aggregate declaration =
   where
     valueName = lowerFirst (odName declaration) <> "OpaqueAssertions"
     label = unCodecIdentity (odCodecIdentity declaration) <> "@" <> unCodecVersion (odCodecVersion declaration)
-    fixtures = unQualifiedValueName (odFixtures declaration)
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (odFixtures declaration))
 
 coverageDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 coverageDecl aggregate (declaration, shape) =
@@ -1069,31 +1175,31 @@ coverageExpression aggregate declaration shape = case obligations of
   _ -> T.intercalate " && " obligations <> "\n  where\n    shapes = map (bindingToShape " <> binding <> " . snd) (NonEmpty.toList (fixtureCases " <> fixtures <> "))"
   where
     shapeModule = structuralShapeModuleName (aContext aggregate) (sdName declaration)
-    binding = unQualifiedValueName (sdBinding declaration)
-    fixtures = unQualifiedValueName (sdFixtures declaration)
+    binding = renderHarnessReference aggregate (harnessQualifiedValueReference (sdBinding declaration))
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
     obligations = case shape of
-      RRecord _ _ fields -> concatMap (recordFieldObligation shapeModule) fields
+      RRecord _ _ fields -> concatMap (recordFieldObligation aggregate shapeModule) fields
       REnum entries ->
-        [ "any (\\case " <> shapeModule <> "." <> weCtor entry <> " -> True; _ -> False) shapes"
+        [ "any (\\case " <> renderHarnessReference aggregate (HaskellReference shapeModule (weCtor entry) ConstructorNamespace RequireQualified) <> " -> True; _ -> False) shapes"
         | entry <- entries
         ]
-      RUnion _ arms -> concatMap (unionArmObligations shapeModule) arms
+      RUnion _ arms -> concatMap (unionArmObligations aggregate shapeModule) arms
 
-recordFieldObligation :: Text -> ResolvedWireField -> [Text]
-recordFieldObligation shapeModule field = case rwfType field of
+recordFieldObligation :: Agg -> Text -> ResolvedWireField -> [Text]
+recordFieldObligation aggregate shapeModule field = case rwfType field of
   ROptional _ ->
     [ "any (isNothing . " <> selector <> ") shapes",
       "any (isJust . " <> selector <> ") shapes"
     ]
   _ -> []
   where
-    selector = shapeModule <> "." <> rwfHaskell field
+    selector = renderHarnessReference aggregate (HaskellReference shapeModule (rwfHaskell field) ValueNamespace RequireQualified)
 
-unionArmObligations :: Text -> ResolvedWireArm -> [Text]
-unionArmObligations shapeModule arm =
+unionArmObligations :: Agg -> Text -> ResolvedWireArm -> [Text]
+unionArmObligations aggregate shapeModule arm =
   ["any (\\case " <> patternText <> " -> True; _ -> False) shapes"] <> optionalPayload
   where
-    constructor = shapeModule <> "." <> rwaCtor arm
+    constructor = renderHarnessReference aggregate (HaskellReference shapeModule (rwaCtor arm) ConstructorNamespace RequireQualified)
     patternText = constructor <> maybe "" (const "{}") (rwaPayload arm)
     optionalPayload = case rwaPayload arm of
       Just (ROptional _) ->
@@ -1113,7 +1219,7 @@ mappedEventAssertionDecl aggregate (event, fieldName, _fieldType, declaration) =
   ]
   where
     valueName = mappedEventAssertionName event fieldName
-    fixtures = unQualifiedValueName (mappedFixtures declaration)
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (mappedFixtures declaration))
     eventExpression = ctorExprWithOverride aggregate event fieldName "mappedValue"
 
 mappedEventAssertionName :: ResolvedCtor -> Text -> Text
@@ -1135,11 +1241,11 @@ wirePolicyAssertions :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 wirePolicyAssertions aggregate (declaration, shape) = case shape of
   RRecord _ unknownFields fields ->
     concatMap (recordMissingAssertions aggregate declaration) [field | field <- fields, rwfPresence field == POptional]
-      <> [unknownFieldAssertion declaration unknownFields]
-  REnum entries -> map (enumArmAssertion declaration) entries <> [enumUnknownAssertion declaration]
+      <> [unknownFieldAssertion aggregate declaration unknownFields]
+  REnum entries -> map (enumArmAssertion aggregate declaration) entries <> [enumUnknownAssertion declaration]
   RUnion encoding arms ->
-    map (unionArmAssertion declaration encoding) arms
-      <> [unknownFieldAssertion declaration (ueUnknownFields encoding)]
+    map (unionArmAssertion aggregate declaration encoding) arms
+      <> [unknownFieldAssertion aggregate declaration (ueUnknownFields encoding)]
 
 recordMissingAssertions :: Agg -> StructuralDecl -> ResolvedWireField -> [Text]
 recordMissingAssertions aggregate declaration field =
@@ -1178,7 +1284,7 @@ recordMissingAssertions aggregate declaration field =
     canonical = unCanonicalTypeId (sdCanonical declaration)
     encoder = "encode" <> sdName declaration <> "Mapped"
     decoder = "decode" <> sdName declaration <> "Mapped"
-    fixtures = unQualifiedValueName (sdFixtures declaration)
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
     encodedSample = encoder <> " (snd (NonEmpty.head (fixtureCases " <> fixtures <> ")))"
     nullExpectation = case rwfType field of
       ROptional _ -> "isRight"
@@ -1201,8 +1307,8 @@ missingExpectedValue aggregate field = case rwfOnMissing field of
     _ -> "error \"non-reference constructor default\""
   Nothing -> "error \"optional field lacks on-missing policy\""
 
-unknownFieldAssertion :: StructuralDecl -> UnknownFields -> Text
-unknownFieldAssertion declaration policy =
+unknownFieldAssertion :: Agg -> StructuralDecl -> UnknownFields -> Text
+unknownFieldAssertion aggregate declaration policy =
   "(\"wire policy unknown fields: "
     <> unCanonicalTypeId (sdCanonical declaration)
     <> "\", all (\\(_, value) -> "
@@ -1212,15 +1318,15 @@ unknownFieldAssertion declaration policy =
     <> "Mapped (insertObjectField \"__keiro_unknown\" (Aeson.Bool True) (encode"
     <> sdName declaration
     <> "Mapped value)))) (NonEmpty.toList (fixtureCases "
-    <> unQualifiedValueName (sdFixtures declaration)
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
     <> ")))"
   where
     expectation = case policy of
       RejectUnknown -> "isLeft"
       IgnoreUnknown -> "isRight"
 
-enumArmAssertion :: StructuralDecl -> WireEnum -> Text
-enumArmAssertion declaration entry =
+enumArmAssertion :: Agg -> StructuralDecl -> WireEnum -> Text
+enumArmAssertion aggregate declaration entry =
   "(\"wire enum arm: "
     <> unCanonicalTypeId (sdCanonical declaration)
     <> "/"
@@ -1234,7 +1340,7 @@ enumArmAssertion declaration entry =
     <> "Mapped (Aeson.String "
     <> tshow (weTag entry)
     <> ") == Right value) (NonEmpty.toList (fixtureCases "
-    <> unQualifiedValueName (sdFixtures declaration)
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
     <> ")))"
 
 enumUnknownAssertion :: StructuralDecl -> Text
@@ -1245,8 +1351,8 @@ enumUnknownAssertion declaration =
     <> sdName declaration
     <> "Mapped (Aeson.String \"__keiro_unknown\")))"
 
-unionArmAssertion :: StructuralDecl -> UnionEncoding -> ResolvedWireArm -> Text
-unionArmAssertion declaration encoding arm =
+unionArmAssertion :: Agg -> StructuralDecl -> UnionEncoding -> ResolvedWireArm -> Text
+unionArmAssertion aggregate declaration encoding arm =
   "(\"wire union arm: "
     <> unCanonicalTypeId (sdCanonical declaration)
     <> "/"
@@ -1262,7 +1368,7 @@ unionArmAssertion declaration encoding arm =
     <> "Mapped (encode"
     <> sdName declaration
     <> "Mapped value) == Right value) (NonEmpty.toList (fixtureCases "
-    <> unQualifiedValueName (sdFixtures declaration)
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
     <> ")))"
 
 wirePolicyHelpers :: [(StructuralDecl, ResolvedMappedShape)] -> [Text]
@@ -1315,19 +1421,24 @@ projectionAssertionDecls aggregate structural
         <> "\", all (\\(_, owner) -> fieldWitnessAgrees StructuralProjections."
         <> spWitness spec
         <> " (\\referenceOwner -> "
-        <> projectionGetter "referenceOwner" spec
+        <> projectionGetter aggregate "referenceOwner" spec
         <> ") owner) (NonEmpty.toList (fixtureCases "
         <> ownerFixtures spec
         <> ")))"
     ownerFixtures spec = case find (\(declaration, _) -> sdCanonical declaration == spCanonical spec) structural of
-      Just (declaration, _) -> unQualifiedValueName (sdFixtures declaration)
+      Just (declaration, _) -> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
       Nothing -> "error \"projection owner fixtures missing\""
 
-projectionGetter :: Text -> StructuralProjection -> Text
-projectionGetter owner spec =
+projectionGetter :: Agg -> Text -> StructuralProjection -> Text
+projectionGetter aggregate owner spec =
   foldl
-    (\value (shapeModule, selector) -> shapeModule <> "." <> selector <> " (" <> value <> ")")
-    ("bindingToShape " <> unQualifiedValueName (spBinding spec) <> " " <> owner)
+    ( \value (shapeModule, selector) ->
+        renderHarnessReference aggregate (HaskellReference shapeModule selector ValueNamespace RequireQualified)
+          <> " ("
+          <> value
+          <> ")"
+    )
+    ("bindingToShape " <> renderHarnessReference aggregate (harnessQualifiedValueReference (spBinding spec)) <> " " <> owner)
     (spSelectors spec)
 
 maybeToListHarness :: Maybe value -> [value]

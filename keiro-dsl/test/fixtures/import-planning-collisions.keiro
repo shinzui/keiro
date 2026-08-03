@@ -18,7 +18,7 @@ mapped nominal InvoiceStatus : Text {
 }
 
 mapped nominal LocalCollision : Text {
-  haskell package=keiro-dsl module=ImportPlanning.Consumer.Domain type=CollisionLedger
+  haskell package=keiro-dsl module=ImportPlanning.Consumer.Domain type=CollisionLedgerCommand
   binding = "ImportPlanning.Bindings.localCollisionBinding"
   binding-version = "1"
   canonical-type = "import-planning.LocalCollision.v1"

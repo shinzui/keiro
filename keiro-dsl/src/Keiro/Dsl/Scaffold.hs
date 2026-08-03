@@ -109,6 +109,7 @@ import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind 
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFoldSurfaceError)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDomainContractFor, idDomainPrefix, idDomainSampleText)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned), languageVersionText)
 import Keiro.Dsl.NominalType
@@ -691,9 +692,7 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), QualifiedValueName (..))",
       "import System.Directory (doesFileExist, listDirectory)",
       "import System.FilePath (takeExtension, (</>))",
-      "",
-      "import " <> fixtureModule <> " qualified as ConsumerFixtures",
-      "import " <> hsModule (sdHaskell declaration) <> " qualified as ConsumerDomain",
+      renderPlannedImports importPlan,
       "",
       "compareWithHistorical :: HistoricalCodec " <> domainType <> " -> FilePath -> IO CompareReport",
       "compareWithHistorical historicalCodec goldenDirectory = do",
@@ -702,7 +701,7 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "  loaded <- traverse (loadGolden historicalCodec) files",
       "  let inputIssues = [issue | Left issue <- loaded]",
       "      entries = [entry | Right entry <- loaded]",
-      "      typedCases = NonEmpty.toList (fixtureCases ConsumerFixtures." <> fixtureSymbol <> ")",
+      "      typedCases = NonEmpty.toList (fixtureCases " <> fixtureReference <> ")",
       "      encodeObservations =",
       "        [ EncodeObservation label (hcEncode historicalCodec value) (GeneratedCodec.encode" <> name <> "Mapped value)",
       "        | (label, value) <- typedCases",
@@ -753,10 +752,18 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
     ]
   where
     name = sdName declaration
-    domainType = "ConsumerDomain." <> hsType (sdHaskell declaration)
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
     codecModule = genPrefixFor ctx (aggName owner) <> ".Codec"
-    fixtureModule = qualifiedModule (sdFixtures declaration)
-    fixtureSymbol = lastSegment (unQualifiedValueName (sdFixtures declaration))
+    fixtureReference = renderReferenceOrDie importPlan (qualifiedValueReference (sdFixtures declaration))
+    importPlan =
+      planImportsOrDie
+        moduleName
+        Set.empty
+        ( Set.fromList
+            [ haskellTypeReference (sdHaskell declaration),
+              qualifiedValueReference (sdFixtures declaration)
+            ]
+        )
 
 branchSchemaFor :: TypeGraph -> ResolvedMappedDecl -> BranchSchema
 branchSchemaFor graph =
@@ -871,7 +878,7 @@ emitBindingSkeleton ctx spec graph owner obligations =
           ]
             <> exportLines
             <> [") where", ""]
-            <> map ("import " <>) imports
+            <> importLines
             <> [""]
             <> intercalateBlank (map renderObligation obligations),
       kind = HoleStub,
@@ -882,30 +889,16 @@ emitBindingSkeleton ctx spec graph owner obligations =
       [ (if index == (0 :: Int) then "    " else "  , ") <> obligationSymbol obligation
       | (index, obligation) <- zip [0 ..] obligations
       ]
-    imports =
+    importPlan = bindingSkeletonImportPlan ctx spec graph owner obligations
+    importLines =
       sort . nub $
-        [ hsModule (sdHaskell declaration) <> " qualified"
-        | obligation <- obligations,
-          Just (declaration, _) <- [structuralFor obligation]
+        map ("import " <>) staticImports
+          <> T.lines (renderPlannedImports importPlan)
+    staticImports =
+      sort . nub $
+        [ "Keiro.Codec.Structural (FixtureCases, StructuralBinding (..))"
+        | any (\obligation -> obligationCategory obligation == "structural" && obligationKind obligation `elem` [BindingValue, FixtureValue]) obligations
         ]
-          <> [ structuralShapeModule ctx (sdName declaration) <> " qualified"
-             | obligation <- obligations,
-               obligationKind obligation == BindingValue,
-               Just (declaration, _) <- [structuralFor obligation]
-             ]
-          <> [ "Keiro.Codec.Structural (FixtureCases, StructuralBinding (..))"
-             | any (\obligation -> obligationCategory obligation == "structural" && obligationKind obligation `elem` [BindingValue, FixtureValue]) obligations
-             ]
-          <> [ hsModule (consumerNominalHaskell binding) <> " qualified"
-             | obligation <- obligations,
-               Just (_, binding) <- [nominalFor obligation]
-             ]
-          <> [ nominalRepresentationModule ctx (resolvedNominalName nominal) <> " qualified"
-             | obligation <- obligations,
-               obligationKind obligation == BindingValue,
-               Just (nominal, _) <- [nominalFor obligation],
-               EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
-             ]
           <> [ "Keiro.Codec.Nominal (NominalBinding (..), NominalFixtureCases)"
              | any ((/= "structural") . obligationCategory) obligations
              ]
@@ -931,18 +924,18 @@ emitBindingSkeleton ctx spec graph owner obligations =
              ]
     renderObligation obligation = case structuralFor obligation of
       Nothing -> case nominalFor obligation of
-        Just (nominal, _) -> renderNominalObligation nominal obligation
+        Just (nominal, binding) -> renderNominalObligation nominal binding obligation
         Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
       Just (declaration, shape) -> case obligationKind obligation of
-        BindingValue -> renderBinding ctx declaration shape obligation
+        BindingValue -> renderBinding importPlan ctx declaration shape obligation
         FixtureValue ->
           [ "-- HOLE: provide deterministic labelled conformance fixtures for " <> sdName declaration,
-            obligationSignature obligation,
+            renderStructuralObligationSignature importPlan declaration obligation,
             obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " fixtures")
           ]
         InitialValue ->
           [ "-- HOLE: provide the initial register value for " <> sdName declaration,
-            obligationSignature obligation,
+            renderStructuralObligationSignature importPlan declaration obligation,
             obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " initial value")
           ]
     structuralFor obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
@@ -955,10 +948,10 @@ emitBindingSkeleton ctx spec graph owner obligations =
         ConsumerNominal value -> Just value
         GeneratedNominal -> Nothing
       pure (nominal, binding)
-    renderNominalObligation nominal obligation = case obligationKind obligation of
+    renderNominalObligation nominal binding obligation = case obligationKind obligation of
       BindingValue ->
         [ "-- HOLE: complete both total directions; the generated codec remains wire authority.",
-          obligationSignature obligation,
+          renderNominalObligationSignature importPlan ctx nominal binding obligation,
           obligationSymbol obligation <> " =",
           "  NominalBinding",
           "    { nominalToRepresentation = \\_domainValue -> error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " nominalToRepresentation"),
@@ -967,19 +960,19 @@ emitBindingSkeleton ctx spec graph owner obligations =
         ]
       FixtureValue ->
         [ "-- HOLE: provide deterministic labelled expected-wire fixtures for " <> resolvedNominalName nominal,
-          obligationSignature obligation,
+          renderNominalObligationSignature importPlan ctx nominal binding obligation,
           obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " fixtures")
         ]
       InitialValue ->
         [ "-- HOLE: provide the initial register value for " <> resolvedNominalName nominal,
-          obligationSignature obligation,
+          renderNominalObligationSignature importPlan ctx nominal binding obligation,
           obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " initial value")
         ]
     intercalateBlank [] = []
     intercalateBlank (section : rest) = section <> concatMap ("" :) rest
 
-renderBinding :: Context -> StructuralDecl -> ResolvedMappedShape -> BindingObligation -> [Text]
-renderBinding ctx declaration shape obligation =
+renderBinding :: HaskellImportPlan -> Context -> StructuralDecl -> ResolvedMappedShape -> BindingObligation -> [Text]
+renderBinding importPlan ctx declaration shape obligation =
   [ "-- HOLE: complete both total directions; wire policy remains in the generated codec.",
     obligationSymbol obligation <> " :: StructuralBinding " <> domainType <> " " <> shapeType,
     obligationSymbol obligation <> " =",
@@ -991,12 +984,11 @@ renderBinding ctx declaration shape obligation =
     <> indentCases (bindingCases False)
     <> ["    }"]
   where
-    domainModule = hsModule (sdHaskell declaration)
-    domainType = domainModule <> "." <> hsType (sdHaskell declaration)
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
     shapeModuleName = structuralShapeModule ctx (sdName declaration)
-    shapeType = shapeModuleName <> "." <> sdName declaration <> "Shape"
-    domainCtor constructor = domainModule <> "." <> constructor
-    shapeCtor constructor = shapeModuleName <> "." <> constructor
+    shapeType = renderReferenceOrDie importPlan (qualifiedTypeReference shapeModuleName (sdName declaration <> "Shape"))
+    domainCtor constructor = renderReferenceOrDie importPlan (constructorReference (hsModule (sdHaskell declaration)) constructor)
+    shapeCtor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
     indentCases = map ("      " <>)
     bindingCases toShapeDirection =
       foldMappedShape
@@ -1041,6 +1033,134 @@ renderBinding ctx declaration shape obligation =
               <> fieldName
           )
         <> ")"
+
+bindingSkeletonImportPlan :: Context -> Spec -> TypeGraph -> Text -> [BindingObligation] -> HaskellImportPlan
+bindingSkeletonImportPlan ctx spec graph owner obligations =
+  planImportsOrDie owner (Set.fromList (map obligationSymbol obligations)) (Set.fromList (concatMap obligationReferences obligations))
+  where
+    obligationReferences obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
+      Just (ResolvedStructural declaration shape) ->
+        haskellTypeReference (sdHaskell declaration)
+          : [ qualifiedTypeReference shapeModuleName (sdName declaration <> "Shape")
+            | obligationKind obligation == BindingValue
+            ]
+            <> [ reference
+               | obligationKind obligation == BindingValue,
+                 constructor <- structuralConstructorNames shape,
+                 reference <-
+                   [ constructorReference (hsModule (sdHaskell declaration)) constructor,
+                     constructorReference shapeModuleName constructor
+                   ]
+               ]
+        where
+          shapeModuleName = structuralShapeModule ctx (sdName declaration)
+      _ -> case nominalForName (obligationMappedName obligation) of
+        Just (nominal, binding) ->
+          haskellTypeReference (consumerNominalHaskell binding)
+            : [ qualifiedTypeReference
+                  (nominalRepresentationModule ctx (resolvedNominalName nominal))
+                  (resolvedNominalName nominal <> "Representation")
+              | obligationKind obligation == BindingValue,
+                EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
+              ]
+        Nothing -> []
+    nominalForName name = do
+      registry <- either (const Nothing) Just (resolveNominalTypes spec)
+      nominal <- lookupNominalType name registry
+      binding <- case resolvedNominalOwnership nominal of
+        ConsumerNominal value -> Just value
+        GeneratedNominal -> Nothing
+      pure (nominal, binding)
+
+structuralConstructorNames :: ResolvedMappedShape -> [Text]
+structuralConstructorNames =
+  foldMappedShape
+    MappedShapeAlgebra
+      { onRecord = \constructor _ _ -> [constructor],
+        onEnum = map weCtor,
+        onUnion = \_ -> map rwaCtor
+      }
+
+structuralShapeReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
+structuralShapeReferences ctx declaration shape =
+  qualifiedTypeReference moduleName (sdName declaration <> "Shape")
+    : [constructorReference moduleName constructor | constructor <- structuralConstructorNames shape]
+      <> [ HaskellReference moduleName selector ValueNamespace RequireQualified
+         | selector <- structuralSelectorNames shape
+         ]
+  where
+    moduleName = structuralShapeModule ctx (sdName declaration)
+
+structuralSelectorNames :: ResolvedMappedShape -> [Text]
+structuralSelectorNames =
+  foldMappedShape
+    MappedShapeAlgebra
+      { onRecord = \_ _ -> map rwfHaskell,
+        onEnum = const [],
+        onUnion = \_ _ -> []
+      }
+
+nominalRepresentationEncoderReference :: Context -> ResolvedNominalType -> HaskellReference
+nominalRepresentationEncoderReference ctx nominal =
+  HaskellReference
+    (nominalRepresentationModule ctx name)
+    (lowerFirst name <> "RepresentationText")
+    ValueNamespace
+    RequireQualified
+  where
+    name = resolvedNominalName nominal
+
+nominalRepresentationConstructorReference :: Context -> ResolvedNominalType -> Text -> HaskellReference
+nominalRepresentationConstructorReference ctx nominal constructor =
+  HaskellReference
+    (nominalRepresentationModule ctx (resolvedNominalName nominal))
+    constructor
+    ConstructorNamespace
+    RequireQualified
+
+renderStructuralObligationSignature :: HaskellImportPlan -> StructuralDecl -> BindingObligation -> Text
+renderStructuralObligationSignature importPlan declaration obligation =
+  obligationSymbol obligation
+    <> " :: "
+    <> case obligationKind obligation of
+      BindingValue -> error "structural binding signatures are rendered with renderBinding"
+      FixtureValue -> "FixtureCases " <> domainType
+      InitialValue -> domainType
+  where
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
+
+renderNominalObligationSignature :: HaskellImportPlan -> Context -> ResolvedNominalType -> ConsumerNominalBinding -> BindingObligation -> Text
+renderNominalObligationSignature importPlan ctx nominal binding obligation =
+  obligationSymbol obligation
+    <> " :: "
+    <> case obligationKind obligation of
+      BindingValue -> "NominalBinding " <> domainType <> " " <> representationType
+      FixtureValue -> "NominalFixtureCases " <> domainType
+      InitialValue -> domainType
+  where
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
+    representationType = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> "(KindID " <> tshow prefix <> ")"
+      EnumRepresentation {} ->
+        renderReferenceOrDie
+          importPlan
+          ( qualifiedTypeReference
+              (nominalRepresentationModule ctx (resolvedNominalName nominal))
+              (resolvedNominalName nominal <> "Representation")
+          )
+      ScalarRepresentation NominalText -> "Text"
+      ScalarRepresentation NominalInt -> "Int"
+      ScalarRepresentation NominalNatural -> "Natural"
+      ScalarRepresentation NominalBool -> "Bool"
+      ScalarRepresentation NominalTime -> "UTCTime"
+
+qualifiedTypeReference :: Text -> Text -> HaskellReference
+qualifiedTypeReference moduleName typeName =
+  HaskellReference moduleName typeName TypeNamespace RequireQualified
+
+constructorReference :: Text -> Text -> HaskellReference
+constructorReference moduleName constructor =
+  HaskellReference moduleName constructor ConstructorNamespace RequireQualified
 
 shapeModule :: Context -> TypeGraph -> (StructuralDecl, ResolvedMappedShape) -> ScaffoldModule
 shapeModule ctx graph (declaration, shape) =
@@ -1509,6 +1629,7 @@ emitNominalProjections languageContract ctx nominals =
       ""
     ]
       <> map ("import " <>) imports
+      <> T.lines (renderPlannedImports importPlan)
       <> [""]
       <> [T.intercalate "\n\n" (map emitNominalProjection nominals)]
   where
@@ -1518,9 +1639,6 @@ emitNominalProjections languageContract ctx nominals =
         [ "Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)",
           "Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)"
         ]
-          <> [hsModule (consumerNominalHaskell binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
-          <> [qualifiedModule (consumerNominalBinding binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
-          <> [nominalRepresentationModule ctx (resolvedNominalName nominal) <> " qualified" | nominal <- nominals, EnumRepresentation {} <- [resolvedNominalRepresentation nominal]]
           <> ["Data.KindID qualified as KindID" | any hasId nominals]
           <> ["Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain, validateIdDomainText)" | any hasEnforcedId nominals]
           <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasExactDomain nominals]
@@ -1535,6 +1653,37 @@ emitNominalProjections languageContract ctx nominals =
       _ -> False
     hasExactDomain nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
     usesText nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
+    importPlan =
+      planImportsOrDie
+        moduleName
+        ( Set.fromList
+            [ tagName
+            | nominal <- nominals,
+              tagName <- case resolvedNominalRepresentation nominal of
+                ScalarRepresentation {} -> [resolvedNominalName nominal <> "NominalProjection"]
+                IdRepresentation {} -> [nominalEqualityTagName nominal]
+                EnumRepresentation {} -> [nominalEqualityTagName nominal]
+            ]
+        )
+        ( Set.fromList
+            [ reference
+            | nominal <- nominals,
+              ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+              reference <-
+                [ haskellTypeReference (consumerNominalHaskell binding),
+                  qualifiedValueReference (consumerNominalBinding binding)
+                ]
+                  <> case resolvedNominalRepresentation nominal of
+                    EnumRepresentation constructors ->
+                      HaskellReference representationModule (lowerFirst (resolvedNominalName nominal) <> "RepresentationText") ValueNamespace RequireQualified
+                        : [ HaskellReference representationModule constructor ConstructorNamespace RequireQualified
+                          | (constructor, _) <- NE.toList constructors
+                          ]
+                      where
+                        representationModule = nominalRepresentationModule ctx (resolvedNominalName nominal)
+                    _ -> []
+            ]
+        )
     emitNominalProjection nominal = case resolvedNominalOwnership nominal of
       GeneratedNominal -> ""
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
@@ -1547,10 +1696,10 @@ emitNominalProjections languageContract ctx nominals =
           "",
           "instance FieldProjection " <> tagName <> " where",
           "  type FieldName " <> tagName <> " = " <> tshow name,
-          "  type FieldOwner " <> tagName <> " = " <> renderHaskellSource (consumerNominalHaskell binding),
+          "  type FieldOwner " <> tagName <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding)),
           "  type FieldResult " <> tagName <> " = " <> scalarHaskellType (resolvedNominalRepresentation nominal),
           "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (consumerNominalCanonical binding)),
-          "  projectFieldValue _ = nominalToRepresentation " <> unQualifiedValueName (consumerNominalBinding binding),
+          "  projectFieldValue _ = nominalToRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)),
           "",
           witnessName <> " :: FieldWitness " <> tagName,
           witnessName <> " = fieldWitness @" <> tagName
@@ -1591,8 +1740,8 @@ emitNominalProjections languageContract ctx nominals =
         tagName = nominalEqualityTagName nominal
         witnessName = nominalEqualityWitnessName nominal
         patternName = lowerFirst name <> "EqualityPattern"
-        ownerType = renderHaskellSource (consumerNominalHaskell binding)
-        bindingName = unQualifiedValueName (consumerNominalBinding binding)
+        ownerType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
+        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
         equalityIdentity = fromMaybe (error "consumer ID equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
         enforced = isJust (idDomainContractFor languageContract prefix)
         patternLines
@@ -1628,7 +1777,7 @@ emitNominalProjections languageContract ctx nominals =
           "  fieldProjectionDomain _ = finiteProjectionDomain (" <> renderNonEmpty (map (tshow . snd) (NE.toList constructors)) <> ")",
           "  reconstructFieldOwner _ = \\case"
         ]
-          <> [ "    " <> tshow wire <> " -> Just (nominalFromRepresentation " <> bindingName <> " " <> representationModule <> "." <> constructor <> ")"
+          <> [ "    " <> tshow wire <> " -> Just (nominalFromRepresentation " <> bindingName <> " " <> representationConstructor constructor <> ")"
              | (constructor, wire) <- NE.toList constructors
              ]
           <> [ "    _ -> Nothing",
@@ -1640,10 +1789,11 @@ emitNominalProjections languageContract ctx nominals =
         name = resolvedNominalName nominal
         tagName = nominalEqualityTagName nominal
         witnessName = nominalEqualityWitnessName nominal
-        ownerType = renderHaskellSource (consumerNominalHaskell binding)
-        bindingName = unQualifiedValueName (consumerNominalBinding binding)
+        ownerType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
+        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
         representationModule = nominalRepresentationModule ctx name
-        encoderName = representationModule <> "." <> lowerFirst name <> "RepresentationText"
+        encoderName = renderReferenceOrDie importPlan (HaskellReference representationModule (lowerFirst name <> "RepresentationText") ValueNamespace RequireQualified)
+        representationConstructor constructor = renderReferenceOrDie importPlan (HaskellReference representationModule constructor ConstructorNamespace RequireQualified)
         equalityIdentity = fromMaybe (error "consumer enum equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
     scalarHaskellType representation = case representation of
       ScalarRepresentation NominalText -> "Text"
@@ -1666,7 +1816,8 @@ emitShape ctx graph declaration shape =
            ""
          ]
       <> map ("import " <>) imports
-      <> ["" | not (null imports)]
+      <> T.lines (renderPlannedImports importPlan)
+      <> ["" | not (null imports) || not (T.null (renderPlannedImports importPlan))]
       <> [shapeDeclaration]
   where
     moduleName = structuralShapeModule ctx (sdName declaration)
@@ -1683,7 +1834,6 @@ emitShape ctx graph declaration shape =
           <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
           <> ["GHC.Generics (Generic)"]
           <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
-          <> [m <> " qualified" | ReqModule m <- requirements]
     shapeDeclaration =
       foldMappedShape
         MappedShapeAlgebra
@@ -1691,7 +1841,7 @@ emitShape ctx graph declaration shape =
               nl $
                 ["data " <> shapeType <> " = " <> constructor]
                   <> recordFields
-                    [ (rwfHaskell field, renderShapeType ctx graph (rwfType field))
+                    [ (rwfHaskell field, renderShapeType importPlan ctx graph (rwfType field))
                     | field <- fields
                     ]
                   <> ["  deriving stock (Eq, Generic, Show)"],
@@ -1711,7 +1861,12 @@ emitShape ctx graph declaration shape =
                       <> ["  deriving stock (Eq, Generic, Show)"]
           }
         shape
-    renderArm arm = rwaCtor arm <> maybe "" ((" !" <>) . renderShapeType ctx graph) (rwaPayload arm)
+    renderArm arm = rwaCtor arm <> maybe "" ((" !" <>) . renderShapeType importPlan ctx graph) (rwaPayload arm)
+    importPlan =
+      planImportsOrDie
+        moduleName
+        (Set.singleton shapeType)
+        (Set.fromList [reference | ReqReference reference <- requirements])
 
 data ShapeRequirement
   = ReqJson
@@ -1719,7 +1874,7 @@ data ShapeRequirement
   | ReqText
   | ReqTime
   | ReqNatural
-  | ReqModule !Text
+  | ReqReference !HaskellReference
   deriving stock (Eq, Ord, Show)
 
 shapeHasRecord :: ResolvedMappedShape -> Bool
@@ -1755,13 +1910,21 @@ exprRequirements ctx graph =
         onList = id,
         onMap = (ReqMap :) . (ReqText :),
         onRef = \key -> case Map.lookup key (tgDeclarations graph) of
-          Just (ResolvedStructural declaration _) -> [ReqModule (structuralShapeModule ctx (sdName declaration))]
-          Just (ResolvedOpaque declaration) -> [ReqModule (hsModule (odHaskell declaration))]
+          Just (ResolvedStructural declaration _) ->
+            [ ReqReference
+                ( HaskellReference
+                    (structuralShapeModule ctx (sdName declaration))
+                    (sdName declaration <> "Shape")
+                    TypeNamespace
+                    RequireQualified
+                )
+            ]
+          Just (ResolvedOpaque declaration) -> [ReqReference (haskellTypeReference (odHaskell declaration))]
           Nothing -> []
       }
 
-renderShapeType :: Context -> TypeGraph -> ResolvedTypeExpr -> Text
-renderShapeType ctx graph =
+renderShapeType :: HaskellImportPlan -> Context -> TypeGraph -> ResolvedTypeExpr -> Text
+renderShapeType importPlan ctx graph =
   foldTypeExpr
     TypeExprAlgebra
       { onText = "Text",
@@ -1776,9 +1939,11 @@ renderShapeType ctx graph =
         onMap = \value -> "(Map Text (" <> value <> "))",
         onRef = \key -> case Map.lookup key (tgDeclarations graph) of
           Just (ResolvedStructural nested _) ->
-            structuralShapeModule ctx (sdName nested) <> "." <> sdName nested <> "Shape"
+            renderReferenceOrDie
+              importPlan
+              (HaskellReference (structuralShapeModule ctx (sdName nested)) (sdName nested <> "Shape") TypeNamespace RequireQualified)
           Just (ResolvedOpaque opaque) ->
-            hsModule (odHaskell opaque) <> "." <> hsType (odHaskell opaque)
+            renderReferenceOrDie importPlan (haskellTypeReference (odHaskell opaque))
           Nothing -> "()"
       }
 
@@ -1936,23 +2101,31 @@ emitStructuralProjections ctx graph =
       "import Keiro.Codec.Structural (bindingToShape)",
       "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
     ]
-      <> map ("import " <>) imports
+      <> T.lines (renderPlannedImports importPlan)
       <> concatMap renderProjection specs
   where
     moduleName = structuralProjectionModule ctx
     specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
-    imports =
-      sort . nub $
-        [hsModule (spOwner spec) <> " qualified" | spec <- specs]
-          <> [qualifiedModule (spBinding spec) <> " qualified" | spec <- specs]
-          <> [shapeModuleName <> " qualified" | spec <- specs, (shapeModuleName, _) <- spSelectors spec]
+    importPlan =
+      planImportsOrDie
+        moduleName
+        (Set.fromList (map spTag specs))
+        ( Set.fromList
+            ( [haskellTypeReference (spOwner spec) | spec <- specs]
+                <> [qualifiedValueReference (spBinding spec) | spec <- specs]
+                <> [ HaskellReference shapeModuleName selector ValueNamespace RequireQualified
+                   | spec <- specs,
+                     (shapeModuleName, selector) <- spSelectors spec
+                   ]
+            )
+        )
     renderProjection spec =
       [ "",
         "data " <> spTag spec,
         "",
         "instance FieldProjection " <> spTag spec <> " where",
         "  type FieldName " <> spTag spec <> " = " <> tshow (spPointer spec),
-        "  type FieldOwner " <> spTag spec <> " = " <> renderHaskellSource (spOwner spec),
+        "  type FieldOwner " <> spTag spec <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference (spOwner spec)),
         "  type FieldResult " <> spTag spec <> " = " <> spResult spec,
         "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (spCanonical spec)),
         "  projectFieldValue _ owner = " <> renderGetter spec,
@@ -1962,8 +2135,13 @@ emitStructuralProjections ctx graph =
       ]
     renderGetter spec =
       foldl
-        (\value (shapeModuleName, selector) -> shapeModuleName <> "." <> selector <> " (" <> value <> ")")
-        ("bindingToShape " <> unQualifiedValueName (spBinding spec) <> " owner")
+        ( \value (shapeModuleName, selector) ->
+            renderReferenceOrDie importPlan (HaskellReference shapeModuleName selector ValueNamespace RequireQualified)
+              <> " ("
+              <> value
+              <> ")"
+        )
+        ("bindingToShape " <> renderReferenceOrDie importPlan (qualifiedValueReference (spBinding spec)) <> " owner")
         (spSelectors spec)
 
 resolveProjectionModules :: Context -> StructuralProjection -> StructuralProjection
@@ -1979,11 +2157,56 @@ resolveProjectionModules ctx spec =
       | Just name <- T.stripPrefix "__SHAPE__." marker = structuralShapeModule ctx name
       | otherwise = structuralShapeModule ctx (lastSegment marker)
 
-qualifiedModule :: QualifiedValueName -> Text
-qualifiedModule = fst . splitQualified . unQualifiedValueName
+haskellTypeReference :: HaskellSource -> HaskellReference
+haskellTypeReference source =
+  HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified
 
-renderHaskellSource :: HaskellSource -> Text
-renderHaskellSource source = hsModule source <> "." <> hsType source
+qualifiedValueReference :: QualifiedValueName -> HaskellReference
+qualifiedValueReference qualified =
+  HaskellReference moduleName valueName ValueNamespace RequireQualified
+  where
+    (moduleName, valueName) = splitQualified (unQualifiedValueName qualified)
+
+renderReferenceOrDie :: HaskellImportPlan -> HaskellReference -> Text
+renderReferenceOrDie importPlan =
+  either
+    (error . ("validated Haskell reference failed: " <>) . show)
+    id
+    . renderPlannedReference importPlan
+
+planImportsOrDie :: Text -> Set.Set Text -> Set.Set HaskellReference -> HaskellImportPlan
+planImportsOrDie target localDeclarations =
+  either
+    (error . ("validated Haskell import planning failed: " <>) . show)
+    id
+    . planHaskellImports
+      ImportEnvironment
+        { targetModule = target,
+          localNames = localDeclarations,
+          reservedQualifiers = rendererReservedQualifiers
+        }
+
+rendererReservedQualifiers :: Set.Set Text
+rendererReservedQualifiers =
+  Set.fromList
+    [ "Aeson",
+      "AesonKey",
+      "AesonKeyMap",
+      "B",
+      "GeneratedNominals",
+      "Holes",
+      "K",
+      "Key",
+      "KeyMap",
+      "KindID",
+      "Map",
+      "NominalProjections",
+      "NonEmpty",
+      "S",
+      "Set",
+      "StructuralProjections",
+      "T"
+    ]
 
 splitQualified :: Text -> (Text, Text)
 splitQualified value =
@@ -3594,22 +3817,25 @@ emitDomain a =
          ]
       ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
       ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (aGeneratedNominals a)
-      ++ map ("import " <>) (domainConsumerImports a)
+      ++ map ("import " <>) (domainStaticImports a)
+      ++ T.lines (renderPlannedImports importPlan)
       ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)",
            "",
            sectionsOf
              [ [emitVertex a],
-               map (emitRecord a) (aCommands a),
+               map (emitRecord importPlan a) (aCommands a),
                [emitSum (aName a <> "Command") (aCommands a)],
-               map (emitRecord a) (aEvents a),
+               map (emitRecord importPlan a) (aEvents a),
                [emitSum (aName a <> "Event") (aEvents a)],
-               [emitRegsType a, emitInitialRegs a],
+               [emitRegsType importPlan a, emitInitialRegs importPlan a],
                [ "$(deriveAggregateCtorsAll ''" <> aName a <> "Command ''" <> aName a <> "Regs)",
                  "",
                  "$(deriveWireCtorsAll ''" <> aName a <> "Event)"
                ]
              ]
          ]
+  where
+    importPlan = domainImportPlan a
 
 hasSnapshot :: Agg -> Bool
 hasSnapshot = maybe False (const True) . aSnapshot
@@ -3629,12 +3855,12 @@ emitVertex a =
              ]
          ]
 
-emitRecord :: Agg -> ResolvedCtor -> Text
-emitRecord a rc =
+emitRecord :: HaskellImportPlan -> Agg -> ResolvedCtor -> Text
+emitRecord importPlan a rc =
   nl $
     [ "data " <> rcName rc <> "Data = " <> rcName rc <> "Data"
     ]
-      ++ recordFields [(name, renderDomainType a fieldType) | (name, fieldType) <- rcFields rc]
+      ++ recordFields [(name, renderDomainType importPlan a fieldType) | (name, fieldType) <- rcFields rc]
       ++ ["  deriving stock (Generic, Eq, Show)"]
 
 recordFields :: [(Text, Text)] -> [Text]
@@ -3664,16 +3890,16 @@ emitSum tyName ctors =
           ["  | " <> arm c2 | c2 <- cs]
         )
 
-emitRegsType :: Agg -> Text
-emitRegsType a =
+emitRegsType :: HaskellImportPlan -> Agg -> Text
+emitRegsType importPlan a =
   nl $
     ["type " <> aName a <> "Regs ="]
-      ++ regListLines a (aRegs a)
+      ++ regListLines importPlan a (aRegs a)
 
-regListLines :: Agg -> [ResolvedRegister] -> [Text]
-regListLines _ [] = ["  '[]"]
-regListLines a rs =
-  [ lead i <> "'(" <> tshow (rrName r) <> ", " <> renderDomainType a (rrType r) <> ")"
+regListLines :: HaskellImportPlan -> Agg -> [ResolvedRegister] -> [Text]
+regListLines _ _ [] = ["  '[]"]
+regListLines importPlan a rs =
+  [ lead i <> "'(" <> tshow (rrName r) <> ", " <> renderDomainType importPlan a (rrType r) <> ")"
   | (i, r) <- zip [(0 :: Int) ..] rs
   ]
     ++ ["   ]"]
@@ -3681,8 +3907,8 @@ regListLines a rs =
     lead 0 = "  '[ "
     lead _ = "   , "
 
-emitInitialRegs :: Agg -> Text
-emitInitialRegs a =
+emitInitialRegs :: HaskellImportPlan -> Agg -> Text
+emitInitialRegs importPlan a =
   nl $
     [ "initial" <> aName a <> "Regs :: RegFile " <> aName a <> "Regs",
       "initial" <> aName a <> "Regs ="
@@ -3691,37 +3917,64 @@ emitInitialRegs a =
   where
     chain [] = ["  RNil"]
     chain rs =
-      [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue a r <> " $"
+      [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue importPlan a r <> " $"
       | r <- init rs
       ]
-        ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue a lastR <> " RNil"]
+        ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue importPlan a lastR <> " RNil"]
       where
         lastR = last rs
 
 -- | The Haskell initial value for a register, by the category of its type.
-regInitialValue :: Agg -> ResolvedRegister -> Text
-regInitialValue aggregate register = case rrInitial register of
+regInitialValue :: HaskellImportPlan -> Agg -> ResolvedRegister -> Text
+regInitialValue importPlan aggregate register = case rrInitial register of
   InitialId name -> case find ((== name) . resolvedNominalName) (aGeneratedNominals aggregate) >>= generatedIdSampleHaskell aggregate of
     Just value -> value
     Nothing -> renderRegisterInitial (rrInitial register)
+  InitialNominal _ value -> renderReferenceOrDie importPlan (qualifiedValueReference value)
+  InitialMapped _ value -> renderReferenceOrDie importPlan (qualifiedValueReference value)
   _ -> renderRegisterInitial (rrInitial register)
 
-domainConsumerImports :: Agg -> [Text]
-domainConsumerImports a =
-  sort . nub $
-    Set.toList (Set.unions [aggregateImports (aSymbols a) resolved | resolved <- aggregateTypes])
-      <> [ qualifiedModule initialValue <> " qualified"
-         | declaration <- mappedUses a,
-           initialValue <- maybeToListText (mappedInitial declaration)
-         ]
-      <> [ qualifiedModule initialValue <> " qualified"
-         | resolvedType <- aggregateTypes,
-           AggregateNominal nominal <- [resolvedType],
-           ConsumerNominal binding <- [resolvedNominalOwnership nominal],
-           initialValue <- maybeToListText (consumerNominalInitial binding)
-         ]
+domainImportPlan :: Agg -> HaskellImportPlan
+domainImportPlan aggregate =
+  planImportsOrDie
+    (aGenPrefix aggregate <> ".Domain")
+    localDeclarations
+    (Set.unions (map aggregateSourceReferences (domainAggregateSources aggregate)) <> initialReferences)
   where
-    aggregateTypes = map snd (concatMap rcFields (aCommands a <> aEvents a)) <> map rrType (aRegs a)
+    localDeclarations =
+      Set.fromList
+        ( [ aVertexType aggregate,
+            aName aggregate <> "Command",
+            aName aggregate <> "Event",
+            aName aggregate <> "Regs"
+          ]
+            <> [rcName constructor <> "Data" | constructor <- aCommands aggregate <> aEvents aggregate]
+            <> map resolvedNominalName (aGeneratedNominals aggregate)
+        )
+    initialReferences =
+      Set.fromList
+        ( [ qualifiedValueReference initialValue
+          | declaration <- mappedUses aggregate,
+            initialValue <- maybeToListText (mappedInitial declaration)
+          ]
+            <> [ qualifiedValueReference initialValue
+               | resolvedType <- aggregateTypes aggregate,
+                 AggregateNominal nominal <- [resolvedType],
+                 ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+                 initialValue <- maybeToListText (consumerNominalInitial binding)
+               ]
+        )
+
+domainStaticImports :: Agg -> [Text]
+domainStaticImports = Set.toAscList . Set.unions . map aggregateSourceStaticImports . domainAggregateSources
+
+domainAggregateSources :: Agg -> [AggregateHaskellSource]
+domainAggregateSources aggregate =
+  map (aggregateConsumerHaskellSource (aSymbols aggregate)) (aggregateTypes aggregate)
+
+aggregateTypes :: Agg -> [ResolvedAggregateType]
+aggregateTypes aggregate =
+  map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) <> map rrType (aRegs aggregate)
 
 mappedUses :: Agg -> [ResolvedMappedDecl]
 mappedUses a =
@@ -3744,8 +3997,12 @@ mappedInitial :: ResolvedMappedDecl -> Maybe QualifiedValueName
 mappedInitial (ResolvedStructural declaration _) = sdInitial declaration
 mappedInitial (ResolvedOpaque declaration) = odInitial declaration
 
-renderDomainType :: Agg -> ResolvedAggregateType -> Text
-renderDomainType a = aggregateHaskellType (aSymbols a)
+renderDomainType :: HaskellImportPlan -> Agg -> ResolvedAggregateType -> Text
+renderDomainType importPlan aggregate resolvedType =
+  either
+    (error . ("validated aggregate Haskell reference failed: " <>) . show)
+    id
+    (renderAggregateHaskellSource importPlan (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType))
 
 maybeToListText :: Maybe value -> [value]
 maybeToListText = maybe [] pure
@@ -3801,17 +4058,18 @@ emitCodec a =
          ]
       ++ [nl (map ("import " <>) (codecMappedImports a)) | hasMappedCodec a]
       ++ [nl (map ("import " <>) (codecNominalImports a)) | hasConsumerNominalCodec a]
+      ++ T.lines (renderPlannedImports importPlan)
       ++ [ "",
            emitEnumParsers a,
-           emitConsumerNominalParsers a
+           emitConsumerNominalParsers importPlan a
          ]
-      ++ [emitMappedCodecs a | hasMappedCodec a]
+      ++ [emitMappedCodecs importPlan a | hasMappedCodec a]
       ++ [ "",
            emitCodecValue a,
            "",
-           emitEncode a,
+           emitEncode importPlan a,
            "",
-           emitDecode a,
+           emitDecode importPlan a,
            "",
            "mapLeftText :: Either String b -> Either Text b",
            "mapLeftText = either (Left . T.pack) Right"
@@ -3828,6 +4086,7 @@ emitCodec a =
              else []
          )
   where
+    importPlan = codecImportPlan a
     mappedExports (ResolvedStructural declaration _) =
       [ "    encode" <> sdName declaration <> "Mapped,",
         "    decode" <> sdName declaration <> "Mapped,"
@@ -3880,28 +4139,26 @@ emitEnumParser nominal = case resolvedNominalRepresentation nominal of
   where
     name = resolvedNominalName nominal
 
-emitConsumerNominalParsers :: Agg -> Text
-emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumerNominals aggregate)]
+emitConsumerNominalParsers :: HaskellImportPlan -> Agg -> Text
+emitConsumerNominalParsers importPlan aggregate = sectionsOf [map emitParser (codecConsumerNominals aggregate)]
   where
     emitParser nominal = case (resolvedNominalRepresentation nominal, resolvedNominalOwnership nominal) of
       (IdRepresentation prefix, ConsumerNominal binding) ->
         nl $
-          [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding)
+          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
           ]
             <> parserBody nominal prefix binding
       (EnumRepresentation constructors, ConsumerNominal binding) ->
         nl $
-          [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding),
+          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding)),
             parserName nominal <> " = \\case"
           ]
             <> [ "  "
                    <> tshow wire
                    <> " -> pure (nominalFromRepresentation "
-                   <> unQualifiedValueName (consumerNominalBinding binding)
+                   <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
                    <> " "
-                   <> nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal)
-                   <> "."
-                   <> constructor
+                   <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference (aContext aggregate) nominal constructor)
                    <> ")"
                | (constructor, wire) <- NE.toList constructors
                ]
@@ -3912,14 +4169,14 @@ emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumer
       Nothing ->
         [ parserName nominal <> " input = case KindID.parseText @" <> tshow prefix <> " input of",
           "  Left reason -> fail (show reason)",
-          "  Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+          "  Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " representation)"
         ]
       Just _ ->
         [ parserName nominal <> " input = case validateIdDomainText (typeIdV7Domain " <> tshow prefix <> ") input of",
           "  Left reason -> fail (show reason)",
           "  Right () -> case KindID.parseText @" <> tshow prefix <> " input of",
           "    Left reason -> fail (show reason)",
-          "    Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+          "    Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " representation)"
         ]
 
 emitCodecValue :: Agg -> Text
@@ -3996,8 +4253,8 @@ upcasterImport a = case upcasterEntries a of
   [] -> ""
   es -> "import " <> aHolePrefix a <> ".Holes (" <> T.intercalate ", " [fn | (_, _, fn) <- es] <> ")"
 
-emitEncode :: Agg -> Text
-emitEncode a =
+emitEncode :: HaskellImportPlan -> Agg -> Text
+emitEncode importPlan a =
   nl $
     [ "encode" <> aName a <> "Event :: " <> aName a <> "Event -> Value",
       "encode" <> aName a <> "Event = \\case"
@@ -4032,19 +4289,17 @@ emitEncode a =
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
         IdRepresentation {} -> "KindID.toText (nominalToRepresentation " <> bindingName binding <> " " <> value <> ")"
         EnumRepresentation {} ->
-          nominalRepresentationModule (aContext a) (resolvedNominalName nominal)
-            <> "."
-            <> lowerFirst (resolvedNominalName nominal)
-            <> "RepresentationText (nominalToRepresentation "
+          renderReferenceOrDie importPlan (nominalRepresentationEncoderReference (aContext a) nominal)
+            <> " (nominalToRepresentation "
             <> bindingName binding
             <> " "
             <> value
             <> ")"
         ScalarRepresentation {} -> "nominalToRepresentation " <> bindingName binding <> " " <> value
-    bindingName = unQualifiedValueName . consumerNominalBinding
+    bindingName = renderReferenceOrDie importPlan . qualifiedValueReference . consumerNominalBinding
 
-emitDecode :: Agg -> Text
-emitDecode a =
+emitDecode :: HaskellImportPlan -> Agg -> Text
+emitDecode importPlan a =
   nl $
     [ "parse" <> aName a <> "Event :: EventType -> Value -> Either Text " <> aName a <> "Event",
       "parse" <> aName a <> "Event (EventType tag) = mapLeftText . parseEither (withObject " <> tshow (aName a <> "Event") <> " go)",
@@ -4089,7 +4344,7 @@ emitDecode a =
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
         IdRepresentation {} -> consumerNominalFieldParser name nominal
         EnumRepresentation {} -> consumerNominalFieldParser name nominal
-        ScalarRepresentation {} -> "(nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " <$> o .: " <> tshow name <> ")"
+        ScalarRepresentation {} -> "(nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " <$> o .: " <> tshow name <> ")"
     consumerNominalFieldParser fieldName nominal =
       "explicitParseField (withText "
         <> tshow (resolvedNominalName nominal)
@@ -4115,38 +4370,58 @@ codecGeneratedNominals aggregate =
       (_, resolvedType) <- rcFields event
     ]
 
-codecNominalImports :: Agg -> [Text]
-codecNominalImports aggregate =
-  sort . nub $
-    concat
-      [ [ hsModule (consumerNominalHaskell binding) <> " qualified",
-          qualifiedModule (consumerNominalBinding binding) <> " qualified"
-        ]
-          <> [ nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal) <> " qualified"
-             | EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
-             ]
+codecImportPlan :: Agg -> HaskellImportPlan
+codecImportPlan aggregate =
+  planImportsOrDie
+    (aGenPrefix aggregate <> ".Codec")
+    (Set.fromList [aName aggregate <> "Event"])
+    (Set.fromList (nominalReferences <> mappedReferences <> nominalRepresentationReferences <> shapeReferences))
+  where
+    nominalReferences =
+      [ reference
       | nominal <- codecConsumerNominals aggregate,
-        ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+        ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+        reference <-
+          [ haskellTypeReference (consumerNominalHaskell binding),
+            qualifiedValueReference (consumerNominalBinding binding)
+          ]
       ]
+    mappedReferences =
+      [ reference
+      | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate,
+        reference <-
+          [ haskellTypeReference (sdHaskell declaration),
+            qualifiedValueReference (sdBinding declaration)
+          ]
+      ]
+    nominalRepresentationReferences =
+      [ reference
+      | nominal <- codecConsumerNominals aggregate,
+        EnumRepresentation constructors <- [resolvedNominalRepresentation nominal],
+        reference <-
+          nominalRepresentationEncoderReference (aContext aggregate) nominal
+            : [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+              | (constructor, _) <- NE.toList constructors
+              ]
+      ]
+    shapeReferences =
+      [ reference
+      | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate,
+        reference <- structuralShapeReferences (aContext aggregate) declaration shape
+      ]
+
+codecNominalImports :: Agg -> [Text]
+codecNominalImports _ = []
 
 codecMappedImports :: Agg -> [Text]
 codecMappedImports a = case aTypeGraph a of
   Nothing -> []
   Just graph ->
     sort . nub $
-      [ structuralShapeModule (aContext a) (sdName declaration) <> " qualified"
-      | ResolvedStructural declaration _ <- codecMappedDeclarations a
+      [ hsModule (odHaskell declaration) <> " ()"
+      | ResolvedOpaque declaration <- codecMappedDeclarations a
       ]
-        <> [ hsModule (sdHaskell declaration) <> " qualified"
-           | ResolvedStructural declaration _ <- codecMappedDeclarations a
-           ]
-        <> [ qualifiedModule (sdBinding declaration) <> " qualified"
-           | ResolvedStructural declaration _ <- codecMappedDeclarations a
-           ]
-        <> [ hsModule (odHaskell declaration) <> " qualified"
-           | ResolvedOpaque declaration <- codecMappedDeclarations a
-           ]
-        <> [ hsModule (odHaskell declaration) <> " qualified"
+        <> [ hsModule (odHaskell declaration) <> " ()"
            | ResolvedStructural _ shape <- codecMappedDeclarations a,
              key <- directShapeRefs shape,
              Just (ResolvedOpaque declaration) <- [Map.lookup key (tgDeclarations graph)]
@@ -4197,18 +4472,18 @@ exprRefs =
         onRef = pure
       }
 
-emitMappedCodecs :: Agg -> Text
-emitMappedCodecs a = case aTypeGraph a of
+emitMappedCodecs :: HaskellImportPlan -> Agg -> Text
+emitMappedCodecs importPlan a = case aTypeGraph a of
   Nothing -> ""
   Just graph ->
     T.intercalate
       "\n\n"
-      [ emitStructuralCodec a graph declaration shape
+      [ emitStructuralCodec importPlan a graph declaration shape
       | ResolvedStructural declaration shape <- codecMappedDeclarations a
       ]
 
-emitStructuralCodec :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
-emitStructuralCodec a graph declaration shape =
+emitStructuralCodec :: HaskellImportPlan -> Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitStructuralCodec importPlan a graph declaration shape =
   nl
     [ "encode" <> name <> "Mapped :: " <> consumerType <> " -> Value",
       "encode" <> name <> "Mapped = encode" <> name <> "Shape . bindingToShape " <> binding,
@@ -4220,19 +4495,19 @@ emitStructuralCodec a graph declaration shape =
       "decode" <> name <> "Mapped = mapLeftText . parseEither parse" <> name <> "Mapped",
       "",
       "encode" <> name <> "Shape :: " <> shapeType <> " -> Value",
-      emitShapeEncoder a graph declaration shape,
+      emitShapeEncoder importPlan a graph declaration shape,
       "",
       "parse" <> name <> "Shape :: Value -> Parser " <> shapeType,
-      emitShapeDecoder a graph declaration shape
+      emitShapeDecoder importPlan a graph declaration shape
     ]
   where
     name = sdName declaration
-    consumerType = renderHaskellSource (sdHaskell declaration)
-    shapeType = structuralShapeModule (aContext a) name <> "." <> name <> "Shape"
-    binding = unQualifiedValueName (sdBinding declaration)
+    consumerType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
+    shapeType = renderReferenceOrDie importPlan (qualifiedTypeReference (structuralShapeModule (aContext a) name) (name <> "Shape"))
+    binding = renderReferenceOrDie importPlan (qualifiedValueReference (sdBinding declaration))
 
-emitShapeEncoder :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
-emitShapeEncoder a graph declaration =
+emitShapeEncoder :: HaskellImportPlan -> Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitShapeEncoder importPlan a graph declaration =
   foldMappedShape
     MappedShapeAlgebra
       { onRecord = \_ _ fields ->
@@ -4241,13 +4516,13 @@ emitShapeEncoder a graph declaration =
               <> objectEntries
                 [ tshow (rwfKey field)
                     <> " .= "
-                    <> encodeShapeExpr a graph (rwfType field) (shapeModuleName <> "." <> rwfHaskell field <> " shape")
+                    <> encodeShapeExpr a graph (rwfType field) (shapeValue (rwfHaskell field) <> " shape")
                 | field <- fields
                 ],
         onEnum = \entries ->
           nl $
             ["encode" <> name <> "Shape = \\case"]
-              <> ["  " <> shapeModuleName <> "." <> weCtor entry <> " -> String " <> tshow (weTag entry) | entry <- entries],
+              <> ["  " <> shapeConstructor (weCtor entry) <> " -> String " <> tshow (weTag entry) | entry <- entries],
         onUnion = \encoding arms ->
           nl $
             ["encode" <> name <> "Shape = \\case"]
@@ -4256,8 +4531,10 @@ emitShapeEncoder a graph declaration =
   where
     name = sdName declaration
     shapeModuleName = structuralShapeModule (aContext a) name
+    shapeConstructor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
+    shapeValue value = renderReferenceOrDie importPlan (HaskellReference shapeModuleName value ValueNamespace RequireQualified)
     unionEncodeArm encoding arm =
-      [ "  " <> shapeModuleName <> "." <> rwaCtor arm <> payloadPattern <> " ->",
+      [ "  " <> shapeConstructor (rwaCtor arm) <> payloadPattern <> " ->",
         "    object"
       ]
         <> objectEntries
@@ -4269,8 +4546,8 @@ emitShapeEncoder a graph declaration =
       where
         payloadPattern = maybe "" (const " payload") (rwaPayload arm)
 
-emitShapeDecoder :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
-emitShapeDecoder a graph declaration =
+emitShapeDecoder :: HaskellImportPlan -> Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitShapeDecoder importPlan a graph declaration =
   foldMappedShape
     MappedShapeAlgebra
       { onRecord = \constructor unknownFields fields ->
@@ -4278,14 +4555,14 @@ emitShapeDecoder a graph declaration =
             [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do"
             ]
               <> rejectLine "  " unknownFields (map rwfKey fields) "objectValue"
-              <> [ "  " <> shapeModuleName <> "." <> constructor,
-                   "    <$> " <> T.intercalate "\n    <*> " (map (decodeRecordField a graph) fields)
+              <> [ "  " <> shapeConstructor constructor,
+                   "    <$> " <> T.intercalate "\n    <*> " (map (decodeRecordField importPlan a graph) fields)
                  ],
         onEnum = \entries ->
           nl $
             [ "parse" <> name <> "Shape = withText " <> tshow (name <> "Shape") <> " $ \\tag -> case tag of"
             ]
-              <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeModuleName <> "." <> weCtor entry | entry <- entries]
+              <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeConstructor (weCtor entry) | entry <- entries]
               <> ["  tag -> " <> renderUnknownFailure (name <> " wire value") "tag" (map weTag entries)],
         onUnion = \encoding arms ->
           nl $
@@ -4305,6 +4582,7 @@ emitShapeDecoder a graph declaration =
   where
     name = sdName declaration
     shapeModuleName = structuralShapeModule (aContext a) name
+    shapeConstructor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
     rejectLine _ IgnoreUnknown _ _ = []
     rejectLine indent RejectUnknown allowed objectName =
       [indent <> "rejectUnknownFields " <> tshow name <> " " <> renderTextList allowed <> " " <> objectName]
@@ -4312,12 +4590,10 @@ emitShapeDecoder a graph declaration =
       ["    " <> tshow (rwaTag arm) <> " -> do"]
         <> rejectLine "      " (ueUnknownFields encoding) allowed "objectValue"
         <> [ case rwaPayload arm of
-               Nothing -> "      pure " <> shapeModuleName <> "." <> rwaCtor arm
+               Nothing -> "      pure " <> shapeConstructor (rwaCtor arm)
                Just payload ->
                  "      "
-                   <> shapeModuleName
-                   <> "."
-                   <> rwaCtor arm
+                   <> shapeConstructor (rwaCtor arm)
                    <> " <$> explicitParseField ("
                    <> decodeShapeExpr a graph payload
                    <> ") objectValue "
@@ -4326,8 +4602,8 @@ emitShapeDecoder a graph declaration =
       where
         allowed = ueTagField encoding : [ueContentsField encoding | rwaPayload arm /= Nothing]
 
-decodeRecordField :: Agg -> TypeGraph -> ResolvedWireField -> Text
-decodeRecordField a graph field = case rwfPresence field of
+decodeRecordField :: HaskellImportPlan -> Agg -> TypeGraph -> ResolvedWireField -> Text
+decodeRecordField importPlan a graph field = case rwfPresence field of
   PRequired ->
     "explicitParseField (" <> decoder <> ") objectValue " <> key
   POptional ->
@@ -4345,7 +4621,7 @@ decodeRecordField a graph field = case rwfPresence field of
     decoder = decodeShapeExpr a graph (rwfType field)
     missing = case rwfOnMissing field of
       Nothing -> "fail " <> tshow ("missing optional field without default: " <> rwfKey field)
-      Just onMissing -> "pure " <> renderMissingDefault a graph (rwfType field) onMissing
+      Just onMissing -> "pure " <> renderMissingDefault importPlan a graph (rwfType field) onMissing
 
 encodeShapeExpr :: Agg -> TypeGraph -> ResolvedTypeExpr -> Text -> Text
 encodeShapeExpr _a graph expression value =
@@ -4389,8 +4665,8 @@ decodeShapeExpr _a graph =
           Nothing -> "parseJSON"
       }
 
-renderMissingDefault :: Agg -> TypeGraph -> ResolvedTypeExpr -> OnMissing -> Text
-renderMissingDefault a graph expression = \case
+renderMissingDefault :: HaskellImportPlan -> Agg -> TypeGraph -> ResolvedTypeExpr -> OnMissing -> Text
+renderMissingDefault importPlan a graph expression = \case
   OmNull -> "Nothing"
   OmText value -> tshow value
   OmInt value -> T.pack (show value)
@@ -4399,7 +4675,7 @@ renderMissingDefault a graph expression = \case
   OmEmptyMap -> "Map.empty"
   OmCtor constructor -> case expression of
     RRef key -> case Map.lookup key (tgDeclarations graph) of
-      Just (ResolvedStructural declaration _) -> structuralShapeModule (aContext a) (sdName declaration) <> "." <> constructor
+      Just (ResolvedStructural declaration _) -> renderReferenceOrDie importPlan (constructorReference (structuralShapeModule (aContext a) (sdName declaration)) constructor)
       _ -> constructor
     _ -> constructor
 
@@ -4701,8 +4977,8 @@ renderInfixChild parentPrecedence associativity side child
   where
     parenthesized = "(" <> renderedKeikiText child <> ")"
 
-renderKeikiPredicate :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> Text
-renderKeikiPredicate aliases aggregate transition =
+renderKeikiPredicate :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> Text
+renderKeikiPredicate importPlan aliases aggregate transition =
   renderedKeikiText . renderPredicate
   where
     renderPredicate expression = case typedScalarNode expression of
@@ -4716,15 +4992,15 @@ renderKeikiPredicate aliases aggregate transition =
           4
           RenderNonAssociative
           ".=="
-          (renderKeikiTerm aliases aggregate transition expression)
+          (renderKeikiTerm importPlan aliases aggregate transition expression)
           (renderedAtom "K.lit True")
     comparison operator left right =
       renderedInfix
         4
         RenderNonAssociative
         operator
-        (renderComparisonTerm aliases aggregate transition left)
-        (renderComparisonTerm aliases aggregate transition right)
+        (renderComparisonTerm importPlan aliases aggregate transition left)
+        (renderComparisonTerm importPlan aliases aggregate transition right)
     boolean precedence associativity operator left right =
       renderedInfix precedence associativity operator (renderPredicate left) (renderPredicate right)
 
@@ -4737,8 +5013,8 @@ renderComparisonOperator = \case
   OpGt -> ".>"
   OpGe -> ".>="
 
-renderComparisonTerm :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderComparisonTerm aliases aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
+renderComparisonTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderComparisonTerm importPlan aliases aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
   (AggregateNominal nominal, TypedRoot provenance)
     | nominalComparisonProjection nominal ->
         renderedAtom (projectionAliasFor aliases (NominalProjectionAlias nominal provenance))
@@ -4746,7 +5022,7 @@ renderComparisonTerm aliases aggregate transition expression = case (typedScalar
     renderedAtom ("K.lit (" <> tshow (enumWireFor nominal constructor) <> " :: Text)")
   (AggregateNominal _, TypedLiteral (ScalarIdValue _ value)) ->
     renderedAtom ("K.lit (" <> tshow value <> " :: Text)")
-  _ -> renderKeikiTerm aliases aggregate transition expression
+  _ -> renderKeikiTerm importPlan aliases aggregate transition expression
 
 nominalComparisonProjection :: ResolvedNominalType -> Bool
 nominalComparisonProjection nominal = case resolvedNominalRepresentation nominal of
@@ -4761,8 +5037,8 @@ enumWireFor nominal constructor = case resolvedNominalRepresentation nominal of
   EnumRepresentation constructors -> fromMaybe (error "validated enum literal lost its wire spelling") (lookup constructor (NE.toList constructors))
   _ -> error "validated enum literal lost its enum representation"
 
-renderNominalProjectionTerm :: Agg -> Transition -> ResolvedNominalType -> ScalarRootProvenance -> Text
-renderNominalProjectionTerm aggregate transition nominal provenance = case provenance of
+renderNominalProjectionTerm :: HaskellImportPlan -> Agg -> Transition -> ResolvedNominalType -> ScalarRootProvenance -> Text
+renderNominalProjectionTerm importPlan aggregate transition nominal provenance = case provenance of
   ScalarRegisterRoot registerName ownerType ->
     "K.regProj "
       <> projectionQualifier
@@ -4773,7 +5049,7 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       <> " :: K.Index "
       <> aName aggregate
       <> "Regs "
-      <> renderDomainType aggregate ownerType
+      <> renderDomainType importPlan aggregate ownerType
       <> ")"
   ScalarCommandRoot fieldName ownerType ->
     "K.inpProj "
@@ -4787,7 +5063,7 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
-      <> renderDomainType aggregate ownerType
+      <> renderDomainType importPlan aggregate ownerType
       <> ")"
   where
     projectionQualifier = case resolvedNominalOwnership nominal of
@@ -4798,9 +5074,9 @@ renderNominalProjectionTerm aggregate transition nominal provenance = case prove
       IdRepresentation {} -> nominalEqualityWitnessName nominal
       EnumRepresentation {} -> nominalEqualityWitnessName nominal
 
-renderKeikiTerm :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderKeikiTerm aliases aggregate transition expression = case typedScalarNode expression of
-  TypedLiteral value -> renderedAtom (renderKeikiLiteral aggregate (typedScalarType expression) value)
+renderKeikiTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderKeikiTerm importPlan aliases aggregate transition expression = case typedScalarNode expression of
+  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate (typedScalarType expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
   TypedRoot (ScalarCommandRoot fieldName _) -> renderedAtom ("d." <> fieldName)
   TypedProject provenance projection ->
@@ -4819,12 +5095,12 @@ renderKeikiTerm aliases aggregate transition expression = case typedScalarNode e
         precedence
         RenderLeft
         operator
-        (renderKeikiTerm aliases aggregate transition left)
-        (renderKeikiTerm aliases aggregate transition right)
+        (renderKeikiTerm importPlan aliases aggregate transition left)
+        (renderKeikiTerm importPlan aliases aggregate transition right)
     impossiblePredicate = error "predicate-valued Boolean expressions cannot be lowered as register terms"
 
-renderStructuralProjectionTerm :: Agg -> Transition -> ScalarRootProvenance -> ResolvedScalarProjection -> Text
-renderStructuralProjectionTerm aggregate transition provenance projection = case provenance of
+renderStructuralProjectionTerm :: HaskellImportPlan -> Agg -> Transition -> ScalarRootProvenance -> ResolvedScalarProjection -> Text
+renderStructuralProjectionTerm importPlan aggregate transition provenance projection = case provenance of
   ScalarRegisterRoot registerName ownerType ->
     "K.regProj StructuralProjections."
       <> witness
@@ -4833,7 +5109,7 @@ renderStructuralProjectionTerm aggregate transition provenance projection = case
       <> " :: K.Index "
       <> aName aggregate
       <> "Regs "
-      <> renderDomainType aggregate ownerType
+      <> renderDomainType importPlan aggregate ownerType
       <> ")"
   ScalarCommandRoot fieldName ownerType ->
     "K.inpProj StructuralProjections."
@@ -4845,7 +5121,7 @@ renderStructuralProjectionTerm aggregate transition provenance projection = case
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
-      <> renderDomainType aggregate ownerType
+      <> renderDomainType importPlan aggregate ownerType
       <> ")"
   where
     witness =
@@ -4853,24 +5129,22 @@ renderStructuralProjectionTerm aggregate transition provenance projection = case
         (error ("resolved structural projection witness disappeared: " <> show projection))
         (aTypeGraph aggregate >>= \graph -> projectionWitnessName graph (scalarProjectionOwner projection) (scalarProjectionPointer projection))
 
-renderKeikiLiteral :: Agg -> ResolvedAggregateType -> ScalarValue -> Text
-renderKeikiLiteral aggregate scalarType = \case
+renderKeikiLiteral :: HaskellImportPlan -> Agg -> ResolvedAggregateType -> ScalarValue -> Text
+renderKeikiLiteral importPlan aggregate scalarType = \case
   ScalarTextValue value -> "K.lit (" <> tshow value <> " :: Text)"
   ScalarIntValue value -> "K.lit (" <> tshow' value <> " :: Int)"
   ScalarIntegerValue value -> "K.lit (" <> T.pack (show value) <> " :: Integer)"
   ScalarNaturalValue value -> "K.lit (" <> T.pack (show value) <> " :: Natural)"
   ScalarBoolValue value -> "K.lit " <> if value then "True" else "False"
   ScalarTimeValue value -> "K.lit " <> renderRegisterInitial (InitialTime value)
-  ScalarEnumValue typeName constructor -> case scalarType of
+  ScalarEnumValue _typeName constructor -> case scalarType of
     AggregateNominal nominal -> case resolvedNominalOwnership nominal of
       GeneratedNominal -> "K.lit " <> constructor
       ConsumerNominal binding ->
         "K.lit (nominalFromRepresentation "
-          <> unQualifiedValueName (consumerNominalBinding binding)
+          <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
           <> " "
-          <> nominalRepresentationModule (aContext aggregate) typeName
-          <> "."
-          <> constructor
+          <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference (aContext aggregate) nominal constructor)
           <> ")"
     _ -> error "validated enum literal lost its nominal type"
   ScalarIdValue typeName value -> case scalarType of
@@ -4886,7 +5160,7 @@ renderKeikiLiteral aggregate scalarType = \case
       ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
         IdRepresentation prefix ->
           "K.lit (nominalFromRepresentation "
-            <> unQualifiedValueName (consumerNominalBinding binding)
+            <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
             <> " (case KindID.parseText @"
             <> tshow prefix
             <> " "
@@ -4947,7 +5221,6 @@ emitGeneratedTransducer aggregate =
       ++ consumerImports
       ++ ["import Data.KindID qualified as KindID" | expressionUsesConsumerIdLiteral]
       ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation)" | expressionUsesConsumerNominalLiteral]
-      ++ consumerLiteralImports
       ++ [ "import Keiki.Builder qualified as B",
            "import Keiki.Core (" <> T.intercalate ", " keikiCoreImports <> ")",
            "import Keiki.Core qualified as K",
@@ -4968,7 +5241,7 @@ emitGeneratedTransducer aggregate =
            "       " <> aName aggregate <> "Event",
            lowerFirst (aName aggregate) <> "Transducer =",
            "  B.buildTransducer " <> initialVertex aggregate <> " initial" <> aName aggregate <> "Regs isTerminal do",
-           nl (concatMap (generatedFromBlock aggregate resolvedTransitions) (groupTransitionEntriesBySource aggregate)),
+           nl (concatMap (generatedFromBlock importPlan aggregate resolvedTransitions) (groupTransitionEntriesBySource aggregate)),
            " where",
            "  isTerminal = \\case",
            nl ["    " <> vertexCtor aggregate (stName state) <> " -> True" | state <- aStates aggregate, stTerminal state],
@@ -5009,26 +5282,10 @@ emitGeneratedTransducer aggregate =
       | any isConsumerNominalProjection projectionTargets
       ]
     consumerImports =
-      map ("import " <>)
-        . filter (not . builtinExpressionImport)
-        . sort
-        . nub
-        . Set.toList
-        . Set.unions
-        $ [ aggregateImports (aSymbols aggregate) resolvedType
-          | resolvedType <- expressionImportTypes
-          ]
+      T.lines (renderPlannedImports importPlan)
     expressionImportTypes = nub (concatMap typedExpressionImportTypes resolvedExpressions)
-    consumerLiteralImports =
-      [ "import " <> nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal) <> " qualified"
-      | nominal <- consumerLiteralNominals,
-        EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
-      ]
-        <> [ "import " <> qualifiedModule (consumerNominalBinding binding) <> " qualified"
-           | nominal <- consumerLiteralNominals,
-             ConsumerNominal binding <- [resolvedNominalOwnership nominal]
-           ]
     consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
+    importPlan = transducerImportPlan aggregate expressionImportTypes consumerLiteralNominals
     generatedExpressionNominals =
       stableNominals
         [ nominal
@@ -5050,9 +5307,29 @@ emitGeneratedTransducer aggregate =
     isIdRepresentation IdRepresentation {} = True
     isIdRepresentation _ = False
 
-builtinExpressionImport :: Text -> Bool
-builtinExpressionImport imported =
-  any (`T.isPrefixOf` imported) ["Data.Text", "Data.Time", "Numeric.Natural"]
+transducerImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
+transducerImportPlan aggregate importedTypes literalNominals =
+  planImportsOrDie
+    (aGenPrefix aggregate <> ".Transducer")
+    (Set.fromList [aName aggregate <> "Regs", aName aggregate <> "Command", aName aggregate <> "Event"])
+    ( Set.unions
+        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
+        | resolvedType <- importedTypes
+        ]
+        <> Set.fromList
+          [ reference
+          | nominal <- literalNominals,
+            ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+            reference <-
+              qualifiedValueReference (consumerNominalBinding binding)
+                : case resolvedNominalRepresentation nominal of
+                  EnumRepresentation constructors ->
+                    [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+                    | (constructor, _) <- NE.toList constructors
+                    ]
+                  _ -> []
+          ]
+    )
 
 typedExpressionImportTypes :: TypedScalarExpr -> [ResolvedAggregateType]
 typedExpressionImportTypes expression = own <> concatMap typedExpressionImportTypes (typedExpressionChildren expression)
@@ -5164,13 +5441,13 @@ groupTransitionEntriesBySource aggregate = go [] (transitionEntries aggregate)
           (same, rest) = span ((== source) . tSource . snd) remaining
        in go ((source, entry : same) : accumulated) rest
 
-generatedFromBlock :: Agg -> [ResolvedGeneratedTransition] -> (Text, [(Int, Transition)]) -> [Text]
-generatedFromBlock aggregate resolvedTransitions (source, transitions) =
+generatedFromBlock :: HaskellImportPlan -> Agg -> [ResolvedGeneratedTransition] -> (Text, [(Int, Transition)]) -> [Text]
+generatedFromBlock importPlan aggregate resolvedTransitions (source, transitions) =
   ["    B.from " <> vertexCtor aggregate source <> " do"]
-    ++ concatMap (uncurry (generatedOnCmdBlock aggregate resolvedTransitions)) transitions
+    ++ concatMap (uncurry (generatedOnCmdBlock importPlan aggregate resolvedTransitions)) transitions
 
-generatedOnCmdBlock :: Agg -> [ResolvedGeneratedTransition] -> Int -> Transition -> [Text]
-generatedOnCmdBlock aggregate resolvedTransitions index transition =
+generatedOnCmdBlock :: HaskellImportPlan -> Agg -> [ResolvedGeneratedTransition] -> Int -> Transition -> [Text]
+generatedOnCmdBlock importPlan aggregate resolvedTransitions index transition =
   ["      B.onCmd inCtor" <> tCommand transition <> " $ \\" <> payloadBinder <> " -> B.do"]
     ++ projectionBindingLines
     ++ ["        B.replayOnly" | tMode transition == TmReplayOnly]
@@ -5181,8 +5458,8 @@ generatedOnCmdBlock aggregate resolvedTransitions index transition =
   where
     generatedBehavior = case tImplementation transition of
       GeneratedImplementation ->
-        maybe [] (renderGuardLines aliases aggregate transition) (resolvedTransitionGuard resolved)
-          ++ [ "        B.slot @" <> tshow registerName <> " =: " <> renderAssignmentOperand (renderKeikiTerm aliases aggregate transition expression)
+        maybe [] (renderGuardLines importPlan aliases aggregate transition) (resolvedTransitionGuard resolved)
+          ++ [ "        B.slot @" <> tshow registerName <> " =: " <> renderAssignmentOperand (renderKeikiTerm importPlan aliases aggregate transition expression)
              | (registerName, expression) <- resolvedTransitionWrites resolved
              ]
       HoleImplementation -> ["        Holes." <> holeFunctionName index transition <> " d"]
@@ -5197,8 +5474,8 @@ generatedOnCmdBlock aggregate resolvedTransitions index transition =
     projectionBindingLines = case aliases of
       [] -> []
       firstAlias : remainingAliases ->
-        ["        let " <> renderProjectionAliasBinding aggregate transition firstAlias]
-          <> ["            " <> renderProjectionAliasBinding aggregate transition alias | alias <- remainingAliases]
+        ["        let " <> renderProjectionAliasBinding importPlan aggregate transition firstAlias]
+          <> ["            " <> renderProjectionAliasBinding importPlan aggregate transition alias | alias <- remainingAliases]
     outputLines =
       concat
         [ generatedOutputLines aggregate index transition emitIndex eventName
@@ -5218,21 +5495,21 @@ generatedOnCmdBlock aggregate resolvedTransitions index transition =
       GeneratedCommandIdentity _ fields -> not (null fields)
       HandOwnedEventOutput {} -> True
 
-renderProjectionAliasBinding :: Agg -> Transition -> ProjectionAlias -> Text
-renderProjectionAliasBinding aggregate transition alias =
+renderProjectionAliasBinding :: HaskellImportPlan -> Agg -> Transition -> ProjectionAlias -> Text
+renderProjectionAliasBinding importPlan aggregate transition alias =
   projectionAliasName alias <> " = " <> case projectionAliasTarget alias of
-    StructuralProjectionAlias provenance projection -> renderStructuralProjectionTerm aggregate transition provenance projection
-    NominalProjectionAlias nominal provenance -> renderNominalProjectionTerm aggregate transition nominal provenance
+    StructuralProjectionAlias provenance projection -> renderStructuralProjectionTerm importPlan aggregate transition provenance projection
+    NominalProjectionAlias nominal provenance -> renderNominalProjectionTerm importPlan aggregate transition nominal provenance
 
-renderGuardLines :: [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> [Text]
-renderGuardLines aliases aggregate transition expression =
+renderGuardLines :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> [Text]
+renderGuardLines importPlan aliases aggregate transition expression =
   ["        B.requireGuard $"]
     <> ["          " <> line | line <- T.lines readable]
   where
     readable =
       T.replace " .|| " "\n.|| "
         . T.replace " .&& " "\n.&& "
-        $ renderKeikiPredicate aliases aggregate transition expression
+        $ renderKeikiPredicate importPlan aliases aggregate transition expression
 
 renderAssignmentOperand :: RenderedKeikiExpr -> Text
 renderAssignmentOperand expression

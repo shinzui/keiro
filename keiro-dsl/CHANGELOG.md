@@ -6,6 +6,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- Generated Haskell now plans consumer-owned imports once per module. Unique
+  type names use explicit unqualified imports; collisions, external values,
+  constructors, generated shapes, and binding APIs use deterministic short
+  qualified aliases. Imports are merged, deduplicated, and sorted without
+  changing wire schemas, fingerprints, provenance, or create-once ownership.
+
 ## 0.9.0.0 — 2026-08-02
 
 ### Breaking Changes

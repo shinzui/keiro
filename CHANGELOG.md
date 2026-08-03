@@ -6,6 +6,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Other Changes
+
+- **keiro-dsl**: generated Haskell plans consumer-owned imports once per
+  module. Unique type names use explicit unqualified imports; collisions,
+  external values, constructors, generated shapes, and binding APIs use
+  deterministic short qualified aliases. Imports are merged, deduplicated,
+  and sorted without changing semantic identities or create-once ownership.
+
 ## 0.9.0.0 — 2026-08-02
 
 All published packages move to 0.9.0.0 together. The cycle designates

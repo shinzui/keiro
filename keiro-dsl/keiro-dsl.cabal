@@ -393,6 +393,42 @@ test-suite keiro-dsl-conformance-structural
     , text        >=2.1  && <2.2
     , time        >=1.12 && <1.15
 
+-- Plan 184: colliding consumer type occurrences, local-name conflicts, and
+-- repeated binding/shape references compile with deterministic short aliases.
+test-suite keiro-dsl-conformance-import-planning
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-import-planning
+  main-is:        Main.hs
+  other-modules:
+    Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
+    Generated.ImportPlanningCollisions.CollisionLedger.Codec
+    Generated.ImportPlanningCollisions.CollisionLedger.Domain
+    Generated.ImportPlanningCollisions.CollisionLedger.EventStream
+    Generated.ImportPlanningCollisions.CollisionLedger.Harness
+    Generated.ImportPlanningCollisions.CollisionLedger.Projection
+    Generated.ImportPlanningCollisions.CollisionLedger.Transducer
+    Generated.ImportPlanningCollisions.NominalProjections
+    Generated.ImportPlanningCollisions.ReplayAudit
+    Generated.ImportPlanningCollisions.Structural.Shape.Details
+    Generated.ImportPlanningCollisions.StructuralProjections
+    ImportPlanning.Bindings
+    ImportPlanning.Consumer.Domain
+    ImportPlanning.Consumer.Invoice.Types
+    ImportPlanning.Consumer.Order.Types
+    ImportPlanning.Consumer.Shared.Types
+    ImportPlanningCollisions.CollisionLedger.BehaviorHoles
+
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , bytestring  >=0.12 && <0.13
+    , containers  >=0.6  && <0.8
+    , keiki       >=0.8  && <0.9
+    , keiro
+    , text        >=2.1  && <2.2
+    , time        >=1.12 && <1.15
+
 -- Plan 152 / Experiment B: a consumer-owned historical codec and finite JSON
 -- corpus compared with the generated structural codec. The comparison module
 -- is opt-in tooling output and is not part of the production scaffold record.

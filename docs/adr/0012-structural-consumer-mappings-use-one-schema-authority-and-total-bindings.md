@@ -189,6 +189,18 @@ binding path. Structural records declare the consumer constructor explicitly; th
 shape type uses that constructor name and binding modules import it qualified. Shape modules
 never import binding or Holes modules.
 
+Generated Haskell presentation resolves through one import plan for each
+complete target module. A unique consumer-owned type uses an explicit
+unqualified import. Consumer values and constructors, generated shape and
+nominal APIs, and types whose occurrence conflicts with another import or a
+local declaration use deterministic qualified aliases derived from the
+shortest unique module suffix. The plan merges, deduplicates, and sorts imports
+and is independent of declaration traversal order. It never falls back to a
+complete consumer module path at a Haskell use site. This rule changes only
+generated Haskell syntax: semantic authorities, wire identities, fingerprints,
+diagnostics, manifests, scaffold history, and provenance retain complete module
+names. Existing create-once consumer modules remain untouched.
+
 Binding-authoring conveniences remain downstream of this shape boundary. The scaffolder emits
 create-once, hand-owned skeletons grouped by the modules named by qualified binding, fixture, and
 register-initial symbols; a shared leaf module may own several declarations. Scaffold records
@@ -259,6 +271,10 @@ the totality and ownership requirements above.
 - Canonical aggregate identities feed diff, replay-impact, and fold/snapshot
   fingerprints, so source aliases do not create compatibility churn while real
   type or initial changes remain visible.
+- Generated modules use one deterministic import plan: unique consumer types
+  are explicit and unqualified, while collisions and external APIs use stable
+  short aliases. Import presentation does not alter semantic identity or permit
+  rewriting a create-once consumer module.
 - The binding API has no partial inverse or semantic-error channel. A binding that rejects or
   normalizes valid shapes violates the shape round-trip contract, and both directions have
   explicit law tests. `check` and `diff` still do not inspect hand-written Haskell.

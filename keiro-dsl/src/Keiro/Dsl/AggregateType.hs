@@ -18,8 +18,11 @@ module Keiro.Dsl.AggregateType
     aggregateCapability,
     aggregateCanonicalName,
     typeExprCanonicalName,
-    aggregateHaskellType,
-    aggregateImports,
+    AggregateHaskellSource,
+    aggregateConsumerHaskellSource,
+    aggregateSourceReferences,
+    aggregateSourceStaticImports,
+    renderAggregateHaskellSource,
     aggregatePackages,
     aggregateSampleHaskell,
     ResolvedRegisterInitial (..),
@@ -41,6 +44,7 @@ import Data.Time.Calendar (toGregorian)
 import Data.Time.Clock (UTCTime (..), diffTimeToPicoseconds)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.TypeGraph
 import Numeric.Natural (Natural)
@@ -230,39 +234,46 @@ typeExprCanonicalName expression = case expression of
   TMap value -> "Map(" <> typeExprCanonicalName value <> ")"
   TRef name -> name
 
-aggregateHaskellType :: AggregateSymbols -> ResolvedAggregateType -> Text
-aggregateHaskellType symbols resolved = case resolved of
-  AggregateTime -> "UTCTime"
-  AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-    GeneratedNominal -> resolvedNominalName nominal
-    ConsumerNominal binding -> renderHaskellSource (consumerNominalHaskell binding)
-  AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
-    Just declaration -> renderHaskellSource (mappedHaskell declaration)
-    Nothing -> unMappedKey key
-  _ -> aggregateCanonicalName resolved
-  where
-    mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
-    mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
-    renderHaskellSource source = hsModule source <> "." <> hsType source
+data AggregateHaskellSource = AggregateHaskellSource
+  { aggregateSourceBuiltin :: !(Maybe Text),
+    aggregateSourceReference :: !(Maybe HaskellReference),
+    aggregateSourceStaticImports :: !(Set Text)
+  }
 
-aggregateImports :: AggregateSymbols -> ResolvedAggregateType -> Set Text
-aggregateImports symbols resolved = case resolved of
-  AggregateTime ->
-    Set.fromList
-      [ "Data.Time.Calendar (fromGregorian)",
-        "Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
-      ]
-  AggregateNatural -> Set.singleton "Numeric.Natural (Natural)"
+aggregateConsumerHaskellSource :: AggregateSymbols -> ResolvedAggregateType -> AggregateHaskellSource
+aggregateConsumerHaskellSource symbols resolved = case resolved of
+  AggregateTime -> builtin "UTCTime" timeImports
+  AggregateNatural -> builtin "Natural" (Set.singleton "Numeric.Natural (Natural)")
   AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-    GeneratedNominal -> Set.empty
-    ConsumerNominal binding -> Set.singleton (hsModule (consumerNominalHaskell binding) <> " qualified")
+    GeneratedNominal -> builtin (resolvedNominalName nominal) Set.empty
+    ConsumerNominal binding -> external (consumerNominalHaskell binding)
   AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
-    Just declaration -> Set.singleton (hsModule (mappedHaskell declaration) <> " qualified")
-    Nothing -> Set.empty
-  _ -> Set.empty
+    Just declaration -> external (mappedHaskell declaration)
+    Nothing -> builtin (unMappedKey key) Set.empty
+  _ -> builtin (aggregateCanonicalName resolved) Set.empty
   where
+    builtin name imports = AggregateHaskellSource (Just name) Nothing imports
+    external source =
+      AggregateHaskellSource
+        Nothing
+        (Just (HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified))
+        Set.empty
     mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
     mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
+    timeImports =
+      Set.fromList
+        [ "Data.Time.Calendar (fromGregorian)",
+          "Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
+        ]
+
+aggregateSourceReferences :: AggregateHaskellSource -> Set HaskellReference
+aggregateSourceReferences source = maybe Set.empty Set.singleton (aggregateSourceReference source)
+
+renderAggregateHaskellSource :: HaskellImportPlan -> AggregateHaskellSource -> Either HaskellImportError Text
+renderAggregateHaskellSource plan source = case (aggregateSourceBuiltin source, aggregateSourceReference source) of
+  (Just builtin, Nothing) -> pure builtin
+  (Nothing, Just reference) -> renderPlannedReference plan reference
+  _ -> error "invalid aggregate Haskell source description"
 
 aggregatePackages :: AggregateSymbols -> ResolvedAggregateType -> Set Text
 aggregatePackages symbols resolved = case resolved of

@@ -1612,7 +1612,9 @@ main = hspec $ do
       projectionModule <- moduleAt "Generated/NominalScalars/NominalProjections.hs"
       bindingModule <- moduleAt "NominalConformance/Bindings.hs"
       map modulePath modules `shouldNotContain` ["NominalScalars/NominalLedger/Holes.hs"]
-      moduleText domainModule `shouldSatisfy` T.isInfixOf "NominalConformance.Domain.OrderId"
+      moduleText domainModule `shouldSatisfy` T.isInfixOf "import NominalConformance.Domain (AccountNumber, FeatureFlag, ObservedAt, OrderId, OrderStatus, RiskScore, SequenceNumber)"
+      moduleText domainModule `shouldSatisfy` T.isInfixOf "orderId :: !OrderId"
+      moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "NominalConformance.Domain.OrderId")
       moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "newtype OrderId")
       moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "data OrderStatus =")
       moduleText codecModule `shouldSatisfy` T.isInfixOf "KindID.parseText @\"ord\""
@@ -1622,14 +1624,16 @@ main = hspec $ do
         moduleText codecModule `shouldSatisfy` (not . T.isInfixOf forbidden)
       moduleText enumModule `shouldSatisfy` T.isInfixOf "data OrderStatusRepresentation = Draft | Submitted"
       moduleText enumModule `shouldSatisfy` (not . T.isInfixOf "NominalConformance")
-      moduleText projectionModule `shouldSatisfy` T.isInfixOf "type FieldOwner AccountNumberNominalProjection = NominalConformance.Domain.AccountNumber"
-      moduleText projectionModule `shouldSatisfy` T.isInfixOf "projectFieldValue _ = nominalToRepresentation NominalConformance.Bindings.accountNumberBinding"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "type FieldOwner AccountNumberNominalProjection = AccountNumber"
+      moduleText projectionModule `shouldSatisfy` T.isInfixOf "projectFieldValue _ = nominalToRepresentation Bindings.accountNumberBinding"
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection OrderIdEqualityProjection"
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "textProjectionDomain orderIdEqualityPattern"
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "instance ExactFieldProjection OrderStatusEqualityProjection"
       moduleText projectionModule `shouldSatisfy` T.isInfixOf "finiteProjectionDomain (\"draft\" :| [\"submitted\"])"
       kind bindingModule `shouldBe` HoleStub
-      moduleText bindingModule `shouldSatisfy` T.isInfixOf "orderIdBinding :: NominalBinding NominalConformance.Domain.OrderId (KindID \"ord\")"
+      moduleText bindingModule `shouldSatisfy` T.isInfixOf "import NominalConformance.Domain (AccountNumber, FeatureFlag, ObservedAt, OrderId, OrderStatus, RiskScore, SequenceNumber)"
+      moduleText bindingModule `shouldSatisfy` T.isInfixOf "orderIdBinding :: NominalBinding OrderId (KindID \"ord\")"
+      moduleText bindingModule `shouldSatisfy` T.isInfixOf "orderStatusBinding :: NominalBinding OrderStatus ShapeOrderStatus.OrderStatusRepresentation"
       firewallBreaches modules `shouldBe` []
       scaffoldModules ctx spec `shouldBe` modules
       manifestDependencies spec `shouldContain` ["mmzk-typeid", "nominal-conformance"]
@@ -4061,12 +4065,14 @@ main = hspec $ do
       let modules = scaffoldModules (defaultContext (specContext spec)) spec
           domain = generatedTextEndingIn "Catalog/Domain.hs" modules
           codec = generatedTextEndingIn "Catalog/Codec.hs" modules
-      domain `shouldSatisfy` T.isInfixOf "Example.Artifact.Domain.ArtifactInfo"
-      domain `shouldSatisfy` T.isInfixOf "Vendor.Geometry.Geometry"
-      domain `shouldSatisfy` T.isInfixOf "Example.Artifact.KeiroBindings.emptyArtifactInfo"
+      domain `shouldSatisfy` T.isInfixOf "import Example.Artifact.Domain (ArtifactInfo)"
+      domain `shouldSatisfy` T.isInfixOf "import Vendor.Geometry (Geometry)"
+      domain `shouldSatisfy` T.isInfixOf "artifact :: !ArtifactInfo"
+      domain `shouldSatisfy` T.isInfixOf "RCons (Proxy @\"currentArtifact\") ArtifactKeiroBindings.emptyArtifactInfo"
+      domain `shouldSatisfy` (not . T.isInfixOf "Example.Artifact.Domain.ArtifactInfo")
       codec `shouldSatisfy` T.isInfixOf "\"location\" .= encodeArtifactLocationShape"
       codec `shouldSatisfy` T.isInfixOf "\"local_file\""
-      codec `shouldSatisfy` T.isInfixOf "Nothing -> pure Generated.ConsumerDemo.Structural.Shape.ArtifactKind.Guide"
+      codec `shouldSatisfy` T.isInfixOf "Nothing -> pure ShapeArtifactKind.Guide"
       codec `shouldSatisfy` T.isInfixOf "rejectUnknownFields \"ArtifactInfo\""
       codec `shouldSatisfy` T.isInfixOf "toJSON payload.geometry"
       codec `shouldSatisfy` (not . T.isInfixOf "vendor.geometry.json")
@@ -4081,7 +4087,9 @@ main = hspec $ do
       facade `shouldSatisfy` T.isInfixOf "type FieldName"
       facade `shouldSatisfy` T.isInfixOf "= \"/key\""
       facade `shouldSatisfy` T.isInfixOf "fieldShapeId _ = \"example.artifact.ArtifactInfo.v1\""
-      facade `shouldSatisfy` T.isInfixOf "bindingToShape Example.Artifact.KeiroBindings.artifactInfoBinding owner"
+      facade `shouldSatisfy` T.isInfixOf "type FieldOwner ArtifactInfoKeyProjection = ArtifactInfo"
+      facade `shouldSatisfy` T.isInfixOf "bindingToShape KeiroBindings.artifactInfoBinding owner"
+      facade `shouldSatisfy` (not . T.isInfixOf "Example.Artifact.Domain.ArtifactInfo")
       facade `shouldSatisfy` T.isInfixOf "artifactInfoKeyWitness"
       facade `shouldNotSatisfy` T.isInfixOf "structuralProjectionC"
     it "suffixes only structural witness names that collide after normalization" $ do
@@ -4768,7 +4776,8 @@ main = hspec $ do
     it "uses consumer-owned nominal initials for equality-guard samples" $ do
       mods <- scaffoldFixture "test/fixtures/nominal-scalars.keiro"
       let harness = generatedTextEndingIn "Harness.hs" mods
-      harness `shouldSatisfy` T.isInfixOf "NominalConformance.Bindings.initialOrderId"
+      harness `shouldSatisfy` T.isInfixOf "Bindings.initialOrderId"
+      harness `shouldSatisfy` (not . T.isInfixOf "NominalConformance.Bindings.initialOrderId")
       harness `shouldNotSatisfy` T.isInfixOf "case parseOrderId"
     it "emits the canonical reservation register checks" $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"

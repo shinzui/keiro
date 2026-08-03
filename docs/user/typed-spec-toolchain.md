@@ -1247,6 +1247,23 @@ Never edit a generated module. Change the specification and scaffold again.
 If generated code does not represent the checked declaration faithfully, that
 is a toolchain defect rather than an invitation to patch the output.
 
+### Generated Haskell imports
+
+Each generated Haskell module plans its complete import set before rendering.
+A consumer-owned type with a unique occurrence name is imported explicitly and
+used unqualified. If the name conflicts with another import or a local
+declaration, Keiro uses a deterministic short module alias instead. External
+values, constructors, generated structural shapes, nominal representations,
+fixtures, initials, and binding APIs are always short-qualified so their owner
+remains visible. Repeated references merge into one sorted import declaration.
+
+Alias selection uses the shortest unique suffix of the complete module name
+and is independent of declaration order, so a second scaffold of an unchanged
+workspace produces the same bytes. This is Haskell presentation only: complete
+module names remain in manifests, fingerprints, diagnostics, scaffold history,
+and provenance. Existing create-once consumer modules are never rewritten for
+import style; only a newly created skeleton uses the current presentation.
+
 Before writing, scaffold plans the whole service and checks validation,
 case-folded module/path collisions, import cycles, generated-name safety,
 lowering support, and existing-file ownership. One refusal stops the write.
