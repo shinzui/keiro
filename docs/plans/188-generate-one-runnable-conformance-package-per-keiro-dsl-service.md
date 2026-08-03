@@ -51,8 +51,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-03 18:23Z) M1: Recorded the package boundary in ADR 0020 and added
   the validated workspace/CLI runtime-package setting without changing existing unconfigured
   scaffold output. `cabal test keiro-dsl-test` passed 525 examples.
-- [ ] M2: Generate one stable, service-level conformance facade that normalizes every current
-  harness family into executable checks and review-owned facts.
+- [x] (2026-08-03 18:45Z) M2: Generated one stable, service-level conformance facade that
+  normalizes every current harness family into executable checks and review-owned facts. The
+  focused facade tests passed 6 examples and the compiled conformance fixture passed all 25
+  runtime checks.
 - [ ] M3: Generate, preflight, write, and report exactly one local Cabal conformance package per
   workspace service or standalone service.
 - [ ] M4: Prove the complete workflow with a Mori-shaped multi-member fixture, update the user
@@ -68,6 +70,12 @@ implementation. Provide concise evidence.
   `just adr-validate`.
   Evidence: `just check-adr` returned `justfile does not contain recipe 'check-adr'`; the corrected
   command ran `okf validate ... --log-enforce` and reported `OK: 20 concepts`.
+
+- Observation: The committed conformance compile fixture was previously generated from the
+  unconfigured scaffold path, so opt-in facade output needed its own baseline generation mode.
+  Evidence: the baseline now records `source-with-conformance-facade`; the renderer-equivalence
+  test compares the emitted facade with the compiled fixture, and
+  `cabal test keiro-dsl-conformance-newsurface` passed all 25 checks.
 
 
 ## Decision Log
@@ -126,6 +134,14 @@ implementation. Provide concise evidence.
   avoids introducing a cycle between workspace and scaffold/package planning.
   Date: 2026-08-03
 
+- Decision: Normalize existing harness APIs additively at their source, with
+  `readModelFactResults` and `workflowFactValues`, and have the service facade import those
+  per-node harnesses in stable node-identity order.
+  Rationale: This preserves existing consumers, keeps node-specific field knowledge in the
+  current harness renderer, and lets the facade expose only `base`-library result shapes without
+  importing application internals directly.
+  Date: 2026-08-03
+
 
 ## Outcomes & Retrospective
 
@@ -138,6 +154,13 @@ this section into docs/adr/. Keep task-local execution details here.
   `runtime-package` clause and CLI override, and preserved all existing unconfigured manifest and
   scaffold evidence. Focused validation passed 525 examples; the only plan correction was the
   repository's actual ADR recipe name, `adr-validate`.
+
+- Milestone 2 added exactly one context-level facade in configured single-file and workspace
+  plans, exposed only that facade in the runtime manifest, and normalized all five current
+  harness families into stable service-wide checks or facts. Duplicate normalized fact keys are
+  refused during pure planning, empty services retain a stable facade, unconfigured output stays
+  compatible, and the checked-in generated facade compiles and runs under the advertised
+  language contract.
 
 
 ## Context and Orientation
@@ -685,3 +708,7 @@ the authoritative package registry and upstream tags, as required by the reposit
 Revision note (2026-08-03 18:23Z): Milestone 1 implementation recorded ADR 0020, the shared
 runtime-package validation seam, its passing focused evidence, and corrected the stale ADR recipe
 name from `check-adr` to the repository's `adr-validate`.
+
+Revision note (2026-08-03 18:45Z): Milestone 2 implementation recorded the service-facade API,
+additive per-node fact projections, configured scaffold/manifest integration, duplicate-key
+refusal, and compiled conformance evidence.

@@ -12,8 +12,9 @@ import Keiro.Dsl.FrontendCompatibility (SourceExpectation (..), observeSource, r
 import Keiro.Dsl.Grammar (Spec (..))
 import Keiro.Dsl.LanguageVersion (currentStableLanguageVersion, languageVersionNumber)
 import Keiro.Dsl.Parser (parseSource)
+import Keiro.Dsl.RuntimePackage (RuntimePackageName (..))
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext)
-import Keiro.Dsl.ScaffoldRun (scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (planServiceScaffoldWithRuntimePackage, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Workspace (WorkspaceSpec (..), fileContentSource, loadWorkspace)
@@ -164,6 +165,14 @@ expectedStableGeneratedPaths suite = case suiteGeneration suite of
   "source" -> do
     source <- requiredSuiteSource suite
     generatedPathsForSource source
+  "source-with-conformance-facade" -> do
+    source <- requiredSuiteSource suite
+    sourceText <- readRepoText source
+    service <- parseCheckedSource source sourceText
+    modules <- case planServiceScaffoldWithRuntimePackage (Just (RuntimePackageName "conformance-runtime")) (defaultContext (specContext (checkedSpec service))) service of
+      Left refusals -> expectationFailure (show refusals) >> fail "stable configured source scaffold refusal"
+      Right value -> pure value
+    pure (generatedPaths modules)
   "workspace" -> do
     source <- requiredSuiteSource suite
     resolved <- resolveRepoFile ("keiro-dsl" </> source)

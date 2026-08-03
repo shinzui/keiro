@@ -29,6 +29,7 @@
 module Keiro.Dsl.Manifest
   ( renderManifest,
     renderManifestForService,
+    renderManifestForServiceWithFacade,
     manifestDependencies,
     manifestDependenciesForService,
     moduleNameOf,
@@ -58,7 +59,13 @@ renderManifest specName mods = renderManifestForService specName mods . legacyCh
 -- this entry point so language-4 typed contract imports are represented in the
 -- consuming Cabal dependencies.
 renderManifestForService :: Text -> [ScaffoldModule] -> CheckedService -> Text
-renderManifestForService specName mods service =
+renderManifestForService = renderManifestForServiceWithFacade Nothing
+
+-- | Configured manifest renderer. The service facade is the runtime library's
+-- one generated public module; every other generated and hand-owned module
+-- remains in @other-modules@. Passing 'Nothing' preserves the historical bytes.
+renderManifestForServiceWithFacade :: Maybe Text -> Text -> [ScaffoldModule] -> CheckedService -> Text
+renderManifestForServiceWithFacade facadeModule specName mods service =
   T.unlines $
     [ "-- keiro-dsl build manifest for " <> specName,
       "-- Paste the complete fragment below into the consuming Cabal stanza.",
@@ -69,10 +76,11 @@ renderManifestForService specName mods service =
       "default-extensions:"
     ]
       ++ map ("    " <>) generatedHaskellDefaultExtensions
+      ++ exposedBlock
       ++ [ "",
            "other-modules:"
          ]
-      ++ map ("    " <>) (sort (map (moduleNameOf . modulePath) mods))
+      ++ map ("    " <>) otherModules
       ++ [ "",
            "build-depends:"
          ]
@@ -81,6 +89,13 @@ renderManifestForService specName mods service =
   where
     spec = checkedSpec service
     plan = consumerPlan spec
+    moduleNames = sort (map (moduleNameOf . modulePath) mods)
+    otherModules = case facadeModule of
+      Nothing -> moduleNames
+      Just facade -> filter (/= facade) moduleNames
+    exposedBlock = case facadeModule of
+      Nothing -> []
+      Just facade -> ["", "exposed-modules:", "    " <> facade]
     consumerBlocks
       | null (consumerMappings plan) = []
       | otherwise =

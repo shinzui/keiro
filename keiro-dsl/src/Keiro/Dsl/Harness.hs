@@ -175,7 +175,7 @@ emitReadModelHarness :: Text -> Context -> ReadModelNode -> Text
 emitReadModelHarness genPrefix ctx readModel =
   nl
     [ generatedBanner,
-      "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, runReadModelFacts) where",
+      "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, readModelFactResults, runReadModelFacts) where",
       "",
       "-- | (fact, expected from notation, actual shared derivation/lowering).",
       "readModelFacts :: [(String, String, String)]",
@@ -187,6 +187,10 @@ emitReadModelHarness genPrefix ctx readModel =
       "  , (\"consistency\", " <> tshow consistency <> ", " <> tshow consistency <> ")",
       "  , (\"strongScope\", " <> tshow scope <> ", " <> tshow scope <> ")",
       "  ]",
+      "",
+      "readModelFactResults :: [(String, Bool)]",
+      "readModelFactResults =",
+      "  [(fact, expected == actual) | (fact, expected, actual) <- readModelFacts]",
       "",
       "runReadModelFacts :: IO Bool",
       "runReadModelFacts = do",
@@ -302,7 +306,7 @@ emitWorkflowFacts :: Text -> WorkflowNode -> Text
 emitWorkflowFacts genPrefix w =
   nl
     [ generatedBanner,
-      "module " <> genPrefix <> ".WorkflowFacts (WorkflowFacts (..), workflowFacts) where",
+      "module " <> genPrefix <> ".WorkflowFacts (WorkflowFacts (..), workflowFacts, workflowFactValues) where",
       "",
       "-- | The workflow's deterministic decisions, pinned as typed pure facts.",
       "-- A driver asserts them against a hand-written expectation, so a spec",
@@ -326,7 +330,18 @@ emitWorkflowFacts genPrefix w =
       "    , workflowFactBody = " <> stringList (map bodyTag (wfBody w)),
       "    , workflowFactAwaitLabels = " <> stringList (workflowAwaitLabels (wfBody w)),
       "    , workflowFactPatchIds = " <> stringList (workflowPatchIds (wfBody w)),
-      "    }"
+      "    }",
+      "",
+      "-- | Base-library projection used by the service-level conformance facade.",
+      "workflowFactValues :: [(String, String)]",
+      "workflowFactValues =",
+      "  [ (\"name\", workflowFactName workflowFacts)",
+      "  , (\"idVia\", workflowFactIdVia workflowFacts)",
+      "  , (\"idField\", workflowFactIdField workflowFacts)",
+      "  , (\"body\", show (workflowFactBody workflowFacts))",
+      "  , (\"awaits\", show (workflowFactAwaitLabels workflowFacts))",
+      "  , (\"patches\", show (workflowFactPatchIds workflowFacts))",
+      "  ]"
     ]
   where
     hs = tshow

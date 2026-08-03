@@ -4,6 +4,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Effectful (runPureEff)
+import Generated.TransferRouting.Conformance (runServiceConformanceChecks, serviceConformanceFacts)
 import Generated.TransferRouting.Hospital.Domain qualified as Hospital
 import Generated.TransferRouting.Hospital.EventStream (hospitalCommandCategory, hospitalEventStream)
 import Generated.TransferRouting.Hospital.Harness (harnessAssertions)
@@ -21,6 +22,7 @@ import TransferRouting.HospitalTransferRouter.RouterValue (
 main :: IO ()
 main = do
     readModelFactsPass <- runReadModelFacts
+    serviceChecks <- runServiceConformanceChecks
     let input =
             AcceptedHospitalTransferNeed
                 { transferNeedId = "need-42"
@@ -29,7 +31,9 @@ main = do
         commands = runPureEff (hospitalTransferRouter.resolve input)
         checks =
             [("aggregate: " <> label, passed) | (label, passed) <- harnessAssertions]
-                <> [ ("validated hospital event stream constructs", hospitalEventStream `seq` True)
+                <> [("service: " <> label, passed) | (label, passed) <- serviceChecks]
+                <> [ ("service facade exposes router facts", lookup "router/HospitalTransferRouter/routerName" serviceConformanceFacts == Just "hospital-transfer-router")
+                   , ("validated hospital event stream constructs", hospitalEventStream `seq` True)
                    , ("read-model facts", readModelFactsPass)
                    , ("router name", hospitalTransferRouter.name == "hospital-transfer-router")
                    , ("router key", hospitalTransferRouter.key input == "need-42")

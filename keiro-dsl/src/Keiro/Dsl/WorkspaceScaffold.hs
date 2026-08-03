@@ -34,6 +34,7 @@ module Keiro.Dsl.WorkspaceScaffold
     WorkspacePlan (..),
     planWorkspaceScaffold,
     planWorkspaceScaffoldWithGoldens,
+    planWorkspaceScaffoldWithRuntimePackageAndGoldens,
     provenanceOwner,
 
     -- * Golden payload roots
@@ -61,9 +62,10 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
-import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForService)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
@@ -82,6 +84,7 @@ import Keiro.Dsl.ScaffoldRun
     staleAgainst,
   )
 import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
@@ -113,6 +116,7 @@ data WorkspacePlan = WorkspacePlan
   { wpWorkspace :: !WorkspaceSpec,
     wpCheckedService :: !CheckedService,
     wpContext :: !Context,
+    wpRuntimePackage :: !(Maybe RuntimePackageName),
     -- | The one golden-payload root for the whole workspace. Carried here so
     --     execution can refuse a member-adjacent fixture the root lacks before it
     --     writes anything.
@@ -139,7 +143,18 @@ planWorkspaceScaffoldWithGoldens ::
   WorkspaceSpec ->
   Either [Refusal] WorkspacePlan
 planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
-  case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
+  planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens (wsRuntimePackage workspace) goldenRoot ctx workspace
+
+planWorkspaceScaffoldWithRuntimePackageAndGoldens ::
+  [GoldenPayload] ->
+  Maybe RuntimePackageName ->
+  FilePath ->
+  Context ->
+  WorkspaceSpec ->
+  Either [Refusal] WorkspacePlan
+planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenRoot ctx workspace = case workspaceModules goldens runtimePackage ctx workspace of
+  Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+  Right tagged -> case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
     Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
     Right _ -> case pureRefusals ctx merged (map fst tagged) of
       [] ->
@@ -148,6 +163,7 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
             { wpWorkspace = workspace,
               wpCheckedService = service,
               wpContext = ctx,
+              wpRuntimePackage = runtimePackage,
               wpGoldenRoot = goldenRoot,
               wpModules = tagged
             }
@@ -155,7 +171,6 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
   where
     service = checkedWorkspace workspace
     merged = checkedSpec service
-    tagged = workspaceModules goldens ctx workspace
 
 -- | The tagged module set, in exactly the order
 -- 'Keiro.Dsl.ScaffoldRun.scaffoldModulesWithGoldens' produces for the merged spec.
@@ -165,14 +180,19 @@ planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace =
 -- ('scaffoldStructuralOwners') and nodes carry their own identity
 -- ('nodeIdentity'), both of which the workspace's ownership index resolves to a
 -- member file.
-workspaceModules :: [GoldenPayload] -> Context -> WorkspaceSpec -> [(ScaffoldModule, ModuleProvenance)]
-workspaceModules goldens ctx workspace =
-  [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
-    <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
-    <> concat
-      [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
-      | node <- specNodes merged
-      ]
+workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> WorkspaceSpec -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
+workspaceModules goldens runtimePackage ctx workspace = do
+  facade <- case runtimePackage of
+    Nothing -> Right []
+    Just _ -> fmap (\moduleValue -> [(stamp moduleValue, ContextLevel)]) (serviceHarnessModule ctx service)
+  pure $
+    [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
+      <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
+      <> concat
+        [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
+        | node <- specNodes merged
+        ]
+      <> facade
   where
     service = checkedWorkspace workspace
     merged = checkedSpec service
@@ -372,7 +392,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
           (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . wrBehaviorRequirements) previous
       createDirectoryIfMissing True out
       dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
-      TIO.writeFile buildManifestPath (renderManifestForService (T.pack manifestName) modules (wpCheckedService plan))
+      TIO.writeFile buildManifestPath (renderManifestForServiceWithFacade facadeModule (T.pack manifestName) modules (wpCheckedService plan))
       -- Adoption provenance is durable history, not a one-run note: a
       -- later run that adopts nothing carries the previous rows forward,
       -- or the record would silently forget where its files came from.
@@ -421,6 +441,9 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
     manifestName = takeFileName (wsManifestPath workspace)
     recordPath = out </> workspaceRecordFileName service
     buildManifestPath = out </> workspaceManifestFileName service
+    facadeModule = case wpRuntimePackage plan of
+      Nothing -> Nothing
+      Just _ -> Just (serviceConformanceModuleName (wpContext plan))
     previousFiles previous = [(wrmKind row, wrmPath row) | row <- maybe [] wrModules previous]
 
 readWorkspaceRecord :: FilePath -> IO (Maybe WorkspaceRecord)

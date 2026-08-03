@@ -26,13 +26,13 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (executeServiceScaffold, planServiceScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackage, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
-import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
+import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -263,10 +263,9 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       when (any ((== Error) . severity) diags) exitFailure
       let ctx = mkContext cliRoot cliCollocate spec
-          _effectiveRuntimePackage = cliRuntimePackage
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
-      case (planServiceScaffoldWithGoldens goldens ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
+      case (planServiceScaffoldWithRuntimePackageAndGoldens goldens cliRuntimePackage ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
         (Left refusals, _) -> do
           mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
           exitFailure
@@ -276,7 +275,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeServiceScaffold out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
+              result <- executeServiceScaffoldWithRuntimePackage cliRuntimePackage out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -509,12 +508,12 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
       when (any ((== Error) . wdSeverity) diags) exitFailure
       let spec = checkedSpec (checkedWorkspace workspace)
           ctx = workspaceContext cliRoot cliCollocate workspace
-          _effectiveRuntimePackage = case cliRuntimePackage of
+          effectiveRuntimePackage = case cliRuntimePackage of
             Just packageName -> Just packageName
             Nothing -> wsRuntimePackage workspace
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
-      case ( planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace,
+      case ( planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens effectiveRuntimePackage goldenRoot ctx workspace,
              traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest
            ) of
         (Left refusals, _) -> do

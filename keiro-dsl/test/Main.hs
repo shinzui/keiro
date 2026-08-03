@@ -47,7 +47,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
-import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService)
+import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSpec)
@@ -57,8 +57,9 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
+import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateService, validateSpec)
@@ -4503,6 +4504,89 @@ main = hspec $ do
       let dependencies = manifestDependenciesForService service
       mapM_ (\dependency -> dependencies `shouldContain` [dependency]) ["effectful-core", "keiro", "shibuya-core"]
       dependencies `shouldNotContain` ["shibuya"]
+
+  describe "service conformance facade (plan 188 M2)" $ do
+    it "normalizes aggregate and read-model checks behind one base-only API" $ do
+      service <- checkedServiceOf "test/fixtures/transfer-routing.keiro"
+      let ctx = defaultContext (specContext (checkedSpec service))
+      case serviceHarnessModule ctx service of
+        Left duplicates -> expectationFailure ("unexpected duplicate fact keys: " <> show duplicates)
+        Right facade -> do
+          committed <- readTestText ("test/conformance-newsurface/" <> modulePath facade)
+          normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText facade)
+          moduleNameOf (modulePath facade) `shouldBe` "Generated.TransferRouting.Conformance"
+          moduleText facade `shouldSatisfy` T.isInfixOf ".harnessAssertions"
+          moduleText facade `shouldSatisfy` T.isInfixOf ".readModelFactResults"
+          moduleText facade `shouldSatisfy` T.isInfixOf "aggregate/Hospital/"
+          moduleText facade `shouldSatisfy` T.isInfixOf "readmodel/hospital_load/"
+          moduleText facade `shouldNotSatisfy` T.isInfixOf "TransferRouting.Hospital.Holes"
+    it "projects process, router, and workflow facts with qualified stable keys" $ do
+      processService <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
+      routerService <- checkedServiceOf "test/fixtures/incident-paging/incident-paging.keiro"
+      workflowService <- checkedServiceOf "test/fixtures/workflow-evolution.keiro"
+      let select predicate = filter predicate . specNodes . checkedSpec
+          factNodes =
+            select (\case NProcess {} -> True; _ -> False) processService
+              <> select (\case NRouter {} -> True; _ -> False) routerService
+              <> select (\case NWorkflow {} -> True; _ -> False) workflowService
+          baseSpec = checkedSpec processService
+          service = processService {checkedSpec = baseSpec {specNodes = factNodes}}
+          ctx = defaultContext (specContext baseSpec)
+      forM_
+        [ "process/HospitalSurge/maxAttempts",
+          "router/PagingRouter/dispatchCommand",
+          "workflow/HospitalTransferReservation/body"
+        ]
+        (\key -> serviceConformanceFactKeys service `shouldSatisfy` elem key)
+      case serviceHarnessModule ctx service of
+        Left duplicates -> expectationFailure ("unexpected duplicate fact keys: " <> show duplicates)
+        Right facade -> do
+          moduleText facade `shouldSatisfy` T.isInfixOf ".processHarnessValues"
+          moduleText facade `shouldSatisfy` T.isInfixOf ".routerHarnessValues"
+          moduleText facade `shouldSatisfy` T.isInfixOf ".workflowFactValues"
+    it "uses the shared context-level placement policy" $ do
+      service <- checkedServiceOf "test/fixtures/contract-v4.keiro"
+      let ctx = Context {contextName = "modules", moduleRoot = "Mori", placement = CollocatedLeaf}
+      serviceConformanceModuleName ctx `shouldBe` "Mori.Modules.Generated.Conformance"
+      case serviceHarnessModule ctx service of
+        Left duplicates -> expectationFailure ("unexpected duplicate fact keys: " <> show duplicates)
+        Right facade -> do
+          moduleText facade `shouldSatisfy` T.isInfixOf "runServiceConformanceChecks = pure []"
+          moduleText facade `shouldSatisfy` T.isInfixOf "serviceConformanceFacts = []"
+    it "adds one facade only to configured single-file plans and exposes only it" $ do
+      service <- checkedServiceOf "test/fixtures/reservation.keiro"
+      let ctx = defaultContext (specContext (checkedSpec service))
+          runtimePackage = RuntimePackageName "reservation-runtime"
+      unconfigured <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffold ctx service)
+      configured <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffoldWithRuntimePackage (Just runtimePackage) ctx service)
+      let facadeName = serviceConformanceModuleName ctx
+          facades = [moduleValue | moduleValue <- configured, moduleNameOf (modulePath moduleValue) == facadeName]
+          manifest = renderManifestForServiceWithFacade (Just facadeName) "reservation.keiro" configured service
+      length configured `shouldBe` length unconfigured + 1
+      length facades `shouldBe` 1
+      manifest `shouldSatisfy` T.isInfixOf ("exposed-modules:\n    " <> facadeName)
+      T.count facadeName manifest `shouldBe` 1
+    it "emits one context-level facade for a multi-member workspace regardless of member order" $ do
+      canonical <- shouldComposeWorkspace canonicalWorkspacePath
+      reordered <- shouldComposeWorkspace "test/fixtures/workspace/service-reordered.keiro-workspace"
+      let runtimePackage = Just (RuntimePackageName "demo-runtime")
+          plan workspace =
+            planWorkspaceScaffoldWithRuntimePackageAndGoldens [] runtimePackage "goldens" (workspaceContext workspace) workspace
+          facades workspacePlan =
+            [ (moduleText moduleValue, provenance)
+            | (moduleValue, provenance) <- wpModules workspacePlan,
+              ".Conformance" `T.isSuffixOf` moduleNameOf (modulePath moduleValue)
+            ]
+      canonicalPlan <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (plan canonical)
+      reorderedPlan <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (plan reordered)
+      facades canonicalPlan `shouldBe` facades reorderedPlan
+      map snd (facades canonicalPlan) `shouldBe` [ContextLevel]
+    it "refuses duplicate normalized fact keys before planning writes" $ do
+      service <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
+      let spec = checkedSpec service
+          processes = [node | node@NProcess {} <- specNodes spec]
+          duplicated = service {checkedSpec = spec {specNodes = processes <> processes}}
+      serviceHarnessModule (defaultContext (specContext spec)) duplicated `shouldSatisfy` isLeft
 
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->

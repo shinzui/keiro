@@ -24,6 +24,7 @@ module Keiro.Dsl.Scaffold
     Placement (..),
     defaultContext,
     genPrefixFor,
+    contextGeneratedPrefix,
     holePrefixFor,
     generatedNominalModule,
     NominalUseSite (..),
@@ -188,6 +189,13 @@ genPrefixFor ctx node = case placement ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> "." <> node
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> "." <> node <> ".Generated"
 
+-- | The generated-layer namespace shared by modules emitted once for a whole
+-- service context, such as Nominals, ReplayAudit, and Conformance.
+contextGeneratedPrefix :: Context -> Text
+contextGeneratedPrefix ctx = case placement ctx of
+  GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx
+  CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated"
+
 -- | The hand-owned (hole) namespace for a node: @\<root\>.\<Ctx\>.\<Node\>@ —
 -- the same for both placement styles (holes always sit beside the domain).
 holePrefixFor :: Context -> Text -> Text
@@ -195,9 +203,7 @@ holePrefixFor ctx node = rootPrefix ctx <> ctxPascalOf ctx <> "." <> node
 
 -- | The one context-level Haskell owner for generated IDs and enums.
 generatedNominalModule :: Context -> Text
-generatedNominalModule ctx = case placement ctx of
-  GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Nominals"
-  CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.Nominals"
+generatedNominalModule ctx = contextGeneratedPrefix ctx <> ".Nominals"
 
 -- | The root namespace prefix, dot-terminated, or @""@ when no root is set.
 rootPrefix :: Context -> Text
@@ -2677,9 +2683,6 @@ scaffoldReplayAudit ctx spec
   where
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
     moduleName = contextGeneratedPrefix ctx <> ".ReplayAudit"
-    contextGeneratedPrefix context = case placement context of
-      GeneratedPrefix -> rootPrefix context <> "Generated." <> ctxPascalOf context
-      CollocatedLeaf -> rootPrefix context <> ctxPascalOf context <> ".Generated"
     emitReplayAudit =
       nl $
         renderGeneratedLanguagePragmas []

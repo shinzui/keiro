@@ -68,6 +68,7 @@ library
     Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.SemanticContract
+    Keiro.Dsl.ServiceHarness
     Keiro.Dsl.Skeleton
     Keiro.Dsl.Source
     Keiro.Dsl.Syntax
@@ -1001,6 +1002,7 @@ test-suite keiro-dsl-conformance-newsurface
   hs-source-dirs: test/conformance-newsurface
   main-is:        Main.hs
   other-modules:
+    Generated.TransferRouting.Conformance
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain
     Generated.TransferRouting.Hospital.EventStream

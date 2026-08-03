@@ -14,9 +14,12 @@ module Keiro.Dsl.ScaffoldRun
     scaffoldModulesWithGoldens,
     planServiceScaffold,
     planServiceScaffoldWithGoldens,
+    planServiceScaffoldWithRuntimePackage,
+    planServiceScaffoldWithRuntimePackageAndGoldens,
     planScaffold,
     planScaffoldWithGoldens,
     executeServiceScaffold,
+    executeServiceScaffoldWithRuntimePackage,
     executeScaffold,
     executeScaffoldWithLanguage,
     renderRefusals,
@@ -52,12 +55,14 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
-import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForService)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
@@ -85,6 +90,7 @@ data Refusal
   | -- | Golden payload fixtures found beside a workspace member that the one
     --       workspace golden root does not have. Raised only by the workspace path.
     GoldenRootDivergence !FilePath ![FilePath]
+  | DuplicateConformanceFactKeys ![DuplicateServiceFactKey]
   deriving stock (Eq, Show)
 
 -- | What one module write did. 'Unchanged' is produced only by the workspace
@@ -177,21 +183,35 @@ scaffoldModulesWithGoldens goldens ctx = scaffoldServiceModulesWithGoldens golde
 
 -- | Run every pure refusal gate under the effective semantic contract.
 planServiceScaffold :: Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffold = planServiceScaffoldWithGoldens []
+planServiceScaffold = planServiceScaffoldWithRuntimePackage Nothing
 
 planServiceScaffoldWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffoldWithGoldens goldens ctx service =
+planServiceScaffoldWithGoldens goldens = planServiceScaffoldWithRuntimePackageAndGoldens goldens Nothing
+
+-- | Add the one service-level conformance facade only when the runtime package
+-- is explicitly configured. The package name itself is build metadata; facade
+-- naming depends solely on the service context and placement policy.
+planServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planServiceScaffoldWithRuntimePackage = planServiceScaffoldWithRuntimePackageAndGoldens []
+
+planServiceScaffoldWithRuntimePackageAndGoldens :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage ctx service =
   case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes spec] of
     Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
     Right _ -> case scaffoldRefusals spec of
       lowering@(_ : _) -> Left [LoweringRefusal lowering]
-      [] ->
-        let modules = stampGeneratedModules (checkedLanguageContract service) (scaffoldServiceModulesWithGoldens goldens ctx service)
-         in case pureRefusals ctx spec modules of
-              [] -> Right modules
-              refusals -> Left refusals
+      [] -> case facadeModules of
+        Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+        Right facades ->
+          let modules = stampGeneratedModules (checkedLanguageContract service) (scaffoldServiceModulesWithGoldens goldens ctx service <> facades)
+           in case pureRefusals ctx spec modules of
+                [] -> Right modules
+                refusals -> Left refusals
   where
     spec = checkedSpec service
+    facadeModules = case runtimePackage of
+      Nothing -> Right []
+      Just _ -> fmap pure (serviceHarnessModule ctx service)
 
 -- | Run every pure refusal gate. A successful result is the exact write set;
 -- a refusal has no write set and therefore cannot be accidentally executed.
@@ -291,13 +311,19 @@ executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage 
 -- and the source declaration provenance written to history. A mismatch refuses
 -- before checking or creating any output path.
 executeServiceScaffold :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
-executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
+executeServiceScaffold = executeServiceScaffoldWithRuntimePackage Nothing
+
+executeServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
+executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
   | effectiveLanguageContract sourceLanguage /= checkedLanguageContract service =
       pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
   | otherwise = executeCheckedScaffold
   where
     spec = checkedSpec service
     modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
+    facadeModule = case runtimePackage of
+      Nothing -> Nothing
+      Just _ -> Just (serviceConformanceModuleName ctx)
     executeCheckedScaffold =
       case deriveBehaviorRequirements spec of
         Left errors -> pure (Left [BehaviorRefusal errors])
@@ -323,7 +349,7 @@ executeServiceScaffold out forceGeneratedOverwrite specPath sourceLanguage ctx s
               createDirectoryIfMissing True out
               dispositions <- mapM (writeModule out) modules
               let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
-              TIO.writeFile manifestPath (renderManifestForService (T.pack specPath) modules service)
+              TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
               TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
               pure $
                 Right
@@ -520,6 +546,9 @@ renderRefusals = concatMap render
              "  (a fixture the root lacks would be silently replaced by a synthesized stand-in)",
              "nothing was written"
            ]
+    render (DuplicateConformanceFactKeys duplicates) =
+      ["error: duplicate normalized service conformance fact keys -- refusing to scaffold; nothing was written"]
+        <> ["  " <> duplicateServiceFactKey duplicate | duplicate <- duplicates]
 
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
