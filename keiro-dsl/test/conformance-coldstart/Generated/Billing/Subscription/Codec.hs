@@ -12,6 +12,7 @@ import Generated.Billing.Nominals.Internal (unsafeCustomerIdFromLegacyText, unsa
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -24,10 +25,13 @@ parsePlan = \case
   tag -> fail ("unknown Plan " <> show tag <> "; expected one of: paid, free")
 
 
+subscriptionEventTypes :: NonEmpty EventType
+subscriptionEventTypes = EventType "SubscriptionActivated" :| [EventType "SubscriptionCancelled"]
+
 subscriptionCodec :: Codec SubscriptionEvent
 subscriptionCodec =
   Codec
-    { eventTypes = EventType "SubscriptionActivated" :| [EventType "SubscriptionCancelled"]
+    { eventTypes = subscriptionEventTypes
     , eventType = \case
         SubscriptionActivated{} -> EventType "SubscriptionActivated"
         SubscriptionCancelled{} -> EventType "SubscriptionCancelled"
@@ -71,7 +75,14 @@ parseSubscriptionEvent (EventType tag) = mapLeftText . parseEither (withObject "
                     <$> (unsafeSubscriptionIdFromLegacyText <$> o .: "subscriptionId")
                     <*> (unsafeCustomerIdFromLegacyText <$> o .: "customerId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: SubscriptionActivated, SubscriptionCancelled")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes subscriptionEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

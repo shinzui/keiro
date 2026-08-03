@@ -10,6 +10,7 @@ import Generated.NominalScalars.NominalLedger.Domain
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.KindID qualified as KindID
@@ -46,10 +47,13 @@ parseOrderStatusNominal = \case
 
 
 
+nominalLedgerEventTypes :: NonEmpty EventType
+nominalLedgerEventTypes = EventType "NominalsRecorded" :| []
+
 nominalLedgerCodec :: Codec NominalLedgerEvent
 nominalLedgerCodec =
   Codec
-    { eventTypes = EventType "NominalsRecorded" :| []
+    { eventTypes = nominalLedgerEventTypes
     , eventType = \case
         NominalsRecorded{} -> EventType "NominalsRecorded"
     , schemaVersion = 1
@@ -88,7 +92,14 @@ parseNominalLedgerEvent (EventType tag) = mapLeftText . parseEither (withObject 
                     <*> (nominalFromRepresentation Bindings.featureFlagBinding <$> o .: "featureFlag")
                     <*> (nominalFromRepresentation Bindings.observedAtBinding <$> o .: "observedAt")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: NominalsRecorded")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes nominalLedgerEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

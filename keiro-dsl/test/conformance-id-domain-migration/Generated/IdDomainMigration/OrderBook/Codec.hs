@@ -12,6 +12,7 @@ import Generated.IdDomainMigration.Nominals.Internal (unsafeOrderIdFromLegacyTex
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -20,10 +21,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+orderBookEventTypes :: NonEmpty EventType
+orderBookEventTypes = EventType "OrderRecorded" :| []
+
 orderBookCodec :: Codec OrderBookEvent
 orderBookCodec =
   Codec
-    { eventTypes = EventType "OrderRecorded" :| []
+    { eventTypes = orderBookEventTypes
     , eventType = \case
         OrderRecorded{} -> EventType "OrderRecorded"
     , schemaVersion = 1
@@ -50,7 +54,14 @@ parseOrderBookEvent (EventType tag) = mapLeftText . parseEither (withObject "Ord
             <$> ( OrderRecordedData
                     <$> (unsafeOrderIdFromLegacyText <$> o .: "orderId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: OrderRecorded")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes orderBookEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

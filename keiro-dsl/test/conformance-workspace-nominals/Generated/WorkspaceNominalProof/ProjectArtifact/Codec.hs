@@ -12,6 +12,7 @@ import Generated.WorkspaceNominalProof.Nominals.Internal (unsafeProjectIdFromLeg
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -24,10 +25,13 @@ parseProjectPhase = \case
   tag -> fail ("unknown ProjectPhase " <> show tag <> "; expected one of: draft, active")
 
 
+projectArtifactEventTypes :: NonEmpty EventType
+projectArtifactEventTypes = EventType "ArtifactRecorded" :| []
+
 projectArtifactCodec :: Codec ProjectArtifactEvent
 projectArtifactCodec =
   Codec
-    { eventTypes = EventType "ArtifactRecorded" :| []
+    { eventTypes = projectArtifactEventTypes
     , eventType = \case
         ArtifactRecorded{} -> EventType "ArtifactRecorded"
     , schemaVersion = 1
@@ -56,7 +60,14 @@ parseProjectArtifactEvent (EventType tag) = mapLeftText . parseEither (withObjec
                     <$> (unsafeProjectIdFromLegacyText <$> o .: "projectId")
                     <*> explicitParseField (withText "ProjectPhase" parseProjectPhase) o "phase"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ArtifactRecorded")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes projectArtifactEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

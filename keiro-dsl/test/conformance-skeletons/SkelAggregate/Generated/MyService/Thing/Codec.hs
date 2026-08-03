@@ -12,6 +12,7 @@ import SkelAggregate.Generated.MyService.Nominals.Internal (unsafeThingIdFromLeg
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -20,10 +21,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+thingEventTypes :: NonEmpty EventType
+thingEventTypes = EventType "ThingCompleted" :| []
+
 thingCodec :: Codec ThingEvent
 thingCodec =
   Codec
-    { eventTypes = EventType "ThingCompleted" :| []
+    { eventTypes = thingEventTypes
     , eventType = \case
         ThingCompleted{} -> EventType "ThingCompleted"
     , schemaVersion = 1
@@ -52,7 +56,14 @@ parseThingEvent (EventType tag) = mapLeftText . parseEither (withObject "ThingEv
                     <$> (unsafeThingIdFromLegacyText <$> o .: "thingId")
                     <*> o .: "attempt"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ThingCompleted")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes thingEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

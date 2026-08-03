@@ -10,6 +10,7 @@ import Generated.ReplayDivergence.Note.Domain
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -18,10 +19,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+noteEventTypes :: NonEmpty EventType
+noteEventTypes = EventType "NoteWritten" :| []
+
 noteCodec :: Codec NoteEvent
 noteCodec =
   Codec
-    { eventTypes = EventType "NoteWritten" :| []
+    { eventTypes = noteEventTypes
     , eventType = \case
         NoteWritten{} -> EventType "NoteWritten"
     , schemaVersion = 1
@@ -50,7 +54,14 @@ parseNoteEvent (EventType tag) = mapLeftText . parseEither (withObject "NoteEven
                     <$> o .: "noteText"
                     <*> o .: "echo"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: NoteWritten")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes noteEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

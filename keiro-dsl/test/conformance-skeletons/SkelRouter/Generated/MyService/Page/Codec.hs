@@ -10,6 +10,7 @@ import SkelRouter.Generated.MyService.Page.Domain
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -18,10 +19,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+pageEventTypes :: NonEmpty EventType
+pageEventTypes = EventType "PageSent" :| []
+
 pageCodec :: Codec PageEvent
 pageCodec =
   Codec
-    { eventTypes = EventType "PageSent" :| []
+    { eventTypes = pageEventTypes
     , eventType = \case
         PageSent{} -> EventType "PageSent"
     , schemaVersion = 1
@@ -50,7 +54,14 @@ parsePageEvent (EventType tag) = mapLeftText . parseEither (withObject "PageEven
                     <$> o .: "incidentId"
                     <*> o .: "responderId"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: PageSent")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes pageEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

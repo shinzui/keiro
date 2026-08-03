@@ -4057,7 +4057,8 @@ emitCodec a =
              else ["import Data.Aeson (Value, object, withObject, withText, (.:), (.=))"]
          )
       ++ [ "import Data.Aeson.Types (Parser, explicitParseField, parseEither)",
-           "import Data.List.NonEmpty (NonEmpty (..))"
+           "import Data.List.NonEmpty (NonEmpty (..))",
+           "import Data.List.NonEmpty qualified as NonEmpty"
          ]
       ++ ( if hasMappedCodec a
              then ["import Data.Map.Strict (Map)", "import Data.Map.Strict qualified as Map"]
@@ -4082,6 +4083,8 @@ emitCodec a =
          ]
       ++ [emitMappedCodecs importPlan a | hasMappedCodec a]
       ++ [ "",
+           emitEventTypes a,
+           "",
            emitCodecValue a,
            "",
            emitEncode importPlan a,
@@ -4089,7 +4092,14 @@ emitCodec a =
            emitDecode importPlan a,
            "",
            "mapLeftText :: Either String b -> Either Text b",
-           "mapLeftText = either (Left . T.pack) Right"
+           "mapLeftText = either (Left . T.pack) Right",
+           "",
+           "_renderEventTypes :: NonEmpty EventType -> String",
+           "_renderEventTypes =",
+           "  T.unpack",
+           "    . T.intercalate \", \"",
+           "    . map (\\(EventType eventTypeName) -> eventTypeName)",
+           "    . NonEmpty.toList"
          ]
       ++ ( if hasMappedCodec a
              then
@@ -4199,7 +4209,7 @@ emitCodecValue a =
     [ lowerFirst (aName a) <> "Codec :: Codec " <> aName a <> "Event",
       lowerFirst (aName a) <> "Codec =",
       "  Codec",
-      "    { eventTypes = " <> eventTypesExpr,
+      "    { eventTypes = " <> eventTypesName a,
       "    , eventType = \\case"
     ]
       ++ ["        " <> rcName e <> "{} -> EventType " <> tshow (rcName e) | e <- aEvents a]
@@ -4210,10 +4220,20 @@ emitCodecValue a =
            "    }"
          ]
       ++ upcasterRungDecls a
+
+emitEventTypes :: Agg -> Text
+emitEventTypes aggregate =
+  nl
+    [ eventTypesName aggregate <> " :: NonEmpty EventType",
+      eventTypesName aggregate <> " = " <> eventTypesExpr
+    ]
   where
-    eventTypesExpr = case map rcName (aEvents a) of
+    eventTypesExpr = case map rcName (aEvents aggregate) of
       [] -> "error \"no events\""
-      (e : es) -> "EventType " <> tshow e <> " :| [" <> T.intercalate ", " (map (("EventType " <>) . tshow) es) <> "]"
+      event : rest -> "EventType " <> tshow event <> " :| [" <> T.intercalate ", " (map (("EventType " <>) . tshow) rest) <> "]"
+
+eventTypesName :: Agg -> Text
+eventTypesName aggregate = lowerFirst (aName aggregate) <> "EventTypes"
 
 -- | The codec's @schemaVersion@: the maximum declared event version (EP-2).
 maxEventVersion :: Agg -> Int
@@ -4322,7 +4342,7 @@ emitDecode importPlan a =
       "      case tag of"
     ]
       ++ concatMap decodeArm (aEvents a)
-      ++ ["        _ -> " <> renderUnknownFailure "event type" "tag" (map rcName (aEvents a))]
+      ++ ["        _ -> " <> renderUnknownEventTypeFailure a "tag"]
   where
     decodeArm e =
       ["        " <> tshow (rcName e) <> " ->"]
@@ -4719,6 +4739,18 @@ renderUnknownFailure label variable expected =
     expectedText = case expected of
       [] -> "<none>"
       values -> T.intercalate ", " values
+
+renderUnknownEventTypeFailure :: Agg -> Text -> Text
+renderUnknownEventTypeFailure aggregate variable =
+  "fail ("
+    <> tshow "unknown event type "
+    <> " <> show "
+    <> variable
+    <> " <> "
+    <> tshow "; expected one of: "
+    <> " <> _renderEventTypes "
+    <> eventTypesName aggregate
+    <> ")"
 
 --------------------------------------------------------------------------------
 -- Authoritative version-2 expressions and transducer

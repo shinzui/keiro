@@ -21,6 +21,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -175,10 +176,13 @@ parseArtifactMetadataShape = withObject "ArtifactMetadataShape" $ \objectValue -
   ShapeArtifactMetadata.ArtifactMetadata
     <$> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "note"
 
+artifactCatalogEventTypes :: NonEmpty EventType
+artifactCatalogEventTypes = EventType "ArtifactRecorded" :| [EventType "ArtifactAccepted"]
+
 artifactCatalogCodec :: Codec ArtifactCatalogEvent
 artifactCatalogCodec =
   Codec
-    { eventTypes = EventType "ArtifactRecorded" :| [EventType "ArtifactAccepted"]
+    { eventTypes = artifactCatalogEventTypes
     , eventType = \case
         ArtifactRecorded{} -> EventType "ArtifactRecorded"
         ArtifactAccepted{} -> EventType "ArtifactAccepted"
@@ -220,10 +224,17 @@ parseArtifactCatalogEvent (EventType tag) = mapLeftText . parseEither (withObjec
             <$> ( ArtifactAcceptedData
                     <$> o .: "accepted"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ArtifactRecorded, ArtifactAccepted")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes artifactCatalogEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList
 
 rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()
 rejectUnknownFields label allowed objectValue =

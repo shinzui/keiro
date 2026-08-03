@@ -10,6 +10,7 @@ import Generated.AggregateScalars.ScalarLedger.Domain
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -18,10 +19,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+scalarLedgerEventTypes :: NonEmpty EventType
+scalarLedgerEventTypes = EventType "ScalarsRecorded" :| []
+
 scalarLedgerCodec :: Codec ScalarLedgerEvent
 scalarLedgerCodec =
   Codec
-    { eventTypes = EventType "ScalarsRecorded" :| []
+    { eventTypes = scalarLedgerEventTypes
     , eventType = \case
         ScalarsRecorded{} -> EventType "ScalarsRecorded"
     , schemaVersion = 1
@@ -50,7 +54,14 @@ parseScalarLedgerEvent (EventType tag) = mapLeftText . parseEither (withObject "
                     <$> o .: "observedAt"
                     <*> o .: "revision"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: ScalarsRecorded")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes scalarLedgerEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

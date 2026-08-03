@@ -17,6 +17,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -54,10 +55,13 @@ parseStartPayloadShape = withObject "StartPayloadShape" $ \objectValue -> do
     <$> explicitParseField (parseJSON) objectValue "display_label"
     <*> (case KeyMap.lookup (Key.fromText "optional_note") objectValue of Nothing -> pure Nothing; Just _ -> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "optional_note")
 
+journeyEventTypes :: NonEmpty EventType
+journeyEventTypes = EventType "Started" :| [EventType "DecisionRecorded", EventType "Retired", EventType "RetirementAudited"]
+
 journeyCodec :: Codec JourneyEvent
 journeyCodec =
   Codec
-    { eventTypes = EventType "Started" :| [EventType "DecisionRecorded", EventType "Retired", EventType "RetirementAudited"]
+    { eventTypes = journeyEventTypes
     , eventType = \case
         Started{} -> EventType "Started"
         DecisionRecorded{} -> EventType "DecisionRecorded"
@@ -123,10 +127,17 @@ parseJourneyEvent (EventType tag) = mapLeftText . parseEither (withObject "Journ
             <$> ( RetirementAuditedData
                     <$> o .: "amount"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: Started, DecisionRecorded, Retired, RetirementAudited")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes journeyEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList
 
 rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()
 rejectUnknownFields label allowed objectValue =

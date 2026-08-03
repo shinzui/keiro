@@ -2015,12 +2015,14 @@ main = hspec $ do
       spec <- specOf "test/fixtures/aggregate-scalars.keiro"
       errorCodes spec `shouldBe` []
       let aggregate = onlyAggregate spec
+          modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
           generated =
             [ moduleText generatedModule
-            | generatedModule <- scaffoldAggregate (defaultContext (specContext spec)) spec aggregate,
+            | generatedModule <- modules,
               Keiro.Dsl.Scaffold.kind generatedModule == Generated
             ]
-          domain = generatedTextEndingIn "Domain.hs" (scaffoldAggregate (defaultContext (specContext spec)) spec aggregate)
+          domain = generatedTextEndingIn "Domain.hs" modules
+          codec = generatedTextEndingIn "Codec.hs" modules
       domain `shouldSatisfy` T.isInfixOf "observedAt :: !UTCTime"
       domain `shouldSatisfy` T.isInfixOf "revision :: !Natural"
       domain `shouldSatisfy` T.isInfixOf "UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)"
@@ -2029,9 +2031,24 @@ main = hspec $ do
       domain `shouldSatisfy` T.isInfixOf "import Numeric.Natural (Natural)"
       manifestDependencies spec `shouldContain` ["time"]
       manifestDependencies spec `shouldNotContain` ["keiki-codec-json"]
+      codec `shouldSatisfy` T.isInfixOf "scalarLedgerEventTypes :: NonEmpty EventType"
+      codec `shouldSatisfy` T.isInfixOf "eventTypes = scalarLedgerEventTypes"
+      codec `shouldSatisfy` T.isInfixOf "_renderEventTypes scalarLedgerEventTypes"
+      codec `shouldSatisfy` (not . T.isInfixOf "; expected one of: ScalarsRecorded\"")
       generated `shouldSatisfy` all (not . T.isInfixOf "error")
       generated `shouldSatisfy` all (not . T.isInfixOf "getCurrentTime")
       generated `shouldSatisfy` all (not . T.isInfixOf "iso8601ParseM")
+    it "keeps the event-list binding disjoint from the private formatter" $ do
+      source <- readTestText "test/fixtures/aggregate-scalars.keiro"
+      spec <- parseInlineSpec "<render-aggregate>" (T.replace "aggregate ScalarLedger" "aggregate Render" source)
+      let aggregate = onlyAggregate spec
+          modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+          codec = generatedTextEndingIn "Codec.hs" modules
+          codecLines = T.lines codec
+      codecLines `shouldContain` ["renderEventTypes :: NonEmpty EventType"]
+      codecLines `shouldContain` ["_renderEventTypes :: NonEmpty EventType -> String"]
+      codec `shouldSatisfy` T.isInfixOf "eventTypes = renderEventTypes"
+      codec `shouldSatisfy` T.isInfixOf "_renderEventTypes renderEventTypes"
     it "canonicalizes Time and UTCTime across pretty, diff, and fold identity" $ do
       source <- readTestText "test/fixtures/aggregate-scalars.keiro"
       canonical <- parseInlineSpec "<time>" source

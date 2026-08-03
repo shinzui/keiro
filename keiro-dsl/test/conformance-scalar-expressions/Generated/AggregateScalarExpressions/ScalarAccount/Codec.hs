@@ -17,6 +17,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -58,10 +59,13 @@ parseLimitsShape = withObject "LimitsShape" $ \objectValue -> do
     <$> explicitParseField (parseJSON) objectValue "minimum"
     <*> explicitParseField (parseJSON) objectValue "ceiling"
 
+scalarAccountEventTypes :: NonEmpty EventType
+scalarAccountEventTypes = EventType "Adjusted" :| [EventType "ClosedEvent"]
+
 scalarAccountCodec :: Codec ScalarAccountEvent
 scalarAccountCodec =
   Codec
-    { eventTypes = EventType "Adjusted" :| [EventType "ClosedEvent"]
+    { eventTypes = scalarAccountEventTypes
     , eventType = \case
         Adjusted{} -> EventType "Adjusted"
         ClosedEvent{} -> EventType "ClosedEvent"
@@ -115,10 +119,17 @@ parseScalarAccountEvent (EventType tag) = mapLeftText . parseEither (withObject 
             <$> ( ClosedEventData
                     <$> o .: "balance"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: Adjusted, ClosedEvent")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes scalarAccountEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList
 
 rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()
 rejectUnknownFields label allowed objectValue =

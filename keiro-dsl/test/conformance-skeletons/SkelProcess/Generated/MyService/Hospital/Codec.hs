@@ -12,6 +12,7 @@ import SkelProcess.Generated.MyService.Nominals.Internal (unsafeHospitalIdFromLe
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -20,10 +21,13 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 
+hospitalEventTypes :: NonEmpty EventType
+hospitalEventTypes = EventType "SurgeActivated" :| []
+
 hospitalCodec :: Codec HospitalEvent
 hospitalCodec =
   Codec
-    { eventTypes = EventType "SurgeActivated" :| []
+    { eventTypes = hospitalEventTypes
     , eventType = \case
         SurgeActivated{} -> EventType "SurgeActivated"
     , schemaVersion = 1
@@ -50,7 +54,14 @@ parseHospitalEvent (EventType tag) = mapLeftText . parseEither (withObject "Hosp
             <$> ( SurgeActivatedData
                     <$> (unsafeHospitalIdFromLegacyText <$> o .: "hospitalId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: SurgeActivated")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes hospitalEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

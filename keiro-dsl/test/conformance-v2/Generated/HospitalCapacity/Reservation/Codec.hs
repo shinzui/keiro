@@ -12,6 +12,7 @@ import Generated.HospitalCapacity.Nominals.Internal (unsafeCommandIdFromLegacyTe
 import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
@@ -32,10 +33,13 @@ parsePatientAcuity = \case
   tag -> fail ("unknown PatientAcuity " <> show tag <> "; expected one of: red, yellow, green")
 
 
+reservationEventTypes :: NonEmpty EventType
+reservationEventTypes = EventType "TransferReservationCreated" :| [EventType "TransferReservationConfirmed"]
+
 reservationCodec :: Codec ReservationEvent
 reservationCodec =
   Codec
-    { eventTypes = EventType "TransferReservationCreated" :| [EventType "TransferReservationConfirmed"]
+    { eventTypes = reservationEventTypes
     , eventType = \case
         TransferReservationCreated{} -> EventType "TransferReservationCreated"
         TransferReservationConfirmed{} -> EventType "TransferReservationConfirmed"
@@ -95,7 +99,14 @@ parseReservationEvent (EventType tag) = mapLeftText . parseEither (withObject "R
                     <*> (unsafeHospitalIdFromLegacyText <$> o .: "hospitalId")
                     <*> (unsafeCommandIdFromLegacyText <$> o .: "commandId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: TransferReservationCreated, TransferReservationConfirmed")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes reservationEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList

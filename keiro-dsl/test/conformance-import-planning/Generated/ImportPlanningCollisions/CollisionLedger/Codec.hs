@@ -15,6 +15,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -59,10 +60,13 @@ parseDetailsShape = withObject "DetailsShape" $ \objectValue -> do
   ShapeDetails.Details
     <$> explicitParseField (parseJSON) objectValue "label"
 
+collisionLedgerEventTypes :: NonEmpty EventType
+collisionLedgerEventTypes = EventType "RecordedValues" :| []
+
 collisionLedgerCodec :: Codec CollisionLedgerEvent
 collisionLedgerCodec =
   Codec
-    { eventTypes = EventType "RecordedValues" :| []
+    { eventTypes = collisionLedgerEventTypes
     , eventType = \case
         RecordedValues{} -> EventType "RecordedValues"
     , schemaVersion = 1
@@ -95,10 +99,17 @@ parseCollisionLedgerEvent (EventType tag) = mapLeftText . parseEither (withObjec
                     <*> (nominalFromRepresentation Bindings.localCollisionBinding <$> o .: "localCollision")
                     <*> explicitParseField parseDetailsMapped o "details"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: RecordedValues")
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes collisionLedgerEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
+
+_renderEventTypes :: NonEmpty EventType -> String
+_renderEventTypes =
+  T.unpack
+    . T.intercalate ", "
+    . map (\(EventType eventTypeName) -> eventTypeName)
+    . NonEmpty.toList
 
 rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()
 rejectUnknownFields label allowed objectValue =
