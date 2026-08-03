@@ -42,8 +42,8 @@ and retain their own pragmas.
   the manifest and Cabal conformance profile.
 - [x] (2026-08-03) Milestone 2: routed generated emitters through the restricted pragma renderer and
   remove or condition every redundant pragma identified in the audit.
-- [ ] Milestone 3: add policy and conditional-emission regressions, regenerate only
-  overwriteable conformance files, and compile all conformance components under the
+- [x] (2026-08-03) Milestone 3: added policy and conditional-emission regressions, regenerated only
+  overwriteable conformance files, and compiled all conformance components under the
   narrow generated-output profile.
 - [ ] Milestone 4: document the consumer contract, record the durable decision in the
   ADR bundle, run the full validation matrix, and complete the retrospective.
@@ -187,6 +187,17 @@ and retain their own pragmas.
   necessary-only contract and discard a useful consequence of ExecPlan 184.
   Date: 2026-08-03.
 
+- Observation: the structural historical codec-comparison module is tracked below the
+  ordinary structural component's `Generated` tree but is intentionally opt-in and is
+  not emitted by an ordinary scaffold. The guarded baseline refresh therefore stopped
+  at that path until it was generated separately with `--codec-comparison ArtifactInfo`
+  and `--comparison-out`, after which the tracked-only refresh completed.
+
+- Observation: the live conformance inventory contains 34 `keiro-dsl-conformance*`
+  components, one more than the 33 recorded when this plan was written. All 34 were
+  switched to and compiled under `common generated-output`; no additional hand-owned
+  extension dependency appeared beyond the four planned `OverloadedLabels` drivers.
+
 - Decision: preserve and integrate the in-progress import-planning work described by
   [ExecPlan 184](184-generate-idiomatic-haskell-imports-for-consumer-owned-types.md).
   Rationale: both plans touch `Keiro.Dsl.Scaffold` and generated fixtures. This plan may
@@ -230,9 +241,22 @@ read-model feed mode.
 The focused command `cabal test keiro-dsl-test --test-option=--match
 --test-option='generated Haskell language contract' --test-show-details=direct` passed
 three examples covering the eight representative fixtures and positive/negative
-conditional cases. `cabal build keiro-dsl` also passed. Committed generated fixtures have
-not yet been changed; their freshness assertions will be restored by the controlled
-Milestone 3 regeneration.
+conditional cases. `cabal build keiro-dsl` also passed.
+
+Milestone 3 is complete. The controlled CLI refresh updated only already-tracked
+overwriteable files, with the opt-in structural codec-comparison output and built-in
+skeleton union refreshed through their separate generation modes. The corpus fell from
+543 pragma lines before implementation to 224 lines across 129 modules; its vocabulary
+is exactly the eight approved local exceptions. `scripts/check-extension-policy.sh`
+rejects every other leading pragma below `Generated/` while retaining the existing
+hand-owned policy.
+
+All 34 live `keiro-dsl-conformance*` Cabal components now import `common
+generated-output`. `scripts/check-extension-policy.sh`, the 517-example
+`keiro-dsl-test` suite, and `cabal test all --test-show-details=direct` passed. The full
+compile needed only the four planned local `OverloadedLabels` declarations in hand-owned
+drivers, so the emitted GHC2024 plus `OverloadedStrings` contract is sufficient for the
+complete generated corpus.
 
 Before marking the plan complete, compare a freshly scaffolded manifest and generated
 tree with the purpose above. Then distill the final language contract, local-exception

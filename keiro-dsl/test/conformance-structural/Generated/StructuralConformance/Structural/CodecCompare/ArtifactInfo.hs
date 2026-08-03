@@ -17,58 +17,57 @@ import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), QualifiedValueName (..))
 import System.Directory (doesFileExist, listDirectory)
 import System.FilePath (takeExtension, (</>))
+import Conformance.Structural.Bindings qualified as Bindings
+import Conformance.Structural.Domain (ArtifactInfo)
 
-import Conformance.Structural.Bindings qualified as ConsumerFixtures
-import Conformance.Structural.Domain qualified as ConsumerDomain
-
-compareWithHistorical :: HistoricalCodec ConsumerDomain.ArtifactInfo -> FilePath -> IO CompareReport
+compareWithHistorical :: HistoricalCodec ArtifactInfo -> FilePath -> IO CompareReport
 compareWithHistorical historicalCodec goldenDirectory = do
-    names <- sort . filter ((== ".json") . takeExtension) <$> listDirectory goldenDirectory
-    files <- filterM doesFileExist [goldenDirectory </> name | name <- names]
-    loaded <- traverse (loadGolden historicalCodec) files
-    let inputIssues = [issue | Left issue <- loaded]
-        entries = [entry | Right entry <- loaded]
-        typedCases = NonEmpty.toList (fixtureCases ConsumerFixtures.artifactInfoCases)
-        encodeObservations =
-            [ EncodeObservation label (hcEncode historicalCodec value) (GeneratedCodec.encodeArtifactInfoMapped value)
-            | (label, value) <- typedCases
-            ]
-        decodeObservations = [observation | (observation, _) <- entries]
-        typedObserved =
-            concat
-                [ observedBranchesFor FromBinding branchSchema (GeneratedCodec.encodeArtifactInfoMapped value)
-                | (_, value) <- typedCases
-                ]
-        historicalObserved =
-            concat [observedBranchesFor HistoricalGolden branchSchema value | (_, values) <- entries, value <- values]
-        declared = declaredBranchesFor FromBinding branchSchema <> declaredBranchesFor HistoricalGolden branchSchema
-        provenance =
-            CompareProvenance
-                { cpHistoricalCodecIdentity = hcIdentity historicalCodec
-                , cpHistoricalCodecVersion = hcVersion historicalCodec
-                , cpCanonicalType = CanonicalTypeId "conformance.structural.ArtifactInfo.v1"
-                , cpBindingSymbol = QualifiedValueName "Conformance.Structural.Bindings.artifactInfoBinding"
-                , cpBindingVersion = BindingVersion "1"
-                , cpWireFingerprint = "f3b9417666fcf445"
-                }
-    pure (compareReport provenance inputIssues (encodeObservations <> decodeObservations) declared (typedObserved <> historicalObserved))
+  names <- sort . filter ((== ".json") . takeExtension) <$> listDirectory goldenDirectory
+  files <- filterM doesFileExist [goldenDirectory </> name | name <- names]
+  loaded <- traverse (loadGolden historicalCodec) files
+  let inputIssues = [issue | Left issue <- loaded]
+      entries = [entry | Right entry <- loaded]
+      typedCases = NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)
+      encodeObservations =
+        [ EncodeObservation label (hcEncode historicalCodec value) (GeneratedCodec.encodeArtifactInfoMapped value)
+        | (label, value) <- typedCases
+        ]
+      decodeObservations = [observation | (observation, _) <- entries]
+      typedObserved =
+        concat
+          [ observedBranchesFor FromBinding branchSchema (GeneratedCodec.encodeArtifactInfoMapped value)
+          | (_, value) <- typedCases
+          ]
+      historicalObserved =
+        concat [observedBranchesFor HistoricalGolden branchSchema value | (_, values) <- entries, value <- values]
+      declared = declaredBranchesFor FromBinding branchSchema <> declaredBranchesFor HistoricalGolden branchSchema
+      provenance =
+        CompareProvenance
+          { cpHistoricalCodecIdentity = hcIdentity historicalCodec
+          , cpHistoricalCodecVersion = hcVersion historicalCodec
+          , cpCanonicalType = CanonicalTypeId "conformance.structural.ArtifactInfo.v1"
+          , cpBindingSymbol = QualifiedValueName "Conformance.Structural.Bindings.artifactInfoBinding"
+          , cpBindingVersion = BindingVersion "1"
+          , cpWireFingerprint = "f3b9417666fcf445"
+          }
+  pure (compareReport provenance inputIssues (encodeObservations <> decodeObservations) declared (typedObserved <> historicalObserved))
 
-loadGolden :: HistoricalCodec ConsumerDomain.ArtifactInfo -> FilePath -> IO (Either CompareInputIssue (CompareObservation, [Value]))
+loadGolden :: HistoricalCodec ArtifactInfo -> FilePath -> IO (Either CompareInputIssue (CompareObservation, [Value]))
 loadGolden historicalCodec path = do
-    decoded <- Aeson.eitherDecodeFileStrict path
-    pure $ case decoded of
-        Left reason -> Left (HistoricalGoldenUnreadable path (fromString reason))
-        Right inputValue ->
-            let historicalDecoded = hcDecode historicalCodec inputValue
-                historicalOutcome = normalizeDecode historicalDecoded
-                generatedOutcome = normalizeDecode (GeneratedCodec.decodeArtifactInfoMapped inputValue)
-                observation = DecodeObservation path inputValue historicalOutcome generatedOutcome
-                coveredValues = case historicalDecoded of
-                    Right value -> [inputValue, GeneratedCodec.encodeArtifactInfoMapped value]
-                    Left _ -> []
-             in Right (observation, coveredValues)
+  decoded <- Aeson.eitherDecodeFileStrict path
+  pure $ case decoded of
+    Left reason -> Left (HistoricalGoldenUnreadable path (fromString reason))
+    Right inputValue ->
+      let historicalDecoded = hcDecode historicalCodec inputValue
+          historicalOutcome = normalizeDecode historicalDecoded
+          generatedOutcome = normalizeDecode (GeneratedCodec.decodeArtifactInfoMapped inputValue)
+          observation = DecodeObservation path inputValue historicalOutcome generatedOutcome
+          coveredValues = case historicalDecoded of
+            Right value -> [inputValue, GeneratedCodec.encodeArtifactInfoMapped value]
+            Left _ -> []
+       in Right (observation, coveredValues)
 
-normalizeDecode :: Either Text ConsumerDomain.ArtifactInfo -> DecodeOutcome
+normalizeDecode :: Either Text ArtifactInfo -> DecodeOutcome
 normalizeDecode = either DecodeFailed (DecodedShape . GeneratedCodec.encodeArtifactInfoMapped)
 
 fromString :: String -> Text

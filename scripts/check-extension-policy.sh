@@ -39,6 +39,31 @@ while IFS= read -r haskell_file; do
   fi
 done < <(git ls-files '*.hs')
 
+while IFS= read -r generated_file; do
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^\{\-\#\ LANGUAGE\ ([A-Za-z][A-Za-z0-9_]*)\ \#-\}$ ]]; then
+      extension="${BASH_REMATCH[1]}"
+    else
+      break
+    fi
+
+    case "$extension" in
+      BlockArguments | \
+        DeriveAnyClass | \
+        DuplicateRecordFields | \
+        OverloadedLabels | \
+        OverloadedRecordDot | \
+        QualifiedDo | \
+        TemplateHaskell | \
+        TypeFamilies) ;;
+      *)
+        echo "extension policy: $generated_file declares unsupported generated extension $extension" >&2
+        failed=1
+        ;;
+    esac
+  done <"$generated_file"
+done < <(git ls-files '*.hs' | rg '(^|/)Generated/')
+
 if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi

@@ -173,7 +173,7 @@ test-suite keiro-dsl-import-planning-test
 -- test/conformance/ are byte-identical to `keiro-dsl scaffold` output (pinned
 -- by the scaffold-conformance test in keiro-dsl-test).
 test-suite keiro-dsl-conformance
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance
   main-is:        Main.hs
@@ -201,7 +201,7 @@ test-suite keiro-dsl-conformance
 -- symbolic equality/ordering, codecs, snapshots, forward/replay equality,
 -- Natural JSON boundaries, canonical identity, and opaque arithmetic audit.
 test-suite keiro-dsl-conformance-aggregate-scalars
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-aggregate-scalars
   main-is:        Main.hs
@@ -260,7 +260,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     , time        >=1.12 && <1.15
 
 test-suite keiro-dsl-conformance-behavior-complete
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-behavior-complete
   main-is:        Main.hs
@@ -295,7 +295,7 @@ test-suite keiro-dsl-conformance-behavior-complete
 -- EP-158: consumer-owned direct IDs, enums, and nominal scalar wrappers,
 -- checked KindID decoding, total bindings, projections, and snapshot caches.
 test-suite keiro-dsl-conformance-nominal-scalars
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-nominal-scalars
   main-is:        Main.hs
@@ -329,7 +329,7 @@ test-suite keiro-dsl-conformance-nominal-scalars
 -- and round-trips both generated event codecs, so duplicate nominal types fail
 -- at compile time rather than escaping a path-only scaffold assertion.
 test-suite keiro-dsl-conformance-workspace-nominals
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workspace-nominals
   main-is:        Main.hs
@@ -366,7 +366,7 @@ test-suite keiro-dsl-conformance-workspace-nominals
 -- codecs, generated projection witnesses, opaque boundaries, fixture branch
 -- coverage, current payload goldens, and mapped-register replay equality.
 test-suite keiro-dsl-conformance-structural
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-structural
   main-is:        Main.hs
@@ -401,7 +401,7 @@ test-suite keiro-dsl-conformance-structural
 -- Plan 184: colliding consumer type occurrences, local-name conflicts, and
 -- repeated binding/shape references compile with deterministic short aliases.
 test-suite keiro-dsl-conformance-import-planning
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-import-planning
   main-is:        Main.hs
@@ -438,7 +438,7 @@ test-suite keiro-dsl-conformance-import-planning
 -- corpus compared with the generated structural codec. The comparison module
 -- is opt-in tooling output and is not part of the production scaffold record.
 test-suite keiro-dsl-conformance-codec-compare
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs:
     test/conformance-codec-compare test/conformance-structural
@@ -473,7 +473,7 @@ test-suite keiro-dsl-conformance-codec-compare
 -- forward/replay register comparisons catch state divergence missed by the
 -- pre-existing validator, codec round-trip, and accept assertions.
 test-suite keiro-dsl-conformance-replay
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-replay
   main-is:        Main.hs
@@ -524,7 +524,7 @@ benchmark keiro-dsl-codec-bench
 -- defaultStateCodec and stream-construction guards, with the captured codec
 -- identity checked against keiki's regFileShapeHash.
 test-suite keiro-dsl-conformance-snapshot
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-snapshot
   main-is:        Main.hs
@@ -549,7 +549,7 @@ test-suite keiro-dsl-conformance-snapshot
 -- committed tree. Compiling the union proves a starter that passes `check`
 -- cannot emit syntactically or type-invalid Haskell.
 test-suite keiro-dsl-conformance-skeletons
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-skeletons
   main-is:        Main.hs
@@ -637,7 +637,7 @@ test-suite keiro-dsl-conformance-skeletons
 -- notation, scaffolded + hand-filled, compiling against keiki/keiro with a green
 -- spec-derived harness — proof the authoring loop closes on a non-corpus spec.
 test-suite keiro-dsl-conformance-coldstart
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-coldstart
   main-is:        Main.hs
@@ -664,7 +664,7 @@ test-suite keiro-dsl-conformance-coldstart
 -- canonical text JSON, field-path-aware rejection, and the complete generated
 -- dependency set.
 test-suite keiro-dsl-conformance-contract
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-contract
   main-is:        Main.hs
@@ -679,7 +679,7 @@ test-suite keiro-dsl-conformance-contract
 -- Language-1 compatibility proof: the historical permissive Text contract DTO
 -- still accepts pre-TypeID-v7 samples and retains its released JSON image.
 test-suite keiro-dsl-conformance-contract-v1-compat
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-contract-v1-compat
   main-is:        Main.hs
@@ -693,7 +693,7 @@ test-suite keiro-dsl-conformance-contract-v1-compat
 -- EP-4 intake runtime conformance: the scaffolded Inbox disposition + dedupe
 -- policy compiled against the LIVE Keiro.Inbox.Types (InboxResult / dedupe).
 test-suite keiro-dsl-conformance-intake-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-intake-runtime
   main-is:        Main.hs
@@ -707,7 +707,7 @@ test-suite keiro-dsl-conformance-intake-runtime
 -- inbox dedupe + a filled inbox transaction runner and outbox IntegrationProducer
 -- — compiled against the live keiro runtime (Inbox / Outbox / Kiroku.Store).
 test-suite keiro-dsl-conformance-intake-full
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-intake-full
   main-is:        Main.hs
@@ -726,7 +726,7 @@ test-suite keiro-dsl-conformance-intake-full
 -- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
 -- against the LIVE Keiro.Outbox.Types (OrderingPolicy / BackoffSchedule).
 test-suite keiro-dsl-conformance-publisher-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-publisher-runtime
   main-is:        Main.hs
@@ -738,7 +738,7 @@ test-suite keiro-dsl-conformance-publisher-runtime
 -- pgmq Job codec conformance (EP-5): the scaffolded self-contained Job payload
 -- record + field->wire codec, compiled + round-tripped.
 test-suite keiro-dsl-conformance-queue
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-queue
   main-is:        Main.hs
@@ -756,7 +756,7 @@ test-suite keiro-dsl-conformance-queue
 -- EP-5 pgmq runtime conformance: the scaffolded QueuePolicy (RetryPolicy +
 -- JobOutcome disposition) compiled against the LIVE Keiro.PGMQ.Job runtime.
 test-suite keiro-dsl-conformance-queue-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-queue-runtime
   main-is:        Main.hs
@@ -780,7 +780,7 @@ test-suite keiro-dsl-conformance-queue-runtime
 -- registration/rebuild helpers, AsyncProjection, facts harness, and a filled
 -- qualified-table query compiled against the live Keiro.ReadModel API.
 test-suite keiro-dsl-conformance-readmodel-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-readmodel-runtime
   main-is:        Main.hs
@@ -802,7 +802,7 @@ test-suite keiro-dsl-conformance-readmodel-runtime
 -- Job codec + retry policy + a filled worker handler assembled into a live
 -- Keiro.PGMQ.Job.Job value — compiled against keiro-pgmq.
 test-suite keiro-dsl-conformance-dispatch-full
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-dispatch-full
   main-is:        Main.hs
@@ -823,7 +823,7 @@ test-suite keiro-dsl-conformance-dispatch-full
 -- Workflow facts harness (EP-6): the scaffolded self-contained WorkflowFacts
 -- module asserted against a hand-written expectation (mutation-pinnable).
 test-suite keiro-dsl-conformance-workflow
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow
   main-is:        Main.hs
@@ -836,7 +836,7 @@ test-suite keiro-dsl-conformance-workflow
 -- (WorkflowName + awakeable-id derivation) compiled against the LIVE
 -- Keiro.Workflow; pins the await<->signal id match over deterministicAwakeableId.
 test-suite keiro-dsl-conformance-workflow-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow-runtime
   main-is:        Main.hs
@@ -853,7 +853,7 @@ test-suite keiro-dsl-conformance-workflow-runtime
 -- Surge (saga) + Hospital (target) aggregates with filled transducers, plus a
 -- filled ProcessManager handle — compiled against the live keiro/keiki runtime.
 test-suite keiro-dsl-conformance-process-full
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process-full
   main-is:        Main.hs
@@ -890,7 +890,7 @@ test-suite keiro-dsl-conformance-process-full
 -- WorkflowRuntime + a filled ordered step/await body — compiled against the
 -- live Keiro.Workflow effect.
 test-suite keiro-dsl-conformance-workflow-full
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow-full
   main-is:        Main.hs
@@ -910,7 +910,7 @@ test-suite keiro-dsl-conformance-workflow-full
 -- deterministic wiring (timer-request builder + fire disposition) compiled
 -- against the LIVE keiro runtime (Keiro.Timer / Keiro.Command), not just text.
 test-suite keiro-dsl-conformance-process-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process-runtime
   main-is:        Main.hs
@@ -938,7 +938,7 @@ test-suite keiro-dsl-conformance-process-runtime
 -- EP-108 router runtime conformance: generated policy lowering and the live
 -- target-keyed deterministic id contract.
 test-suite keiro-dsl-conformance-router-runtime
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router-runtime
   main-is:        Main.hs
@@ -956,7 +956,7 @@ test-suite keiro-dsl-conformance-router-runtime
 
 -- EP-108 generated router-facts harness with hand-written expectations.
 test-suite keiro-dsl-conformance-router
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router
   main-is:        Main.hs
@@ -966,7 +966,7 @@ test-suite keiro-dsl-conformance-router
 -- EP-108 filled-router conformance: scaffolded Page aggregate plus a filled
 -- resolver and Router value compiled against the live API.
 test-suite keiro-dsl-conformance-router-full
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router-full
   main-is:        Main.hs
@@ -995,7 +995,7 @@ test-suite keiro-dsl-conformance-router-full
 -- The component compiles generated output and hand-owned fills together and
 -- runs the aggregate, readmodel, router-policy, and live Router assertions.
 test-suite keiro-dsl-conformance-newsurface
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-newsurface
   main-is:        Main.hs
@@ -1034,7 +1034,7 @@ test-suite keiro-dsl-conformance-newsurface
 -- faithfully. (The runtime-coupled Process/ProcessHoles modules are emitted to
 -- disk but not in this component; their live conformance is the M5 step.)
 test-suite keiro-dsl-conformance-process
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process
   main-is:        Main.hs
@@ -1049,7 +1049,7 @@ test-suite keiro-dsl-conformance-process
 -- assertion). These sources are raw `keiro-dsl scaffold` output of
 -- reservation-v2.keiro plus a hand-filled Holes.hs.
 test-suite keiro-dsl-conformance-v2
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-v2
   main-is:        Main.hs
@@ -1077,7 +1077,7 @@ test-suite keiro-dsl-conformance-v2
 -- rejects malformed current input while its explicitly internal event-replay
 -- seam preserves identical malformed text from a legacy payload.
 test-suite keiro-dsl-conformance-id-domain-migration
-  import:         warnings, shared
+  import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-id-domain-migration
   main-is:        Main.hs
