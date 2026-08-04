@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-04
+* **Update**: Define the generated Haskell naming edition and idiomatic occurrence policy (plan 190).
+* **Update**: Record explicit backup-backed source moves for generated-name migrations (plan 190).
+* **Update**: Route generated Haskell references through the checked naming plan while preserving consumer identities (plan 190).
+
 ## 2026-08-03
 * **Add**: Record one opt-in service conformance package, an explicit runtime-package authority, one runtime-owned facade, and create-once service expectations (plan 188).
 * **Add**: Record the generated Haskell language and local-extension contract (plan 185).

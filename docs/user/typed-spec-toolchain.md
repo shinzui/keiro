@@ -91,6 +91,25 @@ locally, and only when their emitted syntax needs them. Create-once hand-owned
 modules are outside that cleanup boundary and retain the pragmas they owned when
 they were created.
 
+Generated Haskell naming is a separate, versioned presentation contract. Logical
+`snake_case` or camel-case declarations pass through one ASCII word segmentation:
+module segments, types, and constructors become UpperCamelCase; values and record
+selectors become lowerCamelCase.
+
+| Logical name | UpperCamelCase | lowerCamelCase |
+| --- | --- | --- |
+| `foo_bar` | `FooBar` | `fooBar` |
+| `ThingID` | `ThingID` | `thingID` |
+| `HTTP_server2` | `HTTPServer2` | `httpServer2` |
+| `version2_event` | `Version2Event` | `version2Event` |
+
+Leading, trailing, or repeated underscores are rejected as unsafe. Names such as
+`foo_bar` and `fooBar` are rejected when they converge in the same generated
+namespace, and normalization to a Haskell keyword is rejected before scaffolding.
+This never changes external spellings: wire keys and tags, queue names, SQL names,
+registry/subscription identities, and explicit consumer-owned Haskell references
+remain exactly declared.
+
 After changing a deployed specification, run a compatibility diff before
 scaffolding:
 
@@ -1357,6 +1376,17 @@ Stale paths are informational and are never deleted. Review them against
 version control or a fresh disposable scaffold. A stale generated file with an
 exact banner is a deletion candidate; a missing banner or any create-once path
 must be preserved for review.
+
+The one source-moving exception is an upgrade from a recorded legacy generated-name
+edition. Ordinary scaffolding first refuses without mutation and prints every exact
+old/new/backup path. After review, rerun with `--apply-name-migrations`. Keiro preserves
+the original bytes below
+`.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/`, rewrites only exact module
+references in Haskell code (never comments or literals), and writes current-only
+manifest/record paths. Source and transformed digests plus same-directory prepared
+files make an interrupted move resumable; changed backup, prepared, or destination
+bytes refuse with conflict evidence. The flag does not authorize unrelated stale,
+module-root, or layout moves, and `--force-generated-overwrite` cannot bypass it.
 
 ### Aggregate behavior evidence
 

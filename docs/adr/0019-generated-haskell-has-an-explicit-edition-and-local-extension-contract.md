@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Generated Haskell has an explicit edition and local-extension contract
-description: The generated manifest owns a GHC2024 plus OverloadedStrings compilation baseline, while overwriteable modules declare specialized extensions locally and only when their emitted syntax needs them.
-timestamp: 2026-08-03T16:33:13Z
+description: The generated manifest owns the compilation baseline and naming edition; generated declarations use checked UpperCamelCase or lowerCamelCase while overwriteable modules declare specialized extensions locally only when needed.
+timestamp: 2026-08-04T14:40:00Z
 docId: ADR-19
 status: Accepted
 date: 2026-08-03
@@ -56,10 +56,27 @@ Cabal defaults, emitter predicates, policy, fixtures, and conformance proof. An
 edition upgrade removes edition-provided local declarations instead of also
 listing them as redundant defaults.
 
-This automated cleanup applies only to overwriteable `Generated` modules.
+The generated-Haskell presentation contract also has an additive naming edition in single-file
+and workspace scaffold history. Current output uses `idiomatic-v1`; a missing row means the
+historical `legacy-v1`. One ASCII segmentation derives all logical names. Module segments, types,
+and constructors are UpperCamelCase; values and record selectors are lowerCamelCase. Leading,
+trailing, and repeated underscores, generated keywords, and normalized collisions are check-time
+errors. A final lexical declaration inventory checks emitted generated modules and newly created
+hole stubs before writes, independently of external snake-case strings in their bodies.
+
+The naming edition is Haskell presentation, not a source-language or runtime edition. SQL names,
+wire keys/tags, queue names, registry/subscription identities, fingerprints, and other external
+spellings retain their declared bytes. Explicit consumer Haskell references are validated but not
+normalized. A generated-name-only diff is advisory on the consumer-build axis and replay-neutral.
+
+This automated extension cleanup and ordinary regeneration applies only to overwriteable
+`Generated` modules.
 Create-once `HoleStub` modules, including behavior holes, application holes,
 read-model holes, and consumer binding skeletons, become hand-owned when first
 created. Later scaffold runs neither rewrite nor normalize their pragmas.
+The only source rewrite is the separately authorized legacy-name migration in ADR 0015, which
+backs up the entire original create-once file and rewrites exact module tokens without changing
+comments, literals, or its application-owned body.
 
 
 ## Consequences
@@ -75,6 +92,9 @@ created. Later scaffold runs neither rewrite nor normalize their pragmas.
   pragmas before they become fixture drift.
 - Hand-owned create-once code is not silently rewritten when the generated
   contract changes; its own declarations remain the application's responsibility.
+- A consumer can distinguish a source rebuild from a wire/runtime migration:
+  generated naming changes require re-scaffold, recompile, and conformance, but do
+  not change persisted identities or replay behavior.
 
 
 ## Related decisions

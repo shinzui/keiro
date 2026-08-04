@@ -6,6 +6,39 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Generated module segments, types, constructors, values, selectors, and create-once
+  source paths now use one checked UpperCamelCase/lowerCamelCase policy. Compound
+  logical names such as `service_oncall` therefore move from `Service_oncall` to
+  `ServiceOncall`; consumers must apply the reported source migration and recompile.
+- `DiagnosticCode` gains `IdentUnsafeNormalization`,
+  `GeneratedOccurrenceReserved`, `GeneratedOccurrenceCollision`, and
+  `GeneratedHaskellNameChanged`. `Refusal` gains
+  `GeneratedNameInvariantViolation`, `NameMigrationRequired`, and
+  `NameMigrationRefusal`. Exhaustive matches must be extended.
+- `ScaffoldReport` and `WorkspaceScaffoldReport` gain generated-name source-move
+  evidence. `ScaffoldRecord` and `WorkspaceRecord` gain a generated-Haskell naming
+  edition and stable module-role rows; missing additive rows decode as the legacy
+  naming edition.
+
+### New Features
+
+- `scaffold --apply-name-migrations` applies an explicitly reviewed legacy-to-current
+  source move, backs up original generated and create-once files, rewrites exact
+  Haskell module references outside comments/literals, journals content digests, and
+  resumes exact interrupted states. Ordinary scaffolding reports the complete plan
+  and writes nothing.
+- Generated-only source evolution is classified as consumer-build advisory with
+  re-scaffold, recompile, and conformance remedies while wire, replay, SQL, runtime,
+  and persisted identities remain compatible.
+
+### Other Changes
+
+- Adds the exported stable `ModuleRole`/`moduleRole` projection for
+  `ScaffoldModule` artifacts and a generated-source naming audit plus repository
+  policy gate.
+
 ## 0.10.0.0 — 2026-08-03
 
 ### Breaking Changes

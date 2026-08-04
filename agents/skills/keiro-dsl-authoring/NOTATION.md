@@ -109,11 +109,20 @@ are exact; a legacy generated `newtype Id = Id Text` remains conservatively one-
 successor ID-domain contract restricts construction. Nominal ordering and arithmetic remain
 unavailable.
 
-Identifiers use ASCII letters, digits, and underscores. Aggregate, process, workflow,
-type, and constructor names use `PascalCase`; fields and registers begin with a lowercase
-letter or underscore and cannot be Haskell keywords. Generated vertex constructors also
-share the constructor namespace: for example, state `Created` in aggregate `Reservation`
-generates `ReservationCreated`, so an event with that name is rejected as a collision.
+Logical identifiers use ASCII letters, digits, and underscores. Keiro derives generated Haskell
+names from one checked word segmentation: module segments, types, and constructors use
+UpperCamelCase, while values and selectors use lowerCamelCase. For example, `service_oncall`
+becomes `ServiceOncall` / `serviceOncall`, `HTTP_server2` becomes `HTTPServer2` / `httpServer2`,
+and `ThingID` becomes `ThingID` / `thingID`. Leading, trailing, and repeated underscores are
+unsafe and rejected; two names such as `foo_bar` and `fooBar` are rejected when they normalize to
+the same occurrence in one namespace. A generated lower-case keyword is rejected too.
+
+Normalization changes Haskell presentation only. Enum wire spellings, event tags, JSON keys,
+queue identities, registry/subscription names, and SQL schema/table/column strings retain their
+declared external spelling. Explicit consumer-owned `haskell` modules, types, constructors, and
+qualified values are validated but never re-cased. Generated vertex constructors also share the
+constructor namespace: state `Created` in aggregate `Reservation` generates
+`ReservationCreated`, so an event with that name is rejected as a collision.
 
 ## module placement (optional)
 

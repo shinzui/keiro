@@ -6,6 +6,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **keiro-dsl**: generated Haskell now uses one checked UpperCamelCase/lowerCamelCase
+  naming edition. Compound module and create-once paths move (for example,
+  `Service_oncall` → `ServiceOncall`), and public diagnostic, refusal, report, and
+  additive scaffold-history surfaces expose normalization, collision, and migration
+  evidence.
+
+### New Features
+
+- **keiro-dsl**: `scaffold --apply-name-migrations` performs an explicit,
+  backup-backed and digest-journaled source move with token-aware Haskell module
+  rewriting and crash recovery. Generated-only renames are consumer-build advisories;
+  external and replay identities remain unchanged.
+
 ## 0.10.0.0 — 2026-08-03
 
 All published packages move to 0.10.0.0 together. The cycle is entirely

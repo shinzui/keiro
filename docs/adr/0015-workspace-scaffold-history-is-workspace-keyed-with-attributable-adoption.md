@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workspace scaffold history is workspace-keyed with attributable adoption
 description: A whole-workspace scaffold keys its record and build manifest by the service name, remembers which member produced each module, and imports pre-workspace output only where attribution exists.
-timestamp: 2026-08-02T13:36:12Z
+timestamp: 2026-08-04T14:40:00Z
 docId: ADR-15
 status: Accepted
 date: 2026-07-29
@@ -117,8 +117,25 @@ comparison or a byte comparison with output regenerated from the same source in
 a disposable directory. A missing exact banner is an explicit preserve-and-review
 result. Hole paths are always preserved for review. When no earlier record exists,
 there is no stale report: operators reconcile the regenerated build manifest with
-the old module tree and Cabal stanza manually. No scaffold path deletes files or
-edits Cabal.
+the old module tree and Cabal stanza manually. Ordinary stale reconciliation
+deletes no files and edits no Cabal stanza.
+
+**A recorded generated-name edition permits one explicit, backup-backed source-move
+exception.** When a legacy record's stable module role pairs an old path with a current path and
+component-wise legacy naming normalization produces exactly that current module name, ordinary
+scaffolding refuses before writes and reports the complete move. The operator must rerun with
+`--apply-name-migrations`; neither `--force-generated-overwrite` nor ordinary stale authority can
+substitute for that opt-in. Module-root and placement changes remain ordinary stale paths even
+when their semantic roles pair.
+
+The apply path completes all workspace/package/banner/conflict preflights first, transforms exact
+Haskell module references outside comments and literals, hydrates source/transformed content
+digests, and prepares every destination beside its final path. It then renames each original under
+`.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/` before installing prepared bytes by a
+same-filesystem rename. A durable per-move state records paths and digests, so a rerun can resume
+an exact prepared/backup/installed crash state or refuse conflicting evidence. Backups are never
+deleted or listed in the current manifest/record; create-once bodies remain byte-preserved apart
+from exact code-token module references.
 
 **Generated provenance has two permanently recognized banner forms.** Output
 created before the 0.9 generator uses the exact historical line
@@ -151,8 +168,10 @@ either shipped form.
 - A workspace whose members keep their own `golden-payloads` directories must
   consolidate them under one root before the first workspace scaffold succeeds.
 - Whole-workspace "atomicity" remains detection-before-write, as ADR 0014
-  established: every preflight runs over the complete member set before the
-  output directory is created. Staged temp-file/rename writes stay out of scope.
+  established: every preflight runs over the complete member set before active
+  output changes. An explicitly authorized generated-name migration prepares all
+  transformed files first and journals recoverable rename states; ordinary runs
+  retain the existing write path.
 - Regenerating a legacy tree migrates its generated banners in place while
   preserving the same overwrite authority. Package, language, and stable-node
   provenance become inspectable without making source movement or workspace

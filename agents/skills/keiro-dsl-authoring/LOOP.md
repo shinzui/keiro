@@ -50,7 +50,8 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   duplicate `wire`, `projection`, or transition `goto` clauses. Source selection separately
   reports `InvalidLanguageVersion`, `UnsupportedLanguageVersion`,
   `DuplicateLanguagePreamble`, or `MisplacedLanguagePreamble`. `IdentHaskellKeyword`,
-  `IdentNotConstructorSafe`, `VertexCtorCollision`, `DuplicateNodeName`,
+  `IdentNotConstructorSafe`, `IdentUnsafeNormalization`, `GeneratedOccurrenceReserved`,
+  `GeneratedOccurrenceCollision`, `VertexCtorCollision`, `DuplicateNodeName`,
   `DuplicateEnumCtor`, `DuplicateEnumWire`, `DuplicateIdPrefix`, `DuplicateCommandName`,
   and `DuplicateEventName` reject names that would collide or generate illegal Haskell.
 - Aggregate, rule, and evolution: `StatusMapNotTotal`, `StatusMapDanglingKey`,
@@ -118,6 +119,22 @@ before any deletion. A note about a different previous spec path means two specs
 same context and `--out` (and therefore the same manifest/record); separate their output
 directories unless that sharing is intentional. The manual firewall `grep` is no longer
 needed.
+
+A record created by the legacy generated-Haskell naming edition may instead require exact source
+moves such as `Service_oncall` → `ServiceOncall`. The first run refuses before writing and prints
+the complete move/backup plan. Review it, then opt in explicitly:
+
+```bash
+cabal run keiro-dsl -- scaffold service.keiro --out gen/ --apply-name-migrations
+```
+
+Keiro rewrites exact module references in Haskell code, not comments or string/character
+literals; moves every original generated and create-once source under
+`.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/`; and installs prepared files by
+same-filesystem rename. It journals source/transformed digests so an exact interrupted state can
+resume and a conflicting state refuses with recovery evidence. Backups are never deleted. This is
+the sole explicit exception to ordinary stale handling: unrelated module-root/layout changes and
+ordinary stale hole paths remain preserve-and-review operations.
 
 To place the generated layer next to your domain code instead of a parallel `Generated.*`
 tree, pass `--module-root <Prefix>` and/or `--collocate` (or set `module <Prefix>` / `layout

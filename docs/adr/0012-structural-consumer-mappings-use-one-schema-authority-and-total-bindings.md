@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-02T13:36:12Z
+timestamp: 2026-08-04T14:40:00Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -201,6 +201,15 @@ generated Haskell syntax: semantic authorities, wire identities, fingerprints,
 diagnostics, manifests, scaffold history, and provenance retain complete module
 names. Existing create-once consumer modules remain untouched.
 
+Generated references entering that import plan come from the checked generated-Haskell
+occurrence model. Logical Keiro names are normalized once into typed UpperCamelCase or
+lowerCamelCase occurrences before an emitter or alias allocator sees them. Explicit
+consumer-owned module, type, constructor, and qualified-value references cross the same lexical
+validation boundary without re-casing. Consequently, a generated selector rename paired by an
+unchanged wire key is consumer-build provenance only: it produces a rebuild advisory while the
+mapped wire fingerprint, event compatibility, snapshot identity, and replay surface remain
+unchanged.
+
 Binding-authoring conveniences remain downstream of this shape boundary. The scaffolder emits
 create-once, hand-owned skeletons grouped by the modules named by qualified binding, fixture, and
 register-initial symbols; a shared leaf module may own several declarations. Scaffold records
@@ -275,6 +284,9 @@ the totality and ownership requirements above.
   are explicit and unqualified, while collisions and external APIs use stable
   short aliases. Import presentation does not alter semantic identity or permit
   rewriting a create-once consumer module.
+- The import planner cannot silently invent a second casing policy. Generated
+  occurrences are already checked values, while explicit consumer references preserve
+  their declared spelling and identity.
 - The binding API has no partial inverse or semantic-error channel. A binding that rejects or
   normalizes valid shapes violates the shape round-trip contract, and both directions have
   explicit law tests. `check` and `diff` still do not inspect hand-written Haskell.
