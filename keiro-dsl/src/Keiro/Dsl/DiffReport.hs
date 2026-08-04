@@ -46,6 +46,7 @@ data Remedy
   | RemedyReplayOnlyEdge
   | RemedyStateCodecBump
   | RemedyRecompileConsumers
+  | RemedyRescaffoldGenerated
   | RemedyRescaffoldWorkspace
   | RemedyRunConformance
   | RemedyNoSemanticAction
@@ -182,6 +183,7 @@ vectorValue vector =
 remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 remediationFor context code
   | code == SourceLanguageDeclarationChanged = RemedyNoSemanticAction :| []
+  | code == GeneratedHaskellNameChanged = RemedyRescaffoldGenerated :| [RemedyRecompileConsumers, RemedyRunConformance]
   | code == OwnershipMoved = RemedyRescaffoldWorkspace :| []
   | code == WorkspaceAuthorityChanged = RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers]
   | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
@@ -310,6 +312,7 @@ renderRemedy remedy = case remedy of
   RemedyReplayOnlyEdge -> "add the computed replay-only edge described by docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md"
   RemedyStateCodecBump -> "invalidate and rebuild snapshots by bumping state-codec version when automatic fingerprinting cannot see the change"
   RemedyRecompileConsumers -> "recompile every affected consumer against the generated interface"
+  RemedyRescaffoldGenerated -> "re-run the scaffold so generated modules and create-once imports use the candidate Haskell names"
   RemedyRescaffoldWorkspace -> "re-run the whole-workspace scaffold so the record's ownership and golden roots follow the change"
   RemedyRunConformance -> "run the generated conformance and historical fixture suites"
   RemedyNoSemanticAction -> "no semantic action is required; only source-language provenance changed"

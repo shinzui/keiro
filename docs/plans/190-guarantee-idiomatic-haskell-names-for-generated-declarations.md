@@ -65,8 +65,12 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   workspace preflights complete before any source move.
 - [ ] Add content digests, same-filesystem prepared temporary files, and complete crash-state
   recovery/conflict evidence to the source-move executor.
-- [ ] Classify source edits that change only generated Haskell as consumer-build advisories while
-  preserving replay, wire, SQL, and runtime identity classifications.
+- [x] (2026-08-04 15:00Z) Classify workqueue payload names, uniquely paired workqueue module
+  renames, and mapped record selectors whose stable wire key is unchanged as
+  `GeneratedHaskellNameChanged`. Focused ordinary/workspace tests prove only `ConsumerBuild` is
+  advisory, all other axes are compatible, remedies include re-scaffold/recompile/conformance,
+  replay is neutral, mapped aggregate fold identity is unchanged, runtime identity findings remain
+  independent, and equal normalized spellings produce no finding.
 - [ ] Regenerate and compile the conformance corpus, update authoring and upgrade documentation,
   amend the relevant ADRs, and run the complete repository gates.
 
@@ -91,6 +95,13 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   banner, and conformance-package preflights all succeed.
   Evidence: `executeWorkspaceScaffoldBase` now receives prepared moves and applies them only in
   its refusal-free branch; the focused workspace regression passes.
+
+- Observation: Mapped record fields were already paired first by Haskell selector and then by
+  stable wire key, but the fallback deliberately emitted no finding for a selector-only edit.
+  Adding the generated-name fact at `diffField` preserves all existing wire evolution behavior
+  and keeps replay/fold surfaces unchanged.
+  Evidence: `cabal test keiro-dsl-test --test-options='--match Haskell.name-diff'` passes four
+  examples, including the mapped fold-fingerprint assertion.
 
 
 ## Decision Log
@@ -159,6 +170,14 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   Rationale: Naming presentation history is additive and older readers already ignore unknown
   rows. This preserves the established forward-compatible persistence contract while giving the
   migration planner exact current evidence.
+  Date: 2026-08-04
+
+- Decision: Pair a renamed workqueue for generated-name diffing only when its complete explicit
+  logical/physical/DLQ/table runtime identity is unique and unchanged; prefer exact logical-name
+  pairing first.
+  Rationale: This identifies a module-segment-only edit without inventing semantic correspondence
+  or hiding a queue migration. Ambiguous external identities remain ordinary add/remove findings,
+  and any real external change retains `QueueIdentityChanged`.
   Date: 2026-08-04
 
 

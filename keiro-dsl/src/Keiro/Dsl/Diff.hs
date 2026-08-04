@@ -64,6 +64,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
@@ -267,6 +268,7 @@ advisoryVector surface rollout =
 classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 classifyCompatibility context code
   | code == SourceLanguageDeclarationChanged = sourceProvenanceVector
+  | code == GeneratedHaskellNameChanged = sourceProvenanceVector {cvConsumerBuild = VAdvisory}
   | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
   | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
   | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
@@ -814,7 +816,7 @@ mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld en
 mappedFindingChanges :: MappedFinding -> [Change]
 mappedFindingChanges finding
   | mfCode finding == MappedDeclAdded = [mappedDeclarationChange LabelAdditive finding]
-  | mfCode finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] =
+  | mfCode finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged, GeneratedHaskellNameChanged] =
       [mappedBuildChange finding]
   | mfCode finding `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] =
       mappedBuildChange finding : map (mappedUseChange finding) registerPaths
@@ -1721,17 +1723,69 @@ workqueueDiff env =
     ++ concatMap addedWorkqueueDiff (prAdded paired)
     ++ concatMap removedWorkqueueDiff (prRemoved paired)
   where
-    paired = pairByName nodeWorkqueue wqName env
+    paired = pairWorkqueues env
+
+-- | Prefer source identity, then pair a uniquely renamed queue by its complete
+-- explicit runtime identity. This permits a generated module-segment rename to
+-- remain a build-only finding without guessing when an external identity is
+-- ambiguous.
+pairWorkqueues :: DiffEnv -> Paired WorkqueueNode
+pairWorkqueues env =
+  Paired
+    { prMatched = exact <> fallback,
+      prAdded = [queue | queue <- unmatchedNew, queue `notElem` map snd fallback],
+      prRemoved = [queue | queue <- unmatchedOld, queue `notElem` map fst fallback]
+    }
+  where
+    oldQueues = mapMaybe nodeWorkqueue (specNodes (deOld env))
+    newQueues = mapMaybe nodeWorkqueue (specNodes (deNew env))
+    exact =
+      [ (oldQueue, newQueue)
+      | newQueue <- newQueues,
+        Just oldQueue <- [find ((== wqName newQueue) . wqName) oldQueues]
+      ]
+    exactOldNames = map (wqName . fst) exact
+    exactNewNames = map (wqName . snd) exact
+    unmatchedOld = [queue | queue <- oldQueues, wqName queue `notElem` exactOldNames]
+    unmatchedNew = [queue | queue <- newQueues, wqName queue `notElem` exactNewNames]
+    fallback =
+      [ (oldQueue, newQueue)
+      | newQueue <- unmatchedNew,
+        let matchingOld = [queue | queue <- unmatchedOld, queueIdentity queue == queueIdentity newQueue],
+        [oldQueue] <- [matchingOld],
+        length [queue | queue <- unmatchedNew, queueIdentity queue == queueIdentity newQueue] == 1
+      ]
 
 workqueuePairDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
 workqueuePairDiff oldQueue newQueue =
-  concatMap pairedFieldDiff (prMatched fields)
+  generatedNameChanges
+    ++ concatMap pairedFieldDiff (prMatched fields)
     ++ concatMap addedFieldDiff (prAdded fields)
     ++ concatMap removedFieldDiff (prRemoved fields)
     ++ queueIdentityDiff oldQueue newQueue
     ++ queuePolicyDiff oldQueue newQueue
   where
-    -- wqPayloadName is a generated Haskell type name, not a wire-visible name.
+    generatedNameChanges =
+      [ generatedNameChange
+          (wqName newQueue)
+          "workqueue-module"
+          (wqName newQueue)
+          (wqName oldQueue)
+          (wqName newQueue)
+          "workqueue module segment"
+      | wqName oldQueue /= wqName newQueue,
+        normalizedGeneratedUpper (wqName oldQueue) /= normalizedGeneratedUpper (wqName newQueue)
+      ]
+        ++ [ generatedNameChange
+               (wqName newQueue)
+               "workqueue-payload-type"
+               (wqPayloadName newQueue)
+               (wqPayloadName oldQueue)
+               (wqPayloadName newQueue)
+               "workqueue payload type"
+           | wqPayloadName oldQueue /= wqPayloadName newQueue,
+             normalizedGeneratedUpper (wqPayloadName oldQueue) /= normalizedGeneratedUpper (wqPayloadName newQueue)
+           ]
     fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
     pairedFieldDiff (oldField, newField)
       | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
@@ -1767,6 +1821,35 @@ queueIdentityDiff oldQueue newQueue =
 
 queueIdentity :: WorkqueueNode -> (Text, Text, Text, Text)
 queueIdentity queue = (wqLogical queue, wqPhysical queue, wqDlq queue, wqTable queue)
+
+generatedNameChange :: Name -> Text -> Text -> Text -> Text -> Text -> Change
+generatedNameChange node facet subject oldLogical newLogical occurrenceKind =
+  advisory
+    node
+    facet
+    subject
+    GeneratedHaskellNameChanged
+    ( occurrenceKind
+        <> " changed '"
+        <> normalizedGeneratedUpper oldLogical
+        <> "' -> '"
+        <> normalizedGeneratedUpper newLogical
+        <> "' while wire, SQL, queue, registry, subscription, and persisted runtime identities remain unchanged; re-scaffold and recompile consumers"
+    )
+
+normalizedGeneratedUpper :: Text -> Text
+normalizedGeneratedUpper logicalName =
+  case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+    Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+    Left _ -> logicalName
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedTypeSite,
+          HaskellName.siteLogicalName = logicalName,
+          HaskellName.siteOwner = "diff",
+          HaskellName.siteLine = 0
+        }
 
 queuePolicyDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
 queuePolicyDiff oldQueue newQueue = ordering ++ provision ++ groupKey
@@ -2253,7 +2336,7 @@ contextFor label root facet subject code =
       | code `elem` publicCodes -> publicContractContext root paths
       | code `elem` queueCodes -> queueContext root paths
       | code `elem` identityCodes -> persistedIdentityContext root paths
-      | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] -> consumerBuildContext root paths
+      | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged, GeneratedHaskellNameChanged] -> consumerBuildContext root paths
       | code == AggFoldSurfaceChanged -> snapshotContext root paths
       | code == EnumCtorAdded -> ChangeContext root paths ContextGeneral label
       | code `elem` privateCodes -> privateEventContext root paths

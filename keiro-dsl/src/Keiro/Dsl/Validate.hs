@@ -371,6 +371,9 @@ data DiagnosticCode
   | IntakeDecodeSchemaVersionMismatch
   | ContractTopicAliasUnresolved
   | WireClauseUnsupported
+  | -- ExecPlan 190: an unchanged semantic/external declaration now presents a
+    -- different generated Haskell occurrence.
+    GeneratedHaskellNameChanged
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

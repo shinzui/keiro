@@ -20,6 +20,7 @@ import Data.Maybe (isNothing)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -324,10 +325,26 @@ diffField paths declaration oldField newField =
       paths
       declaration
       leaf
-      MappedWireKeyChanged
-      ("wire key changed '" <> rwfKey oldField <> "' -> '" <> rwfKey newField <> "'; version and upcast every affected private event root")
-  | rwfKey oldField /= rwfKey newField
+      GeneratedHaskellNameChanged
+      ( "generated record selector changed '"
+          <> normalizedGeneratedLower (rwfHaskell oldField)
+          <> "' -> '"
+          <> normalizedGeneratedLower (rwfHaskell newField)
+          <> "' while wire key '"
+          <> rwfKey newField
+          <> "' remains unchanged; re-scaffold and recompile consumers"
+      )
+  | rwfKey oldField == rwfKey newField,
+    normalizedGeneratedLower (rwfHaskell oldField) /= normalizedGeneratedLower (rwfHaskell newField)
   ]
+    ++ [ finding
+           paths
+           declaration
+           leaf
+           MappedWireKeyChanged
+           ("wire key changed '" <> rwfKey oldField <> "' -> '" <> rwfKey newField <> "'; version and upcast every affected private event root")
+       | rwfKey oldField /= rwfKey newField
+       ]
     ++ [ finding
            paths
            declaration
@@ -359,6 +376,20 @@ diffField paths declaration oldField newField =
                 "on-missing default changed; the same historical bytes now construct a different consumer value"
             ]
       _ -> []
+
+normalizedGeneratedLower :: Text -> Text
+normalizedGeneratedLower logicalName =
+  case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+    Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+    Left _ -> logicalName
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
+          HaskellName.siteLogicalName = logicalName,
+          HaskellName.siteOwner = "mapped-diff",
+          HaskellName.siteLine = 0
+        }
 
 diffExpr :: [UsePath] -> Name -> Text -> ResolvedTypeExpr -> ResolvedTypeExpr -> [MappedFinding]
 diffExpr paths declaration leaf oldExpression newExpression =

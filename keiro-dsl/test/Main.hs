@@ -2455,6 +2455,53 @@ main = hspec $ do
           doesFileExist (out </> wrmPath row) `shouldReturn` True
           doesFileExist (out </> ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1" </> legacyPath (wrmPath row)) `shouldReturn` True
 
+  describe "Haskell.name-diff" $ do
+    it "classifies a workqueue payload type rename only on consumer-build" $ do
+      base <- specOf "test/fixtures/reservation-work.keiro"
+      let renamed = mapWorkqueue (\queue -> queue {wqPayloadName = "ReservationJob"}) base
+          findings = generatedHaskellNameFindings (diffSpecs base renamed)
+      case findings of
+        [finding] -> assertGeneratedHaskellNameFinding finding
+        values -> expectationFailure ("expected one payload-name finding, got " <> show (length values))
+      let workspaceFindings =
+            generatedHaskellNameFindings
+              (map wcChange (diffWorkspaces (oneMemberWorkspace "queue.keiro" base) (oneMemberWorkspace "queue.keiro" renamed)))
+      workspaceFindings `shouldSatisfy` \case [finding] -> isAdvisory finding; _ -> False
+      replayImpactSpecs base renamed `shouldBe` ReplayNeutral
+    it "pairs a mapped selector rename by unchanged wire key and keeps fold identity stable" $ do
+      source <- readTestText "test/fixtures/consumer-types.keiro"
+      base <- parseInlineSpec "<mapped-selector-old>" source
+      renamed <-
+        parseInlineSpec
+          "<mapped-selector-new>"
+          (T.replace "key         as \"key\"" "artifactKey as \"key\"" source)
+      let findings = generatedHaskellNameFindings (diffSpecs base renamed)
+      case findings of
+        [finding] -> do
+          assertGeneratedHaskellNameFinding finding
+          ckSubject (kindOfChange finding) `shouldSatisfy` T.isInfixOf "artifactKey"
+        values -> expectationFailure ("expected one selector-name finding, got " <> show (length values))
+      replayImpactSpecs base renamed `shouldBe` ReplayNeutral
+      legacyAggregateFoldFingerprint base (onlyAggregate base)
+        `shouldBe` legacyAggregateFoldFingerprint renamed (onlyAggregate renamed)
+    it "pairs a workqueue module rename by unchanged explicit runtime facts" $ do
+      base <- specOf "test/fixtures/reservation-work.keiro"
+      let queueOnly = base {specNodes = [node | node@NWorkqueue {} <- specNodes base]}
+          renamed = mapWorkqueue (\queue -> queue {wqName = "reservation_jobs"}) queueOnly
+          findings = generatedHaskellNameFindings (diffSpecs queueOnly renamed)
+      case findings of
+        [finding] -> do
+          assertGeneratedHaskellNameFinding finding
+          ckFacet (kindOfChange finding) `shouldBe` "workqueue-module"
+        values -> expectationFailure ("expected one module-name finding, got " <> show (length values))
+      map (ckCode . kindOfChange) (diffSpecs queueOnly renamed) `shouldNotContain` [QueueIdentityChanged]
+      replayImpactSpecs queueOnly renamed `shouldBe` ReplayNeutral
+    it "emits no finding when edited logical spellings normalize identically" $ do
+      base <- specOf "test/fixtures/reservation-work.keiro"
+      let queueOnly = base {specNodes = [node | node@NWorkqueue {} <- specNodes base]}
+          recased = mapWorkqueue (\queue -> queue {wqName = "reservationWork"}) queueOnly
+      generatedHaskellNameFindings (diffSpecs queueOnly recased) `shouldBe` []
+
   describe "canonical reservation.keiro" $
     it "parses into the expected aggregate shape" $ do
       input <- readTestText "test/fixtures/reservation.keiro"
@@ -6819,6 +6866,25 @@ kindOfChange :: Change -> ChangeKind
 kindOfChange (Additive kind) = kind
 kindOfChange (Advisory kind) = kind
 kindOfChange (Breaking kind) = kind
+
+generatedHaskellNameFindings :: [Change] -> [Change]
+generatedHaskellNameFindings = filter ((== GeneratedHaskellNameChanged) . ckCode . kindOfChange)
+
+assertGeneratedHaskellNameFinding :: Change -> Expectation
+assertGeneratedHaskellNameFinding change = do
+  change `shouldSatisfy` isAdvisory
+  let kind = kindOfChange change
+      compatibility = ckVector kind
+      nonBuildVerdicts =
+        [ verdictFor surface compatibility
+        | surface <- [PrivateHistoryRead, OldBinaryReadNewEvents, SnapshotHydration, PublicConsumer, PersistedIdentity]
+        ]
+  nonBuildVerdicts `shouldBe` replicate 5 VCompatible
+  verdictFor ConsumerBuild compatibility `shouldBe` VAdvisory
+  cvRollout compatibility `shouldBe` Set.empty
+  renderFinding change `shouldSatisfy` T.isInfixOf "consumer-build=advisory"
+  remediationFor (ckContext kind) (ckCode kind)
+    `shouldBe` RemedyRescaffoldGenerated :| [RemedyRecompileConsumers, RemedyRunConformance]
 
 labelOfChange :: Change -> Label
 labelOfChange Additive {} = LabelAdditive
