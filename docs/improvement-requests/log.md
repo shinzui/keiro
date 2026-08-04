@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-04
+* **Addition**: IR-16 requires a checked naming invariant so Keiro never scaffolds
+  non-idiomatic Haskell module or value names from snake_case DSL identifiers, while preserving
+  independent wire and SQL spellings.
+
 ## 2026-08-01
 * **Addition**: IR-15 requests measurement and, if justified, removal of repeated remaining-input
 scans during Keiro DSL source-span capture while preserving exact spans and frozen parser
