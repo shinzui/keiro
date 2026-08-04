@@ -5,7 +5,7 @@ module Generated.TransferRouting.Conformance
   ) where
 
 import Generated.TransferRouting.Hospital.Harness qualified as Harness0
-import Generated.TransferRouting.Hospital_load.ReadModelHarness qualified as Harness1
+import Generated.TransferRouting.HospitalLoad.ReadModelHarness qualified as Harness1
 import Generated.TransferRouting.HospitalTransferRouter.RouterHarness qualified as Harness2
 
 runServiceConformanceChecks :: IO [(String, Bool)]

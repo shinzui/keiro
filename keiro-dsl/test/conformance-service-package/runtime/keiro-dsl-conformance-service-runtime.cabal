@@ -18,10 +18,10 @@ library
     Proof.WorkspaceProof.Alpha.Generated.Harness
     Proof.WorkspaceProof.Alpha.Generated.Projection
     Proof.WorkspaceProof.Alpha.Generated.Transducer
-    Proof.WorkspaceProof.Alpha_view.Generated.ReadModel
-    Proof.WorkspaceProof.Alpha_view.Generated.ReadModelHarness
-    Proof.WorkspaceProof.Alpha_view.Generated.ReadModelTable
-    Proof.WorkspaceProof.Alpha_view.ReadModelHoles
+    Proof.WorkspaceProof.AlphaView.Generated.ReadModel
+    Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness
+    Proof.WorkspaceProof.AlphaView.Generated.ReadModelTable
+    Proof.WorkspaceProof.AlphaView.ReadModelHoles
     Proof.WorkspaceProof.Beta.BehaviorHoles
     Proof.WorkspaceProof.Beta.Generated.BehaviorContract
     Proof.WorkspaceProof.Beta.Generated.Codec
@@ -30,10 +30,10 @@ library
     Proof.WorkspaceProof.Beta.Generated.Harness
     Proof.WorkspaceProof.Beta.Generated.Projection
     Proof.WorkspaceProof.Beta.Generated.Transducer
-    Proof.WorkspaceProof.Beta_view.Generated.ReadModel
-    Proof.WorkspaceProof.Beta_view.Generated.ReadModelHarness
-    Proof.WorkspaceProof.Beta_view.Generated.ReadModelTable
-    Proof.WorkspaceProof.Beta_view.ReadModelHoles
+    Proof.WorkspaceProof.BetaView.Generated.ReadModel
+    Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness
+    Proof.WorkspaceProof.BetaView.Generated.ReadModelTable
+    Proof.WorkspaceProof.BetaView.ReadModelHoles
     Proof.WorkspaceProof.Generated.Nominals
     Proof.WorkspaceProof.Generated.Nominals.Internal
     Proof.WorkspaceProof.Generated.ReplayAudit

@@ -92,13 +92,13 @@ parseNominalLedgerEvent (EventType tag) = mapLeftText . parseEither (withObject 
                     <*> (nominalFromRepresentation Bindings.featureFlagBinding <$> o .: "featureFlag")
                     <*> (nominalFromRepresentation Bindings.observedAtBinding <$> o .: "observedAt")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes nominalLedgerEventTypes)
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes nominalLedgerEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
 
-_renderEventTypes :: NonEmpty EventType -> String
-_renderEventTypes =
+renderExpectedEventTypes :: NonEmpty EventType -> String
+renderExpectedEventTypes =
   T.unpack
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)

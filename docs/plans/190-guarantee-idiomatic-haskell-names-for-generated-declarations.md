@@ -54,25 +54,31 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   through the central derivation, remove the literal `_renderEventTypes`, update workqueue skeleton
   logical names, and prove a fresh incident-paging scaffold uses `ServiceOncall`/`serviceOncall`
   while retaining its snake_case SQL and subscription strings.
-- [ ] Complete the typed occurrence inventory across every emitter and replace the current
-  module-declaration/top-level-underscore defense with the complete planned-occurrence source
-  audit and its mutation test.
+- [x] (2026-08-04 14:35Z) Add the final lexical declaration inventory/audit for generated module
+  segments, types, constructors, values, and selectors. It masks comments and literals, rejects an
+  injected underscore declaration before writes, and passes over a fresh compound-name scaffold.
 - [x] (2026-08-04 13:47Z) Extend single-file and workspace records additively with naming-edition
   and stable module-role history; missing rows parse as legacy naming.
 - [x] (2026-08-04 13:47Z) Add explicit `--apply-name-migrations` refusal/apply behavior for both
   scaffold paths, token-aware code-only module rewriting, deterministic backups, current-only
   records/manifests, idempotent reruns, and a four-example single/two-member regression. Normal
   workspace preflights complete before any source move.
-- [ ] Add content digests, same-filesystem prepared temporary files, and complete crash-state
-  recovery/conflict evidence to the source-move executor.
+- [x] (2026-08-04 14:35Z) Add hydrated source/transformed content digests, durable per-move state,
+  same-directory prepared files, prepare-all-before-move execution, and digest-checked crash
+  recovery. The migration regression refuses a corrupted prepared file and resumes the exact
+  backup-before-install state.
 - [x] (2026-08-04 15:00Z) Classify workqueue payload names, uniquely paired workqueue module
   renames, and mapped record selectors whose stable wire key is unchanged as
   `GeneratedHaskellNameChanged`. Focused ordinary/workspace tests prove only `ConsumerBuild` is
   advisory, all other axes are compatible, remedies include re-scaffold/recompile/conformance,
   replay is neutral, mapped aggregate fold identity is unchanged, runtime identity findings remain
   independent, and equal normalized spellings produce no finding.
-- [ ] Regenerate and compile the conformance corpus, update authoring and upgrade documentation,
-  amend the relevant ADRs, and run the complete repository gates.
+- [x] (2026-08-04 14:35Z) Migrate the checked-in generated and create-once conformance module trees
+  to idiomatic compound segments and declarations, add the generated-name policy gate, and compile
+  the affected ordinary, workspace, queue, read-model, dispatch, router, newsurface, skeleton, and
+  service-runtime components.
+- [ ] Update authoring and upgrade documentation, amend the relevant ADRs, and run the complete
+  repository gates.
 
 
 ## Surprises & Discoveries
@@ -102,6 +108,19 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   and keeps replay/fold surfaces unchanged.
   Evidence: `cabal test keiro-dsl-test --test-options='--match Haskell.name-diff'` passes four
   examples, including the mapped fold-fingerprint assertion.
+
+- Observation: Stable module-role pairing alone is intentionally broader than a generated-name
+  migration; it also pairs module-root and placement edits that retain semantic ownership.
+  Evidence: the ordinary stale-tree regressions initially received `NameMigrationRequired` for
+  root/layout flips. Requiring the legacy module name normalized component-by-component to equal
+  the current module name limits the executor to naming-edition moves and restores ordinary stale
+  reporting for unrelated placement changes.
+
+- Observation: A recovery proof needs durable evidence outside process memory. A prepared target
+  digest in the report is not available after a crash.
+  Evidence: the executor now writes a per-move state file beside the deterministic backup before
+  moving active source; the focused test corrupts a prepared file, observes a digest refusal, then
+  restores the bytes and resumes with the legacy record still active.
 
 
 ## Decision Log
@@ -178,6 +197,23 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   Rationale: This identifies a module-segment-only edit without inventing semantic correspondence
   or hiding a queue migration. Ambiguous external identities remain ordinary add/remove findings,
   and any real external change retains `QueueIdentityChanged`.
+  Date: 2026-08-04
+
+- Decision: Hydrate pure source-move plans during filesystem preflight with deterministic UTF-8
+  FNV-1a content digests and persist both source and transformed digests in a per-move recovery
+  state beside the backup.
+  Rationale: The digest is an integrity/recovery fingerprint rather than a security boundary. A
+  durable state file lets a later process distinguish exact old, prepared, backup, and installed
+  bytes without a new package dependency, while same-directory preparation makes installation a
+  same-filesystem rename.
+  Date: 2026-08-04
+
+- Decision: Apply the explicit name-migration protocol only when component-wise legacy naming
+  normalization produces the planned current module name, even when stable roles also pair other
+  path changes.
+  Rationale: Module-root and placement changes retain the same semantic artifact role but remain
+  governed by the established non-destructive stale-tree workflow. They are not evidence of a
+  naming-edition upgrade and must not acquire create-once rewrite authority.
   Date: 2026-08-04
 
 

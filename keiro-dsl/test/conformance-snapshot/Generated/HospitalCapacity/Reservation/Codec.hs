@@ -91,13 +91,13 @@ parseReservationEvent (EventType tag) = mapLeftText . parseEither (withObject "R
                     <*> (unsafeHospitalIdFromLegacyText <$> o .: "hospitalId")
                     <*> (unsafeCommandIdFromLegacyText <$> o .: "commandId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes reservationEventTypes)
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes reservationEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
 
-_renderEventTypes :: NonEmpty EventType -> String
-_renderEventTypes =
+renderExpectedEventTypes :: NonEmpty EventType -> String
+renderExpectedEventTypes =
   T.unpack
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)

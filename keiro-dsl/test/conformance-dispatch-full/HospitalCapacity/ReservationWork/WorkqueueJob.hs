@@ -9,11 +9,11 @@ module HospitalCapacity.ReservationWork.WorkqueueJob (
 ) where
 
 import Effectful (Eff)
-import Generated.HospitalCapacity.Reservation_work.Queue (
+import Generated.HospitalCapacity.ReservationWork.Queue (
     ReservationWorkItem,
  )
-import Generated.HospitalCapacity.Reservation_work.QueueCodec (reservationWorkJobCodec)
-import Generated.HospitalCapacity.Reservation_work.QueuePolicy (retryPolicy)
+import Generated.HospitalCapacity.ReservationWork.QueueCodec (reservationWorkJobCodec)
+import Generated.HospitalCapacity.ReservationWork.QueuePolicy (retryPolicy)
 import Keiro.PGMQ.Job (Job (..), JobOutcome (..))
 import Keiro.PGMQ.Runtime (queueRef)
 

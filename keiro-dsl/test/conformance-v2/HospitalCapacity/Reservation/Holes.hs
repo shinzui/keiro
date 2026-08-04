@@ -7,7 +7,7 @@
 module HospitalCapacity.Reservation.Holes
   ( transition1UnrequestedRequestTransferReservationOutput1TransferReservationCreated,
     transition2HeldConfirmReservationOutput1TransferReservationConfirmed,
-    applyTransfer_decisions,
+    applyTransferDecisions,
     upcastTransferReservationCreatedV1,
   )
 where
@@ -40,8 +40,8 @@ transition2HeldConfirmReservationOutput1TransferReservationConfirmed command =
       commandId = command.commandId
     }
 
-applyTransfer_decisions :: ReservationEvent -> recorded -> txn ()
-applyTransfer_decisions _event _recorded = error "HOLE: fill transfer_decisions projection apply"
+applyTransferDecisions :: ReservationEvent -> recorded -> txn ()
+applyTransferDecisions _event _recorded = error "HOLE: fill transfer_decisions projection apply"
 
 upcastTransferReservationCreatedV1 :: Value -> Either Text Value
 upcastTransferReservationCreatedV1 value = case value of

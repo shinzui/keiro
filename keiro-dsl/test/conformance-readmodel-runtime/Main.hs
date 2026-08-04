@@ -4,8 +4,8 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Effectful (Eff, (:>))
-import Generated.HospitalCapacity.Transfer_decisions.ReadModel
-import Generated.HospitalCapacity.Transfer_decisions.ReadModelHarness (readModelFacts, runReadModelFacts)
+import Generated.HospitalCapacity.TransferDecisions.ReadModel
+import Generated.HospitalCapacity.TransferDecisions.ReadModelHarness (readModelFacts, runReadModelFacts)
 import Keiro.Projection (AsyncProjection (..))
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), ReadModelMetadata, StrongScope (..), qualifiedTableName)
 import Keiro.ReadModel.Rebuild (RebuildError)

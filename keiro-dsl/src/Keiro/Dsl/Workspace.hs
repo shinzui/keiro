@@ -1062,7 +1062,7 @@ composeWorkspace manifestPath manifest supplied
       -- Only ask the scaffold planner about a spec that already validates.
       -- An invalid merged spec is 'checkWorkspace''s report to make, and the
       -- planner is only designed to see specs that passed validation.
-      | any ((== Error) . severity) (validateService (checkedWorkspace composed)) = []
+      | any blocksCollisionPlanning (validateService (checkedWorkspace composed)) = []
       | otherwise = case planServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) plannerContext (checkedWorkspace composed) of
           Right _ -> []
           Left plannerRefusals -> concatMap crossMemberCollision plannerRefusals
@@ -1091,6 +1091,9 @@ composeWorkspace manifestPath manifest supplied
             Just (owner, original) <- [lookupLine mergedLine]
           ]
     crossMemberCollision _ = []
+    blocksCollisionPlanning diagnostic =
+      severity diagnostic == Error
+        && code diagnostic /= GeneratedOccurrenceCollision
     lookupLine n =
       listToMaybe
         [ (path, n - low)

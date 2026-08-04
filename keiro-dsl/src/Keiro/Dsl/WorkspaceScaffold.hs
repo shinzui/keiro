@@ -95,6 +95,7 @@ import Keiro.Dsl.ScaffoldRun
     newBindingObligations,
     obligationKindLabel,
     preflightSourceMoves,
+    preparedSourceMove,
     pureRefusals,
     renderMappingIdentity,
     staleAgainst,
@@ -403,13 +404,13 @@ executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyName
   previous <- readWorkspaceRecord recordPath
   case planWorkspaceSourceMoves previous modules of
     Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-    Right moves
-      | not (null moves) && not applyNameMigrations -> pure (Left [NameMigrationRequired moves])
-      | otherwise -> do
-          preparedMoves <- preflightSourceMoves out moves
-          case preparedMoves of
-            Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
-            Right prepared -> executeWorkspaceScaffoldBase out forceGeneratedOverwrite moves prepared plan
+    Right moves -> do
+      preparedMoves <- preflightSourceMoves out moves
+      case preparedMoves of
+        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+        Right prepared
+          | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
+          | otherwise -> executeWorkspaceScaffoldBase out forceGeneratedOverwrite (map preparedSourceMove prepared) prepared plan
   where
     modules = map fst (wpModules plan)
     recordPath = out </> workspaceRecordFileName (wsService (wpWorkspace plan))

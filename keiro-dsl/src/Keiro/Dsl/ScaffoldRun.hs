@@ -31,9 +31,11 @@ module Keiro.Dsl.ScaffoldRun
     --
     -- $shared
     pureRefusals,
+    auditGeneratedHaskell,
     missingGeneratedBanners,
     staleAgainst,
     PreparedSourceMove,
+    preparedSourceMove,
     preflightSourceMoves,
     applyPreparedSourceMoves,
     constraintPlan,
@@ -69,6 +71,7 @@ import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
@@ -81,7 +84,7 @@ import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
-import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
+import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.FilePath (takeDirectory, (</>))
 
 -- $shared
@@ -262,42 +265,170 @@ pureRefusals ctx spec modules =
     namingViolations = generatedNameInvariantViolations modules
 
 generatedNameInvariantViolations :: [ScaffoldModule] -> [Text]
-generatedNameInvariantViolations = concatMap auditModule
-  where
-    auditModule scaffoldModule = declarationErrors <> occurrenceErrors
-      where
-        expectedModule = moduleNameOf (modulePath scaffoldModule)
-        declarationErrors = case declaredModuleName (moduleText scaffoldModule) of
-          Nothing -> [T.pack (modulePath scaffoldModule) <> ": missing Haskell module declaration"]
-          Just declared
-            | declared == expectedModule -> []
-            | otherwise ->
-                [ T.pack (modulePath scaffoldModule)
-                    <> ": declares "
-                    <> declared
-                    <> " but its planned module is "
-                    <> expectedModule
-                ]
-        occurrenceErrors =
-          [ T.pack (modulePath scaffoldModule)
-              <> ":"
-              <> tshow lineNumber
-              <> ": generated top-level occurrence begins with '_'"
-          | (lineNumber, sourceLine) <- zip [1 :: Int ..] (T.lines (moduleText scaffoldModule)),
-            "_" `T.isPrefixOf` sourceLine,
-            "::" `T.isInfixOf` sourceLine || "=" `T.isInfixOf` sourceLine
-          ]
+generatedNameInvariantViolations = concatMap auditGeneratedHaskell
 
-    declaredModuleName source =
-      case [T.takeWhile moduleCharacter (T.drop 7 sourceLine) | sourceLine <- T.lines source, "module " `T.isPrefixOf` sourceLine] of
-        declaration : _ | not (T.null declaration) -> Just declaration
-        _ -> Nothing
-    moduleCharacter character =
-      (character >= 'A' && character <= 'Z')
-        || (character >= 'a' && character <= 'z')
-        || (character >= '0' && character <= '9')
-        || character == '_'
-        || character == '.'
+-- | Inventory and check declarations in one generated source file.  The
+-- lexical mask keeps comments and literals out of the declaration inventory;
+-- this is deliberately a final defense after the typed naming plan, so a
+-- literal template declaration cannot bypass the checked constructors.
+auditGeneratedHaskell :: ScaffoldModule -> [Text]
+auditGeneratedHaskell scaffoldModule = lexicalErrors <> declarationErrors <> occurrenceErrors
+  where
+    expectedModule = moduleNameOf (modulePath scaffoldModule)
+    (lexicalErrors, codeSource) = case maskNonCode (moduleText scaffoldModule) of
+      Left message -> ([prefix 1 <> message], "")
+      Right masked -> ([], masked)
+    sourceLines = zip [1 :: Int ..] (T.lines codeSource)
+    declarationErrors = moduleDeclarationErrors <> moduleSegmentErrors
+    moduleDeclarationErrors = case declaredModuleName codeSource of
+      Nothing -> [T.pack (modulePath scaffoldModule) <> ": missing Haskell module declaration"]
+      Just declared
+        | declared == expectedModule -> []
+        | otherwise ->
+            [ T.pack (modulePath scaffoldModule)
+                <> ": declares "
+                <> declared
+                <> " but its planned module is "
+                <> expectedModule
+            ]
+    moduleSegmentErrors =
+      [ prefix 1 <> "module segment '" <> segment <> "' is not UpperCamelCase"
+      | segment <- T.splitOn "." expectedModule,
+        isLeftName (HaskellName.checkedModuleSegment (auditSite HaskellName.NodeModuleSite segment 1) segment)
+      ]
+    occurrenceErrors =
+      concat
+        [ checkCandidates lineNumber (signatureCandidates sourceLine)
+            <> checkCandidates lineNumber (typeCandidates sourceLine)
+            <> checkCandidates lineNumber (constructorCandidates sourceLine)
+            <> checkCandidates lineNumber (topLevelValueCandidates sourceLine)
+        | (lineNumber, sourceLine) <- sourceLines
+        ]
+
+    checkCandidates lineNumber = concatMap (checkCandidate lineNumber)
+    checkCandidate lineNumber candidate
+      | T.null candidate = []
+      | asciiUpperInitial candidate =
+          [prefix lineNumber <> "generated declaration '" <> candidate <> "' is not UpperCamelCase" | isLeftName (HaskellName.checkedUpperOccurrence (auditSite HaskellName.GeneratedTypeSite candidate lineNumber) candidate)]
+      | otherwise =
+          [prefix lineNumber <> "generated declaration '" <> candidate <> "' is not lowerCamelCase" | isLeftName (HaskellName.checkedLowerOccurrence (auditSite HaskellName.GeneratedValueSite candidate lineNumber) candidate)]
+
+    prefix lineNumber = T.pack (modulePath scaffoldModule) <> ":" <> tshow lineNumber <> ": "
+
+    auditSite kind candidate lineNumber =
+      HaskellName.NameSite
+        { HaskellName.siteKind = kind,
+          HaskellName.siteLogicalName = candidate,
+          HaskellName.siteOwner = T.pack (modulePath scaffoldModule),
+          HaskellName.siteLine = lineNumber
+        }
+
+isLeftName :: Either left right -> Bool
+isLeftName = \case Left _ -> True; Right _ -> False
+
+declaredModuleName :: Text -> Maybe Text
+declaredModuleName source =
+  case [T.takeWhile moduleCharacter (T.drop 7 sourceLine) | sourceLine <- T.lines source, "module " `T.isPrefixOf` sourceLine] of
+    declaration : _ | not (T.null declaration) -> Just declaration
+    _ -> Nothing
+  where
+    moduleCharacter character = identifierCharacter character || character == '.'
+
+signatureCandidates :: Text -> [Text]
+signatureCandidates sourceLine
+  | T.null suffix || T.any (`elem` ['=', '(', ')', '[', ']']) prefix = []
+  | otherwise = filter isIdentifier (map T.strip (T.splitOn "," prefix))
+  where
+    (prefix, suffix) = T.breakOn "::" (T.strip sourceLine)
+
+typeCandidates :: Text -> [Text]
+typeCandidates sourceLine = case T.words (T.strip sourceLine) of
+  keyword : candidate : _
+    | keyword `elem` ["data", "newtype", "type"], candidate /= "family", candidate /= "instance" -> [cleanIdentifier candidate]
+  _ -> []
+
+constructorCandidates :: Text -> [Text]
+constructorCandidates sourceLine
+  | "|" `T.isPrefixOf` stripped = takeFollowingIdentifier (T.drop 1 stripped)
+  | any (`T.isPrefixOf` stripped) ["data ", "newtype "] = takeFollowingIdentifier (T.drop 1 (snd (T.breakOn "=" stripped)))
+  | otherwise = []
+  where
+    stripped = T.strip sourceLine
+    takeFollowingIdentifier value = case T.words value of
+      candidate : _ | asciiUpperInitial (cleanIdentifier candidate) -> [cleanIdentifier candidate]
+      _ -> []
+
+topLevelValueCandidates :: Text -> [Text]
+topLevelValueCandidates sourceLine
+  | T.null sourceLine || T.head sourceLine == ' ' || T.head sourceLine == '\t' = []
+  | T.null suffix = []
+  | otherwise = case T.words prefix of
+      candidate : _
+        | candidate `notElem` declarationKeywords,
+          isIdentifier candidate ->
+            [candidate]
+      _ -> []
+  where
+    (prefix, suffix) = T.breakOn "=" sourceLine
+    declarationKeywords = ["data", "newtype", "type", "class", "instance", "module", "import", "deriving", "infix", "infixl", "infixr"]
+
+cleanIdentifier :: Text -> Text
+cleanIdentifier = T.takeWhile identifierCharacter . T.dropWhile (not . identifierCharacter)
+
+isIdentifier :: Text -> Bool
+isIdentifier candidate = not (T.null candidate) && T.all identifierCharacter candidate
+
+identifierCharacter :: Char -> Bool
+identifierCharacter character =
+  (character >= 'A' && character <= 'Z')
+    || (character >= 'a' && character <= 'z')
+    || (character >= '0' && character <= '9')
+    || character == '_'
+    || character == '\''
+
+asciiUpperInitial :: Text -> Bool
+asciiUpperInitial candidate = case T.uncons candidate of
+  Just (first, _) -> first >= 'A' && first <= 'Z'
+  Nothing -> False
+
+data AuditLexState = AuditCode | AuditLineComment | AuditBlockComment !Int | AuditString | AuditCharacter
+
+maskNonCode :: Text -> Either Text Text
+maskNonCode = fmap T.pack . go AuditCode . T.unpack
+  where
+    go state input = case (state, input) of
+      (AuditCode, []) -> Right []
+      (AuditLineComment, []) -> Right []
+      (AuditBlockComment _, []) -> Left "unterminated block comment in generated source"
+      (AuditString, []) -> Left "unterminated string literal in generated source"
+      (AuditCharacter, []) -> Left "unterminated character literal in generated source"
+      (AuditCode, '-' : '-' : rest) -> prependSpaces 2 <$> go AuditLineComment rest
+      (AuditCode, '{' : '-' : rest) -> prependSpaces 2 <$> go (AuditBlockComment 1) rest
+      (AuditCode, '"' : rest) -> (' ' :) <$> go AuditString rest
+      (AuditCode, '\'' : rest)
+        | looksLikeCharacterLiteral rest -> (' ' :) <$> go AuditCharacter rest
+      (AuditCode, character : rest) -> (character :) <$> go AuditCode rest
+      (AuditLineComment, '\n' : rest) -> ('\n' :) <$> go AuditCode rest
+      (AuditLineComment, _ : rest) -> (' ' :) <$> go AuditLineComment rest
+      (AuditBlockComment depth, '{' : '-' : rest) -> prependSpaces 2 <$> go (AuditBlockComment (depth + 1)) rest
+      (AuditBlockComment 1, '-' : '}' : rest) -> prependSpaces 2 <$> go AuditCode rest
+      (AuditBlockComment depth, '-' : '}' : rest) -> prependSpaces 2 <$> go (AuditBlockComment (depth - 1)) rest
+      (AuditBlockComment depth, '\n' : rest) -> ('\n' :) <$> go (AuditBlockComment depth) rest
+      (AuditBlockComment depth, _ : rest) -> (' ' :) <$> go (AuditBlockComment depth) rest
+      (AuditString, '\\' : _escaped : rest) -> prependSpaces 2 <$> go AuditString rest
+      (AuditString, '"' : rest) -> (' ' :) <$> go AuditCode rest
+      (AuditString, '\n' : _) -> Left "newline in generated string literal"
+      (AuditString, _ : rest) -> (' ' :) <$> go AuditString rest
+      (AuditCharacter, '\\' : _escaped : rest) -> prependSpaces 2 <$> go AuditCharacter rest
+      (AuditCharacter, '\'' : rest) -> (' ' :) <$> go AuditCode rest
+      (AuditCharacter, '\n' : _) -> Left "newline in generated character literal"
+      (AuditCharacter, _ : rest) -> (' ' :) <$> go AuditCharacter rest
+
+    prependSpaces count suffix = replicate count ' ' <> suffix
+    looksLikeCharacterLiteral = \case
+      '\\' : _escaped : '\'' : _ -> True
+      _character : '\'' : _ -> True
+      _ -> False
 
 dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
 dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
@@ -414,13 +545,14 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
               previousRecord <- readRecord recordPath
               case planRecordedSourceMoves previousRecord modules of
                 Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-                Right moves
-                  | not (null moves) && not applyNameMigrations -> pure (Left [NameMigrationRequired moves])
-                  | otherwise -> do
-                      preparedMoves <- preflightSourceMoves out moves
-                      case preparedMoves of
-                        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
-                        Right prepared -> do
+                Right moves -> do
+                  preparedMoves <- preflightSourceMoves out moves
+                  case preparedMoves of
+                    Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+                    Right prepared
+                      | not (null prepared) && not applyNameMigrations ->
+                          pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
+                      | otherwise -> do
                           applyPreparedSourceMoves out prepared
                           stale <- maybe (pure []) (existingStale out modules) previousRecord
                           let currentConsumerPlan = consumerPlan spec
@@ -460,7 +592,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportRemovedBehavior = removedBehavior,
                                   reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
                                   reportConformancePackage = packageReport,
-                                  reportNameMoves = moves
+                                  reportNameMoves = map preparedSourceMove prepared
                                 }
 
 planRecordedSourceMoves :: Maybe ScaffoldRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
@@ -476,6 +608,11 @@ data PreparedSourceMove
   = SourceMoveReady !SourceMove !Text
   | SourceMoveAlreadyApplied !SourceMove
 
+preparedSourceMove :: PreparedSourceMove -> SourceMove
+preparedSourceMove = \case
+  SourceMoveReady move _ -> move
+  SourceMoveAlreadyApplied move -> move
+
 preflightSourceMoves :: FilePath -> [SourceMove] -> IO (Either [Text] [PreparedSourceMove])
 preflightSourceMoves out moves = do
   prepared <- mapM preflight moves
@@ -487,20 +624,27 @@ preflightSourceMoves out moves = do
       let oldPath = out </> moveOldPath move
           newPath = out </> moveNewPath move
           backupPath = out </> moveBackupPath move
+          preparedPath = preparedSourcePath out move
+          statePath = sourceMoveStatePath out move
       oldExists <- doesFileExist oldPath
       newExists <- doesFileExist newPath
       backupExists <- doesFileExist backupPath
-      case (oldExists, newExists, backupExists) of
-        (False, True, True) -> pure (Right (SourceMoveAlreadyApplied move))
-        (True, False, False) -> do
-          source <- TIO.readFile oldPath
+      preparedExists <- doesFileExist preparedPath
+      stateExists <- doesFileExist statePath
+      case (oldExists, backupExists) of
+        (True, True) -> conflict move newExists backupExists preparedExists "both legacy source and backup exist"
+        (False, False) ->
+          if newExists
+            then conflict move newExists backupExists preparedExists "target exists without a recoverable legacy source"
+            else pure (Left (T.pack (moveOldPath move) <> ": recorded legacy source is missing"))
+        _ -> do
+          source <- TIO.readFile (if oldExists then oldPath else backupPath)
           if moveKind move == Generated && not (any isGeneratedBannerLine (T.lines source))
             then pure (Left (T.pack (moveOldPath move) <> ": generated source lacks an exact generated banner"))
             else case rewriteHaskellModuleReferences replacements source of
               Left lexicalError -> pure (Left (T.pack (moveOldPath move) <> ": " <> T.pack (show lexicalError)))
               Right rewritten
-                | declaresExpectedModule (moveNewModule move) rewritten -> pure (Right (SourceMoveReady move rewritten))
-                | otherwise ->
+                | not (declaresExpectedModule (moveNewModule move) rewritten) ->
                     pure
                       ( Left
                           ( T.pack (moveOldPath move)
@@ -508,35 +652,115 @@ preflightSourceMoves out moves = do
                               <> moveNewModule move
                           )
                       )
-        (False, False, False) -> pure (Left (T.pack (moveOldPath move) <> ": recorded legacy source is missing"))
-        _ ->
-          pure
-            ( Left
-                ( T.pack (moveOldPath move)
-                    <> ": migration state conflicts with target or backup (target="
-                    <> T.pack (show newExists)
-                    <> ", backup="
-                    <> T.pack (show backupExists)
-                    <> ")"
-                )
+                | otherwise -> do
+                    let hydrated =
+                          move
+                            { moveContentDigest = Just (contentDigest source),
+                              moveTransformedDigest = Just (contentDigest rewritten)
+                            }
+                        expectedState = renderSourceMoveState hydrated
+                    stateError <- verifyOptionalText stateExists statePath expectedState "migration state"
+                    preparedError <- verifyOptionalDigest preparedExists preparedPath (contentDigest rewritten) "prepared source"
+                    targetError <- verifyOptionalDigest newExists newPath (contentDigest rewritten) "target source"
+                    case [message | Just message <- [stateError, preparedError, targetError]] of
+                      message : _ -> pure (Left (T.pack (moveOldPath move) <> ": " <> message))
+                      []
+                        | newExists && not backupExists && not oldExists -> conflict hydrated newExists backupExists preparedExists "target has no recoverable backup"
+                        | newExists && backupExists && not oldExists -> pure (Right (SourceMoveAlreadyApplied hydrated))
+                        | otherwise -> pure (Right (SourceMoveReady hydrated rewritten))
+
+    conflict move newExists backupExists preparedExists reason =
+      pure
+        ( Left
+            ( T.pack (moveOldPath move)
+                <> ": migration state conflicts ("
+                <> reason
+                <> "; target="
+                <> T.pack (show newExists)
+                <> ", backup="
+                <> T.pack (show backupExists)
+                <> ", prepared="
+                <> T.pack (show preparedExists)
+                <> ")"
             )
+        )
+
+    verifyOptionalText False _ _ _ = pure Nothing
+    verifyOptionalText True path expected label = do
+      actual <- TIO.readFile path
+      pure $ if actual == expected then Nothing else Just (label <> " digest/path evidence does not match")
+
+    verifyOptionalDigest False _ _ _ = pure Nothing
+    verifyOptionalDigest True path expected label = do
+      actual <- contentDigest <$> TIO.readFile path
+      pure $ if actual == expected then Nothing else Just (label <> " digest does not match " <> expected)
 
     declaresExpectedModule expected source =
       any (T.isPrefixOf ("module " <> expected <> " ")) (T.lines source)
         || any (== ("module " <> expected)) (T.lines source)
 
 applyPreparedSourceMoves :: FilePath -> [PreparedSourceMove] -> IO ()
-applyPreparedSourceMoves out = mapM_ applyMove
+applyPreparedSourceMoves out prepared = do
+  -- Prepare every transformed file and durable digest record before moving a
+  -- single active source.  The temporary file lives beside its destination,
+  -- so installation is a same-filesystem rename.
+  mapM_ prepareMove prepared
+  mapM_ backupMove prepared
+  mapM_ installMove prepared
   where
-    applyMove (SourceMoveAlreadyApplied _) = pure ()
-    applyMove (SourceMoveReady move rewritten) = do
+    prepareMove preparedMove = do
+      let move = preparedSourceMove preparedMove
+          statePath = sourceMoveStatePath out move
+      createDirectoryIfMissing True (takeDirectory statePath)
+      TIO.writeFile statePath (renderSourceMoveState move)
+      case preparedMove of
+        SourceMoveAlreadyApplied _ -> pure ()
+        SourceMoveReady _ rewritten -> do
+          let path = preparedSourcePath out move
+          createDirectoryIfMissing True (takeDirectory path)
+          exists <- doesFileExist path
+          if exists then pure () else TIO.writeFile path rewritten
+
+    backupMove (SourceMoveAlreadyApplied _) = pure ()
+    backupMove (SourceMoveReady move _) = do
       let oldPath = out </> moveOldPath move
-          newPath = out </> moveNewPath move
           backupPath = out </> moveBackupPath move
-      createDirectoryIfMissing True (takeDirectory backupPath)
-      createDirectoryIfMissing True (takeDirectory newPath)
-      renameFile oldPath backupPath
-      TIO.writeFile newPath rewritten
+      oldExists <- doesFileExist oldPath
+      if oldExists
+        then do
+          createDirectoryIfMissing True (takeDirectory backupPath)
+          renameFile oldPath backupPath
+        else pure ()
+
+    installMove preparedMove = do
+      let move = preparedSourceMove preparedMove
+          preparedPath = preparedSourcePath out move
+          newPath = out </> moveNewPath move
+      newExists <- doesFileExist newPath
+      preparedExists <- doesFileExist preparedPath
+      if newExists
+        then if preparedExists then removeFile preparedPath else pure ()
+        else do
+          createDirectoryIfMissing True (takeDirectory newPath)
+          renameFile preparedPath newPath
+
+preparedSourcePath :: FilePath -> SourceMove -> FilePath
+preparedSourcePath out move = out </> (moveNewPath move <> ".keiro-dsl-name-migration-prepared")
+
+sourceMoveStatePath :: FilePath -> SourceMove -> FilePath
+sourceMoveStatePath out move = out </> (moveBackupPath move <> ".keiro-dsl-name-migration-state")
+
+renderSourceMoveState :: SourceMove -> Text
+renderSourceMoveState move =
+  T.unlines
+    [ "keiro-dsl-name-migration-state v1",
+      "old-path " <> T.pack (moveOldPath move),
+      "new-path " <> T.pack (moveNewPath move),
+      "old-module " <> moveOldModule move,
+      "new-module " <> moveNewModule move,
+      "source-digest " <> maybe "<missing>" id (moveContentDigest move),
+      "transformed-digest " <> maybe "<missing>" id (moveTransformedDigest move)
+    ]
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
 constraintPlan spec plan = case resolveTypeGraph spec of

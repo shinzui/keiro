@@ -764,8 +764,8 @@ test-suite keiro-dsl-conformance-queue
   hs-source-dirs: test/conformance-queue
   main-is:        Main.hs
   other-modules:
-    Generated.HospitalCapacity.Reservation_work.Queue
-    Generated.HospitalCapacity.Reservation_work.QueueCodec
+    Generated.HospitalCapacity.ReservationWork.Queue
+    Generated.HospitalCapacity.ReservationWork.QueueCodec
 
   build-depends:
     , aeson       >=2.2  && <2.3
@@ -782,9 +782,9 @@ test-suite keiro-dsl-conformance-queue-runtime
   hs-source-dirs: test/conformance-queue-runtime
   main-is:        Main.hs
   other-modules:
-    Generated.HospitalCapacity.Reservation_work.Queue
-    Generated.HospitalCapacity.Reservation_work.QueueCodec
-    Generated.HospitalCapacity.Reservation_work.QueuePolicy
+    Generated.HospitalCapacity.ReservationWork.Queue
+    Generated.HospitalCapacity.ReservationWork.QueueCodec
+    Generated.HospitalCapacity.ReservationWork.QueuePolicy
 
   build-depends:
     , aeson        >=2.2  && <2.3
@@ -806,10 +806,10 @@ test-suite keiro-dsl-conformance-readmodel-runtime
   hs-source-dirs: test/conformance-readmodel-runtime
   main-is:        Main.hs
   other-modules:
-    Generated.HospitalCapacity.Transfer_decisions.ReadModel
-    Generated.HospitalCapacity.Transfer_decisions.ReadModelHarness
-    Generated.HospitalCapacity.Transfer_decisions.ReadModelTable
-    HospitalCapacity.Transfer_decisions.ReadModelHoles
+    Generated.HospitalCapacity.TransferDecisions.ReadModel
+    Generated.HospitalCapacity.TransferDecisions.ReadModelHarness
+    Generated.HospitalCapacity.TransferDecisions.ReadModelTable
+    HospitalCapacity.TransferDecisions.ReadModelHoles
 
   build-depends:
     , base               >=4.21 && <5
@@ -828,9 +828,9 @@ test-suite keiro-dsl-conformance-dispatch-full
   hs-source-dirs: test/conformance-dispatch-full
   main-is:        Main.hs
   other-modules:
-    Generated.HospitalCapacity.Reservation_work.Queue
-    Generated.HospitalCapacity.Reservation_work.QueueCodec
-    Generated.HospitalCapacity.Reservation_work.QueuePolicy
+    Generated.HospitalCapacity.ReservationWork.Queue
+    Generated.HospitalCapacity.ReservationWork.QueueCodec
+    Generated.HospitalCapacity.ReservationWork.QueuePolicy
     HospitalCapacity.ReservationWork.WorkqueueJob
 
   build-depends:
@@ -1028,14 +1028,14 @@ test-suite keiro-dsl-conformance-newsurface
     Generated.TransferRouting.Hospital.Harness
     Generated.TransferRouting.Hospital.Projection
     Generated.TransferRouting.Hospital.Transducer
-    Generated.TransferRouting.Hospital_load.ReadModel
-    Generated.TransferRouting.Hospital_load.ReadModelHarness
-    Generated.TransferRouting.Hospital_load.ReadModelTable
+    Generated.TransferRouting.HospitalLoad.ReadModel
+    Generated.TransferRouting.HospitalLoad.ReadModelHarness
+    Generated.TransferRouting.HospitalLoad.ReadModelTable
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
     Generated.TransferRouting.ReplayAudit
     TransferRouting.Hospital.Holes
-    TransferRouting.Hospital_load.ReadModelHoles
+    TransferRouting.HospitalLoad.ReadModelHoles
     TransferRouting.HospitalTransferRouter.RouterHoles
     TransferRouting.HospitalTransferRouter.RouterValue
 

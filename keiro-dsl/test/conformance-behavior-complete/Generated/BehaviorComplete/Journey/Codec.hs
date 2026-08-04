@@ -127,13 +127,13 @@ parseJourneyEvent (EventType tag) = mapLeftText . parseEither (withObject "Journ
             <$> ( RetirementAuditedData
                     <$> o .: "amount"
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes journeyEventTypes)
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes journeyEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
 
-_renderEventTypes :: NonEmpty EventType -> String
-_renderEventTypes =
+renderExpectedEventTypes :: NonEmpty EventType -> String
+renderExpectedEventTypes =
   T.unpack
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)

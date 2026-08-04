@@ -54,13 +54,13 @@ parseHospitalEvent (EventType tag) = mapLeftText . parseEither (withObject "Hosp
             <$> ( SurgeActivatedData
                     <$> (unsafeHospitalIdFromLegacyText <$> o .: "hospitalId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes hospitalEventTypes)
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes hospitalEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
 
-_renderEventTypes :: NonEmpty EventType -> String
-_renderEventTypes =
+renderExpectedEventTypes :: NonEmpty EventType -> String
+renderExpectedEventTypes =
   T.unpack
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)

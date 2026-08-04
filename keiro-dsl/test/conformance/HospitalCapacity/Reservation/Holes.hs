@@ -7,7 +7,7 @@
 
 module HospitalCapacity.Reservation.Holes
   ( transition2HeldConfirmReservationOutput1TransferReservationConfirmed,
-    applyTransfer_decisions,
+    applyTransferDecisions,
   )
 where
 
@@ -23,5 +23,5 @@ transition2HeldConfirmReservationOutput1TransferReservationConfirmed command =
       commandId = command.commandId
     }
 
-applyTransfer_decisions :: ReservationEvent -> recorded -> txn ()
-applyTransfer_decisions _event _recorded = error "HOLE: fill transfer_decisions projection apply"
+applyTransferDecisions :: ReservationEvent -> recorded -> txn ()
+applyTransferDecisions _event _recorded = error "HOLE: fill transfer_decisions projection apply"

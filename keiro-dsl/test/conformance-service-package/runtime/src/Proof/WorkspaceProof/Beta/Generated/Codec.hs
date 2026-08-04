@@ -54,13 +54,13 @@ parseBetaEvent (EventType tag) = mapLeftText . parseEither (withObject "BetaEven
             <$> ( BetaPingedData
                     <$> (unsafeProofIdFromLegacyText <$> o .: "proofId")
                 )
-        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> _renderEventTypes betaEventTypes)
+        _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes betaEventTypes)
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right
 
-_renderEventTypes :: NonEmpty EventType -> String
-_renderEventTypes =
+renderExpectedEventTypes :: NonEmpty EventType -> String
+renderExpectedEventTypes =
   T.unpack
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)

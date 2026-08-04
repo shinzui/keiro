@@ -6,8 +6,8 @@ module Proof.WorkspaceProof.Generated.Conformance
 
 import Proof.WorkspaceProof.Alpha.Generated.Harness qualified as Harness0
 import Proof.WorkspaceProof.Beta.Generated.Harness qualified as Harness1
-import Proof.WorkspaceProof.Alpha_view.Generated.ReadModelHarness qualified as Harness2
-import Proof.WorkspaceProof.Beta_view.Generated.ReadModelHarness qualified as Harness3
+import Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness qualified as Harness2
+import Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness qualified as Harness3
 import Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts qualified as Harness4
 
 runServiceConformanceChecks :: IO [(String, Bool)]

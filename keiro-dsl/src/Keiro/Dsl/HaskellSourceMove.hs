@@ -5,9 +5,12 @@ module Keiro.Dsl.HaskellSourceMove
     planSourceMoves,
     rewriteHaskellModuleReferences,
     moduleNameFromPath,
+    contentDigest,
   )
 where
 
+import Data.Bits (xor)
+import Data.ByteString qualified as BS
 import Data.List (sortBy, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
@@ -15,8 +18,11 @@ import Data.Map.Strict qualified as Map
 import Data.Ord (Down (..), comparing)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
+import Data.Word (Word64, Word8)
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.Scaffold (ModuleKind, ModuleRole, ScaffoldModule, modulePath, moduleRole)
+import Numeric (showHex)
 
 data SourceMove = SourceMove
   { moveRole :: !ModuleRole,
@@ -25,7 +31,14 @@ data SourceMove = SourceMove
     moveNewModule :: !Text,
     moveOldPath :: !FilePath,
     moveNewPath :: !FilePath,
-    moveBackupPath :: !FilePath
+    moveBackupPath :: !FilePath,
+    -- | Digest of the exact legacy bytes.  Planning cannot populate it because
+    -- it is pure and filesystem-independent; the complete migration preflight
+    -- hydrates it before a move is reported or applied.
+    moveContentDigest :: !(Maybe Text),
+    -- | Digest of the token-aware transformed bytes, used with the durable
+    -- migration state to recognize an installed or prepared crash state.
+    moveTransformedDigest :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
@@ -63,6 +76,7 @@ planSourceMoves previous current =
         Nothing -> Right Nothing
         Just currentModule
           | modulePath currentModule == previousPath -> Right Nothing
+          | normalizeLegacyModuleName (moduleNameFromPath previousPath) /= moduleNameFromPath (modulePath currentModule) -> Right Nothing
           | otherwise ->
               Right . Just $
                 SourceMove
@@ -72,7 +86,9 @@ planSourceMoves previous current =
                     moveNewModule = moduleNameFromPath (modulePath currentModule),
                     moveOldPath = previousPath,
                     moveNewPath = modulePath currentModule,
-                    moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/" <> previousPath
+                    moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/" <> previousPath,
+                    moveContentDigest = Nothing,
+                    moveTransformedDigest = Nothing
                   }
 
     uniqueRole _ [] = Right Nothing
@@ -183,3 +199,16 @@ isPrefixOfString :: String -> String -> Bool
 isPrefixOfString [] _ = True
 isPrefixOfString _ [] = False
 isPrefixOfString (left : leftRest) (right : rightRest) = left == right && isPrefixOfString leftRest rightRest
+
+-- | Stable UTF-8 content digest used by the local migration journal.  FNV-1a
+-- is sufficient here: this is an integrity/recovery fingerprint rather than a
+-- security boundary, and keeping it local avoids changing the package surface.
+contentDigest :: Text -> Text
+contentDigest source = T.pack (pad16 (showHex digest ""))
+  where
+    digest = BS.foldl' step fnvOffset (TE.encodeUtf8 source)
+    step :: Word64 -> Word8 -> Word64
+    step hash byte = (hash `xor` fromIntegral byte) * fnvPrime
+    fnvOffset = 14695981039346656037 :: Word64
+    fnvPrime = 1099511628211 :: Word64
+    pad16 rendered = replicate (16 - length rendered) '0' <> rendered

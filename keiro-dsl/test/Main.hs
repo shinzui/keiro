@@ -59,7 +59,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -72,7 +72,7 @@ import Keiro.Dsl.WorkspaceDiff qualified as CheckedWorkspaceDiff
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import Paths_keiro_dsl qualified as Package
-import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
+import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly, renameFile)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
@@ -1597,7 +1597,8 @@ main = hspec $ do
       errorCodesOf "test/fixtures/nominal-invalid-prefix.keiro" `shouldReturn` replicate 2 NominalInvalidIdPrefix
       errorCodesOf "test/fixtures/nominal-unsupported-representation.keiro" `shouldReturn` [NominalUnsupportedRepresentation]
       errorCodesOf "test/fixtures/nominal-missing-initial.keiro" `shouldReturn` [NominalMissingInitialValue]
-      errorCodesOf "test/fixtures/nominal-name-collision.keiro" `shouldReturn` [NominalNameCollision, NominalNameCollision]
+      errorCodesOf "test/fixtures/nominal-name-collision.keiro"
+        `shouldReturn` [NominalNameCollision, GeneratedOccurrenceCollision, NominalNameCollision]
 
     it "keeps v1 rejection at the source-language boundary" $ do
       source <- readTestText "test/fixtures/nominal-v1.keiro"
@@ -2280,6 +2281,34 @@ main = hspec $ do
     it "rejects non-ASCII identifier characters in the parser" $
       parseSpec "<unicode-identifier>" unicodeIdentifierSpec `shouldSatisfy` leftContains "unexpected"
 
+  describe "Haskell.name-audit" $ do
+    it "inventories every declaration in a fresh compound-name scaffold" $ do
+      spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+      let service = legacyCheckedService spec
+          ctx = defaultContext (specContext spec)
+          modules = scaffoldServiceModules ctx service
+      concatMap auditGeneratedHaskell modules `shouldBe` []
+    it "rejects underscore module and declaration mutations but ignores literals and comments" $ do
+      let mutated =
+            ScaffoldModule
+              { modulePath = "Generated/IncidentPaging/Service_oncall/Mutation.hs",
+                moduleText =
+                  T.unlines
+                    [ "module Generated.IncidentPaging.Service_oncall.Mutation where",
+                      "-- comment_value :: Text",
+                      "literalValue = \"string_value\"",
+                      "render_eventTypes :: Int",
+                      "render_eventTypes = 1"
+                    ],
+                kind = Generated,
+                origin = "test name-audit mutation"
+              }
+          violations = auditGeneratedHaskell mutated
+      violations `shouldSatisfy` any (T.isInfixOf "Service_oncall")
+      violations `shouldSatisfy` any (T.isInfixOf "render_eventTypes")
+      violations `shouldSatisfy` all (not . T.isInfixOf "comment_value")
+      violations `shouldSatisfy` all (not . T.isInfixOf "string_value")
+
   describe "Haskell.name-migration" $ do
     it "pairs a legacy module path with its stable idiomatic artifact" $ do
       let currentModule =
@@ -2298,7 +2327,9 @@ main = hspec $ do
                 moveNewModule = "Generated.IncidentPaging.ServiceOncall.ReadModel",
                 moveOldPath = "Generated/IncidentPaging/Service_oncall/ReadModel.hs",
                 moveNewPath = "Generated/IncidentPaging/ServiceOncall/ReadModel.hs",
-                moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/Generated/IncidentPaging/Service_oncall/ReadModel.hs"
+                moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/Generated/IncidentPaging/Service_oncall/ReadModel.hs",
+                moveContentDigest = Nothing,
+                moveTransformedDigest = Nothing
               }
           ]
     it "rewrites code-token module references while preserving comments and literals" $ do
@@ -2374,7 +2405,12 @@ main = hspec $ do
         TIO.writeFile recordPath (renderRecord legacyRecord)
         beforeMigration <- treeSnapshot out
         refused <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
-        refused `shouldSatisfy` \case Left [NameMigrationRequired moves] -> length moves == 2; _ -> False
+        refused `shouldSatisfy` \case
+          Left [NameMigrationRequired moves] ->
+            length moves == 2
+              && all ((/= Nothing) . moveContentDigest) moves
+              && all ((/= Nothing) . moveTransformedDigest) moves
+          _ -> False
         treeSnapshot out `shouldReturn` beforeMigration
         applied <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         report <- case applied of
@@ -2396,6 +2432,28 @@ main = hspec $ do
         case rerun of
           Left refusals -> expectationFailure (show refusals)
           Right rerunReport -> reportNameMoves rerunReport `shouldBe` []
+        TIO.readFile backupHole `shouldReturn` backupBefore
+        -- Recreate the exact crash state after every backup and prepared file
+        -- exists but before any destination is installed. A corrupted prepared
+        -- file refuses; restoring its digest lets the next run resume.
+        preparedSnapshots <- forM selected $ \scaffoldModule -> do
+          let newPath = out </> modulePath scaffoldModule
+              preparedPath = newPath <> ".keiro-dsl-name-migration-prepared"
+          bytes <- TIO.readFile newPath
+          renameFile newPath preparedPath
+          pure (preparedPath, bytes)
+        TIO.writeFile recordPath (renderRecord legacyRecord)
+        case preparedSnapshots of
+          (firstPrepared, firstBytes) : _ -> TIO.writeFile firstPrepared (firstBytes <> "\ncorrupt")
+          [] -> expectationFailure "expected prepared migration sources"
+        conflicted <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        conflicted `shouldSatisfy` \case Left [NameMigrationRefusal messages] -> any (T.isInfixOf "prepared source digest") messages; _ -> False
+        forM_ preparedSnapshots (uncurry TIO.writeFile)
+        resumed <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        case resumed of
+          Left refusals -> expectationFailure (show refusals)
+          Right resumedReport -> length (reportNameMoves resumedReport) `shouldBe` 2
+        doesFileExist newHole `shouldReturn` True
         TIO.readFile backupHole `shouldReturn` backupBefore
     it "applies the same move protocol to a two-member workspace without changing ownership" $
       withTempDirectory "keiro-dsl-workspace-name-migration" $ \out -> do
@@ -3473,9 +3531,9 @@ main = hspec $ do
       let ctx = defaultContext (specContext spec)
           readModels = [readModel | NReadModel readModel <- specNodes spec]
           modules = concatMap (scaffoldReadModel ctx) readModels
-          transfer = generatedTextEndingIn "Transfer_decisions/ReadModel.hs" modules
+          transfer = generatedTextEndingIn "TransferDecisions/ReadModel.hs" modules
           inline = generatedTextEndingIn "Subscriptions/ReadModel.hs" modules
-          transferHoles = [moduleText m | m <- modules, "Transfer_decisions/ReadModelHoles.hs" `T.isSuffixOf` T.pack (modulePath m)]
+          transferHoles = [moduleText m | m <- modules, "TransferDecisions/ReadModelHoles.hs" `T.isSuffixOf` T.pack (modulePath m)]
       length modules `shouldBe` 6
       length [m | m <- modules, kind m == Generated] `shouldBe` 4
       length [m | m <- modules, kind m == HoleStub] `shouldBe` 2
@@ -3840,7 +3898,9 @@ main = hspec $ do
       map (ckCode . kindOfChange) (diffSpecs onlyA withB) `shouldContain` [MappedDeclAdded]
       map (ckCode . kindOfChange) (diffSpecs withB onlyA) `shouldContain` [MappedDeclRemoved]
       diffSpecs base (mapArtifactNamedField "key" (\field -> field {wfHaskell = "renamedKey"}) base)
-        `shouldBe` []
+        `shouldSatisfy` \case
+          [Advisory change] -> ckCode change == GeneratedHaskellNameChanged
+          _ -> False
     it "visits every mapped wire mutation and reports every complete root path" $ do
       base <- specOf "test/fixtures/consumer-types.keiro"
       let mutations = mappedWireMutations base
@@ -4664,7 +4724,7 @@ main = hspec $ do
         `shouldBe` ["BlockArguments", "QualifiedDo"]
       generatedExtensionsEndingIn "Holder/Harness.hs" mappedGuard `shouldBe` ["OverloadedLabels"]
       generatedExtensionsEndingIn "Order/Harness.hs" registerFree `shouldBe` []
-      generatedExtensionsEndingIn "Transfer_decisions/ReadModel.hs" readModels `shouldBe` ["OverloadedRecordDot"]
+      generatedExtensionsEndingIn "TransferDecisions/ReadModel.hs" readModels `shouldBe` ["OverloadedRecordDot"]
       generatedExtensionsEndingIn "Subscriptions/ReadModel.hs" readModels `shouldBe` []
       generatedExtensionsEndingIn "Reservation/Domain.hs" snapshot `shouldContain` ["DeriveAnyClass"]
       generatedExtensionsEndingIn "Reservation/Domain.hs" ordinary `shouldNotContain` ["DeriveAnyClass"]
@@ -6185,7 +6245,7 @@ main = hspec $ do
           `shouldBe` Just (MemberOwned "domain/project.keiro")
         ownerOf "ProjectArtifact/Generated/Domain.hs"
           `shouldBe` Just (MemberOwned "domain/project-artifact.keiro")
-        ownerOf "Project_activity/Generated/ReadModel.hs"
+        ownerOf "ProjectActivity/Generated/ReadModel.hs"
           `shouldBe` Just (MemberOwned "domain/project-artifact.keiro")
         -- No module may claim an owner that is not a member of the
         -- workspace: the record's owner column has to stay resolvable.

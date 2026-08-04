@@ -16,7 +16,7 @@ import Generated.TransferRouting.Hospital.EventStream (
     hospitalEventStream,
  )
 import Generated.TransferRouting.HospitalTransferRouter.Router (hospitalTransferRouterName)
-import Generated.TransferRouting.Hospital_load.ReadModel (hospitalLoadReadModel)
+import Generated.TransferRouting.HospitalLoad.ReadModel (hospitalLoadReadModel)
 import Keiki.Core (HsPred)
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.Router (Router (..))

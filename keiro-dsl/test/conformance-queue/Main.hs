@@ -1,5 +1,5 @@
 {- | Conformance driver for the scaffolded EP-5 pgmq Job codec. Compiling this
-component proves the scaffolded @Generated.…Reservation_work.Queue@ module
+component proves the scaffolded @Generated.…ReservationWork.Queue@ module
 (the Job payload record + field->wire JSON codec + physical/dlq/table
 constants) is real, self-contained Haskell; running it proves the payload
 round-trips through encode/decode and the captured physical name is exposed.
@@ -8,8 +8,8 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
-import Generated.HospitalCapacity.Reservation_work.Queue
-import Generated.HospitalCapacity.Reservation_work.QueueCodec (reservationWorkJobCodec)
+import Generated.HospitalCapacity.ReservationWork.Queue
+import Generated.HospitalCapacity.ReservationWork.QueueCodec (reservationWorkJobCodec)
 import Keiro.PGMQ.Codec (JobCodec (..))
 import System.Exit (exitFailure)
 

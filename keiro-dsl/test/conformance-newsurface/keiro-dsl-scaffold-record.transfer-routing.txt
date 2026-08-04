@@ -5,10 +5,10 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 generated Generated/TransferRouting/ReplayAudit.hs
-generated Generated/TransferRouting/Hospital_load/ReadModelTable.hs
-generated Generated/TransferRouting/Hospital_load/ReadModel.hs
-hole TransferRouting/Hospital_load/ReadModelHoles.hs
-generated Generated/TransferRouting/Hospital_load/ReadModelHarness.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModelTable.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModel.hs
+hole TransferRouting/HospitalLoad/ReadModelHoles.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModelHarness.hs
 generated Generated/TransferRouting/HospitalTransferRouter/Router.hs
 hole TransferRouting/HospitalTransferRouter/RouterHoles.hs
 generated Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs

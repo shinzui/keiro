@@ -9,7 +9,7 @@ import Generated.TransferRouting.Hospital.Domain qualified as Hospital
 import Generated.TransferRouting.Hospital.EventStream (hospitalCommandCategory, hospitalEventStream)
 import Generated.TransferRouting.Hospital.Harness (harnessAssertions)
 import Generated.TransferRouting.HospitalTransferRouter.RouterHarness (routerHarnessValues)
-import Generated.TransferRouting.Hospital_load.ReadModelHarness (runReadModelFacts)
+import Generated.TransferRouting.HospitalLoad.ReadModelHarness (runReadModelFacts)
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.Router (Router (..))
 import Keiro.Stream (entityStream)
