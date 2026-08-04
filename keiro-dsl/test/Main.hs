@@ -46,6 +46,7 @@ import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
@@ -56,9 +57,9 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
-import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -1514,6 +1515,8 @@ main = hspec $ do
                 recLayout = "prefixed",
                 recSourceLanguage = DeclaredLanguage version noLoc,
                 recLanguageContract = effectiveLanguageContract (DeclaredLanguage version noLoc),
+                recNamingEdition = IdiomaticNamingV1,
+                recModuleRoles = [],
                 recFiles = [],
                 recMappings = [],
                 recIdDomains = [],
@@ -1541,6 +1544,7 @@ main = hspec $ do
                 wrMembers = map wmPath (wsMembers workspace),
                 wrSourceLanguages = [WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member) | member <- wsMembers workspace],
                 wrLanguageContract = wsLanguageContract workspace,
+                wrNamingEdition = IdiomaticNamingV1,
                 wrModules = [],
                 wrMappings = [],
                 wrIdDomains = [],
@@ -1651,6 +1655,8 @@ main = hspec $ do
                 recLayout = "prefixed",
                 recSourceLanguage = LegacyUnversioned,
                 recLanguageContract = effectiveLanguageContract LegacyUnversioned,
+                recNamingEdition = IdiomaticNamingV1,
+                recModuleRoles = [],
                 recFiles = [],
                 recMappings = consumerMappings plan,
                 recIdDomains = [],
@@ -2035,7 +2041,7 @@ main = hspec $ do
       manifestDependencies spec `shouldNotContain` ["keiki-codec-json"]
       codec `shouldSatisfy` T.isInfixOf "scalarLedgerEventTypes :: NonEmpty EventType"
       codec `shouldSatisfy` T.isInfixOf "eventTypes = scalarLedgerEventTypes"
-      codec `shouldSatisfy` T.isInfixOf "_renderEventTypes scalarLedgerEventTypes"
+      codec `shouldSatisfy` T.isInfixOf "renderExpectedEventTypes scalarLedgerEventTypes"
       codec `shouldSatisfy` (not . T.isInfixOf "; expected one of: ScalarsRecorded\"")
       generated `shouldSatisfy` all (not . T.isInfixOf "error")
       generated `shouldSatisfy` all (not . T.isInfixOf "getCurrentTime")
@@ -2048,9 +2054,9 @@ main = hspec $ do
           codec = generatedTextEndingIn "Codec.hs" modules
           codecLines = T.lines codec
       codecLines `shouldContain` ["renderEventTypes :: NonEmpty EventType"]
-      codecLines `shouldContain` ["_renderEventTypes :: NonEmpty EventType -> String"]
+      codecLines `shouldContain` ["renderExpectedEventTypes :: NonEmpty EventType -> String"]
       codec `shouldSatisfy` T.isInfixOf "eventTypes = renderEventTypes"
-      codec `shouldSatisfy` T.isInfixOf "_renderEventTypes renderEventTypes"
+      codec `shouldSatisfy` T.isInfixOf "renderExpectedEventTypes renderEventTypes"
     it "canonicalizes Time and UTCTime across pretty, diff, and fold identity" $ do
       source <- readTestText "test/fixtures/aggregate-scalars.keiro"
       canonical <- parseInlineSpec "<time>" source
@@ -2251,20 +2257,203 @@ main = hspec $ do
         `shouldBe` [maxBound]
 
   describe "identifier hygiene" $ do
-    it "reports constructor shape and Haskell keywords at their owning declarations" $ do
+    it "normalizes lowercase logical type names and reports generated Haskell keywords at their owning declarations" $ do
       spec <- parseInlineSpec "<identifier-hygiene>" identifierHygieneSpec
-      [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic `elem` [IdentNotConstructorSafe, IdentHaskellKeyword]]
-        `shouldContain` [(IdentNotConstructorSafe, 3), (IdentHaskellKeyword, 7)]
+      [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic `elem` [IdentUnsafeNormalization, GeneratedOccurrenceReserved]]
+        `shouldBe` [(GeneratedOccurrenceReserved, 7)]
     it "rejects generated vertex constructors that collide with event constructors" $ do
       spec <- parseInlineSpec "<vertex-collision>" vertexCollisionSpec
       [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic == VertexCtorCollision]
         `shouldBe` [(VertexCtorCollision, 3)]
-    it "rejects underscore-leading names whose title-casing cannot make a module segment" $ do
+    it "rejects underscore-leading names whose normalization would erase a word boundary" $ do
       spec <- parseInlineSpec "<underscore-node>" underscoreNodeSpec
-      [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic == IdentNotConstructorSafe]
-        `shouldBe` [(IdentNotConstructorSafe, 3)]
+      [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic == IdentUnsafeNormalization]
+        `shouldBe` [(IdentUnsafeNormalization, 3)]
+    it "rejects normalized module collisions with both source locations" $ do
+      spec <- parseInlineSpec "<normalized-collision>" normalizedCollisionSpec
+      case [diagnostic | diagnostic <- validateSpec spec, code diagnostic == GeneratedOccurrenceCollision] of
+        [diagnostic] -> do
+          line diagnostic `shouldBe` 8
+          relatedLocations diagnostic `shouldBe` [(3, "'fooBar' also normalizes here")]
+          renderDiagnostic "<normalized-collision>" diagnostic `shouldSatisfy` T.isInfixOf "fooBar"
+        diagnostics -> expectationFailure ("expected one normalized collision, got " <> show diagnostics)
     it "rejects non-ASCII identifier characters in the parser" $
       parseSpec "<unicode-identifier>" unicodeIdentifierSpec `shouldSatisfy` leftContains "unexpected"
+
+  describe "Haskell.name-migration" $ do
+    it "pairs a legacy module path with its stable idiomatic artifact" $ do
+      let currentModule =
+            ScaffoldModule
+              { modulePath = "Generated/IncidentPaging/ServiceOncall/ReadModel.hs",
+                moduleText = "module Generated.IncidentPaging.ServiceOncall.ReadModel where\n",
+                kind = Generated,
+                origin = "readmodel service_oncall ReadModel"
+              }
+      planSourceMoves [(Nothing, Generated, "Generated/IncidentPaging/Service_oncall/ReadModel.hs")] [currentModule]
+        `shouldBe` Right
+          [ SourceMove
+              { moveRole = moduleRole currentModule,
+                moveKind = Generated,
+                moveOldModule = "Generated.IncidentPaging.Service_oncall.ReadModel",
+                moveNewModule = "Generated.IncidentPaging.ServiceOncall.ReadModel",
+                moveOldPath = "Generated/IncidentPaging/Service_oncall/ReadModel.hs",
+                moveNewPath = "Generated/IncidentPaging/ServiceOncall/ReadModel.hs",
+                moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/Generated/IncidentPaging/Service_oncall/ReadModel.hs"
+              }
+          ]
+    it "rewrites code-token module references while preserving comments and literals" $ do
+      let old = "Generated.IncidentPaging.Service_oncall.ReadModel"
+          new = "Generated.IncidentPaging.ServiceOncall.ReadModel"
+          source =
+            T.unlines
+              [ "module IncidentPaging.Service_oncall.ReadModelHoles where",
+                "import Generated.IncidentPaging.Service_oncall.ReadModel",
+                "value = Generated.IncidentPaging.Service_oncall.ReadModel.constructor",
+                "-- Generated.IncidentPaging.Service_oncall.ReadModel in a comment",
+                "literal = \"Generated.IncidentPaging.Service_oncall.ReadModel\"",
+                "character = 'x'",
+                "{- outer {- Generated.IncidentPaging.Service_oncall.ReadModel -} comment -}"
+              ]
+      case rewriteHaskellModuleReferences (Map.singleton old new) source of
+        Left err -> expectationFailure (show err)
+        Right rewritten -> do
+          rewritten `shouldSatisfy` T.isInfixOf "import Generated.IncidentPaging.ServiceOncall.ReadModel"
+          rewritten `shouldSatisfy` T.isInfixOf "value = Generated.IncidentPaging.ServiceOncall.ReadModel.constructor"
+          rewritten `shouldSatisfy` T.isInfixOf "-- Generated.IncidentPaging.Service_oncall.ReadModel in a comment"
+          rewritten `shouldSatisfy` T.isInfixOf "literal = \"Generated.IncidentPaging.Service_oncall.ReadModel\""
+          rewritten `shouldSatisfy` T.isInfixOf "{- outer {- Generated.IncidentPaging.Service_oncall.ReadModel -} comment -}"
+    it "refuses without mutation, then applies recoverable generated and hole moves" $
+      withTempDirectory "keiro-dsl-name-migration" $ \out -> do
+        spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+        let service = legacyCheckedService spec
+            ctx = defaultContext (specContext spec)
+        modules <- case planServiceScaffold ctx service of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right planned -> pure planned
+        let selected =
+              [ scaffoldModule
+              | scaffoldModule <- modules,
+                any (`T.isSuffixOf` T.pack (modulePath scaffoldModule)) ["ServiceOncall/ReadModel.hs", "ServiceOncall/ReadModelHoles.hs"]
+              ]
+            legacyPath = T.unpack . T.replace "ServiceOncall" "Service_oncall" . T.pack
+            reverseModules =
+              Map.fromList
+                [ (moduleNameFromPath (modulePath scaffoldModule), moduleNameFromPath (legacyPath (modulePath scaffoldModule)))
+                | scaffoldModule <- selected
+                ]
+        forM_ selected $ \scaffoldModule -> do
+          legacyText <- case rewriteHaskellModuleReferences reverseModules (moduleText scaffoldModule) of
+            Left err -> expectationFailure (show err) >> fail "unreachable"
+            Right source -> pure source
+          let oldPath = out </> legacyPath (modulePath scaffoldModule)
+              withEvidence
+                | kind scaffoldModule == HoleStub =
+                    legacyText
+                      <> "\n-- Generated.IncidentPaging.Service_oncall.ReadModel remains in this comment\n"
+                      <> "migrationLiteral = \"Generated.IncidentPaging.Service_oncall.ReadModel\"\n"
+                | otherwise = legacyText
+          createDirectoryIfMissing True (takeDirectory oldPath)
+          TIO.writeFile oldPath withEvidence
+        let legacyRecord =
+              ScaffoldRecord
+                { recSpecPath = "incident-paging.keiro",
+                  recModuleRoot = "",
+                  recLayout = "prefixed",
+                  recSourceLanguage = LegacyUnversioned,
+                  recLanguageContract = effectiveLanguageContract LegacyUnversioned,
+                  recNamingEdition = LegacyNamingV1,
+                  recModuleRoles = [],
+                  recFiles = [(kind scaffoldModule, legacyPath (modulePath scaffoldModule)) | scaffoldModule <- selected],
+                  recMappings = [],
+                  recIdDomains = [],
+                  recNominalEqualities = [],
+                  recBindingObligations = [],
+                  recBehaviorRequirements = []
+                }
+            recordPath = out </> recordFileName (specContext spec)
+        TIO.writeFile recordPath (renderRecord legacyRecord)
+        beforeMigration <- treeSnapshot out
+        refused <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        refused `shouldSatisfy` \case Left [NameMigrationRequired moves] -> length moves == 2; _ -> False
+        treeSnapshot out `shouldReturn` beforeMigration
+        applied <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        report <- case applied of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right value -> pure value
+        length (reportNameMoves report) `shouldBe` 2
+        let newHole = out </> "IncidentPaging/ServiceOncall/ReadModelHoles.hs"
+            oldHole = out </> "IncidentPaging/Service_oncall/ReadModelHoles.hs"
+            backupHole = out </> ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/IncidentPaging/Service_oncall/ReadModelHoles.hs"
+        doesFileExist oldHole `shouldReturn` False
+        doesFileExist newHole `shouldReturn` True
+        doesFileExist backupHole `shouldReturn` True
+        migratedHole <- TIO.readFile newHole
+        migratedHole `shouldSatisfy` T.isInfixOf "module IncidentPaging.ServiceOncall.ReadModelHoles"
+        migratedHole `shouldSatisfy` T.isInfixOf "-- Generated.IncidentPaging.Service_oncall.ReadModel remains in this comment"
+        migratedHole `shouldSatisfy` T.isInfixOf "migrationLiteral = \"Generated.IncidentPaging.Service_oncall.ReadModel\""
+        backupBefore <- TIO.readFile backupHole
+        rerun <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        case rerun of
+          Left refusals -> expectationFailure (show refusals)
+          Right rerunReport -> reportNameMoves rerunReport `shouldBe` []
+        TIO.readFile backupHole `shouldReturn` backupBefore
+    it "applies the same move protocol to a two-member workspace without changing ownership" $
+      withTempDirectory "keiro-dsl-workspace-name-migration" $ \out -> do
+        workspace <- shouldComposeWorkspace canonicalWorkspacePath
+        plan <- shouldPlanWorkspaceSpec workspace
+        initial <- executeWorkspaceScaffold out False plan
+        case initial of
+          Left refusals -> expectationFailure (show refusals)
+          Right _ -> pure ()
+        let recordPath = out </> workspaceRecordFileName (wsService workspace)
+        currentRecord <-
+          TIO.readFile recordPath >>= \contents ->
+            maybe (expectationFailure "fresh workspace record did not parse" >> fail "unreachable") pure (parseWorkspaceRecord contents)
+        let selectedRows = [row | row <- wrModules currentRecord, "ProjectActivity" `T.isInfixOf` T.pack (wrmPath row)]
+            legacyPath = T.unpack . T.replace "ProjectActivity" "Project_activity" . T.pack
+            reverseModules =
+              Map.fromList
+                [ (moduleNameFromPath (wrmPath row), moduleNameFromPath (legacyPath (wrmPath row)))
+                | row <- selectedRows
+                ]
+        selectedRows `shouldSatisfy` (not . null)
+        forM_ selectedRows $ \row -> do
+          currentSource <- TIO.readFile (out </> wrmPath row)
+          legacySource <- case rewriteHaskellModuleReferences reverseModules currentSource of
+            Left err -> expectationFailure (show err) >> fail "unreachable"
+            Right source -> pure source
+          writeFileWithParents (out </> legacyPath (wrmPath row)) legacySource
+          removeFile (out </> wrmPath row)
+        let legacyRecord =
+              currentRecord
+                { wrNamingEdition = LegacyNamingV1,
+                  wrModules =
+                    [ if row `elem` selectedRows then row {wrmPath = legacyPath (wrmPath row)} else row
+                    | row <- wrModules currentRecord
+                    ]
+                }
+            ownersBefore = Map.fromList [(wrmRole row, wrmOwner row) | row <- selectedRows]
+        TIO.writeFile recordPath (renderWorkspaceRecord legacyRecord)
+        beforeMigration <- treeSnapshot out
+        refused <- executeWorkspaceScaffoldWithNameMigrations out False False plan
+        refused `shouldSatisfy` \case Left [NameMigrationRequired moves] -> length moves == length selectedRows; _ -> False
+        treeSnapshot out `shouldReturn` beforeMigration
+        applied <- executeWorkspaceScaffoldWithNameMigrations out False True plan
+        report <- case applied of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right value -> pure value
+        length (wsrNameMoves report) `shouldBe` length selectedRows
+        migratedRecord <-
+          TIO.readFile recordPath >>= \contents ->
+            maybe (expectationFailure "migrated workspace record did not parse" >> fail "unreachable") pure (parseWorkspaceRecord contents)
+        wrNamingEdition migratedRecord `shouldBe` IdiomaticNamingV1
+        let migratedRows = [row | row <- wrModules migratedRecord, wrmRole row `Map.member` ownersBefore]
+        Map.fromList [(wrmRole row, wrmOwner row) | row <- migratedRows] `shouldBe` ownersBefore
+        map wrmPath migratedRows `shouldSatisfy` all (not . T.isInfixOf "Project_activity" . T.pack)
+        forM_ selectedRows $ \row -> do
+          doesFileExist (out </> legacyPath (wrmPath row)) `shouldReturn` False
+          doesFileExist (out </> wrmPath row) `shouldReturn` True
+          doesFileExist (out </> ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1" </> legacyPath (wrmPath row)) `shouldReturn` True
 
   describe "canonical reservation.keiro" $
     it "parses into the expected aggregate shape" $ do
@@ -4982,6 +5171,8 @@ main = hspec $ do
                   recLayout = "prefixed",
                   recSourceLanguage = LegacyUnversioned,
                   recLanguageContract = effectiveLanguageContract LegacyUnversioned,
+                  recNamingEdition = IdiomaticNamingV1,
+                  recModuleRoles = [ScaffoldModuleRoleRow (moduleRole m) (kind m) (modulePath m) | (m, _) <- reportDispositions report],
                   recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report],
                   recMappings = [],
                   recIdDomains = [],
@@ -7072,10 +7263,11 @@ sampleWorkspaceRecord workspace =
         | member <- wsMembers workspace
         ],
       wrLanguageContract = wsLanguageContract workspace,
+      wrNamingEdition = IdiomaticNamingV1,
       wrModules =
-        [ WorkspaceModuleRow Generated "Demo/Generated/StructuralProjections.hs" Nothing,
-          WorkspaceModuleRow Generated "Demo/Project/Generated/Domain.hs" (Just "domain/project.keiro"),
-          WorkspaceModuleRow HoleStub "Demo/Project/Holes.hs" (Just "domain/shared.keiro")
+        [ WorkspaceModuleRow Generated "Demo/Generated/StructuralProjections.hs" Nothing Nothing,
+          WorkspaceModuleRow Generated "Demo/Project/Generated/Domain.hs" (Just "domain/project.keiro") Nothing,
+          WorkspaceModuleRow HoleStub "Demo/Project/Holes.hs" (Just "domain/shared.keiro") Nothing
         ],
       wrMappings = consumerMappings (consumerPlan (wsMergedSpec workspace)),
       wrIdDomains = [],
@@ -8134,6 +8326,22 @@ underscoreNodeSpec =
     [ "context svc",
       "",
       "contract _contract {",
+      "  schemaVersion 1",
+      "  discriminator kind",
+      "}"
+    ]
+
+normalizedCollisionSpec :: T.Text
+normalizedCollisionSpec =
+  T.unlines
+    [ "context svc",
+      "",
+      "contract fooBar {",
+      "  schemaVersion 1",
+      "  discriminator kind",
+      "}",
+      "",
+      "contract foo_bar {",
       "  schemaVersion 1",
       "  discriminator kind",
       "}"

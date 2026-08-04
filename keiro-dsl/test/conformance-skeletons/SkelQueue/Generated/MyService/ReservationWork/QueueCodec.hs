@@ -7,12 +7,12 @@
 -- dead-letter. This is telemetry-neutral:
 -- docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md owns
 -- spans and acknowledgement vocabulary.
-module SkelQueue.Generated.MyService.Reservation_work.QueueCodec (reservationWorkPayloadCodec, reservationWorkJobCodec) where
+module SkelQueue.Generated.MyService.ReservationWork.QueueCodec (reservationWorkPayloadCodec, reservationWorkJobCodec) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Keiro.Codec (Codec (..), EventType (..))
 import Keiro.PGMQ.Codec (JobCodec, keiroJobCodec)
-import SkelQueue.Generated.MyService.Reservation_work.Queue (ReservationWorkItem, encodeReservationWorkItem, parseReservationWorkItem)
+import SkelQueue.Generated.MyService.ReservationWork.Queue (ReservationWorkItem, encodeReservationWorkItem, parseReservationWorkItem)
 
 reservationWorkPayloadCodec :: Codec ReservationWorkItem
 reservationWorkPayloadCodec =

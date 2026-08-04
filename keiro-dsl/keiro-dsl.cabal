@@ -54,6 +54,7 @@ library
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
+    Keiro.Dsl.HaskellSourceMove
     Keiro.Dsl.IdDomain
     Keiro.Dsl.LanguageVersion
     Keiro.Dsl.Manifest
@@ -85,6 +86,7 @@ library
     Keiro.Dsl.Frontend.Internal
     Keiro.Dsl.GeneratedHaskellLanguage
     Keiro.Dsl.HaskellImport
+    Keiro.Dsl.HaskellName
     Keiro.Dsl.Parser.Aggregate
     Keiro.Dsl.Parser.Coordination
     Keiro.Dsl.Parser.Core
@@ -163,11 +165,27 @@ test-suite keiro-dsl-import-planning-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/import-planning src
   main-is:        Main.hs
-  other-modules:  Keiro.Dsl.HaskellImport
+  other-modules:
+    Keiro.Dsl.HaskellImport
+    Keiro.Dsl.HaskellName
+
   build-depends:
     , base        >=4.21 && <5
     , containers  >=0.6  && <0.8
     , hspec       >=2.11
+    , text        >=2.1  && <2.2
+
+test-suite keiro-dsl-haskell-name-test
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/haskell-name src
+  main-is:        Main.hs
+  other-modules:  Keiro.Dsl.HaskellName
+  build-depends:
+    , base        >=4.21 && <5
+    , containers  >=0.6  && <0.8
+    , hspec       >=2.11
+    , QuickCheck  >=2.14
     , text        >=2.1  && <2.2
 
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
@@ -594,17 +612,17 @@ test-suite keiro-dsl-conformance-skeletons
     SkelProcess.MyService.Hospital.Holes
     SkelProcess.MyService.HospitalSurge.ProcessHoles
     SkelProcess.MyService.Surge.Holes
-    SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModel
-    SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModelHarness
-    SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModelTable
-    SkelQueue.Generated.MyService.Reservation_work.Queue
-    SkelQueue.Generated.MyService.Reservation_work.QueueCodec
-    SkelQueue.Generated.MyService.Reservation_work.QueuePolicy
-    SkelQueue.Generated.MyService.Transfer_decisions.ReadModel
-    SkelQueue.Generated.MyService.Transfer_decisions.ReadModelHarness
-    SkelQueue.Generated.MyService.Transfer_decisions.ReadModelTable
-    SkelQueue.MyService.Accepted_transfer_needs.ReadModelHoles
-    SkelQueue.MyService.Transfer_decisions.ReadModelHoles
+    SkelQueue.Generated.MyService.AcceptedTransferNeeds.ReadModel
+    SkelQueue.Generated.MyService.AcceptedTransferNeeds.ReadModelHarness
+    SkelQueue.Generated.MyService.AcceptedTransferNeeds.ReadModelTable
+    SkelQueue.Generated.MyService.ReservationWork.Queue
+    SkelQueue.Generated.MyService.ReservationWork.QueueCodec
+    SkelQueue.Generated.MyService.ReservationWork.QueuePolicy
+    SkelQueue.Generated.MyService.TransferDecisions.ReadModel
+    SkelQueue.Generated.MyService.TransferDecisions.ReadModelHarness
+    SkelQueue.Generated.MyService.TransferDecisions.ReadModelTable
+    SkelQueue.MyService.AcceptedTransferNeeds.ReadModelHoles
+    SkelQueue.MyService.TransferDecisions.ReadModelHoles
     SkelRouter.Generated.MyService.Page.Codec
     SkelRouter.Generated.MyService.Page.Domain
     SkelRouter.Generated.MyService.Page.EventStream

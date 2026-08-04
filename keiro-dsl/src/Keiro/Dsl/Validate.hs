@@ -36,6 +36,7 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType qualified as Nominal
@@ -173,6 +174,9 @@ data DiagnosticCode
     IdentHaskellKeyword
   | IdentNotConstructorSafe
   | VertexCtorCollision
+  | IdentUnsafeNormalization
+  | GeneratedOccurrenceReserved
+  | GeneratedOccurrenceCollision
   | -- EP-107 (first-class read models).
     RmShapeHashDrift
   | RmStrongInlineOnly
@@ -374,6 +378,7 @@ data Diagnostic = Diagnostic
   { line :: !Int,
     severity :: !Severity,
     code :: !DiagnosticCode,
+    relatedLocations :: ![(Int, Text)],
     message :: !Text
   }
   deriving stock (Eq, Show)
@@ -382,16 +387,22 @@ data Diagnostic = Diagnostic
 -- @\<file\>:\<line\>: error[\<code\>]: \<message\>@ form.
 renderDiagnostic :: FilePath -> Diagnostic -> Text
 renderDiagnostic file d =
-  T.pack file
-    <> ":"
-    <> T.pack (show (line d))
-    <> ": "
-    <> sev
-    <> "["
-    <> T.pack (show (code d))
-    <> "]: "
-    <> message d
+  T.intercalate "\n" (primary : notes)
   where
+    primary =
+      T.pack file
+        <> ":"
+        <> T.pack (show (line d))
+        <> ": "
+        <> sev
+        <> "["
+        <> T.pack (show (code d))
+        <> "]: "
+        <> message d
+    notes =
+      [ "  " <> T.pack file <> ":" <> T.pack (show noteLine) <> ": note: " <> note
+      | (noteLine, note) <- relatedLocations d
+      ]
     sev = case severity d of Error -> "error"; Warning -> "warning"
 
 -- | Reserved wall-clock atom names. Sampling any of these inside a guard or
@@ -1077,7 +1088,7 @@ qualifiedValueSafe qualified = case reverse (T.splitOn "." qualified) of
 
 lowerIdentifierSafe :: Text -> Bool
 lowerIdentifierSafe name = case T.uncons name of
-  Just (first, rest) -> asciiLower first && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` haskellKeywords
+  Just (first, rest) -> asciiLower first && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` HaskellName.haskellKeywords
   Nothing -> False
 
 asciiControl :: Char -> Bool
@@ -1095,16 +1106,17 @@ headOr fallback = \case
   [] -> fallback
   value : _ -> value
 
--- | Reject names that would make the scaffolder emit illegal Haskell. The
--- parser enforces the ASCII alphabet; this pass applies the category-specific
--- uppercase/lowercase and keyword rules that require AST context.
+-- | Check every logical name before a renderer can turn it into Haskell.  The
+-- parser enforces the ASCII alphabet; 'HaskellName' owns word segmentation,
+-- casing, keywords, and normalized collision keys.
 validateNames :: Spec -> [Diagnostic]
 validateNames spec =
   concat
     [ concatMap idNames (specIds spec),
       concatMap enumNames (specEnums spec),
       concatMap nominalNames (specNominalScalars spec),
-      concatMap nodeNames (specNodes spec)
+      concatMap nodeNames (specNodes spec),
+      normalizedCollisions
     ]
   where
     idNames declaration =
@@ -1187,30 +1199,139 @@ validateNames spec =
     bindingName category anchor binding = fieldNameRule category (fbName binding) anchor
     contractFieldName contract field = fieldNameRule "contract field" (cfName field) (ctrLoc contract)
 
-    constructorName category name anchor
-      | constructorSafe name = []
-      | otherwise =
-          [ mkErr (locLine anchor) IdentNotConstructorSafe $
-              category <> " '" <> name <> "' must be PascalCase: it becomes a Haskell constructor, type name, or module segment in scaffolded code"
+    constructorName category name anchor = checkedLogicalName HaskellName.GeneratedTypeSite category name anchor
+
+    pascalizedNodeName category name anchor = checkedLogicalName HaskellName.NodeModuleSite (category <> " name") name anchor
+
+    fieldNameRule category name anchor = checkedLogicalName HaskellName.GeneratedFieldSite category name anchor
+
+    checkedLogicalName kind category name anchor =
+      case deriveAt HaskellName.LogicalIdentifier kind category name anchor of
+        Right _ -> []
+        Left nameError -> [nameErrorDiagnostic category nameError]
+
+    deriveAt source kind category name anchor =
+      HaskellName.deriveHaskellName source (nameSite kind category name anchor)
+
+    nameSite kind category name anchor =
+      HaskellName.NameSite
+        { HaskellName.siteKind = kind,
+          HaskellName.siteLogicalName = name,
+          HaskellName.siteOwner = category <> ":" <> name,
+          HaskellName.siteLine = locLine anchor
+        }
+
+    nameErrorDiagnostic category = \case
+      HaskellName.EmptyNameSegment site ->
+        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
+          category <> " '" <> HaskellName.siteLogicalName site <> "' has an empty generated-Haskell word"
+      HaskellName.UnsafeNameSeparator site reason ->
+        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
+          category <> " '" <> HaskellName.siteLogicalName site <> "' cannot be normalized safely: " <> reason
+      HaskellName.ReservedGeneratedOccurrence site occurrence ->
+        mkErr (HaskellName.siteLine site) GeneratedOccurrenceReserved $
+          category <> " '" <> HaskellName.siteLogicalName site <> "' normalizes to reserved Haskell occurrence '" <> occurrence <> "'"
+      HaskellName.InvalidExplicitHaskellName site occurrence ->
+        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
+          category <> " '" <> HaskellName.siteLogicalName site <> "' cannot become generated Haskell occurrence '" <> occurrence <> "'"
+      collision@HaskellName.NormalizedNameCollision {} -> collisionDiagnostic collision
+
+    normalizedCollisions = map collisionDiagnostic (HaskellName.detectNameCollisions collisionOccurrences)
+
+    collisionOccurrences = nodeModuleOccurrences <> sharedTypeOccurrences <> concatMap aggregateFieldOccurrences aggregates
+
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+
+    contextSegment =
+      case deriveAt HaskellName.LogicalWireWord HaskellName.ContextModuleSite "context" (specContext spec) (Loc 1) of
+        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        Left _ -> specContext spec
+
+    nodeModuleOccurrences =
+      [ HaskellName.plannedOccurrence contextSegment HaskellName.ModuleSpace "" rendered site
+      | node <- specNodes spec,
+        let (category, raw, anchor) = nodeNameAndLoc node,
+        let site = nameSite HaskellName.NodeModuleSite category raw anchor,
+        Right derived <- [HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site],
+        let rendered = HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+      ]
+
+    sharedTypeOccurrences =
+      [ HaskellName.plannedOccurrence ("Generated." <> contextSegment <> ".Nominals") HaskellName.TypeSpace "" rendered site
+      | (category, raw, anchor) <-
+          [("id", idName declaration, idLoc declaration) | declaration <- specIds spec]
+            <> [("enum", enumName declaration, enumLoc declaration) | declaration <- specEnums spec]
+            <> [("nominal", nominalScalarName declaration, nominalScalarLoc declaration) | declaration <- specNominalScalars spec],
+        let site = nameSite HaskellName.GeneratedTypeSite category raw anchor,
+        Right derived <- [HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site],
+        let rendered = HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+      ]
+
+    aggregateFieldOccurrences aggregate = commandFields <> eventFields
+      where
+        targetModule = "Generated." <> contextSegment <> "." <> normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate) <> ".Domain"
+        commandFields =
+          [ fieldOccurrence targetModule (cmdName command) "command field" field
+          | command <- aggCommands aggregate,
+            field <- cmdFields command
+          ]
+        eventFields =
+          [ fieldOccurrence targetModule (evName event) "event field" field
+          | event <- aggEvents aggregate,
+            field <- case evBody event of EventFields fields -> fields; EventFromCommand _ -> []
           ]
 
-    pascalizedNodeName category name anchor
-      | "_" `T.isPrefixOf` name =
-          [ mkErr (locLine anchor) IdentNotConstructorSafe $
-              category <> " name '" <> name <> "' cannot begin with '_': title-casing leaves an invalid Haskell module segment"
-          ]
-      | otherwise = []
+    fieldOccurrence targetModule scope category field =
+      let raw = aggregateFieldName field
+          site = nameSite HaskellName.GeneratedFieldSite category raw (aggregateFieldLoc field)
+          rendered = case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+            Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+            Left _ -> raw
+       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
 
-    fieldNameRule category name anchor
-      | name `Set.member` haskellKeywords =
-          [ mkErr (locLine anchor) IdentHaskellKeyword $
-              category <> " '" <> name <> "' is a Haskell keyword and cannot become a record field in generated code"
-          ]
-      | fieldSafe name = []
-      | otherwise =
-          [ mkErr (locLine anchor) IdentNotConstructorSafe $
-              category <> " '" <> name <> "' must begin with a lowercase ASCII letter or underscore to become a Haskell record field"
-          ]
+    normalizedUpper category raw anchor =
+      case deriveAt HaskellName.LogicalIdentifier HaskellName.GeneratedTypeSite category raw anchor of
+        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        Left _ -> raw
+
+    nodeNameAndLoc = \case
+      NAggregate value -> ("aggregate", aggName value, aggLoc value)
+      NProcess value -> ("process", procId value, procLoc value)
+      NRouter value -> ("router", rtId value, rtLoc value)
+      NContract value -> ("contract", ctrName value, ctrLoc value)
+      NIntake value -> ("intake", inkName value, inkLoc value)
+      NEmit value -> ("emit", emName value, emLoc value)
+      NPublisher value -> ("publisher", pubName value, pubLoc value)
+      NWorkqueue value -> ("workqueue", wqName value, wqLoc value)
+      NPgmqDispatch value -> ("dispatch", pdName value, pdLoc value)
+      NReadModel value -> ("readmodel", rmName value, rmLoc value)
+      NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
+      NOperation value -> ("operation", opName value, opLoc value)
+
+    collisionDiagnostic (HaskellName.NormalizedNameCollision key sites) =
+      case reverse (NE.toList sites) of
+        primary : reversedEarlier ->
+          Diagnostic
+            { line = HaskellName.siteLine primary,
+              severity = Error,
+              code = GeneratedOccurrenceCollision,
+              relatedLocations =
+                [ (HaskellName.siteLine site, "'" <> HaskellName.siteLogicalName site <> "' also normalizes here")
+                | site <- reverse reversedEarlier
+                ],
+              message =
+                "logical declarations "
+                  <> T.intercalate ", " ["'" <> HaskellName.siteLogicalName site <> "'" | site <- NE.toList sites]
+                  <> " normalize to the same Haskell occurrence '"
+                  <> HaskellName.occurrenceName key
+                  <> "' in "
+                  <> HaskellName.occurrenceModule key
+                  <> " ("
+                  <> T.pack (show (HaskellName.occurrenceSpace key))
+                  <> ")"
+            }
+        [] -> mkErr 1 GeneratedOccurrenceCollision "internal error: normalized collision without source sites"
+    collisionDiagnostic nameError = nameErrorDiagnostic "generated declaration" nameError
 
     vertexCollisions aggregate =
       [ mkErr (locLine (aggLoc aggregate)) VertexCtorCollision $
@@ -1226,54 +1347,20 @@ validateNames spec =
             <> vertex
             <> "' in the generated Domain constructor namespace"
       | state <- aggStates aggregate,
-        let vertex = aggName aggregate <> stName state,
+        let vertex = normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate) <> normalizedUpper "state" (stName state) (stLoc state),
         declarationKind <- collisionKinds aggregate vertex
       ]
 
     collisionKinds aggregate vertex =
-      ["event" | vertex `elem` map evName (aggEvents aggregate)]
-        ++ ["command" | vertex `elem` map cmdName (aggCommands aggregate)]
-        ++ ["enum constructor" | vertex `elem` [ctor | enum <- specEnums spec, (ctor, _) <- enumCtors enum]]
+      ["event" | vertex `elem` [normalizedUpper "event" (evName event) (evLoc event) | event <- aggEvents aggregate]]
+        ++ ["command" | vertex `elem` [normalizedUpper "command" (cmdName command) (cmdLoc command) | command <- aggCommands aggregate]]
+        ++ ["enum constructor" | vertex `elem` [normalizedUpper "enum constructor" ctor (enumLoc enum) | enum <- specEnums spec, (ctor, _) <- enumCtors enum]]
 
--- Haskell 2010 reserved identifiers plus commonly enabled extension keywords.
-haskellKeywords :: Set Name
-haskellKeywords =
-  Set.fromList
-    [ "case",
-      "class",
-      "data",
-      "default",
-      "deriving",
-      "do",
-      "else",
-      "foreign",
-      "if",
-      "import",
-      "in",
-      "infix",
-      "infixl",
-      "infixr",
-      "instance",
-      "let",
-      "module",
-      "newtype",
-      "of",
-      "then",
-      "type",
-      "where",
-      "mdo",
-      "rec",
-      "proc"
-    ]
-
+-- Explicit consumer-owned Haskell references keep their spelling and use the
+-- historical lexical check. Generated names never call this helper.
 constructorSafe :: Name -> Bool
 constructorSafe name = case T.uncons name of
   Just (first, rest) -> asciiUpper first && T.all asciiAlphaNumOrUnderscore rest
-  Nothing -> False
-
-fieldSafe :: Name -> Bool
-fieldSafe name = case T.uncons name of
-  Just (first, rest) -> (asciiLower first || first == '_') && T.all asciiAlphaNumOrUnderscore rest
   Nothing -> False
 
 asciiUpper :: Char -> Bool
@@ -1805,6 +1892,7 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
             { line = wl,
               severity = Warning,
               code = WqUnloggedDurability,
+              relatedLocations = [],
               message = "workqueue '" <> wqName w <> "': provision unlogged is truncated to empty on a database crash; use it only for transient, regenerable work"
             }
         ]
@@ -2207,11 +2295,11 @@ validateProcess spec p =
 
     -- Surface the dangerous benign inversions the author confirmed (warnings).
     benignInversions =
-      [ Diagnostic (locLine (tmLoc timer)) Warning ProcessBenignInversion $
+      [ Diagnostic (locLine (tmLoc timer)) Warning ProcessBenignInversion [] $
           "timer '" <> tmName timer <> "' maps on-reject => Fired (a CommandRejected is treated as benign success)"
       | onReject (fireDisposition (tmFire timer)) == OFired
       ]
-        ++ [ Diagnostic (locLine (dispLoc d)) Warning ProcessBenignInversion $
+        ++ [ Diagnostic (locLine (dispLoc d)) Warning ProcessBenignInversion [] $
                "dispatch to '" <> dispTarget d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
            | d <- hDispatch (procHandle p),
              onDuplicate (dispDisposition d) == DAckOk
@@ -2327,7 +2415,7 @@ validateRouter spec router =
         [(rdCommand dispatch, rdLoc dispatch, rdDisposition dispatch)]
 
     duplicateNotice =
-      [ Diagnostic dispatchLine Warning ProcessBenignInversion $
+      [ Diagnostic dispatchLine Warning ProcessBenignInversion [] $
           "router dispatch '" <> rdCommand dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
       | onDuplicate (rdDisposition dispatch) == DAckOk
       ]
@@ -2355,14 +2443,14 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
         ]
 
     unused =
-      [ Diagnostic (locLine nodeLoc) Warning PolicyDeadLetterUnused $
+      [ Diagnostic (locLine nodeLoc) Warning PolicyDeadLetterUnused [] $
           "node '" <> nodeName <> "' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it"
       | rejectedPolicy == PolDeadLetter,
         all (not . isDeadLetter . onFailed . third) dispatches
       ]
 
     ambiguityWarning =
-      [ Diagnostic (locLine nodeLoc) Warning AmbiguousFollowsRejectedPolicy $
+      [ Diagnostic (locLine nodeLoc) Warning AmbiguousFollowsRejectedPolicy [] $
           "node '" <> nodeName <> "' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug"
       | rejectedPolicy `elem` [PolDeadLetter, PolSkip]
       ]
@@ -2652,6 +2740,7 @@ validateAggregate languageContract spec agg =
                    { line = locLine (projLoc projection),
                      severity = Warning,
                      code = RmProjectionWithoutNode,
+                     relatedLocations = [],
                      message = "projection '" <> projTable projection <> "' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable"
                    }
                ]
@@ -2769,6 +2858,7 @@ validateAggregate languageContract spec agg =
                    { line = locLine (evLoc event),
                      severity = Warning,
                      code = EventRetirementInProgress,
+                     relatedLocations = [],
                      message =
                        "event '" <> evName event <> "' is retiring: it stays fully live and replayable. Keep its live emitting transition until every affected stream is terminal or truncated; then flip it to 'deprecated event' and retain an equivalent replay-only emitting transition for as long as old payloads may be hydrated"
                    }
@@ -2779,6 +2869,7 @@ validateAggregate languageContract spec agg =
               { line = locLine (evLoc event),
                 severity = Warning,
                 code = DeprecatedEventReplayHazard,
+                relatedLocations = [],
                 message =
                   "deprecated event '" <> evName event <> "' stays decodable but is not replayable: no replay-only transition emits it, so hydration of a live stream containing it fails with HydrationNoInvertingEdge. Restore an equivalent replay-only emitting transition, or terminalize/truncate every affected stream before deployment"
               }
@@ -2789,6 +2880,7 @@ validateAggregate languageContract spec agg =
                    { line = locLine (evLoc event),
                      severity = Warning,
                      code = EventRetirementInProgress,
+                     relatedLocations = [],
                      message =
                        "deprecated event '" <> evName event <> "' is off the live write path and remains replayable through a replay-only transition; retain that transition until every stream containing the event is terminal, truncated, or passes the replay audit"
                    }
@@ -2804,6 +2896,7 @@ validateAggregate languageContract spec agg =
                 { line = locLine (aggLoc agg),
                   severity = Warning,
                   code = WireSchemaVersionMismatch,
+                  relatedLocations = [],
                   message =
                     "wire schemaVersion=" <> tInt (wireSchemaVersion w) <> " does not match the maximum event version " <> tInt maxEventVersion
                 }
@@ -2827,6 +2920,7 @@ validateAggregate languageContract spec agg =
                    { line = locLine (tLoc t),
                      severity = Warning,
                      code = ReplayOnlyCommandStillLive,
+                     relatedLocations = [],
                      message =
                        "replay-only transition '" <> tSource t <> " -- " <> tCommand t <> "' has no live sibling; command '" <> tCommand t <> "' is fully retired at state '" <> tSource t <> "' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)"
                    }
@@ -2906,7 +3000,7 @@ tInt :: Int -> Text
 tInt = T.pack . show
 
 mkErr :: Int -> DiagnosticCode -> Text -> Diagnostic
-mkErr l c m = Diagnostic {line = l, severity = Error, code = c, message = m}
+mkErr l c m = Diagnostic {line = l, severity = Error, code = c, relatedLocations = [], message = m}
 
 locLine :: Loc -> Int
 locLine = unLoc

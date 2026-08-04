@@ -24,6 +24,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.HaskellName (haskellKeywords)
 
 data HaskellNamespace
   = TypeNamespace
@@ -231,42 +232,3 @@ asciiLower character = character >= 'a' && character <= 'z'
 
 asciiDigit :: Char -> Bool
 asciiDigit character = character >= '0' && character <= '9'
-
-haskellKeywords :: Set Text
-haskellKeywords =
-  Set.fromList
-    [ "as",
-      "case",
-      "class",
-      "data",
-      "default",
-      "deriving",
-      "do",
-      "else",
-      "family",
-      "foreign",
-      "forall",
-      "if",
-      "import",
-      "in",
-      "infix",
-      "infixl",
-      "infixr",
-      "instance",
-      "let",
-      "mdo",
-      "module",
-      "newtype",
-      "of",
-      "proc",
-      "qualified",
-      "rec",
-      "safe",
-      "signature",
-      "stock",
-      "then",
-      "type",
-      "unsafe",
-      "via",
-      "where"
-    ]

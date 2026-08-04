@@ -32,7 +32,6 @@ module Keiro.Dsl.AggregateType
   )
 where
 
-import Data.Char (toUpper)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -45,6 +44,7 @@ import Data.Time.Clock (UTCTime (..), diffTimeToPicoseconds)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.TypeGraph
 import Numeric.Natural (Natural)
@@ -420,9 +420,18 @@ registerInitialCanonicalName initial = case initial of
   InitialMapped {} -> "initial"
 
 pascal :: Text -> Text
-pascal value = case T.uncons value of
-  Just (first, rest) -> T.cons (toUpper first) rest
-  Nothing -> value
+pascal value =
+  case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+    Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+    Left _ -> value
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedTypeSite,
+          HaskellName.siteLogicalName = value,
+          HaskellName.siteOwner = "aggregate-type",
+          HaskellName.siteLine = 0
+        }
 
 tshow :: Text -> Text
 tshow = T.pack . show

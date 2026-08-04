@@ -26,13 +26,13 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackage, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
-import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
+import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -46,7 +46,7 @@ data Command
   | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
   | Inspect FilePath InspectionFormat
   | BehaviorObligations FilePath BehaviorFormat
-  | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
+  | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
   | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
   | New String
 
@@ -92,7 +92,7 @@ commands =
           (info (BehaviorObligations <$> fileArg <*> behaviorFormatOpt <**> helper) (progDesc "List static aggregate behavior obligations for a .keiro file or workspace"))
         <> command
           "scaffold"
-          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> applyNameMigrationsSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
         <> command
           "diff"
           (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
@@ -121,6 +121,9 @@ collocateSwitch = switch (long "collocate" <> help "Place the generated layer as
 
 forceGeneratedOverwriteSwitch :: Parser Bool
 forceGeneratedOverwriteSwitch = switch (long "force-generated-overwrite" <> help "Overwrite a Generated path even when the existing file lacks the @generated banner")
+
+applyNameMigrationsSwitch :: Parser Bool
+applyNameMigrationsSwitch = switch (long "apply-name-migrations" <> help "Apply reviewed generated-Haskell source moves with recoverable backups")
 
 goldensOpt :: Parser FilePath
 goldensOpt = strOption (long "goldens" <> metavar "DIR" <> help "Golden-payload root to embed in generated aggregate harnesses")
@@ -212,8 +215,8 @@ run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
 run (BehaviorObligations fp format)
   | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
-run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
-  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest)
+  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
   | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
@@ -248,7 +251,7 @@ run (Check fp emit explainBindings coverageOptions) = do
           coverageOk <- runCheckCoverage fp spec coverageOptions
           when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
           when (not coverageOk) exitFailure
-run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
   case parseSource fp input of
     Left failure -> do
@@ -275,7 +278,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeServiceScaffoldWithRuntimePackage cliRuntimePackage out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
+              result <- executeServiceScaffoldWithRuntimePackageAndNameMigrations cliRuntimePackage applyNameMigrations out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -491,10 +494,11 @@ runWorkspaceScaffold ::
   Maybe RuntimePackageName ->
   Bool ->
   Bool ->
+  Bool ->
   Maybe FilePath ->
   Maybe (String, FilePath) ->
   IO ()
-runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest = do
+runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest = do
   loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
   case loaded of
     Left failure -> do
@@ -525,7 +529,7 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeWorkspaceScaffold out forceGeneratedOverwrite plan
+              result <- executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyNameMigrations plan
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)

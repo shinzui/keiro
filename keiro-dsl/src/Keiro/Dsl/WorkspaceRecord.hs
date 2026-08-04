@@ -66,9 +66,10 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
+import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
-import Keiro.Dsl.Scaffold (ModuleKind (..))
+import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import System.FilePath (isAbsolute, splitDirectories)
 
@@ -78,7 +79,8 @@ import System.FilePath (isAbsolute, splitDirectories)
 data WorkspaceModuleRow = WorkspaceModuleRow
   { wrmKind :: !ModuleKind,
     wrmPath :: !FilePath,
-    wrmOwner :: !(Maybe FilePath)
+    wrmOwner :: !(Maybe FilePath),
+    wrmRole :: !(Maybe ModuleRole)
   }
   deriving stock (Eq, Show)
 
@@ -89,6 +91,9 @@ instance ToJSON WorkspaceModuleRow where
         "path" .= T.pack (wrmPath row)
       ]
         <> ["owner" .= T.pack owner | Just owner <- [wrmOwner row]]
+        <> ["roleOwnerKind" .= roleOwnerKind role | Just role <- [wrmRole row]]
+        <> ["roleOwnerName" .= roleOwnerName role | Just role <- [wrmRole row]]
+        <> ["roleFamily" .= roleFamily role | Just role <- [wrmRole row]]
 
 instance FromJSON WorkspaceModuleRow where
   parseJSON = withObject "WorkspaceModuleRow" $ \fields -> do
@@ -99,11 +104,19 @@ instance FromJSON WorkspaceModuleRow where
       other -> fail ("unknown module kind: " <> T.unpack other)
     path <- fields .: "path"
     owner <- fields .:? "owner"
+    roleOwnerKindValue <- fields .:? "roleOwnerKind"
+    roleOwnerNameValue <- fields .:? "roleOwnerName"
+    roleFamilyValue <- fields .:? "roleFamily"
+    moduleRoleValue <- case (roleOwnerKindValue, roleOwnerNameValue, roleFamilyValue) of
+      (Nothing, Nothing, Nothing) -> pure Nothing
+      (Just ownerKind, Just ownerName, Just family) -> pure (Just (ModuleRole ownerKind ownerName family))
+      _ -> fail "module role fields must be all present or all absent"
     pure
       WorkspaceModuleRow
         { wrmKind = moduleKind,
           wrmPath = T.unpack (path :: Text),
-          wrmOwner = T.unpack <$> (owner :: Maybe Text)
+          wrmOwner = T.unpack <$> (owner :: Maybe Text),
+          wrmRole = moduleRoleValue
         }
 
 -- | One member's source-language provenance in a workspace record.
@@ -187,6 +200,7 @@ data WorkspaceRecord = WorkspaceRecord
     wrMembers :: ![FilePath],
     wrSourceLanguages :: ![WorkspaceSourceLanguageRow],
     wrLanguageContract :: !EffectiveLanguageContract,
+    wrNamingEdition :: !GeneratedHaskellNamingEdition,
     wrModules :: ![WorkspaceModuleRow],
     wrMappings :: ![MappingIdentity],
     wrIdDomains :: ![Text],
@@ -208,7 +222,8 @@ renderWorkspaceRecord record =
       "manifest: " <> wrManifest record,
       "context: " <> wrContext record,
       "module-root: " <> rootLabel,
-      "layout: " <> wrLayout record
+      "layout: " <> wrLayout record,
+      "naming-edition " <> renderGeneratedHaskellNamingEdition (wrNamingEdition record)
     ]
       <> ["member " <> T.pack path | path <- wrMembers record]
       <> ["source-language " <> encodeRow row | row <- wrSourceLanguages record]
@@ -241,6 +256,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         members <- traverse safePath [path | row <- rows, Just path <- [T.stripPrefix "member " row]]
         sourceLanguages <- parseSourceLanguages members rows
         languageContract <- parseLanguageContract sourceLanguages rows
+        namingEdition <- parseNamingEdition rows
         modules <- traverse (decodeRow "module ") (rowsWith "module " rows)
         checkedModules <- traverse checkedModule modules
         ordinaryMappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
@@ -271,6 +287,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrMembers = members,
                   wrSourceLanguages = sourceLanguages,
                   wrLanguageContract = languageContract,
+                  wrNamingEdition = namingEdition,
                   wrModules = checkedModules,
                   wrMappings = mappings,
                   wrIdDomains = idDomains,
@@ -315,6 +332,10 @@ parseWorkspaceRecord contents = case T.lines contents of
           contract <- decodeRow "semantic-contract " row
           if contract == common then Just contract else Nothing
         _ -> Nothing
+    parseNamingEdition rows = case rowsWith "naming-edition " rows of
+      [] -> Just LegacyNamingV1
+      [row] -> T.stripPrefix "naming-edition " row >>= parseGeneratedHaskellNamingEdition
+      _ -> Nothing
     checkedSourceLanguage row = do
       path <- safePath (T.pack (wrslPath row))
       pure row {wrslPath = path}

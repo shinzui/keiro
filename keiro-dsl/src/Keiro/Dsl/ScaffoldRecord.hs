@@ -4,12 +4,15 @@
 -- single-line JSON after a @mapping @ prefix; old readers ignore that row kind.
 module Keiro.Dsl.ScaffoldRecord
   ( ScaffoldRecord (..),
+    ScaffoldModuleRoleRow (..),
+    GeneratedHaskellNamingEdition (..),
     renderRecord,
     parseRecord,
     recordFileName,
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
 import Data.List (nub)
@@ -18,9 +21,10 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
+import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
-import Keiro.Dsl.Scaffold (ModuleKind (..))
+import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import System.FilePath (isAbsolute, splitDirectories)
 
@@ -30,6 +34,8 @@ data ScaffoldRecord = ScaffoldRecord
     recLayout :: !Text,
     recSourceLanguage :: !SourceLanguage,
     recLanguageContract :: !EffectiveLanguageContract,
+    recNamingEdition :: !GeneratedHaskellNamingEdition,
+    recModuleRoles :: ![ScaffoldModuleRoleRow],
     recFiles :: ![(ModuleKind, FilePath)],
     recMappings :: ![MappingIdentity],
     recIdDomains :: ![Text],
@@ -39,6 +45,43 @@ data ScaffoldRecord = ScaffoldRecord
   }
   deriving stock (Eq, Show)
 
+data ScaffoldModuleRoleRow = ScaffoldModuleRoleRow
+  { srrRole :: !ModuleRole,
+    srrKind :: !ModuleKind,
+    srrPath :: !FilePath
+  }
+  deriving stock (Eq, Show)
+
+instance Aeson.ToJSON ScaffoldModuleRoleRow where
+  toJSON row =
+    Aeson.object
+      [ "ownerKind" .= roleOwnerKind role,
+        "ownerName" .= roleOwnerName role,
+        "family" .= roleFamily role,
+        "kind" .= (case srrKind row of Generated -> "generated" :: Text; HoleStub -> "hole"),
+        "path" .= T.pack (srrPath row)
+      ]
+    where
+      role = srrRole row
+
+instance Aeson.FromJSON ScaffoldModuleRoleRow where
+  parseJSON = Aeson.withObject "ScaffoldModuleRoleRow" $ \fields -> do
+    ownerKind <- fields .: "ownerKind"
+    ownerName <- fields .: "ownerName"
+    family <- fields .: "family"
+    kindLabel <- fields .: "kind"
+    rowKind <- case (kindLabel :: Text) of
+      "generated" -> pure Generated
+      "hole" -> pure HoleStub
+      other -> fail ("unknown module kind: " <> T.unpack other)
+    rowPath <- fields .: "path"
+    pure
+      ScaffoldModuleRoleRow
+        { srrRole = ModuleRole ownerKind ownerName family,
+          srrKind = rowKind,
+          srrPath = T.unpack (rowPath :: Text)
+        }
+
 renderRecord :: ScaffoldRecord -> Text
 renderRecord record =
   T.unlines $
@@ -47,8 +90,10 @@ renderRecord record =
       "module-root: " <> rootLabel,
       "layout: " <> recLayout record,
       "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recSourceLanguage record))),
-      "semantic-contract " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recLanguageContract record)))
+      "semantic-contract " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recLanguageContract record))),
+      "naming-edition " <> renderGeneratedHaskellNamingEdition (recNamingEdition record)
     ]
+      <> map ("module-role " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recModuleRoles record))
       <> map renderFile (recFiles record)
       <> map renderMapping (recMappings record)
       <> map ("id-domain " <>) (recIdDomains record)
@@ -78,6 +123,8 @@ parseRecord contents = case T.lines contents of
         layout <- exactlyOne "layout: " rows
         sourceLanguage <- parseSourceLanguage rows
         languageContract <- parseLanguageContract sourceLanguage rows
+        namingEdition <- parseNamingEdition rows
+        moduleRoles <- traverse parseModuleRole (filter ("module-role " `T.isPrefixOf`) rows)
         files <- traverse parseFile (filter isFileRow rows)
         ordinaryMappings <- traverse (parseMapping "mapping ") (filter ("mapping " `T.isPrefixOf`) rows)
         nominalMappings <- traverse (parseMapping "nominal-mapping ") (filter ("nominal-mapping " `T.isPrefixOf`) rows)
@@ -96,6 +143,8 @@ parseRecord contents = case T.lines contents of
                   recLayout = layout,
                   recSourceLanguage = sourceLanguage,
                   recLanguageContract = languageContract,
+                  recNamingEdition = namingEdition,
+                  recModuleRoles = moduleRoles,
                   recFiles = files,
                   recMappings = mappings,
                   recIdDomains = idDomains,
@@ -127,6 +176,18 @@ parseRecord contents = case T.lines contents of
     parseBehaviorRequirement row = do
       payload <- T.stripPrefix "behavior " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseModuleRole row = do
+      payload <- T.stripPrefix "module-role " row
+      decoded <- Aeson.decodeStrict' (Text.encodeUtf8 payload)
+      checkedRole decoded
+    checkedRole roleRow = do
+      path <- checkedPath (T.pack (srrPath roleRow))
+      pure roleRow {srrPath = path}
+    checkedPath pathText =
+      let path = T.unpack pathText
+       in if null path || isAbsolute path || ".." `elem` splitDirectories path
+            then Nothing
+            else Just path
     parseSourceLanguage rows = case filter ("source-language " `T.isPrefixOf`) rows of
       [] -> Just LegacyUnversioned
       [row] -> do
@@ -139,6 +200,10 @@ parseRecord contents = case T.lines contents of
         payload <- T.stripPrefix "semantic-contract " row
         contract <- Aeson.decodeStrict' (Text.encodeUtf8 payload)
         if contract == effectiveLanguageContract sourceLanguage then Just contract else Nothing
+      _ -> Nothing
+    parseNamingEdition rows = case filter ("naming-edition " `T.isPrefixOf`) rows of
+      [] -> Just LegacyNamingV1
+      [row] -> T.stripPrefix "naming-edition " row >>= parseGeneratedHaskellNamingEdition
       _ -> Nothing
     hasDuplicateMappingNames mappings =
       let names = map mappingSpecName mappings

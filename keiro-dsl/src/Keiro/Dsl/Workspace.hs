@@ -741,7 +741,11 @@ checkedWorkspace workspace =
 checkWorkspace :: WorkspaceSpec -> [WorkspaceDiagnostic]
 checkWorkspace workspace =
   [ WorkspaceDiagnostic
-      { wdLocations = pure (locationFor (line diagnostic)),
+      { wdLocations =
+          locationFor (line diagnostic)
+            :| [ (locationFor noteLine) {wlRole = note}
+               | (noteLine, note) <- relatedLocations diagnostic
+               ],
         wdSeverity = severity diagnostic,
         wdCode = code diagnostic,
         wdSourceLanguageCause = Nothing,

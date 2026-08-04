@@ -20,6 +20,7 @@ module Keiro.Dsl.ScaffoldRun
     planScaffoldWithGoldens,
     executeServiceScaffold,
     executeServiceScaffoldWithRuntimePackage,
+    executeServiceScaffoldWithRuntimePackageAndNameMigrations,
     executeScaffold,
     executeScaffoldWithLanguage,
     renderRefusals,
@@ -32,6 +33,9 @@ module Keiro.Dsl.ScaffoldRun
     pureRefusals,
     missingGeneratedBanners,
     staleAgainst,
+    PreparedSourceMove,
+    preflightSourceMoves,
+    applyPreparedSourceMoves,
     constraintPlan,
     mappingDrift,
     behaviorDrift,
@@ -42,6 +46,7 @@ module Keiro.Dsl.ScaffoldRun
 where
 
 import Data.List (sortOn)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -63,6 +68,8 @@ import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForServi
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
+import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
@@ -70,11 +77,11 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consum
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
-import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
 import System.FilePath (takeDirectory, (</>))
 
 -- $shared
@@ -102,6 +109,9 @@ data Refusal
     GoldenRootDivergence !FilePath ![FilePath]
   | DuplicateConformanceFactKeys ![DuplicateServiceFactKey]
   | ConformancePackageRefusal !ConformancePackageFailure
+  | GeneratedNameInvariantViolation ![Text]
+  | NameMigrationRequired ![SourceMove]
+  | NameMigrationRefusal ![Text]
   deriving stock (Eq, Show)
 
 -- | What one module write did. 'Unchanged' is produced only by the workspace
@@ -153,7 +163,8 @@ data ScaffoldReport = ScaffoldReport
     reportAddedBehavior :: ![BehaviorRecordRow],
     reportRemovedBehavior :: ![BehaviorRecordRow],
     reportObsoleteOutputHooks :: ![(Text, Text)],
-    reportConformancePackage :: !(Maybe ConformancePackageReport)
+    reportConformancePackage :: !(Maybe ConformancePackageReport),
+    reportNameMoves :: ![SourceMove]
   }
   deriving stock (Eq, Show)
 
@@ -243,10 +254,50 @@ pureRefusals ctx spec modules =
   collisionRefusals modules
     <> dependencyRefusals ctx spec modules
     <> [FirewallBreach breaches | not (null breaches)]
+    <> [GeneratedNameInvariantViolation namingViolations | not (null namingViolations)]
     <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
     <> [BehaviorRefusal errors | Left errors <- [deriveBehaviorRequirements spec]]
   where
     breaches = firewallBreaches modules
+    namingViolations = generatedNameInvariantViolations modules
+
+generatedNameInvariantViolations :: [ScaffoldModule] -> [Text]
+generatedNameInvariantViolations = concatMap auditModule
+  where
+    auditModule scaffoldModule = declarationErrors <> occurrenceErrors
+      where
+        expectedModule = moduleNameOf (modulePath scaffoldModule)
+        declarationErrors = case declaredModuleName (moduleText scaffoldModule) of
+          Nothing -> [T.pack (modulePath scaffoldModule) <> ": missing Haskell module declaration"]
+          Just declared
+            | declared == expectedModule -> []
+            | otherwise ->
+                [ T.pack (modulePath scaffoldModule)
+                    <> ": declares "
+                    <> declared
+                    <> " but its planned module is "
+                    <> expectedModule
+                ]
+        occurrenceErrors =
+          [ T.pack (modulePath scaffoldModule)
+              <> ":"
+              <> tshow lineNumber
+              <> ": generated top-level occurrence begins with '_'"
+          | (lineNumber, sourceLine) <- zip [1 :: Int ..] (T.lines (moduleText scaffoldModule)),
+            "_" `T.isPrefixOf` sourceLine,
+            "::" `T.isInfixOf` sourceLine || "=" `T.isInfixOf` sourceLine
+          ]
+
+    declaredModuleName source =
+      case [T.takeWhile moduleCharacter (T.drop 7 sourceLine) | sourceLine <- T.lines source, "module " `T.isPrefixOf` sourceLine] of
+        declaration : _ | not (T.null declaration) -> Just declaration
+        _ -> Nothing
+    moduleCharacter character =
+      (character >= 'A' && character <= 'Z')
+        || (character >= 'a' && character <= 'z')
+        || (character >= '0' && character <= '9')
+        || character == '_'
+        || character == '.'
 
 dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
 dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
@@ -326,7 +377,11 @@ executeServiceScaffold :: FilePath -> Bool -> FilePath -> SourceLanguage -> Cont
 executeServiceScaffold = executeServiceScaffoldWithRuntimePackage Nothing
 
 executeServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
-executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
+executeServiceScaffoldWithRuntimePackage runtimePackage =
+  executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage False
+
+executeServiceScaffoldWithRuntimePackageAndNameMigrations :: Maybe RuntimePackageName -> Bool -> FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
+executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNameMigrations out forceGeneratedOverwrite specPath sourceLanguage ctx service plannedModules
   | effectiveLanguageContract sourceLanguage /= checkedLanguageContract service =
       pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
   | otherwise = case packagePlan of
@@ -357,45 +412,131 @@ executeServiceScaffoldWithRuntimePackage runtimePackage out forceGeneratedOverwr
             else do
               let recordPath = out </> recordFileName (specContext spec)
               previousRecord <- readRecord recordPath
-              stale <- maybe (pure []) (existingStale out modules) previousRecord
-              let currentConsumerPlan = consumerPlan spec
-                  drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
-                  languageDrift = do
-                    previous <- previousRecord
-                    if recSourceLanguage previous == sourceLanguage
-                      then Nothing
-                      else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
-                  currentObligations = either (const []) id (bindingHolesForService service)
-                  newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
-                  currentBehavior = behaviorRecordRows requirements
-                  (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
-              createDirectoryIfMissing True out
-              dispositions <- mapM (writeModule out) modules
-              let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
-              TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
-              TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
-              packageReport <- traverse executePreparedConformancePackage preparedPackage
-              pure $
-                Right
-                  ScaffoldReport
-                    { reportSpecPath = specPath,
-                      reportOutDir = out,
-                      reportContext = ctx,
-                      reportDispositions = dispositions,
-                      reportManifestPath = manifestPath,
-                      reportRecordPath = recordPath,
-                      reportPreviousSpecPath = recSpecPath <$> previousRecord,
-                      reportStale = stale,
-                      reportConsumerPlan = currentConsumerPlan,
-                      reportConstraintPlan = constraintPlan spec currentConsumerPlan,
-                      reportMappingDrift = drift,
-                      reportSourceLanguageDrift = languageDrift,
-                      reportNewHoles = newHoles,
-                      reportAddedBehavior = addedBehavior,
-                      reportRemovedBehavior = removedBehavior,
-                      reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
-                      reportConformancePackage = packageReport
-                    }
+              case planRecordedSourceMoves previousRecord modules of
+                Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+                Right moves
+                  | not (null moves) && not applyNameMigrations -> pure (Left [NameMigrationRequired moves])
+                  | otherwise -> do
+                      preparedMoves <- preflightSourceMoves out moves
+                      case preparedMoves of
+                        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+                        Right prepared -> do
+                          applyPreparedSourceMoves out prepared
+                          stale <- maybe (pure []) (existingStale out modules) previousRecord
+                          let currentConsumerPlan = consumerPlan spec
+                              drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                              languageDrift = do
+                                previous <- previousRecord
+                                if recSourceLanguage previous == sourceLanguage
+                                  then Nothing
+                                  else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
+                              currentObligations = either (const []) id (bindingHolesForService service)
+                              newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
+                              currentBehavior = behaviorRecordRows requirements
+                              (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
+                          createDirectoryIfMissing True out
+                          dispositions <- mapM (writeModule out) modules
+                          let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
+                          TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
+                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
+                          packageReport <- traverse executePreparedConformancePackage preparedPackage
+                          pure $
+                            Right
+                              ScaffoldReport
+                                { reportSpecPath = specPath,
+                                  reportOutDir = out,
+                                  reportContext = ctx,
+                                  reportDispositions = dispositions,
+                                  reportManifestPath = manifestPath,
+                                  reportRecordPath = recordPath,
+                                  reportPreviousSpecPath = recSpecPath <$> previousRecord,
+                                  reportStale = stale,
+                                  reportConsumerPlan = currentConsumerPlan,
+                                  reportConstraintPlan = constraintPlan spec currentConsumerPlan,
+                                  reportMappingDrift = drift,
+                                  reportSourceLanguageDrift = languageDrift,
+                                  reportNewHoles = newHoles,
+                                  reportAddedBehavior = addedBehavior,
+                                  reportRemovedBehavior = removedBehavior,
+                                  reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
+                                  reportConformancePackage = packageReport,
+                                  reportNameMoves = moves
+                                }
+
+planRecordedSourceMoves :: Maybe ScaffoldRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
+planRecordedSourceMoves Nothing _ = Right []
+planRecordedSourceMoves (Just previous) current =
+  planSourceMoves priorArtifacts current
+  where
+    priorArtifacts = case recModuleRoles previous of
+      [] -> [(Nothing, fileKind, path) | (fileKind, path) <- recFiles previous]
+      rows -> [(Just (srrRole row), srrKind row, srrPath row) | row <- rows]
+
+data PreparedSourceMove
+  = SourceMoveReady !SourceMove !Text
+  | SourceMoveAlreadyApplied !SourceMove
+
+preflightSourceMoves :: FilePath -> [SourceMove] -> IO (Either [Text] [PreparedSourceMove])
+preflightSourceMoves out moves = do
+  prepared <- mapM preflight moves
+  let errors = [message | Left message <- prepared]
+  pure $ if null errors then Right [value | Right value <- prepared] else Left errors
+  where
+    replacements = Map.fromList [(moveOldModule move, moveNewModule move) | move <- moves]
+    preflight move = do
+      let oldPath = out </> moveOldPath move
+          newPath = out </> moveNewPath move
+          backupPath = out </> moveBackupPath move
+      oldExists <- doesFileExist oldPath
+      newExists <- doesFileExist newPath
+      backupExists <- doesFileExist backupPath
+      case (oldExists, newExists, backupExists) of
+        (False, True, True) -> pure (Right (SourceMoveAlreadyApplied move))
+        (True, False, False) -> do
+          source <- TIO.readFile oldPath
+          if moveKind move == Generated && not (any isGeneratedBannerLine (T.lines source))
+            then pure (Left (T.pack (moveOldPath move) <> ": generated source lacks an exact generated banner"))
+            else case rewriteHaskellModuleReferences replacements source of
+              Left lexicalError -> pure (Left (T.pack (moveOldPath move) <> ": " <> T.pack (show lexicalError)))
+              Right rewritten
+                | declaresExpectedModule (moveNewModule move) rewritten -> pure (Right (SourceMoveReady move rewritten))
+                | otherwise ->
+                    pure
+                      ( Left
+                          ( T.pack (moveOldPath move)
+                              <> ": transformed source does not declare expected module "
+                              <> moveNewModule move
+                          )
+                      )
+        (False, False, False) -> pure (Left (T.pack (moveOldPath move) <> ": recorded legacy source is missing"))
+        _ ->
+          pure
+            ( Left
+                ( T.pack (moveOldPath move)
+                    <> ": migration state conflicts with target or backup (target="
+                    <> T.pack (show newExists)
+                    <> ", backup="
+                    <> T.pack (show backupExists)
+                    <> ")"
+                )
+            )
+
+    declaresExpectedModule expected source =
+      any (T.isPrefixOf ("module " <> expected <> " ")) (T.lines source)
+        || any (== ("module " <> expected)) (T.lines source)
+
+applyPreparedSourceMoves :: FilePath -> [PreparedSourceMove] -> IO ()
+applyPreparedSourceMoves out = mapM_ applyMove
+  where
+    applyMove (SourceMoveAlreadyApplied _) = pure ()
+    applyMove (SourceMoveReady move rewritten) = do
+      let oldPath = out </> moveOldPath move
+          newPath = out </> moveNewPath move
+          backupPath = out </> moveBackupPath move
+      createDirectoryIfMissing True (takeDirectory backupPath)
+      createDirectoryIfMissing True (takeDirectory newPath)
+      renameFile oldPath backupPath
+      TIO.writeFile newPath rewritten
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
 constraintPlan spec plan = case resolveTypeGraph spec of
@@ -489,6 +630,8 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated",
       recSourceLanguage = sourceLanguage,
       recLanguageContract = checkedLanguageContract service,
+      recNamingEdition = currentGeneratedHaskellNamingEdition,
+      recModuleRoles = [ScaffoldModuleRoleRow (moduleRole m) (kind m) (modulePath m) | m <- modules],
       recFiles = [(kind m, modulePath m) | m <- modules],
       recMappings = consumerMappings (consumerPlan spec),
       recIdDomains = idDomainIdentitiesForService service,
@@ -555,6 +698,17 @@ renderRefusals = concatMap render
     render (BehaviorRefusal errors) =
       ["error: behavior obligations cannot be derived soundly -- refusing to scaffold; nothing was written"]
         <> ["  " <> T.pack (show behaviorError) | behaviorError <- errors]
+    render (GeneratedNameInvariantViolation violations) =
+      ["error: generated Haskell name invariant violated -- refusing to scaffold; nothing was written"]
+        <> map ("  " <>) violations
+    render (NameMigrationRequired moves) =
+      [ "error: name migration required: legacy-v1 -> idiomatic-v1; nothing was written",
+        "re-run scaffold with --apply-name-migrations after reviewing these source moves:"
+      ]
+        <> map renderMove moves
+    render (NameMigrationRefusal reasons) =
+      ["error: name migration could not be applied safely; nothing was written"]
+        <> map ("  " <>) reasons
     render (FoldSurfaceRefusal surfaceError) =
       [ "error: aggregate fold identity could not be resolved -- refusing to scaffold; nothing was written",
         "  " <> renderFoldSurfaceError surfaceError
@@ -575,6 +729,14 @@ renderRefusals = concatMap render
       ["error: duplicate normalized service conformance fact keys -- refusing to scaffold; nothing was written"]
         <> ["  " <> duplicateServiceFactKey duplicate | duplicate <- duplicates]
     render (ConformancePackageRefusal failure) = renderConformancePackageFailure failure
+    renderMove move =
+      "  "
+        <> (case moveKind move of Generated -> "generated "; HoleStub -> "hole      ")
+        <> moveOldModule move
+        <> " -> "
+        <> moveNewModule move
+        <> "  backup: "
+        <> T.pack (moveBackupPath move)
 
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
@@ -594,6 +756,7 @@ renderScaffoldReport report =
     <> sourceLanguageDriftSection
     <> behaviorDriftSection
     <> obsoleteOutputSection
+    <> nameMoveSection
     <> staleSection
     <> maybe [] renderConformancePackageReport (reportConformancePackage report)
   where
@@ -688,6 +851,11 @@ renderScaffoldReport report =
       hooks ->
         ["obsolete identity-copy output hooks (if still present, they are unused and may be removed):"]
           <> ["  " <> aggregate <> ".Holes." <> hook | (aggregate, hook) <- hooks]
+    nameMoveSection = case reportNameMoves report of
+      [] -> []
+      moves ->
+        ["name migration: applied (" <> tshow (length moves) <> " source move(s))"]
+          <> ["  backup: " <> T.pack (moveBackupPath move) | move <- moves]
     staleSection = case reportStale report of
       [] -> []
       stale ->

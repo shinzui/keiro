@@ -19,6 +19,8 @@
 -- concern.
 module Keiro.Dsl.Scaffold
   ( ScaffoldModule (..),
+    ModuleRole (..),
+    moduleRole,
     ModuleKind (..),
     Context (..),
     Placement (..),
@@ -92,7 +94,7 @@ module Keiro.Dsl.Scaffold
   )
 where
 
-import Data.Char (isAlpha, isAlphaNum, isDigit, isUpper, toLower, toUpper)
+import Data.Char (isAlpha, isAlphaNum, isDigit, isUpper)
 import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
@@ -112,6 +114,7 @@ import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFold
 import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (IdDomainContract, contractIdDomainContractFor, idDomainContractFor, idDomainPrefix, idDomainSampleText)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned), languageVersionText)
 import Keiro.Dsl.NominalType
@@ -133,6 +136,32 @@ data ScaffoldModule = ScaffoldModule
     origin :: !Text
   }
   deriving stock (Eq, Show)
+
+-- | Stable semantic identity for a generated artifact.  It is deliberately
+-- independent of the cased module path: source-name migrations pair artifacts
+-- by this role, then compare their old and current paths.
+data ModuleRole = ModuleRole
+  { roleOwnerKind :: !Text,
+    roleOwnerName :: !Text,
+    roleFamily :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+moduleRole :: ScaffoldModule -> ModuleRole
+moduleRole scaffoldModule =
+  ModuleRole
+    { roleOwnerKind = headOr "module" originWords,
+      roleOwnerName = origin scaffoldModule,
+      roleFamily = case reverse (T.splitOn "." moduleName) of
+        family : _ -> family
+        [] -> moduleName
+    }
+  where
+    originWords = T.words (origin scaffoldModule)
+    moduleName = T.replace "/" "." (T.dropEnd 3 (T.pack (modulePath scaffoldModule)))
+    headOr fallback = \case
+      value : _ -> value
+      [] -> fallback
 
 data ModuleKind
   = -- | @-- \@generated@; overwritten on every scaffold.
@@ -4097,8 +4126,8 @@ emitCodec a =
            "mapLeftText :: Either String b -> Either Text b",
            "mapLeftText = either (Left . T.pack) Right",
            "",
-           "_renderEventTypes :: NonEmpty EventType -> String",
-           "_renderEventTypes =",
+           "renderExpectedEventTypes :: NonEmpty EventType -> String",
+           "renderExpectedEventTypes =",
            "  T.unpack",
            "    . T.intercalate \", \"",
            "    . map (\\(EventType eventTypeName) -> eventTypeName)",
@@ -4751,7 +4780,7 @@ renderUnknownEventTypeFailure aggregate variable =
     <> variable
     <> " <> "
     <> tshow "; expected one of: "
-    <> " <> _renderEventTypes "
+    <> " <> renderExpectedEventTypes "
     <> eventTypesName aggregate
     <> ")"
 
@@ -6361,9 +6390,7 @@ sectionsOf :: [[Text]] -> Text
 sectionsOf = T.intercalate "\n\n" . filter (not . T.null) . map (T.intercalate "\n\n")
 
 lowerFirst :: Text -> Text
-lowerFirst t = case T.uncons t of
-  Just (c, rest) -> T.cons (toLower c) rest
-  Nothing -> t
+lowerFirst = generatedCase HaskellName.LogicalIdentifier False
 
 -- | Assert the shared category proof at emission time as a belt-and-braces
 -- guard for callers that bypass the CLI's normal validate-before-scaffold path.
@@ -6373,12 +6400,26 @@ staticCategory owner value = case sagaCategoryError value of
   Just reason -> error (T.unpack ("keiro-dsl scaffold: illegal " <> owner <> " category " <> tshow value <> " " <> reason))
 
 pascal :: Text -> Text
-pascal t = case T.uncons t of
-  Just (c, rest) -> T.cons (toUpper c) rest
-  Nothing -> t
+pascal = generatedCase HaskellName.LogicalIdentifier True
 
 pascalFromKebab :: Text -> Text
-pascalFromKebab = T.concat . map pascal . T.splitOn "-"
+pascalFromKebab = generatedCase HaskellName.LogicalWireWord True
+
+generatedCase :: HaskellName.NameSourceKind -> Bool -> Text -> Text
+generatedCase source upper name =
+  case HaskellName.deriveHaskellName source site of
+    Right derived
+      | upper -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+      | otherwise -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+    Left _ -> name
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
+          HaskellName.siteLogicalName = name,
+          HaskellName.siteOwner = "scaffold-renderer",
+          HaskellName.siteLine = 0
+        }
 
 kebabFromPascal :: Text -> Text
 kebabFromPascal = T.intercalate "-" . map T.toLower . splitCamel

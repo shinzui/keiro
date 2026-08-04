@@ -1,5 +1,5 @@
 -- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it.
-module SkelQueue.MyService.Accepted_transfer_needs.ReadModelHoles (
+module SkelQueue.MyService.AcceptedTransferNeeds.ReadModelHoles (
     AcceptedTransferNeedsQueryInput,
     AcceptedTransferNeedsQueryResult,
     acceptedTransferNeedsQuery,
@@ -8,7 +8,7 @@ module SkelQueue.MyService.Accepted_transfer_needs.ReadModelHoles (
 
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Types (RecordedEvent)
-import SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModelTable (acceptedTransferNeedsQualifiedTable)
+import SkelQueue.Generated.MyService.AcceptedTransferNeeds.ReadModelTable (acceptedTransferNeedsQualifiedTable)
 
 -- HOLE: replace these aliases with the real query input and result types.
 type AcceptedTransferNeedsQueryInput = ()

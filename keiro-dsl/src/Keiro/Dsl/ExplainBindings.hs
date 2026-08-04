@@ -18,13 +18,13 @@ where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.Bifunctor (first)
-import Data.Char (toUpper)
 import Data.List (groupBy, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.NominalType
@@ -380,10 +380,17 @@ nominalEnumRepresentationModule spec name = case maybe GeneratedPrefix id (specL
   CollocatedLeaf -> root <> contextName <> ".Nominal.Shape." <> name <> ".Generated"
   where
     root = maybe "" (<> ".") (specModuleRoot spec)
-    contextName = T.concat (map titleSegment (T.splitOn "-" (specContext spec)))
-    titleSegment value = case T.uncons value of
-      Nothing -> ""
-      Just (initialChar, rest) -> T.cons (toUpper initialChar) rest
+    contextName =
+      case HaskellName.deriveHaskellName HaskellName.LogicalWireWord site of
+        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        Left _ -> specContext spec
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.ContextModuleSite,
+          HaskellName.siteLogicalName = specContext spec,
+          HaskellName.siteOwner = "binding-obligation-context",
+          HaskellName.siteLine = 0
+        }
 
 renderBindingObligations :: Text -> [BindingObligation] -> Text
 renderBindingObligations context obligations = case obligations of

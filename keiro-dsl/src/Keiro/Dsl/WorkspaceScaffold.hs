@@ -45,11 +45,13 @@ module Keiro.Dsl.WorkspaceScaffold
     WorkspaceSourceLanguageDrift (..),
     WorkspaceScaffoldReport (..),
     executeWorkspaceScaffold,
+    executeWorkspaceScaffoldWithNameMigrations,
     renderWorkspaceScaffoldReport,
   )
 where
 
 import Data.List (nub, sortOn)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -69,6 +71,8 @@ import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
+import Keiro.Dsl.HaskellSourceMove (SourceMove (..), SourceMoveError, planSourceMoves)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
@@ -78,16 +82,19 @@ import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
+    PreparedSourceMove,
     Refusal (..),
     StaleGeneratedEvidence (..),
     StaleModule (..),
     WriteDisposition (..),
+    applyPreparedSourceMoves,
     behaviorDrift,
     constraintPlan,
     mappingDrift,
     missingGeneratedBanners,
     newBindingObligations,
     obligationKindLabel,
+    preflightSourceMoves,
     pureRefusals,
     renderMappingIdentity,
     staleAgainst,
@@ -362,6 +369,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrRemovedBehavior :: ![BehaviorRecordRow],
     wsrObsoleteOutputHooks :: ![(Text, Text)],
     wsrConformancePackage :: !(Maybe ConformancePackageReport),
+    wsrNameMoves :: ![SourceMove],
     -- | Present only on the run that adopted pre-workspace scaffold output.
     wsrMigration :: !(Maybe MigrationReport)
   }
@@ -387,7 +395,36 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
 --     not rewritten, which is what makes idempotence observable rather than
 --     merely claimed.
 executeWorkspaceScaffold :: FilePath -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
-executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
+executeWorkspaceScaffold out forceGeneratedOverwrite =
+  executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite False
+
+executeWorkspaceScaffoldWithNameMigrations :: FilePath -> Bool -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
+executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyNameMigrations plan = do
+  previous <- readWorkspaceRecord recordPath
+  case planWorkspaceSourceMoves previous modules of
+    Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+    Right moves
+      | not (null moves) && not applyNameMigrations -> pure (Left [NameMigrationRequired moves])
+      | otherwise -> do
+          preparedMoves <- preflightSourceMoves out moves
+          case preparedMoves of
+            Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+            Right prepared -> executeWorkspaceScaffoldBase out forceGeneratedOverwrite moves prepared plan
+  where
+    modules = map fst (wpModules plan)
+    recordPath = out </> workspaceRecordFileName (wsService (wpWorkspace plan))
+
+planWorkspaceSourceMoves :: Maybe WorkspaceRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
+planWorkspaceSourceMoves previous current =
+  case previous of
+    Nothing -> Right []
+    Just record ->
+      planSourceMoves
+        [(wrmRole row, wrmKind row, wrmPath row) | row <- wrModules record]
+        current
+
+executeWorkspaceScaffoldBase :: FilePath -> Bool -> [SourceMove] -> [PreparedSourceMove] -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
+executeWorkspaceScaffoldBase out forceGeneratedOverwrite nameMoves preparedNameMoves plan = do
   stranded <- goldenRootDivergence (wpGoldenRoot plan) workspace
   bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
   packagePreflight <- case wpConformancePackage plan of
@@ -397,6 +434,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
   case stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] <> packageRefusals of
     refusals@(_ : _) -> pure (Left refusals)
     [] -> do
+      applyPreparedSourceMoves out preparedNameMoves
       previous <- readWorkspaceRecord recordPath
       stale <- staleAgainst out (map modulePath modules) (previousFiles previous)
       -- Adoption is a one-shot, guarded by the absence of workspace
@@ -457,6 +495,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
               wsrRemovedBehavior = removedBehavior,
               wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
               wsrConformancePackage = packageReport,
+              wsrNameMoves = nameMoves,
               wsrMigration = migration
             }
   where
@@ -494,11 +533,13 @@ currentWorkspaceRecord plan adopted =
         | member <- wsMembers workspace
         ],
       wrLanguageContract = checkedLanguageContract (wpCheckedService plan),
+      wrNamingEdition = currentGeneratedHaskellNamingEdition,
       wrModules =
         [ WorkspaceModuleRow
             { wrmKind = kind m,
               wrmPath = modulePath m,
-              wrmOwner = provenanceOwner provenance
+              wrmOwner = provenanceOwner provenance,
+              wrmRole = Just (moduleRole m)
             }
         | (m, provenance) <- wpModules plan
         ],
@@ -613,6 +654,7 @@ renderWorkspaceScaffoldReport report =
        ]
     <> previousManifestNote
     <> migrationSection
+    <> nameMoveSection
     <> constraintSection
     <> newHolesSection
     <> mappingDriftSection
@@ -666,6 +708,18 @@ renderWorkspaceScaffoldReport report =
       Just previous -> ["note: the previous workspace record was written from manifest " <> previous]
       Nothing -> []
     migrationSection = maybe [] renderMigrationReport (wsrMigration report)
+    nameMoveSection = case wsrNameMoves report of
+      [] -> []
+      moves ->
+        ["name migration: applied (" <> tshow (length moves) <> " source move(s))"]
+          <> [ "  "
+                 <> T.pack (moveOldPath move)
+                 <> " -> "
+                 <> T.pack (moveNewPath move)
+                 <> "  backup="
+                 <> T.pack (moveBackupPath move)
+             | move <- moves
+             ]
     constraintSection = case wsrConstraintPlan report of
       [] -> []
       constraints -> "constraint plan:" : map ("  " <>) constraints
