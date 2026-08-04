@@ -77,8 +77,11 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   to idiomatic compound segments and declarations, add the generated-name policy gate, and compile
   the affected ordinary, workspace, queue, read-model, dispatch, router, newsurface, skeleton, and
   service-runtime components.
-- [ ] Update authoring and upgrade documentation, amend the relevant ADRs, and run the complete
-  repository gates.
+- [x] (2026-08-04 14:47Z) Update the authoring loop/notation and typed-toolchain upgrade guide,
+  publish both changelog entries, and amend ADRs 0012, 0015, and 0019 with strict bundle logs.
+  The final `cabal test keiro-dsl` run passed all conformance components and the ordinary suite
+  with 550 examples and zero failures; `cabal build all`, both policy gates, strict validation of
+  all 20 ADR concepts, and `git diff --check` also passed.
 
 
 ## Surprises & Discoveries
@@ -121,6 +124,12 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
   Evidence: the executor now writes a per-move state file beside the deterministic backup before
   moving active source; the focused test corrupts a prepared file, observes a digest refusal, then
   restores the bytes and resumes with the legacy record still active.
+
+- Observation: The completed change adds 11 ordinary regression examples while keeping the full
+  package and repository build green.
+  Evidence: the baseline ordinary suite had 539 examples; the final complete package run reported
+  550 examples, zero failures, and one of one test suites passed. `cabal build all` then completed
+  successfully across the repository build graph.
 
 
 ## Decision Log
@@ -219,7 +228,31 @@ metadata still names the SQL table `service_oncall` and the existing subscriptio
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Keiro now has one checked ASCII naming policy for logical names that become generated Haskell.
+Compound logical names consistently produce UpperCamelCase module/type/constructor occurrences
+and lowerCamelCase value/selector occurrences, with unsafe normalization, reserved words, and
+normalized collisions rejected during checking. A final declaration audit guards generated source
+against renderer bypasses while leaving wire, SQL, registry, subscription, queue, and provenance
+spellings unchanged.
+
+Existing scaffold trees have an explicit, reviewable migration path. Single-file and workspace
+scaffolds report naming-edition moves without writing unless `--apply-name-migrations` is supplied;
+the apply path prepares and hashes every transform, preserves originals in deterministic backups,
+rewrites exact module tokens only in Haskell code, journals progress durably, and resumes only from
+an unambiguous digest-checked state. Unrelated module-root and layout changes retain the earlier
+non-destructive stale-file workflow.
+
+The checked-in corpus, skeleton vocabulary, Cabal inventories, manifests, and scaffold records now
+use idiomatic compound names. Generated-only evolution is independently visible as
+`GeneratedHaskellNameChanged` on the consumer-build axis and remains replay-neutral. The authoring
+guides, upgrade workflow, changelogs, and ADRs 0012, 0015, and 0019 publish the resulting contract.
+
+Validation closed with 20 focused private naming examples, 550 ordinary examples and zero
+failures in the complete `cabal test keiro-dsl` target, successful affected conformance runs and
+workspace proof, successful `cabal build all`, both generated-name and extension policies green,
+strict ADR validation at 20 concepts, and a clean `git diff --check`. The work introduced no new
+package dependency and preserved the intentional snake_case external evidence throughout the
+fixtures and generated metadata.
 
 
 ## Context and Orientation
