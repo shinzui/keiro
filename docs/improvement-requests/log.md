@@ -1,6 +1,12 @@
 # Bundle Update Log
 
 ## 2026-08-04
+* **Addition**: IR-18 requires generated harnesses, predicate verification, and behavior
+  conformance to treat replay-only transitions from the initial vertex as replay-only, including
+  correct cumulative edge indices when one source appears in non-contiguous transition blocks.
+* **Addition**: IR-17 requests exact aggregate-level allowlists for reviewed narrowable Keiki
+  validation warnings, with matching runtime options, generated harness assertions, diff evidence,
+  and service conformance while mandatory replay-contract checks remain non-disableable.
 * **Addition**: IR-16 requires a checked naming invariant so Keiro never scaffolds
   non-idiomatic Haskell module or value names from snake_case DSL identifiers, while preserving
   independent wire and SQL spellings.
