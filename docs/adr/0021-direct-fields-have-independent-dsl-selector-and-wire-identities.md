@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Direct fields have independent DSL selector and wire identities
 description: Direct aggregate and contract fields resolve one stable DSL identity, one generated Haskell selector, and one serialized wire key, with explicit aliases and namespace-specific validation and evolution rules.
-timestamp: 2026-08-05T12:42:31Z
+timestamp: 2026-08-05T23:30:00Z
 docId: ADR-21
 status: Accepted
 date: 2026-08-05
@@ -53,6 +53,21 @@ non-reserved Haskell occurrences and unique within each generated record scope. 
 non-empty and unique within a command, event, or contract event; aggregate event keys cannot equal
 the codec envelope key `kind`, and contract keys cannot equal the declared discriminator.
 Diagnostics are anchored at the owning field and retain the earlier conflicting location.
+
+Wire-key validation is structural only, and is deliberately **exempt from a declared
+`wire … fields=camelCase` convention**. An alias exists precisely to preserve a brownfield key the
+current convention would reject — `region_code` in `keiro-dsl/test/fixtures/aggregate-field-alias.keiro`
+is the canonical example — so checking alias content against the convention would defeat the
+feature it implements. What is checked is that the key can be a key at all: beyond non-emptiness,
+a wire key may not have leading or trailing whitespace and may not contain a control character.
+Those are not style preferences; the wire key is the exact bytes of the encoded field name, so a
+typoed `as "family "` ships a permanently mis-keyed public field that no later rename can correct
+without a wire break.
+
+The collision planner registers the selector generation actually emits — the explicit alias when
+one is declared, otherwise the raw DSL name — and never a normalized rendering of it. A field name
+that cannot be a Haskell selector is refused by the generated-name audit that owns that rule, which
+names the offending declaration, rather than by a collision report naming an unrelated sibling.
 
 Aggregate fold identity deliberately sees only DSL names. Selector changes are presentation-only.
 Wire-key changes are codec evolution, not fold evolution: `diff` emits

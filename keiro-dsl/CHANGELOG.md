@@ -47,12 +47,41 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   rather than `"advisory"`, matching `keiro-dsl/check-report/1`. There is one
   severity vocabulary across keiro-dsl's JSON. Consumers matching the literal
   string `"advisory"` (available since 0.4.0.0) must be updated.
-- `DiagnosticCode` loses `EmitDeriveHoleUnrealized`; exhaustive matches must be
-  extended. The code fired unconditionally on every `emit` node because
+- `DiagnosticCode` loses `EmitDeriveHoleUnrealized` and
+  `WqFieldOptionalUnsupported`, and gains `TimerDecodeStatusUnknown`,
+  `TimerDeadLetterTextInvalid`, and `PgmqFanoutFunctionInvalid`; exhaustive
+  matches must be extended. The code fired unconditionally on every `emit` node because
   `derive … hole` is mandatory grammar, so it carried no information and made
   `check --deny-warnings` permanently red for any emit-bearing service. The
   scaffold report's no-modules line already names each emit node that
-  contributes nothing.
+  contributes nothing. `WqFieldOptionalUnsupported` is removed with the model it
+  described: every workqueue payload field is required, because generated
+  decoders read all of them with `o .:`. `WqField` therefore loses `wqfRequired`,
+  the `required` marker is accepted but selects nothing, and adding a payload
+  field is now classified breaking however it is spelled — a job already queued
+  under the old shape does not contain it, which the previous "new optional
+  field is additive" classification denied.
+- The three surfaces ExecPlan 197 recorded as descriptive-only are now checked
+  against the references they name. A timer's `decode unknown-status` must be a
+  status the timer table stores (`Scheduled`, `Firing`, `Fired`, `Cancelled`,
+  `Dead`); its `dead-letter` reason must not be blank, since it is the text an
+  operator-written worker passes to `Keiro.Timer.deadLetterTimer`; a pgmq
+  `dedup key` must be a generated selector of its source read model, reported
+  with the existing `DispatchReadModelFieldUnknown`; and a pgmq `fanout body`
+  must be spellable as a Haskell value identifier. Emit `source`, `key`, and map
+  discriminant names remain the one documented descriptive-only surface, because
+  no typed source namespace exists to resolve them against.
+- `WorkspaceScaffoldReport` gains `wsrInertNodes`, and a workspace scaffold now
+  renders the same `no-modules:` line the single-spec report has always
+  rendered. `Keiro.Dsl.ScaffoldRun` exports the shared `inertNodesOf` and
+  `renderInertNodeSection`.
+- `Keiro.Timer.Schema.TimerStatus` (in **keiro**) additionally derives `Enum` and
+  `Bounded` so consumers can enumerate the lifecycle rather than restate it.
+- `FieldWireKeyInvalid` additionally refuses a wire key with leading or trailing
+  whitespace or a control character, naming the offending codepoint. Aliases stay
+  exempt from a declared `wire … fields=camelCase` convention — preserving a
+  brownfield key is what they are for — so this is structural usability only. A
+  spec that shipped `as "family "` now fails `check`.
 - `Keiro.Dsl.CheckReport`'s `reportLanguage` is now
   `Maybe CheckReportLanguage`, and the new `workspaceRefusalReport` builds the
   report for a workspace refused during composition. Such a report serializes
@@ -141,6 +170,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Generated-name collision planning now registers the selector generation
+  actually emits — the explicit `haskell` alias when declared, otherwise the raw
+  DSL name — instead of a camelized rendering of it. `{foo_bar, fooBar}` in one
+  record is no longer reported as a collision between two fields that in fact
+  generate distinct selectors, and the diagnostic no longer claims `foo_bar`
+  "normalizes to" `fooBar`, which generation never did. A name that cannot be a
+  Haskell selector is still refused, by the generated-name audit that owns that
+  rule and names the offending declaration.
 - `check --report-out` creates missing parent directories, and a workspace
   refused during composition now writes the report a single spec has always
   written for the equivalent failure. A parse failure and an unreadable or

@@ -1,7 +1,9 @@
 # Bundle Update Log
 
 ## 2026-08-05
-* **Update**: Amend ADR 0020: the authoritative generated build inventory is the role-bearing Cabal fragment, not keiro-dsl-manifest.* (plan 199).
+* **Update**: Amend ADR 0021: wire-key aliases are exempt from the case convention and validated structurally (whitespace, control characters); collision planning uses the emitted selector (plan 199).
+* **Update**: Amend ADR 0004: refuse the eight accepted-but-unimplemented spec surfaces on the language-4 tiering; only emit source/key/discriminant names stay descriptive-only (plan 199).
+* **Update**: Amend ADR 0020: the authoritative generated build inventory is the role-bearing Cabal fragment, not keiro-dsl-manifest.\* (plan 199).
 * **Update**: Replace historical record/manifest path authority with current explicit-slot ledger and Cabal-fragment names (plan 198).
 * **Add**: Define role-bearing sidecar names, explicit ledger slots, lossless migration, and forward-compatible conformance history (plan 198).
 * **Update**: Record strict, warning, and descriptive-only boundaries for every accepted service surface (plan 197).

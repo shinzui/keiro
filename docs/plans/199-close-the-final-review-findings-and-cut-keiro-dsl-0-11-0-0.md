@@ -62,11 +62,19 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
       `--emit`/`--explain-bindings` output rather than after), so one warning policy
       governs every warning `check` can emit. `--deny` is backed by the new
       `diagnosticOrigin` registry in `Validate.hs`.
-- [ ] M3: inert surfaces refused/enforced — decode body posture, process `dispatch-id`
+- [x] M3: inert surfaces refused/enforced — decode body posture, process `dispatch-id`
       parser parity, `on-appended` arm, timer `not-mine` arm, intake bind header names,
       workqueue required-by-default, workspace scaffold-report inert-node parity, and the
       EP-197 descriptive-only trio (timer dead-letter text, pgmq fanout function, pgmq
-      dedupe key) re-adjudicated; ADR 0004 inventory re-amended.
+      dedupe key) re-adjudicated; ADR 0004 inventory re-amended. *(2026-08-05)* Eight
+      surfaces closed on the warn-at-3 / error-at-4 tiering via a new `mkSurfaceRefusal`
+      helper; `wqfRequired` and `WqFieldOptionalUnsupported` removed as provably constant;
+      `wsrInertNodes` gives workspaces the single-spec `no-modules:` line. The canonical
+      envelope headers are *imported* from `keiro-core`'s `Keiro.Integration.Event` (no
+      mirror, no drift); the `TimerStatus` vocabulary is mirrored and guarded by a new
+      `keiro-dsl-runtime-vocabulary-test` suite that depends on both packages. mori still
+      checks exit-0 at its five-warning baseline; corpus regeneration produced no
+      generated-output drift.
 - [ ] M4: wire/alias hardening — `contract-reserved-family.keiro` wired into a CLI test,
       wire-key content validation, collision-planner selector normalization fixed.
 - [ ] M5: tooling hardening — corpus plan cross-checked against the cabal suite list,
@@ -169,6 +177,43 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   adopter compile time — the refusal is strictly more honest, and no mori aggregate has
   duplicate pairs. If the shape is ever needed, uniquifying probe names is a compatible
   follow-up.
+  Date: 2026-08-05
+- Decision (M3): Remove `WqField`'s `wqfRequired` rather than defaulting it to `True`.
+  Rationale: With required-by-default and no optional spelling in the grammar, the field is
+  provably constant. A constant record field is exactly the accepted-and-silent shape this
+  plan exists to eliminate, and leaving it would strand two unreachable `Diff.hs` branches
+  (optional→required, required→optional). The `required` keyword stays accepted so existing
+  sources parse, and the pretty-printer always emits it, which keeps every corpus fixture's
+  canonical rendering byte-identical. Consequence: adding a payload field is now classified
+  breaking however it is spelled — correcting a prior "new optional field is additive"
+  classification that described a decoder keiro-dsl never generated.
+  Date: 2026-08-05
+- Decision (M3): Report the pgmq `dedup key` refusal with the existing
+  `DispatchReadModelFieldUnknown` rather than minting a new code.
+  Rationale: The plan called for "a new lang-4-tiered code", but this is literally the same
+  defect the code already names — a dispatch referencing a read-model field that does not
+  exist — with the same remedy. Two codes for one failure class would make an adopter's
+  `--deny` list and triage worse, not better. The two other trio surfaces did get new codes
+  (`TimerDecodeStatusUnknown`, `TimerDeadLetterTextInvalid`) because no existing code covers
+  them, as did `PgmqFanoutFunctionInvalid`.
+  Date: 2026-08-05
+- Decision (M3): Keep the timer `dead-letter` **text** descriptive, and close it only by
+  refusing a blank reason — a narrower closure than the other seven surfaces.
+  Rationale: Unlike every other surface here, there is no correct spelling to accept and no
+  referent to resolve: it is free prose. It is not inert, though.
+  `Keiro.Timer.runTimerWorkerWith` composes its own message for the attempt ceiling, but
+  `Keiro.Timer.deadLetterTimer` is public and the generated timer hole renders this text
+  precisely so an operator-written worker can pass it. That makes it a hand-owned obligation
+  of the same kind as `derive … hole`, and the checkable part is that it names an obligation
+  at all. Making the runtime consume it would be new runtime semantics, which this plan
+  excludes.
+  Date: 2026-08-05
+- Decision (M3): Emit `source`/`key`/map-discriminant names remain the single
+  documented descriptive-only surface (the exception ADR 0004 row 122 already carries).
+  Rationale: The structural reason the plan anticipated is real and unchanged — an emit
+  generates no module, so no typed source namespace exists to resolve these names against,
+  and there is no decidable property to check beyond what the parser already enforces. Every
+  other parked surface did turn out to have a checkable referent and was closed.
   Date: 2026-08-05
 - Decision (M2): Default an unclassified `DiagnosticCode` to check-emittable in
   `diagnosticOrigin` (a `_ -> CheckDiagnostic` fallthrough) rather than forcing an

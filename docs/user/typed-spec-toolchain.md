@@ -633,6 +633,15 @@ exposes `payload.serviceRegion` while encoding `"region_code"`.
 are checked independently, and event wire keys may not equal the codec envelope
 key `"kind"`.
 
+A wire key is **exempt from a declared `wire … fields=camelCase` convention**.
+That is the point of the alias: it preserves a brownfield key the convention
+would reject, as `"region_code"` above does. Wire keys are therefore checked only
+for structural usability — non-empty, no leading or trailing whitespace, no
+control character. Those are not style rules. The wire key is the exact bytes of
+the encoded field name, so a typoed `as "family "` would ship a permanently
+mis-keyed public field that no later rename could correct without breaking
+consumers.
+
 ### Transitions
 
 ```text
@@ -849,10 +858,16 @@ clock-sampling form, and Language 4 rejects a duration whose unit-adjusted
 seconds do not fit in `Int`. The timer ID and fired-event ID expressions must
 end in `correlationId`; their parsed identifiers are not general field
 references.
-Both `decode unknown-status => Name` and the quoted `dead-letter` text are
-descriptive-only today. The latter is operator guidance rendered into the timer
-hole, not a runtime category identity. `max-attempts` is at least 1.
-`on-ambiguous` must be `Retry`:
+`decode unknown-status => Name` names the status an undecodable timer row is
+read as; it must be one the timer table actually stores — `Scheduled`, `Firing`,
+`Fired`, `Cancelled`, or `Dead`. The quoted `dead-letter` text is operator
+guidance rendered into the timer hole rather than a runtime category identity:
+`runTimerWorkerWith` composes its own message for the attempt ceiling, and an
+operator-written worker passes this text to `Keiro.Timer.deadLetterTimer`. It
+must therefore say something; a blank reason is refused. `max-attempts` is at
+least 1. `not-mine` must be `Retry`: the worker marks a timer `Fired` only when
+the fire action returns the id of an event it appended, and a dispatch that is
+not this timer's has none. `on-ambiguous` must be `Retry`:
 command ambiguity is an aggregate-definition defect, never benign success, and
 the ceiling provides a durable dead-letter witness.
 
@@ -997,7 +1012,11 @@ and the dedupe key must resolve to either a field on an accepted contract event
 or one of the canonical envelope names, but generated code does not consume the
 binding rows or enforce either flag. A flagged row therefore produces
 `IntakeBindFlagUnenforced`; consumer-owned decode wiring remains responsible
-for the declared binding posture.
+for the declared binding posture. A `header "name"` source must name one of
+keiro's canonical envelope headers (`keiro-message-id`, `keiro-source`,
+`traceparent`, and so on). The Kafka inbox reconstructs an envelope from that
+fixed set and cannot be remapped, so any other header would describe a
+remapping that does not happen and is refused.
 
 ```text
 messageId source destination key eventType schemaVersion contentType
@@ -1013,9 +1032,11 @@ when a successfully processed payload is re-fetchable or no longer valuable;
 failed rows keep the full envelope for operators regardless of this choice.
 
 The envelope policy is exactly `strict-required lenient-optional`, and the body
-schema version must equal the contract version. Body mode is `strict` or
-`lenient`, but that posture is descriptive-only today: generated and runtime
-code do not enforce the word. A posture change is still diff-classified. The
+schema version must equal the contract version. Body mode must be `strict`:
+generated contract codecs decode every declared body field as required and emit
+no lenient fallback, so `lenient` is refused as a description of something that
+does not run. The word is still parsed and a posture change is still
+diff-classified. The
 disposition table is mandatory and contains each of the seven rows exactly
 once. Duplicates acknowledge success, a previous terminal failure does not
 retry, poison decode failures dead-letter, and transient/in-progress outcomes
@@ -1126,10 +1147,12 @@ starter rather than inventing them.
 Payload rows are `field -> "wire_key" type [required]`. Language 4 closes the
 type vocabulary to `text`, `int`, and `bool`, which lower to `Text`, `Int`, and
 `Bool`; other words are rejected instead of silently becoming `Text`.
-Generated decoders currently require every payload field regardless of whether
-the optional `required` marker is present, so omitting it produces
-`WqFieldOptionalUnsupported`. Queue payload evolution is a persisted wire
-change and must go through `diff`.
+Every payload field is required: generated decoders read all of them with
+`o .:`. The `required` marker is therefore accepted but selects nothing, and a
+row written with it and a row written without it describe the same queue. For
+the same reason, *adding* a payload row is a breaking change however it is
+spelled — a job already queued under the old shape does not contain it. Queue
+payload evolution is a persisted wire change and must go through `diff`.
 
 Ordering is `unordered` (the default), `fifo-throughput`, or
 `fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
@@ -1786,10 +1809,9 @@ operational history and therefore remain warnings: `DeprecatedEventReplayHazard`
 until the database-backed audit establishes the relevant fleet fact. Five
 warnings describe deliberate or currently accepted policy:
 `WqUnloggedDurability`, `ProcessBenignInversion`, `RouterBenignInversion`,
-`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Three more make
+`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Two more make
 accepted but currently inert declarations explicit:
-`IntakeBindFlagUnenforced`, `WqFieldOptionalUnsupported`, and
-`RmInlineSubscriptionIgnored`. Teams may deny
+`IntakeBindFlagUnenforced` and `RmInlineSubscriptionIgnored`. Teams may deny
 any of these warnings without changing the shared language contract. Two internally decidable
 warnings, `WireSchemaVersionMismatch` and `RmProjectionWithoutNode`, are
 candidates for an error in a future language version rather than retroactive

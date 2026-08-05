@@ -976,8 +976,7 @@ data PublisherNode = PublisherNode
 data WqField = WqField
   { wqfName :: !Name,
     wqfWire :: !Text,
-    wqfType :: !Name,
-    wqfRequired :: !Bool
+    wqfType :: !Name
   }
   deriving stock (Eq, Show, Generic)
 

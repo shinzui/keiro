@@ -349,7 +349,9 @@ docWorkqueue w =
       WqUnlogged -> [indent 2 "provision unlogged"]
       WqPartitioned interval retention ->
         [indent 2 ("provision partitioned(interval=" <> dquoted interval <> ", retention=" <> dquoted retention <> ")")]
-    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> pretty (wqfType f) <> (if wqfRequired f then " required" else mempty)
+    -- Always rendered: every payload field is required, and stating it keeps
+    -- the canonical form self-describing.
+    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> pretty (wqfType f) <> " required"
     dispRow r = pretty (wqdOutcome r) <+> "->" <+> act (wqdAction r)
     act IAckOk = "ackOk"
     act (IRetry win) = "retry" <+> pretty win

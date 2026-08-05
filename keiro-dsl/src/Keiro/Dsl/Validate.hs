@@ -17,6 +17,8 @@ module Keiro.Dsl.Validate
     parseDiagnosticCode,
     renderDiagnostic,
     minimumLanguageDiagnostics,
+    runtimeTimerStatuses,
+    canonicalEnvelopeHeaders,
     validateService,
     validateSpec,
     derivedQueueTrio,
@@ -408,7 +410,6 @@ data DiagnosticCode
   | -- ExecPlan 197: accepted but currently inert spec surfaces are reported
     -- through the ordinary warning pipeline.
     IntakeBindFlagUnenforced
-  | WqFieldOptionalUnsupported
   | RmInlineSubscriptionIgnored
   | -- ExecPlan 197: process and router references close under language 4.
     ProcessKeyFieldUnknown
@@ -428,6 +429,11 @@ data DiagnosticCode
   | DispatchOnAppendedUnsupported
   | TimerNotMineUnsupported
   | IntakeBindHeaderUnknown
+  | -- ExecPlan 199: the surfaces ExecPlan 197 parked as descriptive-only, closed
+    -- by checking the reference each one actually names.
+    TimerDecodeStatusUnknown
+  | TimerDeadLetterTextInvalid
+  | PgmqFanoutFunctionInvalid
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -1534,15 +1540,17 @@ validateNames languageContract spec =
             field <- cmdFields command
           ]
 
+    -- The occurrence registered here must be the selector generation actually
+    -- emits — 'resolveAggregateFieldIdentity', which falls back to the raw DSL
+    -- name, not a camelized rendering of it. Registering the camelized form made
+    -- the planner claim `foo_bar` "normalizes to" `fooBar`, which generation
+    -- never does, and let two fields that generate distinct selectors be
+    -- reported as colliding. A field whose raw name is not lowerCamelCase is
+    -- still refused, by the generated-name audit that owns that rule and says so.
     fieldOccurrence targetModule scope category field =
-      let raw = aggregateFieldName field
-          site = nameSite HaskellName.GeneratedFieldSite category raw (aggregateFieldLoc field)
-          rendered = case aggregateFieldSelector field of
-            Just selector -> selector
-            Nothing -> case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-              Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
-              Left _ -> raw
-       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
+      let identity = resolveAggregateFieldIdentity field
+          site = nameSite HaskellName.GeneratedFieldSite category (fieldDslName identity) (aggregateFieldLoc field)
+       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope (fieldSelector identity) site
 
     aggregateHarnessOccurrences aggregate =
       transitionHelpers <> sampleConstants
@@ -2211,7 +2219,7 @@ validateReadModel languageContract spec readModel =
 -- derivation; the disposition inversions (storeFailure transient => must retry;
 -- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 validateWorkqueue :: EffectiveLanguageContract -> WorkqueueNode -> [Diagnostic]
-validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, optionalFieldWarnings, provisionRules]
+validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -2300,17 +2308,6 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
           | row <- rows,
             IRetry window <- [wqdAction row]
           ]
-    optionalFieldWarnings =
-      [ Diagnostic
-          { line = wl,
-            severity = Warning,
-            code = WqFieldOptionalUnsupported,
-            relatedLocations = [],
-            message = "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' omits 'required', but generated decoders currently require every payload field"
-          }
-      | field <- wqPayload w,
-        not (wqfRequired field)
-      ]
     provisionRules = case wqProvision w of
       WqStandard -> []
       WqUnlogged ->
@@ -2330,9 +2327,42 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
 
 -- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
 validatePgmqDispatch :: EffectiveLanguageContract -> Spec -> PgmqDispatchNode -> [Diagnostic]
-validatePgmqDispatch languageContract spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ sourceReadModelField ++ dedupReadModelRef ++ dedupReadModelField
+validatePgmqDispatch languageContract spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ sourceReadModelField ++ dedupReadModelRef ++ dedupReadModelField ++ dedupKeyField ++ fanoutFunctionName
   where
     dl = locLine (pdLoc d)
+    -- The top-level `dedup key` is the logical value being deduped. Its two
+    -- physical locations are already checked against the seenIn read model and
+    -- queue; the key itself comes from the source read model's row, so it must
+    -- be one of that model's generated selectors — exactly the rule `source key`
+    -- already obeys. ExecPlan 197 parked this as descriptive-only.
+    dedupKeyField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdSourceReadModel d] of
+      [] -> []
+      readModel : _ ->
+        [ mkSurfaceRefusal languageContract dl DispatchReadModelFieldUnknown $
+            "dispatch '"
+              <> pdName d
+              <> "' dedup key '"
+              <> pdDedupKey d
+              <> "' is not a generated logical selector for a column of source readmodel '"
+              <> pdSourceReadModel d
+              <> "'"
+        | pdDedupKey d `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+        ]
+
+    -- `fanout body` names a hand-written function that expands one source row
+    -- into queued jobs. A pgmq dispatch generates no module, so there is no
+    -- typed namespace to resolve the name against — but a name that is not a
+    -- legal Haskell value identifier cannot be the name of any function anyone
+    -- could write, which is decidable here. ExecPlan 197 parked this too.
+    fanoutFunctionName =
+      [ mkSurfaceRefusal languageContract dl PgmqFanoutFunctionInvalid $
+          "dispatch '"
+            <> pdName d
+            <> "' fanout body '"
+            <> pdFanoutBody d
+            <> "' cannot name a Haskell function; it must be a lowercase-initial identifier that is not a reserved word"
+      | not (lowerIdentifierSafe (pdFanoutBody d))
+      ]
     workqueues = [w | NWorkqueue w <- specNodes spec]
     enqueueRef =
       [ mkErr dl DispatchEnqueueUnresolved ("dispatch '" <> pdName d <> "' enqueues to undeclared workqueue '" <> pdEnqueueTo d <> "'")
@@ -2692,6 +2722,13 @@ intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSource
 -- | Every header name keiro's integration envelope actually uses on the wire,
 -- taken from the runtime's own definitions in "Keiro.Integration.Event" rather
 -- than restated here, so the two cannot drift apart.
+-- | The timer statuses a stored row can hold, mirroring @TimerStatus@ in
+-- @keiro@'s "Keiro.Timer.Schema". keiro-dsl deliberately does not depend on the
+-- runtime package, so the list is restated here; the conformance suite that does
+-- depend on @keiro@ asserts the two agree.
+runtimeTimerStatuses :: [Text]
+runtimeTimerStatuses = ["Scheduled", "Firing", "Fired", "Cancelled", "Dead"]
+
 canonicalEnvelopeHeaders :: [Text]
 canonicalEnvelopeHeaders =
   [ Event.headerMessageId,
@@ -2740,7 +2777,7 @@ canonicalIntakeEnvelopeFields =
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: EffectiveLanguageContract -> Spec -> ProcessNode -> [Diagnostic]
 validateProcess languageContract spec p =
-  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions, onAppendedArms, notMineArm]
+  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions, onAppendedArms, notMineArm, decodeUnknownStatus, deadLetterText]
   where
     -- Generated dispatch code appends and then acks; `Keiro.ProcessManager` has
     -- no branch that retries or dead-letters a *successful* append. Only AckOk
@@ -2754,6 +2791,32 @@ validateProcess languageContract spec p =
             <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
       | d <- hDispatch (procHandle p),
         onAppended (dispDisposition d) /= DAckOk
+      ]
+
+    -- `decode unknown-status => X` names the status a row that fails to decode
+    -- is read as. X must be a status the timer table actually has.
+    decodeUnknownStatus =
+      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerDecodeStatusUnknown $
+          "timer '"
+            <> tmName timer
+            <> "' maps decode unknown-status => '"
+            <> tmDecodeUnknown timer
+            <> "', which is not a timer status; a stored timer row is one of: "
+            <> T.intercalate ", " runtimeTimerStatuses
+      | tmDecodeUnknown timer `notElem` runtimeTimerStatuses
+      ]
+
+    -- The dead-letter reason is a hand-owned obligation: `runTimerWorkerWith`
+    -- composes its own message for the attempt ceiling, and the generated
+    -- comment surfaces this text so an operator-written worker can pass it to
+    -- `Keiro.Timer.deadLetterTimer`. Nothing can check what the prose says, but
+    -- an empty or blank reason names no obligation at all.
+    deadLetterText =
+      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerDeadLetterTextInvalid $
+          "timer '"
+            <> tmName timer
+            <> "' declares a blank dead-letter reason; the reason is the hand-owned text an operator-written timer worker passes to Keiro.Timer.deadLetterTimer, so it must say something"
+      | T.null (T.strip (tmDeadLetter timer))
       ]
 
     -- The timer worker marks a timer Fired only when the fire action returns the
@@ -3782,12 +3845,36 @@ mkSurfaceRefusal languageContract l c m =
 wireKeyRulesForRecord :: Text -> Maybe (Text, Text) -> [ResolvedFieldIdentity] -> [Diagnostic]
 wireKeyRulesForRecord owner reservedKey fields = invalidKeys <> duplicateKeys <> reservedCollisions
   where
-    invalidKeys =
-      [ mkErr (locLine (fieldLoc field)) FieldWireKeyInvalid $
-          owner <> " field '" <> fieldDslName field <> "' resolves to an empty wire key"
-      | field <- fields,
-        T.null (fieldWireKey field)
-      ]
+    -- Structural safety only. An alias exists to preserve a brownfield key that
+    -- the current naming convention would reject, so checking alias *style*
+    -- would defeat the feature. What is checked is that the key can be a key at
+    -- all: a stray space or control character in `as "family "` ships a
+    -- permanently mis-keyed public field that no later rename can fix without a
+    -- wire break. See ADR 0021.
+    invalidKeys = concatMap invalidKeyRule fields
+    invalidKeyRule field
+      | T.null key = [refuse "resolves to an empty wire key"]
+      | key /= T.strip key =
+          [ refuse
+              ( "resolves to wire key "
+                  <> T.pack (show key)
+                  <> ", which has leading or trailing whitespace; the wire key is the exact bytes on the wire, so the surrounding space would be part of every encoded field name"
+              )
+          ]
+      | Just offending <- firstMatching isControl (T.unpack key) =
+          [ refuse
+              ( "resolves to wire key "
+                  <> T.pack (show key)
+                  <> ", which contains the control character U+"
+                  <> T.justifyRight 4 '0' (T.toUpper (T.pack (showHex (ord offending) "")))
+              )
+          ]
+      | otherwise = []
+      where
+        key = fieldWireKey field
+        refuse detail =
+          mkErr (locLine (fieldLoc field)) FieldWireKeyInvalid $
+            owner <> " field '" <> fieldDslName field <> "' " <> detail
     duplicateKeys =
       [ Diagnostic
           { line = locLine (fieldLoc field),

@@ -33,6 +33,8 @@ module Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     planningRefusalDiagnostics,
     checkServiceDiagnostics,
+    inertNodesOf,
+    renderInertNodeSection,
     originLine,
     pureRefusals,
     auditGeneratedHaskell,
@@ -278,6 +280,34 @@ planningGatePipeline ctx service modulePlan packagePlan =
 -- deliberate exception: the workspace path already plans through it so the
 -- stronger whole-path collision can cite every claimant. Existing diagnostics
 -- retain their order and planning diagnostics follow them.
+-- | The nodes a spec declares that contribute no generated module.
+--
+-- They are still parsed, validated, and diff-classified; naming them in the
+-- scaffold report is what stops an author from concluding the toolchain lost
+-- their declaration. Shared by the single-spec and workspace planners so a
+-- workspace — the recommended layout — reports exactly what one spec reports.
+inertNodesOf :: Spec -> [(Text, Text)]
+inertNodesOf spec =
+  [ (kindLabel, nodeName)
+  | node <- specNodes spec,
+    (kindLabel, nodeName) <- case node of
+      NEmit emitNode -> [("emit", emName emitNode)]
+      NPgmqDispatch dispatchNode -> [("dispatch", pdName dispatchNode)]
+      NOperation operationNode -> [("operation", opName operationNode)]
+      _ -> []
+  ]
+
+-- | The report line naming 'inertNodesOf', or nothing when every declaration
+-- produced a module.
+renderInertNodeSection :: [(Text, Text)] -> [Text]
+renderInertNodeSection = \case
+  [] -> []
+  nodes ->
+    [ "no-modules: "
+        <> T.intercalate ", " [kindLabel <> " " <> nodeName | (kindLabel, nodeName) <- nodes]
+        <> " (validated and diff-classified; no generated modules)"
+    ]
+
 checkServiceDiagnostics :: Maybe RuntimePackageName -> Context -> CheckedService -> [Diagnostic]
 checkServiceDiagnostics runtimePackage ctx service
   | any blocksPlanning validationDiagnostics = validationDiagnostics
@@ -738,15 +768,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportOutDir = out,
                                   reportContext = ctx,
                                   reportDispositions = dispositions,
-                                  reportInertNodes =
-                                    [ (kindLabel, nodeName)
-                                    | node <- specNodes spec,
-                                      (kindLabel, nodeName) <- case node of
-                                        NEmit emitNode -> [("emit", emName emitNode)]
-                                        NPgmqDispatch dispatchNode -> [("dispatch", pdName dispatchNode)]
-                                        NOperation operationNode -> [("operation", opName operationNode)]
-                                        _ -> []
-                                    ],
+                                  reportInertNodes = inertNodesOf spec,
                                   reportManifestPath = manifestPath,
                                   reportRecordPath = recordPath,
                                   reportPreviousSpecPath = recSpecPath <$> previousRecord,
@@ -1179,13 +1201,7 @@ renderScaffoldReport report =
     dispositionTag Unchanged = "(unchanged)"
     pad name = name <> T.replicate (nameWidth - T.length name) " "
     generatedCount = length [() | (m, _) <- dispositions, kind m == Generated]
-    inertNodeSection = case reportInertNodes report of
-      [] -> []
-      nodes ->
-        [ "no-modules: "
-            <> T.intercalate ", " [kindLabel <> " " <> nodeName | (kindLabel, nodeName) <- nodes]
-            <> " (validated and diff-classified; no generated modules)"
-        ]
+    inertNodeSection = renderInertNodeSection (reportInertNodes report)
     harnesses =
       sortOn
         id

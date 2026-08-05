@@ -1895,12 +1895,10 @@ workqueuePairDiff oldQueue newQueue =
     pairedFieldDiff (oldField, newField)
       | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
       | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> wqfType oldField <> " -> " <> wqfType newField)]
-      | not (wqfRequired oldField) && wqfRequired newField = [payloadBreaking newField "field changed from optional to required; queued jobs may omit it"]
-      | wqfRequired oldField && not (wqfRequired newField) = [additive (wqName newQueue) "payload-field" (wqfName newField) CompatibilityStrengthened "field changed from required to optional"]
       | otherwise = []
-    addedFieldDiff field
-      | wqfRequired field = [payloadBreaking field "new required field; queued jobs do not contain it"]
-      | otherwise = [additive (wqName newQueue) "payload-field" (wqfName field) CompatibilityStrengthened "new optional field"]
+    -- Every payload field is required, so adding one always breaks jobs already
+    -- queued under the old shape; there is no optional variant to strengthen.
+    addedFieldDiff field = [payloadBreaking field "new required field; queued jobs do not contain it"]
     removedFieldDiff field = [payloadBreaking field "field removed; queued jobs still contain the old payload shape"]
     payloadBreaking field detail = breaking (wqName newQueue) "payload-field" (wqfName field) WqPayloadFieldChanged detail
 

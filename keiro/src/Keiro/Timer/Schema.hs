@@ -65,7 +65,9 @@ data TimerStatus
   | Fired
   | Cancelled
   | Dead
-  deriving stock (Generic, Eq, Show)
+  -- 'Enum'/'Bounded' let a consumer enumerate the complete lifecycle rather than
+  -- restate it; keiro-dsl's cross-package vocabulary test relies on this.
+  deriving stock (Generic, Eq, Show, Enum, Bounded)
 
 -- | A timer row as stored: the original 'TimerRequest' fields plus the live
 -- 'status', the 'attempts' count (incremented on each claim), and the

@@ -89,6 +89,7 @@ import Keiro.Dsl.ScaffoldRun
     applyPreparedSourceMoves,
     behaviorDrift,
     constraintPlan,
+    inertNodesOf,
     mappingDrift,
     missingGeneratedBanners,
     newBindingObligations,
@@ -96,6 +97,7 @@ import Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     preflightSourceMoves,
     preparedSourceMove,
+    renderInertNodeSection,
     renderMappingIdentity,
     staleAgainst,
   )
@@ -374,6 +376,10 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrAddedBehavior :: ![BehaviorRecordRow],
     wsrRemovedBehavior :: ![BehaviorRecordRow],
     wsrObsoleteOutputHooks :: ![(Text, Text)],
+    -- | Declarations in the merged service that produce no generated module.
+    --     Same content, same rendering as the single-spec
+    --     'Keiro.Dsl.ScaffoldRun.reportInertNodes'.
+    wsrInertNodes :: ![(Text, Text)],
     wsrConformancePackage :: !(Maybe ConformancePackageReport),
     wsrNameMoves :: ![SourceMove],
     wsrSidecarMoves :: ![SidecarMove],
@@ -516,6 +522,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrAddedBehavior = addedBehavior,
               wsrRemovedBehavior = removedBehavior,
               wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
+              wsrInertNodes = inertNodesOf merged,
               wsrConformancePackage = packageReport,
               wsrNameMoves = nameMoves,
               wsrSidecarMoves = sidecarMoves,
@@ -685,6 +692,7 @@ renderWorkspaceScaffoldReport report =
     <> sourceLanguageDriftSection
     <> behaviorDriftSection
     <> obsoleteOutputSection
+    <> renderInertNodeSection (wsrInertNodes report)
     <> ownershipSection
     <> staleSection
     <> maybe [] renderConformancePackageReport (wsrConformancePackage report)

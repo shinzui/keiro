@@ -93,8 +93,11 @@ pWorkqueue = do
       _ <- symbol "->"
       w <- stringLit
       ty <- ident
-      req <- option False (True <$ keyword "required")
-      pure WqField {wqfName = n, wqfWire = w, wqfType = ty, wqfRequired = req}
+      -- Every payload field is required: generated decoders use `o .:` for all
+      -- of them. The keyword stays accepted so existing sources still parse, but
+      -- it selects nothing, so it is not retained. See ExecPlan 199.
+      _ <- optional (keyword "required")
+      pure WqField {wqfName = n, wqfWire = w, wqfType = ty}
     pWqDispRow = do
       loc <- getLoc
       o <- ident

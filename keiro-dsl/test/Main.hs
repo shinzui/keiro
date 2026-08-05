@@ -2917,6 +2917,90 @@ main = hspec $ do
       case wireDiagnostics of
         firstDiagnostic : _ -> relatedLocations firstDiagnostic `shouldBe` [(7, "wire key 'same' is first declared here")]
         [] -> expectationFailure "expected resolved wire-key diagnostics"
+    -- `family` is a contextual keyword GHC accepts as a term under the
+    -- advertised GHC2024 contract, and it is the field mori's project signals
+    -- are keyed by. This fixture pins that scenario end to end; before ExecPlan
+    -- 199 no test referenced it, so the guarantee was untested.
+    it "keeps a reserved-word-adjacent contract field intact from check to codec" $
+      withTempDirectory "keiro-dsl-reserved-family" $ \out -> do
+        let fixture = "test/fixtures/contract-reserved-family.keiro"
+        (checkCode, checkOut, checkErr) <- runKeiroDsl ["check", fixture, "--min-language", "4", "--deny-warnings"]
+        unless (checkCode == ExitSuccess) (expectationFailure (checkOut <> checkErr))
+        checkOut `shouldBe` "OK\n"
+        checkErr `shouldNotContain` "warning["
+
+        (scaffoldCode, scaffoldOut, scaffoldErr) <- runKeiroDsl ["scaffold", fixture, "--out", out]
+        unless (scaffoldCode == ExitSuccess) (expectationFailure (scaffoldOut <> scaffoldErr))
+        tree <- treeSnapshot out
+        case [text | (path, text) <- tree, "Contract.hs" `T.isSuffixOf` T.pack path] of
+          codec : _ -> do
+            -- The DSL name is the record selector …
+            codec `shouldSatisfy` T.isInfixOf "family ::"
+            -- … and, unaliased, the wire key is the same bytes.
+            codec `shouldSatisfy` T.isInfixOf "\"family\""
+            codec `shouldNotSatisfy` T.isInfixOf "family_"
+          [] -> expectationFailure ("no generated contract module in " <> show (map fst tree))
+
+    -- An alias exists to preserve a brownfield key the current convention would
+    -- reject, so its *style* is deliberately not checked (ADR 0021). What is
+    -- checked is that the key can be a key: a trailing space or a control
+    -- character ships a permanently mis-keyed public field. See ExecPlan 199.
+    it "refuses structurally unusable wire-key aliases without opinionating on style" $ do
+      let aliasSpec alias =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change {",
+                "    region as \"" <> alias <> "\":Text",
+                "  }"
+              ]
+          keyDiagnostics source = do
+            service <- checkedServiceFromText "<alias-content>" source
+            pure [diagnostic | diagnostic <- validateService service, code diagnostic == FieldWireKeyInvalid]
+
+      -- Refused: the wire key is the exact bytes on the wire. Written as the
+      -- DSL spells them, so `\\n` here is the source's escape, not Haskell's.
+      forM_ ["family ", " family", "family\\n", "fam\\tily", "fam\\rily"] $ \bad -> do
+        refused <- keyDiagnostics (aliasSpec bad)
+        map code refused `shouldBe` [FieldWireKeyInvalid]
+        map line refused `shouldBe` [7]
+
+      -- Accepted: these violate `fields=camelCase` and that is exactly the point
+      -- of an alias — the brownfield key is preserved, not corrected.
+      forM_ ["region_code", "Region-Code", "REGION.CODE", "r\233gion"] $ \brownfield -> do
+        accepted <- keyDiagnostics (aliasSpec brownfield)
+        accepted `shouldBe` []
+
+    -- The collision planner must register the selector generation actually
+    -- emits. Registering a camelized rendering of the raw name made it claim
+    -- `foo_bar` "normalizes to" `fooBar`, which generation never does.
+    it "plans field collisions against the emitted selector, not a camelized rendering" $ do
+      let recordSpec fields =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change { " <> fields <> " }"
+              ]
+          collisionsIn source = do
+            service <- checkedServiceFromText "<selector-collision>" source
+            pure [diagnostic | diagnostic <- validateService service, code diagnostic == GeneratedOccurrenceCollision]
+
+      -- Distinct emitted selectors: `foo_bar` generates `foo_bar`. It is still
+      -- refused, but by the generated-name audit that owns lowerCamelCase — not
+      -- by a collision claim naming an unrelated sibling.
+      falseCollision <- collisionsIn (recordSpec "foo_bar fooBar")
+      falseCollision `shouldBe` []
+
+      -- Two declarations that really do emit one selector still collide.
+      realCollision <- collisionsIn (recordSpec "fooBar other haskell fooBar")
+      map code realCollision `shouldSatisfy` \codes -> GeneratedOccurrenceCollision `elem` codes
+
     it "checks copied command selectors in both generated record scopes" $ do
       service <-
         checkedServiceFromText
@@ -3358,7 +3442,6 @@ main = hspec $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation.keiro"
       codes
         `shouldNotContain` [ IntakeBindFlagUnenforced,
-                             WqFieldOptionalUnsupported,
                              RmInlineSubscriptionIgnored
                            ]
     it "reports empty aggregates at their declaration under legacy and stable contracts" $ do
@@ -3686,6 +3769,47 @@ main = hspec $ do
       forM_ [intakeSpec, processSpec, routerSpec] $ \accepted -> do
         serviceErrorCodes 4 accepted `shouldNotContain` closedCodes
         serviceWarningCodes 4 accepted `shouldNotContain` closedCodes
+
+    -- ExecPlan 197 parked these three as "explicitly descriptive-only"; ExecPlan
+    -- 199 re-adjudicated each against the path it purports to describe and found
+    -- a checkable referent in every one.
+    it "checks the references the formerly descriptive-only surfaces name" $ do
+      processSpec <- specOf "test/fixtures/hospital-surge.keiro"
+      dispatchSpec <- specOf "test/fixtures/reservation-work.keiro"
+      let unknownStatus =
+            modifyProcess
+              "HospitalSurge"
+              (\process -> process {procTimer = (procTimer process) {tmDecodeUnknown = "Abandoned"}})
+              processSpec
+          blankDeadLetter =
+            modifyProcess
+              "HospitalSurge"
+              (\process -> process {procTimer = (procTimer process) {tmDeadLetter = "   "}})
+              processSpec
+          phantomDedupeKey =
+            mapPgmqDispatch (\d -> d {pdDedupKey = "ghostKey"}) dispatchSpec
+          uppercaseFanout =
+            mapPgmqDispatch (\d -> d {pdFanoutBody = "ResolveTransferCandidates"}) dispatchSpec
+          cases =
+            [ (unknownStatus, TimerDecodeStatusUnknown),
+              (blankDeadLetter, TimerDeadLetterTextInvalid),
+              (phantomDedupeKey, DispatchReadModelFieldUnknown),
+              (uppercaseFanout, PgmqFanoutFunctionInvalid)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceWarningCodes 3 candidate `shouldContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+
+      -- Every timer status the runtime actually stores is accepted.
+      forM_ ["Scheduled", "Firing", "Fired", "Cancelled", "Dead"] $ \status ->
+        serviceErrorCodes
+          4
+          (modifyProcess "HospitalSurge" (\p -> p {procTimer = (procTimer p) {tmDecodeUnknown = status}}) processSpec)
+          `shouldNotContain` [TimerDecodeStatusUnknown]
+
+      serviceErrorCodes 4 processSpec `shouldNotContain` [TimerDecodeStatusUnknown, TimerDeadLetterTextInvalid]
+      serviceErrorCodes 4 dispatchSpec `shouldNotContain` [PgmqFanoutFunctionInvalid]
 
     it "holds a process dispatch-id line to the same strictness as a router's" $ do
       -- Both lines document a derivation the spec cannot change, but the two
@@ -4522,9 +4646,17 @@ main = hspec $ do
       warningCodes `shouldContain` [WqUnloggedDurability]
       partitionCodes <- errorCodesOf "test/fixtures/reservation-work-partitioned-empty.keiro"
       partitionCodes `shouldContain` [WqPartitionSpecEmpty]
-    it "warns when the optional required marker overstates decoder support" $ do
-      codes <- diagnosticCodesOf "test/fixtures/reservation-work-optfield.keiro"
-      codes `shouldContain` [WqFieldOptionalUnsupported]
+    -- Every payload field is required — generated decoders use `o .:` for all of
+    -- them — so the marker no longer selects anything. A source that omits it and
+    -- a source that writes it describe the same queue and produce identical
+    -- output. See ExecPlan 199.
+    it "treats a payload field as required whether or not the marker is written" $ do
+      unmarkedSource <- readTestText "test/fixtures/reservation-work-optfield.keiro"
+      let bare = "    note -> \"note\" text"
+          markedSource = T.replace bare (bare <> " required") unmarkedSource
+      unmarkedSource `shouldSatisfy` T.isInfixOf bare
+      parseSpec "unmarked" unmarkedSource `shouldBe` parseSpec "marked" markedSource
+      errorCodesOf "test/fixtures/reservation-work-optfield.keiro" >>= (`shouldBe` [])
     it "lowers ordering, provisioning, and raw group-key projection" $ do
       spec <- specOf "test/fixtures/reservation-work.keiro"
       case [workqueue | NWorkqueue workqueue <- specNodes spec] of
@@ -5306,10 +5438,17 @@ main = hspec $ do
       [ckCode k | Breaking k <- fieldTypeChange] `shouldContain` [WqPayloadFieldChanged]
       required <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-reqfield.keiro"
       [ckCode k | Breaking k <- required] `shouldContain` [WqPayloadFieldChanged]
-    it "classifies a new optional workqueue payload field as additive" $ do
+    -- Adding a payload field is breaking however it is spelled. Generated
+    -- decoders read every field with `o .:`, so a job already queued under the
+    -- old shape fails to decode against the new one — the "additive, optional
+    -- field" classification this test previously asserted described a decoder
+    -- that was never generated. See ExecPlan 199.
+    it "classifies any new workqueue payload field as breaking for queued jobs" $ do
       cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-optfield.keiro"
-      any isBreaking cs `shouldBe` False
-      [ckSubject k | Additive k <- cs] `shouldContain` ["note"]
+      [ckCode k | Breaking k <- cs] `shouldContain` [WqPayloadFieldChanged]
+      [ckSubject k | Breaking k <- cs] `shouldContain` ["note"]
+      [ckDetail k | Breaking k <- cs, ckSubject k == "note"]
+        `shouldSatisfy` any (T.isInfixOf "queued jobs do not contain it")
     it "classifies workqueue ordering changes as breaking delivery-contract changes" $ do
       cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-ordering-change.keiro"
       [ckCode k | Breaking k <- cs] `shouldContain` [WqOrderingChanged]
@@ -8504,6 +8643,17 @@ mapIntake update spec =
         ]
     }
 
+mapPgmqDispatch :: (PgmqDispatchNode -> PgmqDispatchNode) -> Spec -> Spec
+mapPgmqDispatch update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NPgmqDispatch dispatch -> NPgmqDispatch (update dispatch)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
 mapRouter :: (RouterNode -> RouterNode) -> Spec -> Spec
 mapRouter update spec =
   spec
@@ -10459,7 +10609,7 @@ genPublisher =
     <*> pure noLoc
 
 genWqField :: Gen WqField
-genWqField = WqField <$> genName <*> genAdversarialText <*> genName <*> arbitrary
+genWqField = WqField <$> genName <*> genAdversarialText <*> genName
 
 genWqDispRow :: Gen WqDispRow
 genWqDispRow = WqDispRow <$> genName <*> genInboxAction <*> pure noLoc

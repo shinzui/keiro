@@ -55,7 +55,7 @@ workqueue reservation_work {
 dispatch reservation_work_dispatch {
   source readModel = accepted_transfer_needs key = reservationId
   fanout body = resolveTransferCandidates
-  dedup key = commandId
+  dedup key = hospitalId
         seenIn readModel = transfer_decisions field = reservation_id
         seenIn queue = reservation_work field = reservation_id
   enqueue to = reservation_work

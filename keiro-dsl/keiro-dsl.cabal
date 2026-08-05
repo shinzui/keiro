@@ -193,6 +193,21 @@ test-suite keiro-dsl-haskell-name-test
     , QuickCheck  >=2.14
     , text        >=2.1  && <2.2
 
+-- Plan 199: keiro-dsl validates specs without depending on the keiro runtime
+-- package, so a few runtime vocabularies are restated in Keiro.Dsl.Validate.
+-- This suite depends on both packages and fails when a restatement drifts from
+-- the definition it mirrors.
+test-suite keiro-dsl-runtime-vocabulary-test
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/runtime-vocabulary
+  main-is:        Main.hs
+  build-depends:
+    , base       >=4.21 && <5
+    , keiro
+    , keiro-dsl
+    , text       >=2.1  && <2.2
+
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
 -- Holes.hs compile against keiki/keiro and that the filled transducer passes
 -- keiki's validator and the codec round-trips. The Generated.* modules under
