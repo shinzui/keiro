@@ -1506,6 +1506,12 @@ semantic validation. Canonical output discards comments and formatting.
 cabal run -v0 keiro-dsl -- check service.keiro
 cabal run -v0 keiro-dsl -- check service.keiro --emit
 cabal run -v0 keiro-dsl -- check service.keiro --explain-bindings
+cabal run -v0 keiro-dsl -- check service.keiro --min-language 4
+cabal run -v0 keiro-dsl -- check service.keiro --deny-warnings
+cabal run -v0 keiro-dsl -- check service.keiro \
+  --deny DeprecatedEventReplayHazard,WireSchemaVersionMismatch
+cabal run -v0 keiro-dsl -- check service.keiro \
+  --report-out build/keiro-check-report.json
 cabal run -v0 keiro-dsl -- check service.keiro \
   --coverage-report build/keiro-coverage.json \
   --fail-on-opaque
@@ -1513,9 +1519,36 @@ cabal run -v0 keiro-dsl -- check service.keiro \
 
 `--emit` prints canonical source after successful validation.
 `--explain-bindings` lists consumer-owned binding obligations.
+`--min-language N` requires a registered released language version at least
+`N`; `--min-language 4` is the standard stable-contract gate.
+`--deny-warnings` makes every warning fail this invocation without changing its
+severity. `--deny CODE[,CODE...]` applies the same exit policy selectively; it
+is repeatable, and the spelling is copied exactly from `warning[Code]`.
+`--report-out` writes `keiro-dsl/check-report/1` after source or workspace
+validation, on success or failure. It records language provenance, enforcement
+flags, diagnostics and related locations, summary counts, and the validation
+outcome. Object and array-element keys are append-only; readers must ignore
+unknown keys. Parse or workspace-composition failures occur before the report
+exists. The report's `ok` excludes the separate structural/opaque coverage
+gate, whose artifact remains `--coverage-report`.
 `--coverage-report` inventories structural, opaque, explicit-`Json`, and
 consumer-JSON register boundaries. `--fail-on-opaque` turns named private
 persisted opaque boundaries into a CI gate.
+
+#### CI recipe
+
+```bash
+cabal run -v0 keiro-dsl -- check service.keiro \
+  --min-language 4 \
+  --deny-warnings \
+  --report-out build/keiro-check-report.json
+```
+
+A red result means the source did not parse or compose, selected a language
+below 4, emitted an error, or emitted a warning denied by this invocation. The
+JSON report distinguishes those outcomes whenever parsing and composition
+succeeded. Ensure the report's parent directory exists before invoking the
+command.
 
 ### `inspect`
 
@@ -1611,8 +1644,29 @@ The tool separates three failure classes:
 2. An `error[Code]` means the graph parses but cannot safely or faithfully
    lower. `check` exits non-zero, and scaffold writes nothing.
 3. A `warning[Code]` calls out a risky but explicit policy, incomplete
-   operational proof, or adoption state. Warnings are printed but do not make
-   `check` fail.
+   operational proof, or adoption state. Warnings do not make `check` fail by
+   default. `--deny-warnings` and `--deny CODE` escalate only this invocation's
+   exit result; the diagnostic still renders and reports as `warning`.
+
+A source without a `language keiro-dsl N` preamble selects compatibility-only
+language 1. Declared languages 1 through 3 are also compatibility-only, and do
+not apply language 4's strict spec-surface validation. `check` and `scaffold`
+print one `language contract:` notice for those sources (workspace notices
+summarize member provenance); `diff` prints it for the working-tree side only.
+Use `--min-language 4` to turn that otherwise-compatible downgrade into the
+located `LanguageVersionBelowMinimum` error expected by stable-contract CI.
+
+The warning policy follows the evidence boundary. Three warnings depend on
+operational history and therefore remain warnings: `DeprecatedEventReplayHazard`,
+`EventRetirementInProgress`, and `ReplayOnlyCommandStillLive`. Deny them in CI
+until the database-backed audit establishes the relevant fleet fact. Four
+warnings describe deliberate or currently accepted policy:
+`WqUnloggedDurability`, `ProcessBenignInversion`,
+`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`; teams may deny
+them without changing the shared language contract. Two internally decidable
+warnings, `WireSchemaVersionMismatch` and `RmProjectionWithoutNode`, are
+candidates for an error in a future language version rather than retroactive
+tightening of language 4. They can be selected with `--deny` today.
 
 Language 4 validates local syntax and whole-service coupling. Important closed
 surfaces include:

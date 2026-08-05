@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-08-02T15:22:00Z
+timestamp: 2026-08-05T15:50:17Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -47,6 +47,13 @@ Machine-readable `DiagnosticCode` values correlate `check` and `diff`.
 Human-readable text explains the operational remedy, but tooling depends on
 the code rather than prose.
 
+The check boundary also states which released contract it applied. Compatibility-only
+sources print one effective-language notice; `--min-language` turns a CI-required released
+floor into the appended `LanguageVersionBelowMinimum` error at the source preamble or workspace
+manifest plus member locations. Warning severity remains a property of the language contract.
+`--deny-warnings` and `--deny CODE` are per-invocation policies that change only the exit result,
+never the rendered or reported severity.
+
 Aggregate type syntax and capabilities follow the same rule. Parsing establishes
 only a `TypeExpr`; `check` resolves it at the declaration or guard use site and
 rejects unknown types, unsupported direct shapes, invalid register initials,
@@ -83,7 +90,7 @@ The landed inventory is:
 
 | Change class | Single-spec `check` | Cross-spec `diff` | Runtime boundary / CI |
 |---|---|---|---|
-| Effective language runtime semantics change | The parser selects a supported contract and workspace composition requires one effective version | Contract-aware fold/diff planning reports runtime-semantic changes independently of source provenance | Generated fold fingerprints add a discriminator only when runtime/fold behavior can differ; scaffold history persists the checked contract and replay impact consumes it |
+| Effective language runtime semantics change | The parser selects a supported contract and workspace composition requires one effective version; compatibility-only selections print their effective contract, and `LanguageVersionBelowMinimum` enforces an explicit CI floor | Contract-aware fold/diff planning reports runtime-semantic changes independently of source provenance | Generated fold fingerprints add a discriminator only when runtime/fold behavior can differ; scaffold history persists the checked contract and replay impact consumes it |
 | Invalid schema version, duplicate event tags, out-of-range rung | Not all are expressible in the DSL | Not required | `mkCodec` fails validated stream construction |
 | Different event kinds change at the same source version | Allowed; chain continuity still applies | Version bumps remain Additive only with their declared upcasts | Scaffolder merges them into one unique rung that dispatches by `EventType`; `mkCodec` validates the resulting codec |
 | Upcaster accidentally rewrites another event kind at the same aggregate version | Not author-expressible in generated code | No separate classification needed | Generated rung dispatch passes foreign kinds through byte-for-byte; codec-level conformance invokes each owning upcaster |
@@ -140,8 +147,13 @@ add surfaces. ADDITIVE/WARNING/BREAKING headlines and append-only
 `DiagnosticCode` values remain the stable text contract, while the vector is
 their context-sensitive refinement. `--report-out` writes schema
 `keiro-dsl/diff-report/1`; object keys and containing paths are append-only and
-readers must ignore unknown keys. The existing replay-impact JSON contract is
-unchanged.
+readers must ignore unknown keys. `check --report-out` writes
+`keiro-dsl/check-report/1` after source or workspace validation, including the effective language,
+per-invocation enforcement policy, open-string diagnostic codes, severities and related locations,
+summary counts, and the exact validation/denial outcome. Its object and array-element keys are also
+append-only and readers must ignore unknown keys; workspace reports add an append-only `members`
+array without changing the schema identifier. Parse and workspace-composition failures precede
+report construction. The existing replay-impact JSON contract is unchanged.
 
 For a `.keiro-workspace` input, the cross-spec boundary is the two composed
 service graphs, not any individual member file. The old graph is reconstructed
@@ -201,6 +213,9 @@ The same evidence boundaries determine rollout ordering:
   streams; generator validation is defense in depth, not the sole gate.
 - `check` may warn rather than reject when the missing fact is operational
   history, such as whether live streams still contain a deprecated event.
+- Warning escalation is per-invocation CI policy. `--deny-warnings` and `--deny CODE` can make a
+  warning fail `check`, but neither reclassifies it; the operational-history rule above remains
+  unchanged.
 - A decode golden proves decode compatibility only. It must never be described
   as proof that an old event still has an inverting edge or folds identically.
 - Golden synthesis never overwrites an existing file, so hand-captured

@@ -30,6 +30,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - **keiro-dsl**: `DiagnosticCode` gains `FieldWireKeyCollision`,
   `FieldWireKeyInvalid`, and `EvtFieldWireKeyChanged`; exhaustive matches must be
   extended.
+- **keiro-dsl**: `DiagnosticCode` appends `LanguageVersionBelowMinimum` and now
+  derives `Ord`, `Enum`, and `Bounded`; exhaustive matches must be extended. `check`,
+  `scaffold`, and the working-tree side of `diff` now add a stderr language-contract
+  notice for compatibility-only sources, which changes exact-stderr consumers.
 
 ### New Features
 
@@ -41,6 +45,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   declare independent `haskell <selector>` and `as "<wire-key>"` aliases. Records
   use selectors, codecs and goldens use wire keys, and `fields(Command)` copies the
   resolved three-namespace identity.
+- **keiro-dsl**: `check --min-language N` enforces a released language floor, while
+  `--deny-warnings` and repeatable/comma-separated `--deny CODE` make warnings
+  CI-failing without changing their severity. `check --report-out` writes the
+  append-only `keiro-dsl/check-report/1` source/workspace schema through the new
+  `Keiro.Dsl.CheckReport` module.
 
 ### Other Changes
 

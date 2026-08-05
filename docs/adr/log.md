@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Update**: Record effective-language notices, explicit language floors, per-invocation warning denial, and the check-report/1 machine contract (plan 193).
 * **Update**: Record mode-aware initial live probes, source-wide transition edge identity, and duplicate generated-declaration preflight (plan 191).
 * **Update**: Add the field-identity validation, selector-only build advisory, and aggregate/public wire-key evolution boundaries (plan 192).
 * **Update**: Make the generated occurrence reserved set exactly the 23 GHC-rejected term identifiers and record the contextual-word compile probe (plan 192).

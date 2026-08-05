@@ -29,6 +29,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   naming edition.
 - `DiagnosticCode` gains `FieldWireKeyCollision`, `FieldWireKeyInvalid`, and
   `EvtFieldWireKeyChanged`. Exhaustive matches must be extended.
+- `DiagnosticCode` appends `LanguageVersionBelowMinimum` and now derives `Ord`,
+  `Enum`, and `Bounded`. Exhaustive matches must be extended. `check`, `scaffold`,
+  and the working-tree side of `diff` add a stderr language-contract notice for
+  compatibility-only sources, changing exact-stderr consumers.
 
 ### New Features
 
@@ -43,6 +47,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Language 4 direct aggregate and integration-contract fields accept independent
   `haskell <selector>` and `as "<wire-key>"` aliases. Generated records use the
   selector, codecs/goldens use the wire key, and `fields(Command)` preserves both.
+- `check --min-language N` enforces a registered released-language floor.
+  `--deny-warnings` and repeatable/comma-separated `--deny CODE` make selected
+  warnings CI-failing without changing their severity. `--report-out` writes the
+  append-only `keiro-dsl/check-report/1` schema for sources and workspaces through
+  the new `Keiro.Dsl.CheckReport` module.
 
 ### Other Changes
 
