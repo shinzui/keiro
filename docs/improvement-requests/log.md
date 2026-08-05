@@ -1,5 +1,15 @@
 # Bundle Update Log
 
+## 2026-08-05
+* **Superseded**: IR-17 will not add reviewed aggregate validation-policy allowlists. Keiki
+  0.9.0.0 implements `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5` and proves
+  Mori's motivating `openSteps > 1` / `openSteps == 1` guards disjoint despite opaque sibling
+  predicates; Mori can remove its temporary override when it adopts that release.
+* **Planning**: IR-18 is planned by
+  [Plan 191](../plans/191-unify-generated-transition-layout-for-replay-only-conformance.md), which
+  gives generated runtime assembly, predicate verification, behavior attribution, and live
+  initial probes one source-wide transition layout with compiled single/workspace conformance.
+
 ## 2026-08-04
 * **Addition**: IR-18 requires generated harnesses, predicate verification, and behavior
   conformance to treat replay-only transitions from the initial vertex as replay-only, including

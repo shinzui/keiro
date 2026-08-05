@@ -5,9 +5,9 @@ description: >-
   Let a checked aggregate declare an exact reviewed allowlist for narrowable Keiki validation
   warnings, and generate matching runtime construction, harness assertions, diff evidence, and
   service conformance without weakening mandatory replay-contract checks.
-timestamp: 2026-08-04T16:24:05Z
+timestamp: 2026-08-05T04:15:24Z
 requestId: IR-17
-status: proposed
+status: superseded
 origin: mori://shinzui/mori
 reviews:
   - kind: model
@@ -29,7 +29,27 @@ reviews:
 
 ## Status
 
-Proposed as a generated-conformance and runtime-assembly correctness feature.
+Superseded by Keiki 0.9.0.0. Keiki now proves the motivating same-mode integral guards
+(`openSteps > 1` and `openSteps == 1`) disjoint even when their conjunctions contain opaque
+siblings, so Mori can remove its temporary `checkInversionAmbiguity` override when it adopts that
+release. Keiro will not add a first-class reviewed-warning policy for this case.
+
+This decision does not supersede
+[`handle-initial-state-replay-only-transitions-in-generated-harnesses.md`](handle-initial-state-replay-only-transitions-in-generated-harnesses.md).
+That request concerns the generated layout and conformance treatment of genuine replay-only
+edges, not a Keiki validation false positive.
+
+## Supersession Evidence
+
+Keiki implemented `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5` in release
+0.9.0.0. Its regression coverage includes the exact `openSteps > 1` versus `openSteps == 1`
+comparison with additional opaque identity and stepbook predicates. The improved default
+inversion analysis reports no ambiguity for Mori's reviewed pair, so the requested exact
+allowlist would preserve a workaround after its cause has disappeared.
+
+Mori's remaining action is dependency adoption: move to Keiki 0.9.0.0 and restore default
+validation. That consumer change belongs to Mori and is not an implementation prerequisite for
+Keiro's separate replay-only generation fix.
 
 ## Context
 
