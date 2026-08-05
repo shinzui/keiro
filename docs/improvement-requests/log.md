@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Addition**: IR-19 requests honest names for the scaffolder's four generated sidecars — the files
+  named `record` are the machine-read ledgers while the file named `manifest` is never parsed — with
+  an old-name fallback so a rename cannot silently discard scaffold history, and one durability
+  contract so the conformance ledger tolerates unknown rows like the workspace ledger already does.
 * **Superseded**: IR-17 will not add reviewed aggregate validation-policy allowlists. Keiki
   0.9.0.0 implements `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5` and proves
   Mori's motivating `openSteps > 1` / `openSteps == 1` guards disjoint despite opaque sibling
