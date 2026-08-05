@@ -11250,57 +11250,62 @@ skipTransducer =
 
 sAddCtor :: InCtor SkipCommand AddFields
 sAddCtor =
-  InCtor
-    { icName = "SAdd",
-      icMatch = \case
+  Keiki.unavailableInCtor
+    "SAdd"
+    ( \case
         SAdd amount -> Just (RCons Proxy amount RNil)
-        SSkip -> Nothing,
-      icBuild = \case
+        SSkip -> Nothing
+    )
+    ( \case
         RCons _ amount RNil -> SAdd amount
-    }
+    )
 
 sSkipCtor :: InCtor SkipCommand '[]
 sSkipCtor =
-  InCtor
-    { icName = "SSkip",
-      icMatch = \case
+  Keiki.unavailableInCtor
+    "SSkip"
+    ( \case
         SAdd {} -> Nothing
-        SSkip -> Just RNil,
-      icBuild = \case
+        SSkip -> Just RNil
+    )
+    ( \case
         RNil -> SSkip
-    }
+    )
 
 addCtor :: InCtor CounterCommand AddFields
 addCtor =
-  InCtor
-    { icName = "Add",
-      icMatch = \case
-        Add amount -> Just (RCons Proxy amount RNil),
-      icBuild = \case
+  Keiki.unavailableInCtor
+    "Add"
+    ( \case
+        Add amount -> Just (RCons Proxy amount RNil)
+    )
+    ( \case
         RCons _ amount RNil -> Add amount
-    }
+    )
 
 counterAddedCtor :: WireCtor CounterEvent (Int, ())
 counterAddedCtor =
-  WireCtor
-    { wcName = "CounterAdded",
-      wcMatch = \case
+  Keiki.unavailableWireCtor
+    "CounterAdded"
+    ( \case
         CounterAdded amount -> Just (amount, ())
-        CounterAudited {} -> Nothing,
-      wcBuild = \case
+        CounterAudited {} -> Nothing
+    )
+    ( \case
         (amount, ()) -> CounterAdded amount
-    }
+    )
 
 counterAuditedCtor :: WireCtor CounterEvent (Int, ())
 counterAuditedCtor =
-  WireCtor
-    { wcName = "CounterAudited",
-      wcMatch = \case
+  Keiki.unavailableWireCtor
+    "CounterAudited"
+    ( \case
         CounterAudited amount -> Just (amount, ())
-        CounterAdded {} -> Nothing,
-      wcBuild = \case
+        CounterAdded {} -> Nothing
+    )
+    ( \case
         (amount, ()) -> CounterAudited amount
-    }
+    )
 
 counterCodec :: Codec CounterEvent
 counterCodec =
@@ -11352,23 +11357,25 @@ type DivertFields = '[ '("acuityBlack", Bool)]
 
 confirmDivertCtor :: InCtor DivertCommand DivertFields
 confirmDivertCtor =
-  InCtor
-    { icName = "ConfirmDivert",
-      icMatch = \case
-        ConfirmDivert acuityBlack -> Just (RCons Proxy acuityBlack RNil),
-      icBuild = \case
+  Keiki.unavailableInCtor
+    "ConfirmDivert"
+    ( \case
+        ConfirmDivert acuityBlack -> Just (RCons Proxy acuityBlack RNil)
+    )
+    ( \case
         RCons _ acuityBlack RNil -> ConfirmDivert acuityBlack
-    }
+    )
 
 divertConfirmedCtor :: WireCtor DivertEvent (Bool, ())
 divertConfirmedCtor =
-  WireCtor
-    { wcName = "DivertConfirmed",
-      wcMatch = \case
-        DivertConfirmed acuityBlack -> Just (acuityBlack, ()),
-      wcBuild = \case
+  Keiki.unavailableWireCtor
+    "DivertConfirmed"
+    ( \case
+        DivertConfirmed acuityBlack -> Just (acuityBlack, ())
+    )
+    ( \case
         (acuityBlack, ()) -> DivertConfirmed acuityBlack
-    }
+    )
 
 divertCodec :: Codec DivertEvent
 divertCodec =

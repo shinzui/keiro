@@ -6,6 +6,15 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Requires `keiki >=0.9 && <0.10`, replacing `>=0.8 && <0.9`. Keiki 0.9
+  classifies trusted event heads by structural constructor evidence and can
+  prove some integral register/literal replay candidates disjoint, so
+  `validateEventStream` and `mkEventStream` may return a different conservative
+  inversion-ambiguity warning set. The `EventStreamWarning` API and runtime
+  stepping/replay behavior are unchanged.
+
 ## 0.10.0.0 — 2026-08-03
 
 No changes this release. Released with the package set for the `keiro-dsl`

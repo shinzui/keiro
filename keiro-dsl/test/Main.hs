@@ -5053,6 +5053,17 @@ main = hspec $ do
                 "  " <> T.pack (copied </> "runtime"),
                 "  " <> T.pack packageRoot,
                 "",
+                "source-repository-package",
+                "  type: git",
+                "  location: https://github.com/shinzui/keiki.git",
+                "  tag: 9714d37033c37595e3aaa3319ca0ca77466782e0",
+                "",
+                "source-repository-package",
+                "  type: git",
+                "  location: https://github.com/shinzui/keiki.git",
+                "  tag: 9714d37033c37595e3aaa3319ca0ca77466782e0",
+                "  subdir: keiki-codec-json",
+                "",
                 "allow-newer:",
                 "  haxl:time"
               ]

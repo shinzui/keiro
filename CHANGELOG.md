@@ -8,6 +8,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-core**, **keiro**, and **keiro-dsl** now require
+  `keiki >=0.9 && <0.10`; **keiro** also requires
+  `keiki-codec-json >=0.9 && <0.10`. Keiki 0.9 seals `InCtor` and `WireCtor`
+  construction behind read-only patterns: manual constructors must use
+  `unavailableInCtor` / `unavailableWireCtor`, while constructors that need
+  trusted structural evidence must use Keiki's Generic or Template Haskell
+  producers. Keiro's generated aggregates already use the trusted TH path.
+- Keiki 0.9 classifies replay head identity structurally and can suppress a
+  default inversion-ambiguity warning when exact integral register/literal
+  constraints prove the candidates disjoint. Consequently,
+  `validateEventStream`, `mkEventStream`, generated validation harnesses, and
+  consumers that inspect Keiki warnings may report a different conservative
+  warning set after recompilation. Runtime event execution and the
+  `keiki-codec-json` wire format are unchanged.
 - **keiro-dsl**: generated Haskell now uses one checked UpperCamelCase/lowerCamelCase
   naming edition. Compound module and create-once paths move (for example,
   `Service_oncall` → `ServiceOncall`), and public diagnostic, refusal, report, and
@@ -20,6 +34,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   backup-backed and digest-journaled source move with token-aware Haskell module
   rewriting and crash recovery. Generated-only renames are consumer-build advisories;
   external and replay identities remain unchanged.
+
+### Other Changes
+
+- The development project pins `mori://shinzui/keiki/repos/keiki` at the commit
+  behind `v0.9.0.0` for both `keiki` and `keiki-codec-json` until the coordinated
+  0.9 packages are published to Hackage.
 
 ## 0.10.0.0 — 2026-08-03
 

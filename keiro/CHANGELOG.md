@@ -6,6 +6,17 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Requires `keiki >=0.9 && <0.10` and `keiki-codec-json >=0.9 && <0.10`,
+  replacing the 0.8 bounds. Keiki 0.9 makes `InCtor` and `WireCtor` read-only
+  construction patterns; manual values must use `unavailableInCtor` and
+  `unavailableWireCtor`, or use Generic/TH producers when trusted structural
+  evidence is required. Validation can report fewer name-collision false
+  positives when trusted structural heads differ or exact integral constraints
+  prove replay candidates disjoint. The JSON event and snapshot formats are
+  unchanged.
+
 ## 0.10.0.0 — 2026-08-03
 
 No user-facing changes beyond the lockstep `keiro-core ^>=0.10.0.0` bound.

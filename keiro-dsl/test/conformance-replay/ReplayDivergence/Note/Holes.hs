@@ -16,7 +16,7 @@ import Data.Text (Text)
 import Generated.ReplayDivergence.Note.Domain
 import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, SymTransducer, WireCtor (..))
+import Keiki.Core (HsPred, SymTransducer, WireCtor (..), unavailableWireCtor)
 
 -- HOLE: the transducer body. Reproduce the structure below, replacing each
 -- `-- HOLE` line with the keiki symbolic operators it describes.
@@ -55,9 +55,10 @@ emitWire = wireNoteWritten
 -- register. Only the generated forward/replay register comparison catches it.
 dishonestWireNoteWritten :: WireCtor NoteEvent (Text, (Text, ()))
 dishonestWireNoteWritten =
-    wireNoteWritten
-        { wcBuild = wcBuild wireNoteWritten . duplicateEcho
-        }
+    unavailableWireCtor
+        (wcName wireNoteWritten)
+        (wcMatch wireNoteWritten)
+        (wcBuild wireNoteWritten . duplicateEcho)
 
 duplicateEcho :: (Text, (Text, ())) -> (Text, (Text, ()))
 duplicateEcho (_noteText, (echo, ())) = (echo, (echo, ()))

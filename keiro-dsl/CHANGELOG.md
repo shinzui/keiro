@@ -8,6 +8,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Requires `keiki >=0.9 && <0.10`, replacing `>=0.8 && <0.9`. Generated
+  aggregate domains continue to use `deriveAggregateCtorsAll` and
+  `deriveWireCtorsAll`, which now produce Keiki's trusted structural
+  constructor evidence. Consumers must solve with Keiki 0.9 and recompile;
+  generated validation results may change where 0.9 can distinguish structural
+  heads or prove replay candidates disjoint.
 - Generated module segments, types, constructors, values, selectors, and create-once
   source paths now use one checked UpperCamelCase/lowerCamelCase policy. Compound
   logical names such as `service_oncall` therefore move from `Service_oncall` to
