@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Generated Haskell has an explicit edition and local-extension contract
 description: The generated manifest owns the compilation baseline and naming edition; generated declarations use checked UpperCamelCase or lowerCamelCase while overwriteable modules declare specialized extensions locally only when needed.
-timestamp: 2026-08-04T14:40:00Z
+timestamp: 2026-08-05T14:23:30Z
 docId: ADR-19
 status: Accepted
 date: 2026-08-03
@@ -63,6 +63,15 @@ and constructors are UpperCamelCase; values and record selectors are lowerCamelC
 trailing, and repeated underscores, generated keywords, and normalized collisions are check-time
 errors. A final lexical declaration inventory checks emitted generated modules and newly created
 hole stubs before writes, independently of external snake-case strings in their bodies.
+
+Semantic occurrence planning inventories the exact transition-derived top-level helpers before
+rendering. If two live transitions would emit the same value declaration, the existing generated
+occurrence collision refusal reports the later DSL location with the earlier location as related
+evidence and produces no write set. Replay-only transitions do not contribute live acceptance or
+forward/replay helper occurrences. As defense in depth, the masked final lexical inventory also
+rejects repeated top-level type signatures and repeated type, data, or newtype declarations in a
+generated module; one signature followed by its ordinary value binding remains valid. Both gates
+run before any single-file or workspace output changes.
 
 The naming edition is Haskell presentation, not a source-language or runtime edition. SQL names,
 wire keys/tags, queue names, registry/subscription identities, fingerprints, and other external

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Replay-only edges are the sanctioned remedy for guard tightening
 description: Retired guards keep an inverting edge through keiki's ReplayOnly edge mode instead of the guarded-but-inert command-flag hack.
-timestamp: 2026-07-23T17:14:35Z
+timestamp: 2026-08-05T14:23:30Z
 docId: ADR-2
 status: Accepted
 date: 2026-07-23
@@ -78,6 +78,16 @@ replay-only twin (`AggGuardTightened` advisory) whenever a live guard changes
 and no twin exists. The twin is printed, never auto-applied: whether history
 should stay replayable (paste) or be truncated instead is a business
 decision.
+
+Generated conformance preserves the same phase boundary at every source,
+including the aggregate's initial vertex. Step-based acceptance and
+forward/replay probes are generated only for `Live` transitions. A
+`ReplayOnly` initial transition remains in the generated transducer and finite
+behavior inventory, where a `ReplayWitness` uses detailed replay attribution to
+prove its exact source, target, event span, mode, and edge. It never receives an
+`accept<Command>` helper and is never presented to `step` as though it accepted
+new work. A live/replay-only initial pair therefore has one live acceptance
+probe, while a replay-only-only legacy command has none.
 
 Discipline rules: a replay-only transition with no emit is an error
 (`ReplayOnlyEmitsNothing`); one with no live sibling for its (source,

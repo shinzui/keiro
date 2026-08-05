@@ -119,7 +119,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 192 | Decouple wire keys from generated Haskell selectors with field aliases | docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md | None | None | Complete |
-| 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | In Progress |
+| 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | Complete |
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Not Started |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Not Started |
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Not Started |
@@ -219,7 +219,7 @@ alias-free spec generates byte-identical output.
 - [x] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
 - [x] EP-191 M2: Duplicate generated declarations refused before writes
 - [x] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
-- [ ] EP-191 M4: ADR/doc publication and full closure
+- [x] EP-191 M4: ADR/doc publication and full closure
 - [ ] EP-193 M1: Effective-language notice on check/scaffold/diff and `--min-language` floor
 - [ ] EP-193 M2: `--deny-warnings`/`--deny CODE` escalation with a stable exit-code contract
 - [ ] EP-193 M3: `keiro-dsl/check-report/1` JSON via `--report-out` on both check paths
@@ -374,11 +374,19 @@ selector advisories across legal event-version bumps. These corrections preserve
 and fold contracts and are covered by focused regressions plus the green 565-example DSL unit
 suite.
 
-EP-191 Milestone 3 is complete. The behavior-complete fixture now covers interleaved live and
-replay-only initial edges, with all 19 obligations filled, one live initial acceptance probe, no
-legacy-only probe, and replay edges attributed at indices 1 and 2. Its single/workspace
-idempotence proof, 29-fact generated service package, fold baseline, and falsification script are
-green. The child still requires ADR, user-doc, changelog, and IR publication before closure.
+EP-191 Milestone 3 established the executable proof: the behavior-complete fixture covers
+interleaved live and replay-only initial edges, with all 19 obligations filled, one live initial
+acceptance probe, no legacy-only probe, and replay edges attributed at indices 1 and 2. Its
+single/workspace idempotence proof, 29-fact generated service package, fold baseline, and
+falsification script are green.
+
+EP-191 is complete. ADRs 0002, 0017, and 0019 now make initial live probes mode-aware, define one
+source-wide outgoing-edge identity, and require semantic plus lexical duplicate-declaration
+preflight. The replay-safety/toolchain guides and both changelogs publish the same contract, and
+IR-18 is implemented. All DSL package components (including 566 unit examples), the all-package
+build, both generated-source policies, strict ADR validation, and diff hygiene pass. Strict
+improvement-request validation retains only the previously recorded IR-19 recommended-review
+baseline owned by EP-198; EP-191 introduced no bundle finding.
 
 
 ## Revision Notes
@@ -393,3 +401,5 @@ green. The child still requires ADR, user-doc, changelog, and IR publication bef
   retrospective without changing dependencies or plan status.
 - 2026-08-05: Recorded EP-191 Milestone 3 completion and the source-line-only exception to
   single/workspace generated-byte parity, without changing plan dependencies or status.
+- 2026-08-05: Closed EP-191 after ADR/user/release/IR publication and full validation, retaining
+  the already-recorded IR-19 strict-validation exception under its owning EP-198.

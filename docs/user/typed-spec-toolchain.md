@@ -681,6 +681,32 @@ replay-only Held -- Confirm -->
 It must emit at least one event. Use it to preserve inversion of stored events
 after their live behavior has been retired.
 
+The initial state is not special. A historical first event can retain a
+replay-only sibling beside the current live start rule:
+
+```text
+command Start { legacy:Bool }
+event Started = fields(Start)
+
+Empty -- Start -->
+  guard cmd.legacy == false
+  emit Started
+  goto Active
+
+replay-only Empty -- Start -->
+  guard cmd.legacy == true
+  emit Started
+  goto Active
+```
+
+The generated harness emits one `acceptStart` for the live edge and no live
+probe for the replay-only edge. Replay evidence uses detailed attribution and
+the exact source-wide `EdgeRef`; if an initial legacy command has only a
+replay-only edge, it still receives a required replay witness but no acceptance
+helper. Transitions from one source may be interleaved in the specification:
+generation preserves declaration order, consolidates them into one source
+block, and assigns outgoing indices cumulatively across the whole source.
+
 Event retirement is two-stage:
 
 1. Mark `retiring event Name ...` while a live transition still emits it.
@@ -1432,6 +1458,12 @@ reachable state/command rejection cells, replay-only transitions, stable keys,
 and evidence ownership. Scaffolding emits a generated `BehaviorContract` and a
 create-once `BehaviorHoles` module. Fill live, rejection, and replay witnesses
 with real histories, commands, expected events, or expected rejections.
+
+Replay witnesses assert the detailed runtime edge, including mode and
+source-wide `EdgeRef`; predicate verification consumes that same identity.
+Replay-only initial transitions never appear in step-based acceptance helpers,
+so a green behavior report is the authoritative proof that historical first
+events still invert without reopening the live command path.
 
 The compiled conformance report fails missing, pending, duplicate, stale, or
 behaviorally false evidence. Opaque predicates and one-way projections remain

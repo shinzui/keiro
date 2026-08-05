@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-08-02T13:36:12Z
+timestamp: 2026-08-05T14:23:30Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -119,6 +119,17 @@ labelled source-conformant; Hole ownership remains finite witnessed evidence;
 version-1 whole-transducer Holes remain runtime-witness-only. Unknown guard or
 projection proof is retained as unverified and is only failing under the
 explicit stricter gate.
+
+One checked source-wide transition layout supplies every generated transition
+identity. Each entry retains its one-based declaration index for stable helper
+and Hole names and its zero-based outgoing index among all transitions from the
+same source for Keiki `EdgeRef` attribution. Rendering consolidates each source
+into one `B.from` block in first-source-occurrence order while retaining
+transition declaration order within the block. Predicate verification,
+behavior requirements, detailed replay witnesses, output mappings, legacy Hole
+grouping, and initial live probes all consume that layout; none may regroup
+adjacent runs or restart a local edge index. Source blocks are presentation,
+not a third transition identity.
 
 Changing ownership is a semantic and replay-affecting change. Diff reports the old and new owner,
 the fold fingerprint changes, and snapshot compatibility misses. Migration from an existing

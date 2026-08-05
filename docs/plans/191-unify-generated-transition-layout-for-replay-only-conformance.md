@@ -58,8 +58,11 @@ pass without a runtime-only transducer composition.
   The behavior contract is 19/19 filled (17 executed, 2 intentionally unverified rejection
   cells); the 9-example behavior suite, generated behavior component, 29-fact workspace package,
   fold-identity suite, public-CLI idempotence proof, and all mutation cases pass.
-- [ ] Publish the invariant in the relevant ADRs and user documentation, update changelogs, and
-  pass focused, package-wide, repository-wide, policy, and strict documentation validation.
+- [x] (2026-08-05 07:38 PDT) Publish the invariant in ADRs 0002, 0017, and 0019,
+  both user guides, both changelogs, and IR-18. `cabal test keiro-dsl` passes all components,
+  including 566 unit examples; `cabal build all`, both generated-source policies, strict ADR
+  validation, and diff hygiene pass. Strict improvement-request validation has no EP-191 finding
+  and retains only MP-29's recorded IR-19 missing-review baseline, owned by EP-198.
 
 
 ## Surprises & Discoveries
@@ -102,6 +105,14 @@ pass without a runtime-only transducer composition.
   `EdgeRef` identities remain exact.
   Evidence: Disposable public-CLI scaffolds of the single fixture and its workspace twin produced
   exact Journey module trees except for the final `BehaviorRequirement` source-line field.
+
+- Observation: Strict improvement-request bundle validation still reports the existing IR-19
+  missing-profile-recommended-`reviews` finding recorded by EP-192. IR-18 itself validates after
+  closure, and strict ADR validation passes all 21 concepts.
+  Evidence: `okf validate docs/improvement-requests --strict --profile
+  mori/improvement-requests-profile.dhall --profile-enforce --log-enforce` reports only
+  `give-keiro-dsl-generated-sidecars-honest-names-and-one-durability-contract`; EP-198 owns that
+  request and its review/implementation lifecycle.
 
 
 ## Decision Log
@@ -180,21 +191,31 @@ pass without a runtime-only transducer composition.
   normalizing just the location preserves the stronger semantic parity claim.
   Date: 2026-08-05
 
+- Decision: Close EP-191 with the unchanged IR-19 strict-validation baseline assigned to EP-198;
+  do not fabricate review metadata in an unrelated request.
+  Rationale: Every EP-191 artifact and IR-18 validates, while the only bundle-level finding
+  predates this child and belongs to another active MP-29 plan. Treating that unrelated
+  recommended field as EP-191 implementation scope would blur ownership and make the review
+  record dishonest.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
-Milestones 1 through 3 are complete. The enriched Journey proof emits one initial source block,
-one live `acceptStart`, no `acceptLegacyStart`, and exact replay `EdgeRef`s 1 and 2. All 19 behavior
-obligations are filled; 17 execute and the two unverified rows are the intentional closed-state
-rejection cells. The mutation script proves wrong history, witness kind, replay edge, replay chunk,
-codec, selector, and source-wide predicate index changes all turn the suite red and restores every
-file afterward. The single/workspace proof is byte-exact apart from deliberately relocated source
-line evidence, and the generated whole-service package passes with 29 facts. No generator wire
-semantics or Keiki behavior changed; the enriched fixture intentionally adds its legacy event and
-receives a new fold fingerprint and behavior keys. ADR, user-documentation, release-note, and IR
-closure remain for Milestone 4. Mori can remove
-`legacyEmptyStartTransducer` only after adopting a Keiro release containing this work and passing
-its historical replay proof.
+Complete. The enriched Journey proof emits one initial source block, one live `acceptStart`, no
+`acceptLegacyStart`, and exact replay `EdgeRef`s 1 and 2. All 19 behavior obligations are filled;
+17 execute and the two unverified rows are intentional closed-state rejection cells. The mutation
+script proves wrong history, witness kind, replay edge, replay chunk, codec, selector, and
+source-wide predicate index changes all turn the suite red and restores every file afterward. The
+single/workspace proof is byte-exact apart from deliberately relocated source-line evidence, and
+the generated whole-service package passes with 29 facts. No generator wire semantics or Keiki
+behavior changed; the enriched fixture intentionally adds its legacy event and receives a new
+fold fingerprint and behavior keys. The invariant is durable in ADRs 0002, 0017, and 0019, user
+guides, release notes, and implemented IR-18. The complete 566-example DSL suite, every package
+component, all-package build, both generated-source policies, strict ADR bundle, and diff hygiene
+pass. Strict improvement-request validation retains only the unrelated recorded IR-19 review
+baseline owned by EP-198. Mori can remove `legacyEmptyStartTransducer` only after adopting a Keiro
+release containing this work and passing its historical replay proof.
 
 
 ## Context and Orientation
@@ -548,8 +569,9 @@ Acceptance is behavioral, not merely a successful build:
 9. Existing specs without initial replay-only edges or non-contiguous repeated sources remain
    byte-identical after normalization. No wire tag, payload schema, persisted identity, fold
    meaning, or Keiki live-first replay behavior changes.
-10. `cabal test keiro-dsl`, `cabal build all`, both generated-source policy scripts, both strict OKF
-    bundle validations, and `git diff --check` pass.
+10. `cabal test keiro-dsl`, `cabal build all`, both generated-source policy scripts, strict ADR
+    validation, and `git diff --check` pass. Strict improvement-request validation has no EP-191
+    finding; the pre-existing IR-19 recommended-review finding remains assigned to EP-198.
 
 
 ## Idempotence and Recovery
@@ -657,3 +679,7 @@ workspace source-line relocation in `BehaviorContract.hs`. Implementation proved
 Journey module byte-identical and preserved exact behavior keys and edge identities; the new
 Decision Log records why retaining real member provenance is stronger than forcing artificial
 line equality.
+
+Revision note (2026-08-05): Closure records the unchanged master-level IR-19 strict-validation
+exception already documented by EP-192. EP-191 and IR-18 validate; EP-198 remains responsible for
+IR-19's review lifecycle, so this plan does not manufacture unrelated review metadata.

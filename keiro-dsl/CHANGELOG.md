@@ -53,6 +53,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   narrowed to the 23 term identifiers GHC rejects under the advertised GHC2024
   contract, so contextual words including `family`, `via`, and `qualified` are
   accepted and compile-proven.
+- Generated aggregate conformance now derives transducer rendering, predicate
+  verification, behavior `EdgeRef`s, and initial live probes from one source-wide
+  transition layout. Replay-only initial edges receive detailed replay witnesses but
+  never `step`-based acceptance helpers, and duplicate generated declarations are
+  rejected before writes.
 
 ## 0.10.0.0 — 2026-08-03
 

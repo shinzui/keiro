@@ -203,6 +203,32 @@ Keiro's evolution gates make the detectable parts explicit:
   upcasters protect decoding, but a decode golden does not prove that the
   decoded event still inverts or folds identically.
 
+The initial vertex follows the same rule. For example, a current command can
+keep the live edge while a retired first-event shape falls through to its
+replay-only sibling:
+
+```text
+command Start { legacy:Bool }
+event Started = fields(Start)
+
+Empty -- Start -->
+  guard cmd.legacy == false
+  emit Started
+  goto Active
+
+replay-only Empty -- Start -->
+  guard cmd.legacy == true
+  emit Started
+  goto Active
+```
+
+Scaffolding emits one live `acceptStart` probe. The replay-only sibling is
+proved through its generated `ReplayWitness`, not through `step`. An initial
+replay-only command with no live sibling likewise receives replay evidence but
+no `accept<Command>` helper. Generated predicate verification and behavior
+attribution use the same source-wide outgoing-edge index even when transitions
+from `Empty` are interleaved with transitions from other states.
+
 Real stored histories are the evidence static checks lack. Run `keiro-dsl diff`
 with `--replay-impact-out FILE`: `replay-neutral` requires no data access;
 `affected` names the conservative event-type set for the candidate binary's

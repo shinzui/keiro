@@ -51,6 +51,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   generated occurrence reserved set narrows to the 23 words GHC actually rejects;
   previously refused contextual identifiers such as `family`, `via`, and
   `qualified` now check and compile.
+- **keiro-dsl**: generated aggregate conformance now uses one source-wide transition
+  layout. Replay-only initial edges remain available to detailed replay witnesses but
+  no longer emit live acceptance helpers; predicate verification, behavior attribution,
+  and Keiki runtime edges share the same cumulative outgoing index. Residual duplicate
+  generated declarations are refused before any scaffold write.
 
 ## 0.10.0.0 — 2026-08-03
 

@@ -5,10 +5,11 @@ description: >-
   Make Keiro DSL distinguish live from replay-only transitions at the initial vertex when
   generating acceptance probes, transition blocks, predicate edge indices, behavior witnesses,
   and service conformance.
-timestamp: 2026-08-04T16:24:05Z
+timestamp: 2026-08-05T14:23:30Z
 requestId: IR-18
-status: proposed
+status: implemented
 origin: mori://shinzui/mori
+plan: docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md
 reviews:
   - kind: model
     reviewer: codex
@@ -28,7 +29,17 @@ reviews:
 
 ## Status
 
-Proposed as a code-generation correctness repair for brownfield aggregate adoption.
+**Implemented.**
+[Plan 191](../plans/191-unify-generated-transition-layout-for-replay-only-conformance.md)
+under [MasterPlan 29](../masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md) gives generated
+transducer rendering, predicate verification, behavior attribution, Hole grouping, and initial
+live probes one source-wide transition layout. The compiled fixture proves a live/replay initial
+pair and a replay-only-only legacy command with one live acceptance helper, replay edge indices 1
+and 2, all 19 behavior obligations filled, byte-stable single/workspace scaffolds apart from
+deliberately relocated source-line evidence, and a passing generated whole-service conformance
+package. Semantic and lexical declaration collisions are both refused before writes. Mori may
+remove its runtime-only composition after adopting a Keiro release containing this repair and
+passing its historical replay proof.
 
 ## Context
 
