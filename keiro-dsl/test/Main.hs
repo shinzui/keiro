@@ -172,6 +172,57 @@ main = hspec $ do
       compatibilityOut `shouldContain` "\"languageVersion\":1"
       compatibilityOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
 
+    it "surfaces non-stable contracts and enforces a released minimum language" $ do
+      let legacyPath = "test/fixtures/language-legacy.keiro"
+          stablePath = "test/fixtures/contract-v4.keiro"
+      (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["check", legacyPath]
+      legacyCode `shouldBe` ExitSuccess
+      legacyOut `shouldBe` "OK\n"
+      legacyErr `shouldContain` "language contract: effective keiro-dsl 1 (legacy-unversioned, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
+      legacyErr `shouldContain` "language-4 strict spec-surface validation is not applied"
+
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["check", stablePath]
+      stableCode `shouldBe` ExitSuccess
+      stableOut `shouldBe` "OK\n"
+      stableErr `shouldBe` ""
+
+      (floorCode, floorOut, floorErr) <- runKeiroDsl ["check", legacyPath, "--min-language", "4"]
+      floorCode `shouldBe` ExitFailure 1
+      floorOut `shouldBe` ""
+      floorErr `shouldContain` "language-legacy.keiro:1: error[LanguageVersionBelowMinimum]"
+      floorErr `shouldContain` "effective language version 1 (legacy-unversioned) is below the required minimum 4"
+
+      (metCode, metOut, _) <- runKeiroDsl ["check", legacyPath, "--min-language", "1"]
+      metCode `shouldBe` ExitSuccess
+      metOut `shouldBe` "OK\n"
+
+      (unsupportedCode, _, unsupportedErr) <- runKeiroDsl ["check", legacyPath, "--min-language", "9"]
+      unsupportedCode `shouldBe` ExitFailure 1
+      unsupportedErr `shouldContain` "supported versions: 1, 2, 3, 4"
+
+    it "attributes a workspace language floor to its manifest and every member" $ do
+      let v1Member = T.unlines ["language keiro-dsl 1", "context language-floor"]
+      withInlineWorkspace
+        "keiro-dsl-language-floor"
+        ( "language-floor",
+          [ ("domain/a.keiro", v1Member),
+            ("domain/b.keiro", v1Member)
+          ]
+        )
+        $ \root _ _ -> do
+          let manifest = root </> "service.keiro-workspace"
+          (floorCode, floorOut, floorErr) <- runKeiroDsl ["check", manifest, "--min-language", "4"]
+          floorCode `shouldBe` ExitFailure 1
+          floorOut `shouldBe` ""
+          floorErr `shouldContain` (manifest <> ":1: error[LanguageVersionBelowMinimum]")
+          floorErr `shouldContain` "domain/a.keiro:1: note: member selects effective language version 1"
+          floorErr `shouldContain` "domain/b.keiro:1: note: member selects effective language version 1"
+          floorErr `shouldContain` "workspace, 0 legacy-unversioned member(s)"
+
+          (metCode, metOut, _) <- runKeiroDsl ["check", manifest, "--min-language", "1"]
+          metCode `shouldBe` ExitSuccess
+          metOut `shouldBe` "OK\n"
+
   describe "runtime capability and fold identity baseline (plan 181)" $ do
     it "pins the fold-only FNV-1a-128 UTF-8 encoding" $ do
       foldFingerprint128 "" `shouldBe` "6c62272e07bb014262b821756295c58d"
@@ -649,7 +700,7 @@ main = hspec $ do
       (v1Code, v1Out, v1Err) <- runKeiroDsl ["check", "test/fixtures/language-v1.keiro"]
       v1Code `shouldBe` ExitSuccess
       v1Out `shouldBe` "OK\n"
-      v1Err `shouldBe` ""
+      v1Err `shouldContain` "language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
       (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
       futureCode `shouldBe` ExitFailure 1
       T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
@@ -669,11 +720,18 @@ main = hspec $ do
         (checkCode, checkOut, checkErr) <- runKeiroDsl ["check", sourcePath]
         checkCode `shouldBe` ExitSuccess
         checkOut `shouldBe` "OK\n"
-        checkErr `shouldBe` ""
+        checkErr `shouldContain` "language contract: effective keiro-dsl"
         withTempDirectory ("keiro-dsl-" <> fixture) $ \out -> do
           (scaffoldCode, _, scaffoldErr) <- runKeiroDsl ["scaffold", sourcePath, "--out", out]
           scaffoldCode `shouldBe` ExitSuccess
+          scaffoldErr `shouldContain` "language contract: effective keiro-dsl"
           scaffoldErr `shouldContain` "firewall: OK"
+
+    it "notices only the working-tree contract during diff" $ do
+      (diffCode, _, diffErr) <- runKeiroDsl ["diff", "test/fixtures/language-v1.keiro", "--since", "HEAD"]
+      diffCode `shouldBe` ExitSuccess
+      T.count "language contract:" (T.pack diffErr) `shouldBe` 1
+      diffErr `shouldContain` "language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"

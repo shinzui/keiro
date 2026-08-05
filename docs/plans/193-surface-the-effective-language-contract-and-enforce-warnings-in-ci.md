@@ -60,9 +60,14 @@ After milestone 1 it additionally prints the effective-contract notice on stderr
   `keiro-dsl/src/Keiro/Dsl/Validate.hs`, `keiro-dsl/app/Main.hs`, `keiro-dsl/test/Main.hs`, and
   `docs/user/typed-spec-toolchain.md`; enumerate all nine warning-severity diagnostic sites; author
   this plan under Intention `intention_01kz84b5jre3187dmmyjmd02fc`.
-- [ ] Milestone 1: emit the effective-language notice from check/scaffold/diff (single-file and
-  workspace paths), add `--min-language` with the appended `LanguageVersionBelowMinimum` code, and
-  update the existing CLI tests that assert empty check stderr for non-stable fixtures.
+- [x] (2026-08-05 07:53 PDT) Milestone 1: emit the effective-language notice from
+  check/scaffold/diff (single-file and workspace paths), add `--min-language` with the appended
+  `LanguageVersionBelowMinimum` code, and update the existing CLI tests that asserted empty check
+  stderr for non-stable fixtures. The exact assertions changed were the declared-v1 check and the
+  two contextual-identifier check cases; the scaffold assertions were already contains-based.
+  The `language support` focused group passes 4 examples and the `source language version` group
+  passes 21 examples, including source/workspace floors and a working-tree-only diff notice; the
+  full `keiro-dsl-test` suite passes 569 examples with zero failures.
 - [ ] Milestone 2: add `--deny-warnings` and `--deny CODE[,CODE...]` with the documented exit-code
   contract, `Enum`/`Bounded` derivation plus `parseDiagnosticCode` for the code spelling, and CLI
   tests proving escalation and non-escalation.

@@ -12,6 +12,7 @@ module Keiro.Dsl.Validate
     DiagnosticCode (..),
     Diagnostic (..),
     renderDiagnostic,
+    minimumLanguageDiagnostics,
     validateService,
     validateSpec,
     derivedQueueTrio,
@@ -39,7 +40,7 @@ import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
-import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
+import Keiro.Dsl.LanguageVersion (LanguageVersion, RuntimeCapability (..), SourceLanguage (..), effectiveLanguageVersion, languageVersionText, runtimeProfileHasCapability, sourceFormText)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
@@ -381,6 +382,8 @@ data DiagnosticCode
   | -- ExecPlan 192: changing an aggregate event field's resolved wire key
     -- changes the persisted event decode surface.
     EvtFieldWireKeyChanged
+  | -- ExecPlan 193: a CI-required released language floor was not met.
+    LanguageVersionBelowMinimum
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -414,6 +417,35 @@ renderDiagnostic file d =
       | (noteLine, note) <- relatedLocations d
       ]
     sev = case severity d of Error -> "error"; Warning -> "warning"
+
+-- | Error diagnostics produced when the effective source language is below a
+-- CI-required released floor. A legacy source has no preamble, so line 1 is the
+-- actionable location where one should be added.
+minimumLanguageDiagnostics :: LanguageVersion -> SourceLanguage -> [Diagnostic]
+minimumLanguageDiagnostics floorVersion sourceLanguage
+  | effectiveVersion >= floorVersion = []
+  | otherwise =
+      [ Diagnostic
+          { line = sourceLanguageLine sourceLanguage,
+            severity = Error,
+            code = LanguageVersionBelowMinimum,
+            relatedLocations = [],
+            message =
+              "effective language version "
+                <> languageVersionText effectiveVersion
+                <> " ("
+                <> sourceFormText sourceLanguage
+                <> ") is below the required minimum "
+                <> languageVersionText floorVersion
+                <> "; declare `language keiro-dsl "
+                <> languageVersionText floorVersion
+                <> "`"
+          }
+      ]
+  where
+    effectiveVersion = effectiveLanguageVersion sourceLanguage
+    sourceLanguageLine LegacyUnversioned = 1
+    sourceLanguageLine DeclaredLanguage {languageVersionLoc = Loc lineNumber} = lineNumber
 
 -- | Reserved wall-clock atom names. Sampling any of these inside a guard or
 -- write breaks deterministic replay: TIME IS INJECTED, NOT SAMPLED.

@@ -11,6 +11,7 @@ module Keiro.Dsl.SemanticContract
     effectiveRuntimeProfile,
     effectiveRuntimeSemantics,
     effectiveLanguageSupport,
+    languageContractNotice,
     effectiveLanguageContract,
     effectiveLanguageContractForVersion,
     runtimeSemanticsFingerprintSegments,
@@ -24,19 +25,22 @@ where
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
-  ( LanguageSupport,
+  ( LanguageSupport (..),
     LanguageVersion,
     ParsedSource (..),
     RuntimeSemanticsProfile,
     SourceLanguage (..),
+    currentStableLanguageVersion,
     definitionRuntimeSemanticsProfile,
     effectiveLanguageVersion,
     languageSupportForVersion,
     languageSupportText,
     languageVersion,
     languageVersionNumber,
+    languageVersionText,
     lookupLanguageDefinition,
     runtimeProfileFoldSegments,
     runtimeProfileIdentifier,
@@ -65,6 +69,29 @@ effectiveLanguageSupport contract =
   fromMaybe
     (error "keiro-dsl internal invariant: effective contract selected an unregistered language version")
     (languageSupportForVersion (effectiveContractLanguageVersion contract))
+
+-- | One stderr line naming a non-stable effective contract. Stable sources
+-- stay silent so adopting the current contract does not add CLI noise.
+languageContractNotice :: FilePath -> Text -> EffectiveLanguageContract -> Maybe Text
+languageContractNotice subject sourceFormSummary contract
+  | effectiveLanguageSupport contract == Stable = Nothing
+  | otherwise =
+      Just
+        ( T.pack subject
+            <> ": language contract: effective keiro-dsl "
+            <> languageVersionText (effectiveContractLanguageVersion contract)
+            <> " ("
+            <> sourceFormSummary
+            <> ", "
+            <> languageSupportText (effectiveLanguageSupport contract)
+            <> ", runtime semantics "
+            <> effectiveRuntimeSemantics contract
+            <> "); language-"
+            <> languageVersionText currentStableLanguageVersion
+            <> " strict spec-surface validation is not applied — declare `language keiro-dsl "
+            <> languageVersionText currentStableLanguageVersion
+            <> "` to adopt the stable contract"
+        )
 
 instance ToJSON EffectiveLanguageContract where
   toJSON contract =

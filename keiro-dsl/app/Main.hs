@@ -19,31 +19,33 @@ import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, r
 import Keiro.Dsl.ExplainBindings (bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
-import Keiro.Dsl.Grammar (Placement (..), Spec (..))
-import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
+import Keiro.Dsl.Grammar (Loc (..), Placement (..), Spec (..))
+import Keiro.Dsl.LanguageVersion (LanguageVersion, ParsedSource (..), SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, languageVersion, languageVersionText, lookupLanguageDefinition, sourceFormText, supportedLanguageVersions)
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
 import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
-import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
+import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateService)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), minimumLanguageDiagnostics, renderDiagnostic, validateService)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
+import Numeric.Natural (Natural)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
 import System.FilePath (isAbsolute, makeRelative, normalise, takeDirectory, takeFileName, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
+import Text.Read (readMaybe)
 
 data Command
   = Parse FilePath
   | Pretty FilePath
-  | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
+  | Check FilePath CheckOptions
   | Inspect FilePath InspectionFormat
   | BehaviorObligations FilePath BehaviorFormat
   | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
@@ -57,6 +59,13 @@ data BehaviorFormat = BehaviorText | BehaviorJson
 data CheckCoverageOptions = CheckCoverageOptions
   { checkCoveragePath :: !FilePath,
     checkFailOnOpaque :: !Bool
+  }
+
+data CheckOptions = CheckOptions
+  { checkEmit :: !Bool,
+    checkExplainBindings :: !Bool,
+    checkCoverage :: !(Maybe CheckCoverageOptions),
+    checkMinLanguage :: !(Maybe LanguageVersion)
   }
 
 data DiffCoverageOptions = DiffCoverageOptions
@@ -83,7 +92,7 @@ commands =
           (info (Pretty <$> fileArg <**> helper) (progDesc "Parse a .keiro file and print its canonical source form"))
         <> command
           "check"
-          (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <*> checkCoverageOptions <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
+          (info (Check <$> fileArg <*> checkOptions <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
         <> command
           "inspect"
           (info (Inspect <$> fileArg <*> inspectionFormatOpt <**> helper) (progDesc "Inspect source-language provenance for a .keiro file or workspace as JSON"))
@@ -162,6 +171,33 @@ checkCoverageOptions =
         <*> switch (long "fail-on-opaque" <> help "Fail when a private persisted root contains an opaque boundary (requires --coverage-report)")
     )
 
+checkOptions :: Parser CheckOptions
+checkOptions =
+  CheckOptions
+    <$> emitSwitch
+    <*> explainBindingsSwitch
+    <*> checkCoverageOptions
+    <*> optional minLanguageOpt
+
+minLanguageOpt :: Parser LanguageVersion
+minLanguageOpt =
+  option
+    (eitherReader parseMinimumLanguage)
+    (long "min-language" <> metavar "N" <> help "Require at least released keiro-dsl language version N")
+
+parseMinimumLanguage :: String -> Either String LanguageVersion
+parseMinimumLanguage raw =
+  case (readMaybe raw :: Maybe Natural) >>= languageVersion of
+    Just version
+      | Just _ <- lookupLanguageDefinition version -> Right version
+    _ ->
+      Left
+        ( "minimum keiro-dsl language version "
+            <> raw
+            <> " is unsupported; supported versions: "
+            <> T.unpack (T.intercalate ", " (map languageVersionText (NE.toList supportedLanguageVersions)))
+        )
+
 diffCoverageOptions :: Parser (Maybe DiffCoverageOptions)
 diffCoverageOptions =
   optional
@@ -204,13 +240,66 @@ behaviorFormatOpt =
     parseFormat "json" = Right BehaviorJson
     parseFormat other = Left ("unsupported behavior obligation format: " <> other <> " (expected text or json)")
 
+emitLanguageContractNotice :: FilePath -> T.Text -> CheckedService -> IO ()
+emitLanguageContractNotice subject sourceFormSummary service =
+  mapM_
+    (TIO.hPutStrLn stderr)
+    (languageContractNotice subject sourceFormSummary (checkedLanguageContract service))
+
+emitWorkspaceLanguageContractNotice :: FilePath -> WorkspaceSpec -> IO ()
+emitWorkspaceLanguageContractNotice subject workspace =
+  emitLanguageContractNotice subject (workspaceSourceFormSummary workspace) (checkedWorkspace workspace)
+
+workspaceSourceFormSummary :: WorkspaceSpec -> T.Text
+workspaceSourceFormSummary workspace =
+  "workspace, "
+    <> T.pack (show legacyCount)
+    <> " legacy-unversioned member(s)"
+  where
+    legacyCount = length [() | member <- wsMembers workspace, LegacyUnversioned <- [wmSourceLanguage member]]
+
+minimumWorkspaceLanguageDiagnostics :: LanguageVersion -> WorkspaceSpec -> [WorkspaceDiagnostic]
+minimumWorkspaceLanguageDiagnostics floorVersion workspace
+  | effectiveVersion >= floorVersion = []
+  | otherwise =
+      [ WorkspaceDiagnostic
+          { wdLocations =
+              NE.fromList
+                ( WorkspaceLocation WorkspaceManifestFile 1 ""
+                    : [ WorkspaceLocation
+                          (WorkspaceMemberFile (wmPath member))
+                          (sourceLanguageLine (wmSourceLanguage member))
+                          ( "member selects effective language version "
+                              <> languageVersionText (effectiveLanguageVersion (wmSourceLanguage member))
+                          )
+                      | member <- wsMembers workspace
+                      ]
+                ),
+            wdSeverity = Error,
+            wdCode = LanguageVersionBelowMinimum,
+            wdSourceLanguageCause = Nothing,
+            wdMessage =
+              "effective language version "
+                <> languageVersionText effectiveVersion
+                <> " (workspace-composed) is below the required minimum "
+                <> languageVersionText floorVersion
+                <> "; declare `language keiro-dsl "
+                <> languageVersionText floorVersion
+                <> "` in every member"
+          }
+      ]
+  where
+    effectiveVersion = effectiveContractLanguageVersion (checkedLanguageContract (checkedWorkspace workspace))
+    sourceLanguageLine LegacyUnversioned = 1
+    sourceLanguageLine DeclaredLanguage {languageVersionLoc = Loc lineNumber} = lineNumber
+
 run :: Command -> IO ()
 run (Pretty fp) = run (Parse fp)
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
 -- manifest; everything else takes the untouched single-file path below.
 run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp
-run (Check fp emit explainBindings coverageOptions)
-  | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
+run (Check fp checkOptionsValue)
+  | isWorkspacePath fp = runWorkspaceCheck fp checkOptionsValue
 run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
 run (BehaviorObligations fp format)
@@ -226,7 +315,7 @@ run (Parse fp) = do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
     Right parsedSource -> TIO.putStrLn (renderSource parsedSource)
-run (Check fp emit explainBindings coverageOptions) = do
+run (Check fp options) = do
   input <- TIO.readFile fp
   case parseSource fp input of
     Left failure -> do
@@ -235,21 +324,23 @@ run (Check fp emit explainBindings coverageOptions) = do
     Right parsedSource -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
-          diags = validateService service
+          floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
+          diags = floorDiags <> validateService service
+      emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       if any ((== Error) . severity) diags
         then exitFailure
         else do
-          when emit (TIO.putStrLn (renderSource parsedSource))
-          if explainBindings
+          when (checkEmit options) (TIO.putStrLn (renderSource parsedSource))
+          if checkExplainBindings options
             then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated spec did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure
               Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
             else pure ()
-          coverageOk <- runCheckCoverage fp spec coverageOptions
-          when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
+          coverageOk <- runCheckCoverage fp spec (checkCoverage options)
+          when (coverageOk && not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
           when (not coverageOk) exitFailure
 run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
@@ -260,6 +351,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
     Right parsedSource -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
+      emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       -- Validation gate: never scaffold an invalid spec. Abort on any
       -- error-severity diagnostic before writing a single module.
       let diags = validateService service
@@ -333,6 +425,7 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                   newService = checkedSource newSource
                   oldSpec = checkedSpec oldService
                   newSpec = checkedSpec newService
+              emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage newSource)) newService
               case (,) <$> diffSources oldSource newSource <*> replayImpactServices oldService newService of
                 Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
                 Right (changes, impact) -> do
@@ -448,8 +541,8 @@ renderBehaviorErrors errors = do
 -- @--emit@ prints the canonical whole-service view, @--explain-bindings@ lists the
 -- service's binding obligations, and the coverage options report on the merged
 -- mapped-type graph with the manifest as the report's subject.
-runWorkspaceCheck :: FilePath -> Bool -> Bool -> Maybe CheckCoverageOptions -> IO ()
-runWorkspaceCheck fp emit explainBindings coverageOptions = do
+runWorkspaceCheck :: FilePath -> CheckOptions -> IO ()
+runWorkspaceCheck fp options = do
   loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
   case loaded of
     Left failure -> do
@@ -457,22 +550,24 @@ runWorkspaceCheck fp emit explainBindings coverageOptions = do
       exitFailure
     Right workspace -> do
       let service = checkedWorkspace workspace
-          diags = checkWorkspace workspace
+          floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) (checkMinLanguage options)
+          diags = floorDiags <> checkWorkspace workspace
           spec = checkedSpec service
+      emitWorkspaceLanguageContractNotice fp workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
       if any ((== Error) . wdSeverity) diags
         then exitFailure
         else do
-          when emit (TIO.putStrLn (renderSpec spec))
-          if explainBindings
+          when (checkEmit options) (TIO.putStrLn (renderSpec spec))
+          if checkExplainBindings options
             then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated workspace did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure
               Right obligations -> TIO.putStrLn (renderBindingObligations (wsContext workspace) obligations)
             else pure ()
-          coverageOk <- runCheckCoverage fp spec coverageOptions
-          when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
+          coverageOk <- runCheckCoverage fp spec (checkCoverage options)
+          when (coverageOk && not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
           when (not coverageOk) exitFailure
 
 -- | @scaffold@ on a workspace manifest: compose the whole service, then plan
@@ -505,6 +600,7 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
       mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
       exitFailure
     Right workspace -> do
+      emitWorkspaceLanguageContractNotice fp workspace
       -- Validation gate: never scaffold an invalid service. Abort on any
       -- error-severity diagnostic before writing a single module.
       let diags = checkWorkspace workspace
@@ -576,6 +672,7 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
           case newLoaded of
             Left failure -> printWorkspaceFailure fp failure
             Right newWorkspace -> do
+              emitWorkspaceLanguageContractNotice fp newWorkspace
               currentManifestText <- TIO.readFile fp
               case parseWorkspaceManifest fp currentManifestText of
                 Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
