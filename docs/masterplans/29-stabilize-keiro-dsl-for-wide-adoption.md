@@ -119,7 +119,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 192 | Decouple wire keys from generated Haskell selectors with field aliases | docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md | None | None | Complete |
-| 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | Not Started |
+| 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | In Progress |
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Not Started |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Not Started |
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Not Started |
@@ -215,8 +215,8 @@ alias-free spec generates byte-identical output.
 - [x] EP-192 M2: Checked alias/collision resolution with per-field source locations (fixes the doubled Mori diagnostic)
 - [x] EP-192 M3: Alias-aware generation, Mori-shape `contract-reserved-family` fixture, byte/fingerprint neutrality
 - [x] EP-192 M4: Diff/replay classification, ADR 0019/0004 amendments, new field-identity ADR, IR-6 closure
-- [ ] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
-- [ ] EP-191 M2: Duplicate generated declarations refused before writes
+- [x] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
+- [x] EP-191 M2: Duplicate generated declarations refused before writes
 - [ ] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
 - [ ] EP-191 M4: ADR/doc publication and full closure
 - [ ] EP-193 M1: Effective-language notice on check/scaffold/diff and `--min-language` floor

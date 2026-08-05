@@ -272,7 +272,7 @@ generatedNameInvariantViolations = concatMap auditGeneratedHaskell
 -- this is deliberately a final defense after the typed naming plan, so a
 -- literal template declaration cannot bypass the checked constructors.
 auditGeneratedHaskell :: ScaffoldModule -> [Text]
-auditGeneratedHaskell scaffoldModule = lexicalErrors <> declarationErrors <> occurrenceErrors
+auditGeneratedHaskell scaffoldModule = lexicalErrors <> declarationErrors <> duplicateDeclarationErrors <> occurrenceErrors
   where
     expectedModule = moduleNameOf (modulePath scaffoldModule)
     (lexicalErrors, codeSource) = case maskNonCode (moduleText scaffoldModule) of
@@ -304,6 +304,30 @@ auditGeneratedHaskell scaffoldModule = lexicalErrors <> declarationErrors <> occ
             <> checkCandidates lineNumber (topLevelValueCandidates sourceLine)
         | (lineNumber, sourceLine) <- sourceLines
         ]
+
+    duplicateDeclarationErrors = duplicateErrors "top-level type signature" signatureCandidates <> duplicateErrors "top-level type declaration" typeCandidates
+    duplicateErrors label candidates =
+      [ prefix laterLine
+          <> "repeated "
+          <> label
+          <> " '"
+          <> candidate
+          <> "' (first declared at line "
+          <> tshow firstLine
+          <> ")"
+      | (candidate, declarationLines) <- Map.toAscList declarations,
+        firstLine : laterLines <- [declarationLines],
+        laterLine <- laterLines
+      ]
+      where
+        declarations =
+          Map.fromListWith
+            (flip (++))
+            [ (candidate, [lineNumber])
+            | (lineNumber, sourceLine) <- sourceLines,
+              sourceLine == T.stripStart sourceLine,
+              candidate <- candidates sourceLine
+            ]
 
     checkCandidates lineNumber = concatMap (checkCandidate lineNumber)
     checkCandidate lineNumber candidate

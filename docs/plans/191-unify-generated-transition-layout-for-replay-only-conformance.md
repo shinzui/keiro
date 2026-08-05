@@ -4,7 +4,7 @@ slug: unify-generated-transition-layout-for-replay-only-conformance
 title: "Unify generated transition layout for replay-only conformance"
 kind: exec-plan
 created_at: 2026-08-05T04:18:27Z
-intention: "intention_01kz823p0keghtca7kdkm13k1r"
+intention: "intention_01kz84b5jre3187dmmyjmd02fc"
 master_plan: "docs/masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md"
 ---
 
@@ -46,10 +46,13 @@ pass without a runtime-only transducer composition.
   workspace/service conformance, Keiki builder semantics, and Mori's legacy empty-start
   reproducer; create this plan under Intention
   `intention_01kz823p0keghtca7kdkm13k1r`.
-- [ ] Add one source-wide transition layout and route transducer rendering, predicate edge
-  verification, behavior edge lookup, and live initial probes through it.
-- [ ] Extend generated-name planning and the final lexical audit so duplicate generated
-  declarations are refused before writes with useful source evidence.
+- [x] (2026-08-05 00:42 PDT) Add one source-wide transition layout and route transducer rendering,
+  predicate edge verification, behavior edge lookup, legacy Hole grouping, declaration-index
+  consumers, and live initial probes through it. Focused source-wide layout test: 1 example,
+  0 failures; `cabal build keiro-dsl` passes.
+- [x] (2026-08-05 00:48 PDT) Extend generated-name planning and the final lexical audit so
+  duplicate generated declarations are refused before writes with useful source evidence.
+  Focused semantic-collision and repeated-signature tests: 2 examples, 0 failures.
 - [ ] Add and fill initial replay-only single-spec, workspace, and whole-service conformance
   evidence, including same-command and replay-only-only initial edges.
 - [ ] Publish the invariant in the relevant ADRs and user documentation, update changelogs, and

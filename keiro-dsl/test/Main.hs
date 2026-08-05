@@ -1433,6 +1433,59 @@ main = hspec $ do
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
 
   describe "behavior obligations" $ do
+    it "uses one source-wide layout and excludes replay-only initial edges from live harness probes" $ do
+      spec <-
+        parseInlineSpec "<transition-layout>" $
+          T.unlines
+            [ "language keiro-dsl 4",
+              "context transition-layout",
+              "aggregate Journey",
+              "  regs",
+              "  states Empty Active",
+              "  command Start { current:Bool }",
+              "  command Legacy { current:Bool }",
+              "  event Started = fields(Start)",
+              "  event LegacyStarted = fields(Legacy)",
+              "  Empty -- Start --> guard cmd.current == true ; emit Started ; goto Active",
+              "  Active -- Start --> emit Started ; goto Active",
+              "  replay-only Empty -- Start --> guard cmd.current == false ; emit Started ; goto Active",
+              "  Active -- Legacy --> emit LegacyStarted ; goto Active",
+              "  replay-only Empty -- Legacy --> emit LegacyStarted ; goto Active"
+            ]
+      aggregate <- case [value | NAggregate value <- specNodes spec] of
+        [value] -> pure value
+        _ -> expectationFailure "expected one transition-layout aggregate" >> fail "unreachable"
+      let ctx = defaultContext (specContext spec)
+          modules = scaffoldAggregate ctx spec aggregate <> harnessFor ctx spec aggregate
+          transducer = generatedTextEndingIn "Transducer.hs" modules
+          harness = generatedTextEndingIn "Harness.hs" modules
+          contract = generatedTextEndingIn "BehaviorContract.hs" modules
+      T.count "B.from JourneyEmpty do" transducer `shouldBe` 1
+      transducer `shouldSatisfy` T.isInfixOf "transition3EmptyStart"
+      transducer `shouldSatisfy` T.isInfixOf "transition5EmptyLegacy"
+      T.count "acceptStart :: Bool" harness `shouldBe` 1
+      harness `shouldSatisfy` (not . T.isInfixOf "acceptLegacy")
+      contract `shouldSatisfy` T.isInfixOf "K.EdgeRef JourneyEmpty 1"
+      contract `shouldSatisfy` T.isInfixOf "K.EdgeRef JourneyEmpty 2"
+
+    it "refuses duplicate live initial harness helpers with both source locations" $ do
+      spec <-
+        parseInlineSpec "<initial-helper-collision>" $
+          T.unlines
+            [ "language keiro-dsl 4",
+              "context helper-collision",
+              "aggregate Journey",
+              "  regs",
+              "  states Empty Active",
+              "  command Start { current:Bool }",
+              "  event Started = fields(Start)",
+              "  Empty -- Start --> guard cmd.current == true ; emit Started ; goto Active",
+              "  Empty -- Start --> guard cmd.current == false ; emit Started ; goto Active"
+            ]
+      let collisions = [diagnostic | diagnostic <- validateSpec spec, code diagnostic == GeneratedOccurrenceCollision]
+      map line collisions `shouldBe` [9, 9]
+      collisions `shouldSatisfy` all (elem (8, "'Start' also normalizes here") . relatedLocations)
+
     it "inventories every live-reachable cell, guarded edge, terminal rejection, and replay edge" $ do
       spec <- specOf "test/fixtures/behavior-complete.keiro"
       requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
@@ -2464,6 +2517,22 @@ main = hspec $ do
       violations `shouldSatisfy` any (T.isInfixOf "render_eventTypes")
       violations `shouldSatisfy` all (not . T.isInfixOf "comment_value")
       violations `shouldSatisfy` all (not . T.isInfixOf "string_value")
+    it "rejects repeated generated signatures before writing" $ do
+      let mutated =
+            ScaffoldModule
+              { modulePath = "Generated/Repeated.hs",
+                moduleText =
+                  T.unlines
+                    [ "module Generated.Repeated where",
+                      "sameValue :: Bool",
+                      "sameValue = True",
+                      "sameValue :: Bool",
+                      "sameValue = False"
+                    ],
+                kind = Generated,
+                origin = "test repeated declaration"
+              }
+      auditGeneratedHaskell mutated `shouldSatisfy` any (T.isInfixOf "repeated top-level type signature 'sameValue'")
 
   describe "Haskell.name-migration" $ do
     it "pairs a legacy module path with its stable idiomatic artifact" $ do

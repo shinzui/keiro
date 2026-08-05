@@ -104,6 +104,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Version (showVersion)
+import Keiro.Dsl.AggregateGenerationPlan
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (..))
@@ -4798,7 +4799,10 @@ hasVersion2Ownership :: Agg -> Bool
 hasVersion2Ownership = any ((/= LegacyHoleImplementation) . tImplementation) . aTransitions
 
 transitionEntries :: Agg -> [(Int, Transition)]
-transitionEntries aggregate = zip [1 ..] (aTransitions aggregate)
+transitionEntries aggregate =
+  [ (layoutDeclarationIndex entry, layoutTransition entry)
+  | entry <- transitionLayout (aTransitions aggregate)
+  ]
 
 transitionStem :: Int -> Transition -> Text
 transitionStem index transition =
@@ -4836,7 +4840,9 @@ obsoleteGeneratedOutputHooks spec =
       outputFunctionName transitionIndex transition emitIndex eventName
     )
   | aggregate <- [value | NAggregate value <- specNodes spec],
-    (transitionIndex, transition) <- zip [1 ..] (aggTransitions aggregate),
+    entry <- transitionLayout (aggTransitions aggregate),
+    let transitionIndex = layoutDeclarationIndex entry
+        transition = layoutTransition entry,
     (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
     Right GeneratedCommandIdentity {} <- [eventOutputMapping spec aggregate transition emitIndex eventName]
   ]
@@ -5511,8 +5517,11 @@ renderVerificationList aggregate =
   where
     entries =
       [ (source, edgeIndex, transitionIndex, transition)
-      | (source, transitions) <- groupTransitionEntriesBySource aggregate,
-        (edgeIndex, (transitionIndex, transition)) <- zip [0 ..] transitions
+      | (source, transitions) <- groupTransitionLayoutBySource (transitionLayout (aTransitions aggregate)),
+        entry <- transitions,
+        let edgeIndex = layoutOutgoingIndex entry
+            transitionIndex = layoutDeclarationIndex entry
+            transition = layoutTransition entry
       ]
 
 foldFingerprintExpression :: Agg -> Text
@@ -5532,13 +5541,12 @@ foldFingerprintExpression aggregate = case holeVersions of
       ]
 
 groupTransitionEntriesBySource :: Agg -> [(Text, [(Int, Transition)])]
-groupTransitionEntriesBySource aggregate = go [] (transitionEntries aggregate)
-  where
-    go accumulated [] = reverse accumulated
-    go accumulated (entry@(_, transition) : remaining) =
-      let source = tSource transition
-          (same, rest) = span ((== source) . tSource . snd) remaining
-       in go ((source, entry : same) : accumulated) rest
+groupTransitionEntriesBySource aggregate =
+  [ ( source,
+      [(layoutDeclarationIndex entry, layoutTransition entry) | entry <- entries]
+    )
+  | (source, entries) <- groupTransitionLayoutBySource (transitionLayout (aTransitions aggregate))
+  ]
 
 generatedFromBlock :: HaskellImportPlan -> Agg -> [ResolvedGeneratedTransition] -> (Text, [(Int, Transition)]) -> [Text]
 generatedFromBlock importPlan aggregate resolvedTransitions (source, transitions) =
@@ -6156,13 +6164,10 @@ holeProjectionStub a = case aProjection a of
 
 -- Group transitions by source state, preserving order, for the B.from blocks.
 groupBySource :: Agg -> [(Text, [Transition])]
-groupBySource a = go [] (transitionsOf a)
-  where
-    go acc [] = reverse acc
-    go acc (t : ts) =
-      let src = tSource t
-          (same, rest) = span ((== src) . tSource) ts
-       in go ((src, t : same) : acc) rest
+groupBySource a =
+  [ (source, map layoutTransition entries)
+  | (source, entries) <- groupTransitionLayoutBySource (transitionLayout (transitionsOf a))
+  ]
 
 -- We don't keep the original Aggregate around in Agg, so reconstruct
 -- transitions from a stored field. (Filled in resolveAgg via aTransitions.)

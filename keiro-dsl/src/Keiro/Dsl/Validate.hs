@@ -1275,6 +1275,7 @@ validateNames spec =
       nodeModuleOccurrences
         <> sharedTypeOccurrences
         <> concatMap aggregateFieldOccurrences aggregates
+        <> concatMap aggregateHarnessOccurrences aggregates
         <> concatMap contractFieldOccurrences contracts
 
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
@@ -1338,6 +1339,36 @@ validateNames spec =
               Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
               Left _ -> raw
        in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
+
+    aggregateHarnessOccurrences aggregate =
+      concat
+        [ [helperOccurrence "accept" ("accept" <> commandName) transition]
+            <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null (tEmits transition))]
+        | transition <- aggTransitions aggregate,
+          tSource transition == initialState,
+          tMode transition == TmLive,
+          let commandName = tCommand transition
+        ]
+      where
+        initialState = case aggStates aggregate of
+          state : _ -> stName state
+          [] -> ""
+        targetModule =
+          "Generated."
+            <> contextSegment
+            <> "."
+            <> normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate)
+            <> ".Harness"
+        helperOccurrence helperKind rendered transition =
+          HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
+          where
+            site =
+              HaskellName.NameSite
+                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
+                  HaskellName.siteLogicalName = tCommand transition,
+                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":" <> helperKind <> ":line:" <> T.pack (show (locLine (tLoc transition))),
+                  HaskellName.siteLine = locLine (tLoc transition)
+                }
 
     contractFieldOccurrences contract =
       [ contractFieldOccurrence targetModule (ceName event <> "Data") field

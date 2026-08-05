@@ -42,6 +42,7 @@ import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateGenerationPlan
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.GeneratedHaskellLanguage
@@ -471,7 +472,7 @@ emitHarness goldens a =
          | e <- aEvents a
          ]
       ++ [ "  , (\"accepts " <> tCommand t <> " from " <> initialVertex a <> "\", accept" <> tCommand t <> ")"
-         | t <- initialTransitions a
+         | t <- map layoutTransition (initialLiveTransitionEntries a)
          ]
       ++ [ "  ]"
          ]
@@ -492,7 +493,7 @@ emitHarness goldens a =
            "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
          ]
       ++ concatMap (sampleEventDecl a) (aEvents a)
-      ++ concatMap (acceptDecl a) (initialTransitions a)
+      ++ concatMap (acceptDecl a . layoutTransition) (initialLiveTransitionEntries a)
       ++ concatMap (forwardReplayDecl a) replayTransitions
       ++ concatMap (upcastDecl goldens a) upcastEvents
       ++ mappedHarnessDeclarations a
@@ -504,8 +505,8 @@ emitHarness goldens a =
     upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
     replayTransitions =
       [ t
-      | t <- initialTransitions a,
-        tMode t == TmLive,
+      | entry <- initialLiveTransitionEntries a,
+        let t = layoutTransition entry,
         not (null (tEmits t))
       ]
     coreImports =
@@ -638,9 +639,13 @@ exprNames ELiteral {} = []
 exprNames (EAtom (AName n)) = [n]
 exprNames (EAtom (ABool _)) = []
 
-initialTransitions :: Agg -> [Transition]
-initialTransitions a = case map stName (aStates a) of
-  (s0 : _) -> [t | t <- aTransitions a, tSource t == s0]
+initialLiveTransitionEntries :: Agg -> [TransitionLayoutEntry]
+initialLiveTransitionEntries a = case map stName (aStates a) of
+  (s0 : _) ->
+    [ entry
+    | entry <- transitionLayoutForSource s0 (transitionLayout (aTransitions a)),
+      tMode (layoutTransition entry) == TmLive
+    ]
   [] -> []
 
 -- | @sampleEvent<Ctor> :: <Agg>Event@ — a sample built from per-field sample
