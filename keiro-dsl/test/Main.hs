@@ -7,6 +7,7 @@ import Control.Exception (bracket)
 import Control.Monad (filterM, forM, forM_, unless)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Either (isLeft, isRight)
@@ -292,6 +293,118 @@ main = hspec $ do
           deniedOut `shouldBe` ""
           deniedErr `shouldContain` "domain/jobs.keiro:4: warning[WqUnloggedDurability]"
           deniedErr `shouldContain` "check: 1 warning(s) escalated to failure (denied: WqUnloggedDurability)"
+
+  describe "check report" $ do
+    it "writes the source failure report and matches the public-CLI golden" $ do
+      withTempDirectory "keiro-dsl-check-report-floor" $ \out -> do
+        let reportPath = out </> "report.json"
+        (exitCode, stdoutText, _) <-
+          runKeiroDsl
+            [ "check",
+              "test/fixtures/language-legacy.keiro",
+              "--min-language",
+              "4",
+              "--report-out",
+              reportPath
+            ]
+        exitCode `shouldBe` ExitFailure 1
+        stdoutText `shouldBe` ""
+        report <- decodeJsonValue reportPath
+        goldenPath <- resolveTestPath "test/fixtures/check-report/legacy-min-language.golden.json"
+        golden <- decodeJsonValue goldenPath
+        report `shouldBe` golden
+        jsonField "schema" report `shouldBe` Just (Aeson.String "keiro-dsl/check-report/1")
+        jsonField "kind" report `shouldBe` Just (Aeson.String "source")
+        jsonField "ok" report `shouldBe` Just (Aeson.Bool False)
+        (jsonField "language" report >>= jsonField "stable") `shouldBe` Just (Aeson.Bool False)
+        (jsonField "summary" report >>= jsonField "errors") `shouldBe` Just (Aeson.Number 1)
+        case jsonField "diagnostics" report of
+          Just (Aeson.Array entries) -> case toList entries of
+            entry : _ -> do
+              jsonField "code" entry `shouldBe` Just (Aeson.String "LanguageVersionBelowMinimum")
+              jsonField "severity" entry `shouldBe` Just (Aeson.String "error")
+              jsonField "line" entry `shouldBe` Just (Aeson.Number 1)
+            [] -> expectationFailure "check report had no diagnostics"
+          other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
+    it "marks denied warnings without changing their severity" $ do
+      withTempDirectory "keiro-dsl-check-report-deny" $ \out -> do
+        let deniedPath = out </> "denied.json"
+            allowedPath = out </> "allowed.json"
+            fixture = "test/fixtures/deny-unlogged.keiro"
+        (deniedCode, _, _) <- runKeiroDsl ["check", fixture, "--deny-warnings", "--report-out", deniedPath]
+        deniedCode `shouldBe` ExitFailure 1
+        deniedReport <- decodeJsonValue deniedPath
+        jsonField "ok" deniedReport `shouldBe` Just (Aeson.Bool False)
+        (jsonField "summary" deniedReport >>= jsonField "deniedWarnings") `shouldBe` Just (Aeson.Number 1)
+        case jsonField "diagnostics" deniedReport of
+          Just (Aeson.Array entries) -> case toList entries of
+            entry : _ -> do
+              jsonField "severity" entry `shouldBe` Just (Aeson.String "warning")
+              jsonField "denied" entry `shouldBe` Just (Aeson.Bool True)
+            [] -> expectationFailure "denied-warning report had no diagnostics"
+          other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
+        (allowedCode, _, _) <- runKeiroDsl ["check", fixture, "--report-out", allowedPath]
+        allowedCode `shouldBe` ExitSuccess
+        allowedReport <- decodeJsonValue allowedPath
+        jsonField "ok" allowedReport `shouldBe` Just (Aeson.Bool True)
+        (jsonField "summary" allowedReport >>= jsonField "deniedWarnings") `shouldBe` Just (Aeson.Number 0)
+        case jsonField "diagnostics" allowedReport of
+          Just (Aeson.Array entries) -> case toList entries of
+            entry : _ -> jsonField "denied" entry `shouldBe` Just (Aeson.Bool False)
+            [] -> expectationFailure "allowed-warning report had no diagnostics"
+          other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
+    it "reports canonical workspace members and writes nothing before parse success" $ do
+      withTempDirectory "keiro-dsl-check-report-workspace" $ \out -> do
+        let workspacePath = out </> "workspace.json"
+            parseFailurePath = out </> "parse-failure.json"
+        (workspaceCode, _, _) <- runKeiroDsl ["check", canonicalWorkspacePath, "--report-out", workspacePath]
+        workspaceCode `shouldBe` ExitSuccess
+        workspaceReport <- decodeJsonValue workspacePath
+        jsonField "kind" workspaceReport `shouldBe` Just (Aeson.String "workspace")
+        jsonField "ok" workspaceReport `shouldBe` Just (Aeson.Bool True)
+        (jsonField "language" workspaceReport >>= jsonField "sourceForm") `shouldBe` Just (Aeson.String "workspace-composed")
+        case jsonField "members" workspaceReport of
+          Just (Aeson.Array members) -> length members `shouldBe` 3
+          other -> expectationFailure ("expected members array, got " <> show other)
+
+        let v1Member = T.unlines ["language keiro-dsl 1", "context report-floor"]
+        withInlineWorkspace
+          "keiro-dsl-check-report-workspace-floor"
+          ( "report-floor",
+            [ ("domain/a.keiro", v1Member),
+              ("domain/b.keiro", v1Member)
+            ]
+          )
+          $ \root _ _ -> do
+            let manifest = root </> "service.keiro-workspace"
+                floorReportPath = out </> "workspace-floor.json"
+            (floorCode, _, _) <-
+              runKeiroDsl ["check", manifest, "--min-language", "4", "--report-out", floorReportPath]
+            floorCode `shouldBe` ExitFailure 1
+            floorReport <- decodeJsonValue floorReportPath
+            case jsonField "diagnostics" floorReport of
+              Just (Aeson.Array entries) -> case toList entries of
+                entry : _ -> do
+                  jsonField "file" entry `shouldBe` Just (Aeson.String (T.pack manifest))
+                  jsonField "code" entry `shouldBe` Just (Aeson.String "LanguageVersionBelowMinimum")
+                  case jsonField "related" entry of
+                    Just (Aeson.Array related) -> length related `shouldBe` 2
+                    other -> expectationFailure ("expected related-location array, got " <> show other)
+                [] -> expectationFailure "workspace-floor report had no diagnostics"
+              other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
+        (parseCode, _, _) <-
+          runKeiroDsl
+            [ "check",
+              "test/fixtures/language-future.keiro",
+              "--report-out",
+              parseFailurePath
+            ]
+        parseCode `shouldBe` ExitFailure 1
+        doesFileExist parseFailurePath `shouldReturn` False
 
   describe "runtime capability and fold identity baseline (plan 181)" $ do
     it "pins the fold-only FNV-1a-128 UTF-8 encoding" $ do
@@ -8270,6 +8383,18 @@ coverageSpecPath value = case value of
   Aeson.Object fields -> case KeyMap.lookup "spec" fields of
     Just (Aeson.String path) -> Just path
     _ -> Nothing
+  _ -> Nothing
+
+decodeJsonValue :: FilePath -> IO Value
+decodeJsonValue path = do
+  decoded <- Aeson.eitherDecodeFileStrict path
+  case decoded of
+    Left err -> expectationFailure (path <> ": " <> err) >> fail "unreachable"
+    Right value -> pure value
+
+jsonField :: T.Text -> Value -> Maybe Value
+jsonField name = \case
+  Aeson.Object fields -> KeyMap.lookup (Key.fromText name) fields
   _ -> Nothing
 
 -- | Order-preserving deduplication for comparing cited file sets.

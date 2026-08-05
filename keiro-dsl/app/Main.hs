@@ -13,6 +13,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy.IO qualified as TLIO
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
+import Keiro.Dsl.CheckReport qualified as CheckReport
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
@@ -67,7 +68,8 @@ data CheckOptions = CheckOptions
     checkCoverage :: !(Maybe CheckCoverageOptions),
     checkMinLanguage :: !(Maybe LanguageVersion),
     checkDenyWarnings :: !Bool,
-    checkDenyCodes :: ![DiagnosticCode]
+    checkDenyCodes :: ![DiagnosticCode],
+    checkReportOut :: !(Maybe FilePath)
   }
 
 data DiffCoverageOptions = DiffCoverageOptions
@@ -182,6 +184,7 @@ checkOptions =
     <*> optional minLanguageOpt
     <*> switch (long "deny-warnings" <> help "Exit non-zero when any warning-severity diagnostic fires")
     <*> denyCodesOptions
+    <*> optional checkReportOutOpt
 
 minLanguageOpt :: Parser LanguageVersion
 minLanguageOpt =
@@ -224,6 +227,11 @@ parseDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
                   <> T.unpack token
                   <> "`; copy the spelling exactly from warning[Code] output"
               )
+
+checkReportOutOpt :: Parser FilePath
+checkReportOutOpt =
+  strOption
+    (long "report-out" <> metavar "FILE" <> help "Write the full keiro-dsl/check-report/1 validation report as JSON")
 
 diffCoverageOptions :: Parser (Maybe DiffCoverageOptions)
 diffCoverageOptions =
@@ -350,6 +358,52 @@ emitDeniedWarningSummary deniedCodes =
         <> T.intercalate ", " [diagnosticCodeText diagnosticCode | diagnosticCode <- [minBound .. maxBound], diagnosticCode `elem` deniedCodes]
         <> ")"
 
+checkReportEnforcement :: CheckOptions -> CheckReport.CheckReportEnforcement
+checkReportEnforcement options =
+  CheckReport.CheckReportEnforcement
+    { CheckReport.reportMinLanguage = checkMinLanguage options,
+      CheckReport.reportDenyWarnings = checkDenyWarnings options,
+      CheckReport.reportDenyCodes = checkDenyCodes options
+    }
+
+writeSourceCheckReport :: FilePath -> ParsedSource -> CheckedService -> CheckOptions -> [Diagnostic] -> IO ()
+writeSourceCheckReport subject parsedSource service options diagnostics =
+  mapM_
+    ( \path ->
+        Aeson.encodeFile
+          path
+          ( CheckReport.checkReport
+              subject
+              (parsedSourceLanguage parsedSource)
+              (checkedLanguageContract service)
+              enforcement
+              diagnostics
+              (CheckReport.effectiveDenyCodes enforcement)
+          )
+    )
+    (checkReportOut options)
+  where
+    enforcement = checkReportEnforcement options
+
+writeWorkspaceCheckReport :: FilePath -> WorkspaceSpec -> CheckedService -> CheckOptions -> [WorkspaceDiagnostic] -> IO ()
+writeWorkspaceCheckReport subject workspace service options diagnostics =
+  mapM_
+    ( \path ->
+        Aeson.encodeFile
+          path
+          ( CheckReport.workspaceCheckReport
+              subject
+              workspace
+              (checkedLanguageContract service)
+              enforcement
+              diagnostics
+              (CheckReport.effectiveDenyCodes enforcement)
+          )
+    )
+    (checkReportOut options)
+  where
+    enforcement = checkReportEnforcement options
+
 run :: Command -> IO ()
 run (Pretty fp) = run (Parse fp)
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
@@ -387,6 +441,7 @@ run (Check fp options) = do
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
       emitDeniedWarningSummary deniedWarningCodes
+      writeSourceCheckReport fp parsedSource service options diags
       if any ((== Error) . severity) diags || not (null deniedWarningCodes)
         then exitFailure
         else do
@@ -616,6 +671,7 @@ runWorkspaceCheck fp options = do
       emitWorkspaceLanguageContractNotice fp workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
       emitDeniedWarningSummary deniedWarningCodes
+      writeWorkspaceCheckReport fp workspace service options diags
       if any ((== Error) . wdSeverity) diags || not (null deniedWarningCodes)
         then exitFailure
         else do

@@ -41,6 +41,7 @@ library
     Keiro.Dsl.AggregateType
     Keiro.Dsl.BehaviorCoverage
     Keiro.Dsl.CanonicalEncoding
+    Keiro.Dsl.CheckReport
     Keiro.Dsl.CodecCompare
     Keiro.Dsl.ConformancePackage
     Keiro.Dsl.Coverage
