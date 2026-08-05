@@ -58,6 +58,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Other Changes
 
+- **keiro-dsl**: generated behavior contracts and harnesses now carry complete
+  signatures, annotated behavior cells, named sample constants, runtime-backed
+  read-model facts, evidence-rich failures, and usage-conditional imports. The
+  `keiro/behavior-conformance/1` JSON failure object adds the append-only
+  `subject` field. The conformance corpus was regenerated under `-Wall` and now
+  has a clean-tree regeneration policy gate; consumers should re-scaffold and
+  recompile. Behavior keys, wire data, shape hashes, fold identity, and replay
+  semantics are unchanged.
 - **keiro-dsl**: adds record-derived conformance-corpus regeneration and golden
   acceptance tooling. The driver replays the public CLI without forced overwrites,
   preserves create-once files, checks record/disk and Cabal/disk consistency, and

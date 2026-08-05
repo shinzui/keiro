@@ -60,6 +60,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Generated behavior contracts and harnesses now carry complete signatures,
+  annotated behavior cells, named sample constants, runtime-backed read-model
+  facts, evidence-rich failures, and usage-conditional imports. The
+  `keiro/behavior-conformance/1` JSON failure object adds the append-only
+  `subject` field. The conformance corpus was regenerated under `-Wall` and now
+  has a clean-tree regeneration policy gate; consumers should re-scaffold and
+  recompile. Behavior keys, wire data, shape hashes, fold identity, and replay
+  semantics are unchanged.
 - Adds a record-derived conformance-corpus driver with focused public-CLI replay,
   create-once preservation, record/disk and Cabal/disk consistency checks, and a
   test-owned accept mode for the six renderer goldens.

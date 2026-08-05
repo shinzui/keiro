@@ -120,6 +120,16 @@ version-1 whole-transducer Holes remain runtime-witness-only. Unknown guard or
 projection proof is retained as unverified and is only failing under the
 explicit stricter gate.
 
+Generated behavior evidence is human-attributable without changing its stable
+identity. Every hash-sorted requirement and newly created pending witness row
+annotates the source-state × command cell, obligation kind, and spec line while
+retaining the exact `BehaviorKey` bytes. A failed witness carries the same
+subject plus its stable failure code; comparisons report both actual and
+expected values in text, and the append-only `keiro/behavior-conformance/1`
+JSON object carries the subject in a `subject` field. Presentation must never
+substitute for evidence: the generated contract still executes the same finite
+witness against the runtime transducer and codec.
+
 One checked source-wide transition layout supplies every generated transition
 identity. Each entry retains its one-based declaration index for stable helper
 and Hole names and its zero-based outgoing index among all transitions from the

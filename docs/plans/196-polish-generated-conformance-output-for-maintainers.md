@@ -56,9 +56,10 @@ after regeneration.
   carry explicit signatures, all conformance package surfaces use `-Wall`, and the structural
   BehaviorContract is compiled. A 37-component `cabal test keiro-dsl` compile emitted zero
   compiler warnings.
-- [ ] Milestone 4: single corpus regeneration through EP-195's tool, deliberate create-once
-  updates, activation of the clean-tree corpus policy gate, demonstration failure transcript,
-  ADR/doc/changelog closure, full validation.
+- [x] (2026-08-05T19:33:19Z) Milestone 4: EP-195's 41-invocation driver performed the single
+  corpus refresh, deliberate create-once updates were reviewed, and the clean-tree policy was
+  activated. The falsification/restoration proof, frozen-identity checks, ADR/doc/changelog
+  closure, strict ADR validation, and the complete 37-component test battery all pass.
 
 
 ## Surprises & Discoveries
@@ -243,11 +244,44 @@ after regeneration.
 
 ## Outcomes & Retrospective
 
-Implementation has not started. At completion, record the demonstration failure transcript, the
-before/after warning counts from the corpus build log, the exact regenerated file count from the
-EP-195 tool run, proof that the behavior-key set and fold baseline are byte-identical, and any
-compatibility drift. Perform the ADR distillation pass (amendments to ADR 0017 and ADR 0019 as
-decided above) before marking the plan complete.
+EP-196 is complete. The first full EP-195 replay after the emitter changes reported 421 changed
+files; deliberate updates to preserved create-once/legacy fixtures plus generator, policy, tests,
+and plan bookkeeping produced the 442-file implementation commit. A second direct replay and the
+`just conformance-corpus-policy` entry point each ran all 41 invocations and finished with
+`conformance corpus: ok`; the golden updater ran 582 examples with zero failures and reported no
+Git changes. A pre-dirtied corpus was refused before scaffolding with `conformance corpus check
+requires clean corpus paths before scaffolding`, proving the gate's destructive-work guard.
+
+The clean `bb79ed8e` baseline build emitted 58 GHC warnings, including 19 from generated modules.
+The final 37-component `cabal test keiro-dsl` compile emitted zero GHC warnings, all 37 suites
+passed, and the main suite passed all 582 examples. The named behavior-complete and generated
+workspace-proof targets also passed independently. Generated sources contain no `-Wno-*`
+suppression, while generated and committed package surfaces advertise `-Wall` without `-Werror`.
+
+The deliberate Journey witness mutation produced the intended evidence-rich failure:
+
+```text
+behavior conformance: Journey
+schema: keiro/behavior-conformance/1
+required: 19
+filled: 19
+pending: 0
+missing: 0
+duplicate: 0
+stale: 0
+failed: 1
+verified: 16
+unverified: 2
+FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (spec line 44) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData {amount = 5})] expected=[DecisionRecorded (DecisionRecordedData {amount = 6})]
+```
+
+Restoring the witness exactly returned the report to `failed: 0`, `verified: 17`, and
+`unverified: 2`. The corpus-diff key extraction returned `0` unmatched behavior keys; the fold
+identity baseline had no diff; inspection found no changed wire tag, payload key, shape hash, or
+snapshot discriminator. There is therefore no wire, fold, replay, snapshot, behavior-key, or
+witness-value compatibility drift. ADRs 0017 and 0019, their OKF-generated log entries, the user
+guide, and both changelogs publish the resulting presentation and regeneration contract; strict
+validation reports `OK: 21 concepts`.
 
 
 ## Context and Orientation

@@ -56,6 +56,14 @@ Cabal defaults, emitter predicates, policy, fixtures, and conformance proof. An
 edition upgrade removes edition-provided local declarations instead of also
 listing them as redundant defaults.
 
+Overwriteable generated modules carry explicit signatures for every top-level
+binding and do not use warning-suppression pragmas. Static imports are selected
+by semantic predicates beside their emitters, so the complete tracked corpus
+compiles with zero warnings under `-Wall`; generated conformance-package Cabal
+files advertise that same warning profile. Warning cleanliness is maintained by
+fixing emitted declarations and imports, not by weakening the consumer's
+compiler diagnostics.
+
 The generated-Haskell presentation contract also has an additive naming edition in single-file
 and workspace scaffold history. Current output uses `idiomatic-v1`; a missing row means the
 historical `legacy-v1`. One ASCII segmentation derives all logical names. Module segments, types,

@@ -1462,6 +1462,24 @@ and evidence ownership. Scaffolding emits a generated `BehaviorContract` and a
 create-once `BehaviorHoles` module. Fill live, rejection, and replay witnesses
 with real histories, commands, expected events, or expected rejections.
 
+New pending rows identify the source cell beside the stable key, so the
+create-once file remains readable after it becomes application-owned:
+
+```haskell
+Pending (BehaviorKey "behavior-v1-2f3ebf37a55781db")
+  -- JourneyActive x Decide: live transition (spec line 44)
+```
+
+The generated contract uses the same subject in failures and includes the
+runtime and witness values when they differ:
+
+```text
+FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (spec line 44) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData {amount = 5})] expected=[DecisionRecorded (DecisionRecordedData {amount = 6})]
+```
+
+JSON output remains schema `keiro/behavior-conformance/1`; each failure now
+also carries that human-readable cell in its append-only `subject` field.
+
 Replay witnesses assert the detailed runtime edge, including mode and
 source-wide `EdgeRef`; predicate verification consumes that same identity.
 Replay-only initial transitions never appear in step-based acceptance helpers,
