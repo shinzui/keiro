@@ -5,6 +5,7 @@ title: "Unify generated transition layout for replay-only conformance"
 kind: exec-plan
 created_at: 2026-08-05T04:18:27Z
 intention: "intention_01kz823p0keghtca7kdkm13k1r"
+master_plan: "docs/masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md"
 ---
 
 # Unify generated transition layout for replay-only conformance
@@ -119,6 +120,21 @@ pass without a runtime-only transducer composition.
   Rationale: Keiki already supplies the required `Live`/`ReplayOnly` execution and source-wide
   builder ordering. Mori's Keiki 0.9 adoption removes a separate validation workaround, but IR-18
   is a Keiro generation defect and works against the existing runtime semantics.
+  Date: 2026-08-04
+
+- Decision: Widen Milestone 1 so the layout module becomes the only producer of transition-derived
+  indices and groupings, covering three sibling sites the 2026-08-04 pre-adoption audit found
+  outside the original refactor list: the second adjacency-based grouping `groupBySource` used by
+  the legacy Holes skeleton (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, `emitLegacyHoles` path), the
+  independent `zip [1 ..]` declaration-index recomputations in `resolveAgg`'s
+  `(transitionIndex, emitIndex)` output-mapping key and in `obsoleteGeneratedOutputHooks`, and the
+  initial-state identity derived separately in `Harness.initialTransitions`, `initialVertex`, and
+  the transducer builder call.
+  Rationale: The plan's purpose is that one checked layout determines every transition identity.
+  Leaving a duplicate grouping implementation and two index recomputation sites alive would keep
+  the drift class open; routing them through `AggregateGenerationPlan` (grouping, declaration
+  indices) and one shared initial-state accessor closes it structurally instead of only fixing the
+  four consumers that currently disagree.
   Date: 2026-08-04
 
 - Decision: Extend the existing behavior-complete and service-package proofs instead of creating a
@@ -245,7 +261,14 @@ source's entries still in declaration order. Add unit examples proving the layou
 
 Refactor `transitionEntries`, `groupTransitionEntriesBySource`, `renderVerificationList`,
 `generatedFromBlock`, and `behaviorEdgeIndex` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` to consume
-that plan. Preserve declaration indices for transition stems, Hole functions, output hooks, and
+that plan. In the same pass, route the remaining transition-identity sites through it so no
+duplicate derivation survives: replace the legacy Holes skeleton's own adjacency grouping
+(`groupBySource` and its `fromBlock`/`onCmdBlock` consumers on the `emitLegacyHoles` path) with the
+layout's source groups; build `resolveAgg`'s `(transitionIndex, emitIndex)` output-mapping keys and
+the `obsoleteGeneratedOutputHooks` inventory from layout declaration indices instead of local
+`zip [1 ..]` recomputation; and introduce one initial-state accessor consumed by
+`Harness.initialTransitions`'s replacement, `initialVertex`, and the generated
+`B.buildTransducer` call, removing their independent head-of-`aStates` derivations. Preserve declaration indices for transition stems, Hole functions, output hooks, and
 fold-version references. Render one `B.from` per source group. Pass each entry's stored outgoing
 index to `verifyTransition`, and find behavior requirements by source, transition location, and
 command within the layout before using the stored index. Treat a validated requirement missing
@@ -572,3 +595,14 @@ The runtime dependency is `mori://shinzui/keiki/packages/keiki`. Continue using 
 interfaces. Keiki's merge order and live-first replay semantics are the external contract; this
 plan adds no dependency, changes no Cabal bound, and introduces no compatibility workaround for
 Keiki 0.9.
+
+
+---
+
+Revision note (2026-08-04): Adopted into MasterPlan
+`docs/masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md` and widened Milestone 1 with three
+sibling transition-identity sites found by the pre-adoption audit (legacy Holes grouping,
+output-mapping/obsolete-hook declaration-index recomputation, and the triple-derived initial-state
+identity), so the AggregateGenerationPlan layout becomes the sole producer of transition-derived
+identity rather than only reconciling the four consumers that currently disagree. See the new
+Decision Log entry dated 2026-08-04.
