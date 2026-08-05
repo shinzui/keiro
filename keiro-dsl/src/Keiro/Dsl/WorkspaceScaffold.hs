@@ -101,6 +101,7 @@ import Keiro.Dsl.ScaffoldRun
   )
 import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
+import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
@@ -375,6 +376,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrObsoleteOutputHooks :: ![(Text, Text)],
     wsrConformancePackage :: !(Maybe ConformancePackageReport),
     wsrNameMoves :: ![SourceMove],
+    wsrSidecarMoves :: ![SidecarMove],
     -- | Present only on the run that adopted pre-workspace scaffold output.
     wsrMigration :: !(Maybe MigrationReport)
   }
@@ -405,16 +407,31 @@ executeWorkspaceScaffold out forceGeneratedOverwrite =
 
 executeWorkspaceScaffoldWithNameMigrations :: FilePath -> Bool -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
 executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyNameMigrations plan = do
-  previous <- readWorkspaceRecord recordPath
-  case planWorkspaceSourceMoves previous modules of
-    Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-    Right moves -> do
-      preparedMoves <- preflightSourceMoves out moves
-      case preparedMoves of
-        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
-        Right prepared
-          | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
-          | otherwise -> executeWorkspaceScaffoldBase out forceGeneratedOverwrite (map preparedSourceMove prepared) prepared plan
+  sidecarResult <- planSidecarMigrations out (WorkspaceSidecars (wsService (wpWorkspace plan))) (wpConformancePackage plan)
+  case sidecarResult of
+    Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
+    Right preparedSidecars
+      | not (null preparedSidecars) && not applyNameMigrations ->
+          pure (Left [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)])
+      | otherwise -> do
+          applyPreparedSidecarMoves out preparedSidecars
+          previous <- readWorkspaceRecord recordPath
+          case planWorkspaceSourceMoves previous modules of
+            Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+            Right moves -> do
+              preparedMoves <- preflightSourceMoves out moves
+              case preparedMoves of
+                Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+                Right prepared
+                  | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
+                  | otherwise ->
+                      executeWorkspaceScaffoldBase
+                        out
+                        forceGeneratedOverwrite
+                        (map preparedSidecarMove preparedSidecars)
+                        (map preparedSourceMove prepared)
+                        prepared
+                        plan
   where
     modules = map fst (wpModules plan)
     recordPath = out </> workspaceRecordFileName (wsService (wpWorkspace plan))
@@ -428,8 +445,8 @@ planWorkspaceSourceMoves previous current =
         [(wrmRole row, wrmKind row, wrmPath row) | row <- wrModules record]
         current
 
-executeWorkspaceScaffoldBase :: FilePath -> Bool -> [SourceMove] -> [PreparedSourceMove] -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
-executeWorkspaceScaffoldBase out forceGeneratedOverwrite nameMoves preparedNameMoves plan = do
+executeWorkspaceScaffoldBase :: FilePath -> Bool -> [SidecarMove] -> [SourceMove] -> [PreparedSourceMove] -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
+executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves preparedNameMoves plan = do
   stranded <- goldenRootDivergence (wpGoldenRoot plan) workspace
   bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
   packagePreflight <- case wpConformancePackage plan of
@@ -501,6 +518,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite nameMoves preparedNameM
               wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
               wsrConformancePackage = packageReport,
               wsrNameMoves = nameMoves,
+              wsrSidecarMoves = sidecarMoves,
               wsrMigration = migration
             }
   where
@@ -659,6 +677,7 @@ renderWorkspaceScaffoldReport report =
        ]
     <> previousManifestNote
     <> migrationSection
+    <> sidecarMoveSection
     <> nameMoveSection
     <> constraintSection
     <> newHolesSection
@@ -713,6 +732,11 @@ renderWorkspaceScaffoldReport report =
       Just previous -> ["note: the previous workspace record was written from manifest " <> previous]
       Nothing -> []
     migrationSection = maybe [] renderMigrationReport (wsrMigration report)
+    sidecarMoveSection = case wsrSidecarMoves report of
+      [] -> []
+      moves ->
+        ["sidecar migration: applied (" <> tshow (length moves) <> " move(s))"]
+          <> map (("  " <>) . renderSidecarMove) moves
     nameMoveSection = case wsrNameMoves report of
       [] -> []
       moves ->

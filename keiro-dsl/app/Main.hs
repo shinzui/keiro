@@ -136,7 +136,7 @@ forceGeneratedOverwriteSwitch :: Parser Bool
 forceGeneratedOverwriteSwitch = switch (long "force-generated-overwrite" <> help "Overwrite a Generated path even when the existing file lacks the @generated banner")
 
 applyNameMigrationsSwitch :: Parser Bool
-applyNameMigrationsSwitch = switch (long "apply-name-migrations" <> help "Apply reviewed generated-Haskell source moves with recoverable backups")
+applyNameMigrationsSwitch = switch (long "apply-name-migrations" <> help "Apply reviewed generated-Haskell source and sidecar moves with recoverable backups")
 
 goldensOpt :: Parser FilePath
 goldensOpt = strOption (long "goldens" <> metavar "DIR" <> help "Golden-payload root to embed in generated aggregate harnesses")

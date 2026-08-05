@@ -6,15 +6,13 @@
 -- emitted module__. The last one is what makes moving an aggregate from one member
 -- file to another an ownership move rather than a stale/new pair.
 --
--- __Coexistence.__ Workspace history is keyed by the service name in a distinct
--- file-name slot, @keiro-dsl-scaffold-record.workspace.\<service\>.txt@, and never
--- by context. A context name is lexed as letters, digits, @_@ and @-@ and can
--- never contain a dot, so this slot provably cannot collide with a legacy
--- context-keyed name even when a service is named after its context. Legacy
--- records and a workspace record may therefore share one output directory: the
--- workspace path never writes a context-keyed name, and an older keiro-dsl binary
--- is structurally incapable of parsing — and therefore of clobbering — workspace
--- history. The one exception is the explicit adoption step, which /appends/ a
+-- __Coexistence.__ Workspace history is keyed by the service name in the explicit
+-- @keiro-dsl-ledger.workspace.\<service\>.txt@ slot, while standalone history uses
+-- @keiro-dsl-ledger.context.\<context\>.txt@. The distinct literal slot segments
+-- make collision impossible by construction, including for a context literally
+-- named @workspace@. Legacy records can coexist during adoption because their
+-- @keiro-dsl-scaffold-record.*@ stem is distinct. The one exception to ordinary
+-- workspace isolation is the explicit adoption step, which /appends/ a
 -- @superseded-by:@ line to a legacy record; the v1 parser ignores unknown lines,
 -- so old binaries still read it.
 --
@@ -33,7 +31,7 @@
 -- module {"kind":"generated","path":"Demo/Project/Project/Generated/Domain.hs","owner":"domain/project.keiro"}
 -- mapping {…}
 -- binding {…}
--- adopted {"path":"…","evidence":"record","source":"keiro-dsl-scaffold-record.demo-project.txt"}
+-- adopted {"path":"…","evidence":"record","source":"keiro-dsl-ledger.context.demo-project.txt"}
 -- @
 --
 -- @module@ rows are canonical single-line JSON, following the precedent set for
@@ -71,6 +69,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMa
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
+import Keiro.Dsl.SidecarNames qualified as SidecarNames
 import System.FilePath (isAbsolute, splitDirectories)
 
 -- | One emitted module: what kind it is, where it landed relative to the output
@@ -354,20 +353,20 @@ parseWorkspaceRecord contents = case T.lines contents of
         holePath hole
       )
 
--- | @keiro-dsl-scaffold-record.workspace.\<service\>.txt@ — the workspace
--- history file. See the module header for why the @workspace.@ slot cannot
--- collide with a context-keyed name.
+-- | @keiro-dsl-ledger.workspace.\<service\>.txt@ — the machine-owned workspace
+-- history ledger.
 workspaceRecordFileName :: Text -> FilePath
-workspaceRecordFileName service = "keiro-dsl-scaffold-record.workspace." <> T.unpack service <> ".txt"
+workspaceRecordFileName = SidecarNames.workspaceLedgerFileName
 
--- | @keiro-dsl-manifest.workspace.\<service\>.txt@ — the Cabal build manifest.
+-- | @keiro-dsl-cabal-fragment.workspace.\<service\>.txt@ — the human-facing
+-- Cabal fragment. Kept under the historical helper name for API compatibility.
 workspaceManifestFileName :: Text -> FilePath
-workspaceManifestFileName service = "keiro-dsl-manifest.workspace." <> T.unpack service <> ".txt"
+workspaceManifestFileName = SidecarNames.workspaceCabalFragmentFileName
 
 -- | @keiro-dsl-migration-report.workspace.\<service\>.txt@ — the durable review
 -- artifact written once, on the run that adopts pre-workspace scaffold output.
 workspaceMigrationReportFileName :: Text -> FilePath
-workspaceMigrationReportFileName service = "keiro-dsl-migration-report.workspace." <> T.unpack service <> ".txt"
+workspaceMigrationReportFileName = SidecarNames.workspaceMigrationReportFileName
 
 -- | The single line adoption appends to a superseded legacy record. The v1
 -- parser ignores unknown lines, so the legacy record keeps parsing for old

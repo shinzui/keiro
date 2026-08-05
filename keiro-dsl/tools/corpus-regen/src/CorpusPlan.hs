@@ -198,7 +198,8 @@ trackedTestPaths repoRoot = do
 isRecordPath :: FilePath -> Bool
 isRecordPath path =
   let name = takeFileName path
-   in "keiro-dsl-scaffold-record." `isPrefixOf` name && ".txt" `isSuffixOf` name
+   in ("keiro-dsl-ledger." `isPrefixOf` name || "keiro-dsl-scaffold-record." `isPrefixOf` name)
+        && ".txt" `isSuffixOf` name
 
 loadHistory :: FilePath -> FilePath -> IO (Either [Text] RecordHistory)
 loadHistory repoRoot recordPath = do

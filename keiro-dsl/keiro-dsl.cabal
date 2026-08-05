@@ -72,6 +72,8 @@ library
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.SemanticContract
     Keiro.Dsl.ServiceHarness
+    Keiro.Dsl.SidecarMigration
+    Keiro.Dsl.SidecarNames
     Keiro.Dsl.Skeleton
     Keiro.Dsl.Source
     Keiro.Dsl.Syntax

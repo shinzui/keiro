@@ -63,6 +63,8 @@ import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldMod
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
+import Keiro.Dsl.SidecarMigration
+import Keiro.Dsl.SidecarNames
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, diagnosticCodeText, parseDiagnosticCode, renderDiagnostic, validateService, validateSpec)
@@ -3099,6 +3101,73 @@ main = hspec $ do
           doesFileExist (out </> wrmPath row) `shouldReturn` True
           doesFileExist (out </> ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1" </> legacyPath (wrmPath row)) `shouldReturn` True
 
+  describe "sidecar migration (EP-198)" $ do
+    it "refuses old context names, applies lossless moves, preserves stale history, and is idempotent" $
+      withTempDirectory "keiro-dsl-sidecar-migration" $ \base -> do
+        parsed <- parsedSourceOf "test/fixtures/reservation.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            sourceLanguage = parsedSourceLanguage parsed
+            plain = base </> "plain"
+            migrated = base </> "migrated"
+            runAt out apply specPath selected =
+              executeServiceScaffoldWithRuntimePackageAndNameMigrations
+                Nothing
+                apply
+                out
+                False
+                specPath
+                sourceLanguage
+                ctx
+                service
+                selected
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffold ctx service)
+        _ <- runAt plain False "reservation.keiro" modules >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        _ <- runAt migrated False "reservation.keiro" modules >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        let reduced = drop 1 modules
+            currentLedger = contextLedgerFileName (specContext spec)
+            currentFragment = contextCabalFragmentFileName (specContext spec)
+            oldLedger = legacyContextRecordFileName (specContext spec)
+            oldFragment = legacyContextManifestFileName (specContext spec)
+        renameFile (migrated </> currentLedger) (migrated </> oldLedger)
+        renameFile (migrated </> currentFragment) (migrated </> oldFragment)
+        treeBefore <- treeSnapshot migrated
+        refused <- runAt migrated False "reservation-reduced.keiro" reduced
+        refused `shouldSatisfy` \case
+          Left [SidecarMigrationRequired moves] ->
+            length moves == 2
+              && all ((== RenameSidecar) . sidecarMoveDisposition) moves
+          _ -> False
+        renderRefusals (either id (const []) refused)
+          `shouldSatisfy` any (T.isInfixOf "--apply-name-migrations")
+        treeSnapshot migrated `shouldReturn` treeBefore
+
+        baseline <- runAt plain False "reservation-reduced.keiro" reduced >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        applied <- runAt migrated True "reservation-reduced.keiro" reduced >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        map sidecarMoveDisposition (reportSidecarMoves applied) `shouldBe` [RenameSidecar, RenameSidecar]
+        reportStale applied `shouldBe` reportStale baseline
+        reportPreviousSpecPath applied `shouldBe` Just "reservation.keiro"
+        doesFileExist (migrated </> oldLedger) `shouldReturn` False
+        doesFileExist (migrated </> oldFragment) `shouldReturn` False
+        doesFileExist (migrated </> currentLedger) `shouldReturn` True
+        doesFileExist (migrated </> currentFragment) `shouldReturn` True
+
+        rerun <- runAt migrated True "reservation-reduced.keiro" reduced >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        reportSidecarMoves rerun `shouldBe` []
+
+        let duplicateBytes = "legacy duplicate cabal fragment\n"
+            backup = migrated </> ".keiro-dsl-name-migrations/sidecar-v1" </> oldFragment
+        TIO.writeFile (migrated </> oldFragment) duplicateBytes
+        duplicateRefusal <- runAt migrated False "reservation-reduced.keiro" reduced
+        duplicateRefusal `shouldSatisfy` \case
+          Left [SidecarMigrationRequired [move]] -> sidecarMoveDisposition move == RetireLegacySidecar
+          _ -> False
+        retired <- runAt migrated True "reservation-reduced.keiro" reduced >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        map sidecarMoveDisposition (reportSidecarMoves retired) `shouldBe` [RetireLegacySidecar]
+        doesFileExist (migrated </> oldFragment) `shouldReturn` False
+        TIO.readFile backup `shouldReturn` duplicateBytes
+
   describe "Haskell.name-diff" $ do
     it "classifies a workqueue payload type rename only on consumer-build" $ do
       base <- specOf "test/fixtures/reservation-work.keiro"
@@ -5839,6 +5908,30 @@ main = hspec $ do
               cprFacadeModule = facade,
               cprFiles = [(conformanceFileKind file, conformanceFilePath file) | file <- cppFiles plan]
             }
+    it "tolerates future rows and JSON keys while round-tripping awkward safe paths" $ do
+      let recordText =
+            T.unlines
+              [ "keiro-dsl conformance ledger v1",
+                "service-key standalone hospital-surge",
+                "runtime-package hospital-runtime",
+                "facade-module Generated.HospitalSurge.Conformance",
+                "file {\"kind\":\"generated\",\"path\":\"generated/file with space.hs\",\"future-key\":true}",
+                "future-row {\"value\":1}"
+              ]
+          expected =
+            ConformancePackageRecord
+              { cprSchema = 1,
+                cprServiceKey = StandaloneConformanceService "hospital-surge",
+                cprRuntimePackage = RuntimePackageName "hospital-runtime",
+                cprFacadeModule = "Generated.HospitalSurge.Conformance",
+                cprFiles = [(Generated, "generated/file with space.hs")]
+              }
+      parseConformancePackageRecord recordText `shouldBe` Just expected
+      parseConformancePackageRecord (renderConformancePackageRecord expected) `shouldBe` Just expected
+      parseConformancePackageRecord (T.replace "generated/file with space.hs" "../escape.hs" recordText)
+        `shouldBe` Nothing
+      parseConformancePackageRecord (T.replace "future-row {\"value\":1}" "file {\"kind\":\"generated\",\"path\":\"GENERATED/FILE WITH SPACE.HS\"}" recordText)
+        `shouldBe` Nothing
     it "compares unique facts by key and distinguishes mismatch, missing, and unexpected" $ do
       compareConformanceFacts [("a", "1"), ("b", "2"), ("d", "4")] [("c", "3"), ("a", "1"), ("b", "9")]
         `shouldBe` Right
@@ -5879,6 +5972,81 @@ main = hspec $ do
             conformanceFileKind file == HoleStub
           ]
           `shouldBe` [ConformanceSkipped]
+    it "converts a legacy conformance record losslessly and keeps service-key mismatch refusal" $
+      withTempDirectory "keiro-dsl-conformance-ledger-migration" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            runtimePackage = RuntimePackageName "hospital-runtime"
+            packageRoot = out </> conformancePackageDirectory (StandaloneConformanceService (contextName ctx))
+            currentPath = packageRoot </> conformanceLedgerFileName
+            legacyPath = packageRoot </> legacyConformanceRecordFileName
+            backupPath = out </> ".keiro-dsl-name-migrations/sidecar-v1" </> conformancePackageDirectory (StandaloneConformanceService (contextName ctx)) </> legacyConformanceRecordFileName
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planServiceScaffoldWithRuntimePackage (Just runtimePackage) ctx service)
+        let run apply =
+              executeServiceScaffoldWithRuntimePackageAndNameMigrations
+                (Just runtimePackage)
+                apply
+                out
+                False
+                "hospital-surge.keiro"
+                (parsedSourceLanguage parsed)
+                ctx
+                service
+                modules
+            renderLegacyKey (WorkspaceConformanceService value) = "workspace " <> value
+            renderLegacyKey (StandaloneConformanceService value) = "standalone " <> value
+            renderLegacyKind Generated = "generated"
+            renderLegacyKind HoleStub = "create-once"
+        _ <- run False >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        currentContents <- TIO.readFile currentPath
+        record <- maybe (expectationFailure "fresh conformance ledger did not parse" >> fail "unreachable") pure (parseConformancePackageRecord currentContents)
+        let legacyRecord =
+              record
+                { cprFiles =
+                    [ (fileKind, if path == conformanceLedgerFileName then legacyConformanceRecordFileName else path)
+                    | (fileKind, path) <- cprFiles record
+                    ]
+                }
+            legacyContents =
+              T.unlines $
+                [line | line <- T.lines currentContents, isGeneratedBannerLine line]
+                  <> [ "schema 1",
+                       "service-key " <> renderLegacyKey (cprServiceKey legacyRecord),
+                       "runtime-package " <> unRuntimePackageName (cprRuntimePackage legacyRecord),
+                       "facade-module " <> cprFacadeModule legacyRecord
+                     ]
+                  <> ["file " <> renderLegacyKind fileKind <> " " <> T.pack path | (fileKind, path) <- cprFiles legacyRecord]
+        renameFile currentPath legacyPath
+        TIO.writeFile legacyPath legacyContents
+        migrationTreeBefore <- treeSnapshot out
+        refused <- run False
+        refused `shouldSatisfy` \case
+          Left [SidecarMigrationRequired [move]] -> sidecarMoveDisposition move == ConvertLegacyConformanceLedger
+          _ -> False
+        treeSnapshot out `shouldReturn` migrationTreeBefore
+        applied <- run True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        map sidecarMoveDisposition (reportSidecarMoves applied) `shouldBe` [ConvertLegacyConformanceLedger]
+        doesFileExist legacyPath `shouldReturn` False
+        TIO.readFile backupPath `shouldReturn` legacyContents
+        migrated <- TIO.readFile currentPath
+        cprServiceKey <$> parseConformancePackageRecord migrated
+          `shouldBe` Just (StandaloneConformanceService (contextName ctx))
+
+        TIO.writeFile
+          currentPath
+          ( T.replace
+              ("service-key standalone " <> contextName ctx)
+              "service-key standalone another-service"
+              migrated
+          )
+        mismatchBefore <- treeSnapshot out
+        mismatch <- run False
+        mismatch `shouldSatisfy` \case
+          Left [ConformancePackageRefusal ConformancePackageRecordMismatch {}] -> True
+          _ -> False
+        treeSnapshot out `shouldReturn` mismatchBefore
     it "refuses a bannerless package file before changing any runtime byte" $ do
       withTempDirectory "keiro-dsl-conformance-atomic" $ \out -> do
         parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"
@@ -5935,7 +6103,7 @@ main = hspec $ do
         firstTree <- treeSnapshot out
         length [path | (path, _) <- firstTree, takeExtension path == ".cabal"] `shouldBe` 1
         length [path | (path, _) <- firstTree, "Generated/Conformance.hs" `T.isSuffixOf` T.pack path] `shouldBe` 1
-        let recordPath = out </> "keiro-dsl-conformance.workspace.workspace-proof/keiro-dsl-conformance-record.txt"
+        let recordPath = out </> conformancePackageDirectory (WorkspaceConformanceService "workspace-proof") </> conformanceRecordFileName
         record <- parseConformancePackageRecord <$> TIO.readFile recordPath
         cprServiceKey <$> record `shouldBe` Just (WorkspaceConformanceService "workspace-proof")
         (secondCode, secondOut, secondErr) <- runKeiroDsl ["scaffold", copied </> "service.keiro-workspace", "--out", out]
@@ -7204,23 +7372,16 @@ main = hspec $ do
         corrupt "member domain/shared.keiro" "member ../escape.keiro" `shouldBe` Nothing
         corrupt "\"owner\":\"domain/shared.keiro\"" "\"owner\":\"../shared.keiro\"" `shouldBe` Nothing
         corrupt "\"path\":\"claimed/One.hs\"" "\"path\":\"/tmp/One.hs\"" `shouldBe` Nothing
-      it "keys history by service in a slot no context name can reach" $ do
-        -- A context name is lexed as letters/digits/_/- and can never
-        -- contain a dot, so the workspace slot cannot alias a legacy
-        -- record even when the service is named after its context.
+      it "keys context and workspace history in structurally distinct explicit slots" $ do
         workspaceRecordFileName "demo-project"
-          `shouldBe` "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+          `shouldBe` workspaceLedgerFileName "demo-project"
         workspaceManifestFileName "demo-project"
-          `shouldBe` "keiro-dsl-manifest.workspace.demo-project.txt"
+          `shouldBe` workspaceCabalFragmentFileName "demo-project"
         workspaceRecordFileName "demo-project" `shouldNotBe` recordFileName "demo-project"
-        map
-          (T.isInfixOf "." . T.pack)
-          [ workspaceRecordFileName "demo-project",
-            recordFileName "demo-project"
-          ]
-          `shouldBe` [True, True]
+        contextLedgerFileName "workspace"
+          `shouldNotBe` workspaceLedgerFileName "workspace"
         supersededByLine "demo-project"
-          `shouldBe` "superseded-by: keiro-dsl-scaffold-record.workspace.demo-project.txt"
+          `shouldBe` "superseded-by: keiro-dsl-ledger.workspace.demo-project.txt"
 
     describe "workspace plan" $ do
       it "emits the context-level facade and replay-audit exactly once from the merged graph" $ do
@@ -7403,11 +7564,11 @@ main = hspec $ do
         withWorkspaceFixture "keiro-dsl-workspace-history" id $ \_ out workspace -> do
           report <- executePlannedWorkspaceScaffold out workspace
           wsrRecordPath report
-            `shouldBe` out </> "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+            `shouldBe` out </> workspaceLedgerFileName "demo-project"
           wsrBuildManifestPath report
-            `shouldBe` out </> "keiro-dsl-manifest.workspace.demo-project.txt"
+            `shouldBe` out </> workspaceCabalFragmentFileName "demo-project"
           doesFileExist (out </> recordFileName "demo-project") `shouldReturn` False
-          doesFileExist (out </> "keiro-dsl-manifest.demo-project.txt") `shouldReturn` False
+          doesFileExist (out </> contextCabalFragmentFileName "demo-project") `shouldReturn` False
           contents <- TIO.readFile (wsrRecordPath report)
           buildManifest <- TIO.readFile (wsrBuildManifestPath report)
           assertGeneratedHaskellContract "service.keiro-workspace" buildManifest
@@ -7435,6 +7596,35 @@ main = hspec $ do
                   "Project/Generated/Domain.hs" `T.isSuffixOf` T.pack (wrmPath row)
                 ]
                 `shouldBe` [Just "domain/project.keiro"]
+      it "refuses and then applies old workspace sidecar names before reading history" $
+        withWorkspaceFixture "keiro-dsl-workspace-sidecar-migration" id $ \_ out workspace -> do
+          plan <- shouldPlanWorkspaceSpec workspace
+          first <- executeWorkspaceScaffold out False plan
+          either (\failure -> expectationFailure (show failure)) (const (pure ())) first
+          let service = wsService workspace
+              currentLedger = workspaceLedgerFileName service
+              currentFragment = workspaceCabalFragmentFileName service
+              oldLedger = legacyWorkspaceRecordFileName service
+              oldFragment = legacyWorkspaceManifestFileName service
+          renameFile (out </> currentLedger) (out </> oldLedger)
+          renameFile (out </> currentFragment) (out </> oldFragment)
+          migrationTreeBefore <- treeSnapshot out
+          refused <- executeWorkspaceScaffoldWithNameMigrations out False False plan
+          refused `shouldSatisfy` \case
+            Left [SidecarMigrationRequired moves] ->
+              length moves == 2 && all ((== RenameSidecar) . sidecarMoveDisposition) moves
+            _ -> False
+          treeSnapshot out `shouldReturn` migrationTreeBefore
+          applied <- executeWorkspaceScaffoldWithNameMigrations out False True plan
+          report <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure applied
+          map sidecarMoveDisposition (wsrSidecarMoves report) `shouldBe` [RenameSidecar, RenameSidecar]
+          wsrStale report `shouldBe` []
+          doesFileExist (out </> oldLedger) `shouldReturn` False
+          doesFileExist (out </> oldFragment) `shouldReturn` False
+          doesFileExist (out </> currentLedger) `shouldReturn` True
+          doesFileExist (out </> currentFragment) `shouldReturn` True
+          rerun <- executeWorkspaceScaffoldWithNameMigrations out False True plan
+          either (\failure -> expectationFailure (show failure)) (\value -> wsrSidecarMoves value `shouldBe` []) rerun
       it "is idempotent: an unchanged second run rewrites nothing and reports nothing" $
         withWorkspaceFixture "keiro-dsl-workspace-idempotent" id $ \_ out workspace -> do
           first <- executePlannedWorkspaceScaffold out workspace
@@ -7460,7 +7650,7 @@ main = hspec $ do
             treeB <- treeSnapshot outB
             treeA <- treeSnapshot outA
             treeB `shouldBe` treeA
-            map fst treeA `shouldSatisfy` elem "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+            map fst treeA `shouldSatisfy` elem (workspaceLedgerFileName "demo-project")
       it "reports stale files only for the member that changed" $
         withWorkspaceFixture "keiro-dsl-workspace-stale" id $ \root out workspace -> do
           first <- executePlannedWorkspaceScaffold out workspace
@@ -7522,7 +7712,7 @@ main = hspec $ do
           treeAfter <- treeSnapshot out
           map fst treeAfter `shouldBe` map fst treeBefore
           let unaffected (path, _) =
-                not ("scaffold-record" `T.isInfixOf` T.pack path)
+                path /= workspaceLedgerFileName "demo-project"
                   && path `notElem` overwrittenPaths
           filter unaffected treeAfter `shouldBe` filter unaffected treeBefore
           renderWorkspaceScaffoldReport second
@@ -7586,7 +7776,7 @@ main = hspec $ do
             runKeiroDsl ["scaffold", canonicalWorkspacePath, "--out", out]
           unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
           stderrText `shouldContain` "workspace: demo-project"
-          doesFileExist (out </> "keiro-dsl-scaffold-record.workspace.demo-project.txt")
+          doesFileExist (out </> workspaceLedgerFileName "demo-project")
             `shouldReturn` True
           tree <- treeSnapshot out
           length [path | (path, _) <- tree, "StructuralProjections.hs" `T.isSuffixOf` T.pack path]
@@ -7696,6 +7886,22 @@ main = hspec $ do
             adoptedTree <- treeSnapshot out
             freshTree <- treeSnapshot fresh
             haskellOnly adoptedTree `shouldBe` haskellOnly freshTree
+      it "adopts and marks context history under the legacy record name" $
+        withInlineWorkspace "keiro-dsl-workspace-adopt-legacy-name" adoptionMembers $ \_ out workspace -> do
+          specA <- parseInlineSpec "domain/a.keiro" adoptionMemberA
+          _ <- executePlannedScaffold out "domain/a.keiro" (defaultContext "adoption-demo") specA
+          let current = contextLedgerFileName "adoption-demo"
+              legacy = legacyContextRecordFileName "adoption-demo"
+          renameFile (out </> current) (out </> legacy)
+          ledgerBefore <- TIO.readFile (out </> legacy)
+          report <- executePlannedWorkspaceScaffold out workspace
+          case wsrMigration report of
+            Nothing -> expectationFailure "expected legacy-name context history to be adopted"
+            Just migration -> mrLegacyRecord migration `shouldBe` Just (legacy, "domain/a.keiro")
+          doesFileExist (out </> current) `shouldReturn` False
+          ledgerAfter <- TIO.readFile (out </> legacy)
+          T.lines ledgerAfter `shouldBe` T.lines ledgerBefore <> [supersededByLine "adoption-demo"]
+          parseRecord ledgerAfter `shouldBe` parseRecord ledgerBefore
       it "lists hand-written files as unclaimed and leaves their bytes alone" $
         withInlineWorkspace "keiro-dsl-workspace-unclaimed" adoptionMembers $ \_ out workspace -> do
           plan <- shouldPlanWorkspaceSpec workspace
@@ -8453,7 +8659,7 @@ sampleWorkspaceRecord workspace =
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
       wrBehaviorRequirements = [],
       wrAdopted =
-        [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-scaffold-record.demo-project.txt") (Just "project.keiro"),
+        [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-ledger.context.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing
         ]
     }

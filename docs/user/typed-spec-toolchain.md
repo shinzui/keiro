@@ -82,8 +82,8 @@ scaffold-planning gates succeed under the source-declared context. `scaffold`
 re-runs the same ordered gates under its CLI-effective context before writing,
 so module-root, placement, or runtime-package overrides receive the same defense
 in depth. It emits replaceable files bearing an exact `@generated` banner,
-create-once hand-owned modules, a conformance harness, a build manifest, and a
-scaffold record. Copy the manifest's `default-language`,
+create-once hand-owned modules, a conformance harness, a Cabal fragment, and a
+machine-owned scaffold ledger. Copy the fragment's `default-language`,
 `default-extensions`, `other-modules`, and `build-depends` blocks into the
 consuming Cabal component, fill the create-once modules, and run the generated
 harness in CI.
@@ -1370,7 +1370,7 @@ Cabal package for the complete `service` under the same output root:
 ```text
 src/keiro-dsl-conformance.workspace.demo-project/
   keiro-demo-project-conformance.cabal
-  keiro-dsl-conformance-record.txt
+  keiro-dsl-conformance-ledger.txt
   src/Main.hs
   src/KeiroConformance/Expectations.hs
 ```
@@ -1381,7 +1381,7 @@ distinct `keiro-dsl-conformance.<context>` slot. The explicit package name is
 required because a service such as `mori` may be implemented by a differently
 named library such as `mori-core`.
 
-The runtime build manifest exposes one generated service facade and keeps all
+The runtime Cabal fragment exposes one generated service facade and keeps all
 per-node modules internal. Add the facade to the runtime library exactly as the
 manifest says. Then add one stable glob to the repository's root
 `cabal.project`:
@@ -1406,13 +1406,13 @@ first scaffold. Later scaffolds never overwrite it, including under
 change. Added, removed, duplicate, or changed facts make the generated target
 fail until reviewed.
 
-The package record makes repeat runs observable: byte-identical generated files
+The package ledger makes repeat runs observable: byte-identical generated files
 are reported `unchanged`, Expectations is reported `skipped: already present`,
 and removed package files are reported stale but never deleted. Package and
 runtime ownership checks both finish before either tree is written, so a
 bannerless generated Cabal or runner file refuses the complete scaffold.
 
-The text `keiro-dsl-manifest.*.txt` remains authoritative for runtime-library
+The text `keiro-dsl-cabal-fragment.*.txt` remains authoritative for runtime-library
 modules and dependencies. The generated package replaces hand-written harness
 drivers and test stanzas; it does not remove the need to reconcile that runtime
 manifest when generated modules or dependencies change.
@@ -1459,14 +1459,47 @@ lowering support, and existing-file ownership. One refusal stops the write.
 `--force-generated-overwrite` bypasses only the missing-banner protection for
 a generated target; it does not overwrite create-once hand code.
 
-Every successful run writes:
+### Scaffold sidecars
 
-- a `keiro-dsl-manifest.<context>.txt`, or workspace-keyed equivalent, with
-  Cabal module and dependency entries;
-- a scaffold record with source language, generated paths, mapped provenance,
-  and ownership; and
-- a report classifying created, overwritten, unchanged, skipped, and stale
-  paths.
+Every sidecar name states who owns the file and what it does:
+
+- `keiro-dsl-ledger.context.<context>.txt` or
+  `keiro-dsl-ledger.workspace.<service>.txt` is the machine-owned history read
+  by later scaffold runs. It carries source language, generated paths, mapped
+  provenance, and ownership. Commit it; do not edit or discard it.
+- `keiro-dsl-cabal-fragment.context.<context>.txt` or
+  `keiro-dsl-cabal-fragment.workspace.<service>.txt` is human-facing text to
+  paste into the consuming Cabal stanza.
+- `keiro-dsl-conformance-ledger.txt`, inside an enabled conformance package,
+  is machine-owned package history. Its typed JSON rows tolerate unknown row
+  kinds and unknown JSON keys while still rejecting corrupt records, unsafe
+  paths, duplicate paths, and a mismatched service key.
+- `keiro-dsl-migration-report.workspace.<service>.txt` is a one-time human
+  review report produced when a workspace adopts attributable standalone
+  history.
+
+The breaking rename glossary is:
+
+| Before | Current |
+| --- | --- |
+| `keiro-dsl-scaffold-record.<context>.txt` | `keiro-dsl-ledger.context.<context>.txt` |
+| `keiro-dsl-scaffold-record.workspace.<service>.txt` | `keiro-dsl-ledger.workspace.<service>.txt` |
+| `keiro-dsl-conformance-record.txt` | `keiro-dsl-conformance-ledger.txt` |
+| `keiro-dsl-manifest.<context>.txt` | `keiro-dsl-cabal-fragment.context.<context>.txt` |
+| `keiro-dsl-manifest.workspace.<service>.txt` | `keiro-dsl-cabal-fragment.workspace.<service>.txt` |
+
+If any old-name sidecar remains, ordinary scaffolding refuses before reading
+history or writing output and lists every required move. Review the list and
+rerun with `--apply-name-migrations`. A lone old file is renamed losslessly; if
+both names exist, the new file stays authoritative and the old bytes move under
+`.keiro-dsl-name-migrations/sidecar-v1/`. A legacy conformance record is
+converted to the current ledger format while its original bytes are retained in
+that backup slot. A further run plans no sidecar moves. The `superseded-by:`
+marker remains exclusive to workspace adoption and is never written by a
+sidecar rename.
+
+Every successful run also reports created, overwritten, unchanged, skipped,
+and stale paths.
 
 With an effective runtime package, the same run also writes the one
 service-keyed conformance package described above and prints its exact
@@ -1484,7 +1517,7 @@ the original bytes below
 `.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/`, rewrites only exact module
 references in Haskell code (never comments or literals), and writes current-only
 manifest/record paths. Source and transformed digests plus same-directory prepared
-files make an interrupted move resumable; changed backup, prepared, or destination
+files make an interrupted source move resumable; changed backup, prepared, or destination
 bytes refuse with conflict evidence. The flag does not authorize unrelated stale,
 module-root, or layout moves, and `--force-generated-overwrite` cannot bypass it.
 

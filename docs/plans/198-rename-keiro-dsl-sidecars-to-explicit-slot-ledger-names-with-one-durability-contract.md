@@ -51,20 +51,32 @@ pre-rename run, with the ledgers now under their new names and no orphaned old-n
 
 ## Progress
 
-- [ ] M1: Sidecar name authority module and new context/workspace ledger + cabal-fragment
-      names wired through scaffold, workspace scaffold, and adoption.
-- [ ] M1: `SidecarMigrationRequired` refusal and `--apply-name-migrations` sidecar move
-      (rename, duplicate retirement to backup slot) for context/workspace ledgers and
-      cabal fragments.
-- [ ] M2: Conformance ledger renamed to `keiro-dsl-conformance-ledger.txt` and rebuilt on
-      workspace-record row conventions with legacy-format conversion during migration.
+- [x] (2026-08-05T21:03:29Z) M1: Added the `Keiro.Dsl.SidecarNames` authority and wired
+      the new context/workspace ledger and cabal-fragment names through standalone,
+      workspace, and adoption code; `cabal build keiro-dsl` passes.
+- [x] (2026-08-05T21:03:29Z) M1: Added `SidecarMigrationRequired`, duplicate retirement,
+      recoverable sidecar backups, applied-move reporting, and pre-read planning in both
+      scaffold entry points.
+- [ ] M1: Add and pass refusal, apply, idempotence, duplicate-retirement, stale/drift,
+      adoption, and explicit-slot non-collision regressions.
+- [x] (2026-08-05T21:03:29Z) M2: Renamed the conformance ledger and rebuilt its renderer
+      and parser on header-plus-typed-JSON rows with unknown-extension tolerance; legacy
+      conversion is part of the sidecar migration planner and the library builds.
+- [ ] M2: Add and pass unknown-row/key, mismatch, unsafe/awkward-path, and legacy
+      conversion regressions.
 - [ ] M3: Test suite and committed fixture sweep, regressions, user-guide sidecar section
       with old-to-new glossary, CHANGELOG breaking entry, ADR distillation.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: The already-planned `ConformancePackagePlan` carries the relative package
+  directory before filesystem preflight, so the sidecar migration layer can locate and
+  convert a legacy conformance record before `preflightConformancePackage` reads history,
+  without moving record-format ownership out of `Keiro.Dsl.ConformancePackage`.
+  Evidence: `cabal build keiro-dsl` compiled the resulting acyclic dependency order
+  `SidecarNames -> ConformancePackage -> SidecarMigration -> ScaffoldRun`.
+  Date: 2026-08-05.
 
 
 ## Decision Log

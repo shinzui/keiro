@@ -18,6 +18,7 @@ module Keiro.Dsl.ConformancePackage
     conformanceRecordFileName,
     planConformancePackage,
     parseConformancePackageRecord,
+    parseLegacyConformancePackageRecord,
     renderConformancePackageRecord,
     preflightConformancePackage,
     executePreparedConformancePackage,
@@ -28,17 +29,22 @@ module Keiro.Dsl.ConformancePackage
 where
 
 import Control.Monad (forM)
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as BL
 import Data.Char (isAlphaNum, isAscii, ord)
 import Data.List (groupBy, sortOn)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), isCabalPackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (ModuleKind (..), generatedBannerFor, isGeneratedBannerLine)
 import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.ServiceHarness (serviceConformanceFactValues)
+import Keiro.Dsl.SidecarNames (conformanceLedgerFileName)
 import Numeric (showHex)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (isAbsolute, splitDirectories, takeDirectory, (</>))
@@ -126,7 +132,7 @@ data ConformancePackageReport = ConformancePackageReport
   deriving stock (Eq, Show)
 
 conformanceRecordFileName :: FilePath
-conformanceRecordFileName = "keiro-dsl-conformance-record.txt"
+conformanceRecordFileName = conformanceLedgerFileName
 
 conformancePackageDirectory :: ConformanceServiceKey -> FilePath
 conformancePackageDirectory = \case
@@ -313,25 +319,49 @@ renderExpectations facts =
 renderConformancePackageRecord :: ConformancePackageRecord -> Text
 renderConformancePackageRecord record =
   T.unlines $
-    [ "schema " <> tshow (cprSchema record),
+    [ conformanceLedgerHeader,
       "service-key " <> renderServiceKey (cprServiceKey record),
       "runtime-package " <> unRuntimePackageName (cprRuntimePackage record),
       "facade-module " <> cprFacadeModule record
     ]
-      <> ["file " <> kindLabel fileKind <> " " <> T.pack path | (fileKind, path) <- cprFiles record]
-  where
-    kindLabel Generated = "generated"
-    kindLabel HoleStub = "create-once"
+      <> ["file " <> encodeConformanceFileRow (ConformanceFileRow fileKind path) | (fileKind, path) <- cprFiles record]
 
 parseConformancePackageRecord :: Text -> Maybe ConformancePackageRecord
-parseConformancePackageRecord input = do
+parseConformancePackageRecord input = case meaningfulLines input of
+  header : rows
+    | header == conformanceLedgerHeader -> parseRows rows
+  _ -> Nothing
+  where
+    parseRows rows = do
+      serviceKey <- exactlyOne [value | row <- rows, Just raw <- [T.stripPrefix "service-key " row], Just value <- [parseServiceKeyText raw]]
+      runtimePackage <- exactlyOne [value | row <- rows, Just raw <- [T.stripPrefix "runtime-package " row], Right value <- [mkRuntimePackageName raw]]
+      facadeModule <- exactlyOne [value | row <- rows, Just value <- [T.stripPrefix "facade-module " row], not (T.null value), T.all (not . (`elem` [' ', '\t'])) value]
+      fileRows <- traverse decodeConformanceFileRow [row | row <- rows, "file " `T.isPrefixOf` row]
+      let files = [(conformanceRowKind row, conformanceRowPath row) | row <- fileRows]
+      if safeServiceKey serviceKey && safeConformanceFiles files
+        then
+          Just
+            ConformancePackageRecord
+              { cprSchema = 1,
+                cprServiceKey = serviceKey,
+                cprRuntimePackage = runtimePackage,
+                cprFacadeModule = facadeModule,
+                cprFiles = files
+              }
+        else Nothing
+
+-- | Parser for the record format emitted before the ledger rename. It remains
+-- exported only so the refuse-then-apply sidecar migration can convert an old
+-- record without losing its stale-file history.
+parseLegacyConformancePackageRecord :: Text -> Maybe ConformancePackageRecord
+parseLegacyConformancePackageRecord input = do
   schema <- exactlyOne [value | ["schema", raw] <- rows, Just value <- [readInt raw]]
-  serviceKey <- exactlyOne [value | "service-key" : rest <- rows, Just value <- [parseServiceKey rest]]
+  serviceKey <- exactlyOne [value | "service-key" : rest <- rows, Just value <- [parseServiceKeyWords rest]]
   runtimePackage <- exactlyOne [value | ["runtime-package", raw] <- rows, Right value <- [mkRuntimePackageName raw]]
   facadeModule <- exactlyOne [value | ["facade-module", value] <- rows]
   files <- traverse parseFile [row | row@(keyword : _) <- rows, keyword == "file"]
   let knownRows = 4 + length files
-  if schema == 1 && knownRows == length rows && safeServiceKey serviceKey && safeFiles files
+  if schema == 1 && knownRows == length rows && safeServiceKey serviceKey && safeConformanceFiles files
     then
       Just
         ConformancePackageRecord
@@ -343,19 +373,68 @@ parseConformancePackageRecord input = do
           }
     else Nothing
   where
-    rows = [T.words line | line <- T.lines input, let stripped = T.strip line, not (T.null stripped), not (isGeneratedBannerLine stripped)]
-    parseServiceKey ["workspace", value] = Just (WorkspaceConformanceService value)
-    parseServiceKey ["standalone", value] = Just (StandaloneConformanceService value)
-    parseServiceKey _ = Nothing
+    rows = map T.words (meaningfulLines input)
     parseFile ["file", "generated", path] = Just (Generated, T.unpack path)
     parseFile ["file", "create-once", path] = Just (HoleStub, T.unpack path)
     parseFile _ = Nothing
-    safeFiles files =
-      all (safeRelativePath . snd) files
-        && length files == Set.size (Set.fromList (map (T.toCaseFold . T.pack . snd) files))
     readInt raw = case reads (T.unpack raw) of
       [(value, "")] -> Just value
       _ -> Nothing
+
+conformanceLedgerHeader :: Text
+conformanceLedgerHeader = "keiro-dsl conformance ledger v1"
+
+data ConformanceFileRow = ConformanceFileRow
+  { conformanceRowKind :: !ModuleKind,
+    conformanceRowPath :: !FilePath
+  }
+
+instance ToJSON ConformanceFileRow where
+  toJSON row =
+    object
+      [ "kind" .= case conformanceRowKind row of Generated -> "generated" :: Text; HoleStub -> "create-once",
+        "path" .= T.pack (conformanceRowPath row)
+      ]
+
+instance FromJSON ConformanceFileRow where
+  parseJSON = withObject "ConformanceFileRow" $ \fields -> do
+    kindLabel <- fields .: "kind"
+    fileKind <- case (kindLabel :: Text) of
+      "generated" -> pure Generated
+      "create-once" -> pure HoleStub
+      other -> fail ("unknown conformance file kind: " <> T.unpack other)
+    path <- fields .: "path"
+    pure (ConformanceFileRow fileKind (T.unpack (path :: Text)))
+
+encodeConformanceFileRow :: ConformanceFileRow -> Text
+encodeConformanceFileRow = Text.decodeUtf8 . BL.toStrict . Aeson.encode
+
+decodeConformanceFileRow :: Text -> Maybe ConformanceFileRow
+decodeConformanceFileRow row = do
+  payload <- T.stripPrefix "file " row
+  Aeson.decodeStrict' (Text.encodeUtf8 payload)
+
+meaningfulLines :: Text -> [Text]
+meaningfulLines input =
+  [ stripped
+  | line <- T.lines input,
+    let stripped = T.strip line,
+    not (T.null stripped),
+    not (isGeneratedBannerLine stripped)
+  ]
+
+parseServiceKeyText :: Text -> Maybe ConformanceServiceKey
+parseServiceKeyText = parseServiceKeyWords . T.words
+
+parseServiceKeyWords :: [Text] -> Maybe ConformanceServiceKey
+parseServiceKeyWords ["workspace", value] = Just (WorkspaceConformanceService value)
+parseServiceKeyWords ["standalone", value] = Just (StandaloneConformanceService value)
+parseServiceKeyWords _ = Nothing
+
+safeConformanceFiles :: [(ModuleKind, FilePath)] -> Bool
+safeConformanceFiles files =
+  all (safeRelativePath . snd) files
+    && length files == Set.size (Set.fromList (map (T.toCaseFold . T.pack . snd) files))
 
 preflightConformancePackage :: FilePath -> Bool -> ConformancePackagePlan -> IO (Either [ConformancePackageFailure] PreparedConformancePackage)
 preflightConformancePackage out forceGeneratedOverwrite plan = do

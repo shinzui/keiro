@@ -26,6 +26,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
+import Keiro.Dsl.SidecarNames (contextLedgerFileName)
 import System.FilePath (isAbsolute, splitDirectories)
 
 data ScaffoldRecord = ScaffoldRecord
@@ -224,7 +225,7 @@ parseRecord contents = case T.lines contents of
        in length keys /= length (nub keys)
 
 recordFileName :: Text -> FilePath
-recordFileName context = "keiro-dsl-scaffold-record." <> T.unpack context <> ".txt"
+recordFileName = contextLedgerFileName
 
 mappingRowPrefix :: MappingIdentity -> Text
 mappingRowPrefix NominalMapping {} = "nominal-mapping "

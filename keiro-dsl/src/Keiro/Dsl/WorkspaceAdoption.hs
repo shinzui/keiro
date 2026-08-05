@@ -48,8 +48,9 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Scaffold (ModuleKind (..), ScaffoldModule (..), isGeneratedBannerLine)
-import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord)
 import Keiro.Dsl.ScaffoldRun (StaleGeneratedEvidence (..), StaleModule (..), staleAgainst)
+import Keiro.Dsl.SidecarNames (contextLedgerFileName, legacyContextRecordFileName)
 import Keiro.Dsl.WorkspaceRecord (AdoptedRow (..), supersededByLine, workspaceMigrationReportFileName)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath ((</>))
@@ -89,9 +90,11 @@ data MigrationReport = MigrationReport
 -- or marked.
 adoptionReport :: FilePath -> Text -> Text -> [ScaffoldModule] -> IO (Maybe MigrationReport)
 adoptionReport out context service modules = do
-  legacy <- readLegacyRecord (out </> legacyName)
+  ledger <- readContextLedger out context
   present <- Set.fromList <$> outputTreeFiles out
-  let plannedGenerated = [modulePath m | m <- modules, kind m == Generated]
+  let legacyName = maybe (contextLedgerFileName context) fst ledger
+      legacy = snd <$> ledger
+      plannedGenerated = [modulePath m | m <- modules, kind m == Generated]
       plannedAll = Set.fromList (map modulePath modules)
       onDisk path = path `Set.member` present
 
@@ -147,8 +150,6 @@ adoptionReport out context service modules = do
     if null claimed && null likelyStale && null unclaimed && isNothing legacy
       then Nothing
       else Just report
-  where
-    legacyName = recordFileName context
 
 -- | The record rows an adopting run adds to the new workspace record.
 adoptedRows :: MigrationReport -> [AdoptedRow]
@@ -169,11 +170,11 @@ adoptedRows report =
 -- as it is, so a re-run after an interrupted adoption cannot accumulate markers.
 markLegacyRecordSuperseded :: FilePath -> Text -> Text -> IO ()
 markLegacyRecordSuperseded out context service = do
-  let path = out </> recordFileName context
-  exists <- doesFileExist path
-  if not exists
-    then pure ()
-    else do
+  ledgerPath <- existingContextLedgerPath out context
+  case ledgerPath of
+    Nothing -> pure ()
+    Just relativePath -> do
+      let path = out </> relativePath
       contents <- TIO.readFile path
       let marker = supersededByLine service
       if marker `elem` T.lines contents
@@ -200,10 +201,23 @@ outputTreeFiles root = do
         then walk child
         else pure [child | ".hs" `T.isSuffixOf` T.pack child]
 
-readLegacyRecord :: FilePath -> IO (Maybe ScaffoldRecord)
-readLegacyRecord path = do
-  exists <- doesFileExist path
-  if exists then parseRecord <$> TIO.readFile path else pure Nothing
+readContextLedger :: FilePath -> Text -> IO (Maybe (FilePath, ScaffoldRecord))
+readContextLedger out context = do
+  relativePath <- existingContextLedgerPath out context
+  case relativePath of
+    Nothing -> pure Nothing
+    Just path -> fmap ((,) path) . parseRecord <$> TIO.readFile (out </> path)
+
+existingContextLedgerPath :: FilePath -> Text -> IO (Maybe FilePath)
+existingContextLedgerPath out context = do
+  let current = contextLedgerFileName context
+      legacy = legacyContextRecordFileName context
+  currentExists <- doesFileExist (out </> current)
+  if currentExists
+    then pure (Just current)
+    else do
+      legacyExists <- doesFileExist (out </> legacy)
+      pure (if legacyExists then Just legacy else Nothing)
 
 hasGeneratedBanner :: FilePath -> IO Bool
 hasGeneratedBanner path = do

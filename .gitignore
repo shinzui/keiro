@@ -19,6 +19,8 @@ db/
 # keiro-dsl scaffold metadata artifacts (informational; emitted into --out)
 keiro-dsl-manifest.*.txt
 keiro-dsl-scaffold-record.*.txt
+keiro-dsl-cabal-fragment.*.txt
+keiro-dsl-ledger.*.txt
 
 # Scratch benchmark baselines captured before code changes; committed baselines
 # live under keiro/bench/baseline-*.csv after the implementation is complete.

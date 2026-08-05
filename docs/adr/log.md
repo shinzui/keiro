@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Update**: Replace historical record/manifest path authority with current explicit-slot ledger and Cabal-fragment names (plan 198).
+* **Add**: Define role-bearing sidecar names, explicit ledger slots, lossless migration, and forward-compatible conformance history (plan 198).
 * **Update**: Record strict, warning, and descriptive-only boundaries for every accepted service surface (plan 197).
 * **Update**: Require explicit signatures, semantic import planning, and zero-warning generated conformance output under -Wall (plan 196).
 * **Update**: Clarify generated behavior evidence with stable human-attributable subjects and actual/expected runtime values (plan 196).

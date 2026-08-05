@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Workspace scaffold history is workspace-keyed with attributable adoption
-description: A whole-workspace scaffold keys its record and build manifest by the service name, remembers which member produced each module, and imports pre-workspace output only where attribution exists.
-timestamp: 2026-08-05T17:05:38Z
+description: A whole-workspace scaffold keys its machine ledger and Cabal fragment by the service name, remembers which member produced each module, and imports pre-workspace output only where attribution exists.
+timestamp: 2026-08-05T21:24:11Z
 docId: ADR-15
 status: Accepted
 date: 2026-07-29
@@ -23,8 +23,9 @@ through a `.keiro-workspace` manifest whose `service` name is the durable
 identity. That decided what a workspace *is*. It did not decide what a workspace
 *leaves on disk*.
 
-The artifacts that record scaffold output were keyed only by the spec's context
-name — `keiro-dsl-scaffold-record.<context>.txt` and
+Before workspace support, the artifacts that recorded scaffold output were keyed
+only by the spec's context name —
+`keiro-dsl-scaffold-record.<context>.txt` and
 `keiro-dsl-manifest.<context>.txt` — and carried no notion of which source file
 produced which module. Two same-context specs scaffolded into one output
 directory therefore replaced each other's record, reported each other's modules
@@ -40,23 +41,19 @@ finds but did not produce?
 
 ## Decision
 
-**History is keyed by the service, in a slot no context name can reach.** A
-whole-workspace run writes `keiro-dsl-scaffold-record.workspace.<service>.txt`
-and `keiro-dsl-manifest.workspace.<service>.txt`. A context name is lexed as
-ASCII letters, digits, `_`, and `-`, so it can never contain a dot; the
-`workspace.` segment therefore provably cannot alias a legacy context-keyed
-name, even for the very likely case where a service is named after its context.
-The bare `keiro-dsl-scaffold-record.<service>.txt` spelling was rejected for
-exactly that aliasing: an older keiro-dsl binary running a single-file scaffold
-would fail to parse a workspace record sitting at the legacy path, conclude the
-directory had no history, and overwrite it — silent destruction of workspace
-history by an older tool. Distinct names make old binaries structurally
-incapable of touching workspace history.
+**History is keyed by the service, in an explicit workspace slot.** A
+whole-workspace run writes `keiro-dsl-ledger.workspace.<service>.txt` and the
+human-facing `keiro-dsl-cabal-fragment.workspace.<service>.txt`; a standalone run
+uses the structurally distinct `context` slot. The literal second segments make
+the two current namespaces non-colliding by construction, including for a
+context literally named `workspace`. Existing old-name sidecars are handled by
+the explicit refuse-then-apply migration contract in ADR 0022, never interpreted
+as missing history.
 
-**The two paths coexist; only the workspace path is new.** The single-file path
-keeps its context-keyed names, its bytes, and its report format unchanged. The
-workspace path never reads or writes a context-keyed name, with one deliberate
-exception: the adoption step, below.
+**The two current paths coexist.** Standalone and workspace histories have
+distinct context- and workspace-keyed ledger slots and retain their existing
+record bytes and report semantics. The workspace path never reads or writes a
+context-keyed name, with one deliberate exception: the adoption step, below.
 
 **The record remembers per-module source ownership.** Each module row carries
 the member file that produced it. An absent owner means *context-level*: emitted
@@ -77,9 +74,9 @@ overwriting a Generated module and reports `unchanged` without writing when they
 match. A re-run with no source edits therefore proves it changed nothing, rather
 than asserting it.
 
-**Repository conformance histories track their record and manifest twins.** The
-`keiro-dsl/test` conformance corpus force-tracks the authoritative scaffold record
-and generated build manifest for every committed history, even though the repository-wide
+**Repository conformance histories track their ledger and Cabal-fragment twins.** The
+`keiro-dsl/test` conformance corpus force-tracks the authoritative scaffold ledger
+and generated Cabal fragment for every committed history, even though the repository-wide
 ignore rules continue to hide these metadata artifacts for ordinary consumer scaffolds.
 Regeneration tooling discovers only tracked records, so a clean checkout has the same
 provenance and replay inputs as the checkout that created the corpus. A skeleton corpus
@@ -125,7 +122,7 @@ provenance only; deletion additionally requires a clean version-control
 comparison or a byte comparison with output regenerated from the same source in
 a disposable directory. A missing exact banner is an explicit preserve-and-review
 result. Hole paths are always preserved for review. When no earlier record exists,
-there is no stale report: operators reconcile the regenerated build manifest with
+there is no stale report: operators reconcile the regenerated Cabal fragment with
 the old module tree and Cabal stanza manually. Ordinary stale reconciliation
 deletes no files and edits no Cabal stanza.
 
@@ -229,3 +226,5 @@ change the generated harness.
 - ADR 0012 requires one schema authority per structural mapping, which is why
   the structural projection facade is emitted exactly once from the merged graph
   and recorded as context-level rather than attributed to a member.
+- ADR 0022 defines the current role-bearing sidecar names, forward-compatible
+  ledger contract, and explicit migration from the historical names cited here.

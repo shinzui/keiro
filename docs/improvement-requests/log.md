@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Implemented**: Close IR-19 after Plan 198 ships role-bearing sidecar names, explicit lossless migration, and a forward-compatible conformance ledger.
 * **Implemented**: Close IR-18 after Plan 191 unifies source-wide transition identity and proves replay-only initial conformance across single, workspace, and generated service paths.
 * **Planning**: IR-19 is revised and planned by
 [Plan 198](../plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md)

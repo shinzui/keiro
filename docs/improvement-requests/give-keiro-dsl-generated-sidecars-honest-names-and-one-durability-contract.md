@@ -5,9 +5,9 @@ description: >-
   Rename the scaffolder's generated sidecar files so each name states whether keiro-dsl or a human
   owns it, migrate existing history loudly through the refuse-then-apply rail without losing it,
   and hold the conformance package record to the workspace record's forward-compatibility contract.
-timestamp: 2026-08-05T12:55:00Z
+timestamp: 2026-08-05T21:24:11Z
 requestId: IR-19
-status: planned
+status: implemented
 origin: mori://shinzui/keiro
 plan: docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md
 ---
@@ -16,10 +16,13 @@ plan: docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-wit
 
 ## Status
 
-**Planned.**
+**Implemented.**
 [Plan 198](../plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md)
-under [MasterPlan 29](../masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md) implements this
-request in the current breaking release window.
+under [MasterPlan 29](../masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md) implements the
+role-bearing names, refuse-then-apply migration, explicit-slot collision rule, forward-compatible
+conformance ledger, regression coverage, and user/release documentation in the current breaking
+release window. [ADR 0022](../adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md)
+records the durable contract.
 
 Revised 2026-08-05 during planning review. The diagnosis and goal are unchanged; the requested
 solution changed in three ways, each recorded with rationale in Plan 198's Decision Log. First,

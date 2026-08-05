@@ -88,6 +88,8 @@ import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
+import Keiro.Dsl.SidecarMigration
+import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
@@ -122,6 +124,8 @@ data Refusal
   | GeneratedNameInvariantViolation ![Text]
   | NameMigrationRequired ![SourceMove]
   | NameMigrationRefusal ![Text]
+  | SidecarMigrationRequired ![SidecarMove]
+  | SidecarMigrationRefusal ![Text]
   deriving stock (Eq, Show)
 
 -- | What one module write did. 'Unchanged' is produced only by the workspace
@@ -175,7 +179,8 @@ data ScaffoldReport = ScaffoldReport
     reportRemovedBehavior :: ![BehaviorRecordRow],
     reportObsoleteOutputHooks :: ![(Text, Text)],
     reportConformancePackage :: !(Maybe ConformancePackageReport),
-    reportNameMoves :: ![SourceMove]
+    reportNameMoves :: ![SourceMove],
+    reportSidecarMoves :: ![SidecarMove]
   }
   deriving stock (Eq, Show)
 
@@ -661,12 +666,22 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
       pure (Left [SemanticContractMismatch "source provenance and checked service selected different effective language contracts"])
   | otherwise = case packagePlan of
       Left failures -> pure (Left (map ConformancePackageRefusal failures))
-      Right Nothing -> executeCheckedScaffold Nothing
-      Right (Just plannedPackage) -> do
-        prepared <- preflightConformancePackage out forceGeneratedOverwrite plannedPackage
-        case prepared of
-          Left failures -> pure (Left (map ConformancePackageRefusal failures))
-          Right packageReady -> executeCheckedScaffold (Just packageReady)
+      Right plannedPackage -> do
+        sidecarResult <- planSidecarMigrations out (ContextSidecars (specContext spec)) plannedPackage
+        case sidecarResult of
+          Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
+          Right preparedSidecars
+            | not (null preparedSidecars) && not applyNameMigrations ->
+                pure (Left [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)])
+            | otherwise -> do
+                applyPreparedSidecarMoves out preparedSidecars
+                case plannedPackage of
+                  Nothing -> executeCheckedScaffold (map preparedSidecarMove preparedSidecars) Nothing
+                  Just package -> do
+                    preparedPackage <- preflightConformancePackage out forceGeneratedOverwrite package
+                    case preparedPackage of
+                      Left failures -> pure (Left (map ConformancePackageRefusal failures))
+                      Right packageReady -> executeCheckedScaffold (map preparedSidecarMove preparedSidecars) (Just packageReady)
   where
     spec = checkedSpec service
     modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
@@ -677,7 +692,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
       traverse
         (\packageName -> planConformancePackage (StandaloneConformanceService (contextName ctx)) packageName (serviceConformanceModuleName ctx) service)
         runtimePackage
-    executeCheckedScaffold preparedPackage =
+    executeCheckedScaffold sidecarMoves preparedPackage =
       case deriveBehaviorRequirements spec of
         Left errors -> pure (Left [BehaviorRefusal errors])
         Right requirements -> do
@@ -712,7 +727,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                               (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . recBehaviorRequirements) previousRecord
                           createDirectoryIfMissing True out
                           dispositions <- mapM (writeModule out) modules
-                          let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
+                          let manifestPath = out </> contextCabalFragmentFileName (specContext spec)
                           TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
                           TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
                           packageReport <- traverse executePreparedConformancePackage preparedPackage
@@ -745,7 +760,8 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportRemovedBehavior = removedBehavior,
                                   reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
                                   reportConformancePackage = packageReport,
-                                  reportNameMoves = map preparedSourceMove prepared
+                                  reportNameMoves = map preparedSourceMove prepared,
+                                  reportSidecarMoves = sidecarMoves
                                 }
 
 planRecordedSourceMoves :: Maybe ScaffoldRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
@@ -1086,6 +1102,14 @@ renderRefusals = concatMap render
     render (NameMigrationRefusal reasons) =
       ["error: name migration could not be applied safely; nothing was written"]
         <> map ("  " <>) reasons
+    render (SidecarMigrationRequired moves) =
+      [ "error: sidecar migration required; nothing was written",
+        "re-run scaffold with --apply-name-migrations after reviewing these sidecar renames:"
+      ]
+        <> map (("  " <>) . renderSidecarMove) moves
+    render (SidecarMigrationRefusal reasons) =
+      ["error: sidecar migration could not be applied safely; nothing was written"]
+        <> map ("  " <>) reasons
     render (FoldSurfaceRefusal surfaceError) =
       [ "error: aggregate fold identity could not be resolved -- refusing to scaffold; nothing was written",
         "  " <> renderFoldSurfaceError surfaceError
@@ -1134,6 +1158,7 @@ renderScaffoldReport report =
     <> sourceLanguageDriftSection
     <> behaviorDriftSection
     <> obsoleteOutputSection
+    <> sidecarMoveSection
     <> nameMoveSection
     <> staleSection
     <> maybe [] renderConformancePackageReport (reportConformancePackage report)
@@ -1236,6 +1261,11 @@ renderScaffoldReport report =
       hooks ->
         ["obsolete identity-copy output hooks (if still present, they are unused and may be removed):"]
           <> ["  " <> aggregate <> ".Holes." <> hook | (aggregate, hook) <- hooks]
+    sidecarMoveSection = case reportSidecarMoves report of
+      [] -> []
+      moves ->
+        ["sidecar migration: applied (" <> tshow (length moves) <> " move(s))"]
+          <> map (("  " <>) . renderSidecarMove) moves
     nameMoveSection = case reportNameMoves report of
       [] -> []
       moves ->

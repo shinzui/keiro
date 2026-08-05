@@ -125,7 +125,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Complete |
 | 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | Complete |
 | 197 | Enforce or refuse every accepted spec surface | docs/plans/197-enforce-or-refuse-every-accepted-spec-surface.md | None | EP-193 | Complete |
-| 198 | Rename keiro-dsl sidecars to explicit-slot ledger names with one durability contract | docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md | None | None | Not Started |
+| 198 | Rename keiro-dsl sidecars to explicit-slot ledger names with one durability contract | docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md | None | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by plan number (e.g., EP-195).

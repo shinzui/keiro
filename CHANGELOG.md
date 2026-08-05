@@ -8,6 +8,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-dsl**: scaffold sidecars now use role-bearing names:
+  `keiro-dsl-scaffold-record.<context>.txt` becomes
+  `keiro-dsl-ledger.context.<context>.txt`, the workspace form becomes
+  `keiro-dsl-ledger.workspace.<service>.txt`, the conformance record becomes
+  `keiro-dsl-conformance-ledger.txt`, and both generated `keiro-dsl-manifest.*`
+  files become explicit `keiro-dsl-cabal-fragment.context.*` or
+  `.workspace.*` files. An existing old-name tree now refuses without writing;
+  review the listed moves and rerun `scaffold --apply-name-migrations` to rename
+  them losslessly or preserve duplicate old files under
+  `.keiro-dsl-name-migrations/sidecar-v1/`.
+- **keiro-dsl**: `Refusal` gains `SidecarMigrationRequired` and
+  `SidecarMigrationRefusal`, while `ScaffoldReport` and
+  `WorkspaceScaffoldReport` gain their applied-sidecar-move fields; exhaustive
+  consumers must be extended. The renamed conformance ledger also moves from
+  whitespace rows to the versioned `keiro-dsl conformance ledger v1` format
+  with typed JSON file rows. Its parser now ignores unknown row kinds and JSON
+  keys while retaining service-key, malformed-record, unsafe-path, and
+  case-folded duplicate-path refusals; legacy conformance records are converted
+  only by the explicit name-migration apply path.
 - **keiro-core**, **keiro**, and **keiro-dsl** now require
   `keiki >=0.9 && <0.10`; **keiro** also requires
   `keiki-codec-json >=0.9 && <0.10`. Keiki 0.9 seals `InCtor` and `WireCtor`
