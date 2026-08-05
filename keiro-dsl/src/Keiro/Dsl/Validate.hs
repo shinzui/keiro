@@ -395,6 +395,10 @@ data DiagnosticCode
     EvtFieldWireKeyChanged
   | -- ExecPlan 193: a CI-required released language floor was not met.
     LanguageVersionBelowMinimum
+  | -- ExecPlan 194: scaffold's empty-node refusals are reported by check at
+    -- the owning declaration before planning begins.
+    AggregateEmpty
+  | ContractEmpty
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.
@@ -1626,7 +1630,8 @@ validateNode _languageContract spec (NOperation o) = validateOperation spec o
 
 validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
-  typeIdPrefixErrors
+  emptyContract
+    <> typeIdPrefixErrors
     <> schemaVersionFloor
     <> topicNames
     <> duplicateEvents
@@ -1636,6 +1641,13 @@ validateContract languageContract contract =
     <> fieldWireKeyRules
     <> unresolvedTopicAliases
   where
+    emptyContract =
+      [ mkErr (locLine (ctrLoc contract)) ContractEmpty $
+          "contract '"
+            <> ctrName contract
+            <> "' declares no events; scaffold cannot lower an empty contract -- declare at least one event"
+      | null (ctrEvents contract)
+      ]
     typeIdPrefixErrors =
       [ mkErr (locLine (cfLoc field)) ContractInvalidTypeIdPrefix $
           "contract '"
@@ -2620,7 +2632,8 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
 validateAggregate :: EffectiveLanguageContract -> Spec -> Aggregate -> [Diagnostic]
 validateAggregate languageContract spec agg =
   concat
-    [ duplicateMembers,
+    [ emptyAggregate,
+      duplicateMembers,
       declaredRefs,
       eventBodyRefs,
       outputMappingRules,
@@ -2639,6 +2652,29 @@ validateAggregate languageContract spec agg =
       fieldWireKeyRules
     ]
   where
+    emptyAggregate =
+      [ mkErr (locLine (aggLoc agg)) AggregateEmpty $
+          "aggregate '"
+            <> aggName agg
+            <> "' declares "
+            <> renderMissing missingAggregateParts
+            <> "; scaffold cannot lower an empty aggregate -- declare at least one command, one event, and one transition"
+      | not (null missingAggregateParts)
+      ]
+    missingAggregateParts =
+      [ label
+      | (isMissing, label) <-
+          [ (null (aggCommands agg), "no commands"),
+            (null (aggEvents agg), "no events"),
+            (null (aggTransitions agg), "no transitions")
+          ],
+        isMissing
+      ]
+    renderMissing [] = ""
+    renderMissing [onlyPart] = onlyPart
+    renderMissing [firstPart, secondPart] = firstPart <> " and " <> secondPart
+    renderMissing parts = T.intercalate ", " (init parts) <> ", and " <> last parts
+
     states = Set.fromList (map stName (aggStates agg))
     terminals = Set.fromList [stName s | s <- aggStates agg, stTerminal s]
     commandFields :: Map Name [Name]

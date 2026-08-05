@@ -15,4 +15,7 @@ mapped structural record Thing {
 aggregate Holder
   regs
     current Thing = initial
-  states Empty!
+  states Empty
+  command Touch { }
+  event Touched = fields(Touch)
+  Empty -- Touch --> emit Touched ; goto Empty

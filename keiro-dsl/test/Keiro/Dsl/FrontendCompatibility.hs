@@ -462,6 +462,8 @@ semanticErrorSource =
       "aggregate Thing",
       "  regs",
       "  states Open",
+      "  command Known { }",
+      "  event KnownHappened = fields(Known)",
       "  Open -- MissingCommand -->",
       "    goto Open"
     ]

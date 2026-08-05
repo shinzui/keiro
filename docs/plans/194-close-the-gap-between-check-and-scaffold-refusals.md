@@ -42,9 +42,12 @@ changes for any valid spec: this plan changes gates only, never output.
   planners, `pureRefusals`, the workspace `check` collision consultation, and the
   `check` CLI wiring; enumerate and classify every scaffold-stage refusal; author this
   plan under Intention `intention_01kz84b5jre3187dmmyjmd02fc`.
-- [ ] Milestone 1: add `AggregateEmpty` and `ContractEmpty` to `validateSpec` as
-  unconditional located errors with tests, keeping the scaffold-side check as defense
-  in depth, and pin check-counterpart parity for every remaining lowering refusal.
+- [x] (2026-08-05 09:17 PDT) Milestone 1: add `AggregateEmpty` and `ContractEmpty` to
+  `validateSpec` as unconditional located errors, keep the scaffold-side check as defense in
+  depth, and pin check-counterpart parity for incomplete backoff, invalid register initial,
+  unrepresentable aggregate field, and missing mapped initial refusals. The focused `empty`
+  match passes 7 examples, the sampled-lowering match passes 1 example, and the complete suite
+  passes 578 examples with zero failures.
 - [ ] Milestone 2: factor the one shared planning-gate pipeline consumed by both
   scaffold planners and both `check` paths, map planner refusals to located
   diagnostics with new appended codes, and pin the gate order with a test.
@@ -80,6 +83,15 @@ changes for any valid spec: this plan changes gates only, never output.
   `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` (near line 224) versus
   `planWorkspaceScaffoldWithRuntimePackageAndGoldens` in
   `keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs` (near line 173).
+
+- Observation: five pre-existing tests used aggregates that were deliberately incomplete beyond
+  the rule under test: the frontend semantic golden had no commands or events, the eventless
+  no-op had no event, two missing-initial fixtures had no commands/events/transitions, and the
+  field-alias proof had no transition. The new unconditional diagnostic correctly made those
+  shapes fail before their intended assertion.
+  Evidence: the first complete run reported 578 examples and exactly five failures headed by
+  `AggregateEmpty`. Each source now declares the smallest valid command/event/transition surface
+  while preserving its original tested fact; the second complete run passes all 578 examples.
 
 
 ## Decision Log
@@ -172,6 +184,14 @@ changes for any valid spec: this plan changes gates only, never output.
   defense in depth but is not the first place an author learns" — and both planners
   will consume the one shared pipeline, so the defense cannot drift from the gate.
   Date: 2026-08-04
+
+- Decision: append EP-194's diagnostic codes after `LanguageVersionBelowMinimum`, the current
+  registry tail established by completed EP-193, rather than after the older
+  `GeneratedHaskellNameChanged` position named when this plan was drafted.
+  Rationale: `DiagnosticCode` is append-only. The MasterPlan's merge-order rule requires a later
+  child to preserve all constructors already landed by earlier children; the code spellings, not
+  obsolete planned positions, are the stable interface.
+  Date: 2026-08-05
 
 
 ## Outcomes & Retrospective

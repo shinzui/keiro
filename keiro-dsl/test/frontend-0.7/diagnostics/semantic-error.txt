@@ -1,1 +1,1 @@
-semantic-error.keiro:5: error[UndeclaredCommand]: transition references undeclared command 'MissingCommand'
+semantic-error.keiro:7: error[UndeclaredCommand]: transition references undeclared command 'MissingCommand'

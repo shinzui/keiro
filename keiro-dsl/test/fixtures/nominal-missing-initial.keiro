@@ -11,5 +11,8 @@ mapped nominal AccountNumber : Text {
 
 aggregate Ledger
   regs accountNumber AccountNumber = initial
-  states Empty!
+  states Empty
+  command Touch { }
+  event Touched = fields(Touch)
+  Empty -- Touch --> emit Touched ; goto Empty
   wire kind=ctorName fields=camelCase schemaVersion=1

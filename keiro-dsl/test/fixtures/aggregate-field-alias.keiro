@@ -11,5 +11,6 @@ aggregate FieldAliasProof
     region haskell serviceRegion as "region_code":Text
   }
   event FieldsCopied = fields(Observe)
+  Open -- Observe --> emit FieldsCopied ; goto Open
 
   wire kind=ctorName fields=camelCase schemaVersion=1

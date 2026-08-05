@@ -1841,6 +1841,7 @@ main = hspec $ do
               "    count Natural = 0",
               "  states Open",
               "  command Tick { count:Natural }",
+              "  event Ticked = fields(Tick)",
               "  Open -- Tick --> goto Open"
             ]
       errorCodes valid `shouldBe` []
@@ -3126,6 +3127,58 @@ main = hspec $ do
     it "accepts the canonical reservation.keiro" $ do
       codes <- errorCodesOf "test/fixtures/reservation.keiro"
       codes `shouldBe` []
+    it "reports empty aggregates at their declaration under legacy and stable contracts" $ do
+      spec <- specOf "test/fixtures/reservation.keiro"
+      case [aggregate | NAggregate aggregate <- specNodes spec] of
+        aggregate : _ -> do
+          let emptyAggregate = aggregate {aggCommands = [], aggEvents = [], aggTransitions = []}
+              emptySpec = spec {specNodes = [NAggregate emptyAggregate]}
+              expectedLine = unLoc (aggLoc aggregate)
+              expectedMessage =
+                "aggregate 'Reservation' declares no commands, no events, and no transitions; scaffold cannot lower an empty aggregate -- declare at least one command, one event, and one transition"
+          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service ->
+            [ (severity diagnostic, line diagnostic, message diagnostic)
+            | diagnostic <- validateService service,
+              code diagnostic == AggregateEmpty
+            ]
+              `shouldBe` [(Error, expectedLine, expectedMessage)]
+          scaffoldRefusals emptySpec `shouldSatisfy` any (T.isPrefixOf "AggregateEmpty:")
+        [] -> expectationFailure "reservation fixture has no aggregate"
+    it "reports empty contracts at their declaration under legacy and stable contracts" $ do
+      spec <- specOf "test/fixtures/contract-v4.keiro"
+      case [contract | NContract contract <- specNodes spec] of
+        contract : _ -> do
+          let emptyContract = contract {ctrEvents = []}
+              emptySpec = spec {specNodes = [NContract emptyContract]}
+              expectedLine = unLoc (ctrLoc contract)
+              expectedMessage =
+                "contract 'emergency' declares no events; scaffold cannot lower an empty contract -- declare at least one event"
+          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service ->
+            [ (severity diagnostic, line diagnostic, message diagnostic)
+            | diagnostic <- validateService service,
+              code diagnostic == ContractEmpty
+            ]
+              `shouldBe` [(Error, expectedLine, expectedMessage)]
+          scaffoldRefusals emptySpec `shouldSatisfy` any (T.isPrefixOf "ContractEmpty:")
+        [] -> expectationFailure "contract fixture has no contract"
+    it "keeps a check-time error counterpart for every sampled lowering refusal class" $ do
+      emitSource <- readTestText "test/fixtures/emit.keiro"
+      incompleteBackoff <- parseInlineSpec "<incomplete-backoff-parity>" (T.replace "backoff constant 2s" "backoff exponential 2s" emitSource)
+      baseAggregate <- parseInlineSpec "<lowering-parity>" loweringAggregateSpec
+      bareTextInitial <- parseInlineSpec "<bare-text-initial-parity>" (T.replace "\"hello world\"" "hello" loweringAggregateSpec)
+      unsupportedField <- parseInlineSpec "<unsupported-field-parity>" (T.replace "count:Int" "count:Json" loweringAggregateSpec)
+      mappedInitial <- specOf "test/fixtures/mapped-missing-initial.keiro"
+      let candidates =
+            [ ("incomplete publisher backoff", incompleteBackoff),
+              ("invalid register initial", bareTextInitial),
+              ("unrepresentable aggregate field", unsupportedField),
+              ("missing mapped register initial", mappedInitial)
+            ]
+      scaffoldRefusals baseAggregate `shouldBe` []
+      forM_ candidates $ \(caseLabel, candidate) ->
+        unless
+          (not (null (scaffoldRefusals candidate)) && any ((== Error) . severity) (validateSpec candidate))
+          (expectationFailure (caseLabel <> " did not fail at both check and scaffold planning"))
     it "rejects policy words that generated Haskell cannot lower" $ do
       emitSpec <- specOf "test/fixtures/emit.keiro"
       intakeSpec <- specOf "test/fixtures/intake.keiro"
