@@ -249,8 +249,8 @@ pIdExpr = do
   keyword "uuidv5"
   pfx <- stringLit
   _ <- symbol "<>"
-  _ <- ident -- correlationId (fixed)
-  pure IdExpr {ideStrategy = UuidV5Id, idePrefix = pfx}
+  field <- ident
+  pure IdExpr {ideStrategy = UuidV5Id, idePrefix = pfx, ideField = field}
 
 pFireAt :: P FireAtExpr
 pFireAt = do

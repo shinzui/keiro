@@ -39,6 +39,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `ConformanceFactKeyCollision`, and `GeneratedPlanningInvariantViolation`;
   exhaustive matches must be extended. Specs that scaffold already could not lower
   now fail earlier during `check`.
+- **keiro-dsl**: `DiagnosticCode` appends thirteen accepted-surface warning and
+  language-4 error codes, including process/router resolution, bounded windows,
+  queue payload types, derived IDs, projection/outbox fields, and the distinct
+  `RouterBenignInversion`; exhaustive matches must be extended. The never-emitted
+  `DuplicateUpcasterSource`, `IdentHaskellKeyword`, `IdentNotConstructorSafe`, and
+  `MappedGuardUnsupported` constructors are removed.
+- **keiro-dsl**: `IdExpr` gains the parsed `ideField`, and `ScaffoldReport` gains
+  `reportInertNodes`; callers constructing or exhaustively matching these exported
+  records must be updated.
 
 ### New Features
 
@@ -55,6 +64,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   CI-failing without changing their severity. `check --report-out` writes the
   append-only `keiro-dsl/check-report/1` source/workspace schema through the new
   `Keiro.Dsl.CheckReport` module.
+- **keiro-dsl**: language 4 now resolves every internally decidable process,
+  router, projection, publisher, queue, pgmq source-key, read-model identity, and
+  timer-ID surface, and rejects duration values that cannot fit the runtime `Int`
+  seconds representation. Released languages 1–3 keep their prior acceptance.
 
 ### Other Changes
 
@@ -86,6 +99,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   one pure gate order: fold surface, lowering, module construction, conformance-package
   planning, then module-plan refusals. Workspace planning therefore reports a lowering
   refusal before a simultaneous facade-key refusal. Valid generated output is unchanged.
+- **keiro-dsl**: accepted but inert intake flags, emit derivations, optional queue
+  markers, and inline subscriptions now warn; scaffold reports list emit, pgmq
+  dispatch, and operation nodes that contribute no modules. Timer dead-letter text,
+  pgmq fanout functions, and pgmq top-level dedupe keys are explicitly
+  descriptive-only. Existing valid generated output remains byte-identical.
 
 ## 0.10.0.0 — 2026-08-03
 

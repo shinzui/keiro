@@ -620,7 +620,7 @@ docTimer t =
     ]
 
 docIdExpr :: IdExpr -> Doc ann
-docIdExpr e = "uuidv5" <+> dquoted (idePrefix e) <+> "<>" <+> "correlationId"
+docIdExpr e = "uuidv5" <+> dquoted (idePrefix e) <+> "<>" <+> pretty (ideField e)
 
 docFireAt :: FireAtExpr -> Doc ann
 docFireAt f = ("input." <> pretty (faField f)) <+> "+" <+> pretty (faWindow f)

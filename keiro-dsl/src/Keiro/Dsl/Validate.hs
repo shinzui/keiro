@@ -77,7 +77,6 @@ data DiagnosticCode
     -- the cross-spec diff path, so the enum remains the single registry of
     -- evolution rules.
     EvtVersionMissingUpcaster
-  | DuplicateUpcasterSource
   | UpcasterChainGap
   | DeprecatedEventReplayHazard
   | EventRetirementInProgress
@@ -184,9 +183,7 @@ data DiagnosticCode
   | DispatchDedupQueueUnresolved
   | DispatchDedupFieldUnresolved
   | -- EP-105 (notation integrity and scaffold-safe names).
-    IdentHaskellKeyword
-  | IdentNotConstructorSafe
-  | VertexCtorCollision
+    VertexCtorCollision
   | IdentUnsafeNormalization
   | GeneratedOccurrenceReserved
   | GeneratedOccurrenceCollision
@@ -255,7 +252,6 @@ data DiagnosticCode
   | MappedInvalidIdentity
   | MappedImportConflict
   | MappedDefaultIllTyped
-  | MappedGuardUnsupported
   | -- MasterPlan 25 / EP-149 mapped evolution codes.
     MappedFieldAddedWithDefault
   | MappedFieldAddedNoDefault
@@ -416,6 +412,13 @@ data DiagnosticCode
     ProcessKeyFieldUnknown
   | ProcessDispatchKeyUnresolved
   | ProcessBindingUnscoped
+  | -- ExecPlan 197: remaining accepted surfaces close under language 4.
+    WqPayloadTypeUnknown
+  | WindowOutOfRange
+  | TimerIdFieldNotCorrelation
+  | AggProjectionKeyUnresolved
+  | PublisherOutboxFieldUnresolved
+  | RouterBenignInversion
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.
@@ -923,7 +926,6 @@ mappedGraphRules :: Spec -> TypeGraph -> [Diagnostic]
 mappedGraphRules spec graph =
   concatMap declarationRules (Map.elems (tgDeclarations graph))
     ++ mappedRegisterInitialRules spec graph
-    ++ if null (specMapped spec) then [] else mappedGuardRules spec graph
   where
     declarationRules =
       foldMappedDecl
@@ -1139,12 +1141,6 @@ mappedRegisterInitialRules spec graph =
           { onStructuralDecl = \declaration _ -> sdInitial declaration,
             onOpaqueDecl = odInitial
           }
-
--- | Mapped values support whole-value writes and event copies, but guards may
--- only operate on Keiki's curated scalar set. Nested access has no spelling in
--- the grammar, so it is unrepresentable rather than silently accepted.
-mappedGuardRules :: Spec -> TypeGraph -> [Diagnostic]
-mappedGuardRules _spec _graph = []
 
 moduleNameSafe :: Text -> Bool
 moduleNameSafe moduleName =
@@ -1691,8 +1687,8 @@ validateNode languageContract _spec (NContract contract) = validateContract lang
 validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
 validateNode languageContract spec (NEmit e) = validateEmit languageContract spec e
 validateNode languageContract spec (NPublisher p) = validatePublisher languageContract spec p
-validateNode _languageContract _spec (NWorkqueue w) = validateWorkqueue w
-validateNode _languageContract spec (NPgmqDispatch d) = validatePgmqDispatch spec d
+validateNode languageContract _spec (NWorkqueue w) = validateWorkqueue languageContract w
+validateNode languageContract spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
 validateNode languageContract spec (NReadModel readModel) = validateReadModel languageContract spec readModel
 validateNode _languageContract _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract spec (NOperation o) = validateOperation spec o
@@ -1979,7 +1975,7 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ duplicateColumns
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -2047,6 +2043,19 @@ validateReadModel languageContract spec readModel =
             <> [("column", rmcName columnDecl) | columnDecl <- rmColumns readModel],
         not (validPostgresIdentifier identifier)
       ]
+    runtimeIdentities =
+      [ mkErr readModelLine RuntimeIdentityInvalid $
+          "readmodel '" <> rmName readModel <> "' subscription " <> T.pack (show subscription) <> " " <> reason
+      | enforcesSpecSurfaceClosures languageContract,
+        Just subscription <- [rmSubscription readModel],
+        Just reason <- [stableIdentityError subscription]
+      ]
+        ++ [ mkErr readModelLine RuntimeIdentityInvalid $
+               "readmodel '" <> rmName readModel <> "' scope category " <> T.pack (show category) <> " " <> reason
+           | enforcesSpecSurfaceClosures languageContract,
+             Just (RmCategory category) <- [rmScope readModel],
+             Just reason <- [runtimeIdentityError False category]
+           ]
     duplicateColumns =
       [ mkErr readModelLine ReadModelDuplicateColumn $
           "readmodel '" <> rmName readModel <> "' declares column '" <> rmcName columnDecl <> "' more than once"
@@ -2057,8 +2066,8 @@ validateReadModel languageContract spec readModel =
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
 -- derivation; the disposition inversions (storeFailure transient => must retry;
 -- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
-validateWorkqueue :: WorkqueueNode -> [Diagnostic]
-validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, optionalFieldWarnings, provisionRules]
+validateWorkqueue :: EffectiveLanguageContract -> WorkqueueNode -> [Diagnostic]
+validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, optionalFieldWarnings, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -2133,6 +2142,20 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
                      "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
                  | gkVia groupKey /= "raw" && gkFixture groupKey == Nothing
                  ]
+    payloadTypes =
+      [ mkErr wl WqPayloadTypeUnknown $
+          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' has unknown type '" <> wqfType field <> "'; expected text, int, or bool"
+      | enforcesSpecSurfaceClosures languageContract,
+        field <- wqPayload w,
+        wqfType field `Set.notMember` Set.fromList ["text", "int", "bool"]
+      ]
+    windows =
+      windowRangeRule languageContract wl ("workqueue '" <> wqName w <> "' delay") (wqDelay w)
+        ++ concat
+          [ windowRangeRule languageContract (locLine (wqdLoc row)) ("workqueue '" <> wqName w <> "' retry") window
+          | row <- rows,
+            IRetry window <- [wqdAction row]
+          ]
     optionalFieldWarnings =
       [ Diagnostic
           { line = wl,
@@ -2162,8 +2185,8 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
         ]
 
 -- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
-validatePgmqDispatch :: Spec -> PgmqDispatchNode -> [Diagnostic]
-validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ dedupReadModelRef ++ dedupReadModelField
+validatePgmqDispatch :: EffectiveLanguageContract -> Spec -> PgmqDispatchNode -> [Diagnostic]
+validatePgmqDispatch languageContract spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ sourceReadModelField ++ dedupReadModelRef ++ dedupReadModelField
   where
     dl = locLine (pdLoc d)
     workqueues = [w | NWorkqueue w <- specNodes spec]
@@ -2183,6 +2206,14 @@ validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef 
         ]
     sourceReadModelRef =
       resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' source") (pdSourceReadModel d)
+    sourceReadModelField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdSourceReadModel d] of
+      [] -> []
+      readModel : _ ->
+        [ mkErr dl DispatchReadModelFieldUnknown $
+            "dispatch '" <> pdName d <> "' source key '" <> pdSourceKey d <> "' is not a generated logical selector for a column of readmodel '" <> pdSourceReadModel d <> "'"
+        | enforcesSpecSurfaceClosures languageContract,
+          pdSourceKey d `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+        ]
     dedupReadModelRef =
       resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' dedup") (pdDedupReadModel d)
     dedupReadModelField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdDedupReadModel d] of
@@ -2319,7 +2350,7 @@ validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling ++
 
 validatePublisher :: EffectiveLanguageContract -> Spec -> PublisherNode -> [Diagnostic]
 validatePublisher languageContract spec p =
-  unresolvedEmit ++ orderingVocabulary ++ backoffPolicy ++ attemptsFloor
+  unresolvedEmit ++ orderingVocabulary ++ backoffPolicy ++ attemptsFloor ++ outboxField ++ windows
   where
     publisherLine = locLine (pubLoc p)
     unresolvedEmit =
@@ -2346,6 +2377,27 @@ validatePublisher languageContract spec p =
       | enforcesSpecSurfaceClosures languageContract,
         pubMaxAttempts p < 1
       ]
+    outboxField = case [emitNode | NEmit emitNode <- specNodes spec, emName emitNode == pubEmit p] of
+      [] -> []
+      emitNode : _ ->
+        [ mkErr publisherLine PublisherOutboxFieldUnresolved $
+            "publisher '" <> pubName p <> "' outboxId field '" <> pubOutboxField p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> pubEmit p <> "'"
+        | enforcesSpecSurfaceClosures languageContract,
+          pubOutboxField p `Set.notMember` allowedOutboxFields emitNode
+        ]
+    allowedOutboxFields emitNode =
+      Set.fromList ("messageId" : "idempotencyKey" : mappedContractFields emitNode)
+    mappedContractFields emitNode =
+      [ fieldDslName (resolveContractFieldIdentity field)
+      | contract <- specContracts spec,
+        ctrName contract == emContract emitNode,
+        event <- ctrEvents contract,
+        ceName event `elem` map emrEvent (emMap emitNode),
+        field <- ceFields event
+      ]
+    windows =
+      windowRangeRule languageContract publisherLine ("publisher '" <> pubName p <> "' backoff") (boWindow (pubBackoff p))
+        ++ maybe [] (windowRangeRule languageContract publisherLine ("publisher '" <> pubName p <> "' maximum backoff")) (boMax (pubBackoff p))
 
 publisherOrderings :: Set Name
 publisherOrderings = Set.fromList ["PerKeyHeadOfLine", "PerSourceStream", "StopTheLine", "BestEffort"]
@@ -2373,10 +2425,36 @@ validationWindowSeconds window = case T.unsnoc window of
       _ -> Nothing
   Nothing -> Nothing
 
+windowSecondsBounded :: Text -> Either Text Int
+windowSecondsBounded window = case T.unsnoc window of
+  Nothing -> Left "has no unit"
+  Just (digits, unit) -> case readMaybe (T.unpack digits) :: Maybe Integer of
+    Nothing -> Left "has invalid digits"
+    Just amount -> case unitFactor unit of
+      Nothing -> Left "has an unknown unit"
+      Just factor
+        | seconds > fromIntegral (maxBound :: Int) -> Left "exceeds the runtime Int seconds range"
+        | otherwise -> Right (fromIntegral seconds)
+        where
+          seconds = amount * factor
+  where
+    unitFactor 's' = Just 1
+    unitFactor 'm' = Just 60
+    unitFactor 'h' = Just 3600
+    unitFactor _ = Nothing
+
+windowRangeRule :: EffectiveLanguageContract -> Int -> Text -> Text -> [Diagnostic]
+windowRangeRule languageContract diagnosticLine context window =
+  [ mkErr diagnosticLine WindowOutOfRange $
+      context <> " window '" <> window <> "' " <> reason
+  | enforcesSpecSurfaceClosures languageContract,
+    Left reason <- [windowSecondsBounded window]
+  ]
+
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.
 validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
-validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary]
+validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary, windows]
   where
     il = locLine (inkLoc i)
     rows = inkDisposition i
@@ -2393,6 +2471,12 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
           "intake '" <> inkName i <> "' repeats disposition outcome '" <> drOutcome row <> "'; the first row would shadow this row"
       | row <- duplicatesBy drOutcome rows
       ]
+    windows =
+      concat
+        [ windowRangeRule languageContract (locLine (drLoc row)) ("intake '" <> inkName i <> "' retry") window
+        | row <- rows,
+          IRetry window <- [drAction row]
+        ]
     dedupeVocabulary =
       [ mkErr il IntakeDedupePolicyUnknown $
           "intake '"
@@ -2568,7 +2652,7 @@ validateProcess languageContract spec p =
 
     strictSurfaceResolution
       | not (enforcesSpecSurfaceClosures languageContract) = []
-      | otherwise = correlateFieldRule ++ dispatchKeyRules ++ bindingScopeRules
+      | otherwise = correlateFieldRule ++ dispatchKeyRules ++ bindingScopeRules ++ idFieldRules ++ fireWindowRule
 
     correlateFieldRule =
       [ mkErr pl ProcessKeyFieldUnknown $
@@ -2620,6 +2704,16 @@ validateProcess languageContract spec p =
         | otherwise -> value `elem` bareScope
 
     isQuoted value = T.length value >= 2 && T.head value == '"' && T.last value == '"'
+
+    idFieldRules =
+      [ mkErr (locLine (tmLoc timer)) TimerIdFieldNotCorrelation $
+          "timer '" <> tmName timer <> "' " <> context <> " derives from '" <> ideField expression <> "'; only correlationId is implemented by generated runtime code"
+      | (context, expression) <- [("id", tmId timer), ("fired-event-id", fireFiredEventId (tmFire timer))],
+        ideField expression /= "correlationId"
+      ]
+
+    fireWindowRule =
+      windowRangeRule languageContract (locLine (tmLoc timer)) ("timer '" <> tmName timer <> "' fireAt") (faWindow (tmFireAt timer))
 
     timerCeiling =
       [ mkErr (locLine (tmLoc timer)) ProcessTimerCeilingInvalid $
@@ -2789,7 +2883,7 @@ validateRouter languageContract spec router =
         [(rdCommand dispatch, rdLoc dispatch, rdDisposition dispatch)]
 
     duplicateNotice =
-      [ Diagnostic dispatchLine Warning ProcessBenignInversion [] $
+      [ Diagnostic dispatchLine Warning RouterBenignInversion [] $
           "router dispatch '" <> rdCommand dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
       | onDuplicate (rdDisposition dispatch) == DAckOk
       ]
@@ -2848,6 +2942,7 @@ validateAggregate languageContract spec agg =
       terminalNoOutgoing,
       guardScope,
       clockFree,
+      projectionKeyResolution,
       projectionSafety,
       statusMapTotality,
       evolutionRules,
@@ -3153,6 +3248,18 @@ validateAggregate languageContract spec agg =
 
     -- EP-107: a projection references a first-class read model when one exists.
     -- Legacy standalone projections remain legal, but are surfaced as warnings.
+    projectionKeyResolution =
+      [ mkErr (locLine (projLoc projection)) AggProjectionKeyUnresolved $
+          "projection '" <> projTable projection <> "' key '" <> projKey projection <> "' is not a register, command field, or event field of aggregate '" <> aggName agg <> "'"
+      | enforcesSpecSurfaceClosures languageContract,
+        Just projection <- [aggProjection agg],
+        projKey projection `Set.notMember` projectionFields
+      ]
+    projectionFields =
+      registerNames
+        `Set.union` Set.fromList [fieldDslName (resolveAggregateFieldIdentity field) | command <- aggCommands agg, field <- cmdFields command]
+        `Set.union` Set.fromList [fieldDslName (resolveAggregateFieldIdentity field) | event <- aggEvents agg, field <- eventFieldsFor event]
+
     projectionSafety = case aggProjection agg of
       Nothing -> []
       Just projection -> case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == projTable projection] of
@@ -3206,7 +3313,6 @@ validateAggregate languageContract spec agg =
     -- EP-2 evolution rules (single-spec; the diff path adds the cross-spec ones).
     evolutionRules =
       versionUpcasterRule
-        ++ duplicateUpcasterSourceRule
         ++ upcasterChainGapRule
         ++ deprecatedEmitRule
         ++ eventRetirementRules
@@ -3233,13 +3339,6 @@ validateAggregate languageContract spec agg =
         evVersion e > 1,
         maybe True ((/= evVersion e - 1) . fst) (evUpcastFrom e)
       ]
-
-    -- A generated rung dispatches by event type, so different events may
-    -- deliberately share a source version when they changed in one release.
-    -- Duplicate declarations for one event cannot survive the parser's unique
-    -- event-name rule, so no additional duplicate-source diagnostic is needed.
-    duplicateUpcasterSourceRule =
-      []
 
     -- Aggregate schema stamps are global, so every source version below the
     -- current maximum needs a permanent rung regardless of which event owns it.

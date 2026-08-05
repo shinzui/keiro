@@ -2050,18 +2050,20 @@ processIdentityDiff oldProcess newProcess =
       "derived-identity"
       (procId newProcess)
       DerivedIdentityChanged
-      "process name, correlation derivation, saga stream category, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
+      "process name, correlation derivation, saga stream category, timer id expression, or fired-event-id expression changed; replays and retries no longer derive the persisted identity"
   | processIdentity oldProcess /= processIdentity newProcess
   ]
 
-processIdentity :: ProcessNode -> (Text, Name, Name, Text, Text, Text)
+processIdentity :: ProcessNode -> (Text, Name, Name, Text, Text, Name, Text, Name)
 processIdentity process =
   ( procName process,
     corrField (procCorrelate process),
     corrVia (procCorrelate process),
     sagaCategory (procSaga process),
     idePrefix (tmId (procTimer process)),
-    idePrefix (fireFiredEventId (tmFire (procTimer process)))
+    ideField (tmId (procTimer process)),
+    idePrefix (fireFiredEventId (tmFire (procTimer process))),
+    ideField (fireFiredEventId (tmFire (procTimer process)))
   )
 
 processTimerWindowDiff :: ProcessNode -> ProcessNode -> [Change]

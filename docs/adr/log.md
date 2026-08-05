@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Update**: Record strict, warning, and descriptive-only boundaries for every accepted service surface (plan 197).
 * **Update**: Require explicit signatures, semantic import planning, and zero-warning generated conformance output under -Wall (plan 196).
 * **Update**: Clarify generated behavior evidence with stable human-attributable subjects and actual/expected runtime values (plan 196).
 * **Update**: Define tracked record and manifest twins as clean-checkout conformance history

@@ -836,20 +836,23 @@ unique across all processes, routers, and workflows.
 stream category: it must not contain `-`, whitespace, control characters, or
 `:`, and cannot be `$all`. Use camelCase for compound categories.
 
-Bindings are either bare input-field copies, `input.<field>` references, or
-quoted literals; timer-fire bindings may also copy declared timer payload
-fields. Under Language 4, the correlate field, dispatch and fire keys, and all
+Bindings are either bare input-field copies, `input.<field>` references, quoted
+literals, or the exact runtime-owned value `timer.id`; timer-fire bindings may
+also copy declared timer payload fields or bare `timerId`. Under Language 4,
+the correlate field, dispatch and fire keys, and all
 binding values must resolve within those scopes. Advance, dispatch, timer,
 command, target, field, projection, and scheduled-timer references are checked.
 Do not bind `commandId` or `id`; dispatch identities are runtime-owned.
 
 `fireAt` must reference an injected `:Time` input field. The notation has no
 clock-sampling form, and Language 4 rejects a duration whose unit-adjusted
-seconds do not fit in `Int`. The timer ID expression must end in
-`correlationId`; the parsed identifier is not a general field reference.
-`decode unknown-status => Name` is descriptive-only today. A dead-letter
-category remains operator guidance, but Language 4 validates that it is a legal
-runtime identity. `max-attempts` is at least 1. `on-ambiguous` must be `Retry`:
+seconds do not fit in `Int`. The timer ID and fired-event ID expressions must
+end in `correlationId`; their parsed identifiers are not general field
+references.
+Both `decode unknown-status => Name` and the quoted `dead-letter` text are
+descriptive-only today. The latter is operator guidance rendered into the timer
+hole, not a runtime category identity. `max-attempts` is at least 1.
+`on-ambiguous` must be `Retry`:
 command ambiguity is an aggregate-definition defect, never benign success, and
 the ceiling provides a durable dead-letter witness.
 
@@ -1169,12 +1172,15 @@ dispatch reservation_work_dispatch {
 ```
 
 The source and dedupe read models, dedupe column, dedupe queue, queue payload
-field, and enqueue target must resolve. Under Language 4, the source key and
-fanout body field must also name columns of the source read model. `fanout body`
-is a hand-owned effectful one-to-many function. A dispatch is validated and
-diff-classified but produces no generated module today. The queue-side dedupe
-check is a hand-owned SQL boundary; keep it consistent with the declared wire
-key and read-model check.
+field, and enqueue target must resolve. Under Language 4, the source key must
+also name a generated logical selector for a column of the source read model
+(`reservationId` resolves the SQL column `reservation_id`). `fanout body` names
+a hand-owned effectful one-to-many function, not a column. The top-level
+`dedup key` is likewise descriptive because committed services use both source
+keys and command identities there; the two `seenIn` fields are the enforced
+dedupe boundaries. A dispatch is validated and diff-classified but produces no
+generated module today. Keep the hand-owned queue-side SQL check consistent
+with the declared wire key and read-model check.
 
 ## Read models
 
@@ -1735,9 +1741,9 @@ located `LanguageVersionBelowMinimum` error expected by stable-contract CI.
 The warning policy follows the evidence boundary. Three warnings depend on
 operational history and therefore remain warnings: `DeprecatedEventReplayHazard`,
 `EventRetirementInProgress`, and `ReplayOnlyCommandStillLive`. Deny them in CI
-until the database-backed audit establishes the relevant fleet fact. Four
+until the database-backed audit establishes the relevant fleet fact. Five
 warnings describe deliberate or currently accepted policy:
-`WqUnloggedDurability`, `ProcessBenignInversion`,
+`WqUnloggedDurability`, `ProcessBenignInversion`, `RouterBenignInversion`,
 `AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Four more make
 accepted but currently inert declarations explicit:
 `IntakeBindFlagUnenforced`, `EmitDeriveHoleUnrealized`,

@@ -3400,6 +3400,94 @@ main = hspec $ do
         serviceErrorCodes 3 candidate `shouldNotContain` [expected]
         serviceErrorCodes 4 candidate `shouldContain` [expected]
       serviceErrorCodes 4 acceptedEventBind `shouldNotContain` [IntakeBindUnresolved]
+    it "gates closed workqueue vocabularies and bounded windows on language 4" $ do
+      queueSpec <- specOf "test/fixtures/reservation-work.keiro"
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      emitSpec <- specOf "test/fixtures/emit.keiro"
+      processSpec <- specOf "test/fixtures/hospital-surge.keiro"
+      let huge = "18446744073709551618s"
+          unknownPayload =
+            mapWorkqueue
+              (\queue -> queue {wqPayload = [if wqfName field == "hospitalId" then field {wqfType = "numeric"} else field | field <- wqPayload queue]})
+              queueSpec
+          queueDelay = mapWorkqueue (\queue -> queue {wqDelay = huge}) queueSpec
+          queueRetry = mapWorkqueue (\queue -> queue {wqDisposition = updateFirst (\row -> row {wqdAction = IRetry huge}) (wqDisposition queue)}) queueSpec
+          intakeRetry = mapIntake (\intake -> intake {inkDisposition = updateFirst (\row -> row {drAction = IRetry huge}) (inkDisposition intake)}) intakeSpec
+          publisherBackoff = mapPublisher (\publisher -> publisher {pubBackoff = (pubBackoff publisher) {boWindow = huge}}) emitSpec
+          publisherMaximum =
+            mapPublisher
+              (\publisher -> publisher {pubBackoff = (pubBackoff publisher) {boKind = "exponential", boMax = Just huge, boMultiplier = Just "2"}})
+              emitSpec
+          processFireAt =
+            modifyProcess
+              "HospitalSurge"
+              (\process -> process {procTimer = (procTimer process) {tmFireAt = (tmFireAt (procTimer process)) {faWindow = huge}}})
+              processSpec
+          cases =
+            [ (unknownPayload, WqPayloadTypeUnknown),
+              (queueDelay, WindowOutOfRange),
+              (queueRetry, WindowOutOfRange),
+              (intakeRetry, WindowOutOfRange),
+              (publisherBackoff, WindowOutOfRange),
+              (publisherMaximum, WindowOutOfRange),
+              (processFireAt, WindowOutOfRange)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldBe` []
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+    it "gates the remaining locally resolvable identity and field surfaces on language 4" $ do
+      reservation <- specOf "test/fixtures/reservation.keiro"
+      emitSpec <- specOf "test/fixtures/emit.keiro"
+      processSpec <- specOf "test/fixtures/hospital-surge.keiro"
+      dispatchSpec <- specOf "test/fixtures/reservation-work.keiro"
+      readModelSpec <- specOf "test/fixtures/readmodel.keiro"
+      let projectionKey = modifyAggregate "Reservation" (\aggregate -> aggregate {aggProjection = fmap (\projection -> projection {projKey = "ghost"}) (aggProjection aggregate)}) reservation
+          outboxField = mapPublisher (\publisher -> publisher {pubOutboxField = "ghost"}) emitSpec
+          timerIds =
+            modifyProcess
+              "HospitalSurge"
+              ( \process ->
+                  let timer = procTimer process
+                      fire = tmFire timer
+                   in process
+                        { procTimer =
+                            timer
+                              { tmId = (tmId timer) {ideField = "ghostTimerKey"},
+                                tmFire = fire {fireFiredEventId = (fireFiredEventId fire) {ideField = "ghostEventKey"}}
+                              }
+                        }
+              )
+              processSpec
+          sourceKey = mapDispatch (\dispatch -> dispatch {pdSourceKey = "ghost"}) dispatchSpec
+          subscriptionIdentity = modifyReadModel "transfer_decisions" (\readModel -> readModel {rmSubscription = Just "bad subscription"}) readModelSpec
+          scopeIdentity = modifyReadModel "transfer_decisions" (\readModel -> readModel {rmScope = Just (RmCategory "bad-category")}) readModelSpec
+          cases =
+            [ (projectionKey, AggProjectionKeyUnresolved),
+              (outboxField, PublisherOutboxFieldUnresolved),
+              (timerIds, TimerIdFieldNotCorrelation),
+              (sourceKey, DispatchReadModelFieldUnknown),
+              (subscriptionIdentity, RuntimeIdentityInvalid),
+              (scopeIdentity, RuntimeIdentityInvalid)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldBe` []
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+      length (filter (== TimerIdFieldNotCorrelation) (serviceErrorCodes 4 timerIds)) `shouldBe` 2
+      parseStableRenderedSpec "<timer-id-fields>" timerIds `shouldBe` Right timerIds
+    it "uses a router-specific code for a confirmed duplicate inversion" $ do
+      spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+      let changed =
+            modifyRouter
+              "PagingRouter"
+              ( \router ->
+                  let dispatch = rtDispatch router
+                      disposition = rdDisposition dispatch
+                   in router {rtDispatch = dispatch {rdDisposition = disposition {onDuplicate = DAckOk}}}
+              )
+              spec
+          warningCodes = [code diagnostic | diagnostic <- validateSpec changed, severity diagnostic == Warning]
+      warningCodes `shouldContain` [RouterBenignInversion]
+      warningCodes `shouldNotContain` [ProcessBenignInversion]
     it "pins every emitted legacy single-spec diagnostic that lacked a direct negative test" $ do
       reservation <- specOf "test/fixtures/reservation.keiro"
       intakeSpec <- specOf "test/fixtures/intake.keiro"
@@ -3467,7 +3555,7 @@ main = hspec $ do
       codes `shouldContain` [EvtVersionMissingUpcaster]
     it "accepts shared upcaster sources for different event kinds" $ do
       codes <- errorCodesOf "test/fixtures/reservation-dup-upcast-source.keiro"
-      codes `shouldNotContain` [DuplicateUpcasterSource]
+      codes `shouldBe` []
     it "rejects a gap in the aggregate-global upcaster chain" $ do
       codes <- errorCodesOf "test/fixtures/reservation-chain-gap.keiro"
       codes `shouldContain` [UpcasterChainGap]
@@ -9599,7 +9687,7 @@ processWithLiteral value =
       procTimer =
         TimerNode
           { tmName = "timer",
-            tmId = IdExpr UuidV5Id "timer:",
+            tmId = IdExpr UuidV5Id "timer:" "correlationId",
             tmFireAt = FireAtExpr "observedAt" "5m",
             tmPayload = [],
             tmFire =
@@ -9608,7 +9696,7 @@ processWithLiteral value =
                   fireKey = "correlationId",
                   fireCommand = "Fire",
                   fireFields = [],
-                  fireFiredEventId = IdExpr UuidV5Id "fired:",
+                  fireFiredEventId = IdExpr UuidV5Id "fired:" "correlationId",
                   fireDisposition = FireDisposition OFired OFired ORetry ORetry ORetry
                 },
             tmDecodeUnknown = "Cancelled",
@@ -9785,7 +9873,7 @@ genFireDisposition =
     <*> elements [OFired, ORetry]
 
 genIdExpr :: Gen IdExpr
-genIdExpr = IdExpr UuidV5Id <$> genAdversarialText
+genIdExpr = IdExpr UuidV5Id <$> genAdversarialText <*> pure "correlationId"
 
 genFireNode :: Gen FireNode
 genFireNode =

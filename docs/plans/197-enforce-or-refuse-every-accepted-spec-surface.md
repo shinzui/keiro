@@ -61,10 +61,12 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   admit declared timer-payload names and the runtime-owned `timerId`. Router row fields resolve
   against the generated lower-camel selector for SQL columns. The full suite passes 590 examples
   with zero failures.
-- [ ] Milestone 3: closed vocabularies and bounded values (`WqPayloadTypeUnknown`,
+- [x] (2026-08-05) Milestone 3: closed vocabularies and bounded values (`WqPayloadTypeUnknown`,
   `WindowOutOfRange`, the small-surface cluster), dead-diagnostic cleanup including the new
   `RouterBenignInversion` code, the ADR 0004 inventory amendment, changelogs, and full closure
-  gates.
+  gates. The complete `keiro-dsl` package suite passes, including 593 unit examples; the
+  41-invocation corpus check is byte-clean, the all-package build and both generated-source
+  policies pass, and strict validation accepts all 21 ADR concepts.
 
 
 ## Surprises & Discoveries
@@ -118,6 +120,19 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   `responderId`). The revived router check therefore compares against the same generated
   lower-camel selector derivation as scaffolding rather than comparing raw text. This also gives
   Milestone 3's pgmq source-key check one authoritative interpretation of a declared column.
+
+- Observation: the planned pgmq `fanout body` column check was based on a category error.
+  Every fixture names the hand-owned function `resolveTransferCandidates`, while source columns
+  are data fields such as `reservation_id`. The dispatch corpus also uses both `reservationId`
+  and `commandId` as top-level `dedup key` values. Consequently only `source ... key` is a
+  resolvable read-model selector; `fanout body` and the top-level dedupe key are
+  descriptive-only, while both `seenIn` fields remain enforced.
+
+- Observation: timer `dead-letter` strings in the stable language-4 corpus are operator prose
+  such as `"surge timer exceeded ceiling"`. Scaffolding renders the text only into hand-owned
+  guidance and never constructs a runtime category from it. Applying the runtime identity rule
+  would reject valid services while validating an identity that does not exist, so the text is
+  descriptive-only beside `decode unknown-status`.
 
 
 ## Decision Log
@@ -209,26 +224,28 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   still decode-required; unconditional warning `WqFieldOptionalUnsupported` on fields lacking
   `required`, docs state all payload fields are required at decode. (2) timer
   `decode unknown-status => <name>` — mandatory syntax with no consumer beyond pretty-printing;
-  descriptive-only in docs, no warning. (3) timer `dead-letter "<category>"` — lowered only into
-  a hole comment (Scaffold.hs line 3775); strict-gated error `TimerDeadLetterCategoryInvalid`
-  applying the existing category identity rule (`runtimeIdentityError False`), docs note the
-  category otherwise remains operator guidance. (4) `timer id uuidv5 "p:" <> <ident>` — the
+  descriptive-only in docs, no warning. (3) timer `dead-letter "<text>"` — corpus verification
+  showed this is operator prose lowered only into a hole comment, not a runtime category;
+  descriptive-only in docs, with no warning or identity diagnostic. This reverses the draft
+  `TimerDeadLetterCategoryInvalid` disposition because it would reject stable fixtures for an
+  identity no runtime constructs. (4) `timer id uuidv5 "p:" <> <ident>` — the
   identifier is parsed and discarded (`pIdExpr`, Parser/Coordination.hs line 252) and always
   means `correlationId`; store the identifier in the AST and add strict-gated error
   `TimerIdFieldNotCorrelation` when it is not literally `correlationId`. (5) aggregate
   `projection … key=<name>` — name-shape checked only (Validate.hs line 1165); strict-gated
   error `AggProjectionKeyUnresolved` resolving the key against the union of the aggregate's
   register names and command/event field names (all committed fixtures use `reservationId`,
-  which resolves). (6) pgmq dispatch `source … key=` and `fanout body=` — resolve both against
-  the source read model's declared columns, reusing existing code
-  `DispatchReadModelFieldUnknown` under the gate (same failure class as the already-checked
-  dedup-side field, Validate.hs lines 1932-1938); for `dedup key=`, first inventory the
-  committed dispatch fixtures — if it names a source read-model column everywhere, close it the
-  same way, otherwise document it descriptive-only and record the choice here. (7) publisher
+  which resolves). (6) pgmq dispatch `source … key=` — resolve the key against generated logical
+  selectors for the source read model's columns, reusing existing code
+  `DispatchReadModelFieldUnknown` under the gate. Corpus inspection
+  proved `fanout body` names the hand-owned function `resolveTransferCandidates`, not a column,
+  and `dedup key=` is either `reservationId` or `commandId`; both are descriptive-only. The two
+  `seenIn` fields remain enforced by the existing read-model/queue rules. (7) publisher
   `outboxId stable from <field>` — diff-tracked only (Diff.hs line 2150); strict-gated error
   `PublisherOutboxFieldUnresolved` with vocabulary `messageId`, `idempotencyKey`, or a field of
-  the emit's mapped contract events; verify committed fixtures (which use `messageId`) before
-  freezing, downgrade to warning and record here if any committed spec falls outside. (8)
+  the emit's mapped contract events. Corpus verification confirms both the ordinary
+  `messageId` form and `incidentId` from a mapped contract event, so that vocabulary is frozen
+  without a downgrade. (8)
   readmodel `subscription="…"` beside `feed=inline` — the override is meaningless for an inline
   feed; unconditional warning `RmInlineSubscriptionIgnored`. (9) read-model subscription
   override and scope category strings — they become runtime identities
@@ -247,10 +264,11 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   borrowing the process code: append new code `RouterBenignInversion` and emit it at the router
   site, leaving `ProcessBenignInversion` untouched for processes. Before deleting
   `IdentHaskellKeyword`/`IdentNotConstructorSafe`, confirm EP-192 (which owns the reserved-word
-  policy) has not started constructing them; if it has, keep them and record the reversal here.
+  policy) has not started constructing them; merged EP-192 constructs neither, and the final
+  source/test search confirms all four names are absent.
   Rationale: exported constructors that no code path can emit misrepresent the diagnostic
   contract; plan 180 Milestone 5 set the precedent by deleting dead grammar. The removals ship
-  in the same unreleased 0.9.0.0 window as language 4 and are called out in both changelogs.
+  in the current unreleased cycle and are called out in both changelogs.
   Date: 2026-08-04
 
 - Decision: New errors emit nothing (not warnings) under released languages 1-3.
@@ -262,15 +280,28 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
 
 ## Outcomes & Retrospective
 
-Milestones 1 and 2 are complete. Four accepted-but-inert declarations now produce ordinary warnings,
-single-file scaffold reports name validated and diff-classified nodes that contributed no
-modules, and the user guide distinguishes generated or enforced behavior from descriptive-only
-notation. Process correlate, dispatch-key, and binding scopes now resolve under language 4, and
-router resolve-row fields are verified against the selected read model. The suite grew from the
-captured 582-example baseline to 590 examples and passes with zero failures. Closed-vocabulary,
-bounded-value, and small-surface work remains in Milestone 3. At completion, record the
-`dedup key=` and `outboxId` disposition confirmations, exact final test counts, evidence that no
-committed fixture changed bytes, and the ADR distillation.
+Complete. Four accepted-but-inert declarations now produce ordinary warnings; scaffold reports
+name emit, pgmq dispatch, and operation nodes that contribute no modules; and the guide and ADR
+distinguish generated/enforced behavior from descriptive-only intake decode posture, timer
+operator text, pgmq fanout functions, and top-level dedupe keys. Language 4 now resolves process
+correlate/dispatch/binding scopes, router resolve rows, aggregate projection keys, publisher
+outbox fields, pgmq source selectors, read-model identities, and both timer ID expressions. It
+also closes workqueue payload types and rejects every unit-adjusted duration that cannot fit the
+runtime `Int` seconds representation. Languages 1–3 retain their released acceptance in paired
+tests.
+
+The final process binding vocabulary is quoted literals, `input.<declared>`, bare input names,
+and exactly `timer.id`; timer-fire bindings additionally admit declared payload names and
+runtime-owned `timerId`. The pgmq corpus proves `fanout body` and top-level `dedup key` are
+descriptive-only (`dedup key` is either `reservationId` or `commandId`), while source and both
+`seenIn` references are enforced. Publisher outbox identity accepts `messageId`,
+`idempotencyKey`, and fields of mapped contract events; the committed `incidentId` case passes.
+
+The suite grew from the captured 582-example baseline to 593 examples with zero failures. All
+keiro-dsl package suites, `cabal build all`, extension and generated-name policies, strict
+21-concept ADR validation, the dead-code search, and diff hygiene pass. EP-195's complete
+41-invocation corpus checker reports record/disk and Cabal inventory consistency and no generated
+byte changes; fold fingerprints, wire bytes, and snapshot discriminators remain unchanged.
 
 
 ## Context and Orientation
@@ -500,7 +531,7 @@ Scope: surfaces G, J, the checkable half of I, the K cleanup, documentation/ADR/
 publication, and the full closure gates.
 
 In `Validate.hs`, append `WqPayloadTypeUnknown`, `WindowOutOfRange`,
-`TimerDeadLetterCategoryInvalid`, `TimerIdFieldNotCorrelation`, `AggProjectionKeyUnresolved`,
+`TimerIdFieldNotCorrelation`, `AggProjectionKeyUnresolved`,
 `PublisherOutboxFieldUnresolved`, and `RouterBenignInversion`, all strict-gated except
 `RouterBenignInversion` (which is the unconditional warning replacing the router's borrowed
 code at lines 2420-2424; the message text may stay). Implement, per the Decision Log
@@ -508,13 +539,14 @@ dispositions: the `text`/`int`/`bool` workqueue payload vocabulary; the window b
 digits-times-unit-fits-in-`Int` computation into one helper beside the validator, apply it to
 intake/workqueue `retry` windows, publisher backoff window and max, workqueue delay, and the
 process `fireAt` window — enumerate the exact `IRetry`/`BackoffSpec`/`wqDelay`/`faWindow`
-sites); the timer dead-letter category identity check via `runtimeIdentityError False`; the
-stored-and-checked timer id identifier (add a field such as `ideField :: !Name` to `IdExpr` in
+sites); descriptive-only timer dead-letter operator text; the stored-and-checked timer id
+identifier (add a field such as `ideField :: !Name` to `IdExpr` in
 Grammar.hs and keep `pIdExpr` accepting the same syntax — an AST field addition changes no
 acceptance — then require it be `correlationId`); the projection-key resolution against
-registers plus command/event field names; the pgmq `source key=`/`fanout body=` resolution
-against source read-model columns reusing `DispatchReadModelFieldUnknown`, with the `dedup key=`
-fixture inventory deciding its treatment; the publisher `outboxId` vocabulary; and the
+registers plus command/event field names; pgmq `source key=` resolution against the generated
+logical selectors for source read-model columns reusing `DispatchReadModelFieldUnknown`, with
+`fanout body=` and top-level `dedup key=` documented as descriptive-only after fixture
+inventory; the publisher `outboxId` vocabulary; and the
 read-model subscription/scope identity checks reusing `RuntimeIdentityInvalid` and
 `stableIdentityError`.
 
@@ -685,8 +717,8 @@ parser shape in `Scaffold.hs`.
 one block at the end of the existing declaration: `IntakeBindFlagUnenforced`,
 `EmitDeriveHoleUnrealized`, `WqFieldOptionalUnsupported`, `RmInlineSubscriptionIgnored`,
 `ProcessKeyFieldUnknown`, `ProcessDispatchKeyUnresolved`, `ProcessBindingUnscoped`,
-`WqPayloadTypeUnknown`, `WindowOutOfRange`, `TimerDeadLetterCategoryInvalid`,
-`TimerIdFieldNotCorrelation`, `AggProjectionKeyUnresolved`, `PublisherOutboxFieldUnresolved`,
+`WqPayloadTypeUnknown`, `WindowOutOfRange`, `TimerIdFieldNotCorrelation`,
+`AggProjectionKeyUnresolved`, `PublisherOutboxFieldUnresolved`,
 `RouterBenignInversion` — and removes `IdentHaskellKeyword`, `IdentNotConstructorSafe`,
 `DuplicateUpcasterSource`, `MappedGuardUnsupported`. `RouterReadModelUnverified` gains its
 first construction site. Strict-gated rules receive the `EffectiveLanguageContract` the same
@@ -731,3 +763,10 @@ plan changes none.
   binding-scope resolution plus router resolve-row verification. Recorded the fixture-backed
   process vocabulary and the SQL-column-to-logical-selector normalization; the full suite now
   passes 590 examples with zero failures.
+- 2026-08-05: Completed Milestone 3 and the plan. Added strict closed vocabularies, bounded
+  windows, timer/projection/outbox/pgmq/read-model resolution, and the router-specific warning;
+  removed four dead diagnostic constructors/stubs; preserved both parsed ID-expression fields;
+  corrected the timer/pgmq descriptive-only boundaries after corpus inspection; amended ADR
+  0004, the guide, and changelogs; and closed with 593 passing unit examples, every keiro-dsl
+  suite, the all-package build, both source policies, strict ADR validation, and a byte-clean
+  41-invocation corpus replay.

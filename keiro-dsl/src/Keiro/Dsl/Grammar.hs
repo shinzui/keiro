@@ -693,7 +693,8 @@ data HandleNode = HandleNode
 -- | A deterministic id derivation: @uuidv5 \"prefix:\" <> correlationId@.
 data IdExpr = IdExpr
   { ideStrategy :: !IdStrategy,
-    idePrefix :: !Text
+    idePrefix :: !Text,
+    ideField :: !Name
   }
   deriving stock (Eq, Show, Generic)
 
