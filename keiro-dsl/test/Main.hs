@@ -64,7 +64,7 @@ import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateService, validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, diagnosticCodeText, parseDiagnosticCode, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
 import Keiro.Dsl.WorkspaceAdoption
 import Keiro.Dsl.WorkspaceDiff hiding (diffWorkspaces)
@@ -222,6 +222,76 @@ main = hspec $ do
           (metCode, metOut, _) <- runKeiroDsl ["check", manifest, "--min-language", "1"]
           metCode `shouldBe` ExitSuccess
           metOut `shouldBe` "OK\n"
+
+  describe "warning enforcement" $ do
+    it "round-trips every stable diagnostic code spelling" $ do
+      forM_ [minBound .. maxBound] $ \diagnosticCode ->
+        parseDiagnosticCode (diagnosticCodeText diagnosticCode) `shouldBe` Just diagnosticCode
+
+    it "fails only the warnings selected by invocation policy" $ do
+      let fixture = "test/fixtures/deny-unlogged.keiro"
+          warningText = "warning[WqUnloggedDurability]"
+          summaryText = "check: 1 warning(s) escalated to failure (denied: WqUnloggedDurability)"
+
+      (plainCode, plainOut, plainErr) <- runKeiroDsl ["check", fixture]
+      plainCode `shouldBe` ExitSuccess
+      plainOut `shouldBe` "OK\n"
+      plainErr `shouldContain` warningText
+      plainErr `shouldNotContain` "escalated to failure"
+
+      (allCode, allOut, allErr) <- runKeiroDsl ["check", fixture, "--deny-warnings"]
+      allCode `shouldBe` ExitFailure 1
+      allOut `shouldBe` ""
+      allErr `shouldContain` warningText
+      allErr `shouldContain` summaryText
+
+      (selectedCode, selectedOut, selectedErr) <- runKeiroDsl ["check", fixture, "--deny", "WqUnloggedDurability"]
+      selectedCode `shouldBe` ExitFailure 1
+      selectedOut `shouldBe` ""
+      selectedErr `shouldContain` warningText
+      selectedErr `shouldContain` summaryText
+
+      (otherCode, otherOut, otherErr) <- runKeiroDsl ["check", fixture, "--deny", "WireSchemaVersionMismatch"]
+      otherCode `shouldBe` ExitSuccess
+      otherOut `shouldBe` "OK\n"
+      otherErr `shouldContain` warningText
+      otherErr `shouldNotContain` "escalated to failure"
+
+      (unionCode, unionOut, unionErr) <-
+        runKeiroDsl
+          [ "check",
+            fixture,
+            "--deny-warnings",
+            "--deny",
+            "WireSchemaVersionMismatch,WqUnloggedDurability"
+          ]
+      unionCode `shouldBe` ExitFailure 1
+      unionOut `shouldBe` ""
+      unionErr `shouldContain` warningText
+      unionErr `shouldContain` summaryText
+
+      (unknownCode, _, unknownErr) <- runKeiroDsl ["check", fixture, "--deny", "NotACode"]
+      unknownCode `shouldBe` ExitFailure 1
+      unknownErr `shouldContain` "unknown diagnostic code `NotACode`"
+      unknownErr `shouldContain` "warning[Code]"
+
+    it "applies the same warning policy to a composed workspace" $ do
+      warningSource <- readTestText "test/fixtures/deny-unlogged.keiro"
+      withInlineWorkspace
+        "keiro-dsl-warning-policy"
+        ("warning-policy", [("domain/jobs.keiro", warningSource)])
+        $ \root _ _ -> do
+          let manifest = root </> "service.keiro-workspace"
+          (plainCode, plainOut, plainErr) <- runKeiroDsl ["check", manifest]
+          plainCode `shouldBe` ExitSuccess
+          plainOut `shouldBe` "OK\n"
+          plainErr `shouldContain` "domain/jobs.keiro:4: warning[WqUnloggedDurability]"
+
+          (deniedCode, deniedOut, deniedErr) <- runKeiroDsl ["check", manifest, "--deny", "WqUnloggedDurability"]
+          deniedCode `shouldBe` ExitFailure 1
+          deniedOut `shouldBe` ""
+          deniedErr `shouldContain` "domain/jobs.keiro:4: warning[WqUnloggedDurability]"
+          deniedErr `shouldContain` "check: 1 warning(s) escalated to failure (denied: WqUnloggedDurability)"
 
   describe "runtime capability and fold identity baseline (plan 181)" $ do
     it "pins the fold-only FNV-1a-128 UTF-8 encoding" $ do

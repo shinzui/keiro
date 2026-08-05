@@ -1,0 +1,18 @@
+language keiro-dsl 4
+context warning-policy
+
+workqueue transient_jobs {
+  queue logical = "warning_policy.transient_jobs"
+  derive physical = "warning_policy_transient_jobs"
+         dlq = "warning_policy_transient_jobs_dlq"
+         table = "pgmq.q_warning_policy_transient_jobs"
+  provision unlogged
+  payload TransientJob { jobId -> "job_id" text required }
+  retry maxRetries = 3 delay = 5s dlq = on
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

@@ -11,6 +11,8 @@ module Keiro.Dsl.Validate
   ( Severity (..),
     DiagnosticCode (..),
     Diagnostic (..),
+    diagnosticCodeText,
+    parseDiagnosticCode,
     renderDiagnostic,
     minimumLanguageDiagnostics,
     validateService,
@@ -51,6 +53,15 @@ import Text.Read (readMaybe)
 
 data Severity = Error | Warning
   deriving stock (Eq, Show)
+
+diagnosticCodeText :: DiagnosticCode -> Text
+diagnosticCodeText = T.pack . show
+
+parseDiagnosticCode :: Text -> Maybe DiagnosticCode
+parseDiagnosticCode raw =
+  case [diagnosticCode | diagnosticCode <- [minBound .. maxBound], diagnosticCodeText diagnosticCode == raw] of
+    diagnosticCode : _ -> Just diagnosticCode
+    [] -> Nothing
 
 -- | A machine-checkable code per rule, so tests match on the code, not prose.
 data DiagnosticCode
@@ -384,7 +395,7 @@ data DiagnosticCode
     EvtFieldWireKeyChanged
   | -- ExecPlan 193: a CI-required released language floor was not met.
     LanguageVersionBelowMinimum
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.
 data Diagnostic = Diagnostic

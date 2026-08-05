@@ -68,9 +68,12 @@ After milestone 1 it additionally prints the effective-contract notice on stderr
   The `language support` focused group passes 4 examples and the `source language version` group
   passes 21 examples, including source/workspace floors and a working-tree-only diff notice; the
   full `keiro-dsl-test` suite passes 569 examples with zero failures.
-- [ ] Milestone 2: add `--deny-warnings` and `--deny CODE[,CODE...]` with the documented exit-code
-  contract, `Enum`/`Bounded` derivation plus `parseDiagnosticCode` for the code spelling, and CLI
-  tests proving escalation and non-escalation.
+- [x] (2026-08-05 08:03 PDT) Milestone 2: add `--deny-warnings` and
+  `--deny CODE[,CODE...]` with the documented binary exit-code contract,
+  `Ord`/`Enum`/`Bounded` derivation plus `parseDiagnosticCode` for the code spelling, and CLI tests
+  proving escalation and non-escalation. The `warning enforcement` focused group passes 3 examples:
+  exhaustive code-spelling round trips, default/all/selective/union/no-op/unknown-code source
+  behavior, and a one-member inline warning-bearing workspace with identical policy behavior.
 - [ ] Milestone 3: add `Keiro.Dsl.CheckReport` writing schema `keiro-dsl/check-report/1` from both
   check paths via `--report-out`, with round-trip/shape tests and a golden fixture.
 - [ ] Milestone 4: ratify the warning-policy review in the Decision Log, update
@@ -102,6 +105,17 @@ After milestone 1 it additionally prints the effective-contract notice on stderr
   `EventRetirementInProgress` (2862, 2884), `DeprecatedEventReplayHazard` (2873),
   `WireSchemaVersionMismatch` (2900), and `ReplayOnlyCommandStillLive` (2924). This is the
   complete inventory the warning-policy review in milestone 4 must cover.
+
+- Observation: the executable component does not directly depend on `containers`, although the
+  library does. The first summary implementation imported `Data.Set` into `app/Main.hs` and the
+  executable correctly failed to compile with the hidden-package diagnostic below. The shipped
+  CLI instead enumerates the bounded code registry to deduplicate summary spellings, while the
+  milestone-3 library report API can use its existing `containers` dependency.
+
+  ```text
+  Could not load module ‘Data.Set’.
+  It is a member of the hidden package ‘containers-0.7’.
+  ```
 
 
 ## Decision Log
@@ -243,6 +257,13 @@ After milestone 1 it additionally prints the effective-contract notice on stderr
   already at the edge of readability, and both check paths must receive identical options to
   preserve the single-file/workspace parity that the existing tests assert.
   Date: 2026-08-04
+
+- Decision: Derive `Ord` for `DiagnosticCode` alongside the planned `Enum` and `Bounded`
+  instances.
+  Rationale: Milestone 3's already-specified public builders accept `Set DiagnosticCode`, which
+  requires `Ord`; deriving it from the same append-only constructor order keeps the set contract
+  synchronized with exhaustive parsing and adds no handwritten ordering registry.
+  Date: 2026-08-05
 
 
 ## Outcomes & Retrospective
@@ -756,9 +777,11 @@ released; before release, a revert is safe.
 
 ## Interfaces and Dependencies
 
-No new external dependencies: `aeson`, `optparse-applicative`, `text`, and `containers` are
-already direct dependencies of the `keiro-dsl` library and executable. No Keiki interface is
-touched, and no Cabal bound changes.
+No new external dependencies: `aeson`, `optparse-applicative`, and `text` are already direct
+dependencies of the relevant `keiro-dsl` components, and `containers` is already a direct library
+dependency (not an executable dependency). The CLI summary stays in `base`; the milestone-3 report
+module can use the library's existing `containers` dependency. No Keiki interface is touched, and
+no Cabal bound changes.
 
 Interfaces that must exist at the end of each milestone (exact field prefixes may follow local
 style; information content and locations are fixed):

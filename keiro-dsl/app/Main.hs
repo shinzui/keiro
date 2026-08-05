@@ -29,7 +29,7 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), minimumLanguageDiagnostics, renderDiagnostic, validateService)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), diagnosticCodeText, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
@@ -65,7 +65,9 @@ data CheckOptions = CheckOptions
   { checkEmit :: !Bool,
     checkExplainBindings :: !Bool,
     checkCoverage :: !(Maybe CheckCoverageOptions),
-    checkMinLanguage :: !(Maybe LanguageVersion)
+    checkMinLanguage :: !(Maybe LanguageVersion),
+    checkDenyWarnings :: !Bool,
+    checkDenyCodes :: ![DiagnosticCode]
   }
 
 data DiffCoverageOptions = DiffCoverageOptions
@@ -178,6 +180,8 @@ checkOptions =
     <*> explainBindingsSwitch
     <*> checkCoverageOptions
     <*> optional minLanguageOpt
+    <*> switch (long "deny-warnings" <> help "Exit non-zero when any warning-severity diagnostic fires")
+    <*> denyCodesOptions
 
 minLanguageOpt :: Parser LanguageVersion
 minLanguageOpt =
@@ -197,6 +201,29 @@ parseMinimumLanguage raw =
             <> " is unsupported; supported versions: "
             <> T.unpack (T.intercalate ", " (map languageVersionText (NE.toList supportedLanguageVersions)))
         )
+
+denyCodesOptions :: Parser [DiagnosticCode]
+denyCodesOptions =
+  concat
+    <$> many
+      ( option
+          (eitherReader parseDenyCodes)
+          (long "deny" <> metavar "CODE[,CODE...]" <> help "Exit non-zero for warning diagnostics with these stable codes (repeatable)")
+      )
+
+parseDenyCodes :: String -> Either String [DiagnosticCode]
+parseDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
+  where
+    parseOne token
+      | T.null token = Left "--deny requires one or more comma-separated diagnostic codes"
+      | otherwise = case parseDiagnosticCode token of
+          Just diagnosticCode -> Right diagnosticCode
+          Nothing ->
+            Left
+              ( "unknown diagnostic code `"
+                  <> T.unpack token
+                  <> "`; copy the spelling exactly from warning[Code] output"
+              )
 
 diffCoverageOptions :: Parser (Maybe DiffCoverageOptions)
 diffCoverageOptions =
@@ -293,6 +320,36 @@ minimumWorkspaceLanguageDiagnostics floorVersion workspace
     sourceLanguageLine LegacyUnversioned = 1
     sourceLanguageLine DeclaredLanguage {languageVersionLoc = Loc lineNumber} = lineNumber
 
+deniesWarningCode :: CheckOptions -> DiagnosticCode -> Bool
+deniesWarningCode options diagnosticCode =
+  checkDenyWarnings options || diagnosticCode `elem` checkDenyCodes options
+
+deniedSourceWarningCodes :: CheckOptions -> [Diagnostic] -> [DiagnosticCode]
+deniedSourceWarningCodes options diagnostics =
+  [ code diagnostic
+  | diagnostic <- diagnostics,
+    severity diagnostic == Warning,
+    deniesWarningCode options (code diagnostic)
+  ]
+
+deniedWorkspaceWarningCodes :: CheckOptions -> [WorkspaceDiagnostic] -> [DiagnosticCode]
+deniedWorkspaceWarningCodes options diagnostics =
+  [ wdCode diagnostic
+  | diagnostic <- diagnostics,
+    wdSeverity diagnostic == Warning,
+    deniesWarningCode options (wdCode diagnostic)
+  ]
+
+emitDeniedWarningSummary :: [DiagnosticCode] -> IO ()
+emitDeniedWarningSummary deniedCodes =
+  when (not (null deniedCodes)) $
+    TIO.hPutStrLn stderr $
+      "check: "
+        <> T.pack (show (length deniedCodes))
+        <> " warning(s) escalated to failure (denied: "
+        <> T.intercalate ", " [diagnosticCodeText diagnosticCode | diagnosticCode <- [minBound .. maxBound], diagnosticCode `elem` deniedCodes]
+        <> ")"
+
 run :: Command -> IO ()
 run (Pretty fp) = run (Parse fp)
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
@@ -326,9 +383,11 @@ run (Check fp options) = do
           spec = checkedSpec service
           floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
           diags = floorDiags <> validateService service
+          deniedWarningCodes = deniedSourceWarningCodes options diags
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
-      if any ((== Error) . severity) diags
+      emitDeniedWarningSummary deniedWarningCodes
+      if any ((== Error) . severity) diags || not (null deniedWarningCodes)
         then exitFailure
         else do
           when (checkEmit options) (TIO.putStrLn (renderSource parsedSource))
@@ -553,9 +612,11 @@ runWorkspaceCheck fp options = do
           floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) (checkMinLanguage options)
           diags = floorDiags <> checkWorkspace workspace
           spec = checkedSpec service
+          deniedWarningCodes = deniedWorkspaceWarningCodes options diags
       emitWorkspaceLanguageContractNotice fp workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
-      if any ((== Error) . wdSeverity) diags
+      emitDeniedWarningSummary deniedWarningCodes
+      if any ((== Error) . wdSeverity) diags || not (null deniedWarningCodes)
         then exitFailure
         else do
           when (checkEmit options) (TIO.putStrLn (renderSpec spec))
