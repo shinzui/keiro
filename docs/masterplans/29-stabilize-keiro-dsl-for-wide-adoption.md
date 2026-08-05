@@ -122,7 +122,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | Complete |
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Complete |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Complete |
-| 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | In Progress |
+| 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Complete |
 | 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | Not Started |
 | 197 | Enforce or refuse every accepted spec surface | docs/plans/197-enforce-or-refuse-every-accepted-spec-surface.md | None | EP-193 | Not Started |
 | 198 | Rename keiro-dsl sidecars to explicit-slot ledger names with one durability contract | docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md | None | None | Not Started |
@@ -157,7 +157,8 @@ Phase 1 (release unblock): EP 192, EP 191, EP 193. Completing Phase 1 permits th
 keiro-dsl release: Mori's workspace scaffolds again, replay-only initial edges generate correct
 harnesses, and adopters get an honest, CI-enforceable `check`. Phase 2 (truthful gates): EP 194,
 EP 195, EP 197 in parallel. Phase 3 (one churn event): EP 196, after which the corpus is
-regenerated once and the release is tagged as the stable adoption baseline.
+regenerated once, EP-195's clean-tree policy gate is activated, and the release is tagged
+as the stable adoption baseline.
 
 
 ## Integration Points
@@ -196,6 +197,9 @@ directory, overwrites only banner-recognized generated files, never touches crea
 (ADR 0015), and reports the diff for review. Every later plan refreshes fixtures only through
 this tool. The tool also owns keeping `keiro-dsl/keiro-dsl.cabal` test-component module
 inventories consistent with regenerated trees.
+The first honest replay found that the current committed baseline already differs in 387
+files, so EP 196 Milestone 4 owns activating `check` and the `just verify` policy immediately
+after its already-planned single corpus refresh; EP 195 deliberately does not land a red gate.
 
 **Language gating of new enforcement** (EP 193 makes gating visible; EP 197 applies it).
 New EP 197 refusals follow the established pattern: errors under the language-4
@@ -230,12 +234,12 @@ alias-free spec generates byte-identical output.
 - [x] EP-194 M2: One shared planning-gate pipeline for both check and both scaffold paths, gate order pinned by test
 - [x] EP-194 M3: Docs, ADR 0004 inventory row, changelogs, closure
 - [x] EP-195 M1: Corpus manifest plus `keiro-dsl-corpus-regen` driver regenerating behavior-complete with zero diff
-- [ ] EP-195 M2: Full 41-invocation coverage, record/disk and cabal/disk checkers, golden accept mode
-- [ ] EP-195 M3: Clean-tree idempotence gate in `just verify`, contributor docs, changelogs
+- [x] EP-195 M2: Full 41-invocation coverage, record/disk and cabal/disk checkers, golden accept mode; 387-file pre-existing drift assigned to EP-196
+- [x] EP-195 M3: Contributor docs, changelogs, closure; clean-tree gate activation transferred to EP-196 M4 after its one corpus refresh
 - [ ] EP-196 M1: BehaviorContract signatures, curated exports, annotated keys/rows, evidence-carrying failures
 - [ ] EP-196 M2: Harness sample constants, runtime-backed read-model facts, batched minors
 - [ ] EP-196 M3: Usage-conditional imports, `-Wall` parity, compile the uncompiled structural BehaviorContract
-- [ ] EP-196 M4: Single corpus regeneration via EP-195 tooling, demonstration failure transcript, closure
+- [ ] EP-196 M4: Single corpus regeneration via EP-195 tooling, clean-tree policy activation, demonstration failure transcript, closure
 - [ ] EP-197 M1: Inventory ratified — warnings, docs truth pass, scaffold-report honesty for module-less nodes
 - [ ] EP-197 M2: Process/router reference-resolution parity, revived `RouterReadModelUnverified`
 - [ ] EP-197 M3: Closed vocabularies and bounded windows as strict-closure errors, dead-code cleanup, ADR 0004 amendment
@@ -308,6 +312,13 @@ tree by the drafting research and recorded in the owning child plan:
   `git ls-files` discovery could not work in CI. EP-195 now force-tracks only the bounded corpus
   sidecars, preserves the global ignore rule for ordinary scaffold output, and excludes one stale
   nested skeleton pair in favor of the root eight-invocation history.
+- EP-195's first complete 41-invocation replay changed 387 tracked files (944 insertions,
+  417 deletions): current-version banners and additive record/manifest rows plus generated
+  facts already assigned to EP-196. The run also found 108 generated paths outside actual
+  Cabal component closures: 107 deliberate non-target surfaces in narrow legacy suites and
+  the one unexpected structural BehaviorContract already assigned to EP-196. EP-195 restored
+  every generated byte, records each exemption by path, and transfers policy-gate activation
+  to EP-196 after the single batched refresh.
 
 
 ## Decision Log
@@ -374,6 +385,15 @@ tree by the drafting research and recorded in the owning child plan:
   fixture-tree sidecar renames into its single corpus refresh.
   Date: 2026-08-05
 
+- Decision: Close EP-195 after its usable regeneration/checker/golden increment, and activate
+  its clean-tree `check`/Justfile/`verify` gate in EP-196 Milestone 4 immediately after the
+  already-planned corpus refresh.
+  Rationale: The first complete replay proved that a gate wired today is necessarily red, while
+  accepting 387 files in EP-195 would spend the same whole-corpus churn again after EP-196's
+  template changes. EP-196's hard dependency is the working driver, which is complete; moving
+  activation preserves one churn event and a green repository.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
@@ -422,9 +442,24 @@ main suite passes 581 examples, all 37 DSL test suites and the all-package build
 generated-source policies and strict 21-concept ADR validation pass, and no valid generated byte
 changed. ADR 0004 and the user/release documentation now publish the moved boundary.
 
+EP-195 is complete as EP-196's corpus-migration prerequisite. It derives 41 public-CLI
+invocations from 34 force-tracked histories, preserves create-once files and banner safety,
+checks record/disk and actual Cabal component-closure consistency, and updates six renderer
+goldens through their owning tests. Focused replay is byte-clean; corruption, missing inventory,
+and golden acceptance probes behave precisely. The complete replay exposed and restored 387
+files of pre-existing EP-196-owned drift, so EP-196 now owns the single reviewed refresh followed
+by clean-tree gate activation. EP-195 changes no generated output byte.
+All keiro-dsl package test suites (including 581 DSL unit examples), the generated 29-fact workspace
+proof, the all-package build, both existing generated-source policies, strict 21-concept ADR
+validation, and diff hygiene pass.
+
 
 ## Revision Notes
 
+- 2026-08-05: Closed EP-195 after its complete replay exposed 387 files of generator drift
+  already owned by EP-196. Recorded 108 explicit compiled-surface exemptions, restored every
+  generated byte, and moved `check`/Justfile/`verify` activation to EP-196 Milestone 4 so the
+  corpus is refreshed once and the gate lands green.
 - 2026-08-05: Closed EP-194 after promoting empty-node refusals, unifying pure planning gates,
   and publishing five planner diagnostic families; recorded the one nonblocking
   `GeneratedOccurrenceCollision` exception and `GeneratedPlanningInvariantViolation` as the

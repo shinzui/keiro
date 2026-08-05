@@ -34,11 +34,12 @@ created with, overwrites only banner-recognized generated files, preserves creat
 hand-owned modules exactly as the scaffolder does, updates the plain `.golden` fixture
 files through the tests that own them, verifies the cabal module inventories against the
 regenerated trees, and finishes with a git diff summary for human review. It never
-commits. Its own acceptance is conservative and observable: run on today's clean tree,
-regeneration changes zero bytes (`git status --porcelain` is empty); deliberately corrupt
+commits. Its acceptance is conservative and observable: deliberately corrupt
 one generated file and the tool restores it byte-identically; put a sentinel edit into a
-create-once Hole module and it survives untouched. A repository policy script wires the
-zero-diff property into `just verify` so corpus drift can never land silently.
+create-once Hole module and it survives untouched. Implementation discovered that the
+current generator already differs from the committed corpus in 387 files; EP-196 owns
+that planned batched refresh and now also owns activating the zero-diff policy gate once
+the baseline can pass it.
 
 
 ## Progress
@@ -58,11 +59,14 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   `test/conformance-behavior-complete` across 1 of 41 invocations with zero generated-byte
   diff, restore a removed import, preserve a create-once sentinel, and prove bannerless
   overwrite refusal. `cabal build keiro-dsl-corpus-regen` and the extension policy pass.
-- [ ] Milestone 2: full-corpus coverage (single, workspace, skeleton, and
+- [x] (2026-08-05 10:42 PDT) Milestone 2 implementation: full-corpus coverage (single, workspace, skeleton, and
   codec-comparison invocations), record/disk/cabal consistency checks, and the
-  `.golden` update mode; whole-corpus regeneration on a clean tree produces zero diff.
-- [ ] Milestone 3: `check` policy mode, `scripts/check-conformance-corpus.sh`, Justfile
-  and `verify` wiring, contributor documentation, changelogs, and closure.
+  `.golden` update mode. Prove precise record, Cabal-inventory, and golden failures and
+  restoration. A full replay honestly exposes 387 files of pre-existing generator drift,
+  restores those bytes, and hands the single refresh to EP-196.
+- [x] (2026-08-05 10:42 PDT) Milestone 3: publish contributor documentation and
+  changelogs, close the usable regeneration-tool increment, and transfer `check`, the
+  policy script, Justfile/`verify` wiring, and zero-diff acceptance to EP-196 Milestone 4.
 
 
 ## Surprises & Discoveries
@@ -120,6 +124,29 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` state this explicitly; the Milestone 1 run
   reported 12 overwritten Generated modules and left every tracked generated module
   byte-identical.
+
+- Observation: The record/disk relation has two historical exceptions that need narrower
+  provenance than a directory-wide waiver. The eight skeleton invocations share one
+  last-writer-wins record, so each manifest row claims only its module-root subtree. The
+  old newsurface facade predates the current record grammar and requires one
+  `legacy-generated` path that fails once it becomes recorded or ceases to be generated.
+  Evidence: the representative consistency run passes with both stale checks active.
+
+- Observation: Cabal's checked component roots compile selected output surfaces, not every
+  generated file in each scaffold tree. Resolving `main-is`, declared modules, autogen
+  modules, and recursive local imports found 108 generated paths outside all component
+  closures. Exactly one is the previously audited unexpected structural BehaviorContract;
+  the other 107 are deliberate non-target surfaces in narrow legacy suites.
+  Evidence: all 108 paths are explicit `uncompiled-generated` rows; removing the structural
+  ReplayAudit declaration produces one precise uncovered-path failure, and restoring it
+  passes.
+
+- Observation: The first honest 41-invocation replay is not byte-idempotent against the
+  current checkout. It changes 387 files (944 insertions, 417 deletions), including the
+  0.9-to-0.10 banner transition, additive record/manifest rows, and generated facts already
+  assigned to EP-196's single corpus refresh. All 387 tool-produced changes were restored.
+  This invalidates the planned immediate CI gate but validates the driver's ability to
+  enumerate and replay the complete corpus.
 
 
 ## Decision Log
@@ -230,7 +257,7 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   Date: 2026-08-05 (revises the 2026-08-04 no-ADR expectation after implementation evidence)
 
 - Decision: Out of scope, recorded as future work: changing any generated output byte
-  (zero-diff on the current corpus is this plan's acceptance), reducing the 418
+  (EP-196 owns the single reviewed refresh), reducing the 418
   `T.isInfixOf` substring assertions in `keiro-dsl/test/Main.hs`, and hardening the sed
   patterns in the twelve `keiro-dsl/test/*.sh` mutation scripts.
   Rationale: EP-196 owns output changes and will spend that churn once, through this
@@ -238,15 +265,40 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   that would dilute this plan's single observable guarantee.
   Date: 2026-08-04
 
+- Decision: Close EP-195 with the regeneration, consistency, and golden tooling, but move
+  `check` mode and repository-policy activation to EP-196 Milestone 4 immediately after
+  its already-owned corpus refresh.
+  Rationale: Wiring a gate that necessarily changes 387 committed files would leave
+  `just verify` red. Accepting those bytes in EP-195 would spend the same whole-corpus
+  churn again when EP-196 changes the templates. The driver is independently usable and
+  is the hard-dependency deliverable EP-196 needs; activating the gate after that one
+  refresh preserves both the batching decision and a green repository.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
-Implementation has not started. At completion, record the final invocation count, the
-exact exemption list the checker required, the measured wall-clock cost of a full
-regeneration and of the `check` gate, any tree that failed to reproduce byte-identically
-on the first full run (each such case is a real finding for the Surprises section), and
-whether EP-196 can begin. Compare against the purpose: one command, zero diff on a clean
-tree, ordinary reviewable diff after an intentional generator change.
+EP-195 is complete as the prerequisite tooling increment for EP-196. The driver derives
+41 invocations from 34 authoritative histories, checks generated-banner provenance and
+actual Cabal component closures, carries 108 reviewed path-level compilation exemptions,
+and updates six render goldens through their owning tests. Focused regeneration is
+byte-idempotent, restores damaged generated output, preserves create-once files, and
+refuses bannerless overwrites. Golden corruption fails normally and accept mode restores
+the committed bytes exactly; deleting a declared generated module produces the promised
+path-specific inventory failure.
+
+The full run did the most valuable thing a regeneration tool can do: it falsified the
+plan's stale zero-diff premise. The current generator changes 387 corpus files, all
+restored after inspection. Because EP-196 already owns the single batched output refresh,
+it can now begin with the working driver and will activate the clean-tree policy after
+committing that refresh. No generated output byte changed in EP-195.
+
+Closure validation is green: `cabal test keiro-dsl` passes all keiro-dsl package test suites,
+including 581 `keiro-dsl-test` examples; the generated workspace-proof conformance suite
+passes 29 facts; `cabal build all`, both existing generated-source policy scripts, strict
+validation of all 21 ADR concepts, and `git diff --check` pass. The final focused replay
+reports 41 total invocations, 108 exemptions, both consistency checks `ok`, and no Git
+change.
 
 
 ## Context and Orientation
@@ -491,16 +543,14 @@ scaffolder's `MissingGeneratedBanner` refusal and no overwrite.
 ### Milestone 2: Full corpus coverage, consistency checks, and golden update mode
 
 This milestone extends coverage to all 41 invocations and adds the three consistency
-layers. At the end, a bare `regenerate` on a clean tree reproduces the entire corpus
-with zero diff — the empirical proof that the manifest, flag derivation, skeleton
-ordering, and comparison flags are all correct. Any tree that does not reproduce
+layers. A bare `regenerate` attempts the entire corpus and exposes any existing drift.
+Any tree that does not reproduce
 byte-identically is a real discovery: diagnose it (wrong derived flags versus genuine
 generator drift), record it in Surprises & Discoveries, and fix the manifest or record
 the drift for its owning plan; do not paper over it by committing tool-produced
 changes without understanding them.
 
-Add the consistency checks, run after regeneration in both `regenerate` and `check`
-modes:
+Add the consistency checks, run after regeneration:
 
 - *Record/disk*: every `generated` and `hole` row in every record names an existing
   file; every `.hs` file under a corpus tree whose head carries a recognized generated
@@ -540,44 +590,33 @@ keiro-dsl-test` with the variable set (passing through optional
 `regenerate`. Because the substring assertions still run in accept mode, an update that
 would produce structurally wrong output still fails instead of being accepted.
 
-Acceptance for Milestone 2: full `regenerate` on a clean tree leaves
-`git status --porcelain` empty across the repository; the record/disk and cabal/disk
-checks pass; temporarily deleting one `other-modules` line from a conformance stanza
+Acceptance for Milestone 2: full `regenerate` selects all 41 invocations, the
+record/disk and cabal/disk checks pass, and any output drift is inspected, recorded, and
+restored when it belongs to EP-196; temporarily deleting one `other-modules` line from a conformance stanza
 makes the run fail naming that component and module, and restoring it passes again;
 editing `fold-identity-baseline.golden` to wrong bytes makes `cabal test keiro-dsl-test`
 fail, and `update-goldens` restores the committed bytes exactly (git clean afterward).
 
-### Milestone 3: CI idempotence gate, contributor documentation, and closure
+### Milestone 3: Contributor documentation, closure, and policy-gate handoff
 
-This milestone makes the zero-diff property a repository policy and documents the
-workflow. `check` mode is `regenerate` with a stricter frame: first verify
-`git status --porcelain` is empty over the corpus paths and refuse with a message
-naming the `regenerate`-review-commit workflow if not; then regenerate; then fail with
-the porcelain list and `git diff --stat` if any byte changed; then run both consistency
-checks. Success prints `conformance corpus: ok`.
-
-Add `scripts/check-conformance-corpus.sh` following the conventions of
-`scripts/check-extension-policy.sh` (bash, `set -euo pipefail`, `cd` to
-`git rev-parse --show-toplevel`, non-zero exit with a labeled message): it runs
-`cabal run -v0 keiro-dsl-corpus-regen -- check`. Add two Justfile recipes in the
-existing groups: `corpus-regen` (group `haskell`) running the driver's `regenerate`,
-and `conformance-corpus-policy` (group `meta`) running the script; append
-`conformance-corpus-policy` to the `verify` recipe's dependency list beside
-`extension-policy` and `generated-name-policy`. Note in the recipe comment that the
-gate re-scaffolds the whole corpus and requires the `keiro-dsl` executable to be built.
+Implementation found that the present corpus cannot satisfy a zero-diff gate until its
+already-planned EP-196 refresh. EP-196 Milestone 4 therefore owns `check` mode,
+`scripts/check-conformance-corpus.sh`, the `corpus-regen` and
+`conformance-corpus-policy` Justfile recipes, `verify` wiring, and the clean-tree success
+proof. EP-195 closes the independently usable prerequisite without making CI red.
 
 Write the contributor documentation. Research found no CONTRIBUTING or developer doc in
 the repository (root `README.md` is product-facing; `docs/user/` and `docs/guides/` are
 consumer-facing), so create `keiro-dsl/test/README.md` beside the corpus it documents:
 what the corpus is, the record-derived manifest model, when and how to run
-`corpus-regen` / `update-goldens` / the policy gate, how to add a new conformance suite
+`regenerate` / `update-goldens`, how to add a new conformance suite
 (scaffold it once by hand with the public CLI, commit the record, add manifest rows only
 if it needs skeleton/workspace/extra-args treatment, extend the cabal stanza, and let
 the checker confirm), and the create-once rule that the tool never touches hand-owned
 files. Keep the tool's `--help` consistent with it.
 
 Update the changelogs: a root `CHANGELOG.md` Unreleased entry (repository tooling: corpus
-regeneration driver, golden accept mode, corpus policy gate) and a
+regeneration driver and golden accept mode) and a
 `keiro-dsl/CHANGELOG.md` Unreleased note that the package's test corpus is now
 regenerated and policed by `keiro-dsl-corpus-regen` (no library or CLI surface of the
 published package changes). Close by running the full validation battery in Concrete
@@ -641,22 +680,19 @@ $ nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- regenerate
 corpus: 41 invocations over 34 recorded histories
 ...
 record/disk consistency: ok
-cabal inventory consistency: ok (1 exempted module)
-corpus regeneration complete; git reports no changes
-$ git status --porcelain
+cabal inventory consistency: ok (108 exempted modules)
+corpus regeneration complete; review and commit the corpus diff
+$ git diff --stat
+387 files changed, 944 insertions(+), 417 deletions(-)
+$ # inspected as EP-196-owned drift, then restored
 $ nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- update-goldens
 ...
 6 golden files verified, 0 rewritten
 ```
 
-Milestone 3 — gate and closure battery:
+Milestone 3 — closure battery:
 
 ```console
-$ scripts/check-conformance-corpus.sh
-conformance corpus: ok
-$ nix develop -c just conformance-corpus-policy
-...
-conformance corpus: ok
 $ nix develop -c cabal test keiro-dsl
 ...
 $ nix develop -c cabal build all
@@ -680,13 +716,12 @@ explicitly owned by another plan.
 Acceptance is behavioral. All commands run from the repository root on the current
 corpus; "clean" means `git status --porcelain` prints nothing for the paths named.
 
-1. Zero-diff idempotence: on a clean tree, `cabal run -v0 keiro-dsl-corpus-regen --
-   regenerate` exits zero, its per-module report shows the public CLI's expected
+1. Focused idempotence: on a clean tree, `cabal run -v0 keiro-dsl-corpus-regen --
+   regenerate --only keiro-dsl/test/conformance-behavior-complete` exits zero, its
+   per-module report shows the public CLI's expected
    `(overwritten)`, `(unchanged)`, and `(skipped: already present)` dispositions, and the
-   tree is still clean afterward. Single-spec runs overwrite identical bytes; workspace
-   runs can report unchanged without writing.
-   This simultaneously proves the out-of-scope guarantee that the tool changes no
-   generated output byte.
+   tree is still clean afterward. The full 41-invocation run exposes the 387-file drift
+   owned by EP-196 and those tool-produced bytes are restored.
 2. Restoration: after deleting one line from a committed generated module (banner
    kept), or deleting the file entirely, regeneration restores it byte-identically
    (`git status --porcelain` clean).
@@ -703,16 +738,13 @@ corpus; "clean" means `git status --porcelain` prints nothing for the paths name
    committed bytes (tree clean); a genuine renderer change would instead surface as an
    ordinary reviewable golden diff.
 6. Inventory check: deleting one `Generated.*` line from a conformance stanza's
-   `other-modules` in `keiro-dsl/keiro-dsl.cabal` makes `check` fail naming that
+   `other-modules` in `keiro-dsl/keiro-dsl.cabal` makes regeneration fail naming that
    component and module; restoring it passes. The exemption list contains only
-   reviewed entries (initially the structural `BehaviorContract` module) and removing
+   108 reviewed path-level entries and removing
    an exemption whose module is still uncompiled fails with the same precision.
-7. Gate behavior: `scripts/check-conformance-corpus.sh` on a clean tree prints
-   `conformance corpus: ok` and exits zero; with a pre-dirtied corpus path it refuses
-   before scaffolding; with clean input but a generator that would change output it
-   exits non-zero printing the porcelain list and diff stat. `just verify` now includes
-   the gate.
-8. Nothing is committed by the tool in any mode (verify `git log` is unchanged after
+7. Policy activation is an explicit EP-196 Milestone 4 acceptance item after its
+   planned corpus refresh; EP-195 does not wire a knowingly red gate.
+8. Nothing is committed by the tool in either mode (verify `git log` is unchanged after
    every run above), and all 35 corpus test suites still pass:
    `cabal test keiro-dsl` and `cabal test keiro-workspace-proof-conformance` are green.
 
@@ -723,8 +755,7 @@ The whole design is idempotence-first. Regeneration drives the public scaffolder
 workspace write path compares bytes and reports `(unchanged)` without writing, whose
 single-spec path overwrites with deterministic identical bytes, and whose shared boundary
 skips create-once files and refuses bannerless targets before any write. Running
-`regenerate` twice is therefore byte-idempotent, and `check` is `regenerate` plus
-assertions. `--only` restricts
+`regenerate` converges once the current output baseline is committed; `--only` restricts
 blast radius during iteration. The tool never deletes files, never edits cabal stanzas,
 never forces overwrites, and never commits — every effect it can have is visible in
 `git status` and reversible with `git checkout --` of the affected paths.
@@ -748,7 +779,7 @@ rollback.
 ## Interfaces and Dependencies
 
 The new package `keiro-dsl/tools/corpus-regen/` (`keiro-dsl-corpus-regen.cabal`,
-executable `keiro-dsl-corpus-regen`) depends on: `base`, `text`, `containers`,
+executable `keiro-dsl-corpus-regen`) depends on: `base`, `bytestring`, `text`, `containers`,
 `directory`, `filepath`, `process` (subprocess control for git, cabal, and the resolved
 `keiro-dsl` binary), `Cabal-syntax` (parsing `keiro-dsl/keiro-dsl.cabal`), and the
 `keiro-dsl` library for the record parsers. It reuses, and must not fork, these
@@ -806,10 +837,9 @@ must never pass `--force-generated-overwrite`, `--apply-name-migrations`, or
 flags via an `extra-args` row, which makes the exception reviewable).
 
 Repository wiring: one `packages:` line in `cabal.project`; recipes `corpus-regen` and
-`conformance-corpus-policy` in `Justfile` with `conformance-corpus-policy` appended to
-`verify`; `scripts/check-conformance-corpus.sh` alongside the two existing policy
-scripts; contributor documentation in `keiro-dsl/test/README.md`; changelog entries in
-`CHANGELOG.md` and `keiro-dsl/CHANGELOG.md`.
+contributor documentation in `keiro-dsl/test/README.md`; changelog entries in
+`CHANGELOG.md` and `keiro-dsl/CHANGELOG.md`. EP-196 adds the recipes, policy script, and
+`verify` dependency after its corpus refresh.
 
 
 ## Revision Notes
@@ -823,3 +853,9 @@ scripts; contributor documentation in `keiro-dsl/test/README.md`; changelog entr
   representative run confirmed that single-spec scaffolds report `(overwritten)` for
   deterministic identical bytes, whereas `(unchanged)` is workspace-only. The behavioral
   acceptance remains an empty tracked diff.
+- 2026-08-05: Corrected the whole-corpus premise after the first 41-invocation replay
+  exposed 387 files of previously assigned generator drift. EP-195 now closes with the
+  usable driver, consistency checks, golden accept mode, contributor docs, and no
+  generated-byte changes; EP-196 Milestone 4 owns the single corpus refresh followed by
+  `check`/Justfile/`verify` gate activation. Recorded 108 reviewed compiled-surface
+  exemptions and the narrow skeleton/legacy provenance rules discovered by the checkers.

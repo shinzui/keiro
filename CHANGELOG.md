@@ -58,6 +58,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Other Changes
 
+- **keiro-dsl**: adds record-derived conformance-corpus regeneration and golden
+  acceptance tooling. The driver replays the public CLI without forced overwrites,
+  preserves create-once files, checks record/disk and Cabal/disk consistency, and
+  reports every resulting Git diff for review.
 - The development project pins `mori://shinzui/keiki/repos/keiki` at the commit
   behind `v0.9.0.0` for both `keiki` and `keiki-codec-json` until the coordinated
   0.9 packages are published to Hackage.

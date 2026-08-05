@@ -49,7 +49,8 @@ after regeneration.
 - [ ] Milestone 3: usage-conditional import emission across all generated module families;
   `-Wall` warning parity in generated and committed corpus cabal files.
 - [ ] Milestone 4: single corpus regeneration through EP-195's tool, deliberate create-once
-  updates, demonstration failure transcript, ADR/doc/changelog closure, full validation.
+  updates, activation of the clean-tree corpus policy gate, demonstration failure transcript,
+  ADR/doc/changelog closure, full validation.
 
 
 ## Surprises & Discoveries
@@ -86,6 +87,13 @@ after regeneration.
   currently-unused `RequestId` type import (`Generated/BehaviorComplete/Journey/Harness.hs:10`)
   used, so the milestones interlock: constants land before import pruning.
   Date: 2026-08-04
+
+- Observation: EP-195's first honest 41-invocation replay found 387 files of existing generator
+  drift (944 insertions, 417 deletions) and restored them, confirming that a clean-tree gate
+  cannot pass before this plan's already-batched corpus refresh. Its Cabal closure checker also
+  records 108 explicit uncompiled paths: 107 intentional non-target surfaces in narrow suites
+  and the one unexpected structural BehaviorContract this plan already owns.
+  Date: 2026-08-05
 
 
 ## Decision Log
@@ -161,6 +169,15 @@ after regeneration.
   three times, which is the tax EP-195 exists to remove. This is the MasterPlan 29 hard
   dependency.
   Date: 2026-08-04
+
+- Decision: Activate EP-195's `check` mode and repository policy only after Milestone 4 commits
+  this plan's single corpus refresh. Add the policy script and Justfile/`verify` wiring in the
+  same milestone.
+  Rationale: EP-195 proved the current baseline is 387 files behind the current generator. A
+  gate landed before this refresh is necessarily red; refreshing in EP-195 and again here would
+  spend the whole-corpus churn twice. This sequencing keeps the hard-dependency tooling usable,
+  preserves one reviewed churn event, and makes the new gate green from its first commit.
+  Date: 2026-08-05
 
 - Decision: explicitly excluded from this plan — (a) printer style unification (leading versus
   trailing commas and similar layout differences between module families) and (b) moving the
@@ -644,6 +661,13 @@ annotated stub and an evidence-carrying failure line. Add entries to `CHANGELOG.
 recompile; no wire, key, or replay change). Close with the full validation battery in Concrete
 Steps.
 
+After the reviewed refresh is committed, finish EP-195's deferred policy surface: implement
+`keiro-dsl-corpus-regen check` as a clean-tree preflight plus full regeneration and zero-diff
+assertion; add `scripts/check-conformance-corpus.sh`; add `corpus-regen` and
+`conformance-corpus-policy` Justfile recipes; append the policy recipe to `verify`. Prove the
+gate refuses a pre-dirtied corpus before scaffolding and passes from the clean refreshed
+baseline with `conformance corpus: ok`.
+
 
 ## Concrete Steps
 
@@ -736,6 +760,12 @@ extension policy: ok
 $ scripts/check-generated-name-policy.sh
 generated Haskell naming policy: OK
 
+$ scripts/check-conformance-corpus.sh
+conformance corpus: ok
+
+$ nix develop -c just conformance-corpus-policy
+conformance corpus: ok
+
 $ okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 validation succeeded
 
@@ -782,8 +812,10 @@ Acceptance is behavioral:
    over the corpus diff shows no key added or removed; no wire tag, payload key, shape hash, or
    snapshot discriminator changes; behavior conformance passes with the same witness values as
    before.
-8. Both policy scripts, strict OKF ADR validation (after the 0017/0019 amendments), and
-   `git diff --check` pass; changelogs and user docs updated.
+8. All three generated-source/corpus policy scripts, strict OKF ADR validation (after the
+   0017/0019 amendments), and `git diff --check` pass; changelogs and user docs updated.
+   `just verify` includes the conformance-corpus policy, which refuses pre-dirty corpus paths
+   before scaffolding and passes with `conformance corpus: ok` on the refreshed clean tree.
 
 
 ## Idempotence and Recovery
@@ -865,3 +897,9 @@ Milestone 3's scope. EP-195's corpus inventory (drafted in parallel) discovered 
 `Generated.StructuralConformance.ArtifactCatalog.BehaviorContract` is compiled by no cabal
 component, which would let it escape this plan's zero-warning oracle; Milestone 3 now compiles it
 or records a named exemption in EP-195's checker.
+
+Revision note (2026-08-05): EP-195's complete replay exposed and restored 387 files of
+pre-existing drift, so its clean-tree `check`/script/Justfile/`verify` activation moves into this
+plan's Milestone 4 immediately after the already-planned single corpus refresh. EP-195's working
+regeneration, provenance, Cabal-closure, and golden tooling is complete and satisfies this plan's
+hard dependency without landing a knowingly red gate.

@@ -60,6 +60,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Adds a record-derived conformance-corpus driver with focused public-CLI replay,
+  create-once preservation, record/disk and Cabal/disk consistency checks, and a
+  test-owned accept mode for the six renderer goldens.
 - Adds the exported stable `ModuleRole`/`moduleRole` projection for
   `ScaffoldModule` artifacts and a generated-source naming audit plus repository
   policy gate.
