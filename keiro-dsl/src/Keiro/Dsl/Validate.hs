@@ -412,6 +412,10 @@ data DiagnosticCode
   | EmitDeriveHoleUnrealized
   | WqFieldOptionalUnsupported
   | RmInlineSubscriptionIgnored
+  | -- ExecPlan 197: process and router references close under language 4.
+    ProcessKeyFieldUnknown
+  | ProcessDispatchKeyUnresolved
+  | ProcessBindingUnscoped
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.
@@ -1681,8 +1685,8 @@ nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
 validateNode :: EffectiveLanguageContract -> Spec -> Node -> [Diagnostic]
 validateNode languageContract spec (NAggregate agg) = validateAggregate languageContract spec agg
-validateNode _languageContract spec (NProcess p) = validateProcess spec p
-validateNode _languageContract spec (NRouter router) = validateRouter spec router
+validateNode languageContract spec (NProcess p) = validateProcess languageContract spec p
+validateNode languageContract spec (NRouter router) = validateRouter languageContract spec router
 validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
 validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
 validateNode languageContract spec (NEmit e) = validateEmit languageContract spec e
@@ -2457,9 +2461,9 @@ canonicalIntakeEnvelopeFields =
     ]
 
 -- | EP-3 rules for a process manager + its nested timer.
-validateProcess :: Spec -> ProcessNode -> [Diagnostic]
-validateProcess spec p =
-  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, policyRules, ambiguityRule, benignInversions]
+validateProcess :: EffectiveLanguageContract -> Spec -> ProcessNode -> [Diagnostic]
+validateProcess languageContract spec p =
+  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions]
   where
     aggregates = [a | NAggregate a <- specNodes spec]
     aggNames = map aggName aggregates
@@ -2562,6 +2566,61 @@ validateProcess spec p =
           (aggregate : _) -> Just aggregate
           [] -> Nothing
 
+    strictSurfaceResolution
+      | not (enforcesSpecSurfaceClosures languageContract) = []
+      | otherwise = correlateFieldRule ++ dispatchKeyRules ++ bindingScopeRules
+
+    correlateFieldRule =
+      [ mkErr pl ProcessKeyFieldUnknown $
+          "correlate references 'input." <> corrField (procCorrelate p) <> "' but input '" <> inName (procInput p) <> "' does not declare that field"
+      | corrField (procCorrelate p) `notElem` inputFields
+      ]
+
+    dispatchKeyRules =
+      [ mkErr (locLine (dispLoc dispatch)) ProcessDispatchKeyUnresolved $
+          "dispatch to '" <> dispTarget dispatch <> "' uses unresolved key '" <> dispKey dispatch <> "'; expected correlationId or input.<declared-field>"
+      | dispatch <- hDispatch (procHandle p),
+        not (processKeyInScope (dispKey dispatch))
+      ]
+        ++ [ mkErr (locLine (tmLoc timer)) ProcessDispatchKeyUnresolved $
+               "timer fire to '" <> fireTarget (tmFire timer) <> "' uses unresolved key '" <> fireKey (tmFire timer) <> "'; expected correlationId or input.<declared-field>"
+           | not (processKeyInScope (fireKey (tmFire timer)))
+           ]
+
+    processKeyInScope value =
+      value == "correlationId"
+        || case T.stripPrefix "input." value of
+          Just field -> field `elem` inputFields
+          Nothing -> False
+
+    bindingScopeRules =
+      bindingRules pl "advance" inputFields (advFields (hAdvance (procHandle p)))
+        ++ concatMap
+          (\dispatch -> bindingRules (locLine (dispLoc dispatch)) "dispatch" inputFields (dispFields dispatch))
+          (hDispatch (procHandle p))
+        ++ bindingRules
+          (locLine (tmLoc timer))
+          "timer fire"
+          (inputFields <> map fbName (tmPayload timer) <> ["timerId"])
+          (fireFields (tmFire timer))
+
+    bindingRules diagnosticLine context bareScope bindings =
+      [ mkErr diagnosticLine ProcessBindingUnscoped $
+          context <> " binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the process input and timer scopes"
+      | binding <- bindings,
+        not (bindingInScope bareScope binding)
+      ]
+
+    bindingInScope bareScope binding = case fbValue binding of
+      Nothing -> fbName binding `elem` bareScope
+      Just value
+        | isQuoted value -> True
+        | value == "timer.id" -> True
+        | Just field <- T.stripPrefix "input." value -> field `elem` inputFields
+        | otherwise -> value `elem` bareScope
+
+    isQuoted value = T.length value >= 2 && T.head value == '"' && T.last value == '"'
+
     timerCeiling =
       [ mkErr (locLine (tmLoc timer)) ProcessTimerCeilingInvalid $
           "timer '" <> tmName timer <> "' max-attempts must be at least 1"
@@ -2615,9 +2674,26 @@ runtimeIdentityError allowsHyphen identity
   | T.isInfixOf ":" identity = Just "contains ':' which is reserved for runtime stream-family prefixes; choose a stable name without ':'"
   | otherwise = Nothing
 
+-- | The generated lower-camel selector for a logical field or SQL column.
+-- Read-model notation stores SQL names such as @responder_id@ while router
+-- resolve rows and dispatch keys use the generated selector @responderId@.
+logicalFieldSelector :: Text -> Text
+logicalFieldSelector raw =
+  case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+    Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+    Left _ -> raw
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
+          HaskellName.siteLogicalName = raw,
+          HaskellName.siteOwner = "validation field resolution",
+          HaskellName.siteLine = 0
+        }
+
 -- | EP-108 rules for a stateless content-based router.
-validateRouter :: Spec -> RouterNode -> [Diagnostic]
-validateRouter spec router =
+validateRouter :: EffectiveLanguageContract -> Spec -> RouterNode -> [Diagnostic]
+validateRouter languageContract spec router =
   concat
     [ references,
       keyField,
@@ -2692,10 +2768,18 @@ validateRouter spec router =
     readModelReference = case rvSource (rtResolve router) of
       ResolveHole -> []
       ResolveReadModel name ->
-        [ mkErr (locLine (rvLoc (rtResolve router))) RouterUnresolvedRef $
-            "router '" <> rtId router <> "' resolve names readmodel '" <> name <> "' but no such readmodel node is declared"
-        | name `notElem` map rmName readModels
-        ]
+        case [readModel | readModel <- readModels, rmName readModel == name] of
+          [] ->
+            [ mkErr (locLine (rvLoc (rtResolve router))) RouterUnresolvedRef $
+                "router '" <> rtId router <> "' resolve names readmodel '" <> name <> "' but no such readmodel node is declared"
+            ]
+          readModel : _ ->
+            [ mkErr (locLine (rvLoc (rtResolve router))) RouterReadModelUnverified $
+                "router '" <> rtId router <> "' resolve row field '" <> column <> "' is not a declared column of readmodel '" <> name <> "'"
+            | enforcesSpecSurfaceClosures languageContract,
+              column <- rvRow (rtResolve router),
+              column `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+            ]
 
     policyRules =
       policyConsistency

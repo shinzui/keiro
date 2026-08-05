@@ -53,10 +53,14 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   dispatch/operation nodes, and the documentation truth pass over
   `docs/user/typed-spec-toolchain.md`. The focused suite passes 588 examples with zero failures;
   a real scaffold report names `emit reservationResponse` as contributing no modules.
-- [ ] Milestone 2: reference-resolution parity between process and router nodes —
+- [x] (2026-08-05) Milestone 2: reference-resolution parity between process and router nodes —
   `ProcessKeyFieldUnknown`, `ProcessDispatchKeyUnresolved`, `ProcessBindingUnscoped`, and the
   revived `RouterReadModelUnverified` resolve-row column check, all gated on
-  `enforcesSpecSurfaceClosures`.
+  `enforcesSpecSurfaceClosures`. The process binding vocabulary is quoted literals,
+  `input.<declared>`, bare declared input names, and exactly `timer.id`; timer-fire bindings also
+  admit declared timer-payload names and the runtime-owned `timerId`. Router row fields resolve
+  against the generated lower-camel selector for SQL columns. The full suite passes 590 examples
+  with zero failures.
 - [ ] Milestone 3: closed vocabularies and bounded values (`WqPayloadTypeUnknown`,
   `WindowOutOfRange`, the small-surface cluster), dead-diagnostic cleanup including the new
   `RouterBenignInversion` code, the ADR 0004 inventory amendment, changelogs, and full closure
@@ -108,6 +112,12 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   The new process twins must nevertheless ride the strict closure gate per the MasterPlan 29
   policy, so process and router acceptance are asymmetric under languages 1-3 and symmetric under
   language 4. This asymmetry is deliberate and documented.
+
+- Observation: read-model columns are stored with their SQL spellings (for example
+  `responder_id`) while router resolve rows use generated logical selectors (for example
+  `responderId`). The revived router check therefore compares against the same generated
+  lower-camel selector derivation as scaffolding rather than comparing raw text. This also gives
+  Milestone 3's pgmq source-key check one authoritative interpretation of a declared column.
 
 
 ## Decision Log
@@ -164,7 +174,10 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   (binding values must be quoted literals, `input.<declared field>`, or bare declared input
   names, mirroring `RouterBindingUnscoped`; the timer-fire scope additionally admits declared
   timer payload field names — confirm the exact admitted forms against every committed process
-  fixture before freezing the set, and record the final scope vocabulary here). For H, revive
+  fixture before freezing the set, and record the final scope vocabulary here). The frozen
+  vocabulary is: advance/dispatch bindings admit quoted literals, `input.<declared>`, bare
+  declared input names, and exactly `timer.id`; timer-fire bindings additionally admit declared
+  timer-payload names and the runtime-owned `timerId`. For H, revive
   the dead constructor `RouterReadModelUnverified` (declared Validate.hs line 202, never
   constructed since ExecPlan 108) as the strict-gated error for a `resolve … row { … }` column
   that is not a declared column of the resolved read model; downstream `resolved.<f>` binding
@@ -249,14 +262,15 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
 
 ## Outcomes & Retrospective
 
-Milestone 1 is complete. Four accepted-but-inert declarations now produce ordinary warnings,
+Milestones 1 and 2 are complete. Four accepted-but-inert declarations now produce ordinary warnings,
 single-file scaffold reports name validated and diff-classified nodes that contributed no
 modules, and the user guide distinguishes generated or enforced behavior from descriptive-only
-notation. The focused suite grew from the captured 582-example baseline to 588 examples and
-passes with zero failures. Reference-resolution and strict-closure work remains in Milestones 2
-and 3. At completion, record the final scope vocabulary chosen for
-`ProcessBindingUnscoped`, the `dedup key=` and `outboxId` disposition confirmations, exact test
-counts, evidence that no committed fixture changed bytes, and the ADR distillation.
+notation. Process correlate, dispatch-key, and binding scopes now resolve under language 4, and
+router resolve-row fields are verified against the selected read model. The suite grew from the
+captured 582-example baseline to 590 examples and passes with zero failures. Closed-vocabulary,
+bounded-value, and small-surface work remains in Milestone 3. At completion, record the
+`dedup key=` and `outboxId` disposition confirmations, exact final test counts, evidence that no
+committed fixture changed bytes, and the ADR distillation.
 
 
 ## Context and Orientation
@@ -713,3 +727,7 @@ plan changes none.
   honesty, the user-guide truth pass, six focused regressions, the 582-example baseline, and a
   green 588-example focused suite. Captured the two accepted-hole CLI transcripts before strict
   enforcement begins.
+- 2026-08-05: Completed Milestone 2 with strict-gated process correlate, dispatch-key, and
+  binding-scope resolution plus router resolve-row verification. Recorded the fixture-backed
+  process vocabulary and the SQL-column-to-logical-selector normalization; the full suite now
+  passes 590 examples with zero failures.

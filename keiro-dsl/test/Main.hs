@@ -3719,6 +3719,40 @@ main = hspec $ do
       codes <- errorCodesOf "test/fixtures/process-ghost-refs.keiro"
       length (filter (== ProcessUnresolvedRef) codes) `shouldBe` 5
       codes `shouldContain` [ProcessDispatchIdSupplied]
+    it "gates process correlate, dispatch-key, and binding scopes on language 4" $ do
+      spec <- specOf "test/fixtures/hospital-surge.keiro"
+      let badCorrelate =
+            modifyProcess
+              "HospitalSurge"
+              (\process -> process {procCorrelate = (procCorrelate process) {corrField = "ghost"}})
+              spec
+          badDispatchKey =
+            modifyProcess
+              "HospitalSurge"
+              ( \process ->
+                  let handle = procHandle process
+                   in process {procHandle = handle {hDispatch = updateFirst (\dispatch -> dispatch {dispKey = "input.ghost"}) (hDispatch handle)}}
+              )
+              spec
+          badBinding =
+            modifyProcess
+              "HospitalSurge"
+              ( \process ->
+                  let handle = procHandle process
+                      advance = hAdvance handle
+                   in process {procHandle = handle {hAdvance = advance {advFields = updateFirst (\binding -> binding {fbValue = Just "ghost.value"}) (advFields advance)}}}
+              )
+              spec
+          cases =
+            [ (badCorrelate, ProcessKeyFieldUnknown),
+              (badDispatchKey, ProcessDispatchKeyUnresolved),
+              (badBinding, ProcessBindingUnscoped)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+      serviceErrorCodes 4 spec
+        `shouldNotContain` [ProcessKeyFieldUnknown, ProcessDispatchKeyUnresolved, ProcessBindingUnscoped]
 
   describe "router (EP-108)" $ do
     it "parses the incident-paging router shape" $ do
@@ -3773,6 +3807,16 @@ main = hspec $ do
         )
         spec
         `shouldContain` [PolicyContradiction]
+    it "gates resolve-row column verification on language 4" $ do
+      spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+      let unresolved =
+            modifyRouter
+              "PagingRouter"
+              (\router -> router {rtResolve = (rtResolve router) {rvRow = ["ghostColumn"]}})
+              spec
+      serviceErrorCodes 3 unresolved `shouldNotContain` [RouterReadModelUnverified]
+      serviceErrorCodes 4 unresolved `shouldContain` [RouterReadModelUnverified]
+      serviceErrorCodes 4 spec `shouldNotContain` [RouterReadModelUnverified]
     it "rejects on-ambiguous Fired for process timers" $ do
       spec <- specOf "test/fixtures/hospital-surge.keiro"
       let changed =
