@@ -73,7 +73,7 @@ import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
-import Keiro.Dsl.Grammar (Loc (..), Node (..), Spec (..))
+import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
@@ -161,6 +161,7 @@ data ScaffoldReport = ScaffoldReport
     reportOutDir :: !FilePath,
     reportContext :: !Context,
     reportDispositions :: ![(ScaffoldModule, WriteDisposition)],
+    reportInertNodes :: ![(Text, Text)],
     reportManifestPath :: !FilePath,
     reportRecordPath :: !FilePath,
     reportPreviousSpecPath :: !(Maybe Text),
@@ -722,6 +723,15 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportOutDir = out,
                                   reportContext = ctx,
                                   reportDispositions = dispositions,
+                                  reportInertNodes =
+                                    [ (kindLabel, nodeName)
+                                    | node <- specNodes spec,
+                                      (kindLabel, nodeName) <- case node of
+                                        NEmit emitNode -> [("emit", emName emitNode)]
+                                        NPgmqDispatch dispatchNode -> [("dispatch", pdName dispatchNode)]
+                                        NOperation operationNode -> [("operation", opName operationNode)]
+                                        _ -> []
+                                    ],
                                   reportManifestPath = manifestPath,
                                   reportRecordPath = recordPath,
                                   reportPreviousSpecPath = recSpecPath <$> previousRecord,
@@ -1110,6 +1120,7 @@ renderScaffoldReport report =
   [ "scaffold: " <> T.pack (reportSpecPath report) <> " -> " <> T.pack (reportOutDir report) <> " (module-root=" <> rootLabel <> ", layout=" <> layoutLabel <> ")"
   ]
     <> map moduleLine dispositions
+    <> inertNodeSection
     <> [ "firewall: OK (" <> tshow generatedCount <> " generated modules scanned, 0 forbidden operators)",
          harnessLine,
          dependencyLine,
@@ -1143,6 +1154,13 @@ renderScaffoldReport report =
     dispositionTag Unchanged = "(unchanged)"
     pad name = name <> T.replicate (nameWidth - T.length name) " "
     generatedCount = length [() | (m, _) <- dispositions, kind m == Generated]
+    inertNodeSection = case reportInertNodes report of
+      [] -> []
+      nodes ->
+        [ "no-modules: "
+            <> T.intercalate ", " [kindLabel <> " " <> nodeName | (kindLabel, nodeName) <- nodes]
+            <> " (validated and diff-classified; no generated modules)"
+        ]
     harnesses =
       sortOn
         id

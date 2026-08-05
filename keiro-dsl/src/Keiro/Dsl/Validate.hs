@@ -406,6 +406,12 @@ data DiagnosticCode
   | BehaviorDerivationInvalid
   | ConformanceFactKeyCollision
   | GeneratedPlanningInvariantViolation
+  | -- ExecPlan 197: accepted but currently inert spec surfaces are reported
+    -- through the ordinary warning pipeline.
+    IntakeBindFlagUnenforced
+  | EmitDeriveHoleUnrealized
+  | WqFieldOptionalUnsupported
+  | RmInlineSubscriptionIgnored
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.
@@ -1969,7 +1975,7 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference ++ versionFloor ++ identifiers ++ duplicateColumns
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ duplicateColumns
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -2005,6 +2011,17 @@ validateReadModel languageContract spec readModel =
       | rmScope readModel /= Nothing,
         rmConsistency readModel /= Strong
       ]
+    inlineSubscription =
+      [ Diagnostic
+          { line = readModelLine,
+            severity = Warning,
+            code = RmInlineSubscriptionIgnored,
+            relatedLocations = [],
+            message = "readmodel '" <> rmName readModel <> "': subscription override is ignored when feed = inline; remove it or select feed = subscription"
+          }
+      | rmFeed readModel == RmInline,
+        rmSubscription readModel /= Nothing
+      ]
     inlineReference =
       [ mkErr readModelLine RmInlineFeedUnreferenced $
           "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
@@ -2037,7 +2054,7 @@ validateReadModel languageContract spec readModel =
 -- derivation; the disposition inversions (storeFailure transient => must retry;
 -- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 validateWorkqueue :: WorkqueueNode -> [Diagnostic]
-validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, provisionRules]
+validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, optionalFieldWarnings, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -2112,6 +2129,17 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
                      "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
                  | gkVia groupKey /= "raw" && gkFixture groupKey == Nothing
                  ]
+    optionalFieldWarnings =
+      [ Diagnostic
+          { line = wl,
+            severity = Warning,
+            code = WqFieldOptionalUnsupported,
+            relatedLocations = [],
+            message = "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' omits 'required', but generated decoders currently require every payload field"
+          }
+      | field <- wqPayload w,
+        not (wqfRequired field)
+      ]
     provisionRules = case wqProvision w of
       WqStandard -> []
       WqUnlogged ->
@@ -2167,47 +2195,68 @@ specContracts spec = [c | NContract c <- specNodes spec]
 
 -- | EP-4 cross-node coupling: an intake's contract/topic/accepted-events resolve.
 intakeCoupling :: EffectiveLanguageContract -> Spec -> IntakeNode -> [Diagnostic]
-intakeCoupling languageContract spec i = case lookupContract (inkContract i) of
-  Nothing ->
-    [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
-  Just c ->
-    [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' topic '" <> inkTopic i <> "' is not a topic of contract '" <> inkContract i <> "'")
-    | inkTopic i `notElem` map fst (ctrTopics c)
-    ]
-      ++ [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' accepts event '" <> ev <> "' not declared in contract '" <> inkContract i <> "'")
-         | ev <- inkAccept i,
-           ev `notElem` map ceName (ctrEvents c)
-         ]
-      ++ [ mkErr (locLine (inkLoc i)) TopicAffinityMismatch $
-             "intake '" <> inkName i <> "' subscribes to topic '" <> inkTopic i <> "' but accepted event '" <> ceName event <> "' is declared on topic '" <> ceTopic event <> "'"
-         | event <- ctrEvents c,
-           ceName event `elem` inkAccept i,
-           ceTopic event /= inkTopic i
-         ]
-      ++ [ mkErr (locLine (inkLoc i)) IntakeBindUnresolved $
-             "intake '" <> inkName i <> "' binds undeclared envelope or accepted-event field '" <> brField binding <> "'"
-         | enforcesSpecSurfaceClosures languageContract,
-           binding <- inkBinds i,
-           brField binding `Set.notMember` resolvableFields c
-         ]
-      ++ [ mkErr (locLine (inkLoc i)) IntakeDedupeKeyUnresolved $
-             "intake '" <> inkName i <> "' dedupe key '" <> inkDedupeKey i <> "' is not an envelope or accepted-event field"
-         | enforcesSpecSurfaceClosures languageContract,
-           inkDedupeKey i `Set.notMember` resolvableFields c
-         ]
-      ++ [ mkErr (locLine (inkLoc i)) IntakeDecodeSchemaVersionMismatch $
-             "intake '"
-               <> inkName i
-               <> "' decode schemaVersion "
-               <> tInt (decBodySchemaVersion (inkDecode i))
-               <> " does not match contract '"
-               <> ctrName c
-               <> "' schemaVersion "
-               <> tInt (ctrSchemaVersion c)
-         | enforcesSpecSurfaceClosures languageContract,
-           decBodySchemaVersion (inkDecode i) /= ctrSchemaVersion c
-         ]
+intakeCoupling languageContract spec i = bindFlagWarnings ++ contractCoupling
   where
+    contractCoupling = case lookupContract (inkContract i) of
+      Nothing ->
+        [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
+      Just c ->
+        concat
+          [ [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' topic '" <> inkTopic i <> "' is not a topic of contract '" <> inkContract i <> "'")
+            | inkTopic i `notElem` map fst (ctrTopics c)
+            ],
+            [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' accepts event '" <> ev <> "' not declared in contract '" <> inkContract i <> "'")
+            | ev <- inkAccept i,
+              ev `notElem` map ceName (ctrEvents c)
+            ],
+            [ mkErr (locLine (inkLoc i)) TopicAffinityMismatch $
+                "intake '" <> inkName i <> "' subscribes to topic '" <> inkTopic i <> "' but accepted event '" <> ceName event <> "' is declared on topic '" <> ceTopic event <> "'"
+            | event <- ctrEvents c,
+              ceName event `elem` inkAccept i,
+              ceTopic event /= inkTopic i
+            ],
+            [ mkErr (locLine (inkLoc i)) IntakeBindUnresolved $
+                "intake '" <> inkName i <> "' binds undeclared envelope or accepted-event field '" <> brField binding <> "'"
+            | enforcesSpecSurfaceClosures languageContract,
+              binding <- inkBinds i,
+              brField binding `Set.notMember` resolvableFields c
+            ],
+            [ mkErr (locLine (inkLoc i)) IntakeDedupeKeyUnresolved $
+                "intake '" <> inkName i <> "' dedupe key '" <> inkDedupeKey i <> "' is not an envelope or accepted-event field"
+            | enforcesSpecSurfaceClosures languageContract,
+              inkDedupeKey i `Set.notMember` resolvableFields c
+            ],
+            [ mkErr (locLine (inkLoc i)) IntakeDecodeSchemaVersionMismatch $
+                "intake '"
+                  <> inkName i
+                  <> "' decode schemaVersion "
+                  <> tInt (decBodySchemaVersion (inkDecode i))
+                  <> " does not match contract '"
+                  <> ctrName c
+                  <> "' schemaVersion "
+                  <> tInt (ctrSchemaVersion c)
+            | enforcesSpecSurfaceClosures languageContract,
+              decBodySchemaVersion (inkDecode i) /= ctrSchemaVersion c
+            ]
+          ]
+    bindFlagWarnings =
+      [ Diagnostic
+          { line = locLine (inkLoc i),
+            severity = Warning,
+            code = IntakeBindFlagUnenforced,
+            relatedLocations = [],
+            message =
+              "intake '"
+                <> inkName i
+                <> "' bind for '"
+                <> brField binding
+                <> "' declares "
+                <> bindFlagText binding
+                <> ", but generated code does not consume envelope bindings"
+          }
+      | binding <- inkBinds i,
+        brRequired binding || brCrossCheck binding
+      ]
     lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
     resolvableFields contract =
       canonicalIntakeEnvelopeFields
@@ -2217,9 +2266,14 @@ intakeCoupling languageContract spec i = case lookupContract (inkContract i) of
             ceName event `elem` inkAccept i,
             field <- ceFields event
           ]
+    bindFlagText binding = case (brRequired binding, brCrossCheck binding) of
+      (True, True) -> "'required' and 'cross-check body' flags"
+      (True, False) -> "a 'required' flag"
+      (False, True) -> "a 'cross-check body' flag"
+      (False, False) -> "no enforcement flags"
 
 validateEmit :: EffectiveLanguageContract -> Spec -> EmitNode -> [Diagnostic]
-validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
+validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling ++ deriveWarning
   where
     el = locLine (emLoc e)
     skipRule =
@@ -2249,6 +2303,15 @@ validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
                ceName event == emrEvent row,
                ceTopic event /= emTopic e
              ]
+    deriveWarning =
+      [ Diagnostic
+          { line = el,
+            severity = Warning,
+            code = EmitDeriveHoleUnrealized,
+            relatedLocations = [],
+            message = "emit '" <> emName e <> "': derive ... hole declarations name hand-owned responsibilities but generate no module or typed signature"
+          }
+      ]
 
 validatePublisher :: EffectiveLanguageContract -> Spec -> PublisherNode -> [Diagnostic]
 validatePublisher languageContract spec p =

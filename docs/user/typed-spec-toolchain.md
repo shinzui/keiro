@@ -758,10 +758,11 @@ projection transfer_decisions key=reservationId
   }
 ```
 
-`key` names the source field used by the projection. Status-map keys are exact
-event names. They must be unique and resolve to events in the aggregate. The map
-is total by default; use `status-map partial { ... }` when some events
-intentionally do not change projected status.
+`key` names the source field used by the projection. Under Language 4 it must
+resolve to an aggregate register, command field, or event field. Status-map
+keys are exact event names. They must be unique and resolve to events in the
+aggregate. The map is total by default; use `status-map partial { ... }` when
+some events intentionally do not change projected status.
 
 Prefer declaring a matching `readmodel` node. It then owns schema identity,
 feed, consistency, and rebuild metadata. An optional
@@ -835,15 +836,22 @@ unique across all processes, routers, and workflows.
 stream category: it must not contain `-`, whitespace, control characters, or
 `:`, and cannot be `$all`. Use camelCase for compound categories.
 
-Bindings are either bare field copies, dotted references such as
-`input.hospitalId` or `timer.id`, or quoted literals. Advance, dispatch, timer,
+Bindings are either bare input-field copies, `input.<field>` references, or
+quoted literals; timer-fire bindings may also copy declared timer payload
+fields. Under Language 4, the correlate field, dispatch and fire keys, and all
+binding values must resolve within those scopes. Advance, dispatch, timer,
 command, target, field, projection, and scheduled-timer references are checked.
 Do not bind `commandId` or `id`; dispatch identities are runtime-owned.
 
 `fireAt` must reference an injected `:Time` input field. The notation has no
-clock-sampling form. `max-attempts` is at least 1. `on-ambiguous` must be
-`Retry`: command ambiguity is an aggregate-definition defect, never benign
-success, and the ceiling provides a durable dead-letter witness.
+clock-sampling form, and Language 4 rejects a duration whose unit-adjusted
+seconds do not fit in `Int`. The timer ID expression must end in
+`correlationId`; the parsed identifier is not a general field reference.
+`decode unknown-status => Name` is descriptive-only today. A dead-letter
+category remains operator guidance, but Language 4 validates that it is a legal
+runtime identity. `max-attempts` is at least 1. `on-ambiguous` must be `Retry`:
+command ambiguity is an aggregate-definition defect, never benign success, and
+the ceiling provides a durable dead-letter witness.
 
 `rejected` and `poison` are each `halt`, `deadLetter`, or `skip`. Align the
 node-level rejected policy with every dispatch's `on-failed` action. Mapping a
@@ -876,8 +884,9 @@ router HospitalTransferRouter
 
 `name` follows the stable identity rules described for processes. `key` must
 name an input field. A resolver is either `via read-model Name` for a declared
-read model or `via hole` for another typed effectful implementation. `row`
-declares the fields available under `resolved.*`.
+read model or `via hole` for another typed effectful implementation. Under
+Language 4, every `row` field on a read-model resolver must name a column of
+that read model; only verified row fields become available under `resolved.*`.
 
 The mandatory `resolve stable` phrase acknowledges retry semantics: later
 attempts deduplicate targets already dispatched, but a resolver whose result
@@ -980,9 +989,12 @@ intake incidentInbox {
 must belong to the intake topic. One or more event names follow `accept`.
 
 Bind sources are `header "name"`, `body`, `kafka-key`, and `kafka-cursor`.
-`required` and `cross-check body` are optional flags. A bound name and the
-dedupe key must resolve to either a field on an accepted contract event or one
-of the canonical envelope names:
+`required` and `cross-check body` are optional descriptive flags. A bound name
+and the dedupe key must resolve to either a field on an accepted contract event
+or one of the canonical envelope names, but generated code does not consume the
+binding rows or enforce either flag. A flagged row therefore produces
+`IntakeBindFlagUnenforced`; consumer-owned decode wiring remains responsible
+for the declared binding posture.
 
 ```text
 messageId source destination key eventType schemaVersion contentType
@@ -997,12 +1009,15 @@ Dedupe policies are `PreferIntegrationMessageId`,
 when a successfully processed payload is re-fetchable or no longer valuable;
 failed rows keep the full envelope for operators regardless of this choice.
 
-The envelope policy is exactly `strict-required lenient-optional`. Body mode is
-`strict` or `lenient`, and its schema version must equal the contract version.
-The disposition table is mandatory and contains each of the seven rows exactly
+The envelope policy is exactly `strict-required lenient-optional`, and the body
+schema version must equal the contract version. Body mode is `strict` or
+`lenient`, but that posture is descriptive-only today: generated and runtime
+code do not enforce the word. A posture change is still diff-classified. The
+disposition table is mandatory and contains each of the seven rows exactly
 once. Duplicates acknowledge success, a previous terminal failure does not
 retry, poison decode failures dead-letter, and transient/in-progress outcomes
-use bounded retries according to the declared action.
+use bounded retries according to the declared action. Language 4 rejects any
+retry duration whose unit-adjusted seconds do not fit in `Int`.
 
 ## Emits and publishers
 
@@ -1028,10 +1043,13 @@ The contract, topic, and mapped events must resolve, and every mapped event must
 belong to the selected topic. Discriminant strings are unique. The explicit
 `_ => skip` catch-all is mandatory. `source`, `key`, and the map's discriminant
 name are descriptive because no typed source read-model namespace is declared;
-their values are not field-resolution programs.
+their values are not field-resolution programs. An emit is validated and
+diff-classified but produces no generated module today.
 
-`derive ["prefix"] hole` creates a typed hand-owned derivation point. Its
-implementation must be deterministic so retries reproduce the same IDs.
+`derive ["prefix"] hole` documents a hand-owned derivation responsibility; it
+does not create a module or typed signature. Every emit therefore produces the
+`EmitDeriveHoleUnrealized` warning. The hand-owned implementation must be
+deterministic so retries reproduce the same IDs.
 
 A publisher owns delivery policy for one emit:
 
@@ -1055,8 +1073,11 @@ publisher hospitalPublisher {
 Backoff is either `constant <duration>` or
 `exponential <initial> max=<duration> multiplier=<decimal>`. Exponential
 backoff requires both options, a positive initial delay, a maximum at least as
-large as the initial delay, and a multiplier of at least 1. `outboxId stable
-from <field>` declares the identity that coalesces retries.
+large as the initial delay, and a multiplier of at least 1. Language 4 also
+rejects any delay whose unit-adjusted seconds do not fit in `Int`.
+`outboxId stable from <field>` declares the identity that coalesces retries;
+under Language 4 the field must be `messageId`, `idempotencyKey`, or a field of
+an event mapped by the publisher's emit.
 
 ## Work queues and dispatch
 
@@ -1097,9 +1118,13 @@ drift. Long or otherwise non-simple logical names may use a stable hashed
 physical derivation; copy the values reported by the checker or a generated
 starter rather than inventing them.
 
-Payload rows are `field -> "wire_key" type [required]`. Use `text`, `int`, and
-`bool`, which lower to `Text`, `Int`, and `Bool`. Queue payload evolution is a
-persisted wire change and must go through `diff`.
+Payload rows are `field -> "wire_key" type [required]`. Language 4 closes the
+type vocabulary to `text`, `int`, and `bool`, which lower to `Text`, `Int`, and
+`Bool`; other words are rejected instead of silently becoming `Text`.
+Generated decoders currently require every payload field regardless of whether
+the optional `required` marker is present, so omitting it produces
+`WqFieldOptionalUnsupported`. Queue payload evolution is a persisted wire
+change and must go through `diff`.
 
 Ordering is `unordered` (the default), `fifo-throughput`, or
 `fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
@@ -1123,11 +1148,12 @@ use them only for regenerable work. Partition interval and retention must be
 non-empty and are create-time settings. Changing provisioning does not migrate
 an existing queue.
 
-`dlq=on` requires `maxRetries >= 1`. The disposition table contains all four
-named outcomes exactly once. `storeFailure` is transient and retries;
-`decodeFailure` is poison and dead-letters. Generated policy uses a closed
-queue-specific outcome type, so new rows and spelling mistakes become compile
-errors in hand-owned handlers.
+`dlq=on` requires `maxRetries >= 1`. Language 4 rejects retry and queue-delay
+durations whose unit-adjusted seconds do not fit in `Int`. The disposition
+table contains all four named outcomes exactly once. `storeFailure` is
+transient and retries; `decodeFailure` is poison and dead-letters. Generated
+policy uses a closed queue-specific outcome type, so new rows and spelling
+mistakes become compile errors in hand-owned handlers.
 
 ### Read-model-driven dispatch
 
@@ -1143,9 +1169,12 @@ dispatch reservation_work_dispatch {
 ```
 
 The source and dedupe read models, dedupe column, dedupe queue, queue payload
-field, and enqueue target must resolve. `fanout body` is a hand-owned effectful
-one-to-many function. The queue-side dedupe check is a hand-owned SQL boundary;
-keep it consistent with the declared wire key and read-model check.
+field, and enqueue target must resolve. Under Language 4, the source key and
+fanout body field must also name columns of the source read model. `fanout body`
+is a hand-owned effectful one-to-many function. A dispatch is validated and
+diff-classified but produces no generated module today. The queue-side dedupe
+check is a hand-owned SQL boundary; keep it consistent with the declared wire
+key and read-model check.
 
 ## Read models
 
@@ -1182,8 +1211,11 @@ Consistency is `Strong` or `Eventual`. A strong model requires
 a subscription cursor. `scope` is legal only for a strong model and is either
 `entire-log` or `category "name"`; omitted strong scope defaults to the entire
 log. Feed is `inline` or `subscription`. An inline model must be referenced by
-an aggregate projection of the same name. A subscription name is optional; the
-tool derives a stable default when omitted.
+an aggregate projection of the same name. A `subscription` override beside
+`feed = inline` is ignored and produces `RmInlineSubscriptionIgnored`. A
+subscription name is optional for `feed = subscription`; the tool derives a
+stable default when omitted. Under Language 4, explicit subscription and scope
+category strings must satisfy the stable runtime-identity rules.
 
 The SQL table remains application-migration-owned. The scaffold generates
 schema-qualified table facts and create-once apply/query functions. Use the
@@ -1237,7 +1269,9 @@ runtime wiring, not the workflow's business body.
 
 ## Operations
 
-Operations name application entry points. Four shapes are supported.
+Operations name application entry points. Four shapes are supported. Operation
+declarations are validated and diff-classified but produce no generated module
+today; the command/query/signal/run implementation boundary is hand-owned.
 
 ### Command operation
 
@@ -1614,6 +1648,10 @@ Options:
   non-production historical codec comparison module for one structural mapped
   type.
 
+The scaffold report includes a `no-modules:` line for every declared emit,
+pgmq dispatch, or operation. Those nodes remain validated and diff-classified;
+the line makes explicit that they contributed no generated modules.
+
 For historical comparison, compile the emitted module in a consumer-owned test
 and supply the old codec explicitly. The tool does not discover or fall back to
 an old application instance at runtime.
@@ -1700,8 +1738,11 @@ operational history and therefore remain warnings: `DeprecatedEventReplayHazard`
 until the database-backed audit establishes the relevant fleet fact. Four
 warnings describe deliberate or currently accepted policy:
 `WqUnloggedDurability`, `ProcessBenignInversion`,
-`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`; teams may deny
-them without changing the shared language contract. Two internally decidable
+`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Four more make
+accepted but currently inert declarations explicit:
+`IntakeBindFlagUnenforced`, `EmitDeriveHoleUnrealized`,
+`WqFieldOptionalUnsupported`, and `RmInlineSubscriptionIgnored`. Teams may deny
+any of these warnings without changing the shared language contract. Two internally decidable
 warnings, `WireSchemaVersionMismatch` and `RmProjectionWithoutNode`, are
 candidates for an error in a future language version rather than retroactive
 tightening of language 4. They can be selected with `--deny` today.
@@ -1715,15 +1756,16 @@ surfaces include:
 - typed aggregate expressions, initial values, transition ownership,
   event-sourced state changes, reachability, terminal states, upcaster chains,
   wire policy, projection maps, and snapshot fixtures;
-- process/router aggregate, command, field, projection, resolver, timer, and
-  worker-policy references;
+- process/router aggregate, command, key, binding, field, projection, resolver,
+  verified resolve-row, timer, and worker-policy references;
 - contract topic syntax and topology; intake binding, schema, dedupe, decode,
   persistence, and complete disposition policy; emit topic affinity; publisher
   ordering/backoff/attempt policy;
-- queue identity fixtures, FIFO/group/provisioning rules, complete disposition,
-  and dispatch read-model/queue references;
-- PostgreSQL read-model names, types, shape fixtures, feed, scope, consistency,
-  and projection ownership; and
+- queue payload vocabulary, bounded durations, identity fixtures,
+  FIFO/group/provisioning rules, complete disposition, and dispatch
+  read-model/queue references;
+- PostgreSQL read-model names, types, shape fixtures, feed, scope, subscription
+  identities, consistency, and projection ownership; and
 - workflow label, input, patch, rotation, signal, operation, and stable identity
   rules.
 

@@ -3170,6 +3170,14 @@ main = hspec $ do
     it "accepts the canonical reservation.keiro" $ do
       codes <- errorCodesOf "test/fixtures/reservation.keiro"
       codes `shouldBe` []
+    it "keeps unrelated aggregate-only specs free of inert-surface warnings" $ do
+      codes <- diagnosticCodesOf "test/fixtures/reservation.keiro"
+      codes
+        `shouldNotContain` [ IntakeBindFlagUnenforced,
+                             EmitDeriveHoleUnrealized,
+                             WqFieldOptionalUnsupported,
+                             RmInlineSubscriptionIgnored
+                           ]
     it "reports empty aggregates at their declaration under legacy and stable contracts" $ do
       spec <- specOf "test/fixtures/reservation.keiro"
       case [aggregate | NAggregate aggregate <- specNodes spec] of
@@ -3979,6 +3987,9 @@ main = hspec $ do
     it "accepts the intake spec (complete disposition, no inversions)" $ do
       codes <- errorCodesOf "test/fixtures/intake.keiro"
       codes `shouldBe` []
+    it "warns when intake bind flags describe unenforced generated behavior" $ do
+      codes <- diagnosticCodesOf "test/fixtures/intake.keiro"
+      codes `shouldContain` [IntakeBindFlagUnenforced]
     it "lowers explicit dedupe-only persistence and defaults omission to full-envelope" $ do
       spec <- specOf "test/fixtures/intake.keiro"
       ordinary <- specOf "test/fixtures/intake-decode.keiro"
@@ -4021,6 +4032,19 @@ main = hspec $ do
     it "accepts the emit/publisher spec (skip present, coupling resolves)" $ do
       codes <- errorCodesOf "test/fixtures/emit.keiro"
       codes `shouldBe` []
+    it "warns that emit derive holes remain wholly hand-owned" $ do
+      codes <- diagnosticCodesOf "test/fixtures/emit.keiro"
+      codes `shouldContain` [EmitDeriveHoleUnrealized]
+    it "reports emit nodes that contribute no generated modules" $
+      withTempDirectory "keiro-dsl-inert-report" $ \out -> do
+        spec <- specOf "test/fixtures/emit.keiro"
+        report <- executePlannedScaffold out "test/fixtures/emit.keiro" (defaultContext (specContext spec)) spec
+        reportInertNodes report `shouldBe` [("emit", "reservationResponse")]
+        renderScaffoldReport report
+          `shouldSatisfy` any
+            ( T.isInfixOf
+                "no-modules: emit reservationResponse (validated and diff-classified; no generated modules)"
+            )
     it "rejects a missing _ => skip catch-all as EmitSkipMissing" $ do
       codes <- errorCodesOf "test/fixtures/emit-noskip.keiro"
       codes `shouldContain` [EmitSkipMissing]
@@ -4088,6 +4112,9 @@ main = hspec $ do
       warningCodes `shouldContain` [WqUnloggedDurability]
       partitionCodes <- errorCodesOf "test/fixtures/reservation-work-partitioned-empty.keiro"
       partitionCodes `shouldContain` [WqPartitionSpecEmpty]
+    it "warns when the optional required marker overstates decoder support" $ do
+      codes <- diagnosticCodesOf "test/fixtures/reservation-work-optfield.keiro"
+      codes `shouldContain` [WqFieldOptionalUnsupported]
     it "lowers ordering, provisioning, and raw group-key projection" $ do
       spec <- specOf "test/fixtures/reservation-work.keiro"
       case [workqueue | NWorkqueue workqueue <- specNodes spec] of
@@ -4161,6 +4188,13 @@ main = hspec $ do
       scopeCodes `shouldContain` [RmScopeWithoutStrong]
       inlineCodes <- errorCodesOf "test/fixtures/readmodel-inline-unreferenced.keiro"
       inlineCodes `shouldContain` [RmInlineFeedUnreferenced]
+    it "warns when an inline feed carries an ignored subscription override" $ do
+      source <- readTestText "test/fixtures/readmodel.keiro"
+      spec <-
+        parseInlineSpec
+          "<inline-subscription>"
+          (T.replace "  feed = inline\n" "  feed = inline\n  subscription = \"ignored-subscription\"\n" source)
+      diagnosticCodes spec `shouldContain` [RmInlineSubscriptionIgnored]
     it "rejects projection consistency conflicts" $ do
       codes <- errorCodesOf "test/fixtures/readmodel-consistency-conflict.keiro"
       codes `shouldContain` [RmConsistencyConflict]

@@ -47,11 +47,12 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
   mode (`readMaybe @Int` wraps rather than fails; see Surprises & Discoveries), confirmed no
   committed workqueue fixture uses a payload type outside `text`/`int`/`bool`, and authored this
   plan with the disposition inventory seeded in the Decision Log.
-- [ ] Milestone 1: ratify the inventory in code — add the four unconditional warnings
+- [x] (2026-08-05) Milestone 1: ratified the inventory in code — added the four unconditional warnings
   (`IntakeBindFlagUnenforced`, `EmitDeriveHoleUnrealized`, `WqFieldOptionalUnsupported`,
   `RmInlineSubscriptionIgnored`), the scaffold-report no-modules note for emit/pgmq
   dispatch/operation nodes, and the documentation truth pass over
-  `docs/user/typed-spec-toolchain.md`.
+  `docs/user/typed-spec-toolchain.md`. The focused suite passes 588 examples with zero failures;
+  a real scaffold report names `emit reservationResponse` as contributing no modules.
 - [ ] Milestone 2: reference-resolution parity between process and router nodes —
   `ProcessKeyFieldUnknown`, `ProcessDispatchKeyUnresolved`, `ProcessBindingUnscoped`, and the
   revived `RouterReadModelUnverified` resolve-row column check, all gated on
@@ -248,10 +249,14 @@ Every existing committed fixture and conformance suite passes byte-unchanged.
 
 ## Outcomes & Retrospective
 
-Implementation has not started. At completion, record: the final scope vocabulary chosen for
+Milestone 1 is complete. Four accepted-but-inert declarations now produce ordinary warnings,
+single-file scaffold reports name validated and diff-classified nodes that contributed no
+modules, and the user guide distinguishes generated or enforced behavior from descriptive-only
+notation. The focused suite grew from the captured 582-example baseline to 588 examples and
+passes with zero failures. Reference-resolution and strict-closure work remains in Milestones 2
+and 3. At completion, record the final scope vocabulary chosen for
 `ProcessBindingUnscoped`, the `dedup key=` and `outboxId` disposition confirmations, exact test
-counts, evidence that no committed fixture changed bytes, and the ADR distillation. Compare
-against the purpose: no accepted construct silently does nothing.
+counts, evidence that no committed fixture changed bytes, and the ADR distillation.
 
 
 ## Context and Orientation
@@ -533,9 +538,23 @@ evidence is pinned (stream scratch specs via `/dev/stdin` as plan 180 did):
 nix develop -c cabal run keiro-dsl:exe:keiro-dsl -- check /dev/stdin
 ```
 
-Expected today: a language-4 spec with `correlate input.ghost via extractKey` in a process
-exits zero, and a workqueue payload row `amount -> "amount" numeric required` exits zero.
-Record the actual transcripts here when captured.
+The pre-enforcement transcripts were captured after Milestone 1 and before either strict-gated
+milestone. Replacing the hospital-surge correlate field with `ghost` still exited zero:
+
+```console
+$ sed 's/correlate input.hospitalId/correlate input.ghost/' keiro-dsl/test/fixtures/hospital-surge.keiro | nix develop -c cabal run -v0 keiro-dsl:exe:keiro-dsl -- check /dev/stdin
+/dev/stdin:17: warning[ProcessBenignInversion]: dispatch to 'Hospital' maps on-duplicate => AckOk (a duplicate is treated as benign success)
+/dev/stdin:25: warning[ProcessBenignInversion]: timer 'surgeFollowUp' maps on-reject => Fired (a CommandRejected is treated as benign success)
+OK
+```
+
+Changing the non-group-key `hospitalId` queue payload row from `text` to `numeric` also exited
+zero (changing the group key itself already trips the older `WqGroupKeyUnresolved` rule):
+
+```console
+$ sed '0,/hospitalId -> "hospital_id" text required/s//hospitalId -> "hospital_id" numeric required/' keiro-dsl/test/fixtures/reservation-work.keiro | nix develop -c cabal run -v0 keiro-dsl:exe:keiro-dsl -- check /dev/stdin
+OK
+```
 
 After each milestone, run the focused suite:
 
@@ -686,3 +705,11 @@ EP-192 owns reserved-word policy; confirm the two Ident-code removals with its m
 EP-194 also edits `Validate.hs`; merge order is textual, later merger rebases. No plan in
 MasterPlan 29 may change fold fingerprints, wire bytes, or snapshot discriminators, and this
 plan changes none.
+
+
+## Revision Notes
+
+- 2026-08-05: Completed Milestone 1 with four warnings, additive single-file scaffold-report
+  honesty, the user-guide truth pass, six focused regressions, the 582-example baseline, and a
+  green 588-example focused suite. Captured the two accepted-hole CLI transcripts before strict
+  enforcement begins.
