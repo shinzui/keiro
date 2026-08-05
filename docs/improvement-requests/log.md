@@ -1,29 +1,38 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Planning**: IR-19 is revised and planned by
+[Plan 198](../plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md)
+under MasterPlan 29. The planning review kept the diagnosis and changed the solution: the
+machine-owned stem is `ledger` rather than `lock` (lockfiles are regenerable; these files are
+not), the workspace/context slots are explicit literal segments so collision-freedom needs no
+proof, the conformance ledger keeps its qualifier, and migration rides the refuse-then-apply
+`--apply-name-migrations` rail as lossless file moves instead of silently falling back to old
+names and marking them superseded.
+* **Implemented**: Close IR-6 after Plan 192 separates DSL, generated-selector, and wire-key identities across aggregate and contract fields with compiled conformance and diff/replay evidence.
 * **Addition**: IR-19 requests honest names for the scaffolder's four generated sidecars — the files
-  named `record` are the machine-read ledgers while the file named `manifest` is never parsed — with
-  an old-name fallback so a rename cannot silently discard scaffold history, and one durability
-  contract so the conformance ledger tolerates unknown rows like the workspace ledger already does.
+named `record` are the machine-read ledgers while the file named `manifest` is never parsed — with
+an old-name fallback so a rename cannot silently discard scaffold history, and one durability
+contract so the conformance ledger tolerates unknown rows like the workspace ledger already does.
 * **Superseded**: IR-17 will not add reviewed aggregate validation-policy allowlists. Keiki
-  0.9.0.0 implements `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5` and proves
-  Mori's motivating `openSteps > 1` / `openSteps == 1` guards disjoint despite opaque sibling
-  predicates; Mori can remove its temporary override when it adopts that release.
+0.9.0.0 implements `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5` and proves
+Mori's motivating `openSteps > 1` / `openSteps == 1` guards disjoint despite opaque sibling
+predicates; Mori can remove its temporary override when it adopts that release.
 * **Planning**: IR-18 is planned by
-  [Plan 191](../plans/191-unify-generated-transition-layout-for-replay-only-conformance.md), which
-  gives generated runtime assembly, predicate verification, behavior attribution, and live
-  initial probes one source-wide transition layout with compiled single/workspace conformance.
+[Plan 191](../plans/191-unify-generated-transition-layout-for-replay-only-conformance.md), which
+gives generated runtime assembly, predicate verification, behavior attribution, and live
+initial probes one source-wide transition layout with compiled single/workspace conformance.
 
 ## 2026-08-04
 * **Addition**: IR-18 requires generated harnesses, predicate verification, and behavior
-  conformance to treat replay-only transitions from the initial vertex as replay-only, including
-  correct cumulative edge indices when one source appears in non-contiguous transition blocks.
+conformance to treat replay-only transitions from the initial vertex as replay-only, including
+correct cumulative edge indices when one source appears in non-contiguous transition blocks.
 * **Addition**: IR-17 requests exact aggregate-level allowlists for reviewed narrowable Keiki
-  validation warnings, with matching runtime options, generated harness assertions, diff evidence,
-  and service conformance while mandatory replay-contract checks remain non-disableable.
+validation warnings, with matching runtime options, generated harness assertions, diff evidence,
+and service conformance while mandatory replay-contract checks remain non-disableable.
 * **Addition**: IR-16 requires a checked naming invariant so Keiro never scaffolds
-  non-idiomatic Haskell module or value names from snake_case DSL identifiers, while preserving
-  independent wire and SQL spellings.
+non-idiomatic Haskell module or value names from snake\_case DSL identifiers, while preserving
+independent wire and SQL spellings.
 
 ## 2026-08-01
 * **Addition**: IR-15 requests measurement and, if justified, removal of repeated remaining-input

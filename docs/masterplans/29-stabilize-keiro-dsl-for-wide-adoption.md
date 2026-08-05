@@ -52,12 +52,13 @@ any Keiki semantics or dependency-bound change.
 
 ## Decomposition Strategy
 
-The initiative decomposes into seven ExecPlans by functional concern, each independently
+The initiative decomposes into eight ExecPlans by functional concern, each independently
 verifiable: field-identity aliases plus a corrected reserved-name policy (the release blocker),
 the already-planned transition-layout repair (ExecPlan 191, adopted into this MasterPlan), the
 CLI language-contract and warning-enforcement surface, closing the `check`-versus-`scaffold`
-refusal gap, conformance-corpus regeneration tooling, generated-output polish, and the
-accepted-but-inert surface triage.
+refusal gap, conformance-corpus regeneration tooling, generated-output polish, the
+accepted-but-inert surface triage, and the sidecar rename with one ledger durability contract
+(ExecPlan 198, added 2026-08-05 from revised IR-19).
 
 The boundaries follow three principles. First, merge work that must change the same decision:
 the reserved-name regression fix and alias support are one plan (EP 192) because both live in the
@@ -70,9 +71,10 @@ churn cheap before spending it: EP 196 rewrites the two roughest generated modul
 whole committed corpus, so it hard-depends on EP 195's regeneration tooling and soft-depends on
 the other output-changing plans to batch fixture refreshes.
 
-With seven plans, work is grouped into three phases. Phase 1 unblocks the release (EP 192,
-EP 191, EP 193). Phase 2 makes the gates truthful (EP 194, EP 197, EP 195 — all parallel).
-Phase 3 spends one deliberate churn event on generated-output quality (EP 196).
+With eight plans, work is grouped into three phases. Phase 1 unblocks the release (EP 192,
+EP 191, EP 193). Phase 2 makes the gates truthful and the sidecars honest (EP 194, EP 197,
+EP 195, EP 198 — all parallel). Phase 3 spends one deliberate churn event on generated-output
+quality (EP 196).
 
 Relevant local ADRs, read during decomposition:
 
@@ -106,7 +108,9 @@ Relevant local ADRs, read during decomposition:
 Source improvement requests: EP 192 implements and widens
 [IR-6](../improvement-requests/allow-independent-haskell-selector-and-wire-key-aliases-on-direct-aggregate-fields.md);
 EP 191 implements
-[IR-18](../improvement-requests/handle-initial-state-replay-only-transitions-in-generated-harnesses.md).
+[IR-18](../improvement-requests/handle-initial-state-replay-only-transitions-in-generated-harnesses.md);
+EP 198 implements the 2026-08-05 revision of
+[IR-19](../improvement-requests/give-keiro-dsl-generated-sidecars-honest-names-and-one-durability-contract.md).
 The audit findings behind EP 193–197 are recorded in each child plan's Context and Orientation.
 
 
@@ -119,8 +123,9 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Not Started |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Not Started |
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Not Started |
-| 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192 | Not Started |
+| 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | Not Started |
 | 197 | Enforce or refuse every accepted spec surface | docs/plans/197-enforce-or-refuse-every-accepted-spec-surface.md | None | EP-193 | Not Started |
+| 198 | Rename keiro-dsl sidecars to explicit-slot ledger names with one durability contract | docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by plan number (e.g., EP-195).
@@ -140,9 +145,11 @@ declarations exist; 196 changes how they read), and should follow EP 192 so alia
 output is regenerated once, not twice. EP 194 and EP 197 benefit from EP 193's machine-readable
 `check` report and severity policy landing first, so their new diagnostics are born into the
 final rendering contract rather than migrated later; both can proceed independently against the
-existing text rendering if EP 193 is delayed.
+existing text rendering if EP 193 is delayed. EP 196 should also follow EP 198, because EP 198
+renames the sidecar files present in every committed scaffold history: batching that rename
+into the same EP-195-driven corpus refresh spends the fixture churn once.
 
-EP 192, EP 191, EP 193, and EP 195 are mutually independent and can proceed in parallel today.
+EP 192, EP 191, EP 193, EP 195, and EP 198 are mutually independent and can proceed in parallel today.
 EP 194 and EP 197 both concentrate edits in `keiro-dsl/src/Keiro/Dsl/Validate.hs`; they can
 proceed in parallel but should coordinate merge order (see Integration Points).
 
@@ -229,6 +236,9 @@ alias-free spec generates byte-identical output.
 - [ ] EP-197 M1: Inventory ratified — warnings, docs truth pass, scaffold-report honesty for module-less nodes
 - [ ] EP-197 M2: Process/router reference-resolution parity, revived `RouterReadModelUnverified`
 - [ ] EP-197 M3: Closed vocabularies and bounded windows as strict-closure errors, dead-code cleanup, ADR 0004 amendment
+- [ ] EP-198 M1: Sidecar name authority module, new ledger/cabal-fragment names, `SidecarMigrationRequired` refuse-then-apply migration
+- [ ] EP-198 M2: Conformance ledger renamed and rebuilt on workspace-record row conventions with legacy conversion
+- [ ] EP-198 M3: Test/fixture sweep, regressions, user-guide sidecar glossary, CHANGELOG, ADR distillation, IR-19 closure
 
 (Milestone wording mirrors each child plan's Progress section; keep in sync as plans evolve.)
 
@@ -320,6 +330,20 @@ tree by the drafting research and recorded in the owning child plan:
   an upgrade without a staged path (this is the lesson of the `family` regression).
   Date: 2026-08-04
 
+- Decision: Adopt revised IR-19 as EP 198 — sidecar renames to `ledger`/`cabal-fragment` stems
+  with explicit `.workspace.`/`.context.` slot segments, migration via the existing
+  refuse-then-apply `--apply-name-migrations` rail, and the conformance record rebuilt on the
+  workspace record's row conventions — inside this MasterPlan's breaking window, in Phase 2,
+  with EP 196 soft-depending on it.
+  Rationale: The Unreleased window already breaks generated names, so the sidecar rename is
+  cheapest here and rides migration machinery this initiative already shipped. The planning
+  review replaced IR-19's original `lock` stem (lockfiles connote regenerability these files
+  cannot afford), its segment-count collision proof (explicit slot literals make collisions
+  impossible by construction), and its silent old-name fallback (a refusal enforces the
+  never-present-as-fresh invariant without permanent superseded zombies). EP 196 batches the
+  fixture-tree sidecar renames into its single corpus refresh.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
@@ -331,3 +355,12 @@ identity contract. The 560-example DSL suite, all conformance components, the re
 and both generated-code policy checks pass. Strict improvement-request validation retains one
 unrelated baseline failure in IR-19 for a missing recommended `reviews` field; EP-192's plan
 records the exact exception. The remaining master-plan children are not yet implemented.
+
+
+## Revision Notes
+
+- 2026-08-05: Added EP 198 (sidecar renames plus one ledger durability contract) as an eighth
+  child implementing the same-day revision of IR-19, placed in Phase 2 with an EP-196 soft
+  dependency so fixture-tree sidecar renames batch into the single corpus refresh. Updated the
+  decomposition prose, registry, dependency prose, phases, Progress, and Decision Log
+  accordingly.
