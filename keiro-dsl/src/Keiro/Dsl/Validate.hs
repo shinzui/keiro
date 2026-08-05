@@ -50,6 +50,7 @@ import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
+import Keiro.Integration.Event qualified as Event
 import Numeric (showHex)
 import Text.Read (readMaybe)
 
@@ -420,6 +421,13 @@ data DiagnosticCode
   | AggProjectionKeyUnresolved
   | PublisherOutboxFieldUnresolved
   | RouterBenignInversion
+  | -- ExecPlan 199: spellings the grammar accepts that no runtime implements.
+    -- Each names one concrete runtime fact the declaration contradicts, warns on
+    -- released languages below 4, and errors from language 4 on.
+    DecodeBodyPostureUnsupported
+  | DispatchOnAppendedUnsupported
+  | TimerNotMineUnsupported
+  | IntakeBindHeaderUnknown
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -2366,8 +2374,26 @@ specContracts spec = [c | NContract c <- specNodes spec]
 
 -- | EP-4 cross-node coupling: an intake's contract/topic/accepted-events resolve.
 intakeCoupling :: EffectiveLanguageContract -> Spec -> IntakeNode -> [Diagnostic]
-intakeCoupling languageContract spec i = bindFlagWarnings ++ contractCoupling
+intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ contractCoupling
   where
+    -- The Kafka inbox reconstructs an envelope from the canonical header names
+    -- in "Keiro.Integration.Event"; nothing reads a spec-declared header. A row
+    -- naming a canonical header is descriptive and true, so it stays silent. A
+    -- row naming any other header reads like remapping and silently is not.
+    bindHeaderNames =
+      [ mkSurfaceRefusal languageContract (locLine (inkLoc i)) IntakeBindHeaderUnknown $
+          "intake '"
+            <> inkName i
+            <> "' binds '"
+            <> brField binding
+            <> "' from header "
+            <> T.pack (show headerName)
+            <> ", which is not one of keiro's canonical envelope headers; the Kafka inbox reads a fixed header set and cannot be remapped, so this row would not take effect. Use one of: "
+            <> T.intercalate ", " (map (T.pack . show) canonicalEnvelopeHeaders)
+      | binding <- inkBinds i,
+        SrcHeader headerName <- [brSource binding],
+        headerName `notElem` canonicalEnvelopeHeaders
+      ]
     contractCoupling = case lookupContract (inkContract i) of
       Nothing ->
         [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
@@ -2585,9 +2611,19 @@ windowRangeRule languageContract diagnosticLine context window =
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.
 validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
-validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary, windows]
+validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary, decodePosture, windows]
   where
     il = locLine (inkLoc i)
+    -- `decBodyStrict` reaches nothing but the pretty-printer: generated contract
+    -- codecs decode every declared body field as required and admit no lenient
+    -- mode, so `body strict` describes what happens and `body lenient` does not.
+    decodePosture =
+      [ mkSurfaceRefusal languageContract il DecodeBodyPostureUnsupported $
+          "intake '"
+            <> inkName i
+            <> "' declares 'body lenient', but generated contract codecs decode a body strictly: every declared field is required and no lenient fallback is emitted. Write 'body strict' to describe what runs"
+      | not (decBodyStrict (inkDecode i))
+      ]
     rows = inkDisposition i
     requiredOutcomes =
       ["processed", "duplicate", "inProgress", "previouslyFailed", "decodeFailed", "dedupeFailed", "storeFailed"]
@@ -2653,6 +2689,32 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
 intakeDedupePolicies :: Set Name
 intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSourceEventIdentity", "KafkaDeliveryIdentity"]
 
+-- | Every header name keiro's integration envelope actually uses on the wire,
+-- taken from the runtime's own definitions in "Keiro.Integration.Event" rather
+-- than restated here, so the two cannot drift apart.
+canonicalEnvelopeHeaders :: [Text]
+canonicalEnvelopeHeaders =
+  [ Event.headerMessageId,
+    Event.headerSource,
+    Event.headerDestination,
+    Event.headerEventType,
+    Event.headerSchemaVersion,
+    Event.headerContentType,
+    Event.headerSchemaRegistry,
+    Event.headerSchemaSubject,
+    Event.headerSchemaVersionRef,
+    Event.headerSchemaId,
+    Event.headerSchemaFingerprint,
+    Event.headerSourceEventId,
+    Event.headerSourceGlobalPosition,
+    Event.headerCausationId,
+    Event.headerCorrelationId,
+    Event.headerTraceParent,
+    Event.headerTraceState,
+    Event.headerOccurredAt,
+    Event.headerAttributes
+  ]
+
 canonicalIntakeEnvelopeFields :: Set Name
 canonicalIntakeEnvelopeFields =
   Set.fromList
@@ -2678,8 +2740,33 @@ canonicalIntakeEnvelopeFields =
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: EffectiveLanguageContract -> Spec -> ProcessNode -> [Diagnostic]
 validateProcess languageContract spec p =
-  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions]
+  concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions, onAppendedArms, notMineArm]
   where
+    -- Generated dispatch code appends and then acks; `Keiro.ProcessManager` has
+    -- no branch that retries or dead-letters a *successful* append. Only AckOk
+    -- describes what runs.
+    onAppendedArms =
+      [ mkSurfaceRefusal languageContract (locLine (dispLoc d)) DispatchOnAppendedUnsupported $
+          "dispatch to '"
+            <> dispTarget d
+            <> "' maps on-appended => "
+            <> dispText (onAppended (dispDisposition d))
+            <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
+      | d <- hDispatch (procHandle p),
+        onAppended (dispDisposition d) /= DAckOk
+      ]
+
+    -- The timer worker marks a timer Fired only when the fire action returns the
+    -- id of an event it appended (`Keiro.Timer.runTimerWorkerWith`). A not-mine
+    -- dispatch produces no such id, so the row is left Firing and requeued on a
+    -- later pass — which is exactly Retry. Fired is not reachable.
+    notMineArm =
+      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerNotMineUnsupported $
+          "timer '"
+            <> tmName timer
+            <> "' maps not-mine => Fired, but the timer worker marks a timer Fired only when the fire action returns the id of the event it appended; a dispatch that is not this timer's has no such id, so the row is requeued instead. Write 'not-mine Retry'"
+      | notMine (fireDisposition (tmFire timer)) == OFired
+      ]
     aggregates = [a | NAggregate a <- specNodes spec]
     aggNames = map aggName aggregates
     projectionTables = [projTable projection | aggregate <- aggregates, Just projection <- [aggProjection aggregate]]
@@ -2926,9 +3013,21 @@ validateRouter languageContract spec router =
       commandReference,
       readModelReference,
       policyRules,
-      duplicateNotice
+      duplicateNotice,
+      onAppendedArm
     ]
   where
+    -- The process twin of this rule is in 'validateProcess'; both say the same
+    -- thing because both runtimes do: a successful append is always acked.
+    onAppendedArm =
+      [ mkSurfaceRefusal languageContract dispatchLine DispatchOnAppendedUnsupported $
+          "router dispatch '"
+            <> rdCommand dispatch
+            <> "' maps on-appended => "
+            <> dispText (onAppended (rdDisposition dispatch))
+            <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
+      | onAppended (rdDisposition dispatch) /= DAckOk
+      ]
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
     readModels = [readModel | NReadModel readModel <- specNodes spec]
     inputFields = map fieldName (inFields (rtInput router))
@@ -3656,6 +3755,29 @@ tInt = T.pack . show
 
 mkErr :: Int -> DiagnosticCode -> Text -> Diagnostic
 mkErr l c m = Diagnostic {line = l, severity = Error, code = c, relatedLocations = [], message = m}
+
+-- | A spec surface the grammar accepts but no runtime implements.
+--
+-- Released languages below 4 keep their acceptance and only warn, so an
+-- existing source does not stop checking when it is pinned to an older
+-- language. From language 4 — which promised strict spec-surface validation —
+-- the same sentence is an error. The message never changes with the severity, so
+-- an author reads one explanation before and after the tightening.
+-- | A dispatch disposition as the author spelled it.
+dispText :: Disp -> Text
+dispText DAckOk = "AckOk"
+dispText DRetry = "Retry"
+dispText (DDeadLetter reason) = "DeadLetter " <> T.pack (show reason)
+
+mkSurfaceRefusal :: EffectiveLanguageContract -> Int -> DiagnosticCode -> Text -> Diagnostic
+mkSurfaceRefusal languageContract l c m =
+  Diagnostic
+    { line = l,
+      severity = if enforcesSpecSurfaceClosures languageContract then Error else Warning,
+      code = c,
+      relatedLocations = [],
+      message = m
+    }
 
 wireKeyRulesForRecord :: Text -> Maybe (Text, Text) -> [ResolvedFieldIdentity] -> [Diagnostic]
 wireKeyRulesForRecord owner reservedKey fields = invalidKeys <> duplicateKeys <> reservedCollisions

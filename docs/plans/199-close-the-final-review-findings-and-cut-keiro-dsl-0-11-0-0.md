@@ -93,6 +93,26 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   breaking change for any consumer matching that literal. The change still lands — the
   owner's one-vocabulary mandate holds and the breaking window is open — but it is recorded
   under Breaking Changes rather than as a silent unification.
+- (M3, 2026-08-05) **The plan named the wrong tuple for process `dispatch-id`.** M3 said to
+  give the process line "the router-grade parser — require `uuidv5` and the exact 5-tuple,
+  reusing `pRouterDispatchIdLine`'s components". The two runtimes key on *different* fixed
+  tuples: `Keiro.ProcessManager.deterministicCommandId`
+  (`keiro/src/Keiro/ProcessManager.hs:406-419`) uses
+  `(managerName, correlationId, sourceEventId, emitIndex)` while
+  `Keiro.Router.deterministicRouterCommandId` (`keiro/src/Keiro/Router.hs:161-175`) uses
+  `(routerName, key, sourceEventId, targetStreamName, occurrence)`. All 13 process fixtures
+  already write the 4-tuple. Reusing the router parser verbatim would have refused every
+  correct process spec while accepting a line that misdescribes the runtime. Implemented as
+  a shared `pFixedDispatchIdLine :: [Text] -> P ()` with each caller pinning its own
+  runtime-owned tuple — parser *parity* (the plan's actual intent) without conflating the
+  two derivations.
+- (M3, 2026-08-05) The timer runtime has **no not-mine branch at all**.
+  `Keiro.Timer.runTimerWorkerWith` (`keiro/src/Keiro/Timer.hs:120-161`) takes a
+  `TimerRow -> Eff es (Maybe EventId)`: `Just` marks the timer `Fired`, `Nothing` leaves it
+  `Firing` for a later requeue. So a not-mine dispatch, having no appended event id, can only
+  be retried — `not-mine Fired` is unreachable and `not-mine Retry` is exactly true. All 13
+  timer fixtures already write `Retry`, so refusing `Fired` closes the surface without
+  touching a single existing spec.
 - (M2, 2026-08-05) The `--deny` emittable-set registry could not be derived from severity, so
   it was derived mechanically from the sources: for each of the 301 `DiagnosticCode`
   constructors, count its mentions in `Validate.hs` (exactly one = the enum declaration, so

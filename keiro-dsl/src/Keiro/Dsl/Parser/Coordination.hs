@@ -5,6 +5,7 @@ module Keiro.Dsl.Parser.Coordination
   )
 where
 
+import Data.List (intersperse)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -114,23 +115,22 @@ pRouterDispatch = do
       <*> (symbol ";" *> keyword "on-failed" *> pDisp)
   pure RouterDispatchNode {rdCommand = command, rdFields = fields, rdDisposition = disposition, rdLoc = loc}
 
-pRouterDispatchIdLine :: P ()
-pRouterDispatchIdLine = do
+-- | @dispatch-id strategy=uuidv5 from=(…)@ where the tuple is fixed by the
+-- runtime that derives the id. The line documents a derivation the spec cannot
+-- change, so the only sound thing to accept is the exact spelling that is true.
+pFixedDispatchIdLine :: [Text] -> P ()
+pFixedDispatchIdLine inputs = do
   keyword "dispatch-id"
   _ <- symbol "strategy" *> symbol "=" *> keyword "uuidv5"
-  _ <- symbol "from" *> symbol "=" *> parens fixedInputs
+  _ <- symbol "from" *> symbol "=" *> parens (sequence_ (intersperse (() <$ symbol ",") (map keyword inputs)))
   pure ()
-  where
-    fixedInputs = do
-      keyword "name"
-      _ <- symbol ","
-      keyword "key"
-      _ <- symbol ","
-      keyword "sourceEventId"
-      _ <- symbol ","
-      keyword "targetStreamName"
-      _ <- symbol ","
-      keyword "occurrence"
+
+-- | @Keiro.Router.deterministicRouterCommandId@ keys on the router name, the
+-- correlation key, the source event, the resolved target stream, and the
+-- same-stream occurrence.
+pRouterDispatchIdLine :: P ()
+pRouterDispatchIdLine =
+  pFixedDispatchIdLine ["name", "key", "sourceEventId", "targetStreamName", "occurrence"]
 
 pPolicyLine :: Text -> P PolicyChoice
 pPolicyLine clause = keyword clause *> symbol "=>" *> pPolicyChoice
@@ -208,13 +208,16 @@ pDisp =
       DDeadLetter <$> (keyword "DeadLetter" *> stringLit)
     ]
 
--- The dispatch-id line is a fixed, runtime-owned strategy; parse and discard.
+-- | A process manager's twin of 'pRouterDispatchIdLine'.
+-- @Keiro.ProcessManager.deterministicCommandId@ keys on the manager name, the
+-- correlation id, the source event, and the positional emit index — a different
+-- fixed tuple from the router's, so the two lines are checked separately but
+-- equally strictly. Before ExecPlan 199 a process accepted any strategy
+-- identifier and any tuple, so `dispatch-id strategy=md5 from=(banana)` checked
+-- clean here while the same line was a parse error on a router.
 pDispatchIdLine :: P ()
-pDispatchIdLine = do
-  keyword "dispatch-id"
-  _ <- symbol "strategy" *> symbol "=" *> ident
-  _ <- symbol "from" *> symbol "=" *> parens (sepBy dottedRef (symbol ","))
-  pure ()
+pDispatchIdLine =
+  pFixedDispatchIdLine ["name", "correlationId", "sourceEventId", "emitIndex"]
 
 pTimerNode :: P TimerNode
 pTimerNode = do

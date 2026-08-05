@@ -8,6 +8,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- `DiagnosticCode` gains `DecodeBodyPostureUnsupported`,
+  `DispatchOnAppendedUnsupported`, `TimerNotMineUnsupported`, and
+  `IntakeBindHeaderUnknown`; exhaustive matches must be extended. Each closes a
+  spelling the grammar accepted that no runtime implements, and each warns on
+  released languages below 4 and errors from language 4 on. `intake … body
+  lenient` is refused because generated codecs decode a body strictly;
+  `on-appended` other than `AckOk` is refused on both process and router
+  dispatch rows because a successful append is always acked; `not-mine Fired` is
+  refused because the timer worker marks a timer `Fired` only when the fire
+  action returns an appended event id; and an intake `bind … from header "x"`
+  naming a header outside keiro's canonical envelope set is refused because the
+  Kafka inbox reads a fixed header set and cannot be remapped. The spelling that
+  matches the runtime stays accepted and silent in every case.
+- A process `dispatch-id` line is now checked as strictly as a router's. It must
+  read exactly `strategy=uuidv5 from=(name, correlationId, sourceEventId,
+  emitIndex)` — the tuple `Keiro.ProcessManager` actually derives from — where
+  previously any strategy identifier and any tuple parsed and were discarded.
+  Routers keep their own `(name, key, sourceEventId, targetStreamName,
+  occurrence)`. A process spec that wrote anything else is now a parse error.
 - `check`'s warning policy now covers structural coverage. When an invocation
   supplies `--coverage-report`, its findings are ordinary diagnostics of this
   run: `--deny-warnings` and `--deny CoverageOpaqueSurface` escalate them, they

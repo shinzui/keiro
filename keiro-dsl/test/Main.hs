@@ -3618,6 +3618,96 @@ main = hspec $ do
       forM_ cases $ \(candidate, expected) -> do
         serviceErrorCodes 3 candidate `shouldBe` []
         serviceErrorCodes 4 candidate `shouldContain` [expected]
+    -- ExecPlan 199: spellings the grammar accepted that no runtime implements.
+    -- Each pair asserts both halves of the contract — the divergent spelling
+    -- warns at 3 and errors at 4, and the spelling that matches the runtime
+    -- stays completely silent, so these are refusals and not blanket noise.
+    it "refuses spec surfaces that contradict the runtime, and stays silent on the ones that describe it" $ do
+      intakeSpec <- specOf "test/fixtures/intake.keiro"
+      processSpec <- specOf "test/fixtures/hospital-surge.keiro"
+      routerSpec <- specOf "test/fixtures/transfer-routing.keiro"
+      let lenientBody =
+            mapIntake (\intake -> intake {inkDecode = (inkDecode intake) {decBodyStrict = False}}) intakeSpec
+          unknownHeader =
+            mapIntake
+              (\intake -> intake {inkBinds = updateFirst (\binding -> binding {brSource = SrcHeader "x-custom"}) (inkBinds intake)})
+              intakeSpec
+          retryOnAppended =
+            modifyProcess
+              "HospitalSurge"
+              ( \process ->
+                  process
+                    { procHandle =
+                        (procHandle process)
+                          { hDispatch =
+                              updateFirst
+                                (\d -> d {dispDisposition = (dispDisposition d) {onAppended = DRetry}})
+                                (hDispatch (procHandle process))
+                          }
+                    }
+              )
+              processSpec
+          firedNotMine =
+            modifyProcess
+              "HospitalSurge"
+              ( \process ->
+                  let timer = procTimer process
+                      fire = tmFire timer
+                   in process
+                        { procTimer =
+                            timer {tmFire = fire {fireDisposition = (fireDisposition fire) {notMine = OFired}}}
+                        }
+              )
+              processSpec
+          routerRetryOnAppended =
+            mapRouter
+              (\router -> router {rtDispatch = (rtDispatch router) {rdDisposition = (rdDisposition (rtDispatch router)) {onAppended = DRetry}}})
+              routerSpec
+          cases =
+            [ (lenientBody, DecodeBodyPostureUnsupported),
+              (unknownHeader, IntakeBindHeaderUnknown),
+              (retryOnAppended, DispatchOnAppendedUnsupported),
+              (firedNotMine, TimerNotMineUnsupported),
+              (routerRetryOnAppended, DispatchOnAppendedUnsupported)
+            ]
+      forM_ cases $ \(candidate, expected) -> do
+        serviceErrorCodes 3 candidate `shouldNotContain` [expected]
+        serviceWarningCodes 3 candidate `shouldContain` [expected]
+        serviceErrorCodes 4 candidate `shouldContain` [expected]
+
+      -- The unmutated fixtures spell every one of these the way the runtime
+      -- behaves, so language 4 has nothing to say about them.
+      let closedCodes =
+            [ DecodeBodyPostureUnsupported,
+              IntakeBindHeaderUnknown,
+              DispatchOnAppendedUnsupported,
+              TimerNotMineUnsupported
+            ]
+      forM_ [intakeSpec, processSpec, routerSpec] $ \accepted -> do
+        serviceErrorCodes 4 accepted `shouldNotContain` closedCodes
+        serviceWarningCodes 4 accepted `shouldNotContain` closedCodes
+
+    it "holds a process dispatch-id line to the same strictness as a router's" $ do
+      -- Both lines document a derivation the spec cannot change, but the two
+      -- runtimes key on different tuples: Keiro.ProcessManager on
+      -- (name, correlationId, sourceEventId, emitIndex) and Keiro.Router on
+      -- (name, key, sourceEventId, targetStreamName, occurrence). Before
+      -- ExecPlan 199 the process line accepted any strategy and any tuple.
+      processSource <- readTestText "test/fixtures/hospital-surge.keiro"
+      let processLine = "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)"
+          rejected =
+            [ "dispatch-id strategy=md5 from=(name, correlationId, sourceEventId, emitIndex)",
+              "dispatch-id strategy=uuidv5 from=(banana)",
+              "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId)",
+              -- The router's tuple is not the process's tuple.
+              "dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)"
+            ]
+      processSource `shouldSatisfy` T.isInfixOf processLine
+      parseSpec "accepted" processSource `shouldSatisfy` isRight
+      forM_ rejected $ \badLine ->
+        parseSpec "mutated" (T.replace processLine badLine processSource)
+          `shouldSatisfy` isLeft
+
     it "gates the remaining locally resolvable identity and field surfaces on language 4" $ do
       reservation <- specOf "test/fixtures/reservation.keiro"
       emitSpec <- specOf "test/fixtures/emit.keiro"
@@ -8414,6 +8504,17 @@ mapIntake update spec =
         ]
     }
 
+mapRouter :: (RouterNode -> RouterNode) -> Spec -> Spec
+mapRouter update spec =
+  spec
+    { specNodes =
+        [ case node of
+            NRouter router -> NRouter (update router)
+            _ -> node
+        | node <- specNodes spec
+        ]
+    }
+
 mapEmit :: (EmitNode -> EmitNode) -> Spec -> Spec
 mapEmit update spec =
   spec
@@ -8483,6 +8584,17 @@ mapPublisher update spec =
 serviceErrorCodes :: Int -> Spec -> [DiagnosticCode]
 serviceErrorCodes versionNumber spec =
   [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
+  where
+    service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
+      Nothing -> error ("unsupported test language version " <> show versionNumber)
+      Just languageContract -> CheckedService languageContract spec
+
+-- | Codes emitted at 'Warning' severity under the given released language.
+-- Pairs with 'serviceErrorCodes' to assert a surface's warn-then-error tiering
+-- from both sides, rather than only proving it is not an error.
+serviceWarningCodes :: Int -> Spec -> [DiagnosticCode]
+serviceWarningCodes versionNumber spec =
+  [code diagnostic | diagnostic <- validateService service, severity diagnostic == Warning]
   where
     service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
       Nothing -> error ("unsupported test language version " <> show versionNumber)
