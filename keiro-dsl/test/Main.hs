@@ -1809,9 +1809,20 @@ main = hspec $ do
       harness `shouldSatisfy` (not . T.isInfixOf "acceptLegacyStart")
       contract `shouldSatisfy` T.isInfixOf "keiro/behavior-conformance/1"
       contract `shouldSatisfy` T.isInfixOf "commandKind command == requirementCommandName requirement"
-      contract `shouldSatisfy` T.isInfixOf "JourneyEmpty \"Start\" (Just (K.EdgeRef JourneyEmpty 1))"
-      contract `shouldSatisfy` T.isInfixOf "JourneyEmpty \"LegacyStart\" (Just (K.EdgeRef JourneyEmpty 2))"
+      contract `shouldSatisfy` (not . T.isInfixOf "OPTIONS_GHC")
+      contract `shouldSatisfy` T.isInfixOf "module Generated.BehaviorComplete.Journey.BehaviorContract\n  ( BehaviorKey (..)"
+      contract `shouldSatisfy` T.isInfixOf "runRejection :: BehaviorRequirement"
+      contract `shouldSatisfy` T.isInfixOf "failureSubject :: !Text"
+      contract `shouldSatisfy` T.isInfixOf "\"subject\" .= failureSubject behaviorFailure"
+      contract `shouldSatisfy` T.isInfixOf "-- JourneyEmpty x Start: live transition (spec line 38)"
+      contract `shouldSatisfy` T.isInfixOf "requirementKey = BehaviorKey \"behavior-v1-"
+      contract `shouldSatisfy` T.isInfixOf "requirementCommandName = \"Start\""
+      contract `shouldSatisfy` T.isInfixOf "requirementExpectedEdge = (Just (K.EdgeRef JourneyEmpty 1))"
+      contract `shouldSatisfy` T.isInfixOf "requirementCommandName = \"LegacyStart\""
+      contract `shouldSatisfy` T.isInfixOf "requirementExpectedEdge = (Just (K.EdgeRef JourneyEmpty 2))"
+      contract `shouldSatisfy` T.isInfixOf "runtime event values differ from the exact witness expectation; actual="
       T.count "Pending (BehaviorKey " behaviorHoles `shouldBe` 19
+      behaviorHoles `shouldSatisfy` T.isInfixOf "-- JourneyEmpty x Start: live transition (spec line 38)"
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "undefined")
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "error")
 
@@ -1932,11 +1943,12 @@ main = hspec $ do
               T.unlines
                 . map
                   ( \sourceLine ->
-                      if "BehaviorRequirement" `T.isInfixOf` sourceLine
-                        then case T.words sourceLine of
-                          [] -> sourceLine
-                          tokens -> T.unwords (init tokens <> ["<source-line>"])
-                        else sourceLine
+                      if "requirementLine =" `T.isInfixOf` sourceLine
+                        then fst (T.breakOn "=" sourceLine) <> "= <source-line>"
+                        else case T.breakOn "(spec line " sourceLine of
+                          (prefix, suffix)
+                            | T.null suffix -> sourceLine
+                            | otherwise -> prefix <> "(spec line <source-line>)"
                   )
                 . T.lines
         (singleCode, singleStdout, singleStderr) <- runKeiroDsl ["scaffold", singleSource, "--out", singleOut]

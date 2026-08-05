@@ -2295,9 +2295,24 @@ emitBehaviorContract :: Agg -> Text
 emitBehaviorContract aggregate =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null (aRegs aggregate))]
-      <> [ "{-# OPTIONS_GHC -Wno-missing-signatures -Wno-name-shadowing #-}",
-           generatedBanner,
-           "module " <> aGenPrefix aggregate <> ".BehaviorContract where",
+      <> [ generatedBanner,
+           "module " <> aGenPrefix aggregate <> ".BehaviorContract",
+           "  ( BehaviorKey (..)",
+           "  , ObligationKind (..)",
+           "  , EvidenceLevel (..)",
+           "  , GuardCoverage (..)",
+           "  , BehaviorRequirement (..)",
+           "  , RejectionClass (..)",
+           "  , LiveExpectation (..)",
+           "  , BehaviorWitness (..)",
+           "  , BehaviorFailure (..)",
+           "  , BehaviorConformanceReport (..)",
+           "  , behaviorRequirements",
+           "  , behaviorCoverageReport",
+           "  , behaviorConformancePassed",
+           "  , behaviorConformancePassedWith",
+           "  , renderBehaviorConformanceText",
+           "  ) where",
            "",
            "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
            "import " <> aGenPrefix aggregate <> ".Domain",
@@ -2364,16 +2379,18 @@ emitBehaviorContract aggregate =
            "",
            "data BehaviorFailure = BehaviorFailure",
            "  { failureKey :: !BehaviorKey",
+           "  , failureSubject :: !Text",
            "  , failureCode :: !Text",
            "  , failureDetail :: !Text",
            "  }",
            "  deriving stock (Eq, Show)",
            "",
            "instance ToJSON BehaviorFailure where",
-           "  toJSON failure = object",
-           "    [ \"key\" .= unBehaviorKey (failureKey failure)",
-           "    , \"code\" .= failureCode failure",
-           "    , \"detail\" .= failureDetail failure",
+           "  toJSON behaviorFailure = object",
+           "    [ \"key\" .= unBehaviorKey (failureKey behaviorFailure)",
+           "    , \"subject\" .= failureSubject behaviorFailure",
+           "    , \"code\" .= failureCode behaviorFailure",
+           "    , \"detail\" .= failureDetail behaviorFailure",
            "    ]",
            "",
            "data BehaviorConformanceReport = BehaviorConformanceReport",
@@ -2430,7 +2447,7 @@ emitBehaviorContract aggregate =
            "    , not (isPending witness)",
            "    , Just requirement <- [Map.lookup key requiredByKey]",
            "    ]",
-           "  failures = [failure | (_, Left failure) <- executions]",
+           "  failures = [behaviorFailure | (_, Left behaviorFailure) <- executions]",
            "",
            "behaviorConformancePassed :: BehaviorConformanceReport -> Bool",
            "behaviorConformancePassed = behaviorConformancePassedWith False",
@@ -2457,7 +2474,7 @@ emitBehaviorContract aggregate =
            "  , \"failed: \" <> tshow (length (reportFailed report))",
            "  , countLine \"verified\" (reportVerified report)",
            "  , countLine \"unverified\" (reportUnverified report)",
-           "  ] <> T.unlines [\"FAIL \" <> unBehaviorKey (failureKey failure) <> \" [\" <> failureCode failure <> \"] \" <> failureDetail failure | failure <- reportFailed report]",
+           "  ] <> T.unlines [\"FAIL \" <> unBehaviorKey (failureKey behaviorFailure) <> \" \" <> failureSubject behaviorFailure <> \" [\" <> failureCode behaviorFailure <> \"] \" <> failureDetail behaviorFailure | behaviorFailure <- reportFailed report]",
            "",
            "runWitness :: BehaviorRequirement -> BehaviorWitness -> Either BehaviorFailure ()",
            "runWitness requirement witness = case witness of",
@@ -2475,6 +2492,7 @@ emitBehaviorContract aggregate =
            "    RequiredRejection -> runRejection requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation",
            "    LiveTransition -> runAcceptance requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation",
            "",
+           "runRejection :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runRejection requirement seed command expectation = case expectation of",
            "  Emits _ -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect emitted events\"",
            "  NoOp -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect an accepted no-op\"",
@@ -2484,6 +2502,7 @@ emitBehaviorContract aggregate =
            "    Left K.AmbiguousEdges {} -> failure requirement \"ambiguous-edges\" \"AmbiguousEdges can never satisfy a rejection witness\"",
            "    Right _ -> failure requirement \"unexpected-acceptance\" \"runtime accepted a command required to reject\"",
            "",
+           "runAcceptance :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runAcceptance requirement seed command expectation = case expectation of",
            "  Rejects _ -> failure requirement \"expectation-kind\" \"a live-transition requirement needs Emits or NoOp\"",
            "  NoOp -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
@@ -2499,8 +2518,8 @@ emitBehaviorContract aggregate =
            "      checkAcceptedEnvelope requirement success",
            "      let expected = NonEmpty.toList expectedEvents",
            "          actual = K.stepSuccessOutputs success",
-           "      ensure requirement (actual == expected) \"event-value-mismatch\" \"runtime event values differ from the exact witness expectation\"",
-           "      ensure requirement (map eventKind actual == requirementEventKinds requirement) \"event-envelope-mismatch\" \"runtime event kinds differ from the declared ordered envelope\"",
+           "      ensure requirement (actual == expected) \"event-value-mismatch\" (\"runtime event values differ from the exact witness expectation; actual=\" <> tshow actual <> \" expected=\" <> tshow expected)",
+           "      ensure requirement (map eventKind actual == requirementEventKinds requirement) \"event-envelope-mismatch\" (\"runtime event kinds differ from the declared ordered envelope; actual=\" <> tshow (map eventKind actual) <> \" expected=\" <> tshow (requirementEventKinds requirement))",
            "      decoded <- either (failure requirement \"emitted-codec-decode\") Right (decodeEvents actual)",
            "      replayed <- case K.applyEventsDetailedEither " <> valueStem <> "Transducer seed decoded of",
            "        Left replayFailure -> failure requirement \"emitted-replay-failed\" (tshow replayFailure)",
@@ -2509,10 +2528,11 @@ emitBehaviorContract aggregate =
            "      ensure requirement (regsEqual (K.replaySuccessRegs replayed) (K.stepSuccessRegs success)) \"forward-replay-registers\" \"decoded emissions replay to different registers\"",
            "      checkSingleAttribution requirement K.Live (length decoded) (K.replaySuccessTrace replayed)",
            "",
+           "checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess " <> name <> "Regs " <> aVertexType aggregate <> " " <> name <> "Event -> Either BehaviorFailure ()",
            "checkAcceptedEnvelope requirement success = do",
-           "  ensure requirement (K.stepSuccessMode success == K.Live) \"forward-mode\" \"forward execution selected a non-live edge\"",
-           "  ensure requirement (Just (K.stepSuccessEdge success) == requirementExpectedEdge requirement) \"edge-attribution\" \"runtime selected a different guarded sibling\"",
-           "  ensure requirement (Just (K.stepSuccessState success) == requirementTarget requirement) \"target-mismatch\" \"runtime reached a different target vertex\"",
+           "  ensure requirement (K.stepSuccessMode success == K.Live) \"forward-mode\" (\"forward execution selected a non-live edge; actual=\" <> tshow (K.stepSuccessMode success) <> \" expected=\" <> tshow K.Live)",
+           "  ensure requirement (Just (K.stepSuccessEdge success) == requirementExpectedEdge requirement) \"edge-attribution\" (\"runtime selected a different guarded sibling; actual=\" <> tshow (Just (K.stepSuccessEdge success)) <> \" expected=\" <> tshow (requirementExpectedEdge requirement))",
+           "  ensure requirement (Just (K.stepSuccessState success) == requirementTarget requirement) \"target-mismatch\" (\"runtime reached a different target vertex; actual=\" <> tshow (Just (K.stepSuccessState success)) <> \" expected=\" <> tshow (requirementTarget requirement))",
            "",
            "runReplay :: BehaviorRequirement -> [" <> name <> "Event] -> [" <> name <> "Event] -> Either BehaviorFailure ()",
            "runReplay requirement prefix chunk = case requirementKind requirement of",
@@ -2524,19 +2544,21 @@ emitBehaviorContract aggregate =
            "    replayed <- case K.applyEventsDetailedEither " <> valueStem <> "Transducer (K.replaySuccessState settled, K.replaySuccessRegs settled) decoded of",
            "      Left replayFailure -> failure requirement \"replay-chunk-failed\" (tshow replayFailure)",
            "      Right replaySuccess -> Right replaySuccess",
-           "    ensure requirement (Just (K.replaySuccessState replayed) == requirementTarget requirement) \"target-mismatch\" \"replay chunk reached a different target vertex\"",
+           "    ensure requirement (Just (K.replaySuccessState replayed) == requirementTarget requirement) \"target-mismatch\" (\"replay chunk reached a different target vertex; actual=\" <> tshow (Just (K.replaySuccessState replayed)) <> \" expected=\" <> tshow (requirementTarget requirement))",
            "    checkSingleAttribution requirement K.ReplayOnly (length decoded) (K.replaySuccessTrace replayed)",
            "  _ -> failure requirement \"witness-kind\" \"ReplayWitness supplied for a non-replay requirement\"",
            "",
+           "checkSingleAttribution :: BehaviorRequirement -> K.EdgeMode -> Int -> [K.ReplayAttribution " <> aVertexType aggregate <> "] -> Either BehaviorFailure ()",
            "checkSingleAttribution requirement expectedMode eventCount trace = case trace of",
            "  [attribution] -> do",
-           "    ensure requirement (Just (K.replayAttributionEdge attribution) == requirementExpectedEdge requirement) \"replay-edge-attribution\" \"replay selected a different edge\"",
-           "    ensure requirement (K.replayAttributionMode attribution == expectedMode) \"replay-mode-attribution\" \"replay selected the wrong live/replay-only phase\"",
-           "    ensure requirement (K.replayAttributionSource attribution == requirementSource requirement) \"replay-source-attribution\" \"replay attribution starts at the wrong source\"",
-           "    ensure requirement (Just (K.replayAttributionTarget attribution) == requirementTarget requirement) \"replay-target-attribution\" \"replay attribution ends at the wrong target\"",
-           "    ensure requirement (K.replayAttributionSpan attribution == K.ReplayEventSpan 0 eventCount) \"replay-span-attribution\" \"replay attribution did not consume the exact chunk\"",
+           "    ensure requirement (Just (K.replayAttributionEdge attribution) == requirementExpectedEdge requirement) \"replay-edge-attribution\" (\"replay selected a different edge; actual=\" <> tshow (Just (K.replayAttributionEdge attribution)) <> \" expected=\" <> tshow (requirementExpectedEdge requirement))",
+           "    ensure requirement (K.replayAttributionMode attribution == expectedMode) \"replay-mode-attribution\" (\"replay selected the wrong live/replay-only phase; actual=\" <> tshow (K.replayAttributionMode attribution) <> \" expected=\" <> tshow expectedMode)",
+           "    ensure requirement (K.replayAttributionSource attribution == requirementSource requirement) \"replay-source-attribution\" (\"replay attribution starts at the wrong source; actual=\" <> tshow (K.replayAttributionSource attribution) <> \" expected=\" <> tshow (requirementSource requirement))",
+           "    ensure requirement (Just (K.replayAttributionTarget attribution) == requirementTarget requirement) \"replay-target-attribution\" (\"replay attribution ends at the wrong target; actual=\" <> tshow (Just (K.replayAttributionTarget attribution)) <> \" expected=\" <> tshow (requirementTarget requirement))",
+           "    ensure requirement (K.replayAttributionSpan attribution == K.ReplayEventSpan 0 eventCount) \"replay-span-attribution\" (\"replay attribution did not consume the exact chunk; actual=\" <> tshow (K.replayAttributionSpan attribution) <> \" expected=\" <> tshow (K.ReplayEventSpan 0 eventCount))",
            "  _ -> failure requirement \"replay-trace-cardinality\" \"expected exactly one completed-edge attribution\"",
            "",
+           "settleHistory :: BehaviorRequirement -> Text -> [" <> name <> "Event] -> Either BehaviorFailure (K.ReplaySuccess " <> name <> "Regs " <> aVertexType aggregate <> ")",
            "settleHistory requirement label history = do",
            "  decoded <- either (failure requirement (label <> \"-codec-decode\")) Right (decodeEvents history)",
            "  case K.applyEventsDetailedEither " <> valueStem <> "Transducer (" <> initialVertex aggregate <> ", initial" <> name <> "Regs) decoded of",
@@ -2548,27 +2570,48 @@ emitBehaviorContract aggregate =
          ]
       <> renderCommandKind aggregate
       <> [ "",
+           "eventKind :: " <> name <> "Event -> Text",
            "eventKind event = case Codec.eventType " <> valueStem <> "Codec event of Codec.EventType tag -> tag",
            "",
            "regsEqual :: K.RegFile " <> name <> "Regs -> K.RegFile " <> name <> "Regs -> Bool",
            regsEqualityExpression aggregate,
            "",
+           "proofStrength :: BehaviorRequirement -> Bool",
            "proofStrength requirement =",
            "  requirementEvidence requirement == GeneratedAuthoritative",
            "    && requirementGuardCoverage requirement `elem` [GuardTotal, GuardNotApplicable]",
            "",
+           "behaviorWitnessKey :: BehaviorWitness -> BehaviorKey",
            "behaviorWitnessKey witness = case witness of",
            "  Pending key -> key",
            "  LiveWitness { witnessKey = key } -> key",
            "  ReplayWitness { witnessKey = key } -> key",
            "",
+           "isPending :: BehaviorWitness -> Bool",
            "isPending Pending {} = True",
            "isPending _ = False",
            "",
+           "ensure :: BehaviorRequirement -> Bool -> Text -> Text -> Either BehaviorFailure ()",
            "ensure requirement condition code detail = if condition then Right () else failure requirement code detail",
-           "failure requirement code detail = Left (BehaviorFailure (requirementKey requirement) code detail)",
+           "failure :: BehaviorRequirement -> Text -> Text -> Either BehaviorFailure failed",
+           "failure requirement code detail =",
+           "  Left",
+           "    ( BehaviorFailure",
+           "        (requirementKey requirement)",
+           "        (tshow (requirementSource requirement) <> \" x \" <> requirementCommandName requirement <> \": \" <> kindPhrase <> \" (spec line \" <> tshow (requirementLine requirement) <> \")\")",
+           "        code",
+           "        detail",
+           "    )",
+           " where",
+           "  kindPhrase = case requirementKind requirement of",
+           "    LiveTransition -> \"live transition\"",
+           "    RequiredRejection -> \"required rejection\"",
+           "    ReplayTransition -> \"replay-only transition\"",
+           "sortedKeys :: [BehaviorKey] -> [BehaviorKey]",
            "sortedKeys = sortOn unBehaviorKey",
+           "keyTexts :: [BehaviorKey] -> [Text]",
            "keyTexts = map unBehaviorKey",
+           "countLine :: Text -> [BehaviorKey] -> Text",
            "countLine label values = label <> \": \" <> tshow (length values)",
            "tshow :: Show value => value -> Text",
            "tshow = T.pack . show"
@@ -2579,9 +2622,10 @@ emitBehaviorContract aggregate =
 
 renderCommandKind :: Agg -> [Text]
 renderCommandKind aggregate = case aCommands aggregate of
-  [] -> ["", "commandKind _ = \"\""]
+  [] -> ["", "commandKind :: " <> aName aggregate <> "Command -> Text", "commandKind _ = \"\""]
   commands ->
     [ "",
+      "commandKind :: " <> aName aggregate <> "Command -> Text",
       "commandKind command = case command of"
     ]
       <> ["  " <> rcName command <> " _ -> " <> tshow (rcName command) | command <- commands]
@@ -2591,33 +2635,42 @@ renderBehaviorRequirementList aggregate =
   case behaviorRequirementsFor aggregate of
     [] -> ["  []"]
     requirements ->
-      [ (if index == (0 :: Int) then "  [ " else "  , ") <> render requirement
-      | (index, requirement) <- zip [0 ..] requirements
-      ]
+      concat
+        [ render index requirement
+        | (index, requirement) <- zip [0 ..] requirements
+        ]
         <> ["  ]"]
   where
-    render requirement =
-      "BehaviorRequirement "
-        <> keyExpr requirement
-        <> " "
-        <> T.pack (show (Behavior.requirementKind requirement))
-        <> " "
-        <> T.pack (show (Behavior.requirementEvidence requirement))
-        <> " "
-        <> T.pack (show (Behavior.requirementGuardCoverage requirement))
-        <> " "
-        <> vertexCtor aggregate (Behavior.requirementSource requirement)
-        <> " "
-        <> tshow (Behavior.requirementCommand requirement)
-        <> " "
-        <> edgeExpr aggregate requirement
-        <> " "
-        <> maybe "Nothing" (\target -> "(Just " <> vertexCtor aggregate target <> ")") (Behavior.requirementTarget requirement)
-        <> " "
-        <> renderBehaviorTextList (Behavior.requirementEvents requirement)
-        <> " "
-        <> tshow' (unLoc (Behavior.requirementLocation requirement))
-    keyExpr requirement = "(BehaviorKey " <> tshow (Behavior.unBehaviorKey (Behavior.requirementKey requirement)) <> ")"
+    render index requirement =
+      [ (if index == (0 :: Int) then "  [ -- " else "  , -- ") <> behaviorRequirementLabel aggregate requirement,
+        "    BehaviorRequirement",
+        "      { requirementKey = BehaviorKey " <> tshow (Behavior.unBehaviorKey (Behavior.requirementKey requirement)),
+        "      , requirementKind = " <> T.pack (show (Behavior.requirementKind requirement)),
+        "      , requirementEvidence = " <> T.pack (show (Behavior.requirementEvidence requirement)),
+        "      , requirementGuardCoverage = " <> T.pack (show (Behavior.requirementGuardCoverage requirement)),
+        "      , requirementSource = " <> vertexCtor aggregate (Behavior.requirementSource requirement),
+        "      , requirementCommandName = " <> tshow (Behavior.requirementCommand requirement),
+        "      , requirementExpectedEdge = " <> edgeExpr aggregate requirement,
+        "      , requirementTarget = " <> maybe "Nothing" (\target -> "Just " <> vertexCtor aggregate target) (Behavior.requirementTarget requirement),
+        "      , requirementEventKinds = " <> renderBehaviorTextList (Behavior.requirementEvents requirement),
+        "      , requirementLine = " <> tshow' (unLoc (Behavior.requirementLocation requirement)),
+        "      }"
+      ]
+
+behaviorRequirementLabel :: Agg -> Behavior.BehaviorRequirement -> Text
+behaviorRequirementLabel aggregate requirement =
+  vertexCtor aggregate (Behavior.requirementSource requirement)
+    <> " x "
+    <> Behavior.requirementCommand requirement
+    <> ": "
+    <> ( case Behavior.requirementKind requirement of
+           Behavior.LiveTransition -> "live transition"
+           Behavior.RequiredRejection -> "required rejection"
+           Behavior.ReplayTransition -> "replay-only transition"
+       )
+    <> " (spec line "
+    <> tshow' (unLoc (Behavior.requirementLocation requirement))
+    <> ")"
 
 edgeExpr :: Agg -> Behavior.BehaviorRequirement -> Text
 edgeExpr aggregate requirement = case Behavior.requirementKind requirement of
@@ -2690,7 +2743,8 @@ emitBehaviorHoles aggregate =
           [ (if index == (0 :: Int) then "  [ " else "  , ")
               <> "Pending (BehaviorKey "
               <> tshow (Behavior.unBehaviorKey (Behavior.requirementKey requirement))
-              <> ")"
+              <> ") -- "
+              <> behaviorRequirementLabel aggregate requirement
           | (index, requirement) <- zip [0 ..] requirements
           ]
             <> ["  ]"]

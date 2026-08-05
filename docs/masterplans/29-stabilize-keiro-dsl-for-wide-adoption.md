@@ -123,7 +123,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Complete |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Complete |
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Complete |
-| 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | Not Started |
+| 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | In Progress |
 | 197 | Enforce or refuse every accepted spec surface | docs/plans/197-enforce-or-refuse-every-accepted-spec-surface.md | None | EP-193 | Not Started |
 | 198 | Rename keiro-dsl sidecars to explicit-slot ledger names with one durability contract | docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md | None | None | Not Started |
 
@@ -236,7 +236,7 @@ alias-free spec generates byte-identical output.
 - [x] EP-195 M1: Corpus manifest plus `keiro-dsl-corpus-regen` driver regenerating behavior-complete with zero diff
 - [x] EP-195 M2: Full 41-invocation coverage, record/disk and cabal/disk checkers, golden accept mode; 387-file pre-existing drift assigned to EP-196
 - [x] EP-195 M3: Contributor docs, changelogs, closure; clean-tree gate activation transferred to EP-196 M4 after its one corpus refresh
-- [ ] EP-196 M1: BehaviorContract signatures, curated exports, annotated keys/rows, evidence-carrying failures
+- [x] EP-196 M1: BehaviorContract signatures, curated exports, annotated keys/rows, evidence-carrying failures
 - [ ] EP-196 M2: Harness sample constants, runtime-backed read-model facts, batched minors
 - [ ] EP-196 M3: Usage-conditional imports, `-Wall` parity, compile the uncompiled structural BehaviorContract
 - [ ] EP-196 M4: Single corpus regeneration via EP-195 tooling, clean-tree policy activation, demonstration failure transcript, closure

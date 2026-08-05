@@ -41,8 +41,11 @@ after regeneration.
 - [x] (2026-08-04) Verified every 2026-08-04 audit anchor against the committed fixtures and the
   emitters (evidence recorded in Context and Orientation and Surprises & Discoveries); authored
   this plan as EP-196, Phase 3 of MasterPlan 29.
-- [ ] Milestone 1: BehaviorContract signatures, renamed binders, curated export list, annotated
-  behavior keys and requirement rows, evidence-carrying failures.
+- [x] (2026-08-05T18:09:58Z) Milestone 1: BehaviorContract now emits a curated public surface,
+  complete top-level signatures without warning suppressions, annotated record-syntax
+  requirements and Pending rows, and subject/actual/expected failure evidence. The focused
+  behavior suite passed 11 examples; a disposable public-CLI scaffold confirmed every required
+  signature and annotation while leaving committed corpus bytes untouched for Milestone 4.
 - [ ] Milestone 2: Harness sample constants and paren cleanup, honest clock-free rendering,
   runtime-backed read-model facts, codec optional-field helper, component-named facade aliases,
   Projection module comment.
@@ -93,6 +96,15 @@ after regeneration.
   cannot pass before this plan's already-batched corpus refresh. Its Cabal closure checker also
   records 108 explicit uncompiled paths: 107 intentional non-target surfaces in narrow suites
   and the one unexpected structural BehaviorContract this plan already owns.
+  Date: 2026-08-05
+
+- Observation: adding the spec line to each human-readable behavior-row comment exposed the same
+  intentional single-file/workspace source-line relocation that EP-191 already normalized for
+  the positional requirement row. The byte-parity test now normalizes both the record field and
+  its adjacent comment while continuing to compare every behavior key, cell, kind, edge, target,
+  and event byte exactly.
+  Evidence: the first focused behavior run differed only by the workspace composition's uniform
+  two-line offset; the rerun passed 11 examples after extending that existing normalization.
   Date: 2026-08-05
 
 
