@@ -752,7 +752,7 @@ $ nix develop -c cabal test keiro-dsl-test --test-options='--match "behavior"'
 ...
 0 failures
 
-$ nix develop -c cabal build all 2>&1 | grep -c 'warning:'
+$ nix develop -c cabal build all 2>&1 | grep -c 'warning: \[GHC-'
 <nonzero — record this count as the before-figure>
 ```
 
@@ -804,10 +804,18 @@ in Plan of Work, then:
 ```console
 $ nix develop -c cabal run keiro-dsl-behavior-complete-report
 behavior conformance: Journey
-...
+schema: keiro/behavior-conformance/1
+required: 19
+filled: 19
+pending: 0
+missing: 0
+duplicate: 0
+stale: 0
 failed: 1
-FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (spec line 41) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData 5)] expected=[DecisionRecorded (DecisionRecordedData 6)]
-$ git checkout -- keiro-dsl/test/conformance-behavior-complete/BehaviorComplete/Journey/BehaviorHoles.hs
+verified: 16
+unverified: 2
+FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (spec line 44) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData {amount = 5})] expected=[DecisionRecorded (DecisionRecordedData {amount = 6})]
+# Restore the exact original witness with the inverse patch.
 ```
 
 (Exact wording will match the implemented renderer; the required content is key, subject with
@@ -819,7 +827,7 @@ Full closure after documentation:
 $ nix develop -c cabal test keiro-dsl
 All ... test suites passed
 
-$ nix develop -c cabal build all 2>&1 | tee /tmp/keiro-build.log | grep -c 'warning:'
+$ nix develop -c cabal build all 2>&1 | tee /tmp/keiro-build.log | grep -c 'warning: \[GHC-'
 0
 
 $ nix develop -c cabal test keiro-dsl-conformance-behavior-complete
