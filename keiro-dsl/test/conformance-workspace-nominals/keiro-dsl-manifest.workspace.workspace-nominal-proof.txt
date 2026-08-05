@@ -1,0 +1,32 @@
+-- keiro-dsl build manifest for service.keiro-workspace
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.WorkspaceNominalProof.Nominals
+    Generated.WorkspaceNominalProof.Nominals.Internal
+    Generated.WorkspaceNominalProof.Project.BehaviorContract
+    Generated.WorkspaceNominalProof.Project.Codec
+    Generated.WorkspaceNominalProof.Project.Domain
+    Generated.WorkspaceNominalProof.Project.EventStream
+    Generated.WorkspaceNominalProof.Project.Harness
+    Generated.WorkspaceNominalProof.Project.Projection
+    Generated.WorkspaceNominalProof.Project.Transducer
+    Generated.WorkspaceNominalProof.ProjectArtifact.BehaviorContract
+    Generated.WorkspaceNominalProof.ProjectArtifact.Codec
+    Generated.WorkspaceNominalProof.ProjectArtifact.Domain
+    Generated.WorkspaceNominalProof.ProjectArtifact.EventStream
+    Generated.WorkspaceNominalProof.ProjectArtifact.Harness
+    Generated.WorkspaceNominalProof.ProjectArtifact.Projection
+    Generated.WorkspaceNominalProof.ProjectArtifact.Transducer
+    Generated.WorkspaceNominalProof.ReplayAudit
+    WorkspaceNominalProof.Project.BehaviorHoles
+    WorkspaceNominalProof.ProjectArtifact.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

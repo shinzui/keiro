@@ -1,0 +1,40 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/behavior-complete.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    BehaviorComplete.Bindings
+    BehaviorComplete.Journey.BehaviorHoles
+    Generated.BehaviorComplete.Journey.BehaviorContract
+    Generated.BehaviorComplete.Journey.Codec
+    Generated.BehaviorComplete.Journey.Domain
+    Generated.BehaviorComplete.Journey.EventStream
+    Generated.BehaviorComplete.Journey.Harness
+    Generated.BehaviorComplete.Journey.Projection
+    Generated.BehaviorComplete.Journey.Transducer
+    Generated.BehaviorComplete.Nominals
+    Generated.BehaviorComplete.Nominals.Internal
+    Generated.BehaviorComplete.ReplayAudit
+    Generated.BehaviorComplete.Structural.Shape.StartPayload
+    Generated.BehaviorComplete.StructuralProjections
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+    , time
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    BehaviorComplete.Bindings
+    BehaviorComplete.Domain

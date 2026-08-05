@@ -1,0 +1,25 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/subscription.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Billing.Subscription.BehaviorHoles
+    Billing.Subscription.Holes
+    Generated.Billing.Nominals
+    Generated.Billing.Nominals.Internal
+    Generated.Billing.ReplayAudit
+    Generated.Billing.Subscription.BehaviorContract
+    Generated.Billing.Subscription.Codec
+    Generated.Billing.Subscription.Domain
+    Generated.Billing.Subscription.EventStream
+    Generated.Billing.Subscription.Harness
+    Generated.Billing.Subscription.Projection
+    Generated.Billing.Subscription.Transducer
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

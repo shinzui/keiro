@@ -1,0 +1,37 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/import-planning-collisions.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
+    Generated.ImportPlanningCollisions.CollisionLedger.Codec
+    Generated.ImportPlanningCollisions.CollisionLedger.Domain
+    Generated.ImportPlanningCollisions.CollisionLedger.EventStream
+    Generated.ImportPlanningCollisions.CollisionLedger.Harness
+    Generated.ImportPlanningCollisions.CollisionLedger.Projection
+    Generated.ImportPlanningCollisions.CollisionLedger.Transducer
+    Generated.ImportPlanningCollisions.NominalProjections
+    Generated.ImportPlanningCollisions.ReplayAudit
+    Generated.ImportPlanningCollisions.Structural.Shape.Details
+    Generated.ImportPlanningCollisions.StructuralProjections
+    ImportPlanning.Bindings
+    ImportPlanningCollisions.CollisionLedger.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    ImportPlanning.Bindings
+    ImportPlanning.Consumer.Domain
+    ImportPlanning.Consumer.Invoice.Types
+    ImportPlanning.Consumer.Order.Types
+    ImportPlanning.Consumer.Shared.Types

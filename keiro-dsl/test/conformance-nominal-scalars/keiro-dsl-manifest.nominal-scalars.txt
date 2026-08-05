@@ -1,0 +1,34 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/nominal-scalars.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.NominalScalars.Nominal.Shape.OrderStatus
+    Generated.NominalScalars.NominalLedger.BehaviorContract
+    Generated.NominalScalars.NominalLedger.Codec
+    Generated.NominalScalars.NominalLedger.Domain
+    Generated.NominalScalars.NominalLedger.EventStream
+    Generated.NominalScalars.NominalLedger.Harness
+    Generated.NominalScalars.NominalLedger.Projection
+    Generated.NominalScalars.NominalLedger.Transducer
+    Generated.NominalScalars.NominalProjections
+    Generated.NominalScalars.ReplayAudit
+    NominalConformance.Bindings
+    NominalScalars.NominalLedger.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , mmzk-typeid
+    , nominal-conformance
+    , text
+
+consumer-packages:
+    nominal-conformance
+
+consumer-modules:
+    NominalConformance.Bindings
+    NominalConformance.Domain

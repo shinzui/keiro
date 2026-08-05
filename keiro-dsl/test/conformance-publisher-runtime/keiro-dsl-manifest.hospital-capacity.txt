@@ -1,0 +1,19 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/emit.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.HospitalCapacity.Emergency.Contract
+    Generated.HospitalCapacity.HospitalPublisher.Publisher
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , keiro-core
+    , kiroku-store
+    , mmzk-typeid
+    , text

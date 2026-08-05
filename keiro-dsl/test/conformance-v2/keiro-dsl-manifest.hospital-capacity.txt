@@ -1,0 +1,25 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/reservation-v2.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.HospitalCapacity.Nominals
+    Generated.HospitalCapacity.Nominals.Internal
+    Generated.HospitalCapacity.ReplayAudit
+    Generated.HospitalCapacity.Reservation.BehaviorContract
+    Generated.HospitalCapacity.Reservation.Codec
+    Generated.HospitalCapacity.Reservation.Domain
+    Generated.HospitalCapacity.Reservation.EventStream
+    Generated.HospitalCapacity.Reservation.Harness
+    Generated.HospitalCapacity.Reservation.Projection
+    Generated.HospitalCapacity.Reservation.Transducer
+    HospitalCapacity.Reservation.BehaviorHoles
+    HospitalCapacity.Reservation.Holes
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

@@ -1,0 +1,7 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/contract-v1-compat.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":1,"effectiveLanguageVersion":1,"sourceForm":"declared"}
+semantic-contract {"languageVersion":1,"runtimeSemantics":"keiro-dsl/runtime-semantics/1"}
+generated Generated/HospitalCapacity/Emergency/Contract.hs

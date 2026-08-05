@@ -1,0 +1,33 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/import-planning-collisions.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/ImportPlanningCollisions/Structural/Shape/Details.hs
+generated Generated/ImportPlanningCollisions/StructuralProjections.hs
+generated Generated/ImportPlanningCollisions/NominalProjections.hs
+hole ImportPlanning/Bindings.hs
+generated Generated/ImportPlanningCollisions/ReplayAudit.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/Transducer.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs
+hole ImportPlanningCollisions/CollisionLedger/BehaviorHoles.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/EventStream.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/Projection.hs
+generated Generated/ImportPlanningCollisions/CollisionLedger/Harness.hs
+mapping {"bindingSymbol":"ImportPlanning.Bindings.detailsBinding","bindingVersion":"1","canonicalType":"import-planning.Details.v1","mode":"structural","module":"ImportPlanning.Consumer.Shared.Types","package":"keiro-dsl","schema":1,"specName":"Details","type":"Details"}
+nominal-mapping {"bindingSymbol":"ImportPlanning.Bindings.invoiceStatusBinding","bindingVersion":"1","canonicalType":"import-planning.InvoiceStatus.v1","category":"scalar","fixtureSymbol":"ImportPlanning.Bindings.invoiceStatusFixtures","initialSymbol":null,"mode":"nominal","module":"ImportPlanning.Consumer.Invoice.Types","package":"keiro-dsl","representation":"Text","schema":1,"specName":"InvoiceStatus","type":"Status"}
+nominal-mapping {"bindingSymbol":"ImportPlanning.Bindings.localCollisionBinding","bindingVersion":"1","canonicalType":"import-planning.LocalCollision.v1","category":"scalar","fixtureSymbol":"ImportPlanning.Bindings.localCollisionFixtures","initialSymbol":null,"mode":"nominal","module":"ImportPlanning.Consumer.Domain","package":"keiro-dsl","representation":"Text","schema":1,"specName":"LocalCollision","type":"CollisionLedgerCommand"}
+nominal-mapping {"bindingSymbol":"ImportPlanning.Bindings.orderStatusBinding","bindingVersion":"1","canonicalType":"import-planning.OrderStatus.v1","category":"scalar","fixtureSymbol":"ImportPlanning.Bindings.orderStatusFixtures","initialSymbol":null,"mode":"nominal","module":"ImportPlanning.Consumer.Order.Types","package":"keiro-dsl","representation":"Text","schema":1,"specName":"OrderStatus","type":"Status"}
+binding {"kind":"binding","mappedName":"Details","module":"ImportPlanning.Bindings","path":"label","schema":1,"signature":"detailsBinding.label :: Text","symbol":"detailsBinding"}
+binding {"kind":"fixtures","mappedName":"Details","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"detailsFixtures :: FixtureCases ImportPlanning.Consumer.Shared.Types.Details","symbol":"detailsFixtures"}
+binding {"kind":"binding","mappedName":"InvoiceStatus","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"invoiceStatusBinding :: NominalBinding ImportPlanning.Consumer.Invoice.Types.Status Text","symbol":"invoiceStatusBinding"}
+binding {"kind":"fixtures","mappedName":"InvoiceStatus","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"invoiceStatusFixtures :: NominalFixtureCases ImportPlanning.Consumer.Invoice.Types.Status","symbol":"invoiceStatusFixtures"}
+binding {"kind":"binding","mappedName":"LocalCollision","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"localCollisionBinding :: NominalBinding ImportPlanning.Consumer.Domain.CollisionLedgerCommand Text","symbol":"localCollisionBinding"}
+binding {"kind":"fixtures","mappedName":"LocalCollision","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"localCollisionFixtures :: NominalFixtureCases ImportPlanning.Consumer.Domain.CollisionLedgerCommand","symbol":"localCollisionFixtures"}
+binding {"kind":"binding","mappedName":"OrderStatus","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"orderStatusBinding :: NominalBinding ImportPlanning.Consumer.Order.Types.Status Text","symbol":"orderStatusBinding"}
+binding {"kind":"fixtures","mappedName":"OrderStatus","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"orderStatusFixtures :: NominalFixtureCases ImportPlanning.Consumer.Order.Types.Status","symbol":"orderStatusFixtures"}
+behavior {"aggregate":"CollisionLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-2134fce4a19c59d7","kind":"live-transition","outputs":[{"command":"Record","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"CollisionLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-995f9bf710ce7c6c","kind":"required-rejection","outputs":[],"source":"Recorded"}

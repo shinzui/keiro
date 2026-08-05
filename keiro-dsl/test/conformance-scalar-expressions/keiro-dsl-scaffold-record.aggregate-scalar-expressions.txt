@@ -1,0 +1,35 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs
+generated Generated/AggregateScalarExpressions/StructuralProjections.hs
+generated Generated/AggregateScalarExpressions/Nominals.hs
+generated Generated/AggregateScalarExpressions/Nominals/Internal.hs
+hole ScalarExpressions/Bindings.hs
+generated Generated/AggregateScalarExpressions/ReplayAudit.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs
+hole AggregateScalarExpressions/ScalarAccount/BehaviorHoles.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/EventStream.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/Projection.hs
+hole AggregateScalarExpressions/ScalarAccount/Holes.hs
+generated Generated/AggregateScalarExpressions/ScalarAccount/Harness.hs
+mapping {"bindingSymbol":"ScalarExpressions.Bindings.limitsBinding","bindingVersion":"1","canonicalType":"scalar-expressions.Limits.v1","mode":"structural","module":"ScalarExpressions.Domain","package":"keiro-dsl","schema":1,"specName":"Limits","type":"Limits"}
+id-domain id-domain|name=RequestId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=req|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=AccountMode|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:normal,restricted|owner=generated
+nominal-equality nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:req:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+binding {"kind":"binding","mappedName":"Limits","module":"ScalarExpressions.Bindings","path":"ceiling","schema":1,"signature":"limitsBinding.ceiling :: Natural","symbol":"limitsBinding"}
+binding {"kind":"binding","mappedName":"Limits","module":"ScalarExpressions.Bindings","path":"minimum","schema":1,"signature":"limitsBinding.minimum :: Integer","symbol":"limitsBinding"}
+binding {"kind":"fixtures","mappedName":"Limits","module":"ScalarExpressions.Bindings","path":null,"schema":1,"signature":"limitsCases :: FixtureCases ScalarExpressions.Domain.Limits","symbol":"limitsCases"}
+binding {"kind":"initial-value","mappedName":"Limits","module":"ScalarExpressions.Bindings","path":null,"schema":1,"signature":"initialLimits :: ScalarExpressions.Domain.Limits","symbol":"initialLimits"}
+behavior {"aggregate":"ScalarAccount","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-1de91883b9e3f8bc","kind":"required-rejection","outputs":[],"source":"Open"}
+behavior {"aggregate":"ScalarAccount","command":"Adjust","evidence":"generated-authoritative","key":"behavior-v1-5c58e0aafeb5f400","kind":"required-rejection","outputs":[],"source":"Reviewed"}
+behavior {"aggregate":"ScalarAccount","command":"Adjust","evidence":"generated-authoritative","key":"behavior-v1-a19a8e94d935493f","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"ScalarAccount","command":"Close","evidence":"hole-witnessed","key":"behavior-v1-b7db52f28632d8da","kind":"live-transition","outputs":[{"command":"Close","ownership":"generated-command-identity"}],"source":"Reviewed"}
+behavior {"aggregate":"ScalarAccount","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-dbf483c868dd6d34","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"ScalarAccount","command":"Adjust","evidence":"generated-authoritative","key":"behavior-v1-e9c863d5daf20011","kind":"live-transition","outputs":[{"command":"Adjust","ownership":"generated-command-identity"}],"source":"Open"}

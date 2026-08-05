@@ -1,0 +1,34 @@
+cabal-version: 3.0
+name:          keiro-dsl-corpus-regen
+version:       0.1.0.0
+synopsis:
+  Regenerate and verify the committed keiro-dsl conformance corpus
+
+license:       BSD-3-Clause
+author:        Nadeem Bitar
+maintainer:    nadeem@gmail.com
+copyright:     2026 Nadeem Bitar
+category:      Development
+build-type:    Simple
+tested-with:   GHC >=9.12 && <9.13
+
+executable keiro-dsl-corpus-regen
+  main-is:            Main.hs
+  hs-source-dirs:     src
+  other-modules:      CorpusPlan
+  ghc-options:        -Wall -Werror=missing-fields
+  default-language:   GHC2024
+  default-extensions:
+    ImportQualifiedPost
+    OverloadedLabels
+    OverloadedStrings
+
+  build-depends:
+    , base          >=4.21 && <5
+    , Cabal-syntax  >=3.14 && <3.17
+    , containers    >=0.6  && <0.8
+    , directory     >=1.3  && <1.4
+    , filepath      >=1.4  && <1.6
+    , keiro-dsl
+    , process       >=1.6  && <1.7
+    , text          >=2.1  && <2.2

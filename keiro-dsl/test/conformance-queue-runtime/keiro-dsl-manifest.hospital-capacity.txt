@@ -1,0 +1,28 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/reservation-work.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModel
+    Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelHarness
+    Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelTable
+    Generated.HospitalCapacity.ReservationWork.Queue
+    Generated.HospitalCapacity.ReservationWork.QueueCodec
+    Generated.HospitalCapacity.ReservationWork.QueuePolicy
+    Generated.HospitalCapacity.TransferDecisions.ReadModel
+    Generated.HospitalCapacity.TransferDecisions.ReadModelHarness
+    Generated.HospitalCapacity.TransferDecisions.ReadModelTable
+    HospitalCapacity.AcceptedTransferNeeds.ReadModelHoles
+    HospitalCapacity.TransferDecisions.ReadModelHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , keiro-core
+    , keiro-pgmq
+    , kiroku-store
+    , text

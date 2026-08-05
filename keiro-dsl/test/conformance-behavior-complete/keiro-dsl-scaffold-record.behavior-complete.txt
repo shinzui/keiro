@@ -1,0 +1,60 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/behavior-complete.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"StartPayload","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural StartPayload (line 6)","path":"Generated/BehaviorComplete/Structural/Shape/StartPayload.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete mapped structural facade","path":"Generated/BehaviorComplete/StructuralProjections.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete generated nominal declarations","path":"Generated/BehaviorComplete/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete generated nominal ID internals","path":"Generated/BehaviorComplete/Nominals/Internal.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton BehaviorComplete.Bindings","path":"BehaviorComplete/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete replay-audit assembly","path":"Generated/BehaviorComplete/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Journey (line 18)","path":"BehaviorComplete/Journey/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Harness.hs"}
+generated Generated/BehaviorComplete/Structural/Shape/StartPayload.hs
+generated Generated/BehaviorComplete/StructuralProjections.hs
+generated Generated/BehaviorComplete/Nominals.hs
+generated Generated/BehaviorComplete/Nominals/Internal.hs
+hole BehaviorComplete/Bindings.hs
+generated Generated/BehaviorComplete/ReplayAudit.hs
+generated Generated/BehaviorComplete/Journey/Domain.hs
+generated Generated/BehaviorComplete/Journey/Codec.hs
+generated Generated/BehaviorComplete/Journey/Transducer.hs
+generated Generated/BehaviorComplete/Journey/BehaviorContract.hs
+hole BehaviorComplete/Journey/BehaviorHoles.hs
+generated Generated/BehaviorComplete/Journey/EventStream.hs
+generated Generated/BehaviorComplete/Journey/Projection.hs
+generated Generated/BehaviorComplete/Journey/Harness.hs
+mapping {"bindingSymbol":"BehaviorComplete.Bindings.startPayloadBinding","bindingVersion":"1","canonicalType":"behavior-complete.StartPayload.v1","mode":"structural","module":"BehaviorComplete.Domain","package":"keiro-dsl","schema":1,"specName":"StartPayload","type":"StartPayload"}
+id-domain id-domain|name=RequestId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=req|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=RequestId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:req:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+binding {"kind":"binding","mappedName":"StartPayload","module":"BehaviorComplete.Bindings","path":"label","schema":1,"signature":"startPayloadBinding.label :: Text","symbol":"startPayloadBinding"}
+binding {"kind":"binding","mappedName":"StartPayload","module":"BehaviorComplete.Bindings","path":"note","schema":1,"signature":"startPayloadBinding.note :: Maybe (Text)","symbol":"startPayloadBinding"}
+binding {"kind":"fixtures","mappedName":"StartPayload","module":"BehaviorComplete.Bindings","path":null,"schema":1,"signature":"startPayloadCases :: FixtureCases BehaviorComplete.Domain.StartPayload","symbol":"startPayloadCases"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-0128e858fee6f2b3","kind":"replay-transition","outputs":[{"command":"LegacyStart","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-08a2bda57424a16e","kind":"replay-transition","outputs":[{"command":"Start","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-2e1fd6b9580e1a3d","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-2f3ebf37a55781db","kind":"live-transition","outputs":[{"command":"Decide","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-43b8fc7fa48595dd","kind":"required-rejection","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-68e75665b789892c","kind":"live-transition","outputs":[{"command":"Retire","ownership":"generated-command-identity"},{"command":"Retire","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-76005937ded24bec","kind":"required-rejection","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-7ea811586a738ee5","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-83b0a46823e1a788","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-8f79f2e40d8b3bd5","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-926739ffb27d20e7","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-9c61af3593764622","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-ba7053f86d15e1b0","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-be8b08a049ab4d8b","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-d2fc3eca5c449e84","kind":"live-transition","outputs":[{"command":"Start","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-db1a553baa3eda84","kind":"live-transition","outputs":[{"command":"Decide","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-ea258e9c47d66aac","kind":"live-transition","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-f0fbe3a3ba0b40e8","kind":"replay-transition","outputs":[{"command":"Retire","ownership":"generated-command-identity"},{"command":"Retire","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-f9cae2bf4c0d0562","kind":"required-rejection","outputs":[],"source":"Closed"}

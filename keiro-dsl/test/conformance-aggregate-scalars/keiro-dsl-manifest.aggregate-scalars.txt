@@ -1,0 +1,28 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/aggregate-scalars.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    AggregateScalars.ScalarLedger.BehaviorHoles
+    AggregateScalars.ScalarLedger.Holes
+    Generated.AggregateScalars.ReplayAudit
+    Generated.AggregateScalars.ScalarLedger.BehaviorContract
+    Generated.AggregateScalars.ScalarLedger.Codec
+    Generated.AggregateScalars.ScalarLedger.Domain
+    Generated.AggregateScalars.ScalarLedger.EventStream
+    Generated.AggregateScalars.ScalarLedger.Harness
+    Generated.AggregateScalars.ScalarLedger.Projection
+    Generated.AggregateScalars.ScalarLedger.Transducer
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text
+    , time

@@ -1,0 +1,53 @@
+keiro-dsl workspace scaffold record v1
+service: workspace-proof
+manifest: service.keiro-workspace
+context: workspace-proof
+module-root: Proof
+layout: collocated
+naming-edition idiomatic-v1
+member domain/alpha.keiro
+member domain/beta.keiro
+member domain/evidence.keiro
+member domain/shared.keiro
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/alpha.keiro","sourceForm":"declared"}
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/beta.keiro","sourceForm":"declared"}
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/evidence.keiro","sourceForm":"declared"}
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/shared.keiro","sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals.hs","roleFamily":"Nominals","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal declarations"}
+module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals/Internal.hs","roleFamily":"Internal","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal ID internals"}
+module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/ReplayAudit.hs","roleFamily":"ReplayAudit","roleOwnerKind":"context","roleOwnerName":"context workspace-proof replay-audit assembly"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/Domain.hs","roleFamily":"Domain","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/Codec.hs","roleFamily":"Codec","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/Transducer.hs","roleFamily":"Transducer","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs","roleFamily":"BehaviorContract","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"hole","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/BehaviorHoles.hs","roleFamily":"BehaviorHoles","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate behavior witnesses Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/EventStream.hs","roleFamily":"EventStream","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/Projection.hs","roleFamily":"Projection","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/alpha.keiro","path":"Proof/WorkspaceProof/Alpha/Generated/Harness.hs","roleFamily":"Harness","roleOwnerKind":"domain/alpha.keiro:","roleOwnerName":"domain/alpha.keiro: aggregate Alpha (line 4)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/Domain.hs","roleFamily":"Domain","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/Codec.hs","roleFamily":"Codec","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/Transducer.hs","roleFamily":"Transducer","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs","roleFamily":"BehaviorContract","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"hole","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/BehaviorHoles.hs","roleFamily":"BehaviorHoles","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate behavior witnesses Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/EventStream.hs","roleFamily":"EventStream","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/Projection.hs","roleFamily":"Projection","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/beta.keiro","path":"Proof/WorkspaceProof/Beta/Generated/Harness.hs","roleFamily":"Harness","roleOwnerKind":"domain/beta.keiro:","roleOwnerName":"domain/beta.keiro: aggregate Beta (line 21)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/AlphaView/Generated/ReadModelTable.hs","roleFamily":"ReadModelTable","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel alpha_view (line 34)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs","roleFamily":"ReadModel","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel alpha_view (line 34)"}
+module {"kind":"hole","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/AlphaView/ReadModelHoles.hs","roleFamily":"ReadModelHoles","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel alpha_view (line 34)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs","roleFamily":"ReadModelHarness","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel alpha_view (line 34)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/BetaView/Generated/ReadModelTable.hs","roleFamily":"ReadModelTable","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel beta_view (line 48)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs","roleFamily":"ReadModel","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel beta_view (line 48)"}
+module {"kind":"hole","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/BetaView/ReadModelHoles.hs","roleFamily":"ReadModelHoles","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel beta_view (line 48)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs","roleFamily":"ReadModelHarness","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: readmodel beta_view (line 48)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowFacts.hs","roleFamily":"WorkflowFacts","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: workflow WorkspaceProofWorkflow (line 62)"}
+module {"kind":"generated","owner":"domain/evidence.keiro","path":"Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowRuntime.hs","roleFamily":"WorkflowRuntime","roleOwnerKind":"domain/evidence.keiro:","roleOwnerName":"domain/evidence.keiro: workflow WorkspaceProofWorkflow (line 62)"}
+module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Conformance.hs","roleFamily":"Conformance","roleOwnerKind":"context","roleOwnerName":"context workspace-proof service conformance facade"}
+id-domain id-domain|name=ProofId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=proof|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=ProofId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:proof:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Alpha","command":"LegacyPingAlpha","evidence":"generated-authoritative","key":"behavior-v1-579df4e5e81f7729","kind":"replay-transition","outputs":[{"command":"LegacyPingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
+behavior {"aggregate":"Beta","command":"PingBeta","evidence":"generated-authoritative","key":"behavior-v1-6ab7fee2c8aa4e1d","kind":"live-transition","outputs":[{"command":"PingBeta","ownership":"generated-command-identity"}],"owner":"domain/beta.keiro","source":"Active"}
+behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-72a96c964b44a2b6","kind":"replay-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
+behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-baf43b4c31db955a","kind":"live-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
+behavior {"aggregate":"Alpha","command":"LegacyPingAlpha","evidence":"generated-authoritative","key":"behavior-v1-c062ccf5e9b6f5c4","kind":"required-rejection","outputs":[],"owner":"domain/alpha.keiro","source":"Active"}

@@ -1,0 +1,33 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/reservation-v2.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/HospitalCapacity/Nominals.hs
+generated Generated/HospitalCapacity/Nominals/Internal.hs
+generated Generated/HospitalCapacity/ReplayAudit.hs
+generated Generated/HospitalCapacity/Reservation/Domain.hs
+generated Generated/HospitalCapacity/Reservation/Codec.hs
+generated Generated/HospitalCapacity/Reservation/Transducer.hs
+generated Generated/HospitalCapacity/Reservation/BehaviorContract.hs
+hole HospitalCapacity/Reservation/BehaviorHoles.hs
+generated Generated/HospitalCapacity/Reservation/EventStream.hs
+generated Generated/HospitalCapacity/Reservation/Projection.hs
+hole HospitalCapacity/Reservation/Holes.hs
+generated Generated/HospitalCapacity/Reservation/Harness.hs
+id-domain id-domain|name=TransferReservationId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=rsv|separator=_|json=canonical-json-text
+id-domain id-domain|name=HospitalId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=hosp|separator=_|json=canonical-json-text
+id-domain id-domain|name=CommandId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=cmd|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=BedType|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:icu,medical-surgical|owner=generated
+nominal-equality nominal-equality|name=CommandId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:cmd:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+nominal-equality nominal-equality|name=DivertStatus|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:open,partial-divert,total-divert|owner=generated
+nominal-equality nominal-equality|name=HospitalId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:hosp:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+nominal-equality nominal-equality|name=PatientAcuity|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:red,yellow,green|owner=generated
+nominal-equality nominal-equality|name=TransferReservationId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:rsv:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Reservation","command":"RequestTransferReservation","evidence":"generated-authoritative","key":"behavior-v1-25971c9701fc5660","kind":"live-transition","outputs":[{"obligation":"event-output-v1/Reservation/live/Unrequested/RequestTransferReservation/cmd.divertStatus != DivertStatus.TotalDivert || cmd.lifeCriticalOverride//TransferReservationCreated/Held/1/TransferReservationCreated","ownership":"hand-owned"}],"source":"Unrequested"}
+behavior {"aggregate":"Reservation","command":"RequestTransferReservation","evidence":"generated-authoritative","key":"behavior-v1-a544566ac00664fb","kind":"required-rejection","outputs":[],"source":"Held"}
+behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"generated-authoritative","key":"behavior-v1-bf9ebe70beb18440","kind":"live-transition","outputs":[{"obligation":"event-output-v1/Reservation/live/Held/ConfirmReservation/unguarded//TransferReservationConfirmed/Confirmed/1/TransferReservationConfirmed","ownership":"hand-owned"}],"source":"Held"}
+behavior {"aggregate":"Reservation","command":"RequestTransferReservation","evidence":"generated-authoritative","key":"behavior-v1-cf40a84edc844a41","kind":"required-rejection","outputs":[],"source":"Confirmed"}
+behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"generated-authoritative","key":"behavior-v1-e53a65263ad89283","kind":"required-rejection","outputs":[],"source":"Confirmed"}
+behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"generated-authoritative","key":"behavior-v1-e7378f31cfa93bbf","kind":"required-rejection","outputs":[],"source":"Unrequested"}

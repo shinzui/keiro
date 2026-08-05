@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-05
+* **Update**: Define tracked record and manifest twins as clean-checkout conformance history
 * **Update**: Record located empty-node and pure scaffold-planning refusals at check, with one shared defense-in-depth gate pipeline (plan 194).
 * **Update**: Record effective-language notices, explicit language floors, per-invocation warning denial, and the check-report/1 machine contract (plan 193).
 * **Update**: Record mode-aware initial live probes, source-wide transition edge identity, and duplicate generated-declaration preflight (plan 191).

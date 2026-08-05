@@ -1,0 +1,40 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/surge-service.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.SurgeDemo.Hospital.BehaviorContract
+    Generated.SurgeDemo.Hospital.Codec
+    Generated.SurgeDemo.Hospital.Domain
+    Generated.SurgeDemo.Hospital.EventStream
+    Generated.SurgeDemo.Hospital.Harness
+    Generated.SurgeDemo.Hospital.Projection
+    Generated.SurgeDemo.Hospital.Transducer
+    Generated.SurgeDemo.Nominals
+    Generated.SurgeDemo.Nominals.Internal
+    Generated.SurgeDemo.ReplayAudit
+    Generated.SurgeDemo.Surge.BehaviorContract
+    Generated.SurgeDemo.Surge.Codec
+    Generated.SurgeDemo.Surge.Domain
+    Generated.SurgeDemo.Surge.EventStream
+    Generated.SurgeDemo.Surge.Harness
+    Generated.SurgeDemo.Surge.Projection
+    Generated.SurgeDemo.Surge.Transducer
+    Generated.SurgeDemo.SurgeFlow.Process
+    Generated.SurgeDemo.SurgeFlow.ProcessHarness
+    SurgeDemo.Hospital.BehaviorHoles
+    SurgeDemo.Hospital.Holes
+    SurgeDemo.Surge.BehaviorHoles
+    SurgeDemo.Surge.Holes
+    SurgeDemo.SurgeFlow.ProcessHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , shibuya-core
+    , text
+    , time
+    , uuid

@@ -1,0 +1,50 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/structural-conformance.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/StructuralConformance/Structural/Shape/ArtifactInfo.hs
+generated Generated/StructuralConformance/Structural/Shape/ArtifactKind.hs
+generated Generated/StructuralConformance/Structural/Shape/ArtifactLocation.hs
+generated Generated/StructuralConformance/Structural/Shape/ArtifactMetadata.hs
+generated Generated/StructuralConformance/StructuralProjections.hs
+hole Conformance/Structural/Bindings.hs
+generated Generated/StructuralConformance/ReplayAudit.hs
+generated Generated/StructuralConformance/ArtifactCatalog/Domain.hs
+generated Generated/StructuralConformance/ArtifactCatalog/Codec.hs
+generated Generated/StructuralConformance/ArtifactCatalog/Transducer.hs
+generated Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs
+hole StructuralConformance/ArtifactCatalog/BehaviorHoles.hs
+generated Generated/StructuralConformance/ArtifactCatalog/EventStream.hs
+generated Generated/StructuralConformance/ArtifactCatalog/Projection.hs
+hole StructuralConformance/ArtifactCatalog/Holes.hs
+generated Generated/StructuralConformance/ArtifactCatalog/Harness.hs
+mapping {"bindingSymbol":"Conformance.Structural.Bindings.artifactInfoBinding","bindingVersion":"1","canonicalType":"conformance.structural.ArtifactInfo.v1","mode":"structural","module":"Conformance.Structural.Domain","package":"keiro-dsl","schema":1,"specName":"ArtifactInfo","type":"ArtifactInfo"}
+mapping {"bindingSymbol":"Conformance.Structural.Bindings.artifactKindBinding","bindingVersion":"1","canonicalType":"conformance.structural.ArtifactKind.v1","mode":"structural","module":"Conformance.Structural.Domain","package":"keiro-dsl","schema":1,"specName":"ArtifactKind","type":"ArtifactKind"}
+mapping {"bindingSymbol":"Conformance.Structural.Bindings.artifactLocationBinding","bindingVersion":"1","canonicalType":"conformance.structural.ArtifactLocation.v1","mode":"structural","module":"Conformance.Structural.Domain","package":"keiro-dsl","schema":1,"specName":"ArtifactLocation","type":"ArtifactLocation"}
+mapping {"bindingSymbol":"Conformance.Structural.Bindings.artifactMetadataBinding","bindingVersion":"1","canonicalType":"conformance.structural.ArtifactMetadata.v1","mode":"structural","module":"Conformance.Structural.Domain","package":"keiro-dsl","schema":1,"specName":"ArtifactMetadata","type":"ArtifactMetadata"}
+mapping {"codecIdentity":"vendor.geometry.json","codecVersion":"3","mode":"opaque","module":"Conformance.Structural.Domain","package":"keiro-dsl","schema":1,"specName":"VendorGeometry","type":"Geometry"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"active","schema":1,"signature":"artifactInfoBinding.active :: Bool","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"artifactHash","schema":1,"signature":"artifactInfoBinding.artifactHash :: Maybe (Text)","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"artifactKey","schema":1,"signature":"artifactInfoBinding.artifactKey :: Text","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"artifactKind","schema":1,"signature":"artifactInfoBinding.artifactKind :: ArtifactKind","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"displayName","schema":1,"signature":"artifactInfoBinding.displayName :: Text","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"location","schema":1,"signature":"artifactInfoBinding.location :: ArtifactLocation","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"metadata","schema":1,"signature":"artifactInfoBinding.metadata :: ArtifactMetadata","symbol":"artifactInfoBinding"}
+binding {"kind":"binding","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":"tags","schema":1,"signature":"artifactInfoBinding.tags :: [Text]","symbol":"artifactInfoBinding"}
+binding {"kind":"fixtures","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":null,"schema":1,"signature":"artifactInfoCases :: FixtureCases Conformance.Structural.Domain.ArtifactInfo","symbol":"artifactInfoCases"}
+binding {"kind":"initial-value","mappedName":"ArtifactInfo","module":"Conformance.Structural.Bindings","path":null,"schema":1,"signature":"emptyArtifactInfo :: Conformance.Structural.Domain.ArtifactInfo","symbol":"emptyArtifactInfo"}
+binding {"kind":"binding","mappedName":"ArtifactKind","module":"Conformance.Structural.Bindings","path":"Guide","schema":1,"signature":"artifactKindBinding.Guide :: constructor case","symbol":"artifactKindBinding"}
+binding {"kind":"binding","mappedName":"ArtifactKind","module":"Conformance.Structural.Bindings","path":"Reference","schema":1,"signature":"artifactKindBinding.Reference :: constructor case","symbol":"artifactKindBinding"}
+binding {"kind":"fixtures","mappedName":"ArtifactKind","module":"Conformance.Structural.Bindings","path":null,"schema":1,"signature":"artifactKindCases :: FixtureCases Conformance.Structural.Domain.ArtifactKind","symbol":"artifactKindCases"}
+binding {"kind":"binding","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":"Canonical","schema":1,"signature":"artifactLocationBinding.Canonical :: constructor case","symbol":"artifactLocationBinding"}
+binding {"kind":"binding","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":"LocUrl","schema":1,"signature":"artifactLocationBinding.LocUrl :: Text","symbol":"artifactLocationBinding"}
+binding {"kind":"binding","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":"LocalDir","schema":1,"signature":"artifactLocationBinding.LocalDir :: Text","symbol":"artifactLocationBinding"}
+binding {"kind":"binding","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":"LocalFile","schema":1,"signature":"artifactLocationBinding.LocalFile :: Text","symbol":"artifactLocationBinding"}
+binding {"kind":"binding","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":"RepoPath","schema":1,"signature":"artifactLocationBinding.RepoPath :: Text","symbol":"artifactLocationBinding"}
+binding {"kind":"fixtures","mappedName":"ArtifactLocation","module":"Conformance.Structural.Bindings","path":null,"schema":1,"signature":"artifactLocationCases :: FixtureCases Conformance.Structural.Domain.ArtifactLocation","symbol":"artifactLocationCases"}
+binding {"kind":"binding","mappedName":"ArtifactMetadata","module":"Conformance.Structural.Bindings","path":"note","schema":1,"signature":"artifactMetadataBinding.note :: Maybe (Text)","symbol":"artifactMetadataBinding"}
+binding {"kind":"fixtures","mappedName":"ArtifactMetadata","module":"Conformance.Structural.Bindings","path":null,"schema":1,"signature":"artifactMetadataCases :: FixtureCases Conformance.Structural.Domain.ArtifactMetadata","symbol":"artifactMetadataCases"}
+behavior {"aggregate":"ArtifactCatalog","command":"ObserveArtifact","evidence":"generated-authoritative","key":"behavior-v1-5ef17e70af0d6ff7","kind":"live-transition","outputs":[{"command":"ObserveArtifact","ownership":"generated-command-identity"},{"obligation":"event-output-v1/ArtifactCatalog/live/Empty/ObserveArtifact/unguarded/currentArtifact:=artifact;currentGeometry:=geometry;acceptedCount:=acceptedCount/ArtifactRecorded,ArtifactAccepted/Observed/2/ArtifactAccepted","ownership":"hand-owned"}],"source":"Empty"}
+behavior {"aggregate":"ArtifactCatalog","command":"ObserveArtifact","evidence":"generated-authoritative","key":"behavior-v1-c20f0b92a1f17333","kind":"required-rejection","outputs":[],"source":"Observed"}

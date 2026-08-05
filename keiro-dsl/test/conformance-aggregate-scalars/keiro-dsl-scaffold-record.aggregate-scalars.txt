@@ -1,0 +1,29 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/aggregate-scalars.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalars replay-audit assembly","path":"Generated/AggregateScalars/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses ScalarLedger (line 4)","path":"AggregateScalars/ScalarLedger/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"AggregateScalars/ScalarLedger/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Harness.hs"}
+generated Generated/AggregateScalars/ReplayAudit.hs
+generated Generated/AggregateScalars/ScalarLedger/Domain.hs
+generated Generated/AggregateScalars/ScalarLedger/Codec.hs
+generated Generated/AggregateScalars/ScalarLedger/Transducer.hs
+generated Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs
+hole AggregateScalars/ScalarLedger/BehaviorHoles.hs
+generated Generated/AggregateScalars/ScalarLedger/EventStream.hs
+generated Generated/AggregateScalars/ScalarLedger/Projection.hs
+hole AggregateScalars/ScalarLedger/Holes.hs
+generated Generated/AggregateScalars/ScalarLedger/Harness.hs
+behavior {"aggregate":"ScalarLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-4e461a9ba9271054","kind":"live-transition","outputs":[{"obligation":"event-output-v1/ScalarLedger/live/Empty/Record/cmd.observedAt >= reg.observedAt && cmd.revision >= reg.revision/observedAt:=cmd.observedAt;revision:=cmd.revision/ScalarsRecorded/Recorded/1/ScalarsRecorded","ownership":"hand-owned"}],"source":"Empty"}
+behavior {"aggregate":"ScalarLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-d15e326edfa1a438","kind":"required-rejection","outputs":[],"source":"Recorded"}

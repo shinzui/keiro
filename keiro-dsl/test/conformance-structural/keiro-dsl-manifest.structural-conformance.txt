@@ -1,0 +1,41 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/structural-conformance.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    Conformance.Structural.Bindings
+    Generated.StructuralConformance.ArtifactCatalog.BehaviorContract
+    Generated.StructuralConformance.ArtifactCatalog.Codec
+    Generated.StructuralConformance.ArtifactCatalog.Domain
+    Generated.StructuralConformance.ArtifactCatalog.EventStream
+    Generated.StructuralConformance.ArtifactCatalog.Harness
+    Generated.StructuralConformance.ArtifactCatalog.Projection
+    Generated.StructuralConformance.ArtifactCatalog.Transducer
+    Generated.StructuralConformance.ReplayAudit
+    Generated.StructuralConformance.Structural.Shape.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactKind
+    Generated.StructuralConformance.Structural.Shape.ArtifactLocation
+    Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+    Generated.StructuralConformance.StructuralProjections
+    StructuralConformance.ArtifactCatalog.BehaviorHoles
+    StructuralConformance.ArtifactCatalog.Holes
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.Structural.Bindings
+    Conformance.Structural.Domain

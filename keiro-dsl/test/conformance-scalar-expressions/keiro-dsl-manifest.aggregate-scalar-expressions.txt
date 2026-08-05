@@ -1,0 +1,37 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    AggregateScalarExpressions.ScalarAccount.BehaviorHoles
+    AggregateScalarExpressions.ScalarAccount.Holes
+    Generated.AggregateScalarExpressions.Nominals
+    Generated.AggregateScalarExpressions.Nominals.Internal
+    Generated.AggregateScalarExpressions.ReplayAudit
+    Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract
+    Generated.AggregateScalarExpressions.ScalarAccount.Codec
+    Generated.AggregateScalarExpressions.ScalarAccount.Domain
+    Generated.AggregateScalarExpressions.ScalarAccount.EventStream
+    Generated.AggregateScalarExpressions.ScalarAccount.Harness
+    Generated.AggregateScalarExpressions.ScalarAccount.Projection
+    Generated.AggregateScalarExpressions.ScalarAccount.Transducer
+    Generated.AggregateScalarExpressions.Structural.Shape.Limits
+    Generated.AggregateScalarExpressions.StructuralProjections
+    ScalarExpressions.Bindings
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+    , time
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    ScalarExpressions.Bindings
+    ScalarExpressions.Domain

@@ -1,0 +1,15 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/workflow-evolution.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
+    Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
+
+build-depends:
+    , base
+    , containers
+    , effectful-core
+    , keiro
+    , text

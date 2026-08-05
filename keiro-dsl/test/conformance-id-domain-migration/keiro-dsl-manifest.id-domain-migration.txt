@@ -1,0 +1,24 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/id-domain-migration-v3.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.IdDomainMigration.Nominals
+    Generated.IdDomainMigration.Nominals.Internal
+    Generated.IdDomainMigration.OrderBook.BehaviorContract
+    Generated.IdDomainMigration.OrderBook.Codec
+    Generated.IdDomainMigration.OrderBook.Domain
+    Generated.IdDomainMigration.OrderBook.EventStream
+    Generated.IdDomainMigration.OrderBook.Harness
+    Generated.IdDomainMigration.OrderBook.Projection
+    Generated.IdDomainMigration.OrderBook.Transducer
+    Generated.IdDomainMigration.ReplayAudit
+    IdDomainMigration.OrderBook.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

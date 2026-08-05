@@ -1,0 +1,17 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/replay-divergence.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/ReplayDivergence/ReplayAudit.hs
+generated Generated/ReplayDivergence/Note/Domain.hs
+generated Generated/ReplayDivergence/Note/Codec.hs
+generated Generated/ReplayDivergence/Note/Transducer.hs
+generated Generated/ReplayDivergence/Note/BehaviorContract.hs
+hole ReplayDivergence/Note/BehaviorHoles.hs
+generated Generated/ReplayDivergence/Note/EventStream.hs
+generated Generated/ReplayDivergence/Note/Projection.hs
+generated Generated/ReplayDivergence/Note/Harness.hs
+behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-248e9c1b1eb3e5bc","kind":"live-transition","outputs":[{"command":"WriteNote","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-7c36eda198514110","kind":"required-rejection","outputs":[],"source":"Recorded"}

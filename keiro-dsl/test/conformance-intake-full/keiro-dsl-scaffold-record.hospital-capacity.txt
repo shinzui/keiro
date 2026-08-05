@@ -1,0 +1,9 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/intake.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+generated Generated/HospitalCapacity/Emergency/Contract.hs
+generated Generated/HospitalCapacity/IncidentInbox/Inbox.hs
+id-domain id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text

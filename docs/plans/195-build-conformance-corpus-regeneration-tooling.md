@@ -48,9 +48,16 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   that reproduce them, the 35 cabal test suites (and 4 further components) that compile
   them, the 6 `.golden` fixtures, and the record/banner provenance model; author this
   plan under Intention `intention_01kz84b5jre3187dmmyjmd02fc`.
-- [ ] Milestone 1: corpus supplement manifest plus the `keiro-dsl-corpus-regen` package;
-  regenerate `test/conformance-behavior-complete` with zero diff, prove restore of a
-  corrupted generated file and preservation of a create-once sentinel.
+- [x] (2026-08-05 10:02 PDT) Reconcile the plan with the working tree: the generated
+  histories are committed, but 33 of their 34 authoritative record/manifest pairs were
+  ignored and untracked. Decide to force-add those corpus sidecars while retaining the
+  repository-wide ignore rule for ordinary consumer scaffolds; exclude the stale nested
+  `conformance-skeletons/SkelAggregate` record/manifest pair.
+- [x] (2026-08-05 10:10 PDT) Milestone 1: add the tracked corpus provenance, supplement
+  manifest, and `keiro-dsl-corpus-regen` package; regenerate
+  `test/conformance-behavior-complete` across 1 of 41 invocations with zero generated-byte
+  diff, restore a removed import, preserve a create-once sentinel, and prove bannerless
+  overwrite refusal. `cabal build keiro-dsl-corpus-regen` and the extension policy pass.
 - [ ] Milestone 2: full-corpus coverage (single, workspace, skeleton, and
   codec-comparison invocations), record/disk/cabal consistency checks, and the
   `.golden` update mode; whole-corpus regeneration on a clean tree produces zero diff.
@@ -94,6 +101,26 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   recorded but compiled by no component at all today. See the Decision Log entry
   choosing a checker with exemptions over stanza generation.
 
+- Observation: The plan's record-derived discovery could not work in a clean checkout as
+  drafted. `.gitignore` ignores every `keiro-dsl-scaffold-record.*.txt` and
+  `keiro-dsl-manifest.*.txt`; only the newsurface pair was already force-tracked. The local
+  tree also held one stale nested skeleton pair under
+  `keiro-dsl/test/conformance-skeletons/SkelAggregate/`, while the authoritative eight-run
+  skeleton history is the root pair whose last writer is `SkelWorkflow`.
+  Evidence: `git ls-files keiro-dsl/test | rg 'keiro-dsl-scaffold-record'` returned one
+  path, while the filesystem held 35 records; excluding the nested stale pair leaves the
+  intended 34 histories.
+
+- Observation: Single-spec and workspace scaffold reports have deliberately different
+  idempotence vocabulary. The single-spec `writeModule` always writes a recognized
+  Generated target and reports `(overwritten)`; only the workspace path compares bytes
+  before writing and can report `(unchanged)`. Git still reports zero byte diff after the
+  representative single-spec regeneration.
+  Evidence: `WriteDisposition`'s comment and `writeModule` in
+  `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` state this explicitly; the Milestone 1 run
+  reported 12 overwritten Generated modules and left every tracked generated module
+  byte-identical.
+
 
 ## Decision Log
 
@@ -108,6 +135,26 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   committed. Hand-maintaining only the three unrecoverable facts keeps the supplement
   a dozen lines instead of a forty-entry mirror that would drift.
   Date: 2026-08-04
+
+- Decision: Force-track the 34 authoritative scaffold-record and build-manifest pairs as
+  corpus evidence, while preserving `.gitignore` for scaffold metadata outside the test
+  corpus. Do not track the stale nested `conformance-skeletons/SkelAggregate` pair.
+  Rationale: `git ls-files` is deliberately the driver's discovery boundary, so every
+  provenance record it needs must exist in a clean checkout. Removing the global ignore
+  rule would make consumer-local scaffold metadata appear as ordinary untracked files;
+  force-tracking the bounded corpus evidence preserves both behaviors. The root skeleton
+  record is authoritative because the declared eight invocations share one output and
+  `SkelWorkflow` must be the final writer.
+  Date: 2026-08-05
+
+- Decision: Define corpus idempotence by resulting tracked bytes, while retaining the
+  public CLI's existing per-path dispositions as supporting evidence rather than requiring
+  `(unchanged)` from single-spec runs.
+  Rationale: The driver must replay the public CLI without forking its write semantics.
+  Workspace runs prove no-write idempotence through `(unchanged)`; single-spec runs prove
+  byte idempotence through an empty Git diff after their expected `(overwritten)` report.
+  Changing single-spec write behavior is outside this tooling plan.
+  Date: 2026-08-05
 
 - Decision: Implement the driver as a Haskell executable in a new local package
   `keiro-dsl-corpus-regen` under `keiro-dsl/tools/corpus-regen/`, not as a shell script
@@ -172,13 +219,15 @@ zero-diff property into `just verify` so corpus drift can never land silently.
   declarative, not incidental.
   Date: 2026-08-04
 
-- Decision: No ADR change is planned. This plan builds tooling that enforces existing
-  accepted decisions — ADR 0015's create-once/overwriteable boundary and banner
-  provenance, ADR 0019's generated-output contract — and selects no new architecture.
-  If implementation surfaces durable policy (for example, if the uncompiled-module
-  exemption hardens into a rule), promote it to `docs/adr/` at that point per the
-  distillation pass.
-  Date: 2026-08-04
+- Decision: Amend ADR 0015 with the clean-checkout conformance-history rule discovered
+  during implementation; otherwise this plan enforces existing decisions rather than
+  selecting a new product architecture.
+  Rationale: The create-once/overwriteable and banner-provenance boundaries were already
+  durable, but record-derived regeneration adds one repository-level consequence: every
+  committed conformance history must force-track its authoritative record/manifest twins
+  even though ordinary consumer metadata remains ignored. Without that rule, the same
+  checkout can regenerate while CI cannot.
+  Date: 2026-08-05 (revises the 2026-08-04 no-ADR expectation after implementation evidence)
 
 - Decision: Out of scope, recorded as future work: changing any generated output byte
   (zero-diff on the current corpus is this plan's acceptance), reducing the 418
@@ -220,8 +269,9 @@ and
   shaped `-- @generated by keiro-dsl <package-version> (language keiro-dsl <effective
   version>) from <stable-node-origin>; do not edit.` (a historical fixed line is also
   recognized; see `isGeneratedBannerLine` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`,
-  around line 6249). The scaffolder overwrites these freely, compares bytes first, and
-  reports `(unchanged)` without writing when they match. It *refuses the whole run*
+  around line 6249). The single-spec path overwrites these deterministically; the
+  workspace path compares bytes first and reports `(unchanged)` without writing when they
+  match. Both paths *refuse the whole run*
   (`MissingGeneratedBanner`, `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` around line 540)
   if a planned generated path exists without the banner, unless
   `--force-generated-overwrite` is passed.
@@ -374,6 +424,13 @@ keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural
 Begin the file with `#`-prefixed comment lines documenting the format, since the
 manifest is also contributor documentation.
 
+Before the driver performs record discovery, force-add the 34 authoritative
+`keiro-dsl-scaffold-record.*.txt` files and their 34 `keiro-dsl-manifest.*.txt` twins
+under the corpus output roots. Keep the repository-wide ignore rules unchanged, and do
+not add the stale nested pair under `keiro-dsl/test/conformance-skeletons/SkelAggregate/`.
+This turns the already-generated provenance into clean-checkout input without changing
+any generated bytes.
+
 Create the package `keiro-dsl/tools/corpus-regen/` containing
 `keiro-dsl-corpus-regen.cabal` (one executable, `keiro-dsl-corpus-regen`, `main-is:
 Main.hs`, modules `Main` and `CorpusPlan`) and add the directory to the `packages`
@@ -408,7 +465,7 @@ the manifest format, and the review workflow. `regenerate` performs:
    rows in manifest order. Skeleton invocations run `keiro-dsl new <kind>`, capture
    stdout, and feed it as the child's stdin to `keiro-dsl scaffold /dev/stdin --out
    <dir> --module-root <Root>`. Stream each invocation's stderr report (the
-   `(unchanged)` / `(skipped: already present)` lines) to the operator.
+   `(overwritten)` / `(unchanged)` / `(skipped: already present)` lines) to the operator.
 5. A non-zero exit from any invocation (for example a `MissingGeneratedBanner` refusal)
    stops the run with the CLI's own message; the tool adds only which invocation
    failed. It never passes `--force-generated-overwrite`.
@@ -422,7 +479,8 @@ iteration and for this milestone's acceptance.
 
 Acceptance for Milestone 1 (commands in Concrete Steps): on a clean tree,
 `regenerate --only keiro-dsl/test/conformance-behavior-complete` exits zero, reports
-every generated module `(unchanged)`, and `git status --porcelain` stays empty; after
+every generated module `(overwritten)` on this single-spec path, and leaves no tracked
+byte diff; workspace entries may instead report `(unchanged)`. After
 deleting a line from a committed generated module (keeping its banner) the same command
 restores it byte-identically; after deleting the file outright it is recreated
 byte-identically; a sentinel comment appended to the create-once
@@ -553,7 +611,7 @@ $ nix develop -c cabal build keiro-dsl-corpus-regen
 $ nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- regenerate --only keiro-dsl/test/conformance-behavior-complete
 corpus: 1 of 41 invocations selected
 scaffold keiro-dsl/test/fixtures/behavior-complete.keiro --out keiro-dsl/test/conformance-behavior-complete
-  Generated/BehaviorComplete/Journey/Transducer.hs (unchanged)
+  Generated/BehaviorComplete/Journey/Transducer.hs (overwritten)
   BehaviorComplete/Journey/BehaviorHoles.hs (skipped: already present)
 ...
 corpus regeneration complete; git reports no changes
@@ -623,8 +681,10 @@ Acceptance is behavioral. All commands run from the repository root on the curre
 corpus; "clean" means `git status --porcelain` prints nothing for the paths named.
 
 1. Zero-diff idempotence: on a clean tree, `cabal run -v0 keiro-dsl-corpus-regen --
-   regenerate` exits zero, its per-module report shows only `(unchanged)` and
-   `(skipped: already present)` dispositions, and the tree is still clean afterward.
+   regenerate` exits zero, its per-module report shows the public CLI's expected
+   `(overwritten)`, `(unchanged)`, and `(skipped: already present)` dispositions, and the
+   tree is still clean afterward. Single-spec runs overwrite identical bytes; workspace
+   runs can report unchanged without writing.
    This simultaneously proves the out-of-scope guarantee that the tool changes no
    generated output byte.
 2. Restoration: after deleting one line from a committed generated module (banner
@@ -660,9 +720,11 @@ corpus; "clean" means `git status --porcelain` prints nothing for the paths name
 ## Idempotence and Recovery
 
 The whole design is idempotence-first. Regeneration drives the public scaffolder, whose
-write path compares bytes and reports `(unchanged)` without writing, skips create-once
-files, and refuses bannerless targets before any write; running `regenerate` twice is
-therefore always safe, and `check` is `regenerate` plus assertions. `--only` restricts
+workspace write path compares bytes and reports `(unchanged)` without writing, whose
+single-spec path overwrites with deterministic identical bytes, and whose shared boundary
+skips create-once files and refuses bannerless targets before any write. Running
+`regenerate` twice is therefore byte-idempotent, and `check` is `regenerate` plus
+assertions. `--only` restricts
 blast radius during iteration. The tool never deletes files, never edits cabal stanzas,
 never forces overwrites, and never commits — every effect it can have is visible in
 `git status` and reversible with `git checkout --` of the affected paths.
@@ -748,3 +810,16 @@ Repository wiring: one `packages:` line in `cabal.project`; recipes `corpus-rege
 `verify`; `scripts/check-conformance-corpus.sh` alongside the two existing policy
 scripts; contributor documentation in `keiro-dsl/test/README.md`; changelog entries in
 `CHANGELOG.md` and `keiro-dsl/CHANGELOG.md`.
+
+
+## Revision Notes
+
+- 2026-08-05: Corrected the record-derived discovery premise after implementation found
+  that 33 authoritative record/manifest pairs were ignored rather than tracked. Milestone
+  1 now force-tracks the bounded corpus sidecars, retains the global ignore rule, and
+  excludes the stale nested skeleton pair so a clean checkout contains exactly the 34
+  histories the driver must replay.
+- 2026-08-05: Corrected the idempotence transcript and acceptance language after the
+  representative run confirmed that single-spec scaffolds report `(overwritten)` for
+  deterministic identical bytes, whereas `(unchanged)` is workspace-only. The behavioral
+  acceptance remains an empty tracked diff.

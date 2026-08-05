@@ -1,0 +1,22 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/replay-divergence.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.ReplayDivergence.Note.BehaviorContract
+    Generated.ReplayDivergence.Note.Codec
+    Generated.ReplayDivergence.Note.Domain
+    Generated.ReplayDivergence.Note.EventStream
+    Generated.ReplayDivergence.Note.Harness
+    Generated.ReplayDivergence.Note.Projection
+    Generated.ReplayDivergence.Note.Transducer
+    Generated.ReplayDivergence.ReplayAudit
+    ReplayDivergence.Note.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

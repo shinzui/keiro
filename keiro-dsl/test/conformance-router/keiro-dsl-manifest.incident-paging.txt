@@ -1,0 +1,33 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.IncidentPaging.Page.BehaviorContract
+    Generated.IncidentPaging.Page.Codec
+    Generated.IncidentPaging.Page.Domain
+    Generated.IncidentPaging.Page.EventStream
+    Generated.IncidentPaging.Page.Harness
+    Generated.IncidentPaging.Page.Projection
+    Generated.IncidentPaging.Page.Transducer
+    Generated.IncidentPaging.PagingRouter.Router
+    Generated.IncidentPaging.PagingRouter.RouterHarness
+    Generated.IncidentPaging.ReplayAudit
+    Generated.IncidentPaging.ServiceOncall.ReadModel
+    Generated.IncidentPaging.ServiceOncall.ReadModelHarness
+    Generated.IncidentPaging.ServiceOncall.ReadModelTable
+    IncidentPaging.Page.BehaviorHoles
+    IncidentPaging.PagingRouter.RouterHoles
+    IncidentPaging.ServiceOncall.ReadModelHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , kiroku-store
+    , shibuya-core
+    , text

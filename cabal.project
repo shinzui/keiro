@@ -6,6 +6,7 @@ packages:
   keiro-test-support
   jitsurei
   keiro-dsl
+  keiro-dsl/tools/corpus-regen
   keiro-dsl/test
   keiro-dsl/test/conformance-behavior-complete
   keiro-dsl/test/conformance-service-package/runtime
