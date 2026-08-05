@@ -53,8 +53,11 @@ pass without a runtime-only transducer composition.
 - [x] (2026-08-05 00:48 PDT) Extend generated-name planning and the final lexical audit so
   duplicate generated declarations are refused before writes with useful source evidence.
   Focused semantic-collision and repeated-signature tests: 2 examples, 0 failures.
-- [ ] Add and fill initial replay-only single-spec, workspace, and whole-service conformance
-  evidence, including same-command and replay-only-only initial edges.
+- [x] (2026-08-05 07:23 PDT) Add and fill initial replay-only single-spec, workspace, and
+  whole-service conformance evidence, including same-command and replay-only-only initial edges.
+  The behavior contract is 19/19 filled (17 executed, 2 intentionally unverified rejection
+  cells); the 9-example behavior suite, generated behavior component, 29-fact workspace package,
+  fold-identity suite, public-CLI idempotence proof, and all mutation cases pass.
 - [ ] Publish the invariant in the relevant ADRs and user documentation, update changelogs, and
   pass focused, package-wide, repository-wide, policy, and strict documentation validation.
 
@@ -84,6 +87,21 @@ pass without a runtime-only transducer composition.
   `mori://shinzui/mori/packages/mori-core` defines both `workflowValidationOptions` and
   `legacyEmptyStartTransducer`; only the former is superseded by
   `mori://shinzui/keiki/okf/improvement-requests/concepts/IR-5`.
+
+- Observation: Generated harness samples are deterministic type defaults, not values solved from
+  transition guards. The initial live guard therefore has to admit `Natural` zero (and the Alpha
+  service proof has to admit `Bool` false) for its compiled live acceptance probe to be meaningful.
+  Evidence: Orienting the complementary guards the other way made the generated `acceptStart` and
+  `acceptPingAlpha` probes fail even though the layout itself was correct; reversing the guards
+  around the generated defaults makes the live and replay witnesses select distinct edges.
+
+- Observation: A workspace member's source line is relocated during composition, so the single
+  and workspace `BehaviorContract.hs` files differ only in requirement source-line evidence.
+  Every other aggregate module is byte-identical, and the contracts are byte-identical after
+  normalizing only that diagnostic line number; behavior keys, declaration indices, and
+  `EdgeRef` identities remain exact.
+  Evidence: Disposable public-CLI scaffolds of the single fixture and its workspace twin produced
+  exact Journey module trees except for the final `BehaviorRequirement` source-line field.
 
 
 ## Decision Log
@@ -148,14 +166,35 @@ pass without a runtime-only transducer composition.
   paths and keeps `cabal test keiro-dsl` authoritative.
   Date: 2026-08-04
 
+- Decision: Orient the new complementary guards around the generator's deterministic sample
+  values and preserve those exact values in the filled behavior witnesses.
+  Rationale: The generated harness is a concrete executable proof, not a constraint solver. The
+  fixture must exercise the intended live path with its generated sample while a separate retired
+  value proves replay-only fallback and exact edge attribution.
+  Date: 2026-08-05
+
+- Decision: Compare single/workspace aggregate modules byte-for-byte except for source-line
+  evidence in `BehaviorContract.hs`, where the test normalizes only the relocated line number.
+  Rationale: Member attribution deliberately relocates workspace source spans. Erasing that
+  provenance or padding fixtures to force coincidental line equality would weaken diagnostics;
+  normalizing just the location preserves the stronger semantic parity claim.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
-Implementation has not started. At completion, record the generated shape, focused mutation
-evidence, exact test counts, any compatibility drift, and whether Mori can delete its
-`legacyEmptyStartTransducer` after adopting the released Keiro change. Distill the source-wide edge
-identity and mode-aware harness rules into the existing ADRs named below before marking the plan
-complete.
+Milestones 1 through 3 are complete. The enriched Journey proof emits one initial source block,
+one live `acceptStart`, no `acceptLegacyStart`, and exact replay `EdgeRef`s 1 and 2. All 19 behavior
+obligations are filled; 17 execute and the two unverified rows are the intentional closed-state
+rejection cells. The mutation script proves wrong history, witness kind, replay edge, replay chunk,
+codec, selector, and source-wide predicate index changes all turn the suite red and restores every
+file afterward. The single/workspace proof is byte-exact apart from deliberately relocated source
+line evidence, and the generated whole-service package passes with 29 facts. No generator wire
+semantics or Keiki behavior changed; the enriched fixture intentionally adds its legacy event and
+receives a new fold fingerprint and behavior keys. ADR, user-documentation, release-note, and IR
+closure remain for Milestone 4. Mori can remove
+`legacyEmptyStartTransducer` only after adopting a Keiro release containing this work and passing
+its historical replay proof.
 
 
 ## Context and Orientation
@@ -339,8 +378,10 @@ create-once `BehaviorComplete/Journey/BehaviorHoles.hs` deliberately. Fill both 
 - predicate-verification rows name the same indices and transition stems;
 - live stepping never returns `ReplayOnly`, current replay attributes to the live edge, and retired
   replay attributes to the expected replay-only edge; and
-- single-spec and workspace planning produce identical aggregate module bytes, behavior rows, and
-  source-wide identities, with a byte-stable second scaffold.
+- single-spec and workspace planning produce identical aggregate module bytes except for the
+  workspace-relocated source-line evidence in `BehaviorContract.hs`; after normalizing only that
+  diagnostic line, behavior rows and source-wide identities are exact, with a byte-stable second
+  scaffold.
 
 Update the expected behavior counts, stable fold baseline, scaffold-record assertions, and Cabal
 module inventory only where the enriched fixture requires it. `cabal test
@@ -500,9 +541,10 @@ Acceptance is behavioral, not merely a successful build:
 7. A residual semantic helper collision is reported as `GeneratedOccurrenceCollision` before any
    file changes, with primary and related DSL lines. A synthetic repeated generated signature is
    independently rejected by `auditGeneratedHaskell`.
-8. The single-file fixture and its workspace twin emit identical aggregate generated bytes and
-   source-wide edge identities. A second public scaffold changes no bytes. The existing runnable
-   workspace service package compiles and passes with the same initial replay-only shape.
+8. The single-file fixture and its workspace twin emit identical aggregate generated bytes except
+   for deliberately relocated source-line evidence, and exact source-wide edge identities. A
+   second public scaffold changes no bytes. The existing runnable workspace service package
+   compiles and passes with the same initial replay-only shape.
 9. Existing specs without initial replay-only edges or non-contiguous repeated sources remain
    byte-identical after normalization. No wire tag, payload schema, persisted identity, fold
    meaning, or Keiki live-first replay behavior changes.
@@ -609,3 +651,9 @@ output-mapping/obsolete-hook declaration-index recomputation, and the triple-der
 identity), so the AggregateGenerationPlan layout becomes the sole producer of transition-derived
 identity rather than only reconciling the four consumers that currently disagree. See the new
 Decision Log entry dated 2026-08-04.
+
+Revision note (2026-08-05): Milestone 3's byte-parity wording now excludes only the composed
+workspace source-line relocation in `BehaviorContract.hs`. Implementation proved every other
+Journey module byte-identical and preserved exact behavior keys and edge identities; the new
+Decision Log records why retaining real member provenance is stronger than forcing artificial
+line equality.

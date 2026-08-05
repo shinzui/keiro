@@ -12,16 +12,21 @@ import Numeric.Natural (Natural)
 
 behaviorWitnesses :: [BehaviorWitness]
 behaviorWitnesses =
-  [ live "behavior-v1-2e1fd6b9580e1a3d" closedHistory pingCommand (Rejects RejectNoOutgoingEdges),
+  [ ReplayWitness (key "behavior-v1-0128e858fee6f2b3") [] [legacyStartedEvent 2],
+    ReplayWitness (key "behavior-v1-08a2bda57424a16e") [] [startedEvent 1],
+    live "behavior-v1-2e1fd6b9580e1a3d" closedHistory pingCommand (Rejects RejectNoOutgoingEdges),
     live "behavior-v1-2f3ebf37a55781db" activeHistory (decideCommand 5) (Emits (decisionEvent 5 :| [])),
-    live "behavior-v1-37578058289e05a9" [] (startCommand 0) (Emits (startedEvent 0 :| [])),
     live "behavior-v1-43b8fc7fa48595dd" activeHistory (startCommand 0) (Rejects RejectNoMatchingEdge),
     live "behavior-v1-68e75665b789892c" activeHistory (retireCommand 1) (Emits (retiredEvent 1 :| [retirementAuditedEvent 1])),
+    live "behavior-v1-76005937ded24bec" activeHistory (legacyStartCommand 2) (Rejects RejectNoMatchingEdge),
     live "behavior-v1-7ea811586a738ee5" closedHistory (decideCommand 1) (Rejects RejectNoOutgoingEdges),
     live "behavior-v1-83b0a46823e1a788" [] pingCommand (Rejects RejectNoMatchingEdge),
+    live "behavior-v1-8f79f2e40d8b3bd5" [] (legacyStartCommand 2) (Rejects RejectNoMatchingEdge),
     live "behavior-v1-926739ffb27d20e7" [] (retireCommand 1) (Rejects RejectNoMatchingEdge),
+    live "behavior-v1-9c61af3593764622" closedHistory (legacyStartCommand 2) (Rejects RejectNoOutgoingEdges),
     live "behavior-v1-ba7053f86d15e1b0" [] (decideCommand 1) (Rejects RejectNoMatchingEdge),
     live "behavior-v1-be8b08a049ab4d8b" closedHistory (startCommand 0) (Rejects RejectNoOutgoingEdges),
+    live "behavior-v1-d2fc3eca5c449e84" [] (startCommand 0) (Emits (startedEvent 0 :| [])),
     live "behavior-v1-db1a553baa3eda84" activeHistory (decideCommand 6) (Emits (decisionEvent 6 :| [])),
     live "behavior-v1-ea258e9c47d66aac" activeHistory pingCommand NoOp,
     ReplayWitness (key "behavior-v1-f0fbe3a3ba0b40e8") activeHistory [retiredEvent 0, retirementAuditedEvent 0],
@@ -43,6 +48,9 @@ closedHistory = activeHistory <> [retiredEvent 1, retirementAuditedEvent 1]
 startCommand :: Natural -> JourneyCommand
 startCommand amountValue = Start (StartData requestIdValue observedAtValue amountValue payloadValue)
 
+legacyStartCommand :: Natural -> JourneyCommand
+legacyStartCommand amountValue = LegacyStart (LegacyStartData amountValue)
+
 decideCommand :: Natural -> JourneyCommand
 decideCommand amountValue = Decide (DecideData amountValue)
 
@@ -54,6 +62,9 @@ retireCommand amountValue = Retire (RetireData amountValue)
 
 startedEvent :: Natural -> JourneyEvent
 startedEvent amountValue = Started (StartedData requestIdValue observedAtValue amountValue payloadValue)
+
+legacyStartedEvent :: Natural -> JourneyEvent
+legacyStartedEvent amountValue = LegacyStarted (LegacyStartedData amountValue)
 
 decisionEvent :: Natural -> JourneyEvent
 decisionEvent amountValue = DecisionRecorded (DecisionRecordedData amountValue)

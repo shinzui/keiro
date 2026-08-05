@@ -13,13 +13,16 @@ aggregate Journey
   command Decide { amount:Natural }
   command Ping { token:Bool }
   command Retire { amount:Natural }
+  command LegacyStart { amount:Natural }
 
   event Started = fields(Start)
   event DecisionRecorded = fields(Decide)
   event Retired = fields(Retire)
   event RetirementAudited = fields(Retire)
+  event LegacyStarted = fields(LegacyStart)
 
   Empty -- Start -->
+    guard cmd.amount <= 0
     write lastAmount := cmd.amount
     emit Started
     goto Active
@@ -30,10 +33,21 @@ aggregate Journey
     emit DecisionRecorded
     goto Active
 
+  replay-only Empty -- Start -->
+    guard cmd.amount > 0
+    write lastAmount := cmd.amount
+    emit Started
+    goto Active
+
   Active -- Decide -->
     guard cmd.amount > 5
     write lastAmount := cmd.amount
     emit DecisionRecorded
+    goto Active
+
+  replay-only Empty -- LegacyStart -->
+    write lastAmount := cmd.amount
+    emit LegacyStarted
     goto Active
 
   Active -- Ping -->

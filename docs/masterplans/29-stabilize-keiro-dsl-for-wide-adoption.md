@@ -218,7 +218,7 @@ alias-free spec generates byte-identical output.
 - [x] EP-192 follow-up: Resolved command selectors in scalar/projection emitters and selector advisories across version bumps
 - [x] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
 - [x] EP-191 M2: Duplicate generated declarations refused before writes
-- [ ] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
+- [x] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
 - [ ] EP-191 M4: ADR/doc publication and full closure
 - [ ] EP-193 M1: Effective-language notice on check/scaffold/diff and `--min-language` floor
 - [ ] EP-193 M2: `--deny-warnings`/`--deny CODE` escalation with a stable exit-code contract
@@ -285,6 +285,12 @@ tree by the drafting research and recorded in the owning child plan:
   all affected expression emitters through one selector lookup and classifies the advisory
   independently of event-version movement; focused regressions pin both behaviors.
   The complete DSL unit suite passes with 565 examples and zero failures after the repair.
+- EP-191's compiled fixture work showed that generated harness values are deterministic type
+  defaults rather than guard-solved samples, so complementary proof guards must deliberately
+  admit those defaults. It also made one intentional single/workspace byte difference visible:
+  workspace composition relocates source-line evidence in `BehaviorContract.hs`. The parity test
+  keeps all other aggregate modules byte-exact and normalizes only that diagnostic line while
+  pinning exact behavior keys and `EdgeRef`s.
 
 
 ## Decision Log
@@ -368,6 +374,12 @@ selector advisories across legal event-version bumps. These corrections preserve
 and fold contracts and are covered by focused regressions plus the green 565-example DSL unit
 suite.
 
+EP-191 Milestone 3 is complete. The behavior-complete fixture now covers interleaved live and
+replay-only initial edges, with all 19 obligations filled, one live initial acceptance probe, no
+legacy-only probe, and replay edges attributed at indices 1 and 2. Its single/workspace
+idempotence proof, 29-fact generated service package, fold baseline, and falsification script are
+green. The child still requires ADR, user-doc, changelog, and IR publication before closure.
+
 
 ## Revision Notes
 
@@ -379,3 +391,5 @@ suite.
 - 2026-08-05: Recorded the EP-192 post-closure selector repair discovered after the first MP-29
   implementation commits, updating aggregate Progress, cross-plan discoveries, and the partial
   retrospective without changing dependencies or plan status.
+- 2026-08-05: Recorded EP-191 Milestone 3 completion and the source-line-only exception to
+  single/workspace generated-byte parity, without changing plan dependencies or status.

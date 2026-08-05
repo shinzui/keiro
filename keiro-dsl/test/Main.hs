@@ -321,7 +321,7 @@ main = hspec $ do
         result -> expectationFailure ("missing behavior requirement: " <> show result) >> fail "unreachable"
       deriveShapeHash readModel `shouldBe` "fnv1a:3717f6d9e3c44bd6"
       wireFingerprint graph "ArtifactInfo" `shouldBe` "2bd99b3e57bcde9b"
-      behaviorKey `shouldBe` "behavior-v1-2e1fd6b9580e1a3d"
+      behaviorKey `shouldBe` "behavior-v1-0128e858fee6f2b3"
 
   describe "source language version" $ do
     let legacy = "context hospital-capacity\n"
@@ -1511,14 +1511,14 @@ main = hspec $ do
     it "inventories every live-reachable cell, guarded edge, terminal rejection, and replay edge" $ do
       spec <- specOf "test/fixtures/behavior-complete.keiro"
       requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
-      length requirements `shouldBe` 14
+      length requirements `shouldBe` 19
       length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.LiveTransition] `shouldBe` 5
-      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection] `shouldBe` 8
-      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.ReplayTransition] `shouldBe` 1
+      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection] `shouldBe` 11
+      length [() | requirement <- requirements, Behavior.requirementKind requirement == Behavior.ReplayTransition] `shouldBe` 3
       [Behavior.requirementSource requirement | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection]
         `shouldContain` ["Active", "Closed"]
-      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardTotal] `shouldBe` 4
-      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardUnknown] `shouldBe` 1
+      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardTotal] `shouldBe` 3
+      length [() | requirement <- requirements, Behavior.requirementGuardCoverage requirement == Behavior.GuardUnknown] `shouldBe` 2
       let report = Behavior.BehaviorObligationsReport "behavior-complete.keiro" Nothing requirements
           encoded = Behavior.encodeBehaviorObligationsJson report
       encoded `shouldSatisfy` T.isInfixOf "\"schema\":\"keiro-dsl/behavior-obligations/1\""
@@ -1544,7 +1544,9 @@ main = hspec $ do
       aggregate <- case [value | NAggregate value <- specNodes spec] of
         [value] -> pure value
         _ -> expectationFailure "expected one behavior-complete aggregate" >> fail "unreachable"
-      let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+      let ctx = defaultContext (specContext spec)
+          modules = scaffoldAggregate ctx spec aggregate
+          harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx spec aggregate)
           transducer = generatedTextEndingIn "Transducer.hs" modules
           codec = generatedTextEndingIn "Codec.hs" modules
           contract = generatedTextEndingIn "BehaviorContract.hs" modules
@@ -1561,9 +1563,16 @@ main = hspec $ do
       transducer `shouldSatisfy` (not . T.isInfixOf "Output")
       ordinaryHoles `shouldBe` []
       obsoleteGeneratedOutputHooks spec `shouldContain` [("Journey", "transition1EmptyStartOutput1Started")]
+      T.count "B.from JourneyEmpty do" transducer `shouldBe` 1
+      transducer `shouldSatisfy` T.isInfixOf "verifyTransition \"transition3EmptyStart\" GeneratedOwned JourneyEmpty 1"
+      transducer `shouldSatisfy` T.isInfixOf "verifyTransition \"transition5EmptyLegacyStart\" GeneratedOwned JourneyEmpty 2"
+      T.count "acceptStart :: Bool" harness `shouldBe` 1
+      harness `shouldSatisfy` (not . T.isInfixOf "acceptLegacyStart")
       contract `shouldSatisfy` T.isInfixOf "keiro/behavior-conformance/1"
       contract `shouldSatisfy` T.isInfixOf "commandKind command == requirementCommandName requirement"
-      T.count "Pending (BehaviorKey " behaviorHoles `shouldBe` 14
+      contract `shouldSatisfy` T.isInfixOf "JourneyEmpty \"Start\" (Just (K.EdgeRef JourneyEmpty 1))"
+      contract `shouldSatisfy` T.isInfixOf "JourneyEmpty \"LegacyStart\" (Just (K.EdgeRef JourneyEmpty 2))"
+      T.count "Pending (BehaviorKey " behaviorHoles `shouldBe` 19
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "undefined")
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "error")
 
@@ -1636,7 +1645,7 @@ main = hspec $ do
                 recBindingObligations = [],
                 recBehaviorRequirements = rows
               }
-      T.count "behavior " (renderRecord singleRecord) `shouldBe` 14
+      T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
       parseRecord (renderRecord singleRecord) `shouldBe` Just singleRecord
 
       workspace <- shouldComposeWorkspace "test/fixtures/behavior-complete-workspace/service.keiro-workspace"
@@ -1666,8 +1675,53 @@ main = hspec $ do
                 wrAdopted = []
               }
       map Behavior.behaviorRecordOwner ownedRows `shouldSatisfy` all (== Just "journey.keiro")
-      T.count "behavior " (renderWorkspaceRecord workspaceRecord) `shouldBe` 14
+      T.count "behavior " (renderWorkspaceRecord workspaceRecord) `shouldBe` 19
       parseWorkspaceRecord (renderWorkspaceRecord workspaceRecord) `shouldBe` Just workspaceRecord
+
+    it "keeps the initial replay fixture byte-identical across single, workspace, and repeat scaffolds" $ do
+      withTempDirectory "keiro-dsl-initial-replay-layout" $ \base -> do
+        let singleOut = base </> "single"
+            workspaceOut = base </> "workspace"
+            singleSource = "test/fixtures/behavior-complete.keiro"
+            workspaceSource = "test/fixtures/behavior-complete-workspace/service.keiro-workspace"
+            journeyModules = filter (T.isPrefixOf "Generated/BehaviorComplete/Journey/" . T.pack . fst)
+            behaviorContractPath = "Generated/BehaviorComplete/Journey/BehaviorContract.hs"
+            withoutBehaviorContract = filter ((/= behaviorContractPath) . fst)
+            present = maybe False (const True)
+            normalizeRequirementLines =
+              T.unlines
+                . map
+                  ( \sourceLine ->
+                      if "BehaviorRequirement" `T.isInfixOf` sourceLine
+                        then case T.words sourceLine of
+                          [] -> sourceLine
+                          tokens -> T.unwords (init tokens <> ["<source-line>"])
+                        else sourceLine
+                  )
+                . T.lines
+        (singleCode, singleStdout, singleStderr) <- runKeiroDsl ["scaffold", singleSource, "--out", singleOut]
+        unless (singleCode == ExitSuccess) (expectationFailure (singleStdout <> singleStderr))
+        singleTree <- treeSnapshot singleOut
+        (singleRepeatCode, singleRepeatStdout, singleRepeatStderr) <- runKeiroDsl ["scaffold", singleSource, "--out", singleOut]
+        unless (singleRepeatCode == ExitSuccess) (expectationFailure (singleRepeatStdout <> singleRepeatStderr))
+        treeSnapshot singleOut `shouldReturn` singleTree
+        (workspaceCode, workspaceStdout, workspaceStderr) <- runKeiroDsl ["scaffold", workspaceSource, "--out", workspaceOut]
+        unless (workspaceCode == ExitSuccess) (expectationFailure (workspaceStdout <> workspaceStderr))
+        workspaceTree <- treeSnapshot workspaceOut
+        let singleJourney = journeyModules singleTree
+            workspaceJourney = journeyModules workspaceTree
+        withoutBehaviorContract workspaceJourney `shouldBe` withoutBehaviorContract singleJourney
+        case (lookup behaviorContractPath workspaceJourney, lookup behaviorContractPath singleJourney) of
+          (Just workspaceContract, Just singleContract) ->
+            normalizeRequirementLines workspaceContract `shouldBe` normalizeRequirementLines singleContract
+          (workspaceContract, singleContract) ->
+            expectationFailure
+              ( "expected both generated behavior contracts, got "
+                  <> show (present workspaceContract, present singleContract)
+              )
+        (workspaceRepeatCode, workspaceRepeatStdout, workspaceRepeatStderr) <- runKeiroDsl ["scaffold", workspaceSource, "--out", workspaceOut]
+        unless (workspaceRepeatCode == ExitSuccess) (expectationFailure (workspaceRepeatStdout <> workspaceRepeatStderr))
+        treeSnapshot workspaceOut `shouldReturn` workspaceTree
 
   describe "nominal consumer types" $ do
     it "resolves every category through one checked registry and explains exact obligations" $ do

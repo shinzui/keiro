@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Falsification evidence for ExecPlan 159's complete behavior contract.
+# Falsification evidence for ExecPlans 159 and 191's complete behavior contract.
 set -euo pipefail
 
 WITNESSES="keiro-dsl/test/conformance-behavior-complete/BehaviorComplete/Journey/BehaviorHoles.hs"
 LEGACY_HOLES="keiro-dsl/test/conformance-behavior-complete/BehaviorComplete/Journey/Holes.hs"
 TRANSDUCER="keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/Transducer.hs"
 CODEC="keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/Codec.hs"
+SCAFFOLD_SOURCE="keiro-dsl/src/Keiro/Dsl/Scaffold.hs"
 SPEC="keiro-dsl/test/fixtures/behavior-complete.keiro"
 OUT="keiro-dsl/test/conformance-behavior-complete"
 
@@ -19,17 +20,19 @@ cp "$WITNESSES" "$BACKUP_DIR/BehaviorHoles.hs"
 cp "$LEGACY_HOLES" "$BACKUP_DIR/Holes.hs"
 cp "$TRANSDUCER" "$BACKUP_DIR/Transducer.hs"
 cp "$CODEC" "$BACKUP_DIR/Codec.hs"
+cp "$SCAFFOLD_SOURCE" "$BACKUP_DIR/Scaffold.hs"
 
 restore_all() {
   cp "$BACKUP_DIR/BehaviorHoles.hs" "$WITNESSES"
   cp "$BACKUP_DIR/Holes.hs" "$LEGACY_HOLES"
   cp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
   cp "$BACKUP_DIR/Codec.hs" "$CODEC"
+  cp "$BACKUP_DIR/Scaffold.hs" "$SCAFFOLD_SOURCE"
 }
 
 cleanup() {
   restore_all
-  rm -f "$BACKUP_DIR/BehaviorHoles.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Codec.hs" "$BACKUP_DIR/mutation.log"
+  rm -f "$BACKUP_DIR/BehaviorHoles.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Codec.hs" "$BACKUP_DIR/Scaffold.hs" "$BACKUP_DIR/mutation.log"
   rmdir "$BACKUP_DIR"
 }
 trap cleanup EXIT
@@ -62,7 +65,21 @@ expect_red() {
   echo "ok: $label -> $expected"
 }
 
-echo "== baseline: all 14 obligations are filled and green =="
+expect_focused_test_red() {
+  local label="$1"
+  set +e
+  cabal test -v0 keiro-dsl-test --test-options='--match "generates direct fields(Command) output and separate create-once pending witnesses"' >"$BACKUP_DIR/mutation.log" 2>&1
+  local status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    sed -n '1,240p' "$BACKUP_DIR/mutation.log"
+    echo "FAIL: mutation stayed green: $label"
+    exit 1
+  fi
+  echo "ok: $label -> focused generated-source assertion"
+}
+
+echo "== baseline: all 19 obligations are filled and green =="
 run_report >/dev/null
 
 echo "== obsolete legacy hook is reported and cannot affect execution =="
@@ -116,6 +133,11 @@ rm -f "$WITNESSES.sed-bak"
 expect_red "let the live twin steal a replay witness" 'replay-edge-attribution'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
+sed -i.sed-bak '/behavior-v1-08a2bda57424a16e/ s/startedEvent 1/startedEvent 0/' "$WITNESSES"
+rm -f "$WITNESSES.sed-bak"
+expect_red "let the live initial edge steal the initial replay witness" 'replay-edge-attribution'
+restore_file BehaviorHoles.hs "$WITNESSES"
+
 sed -i.sed-bak '/behavior-v1-f0fbe3a3ba0b40e8/ s/, retirementAuditedEvent 0//' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
 expect_red "truncate a multi-event replay chunk" 'replay-chunk-failed'
@@ -129,6 +151,10 @@ restore_file Codec.hs "$CODEC"
 perl -0pi -e 's/amount = d\.amount/amount = K.lit 999/' "$TRANSDUCER"
 expect_red "mutate a generated identity selector" 'event-value-mismatch'
 restore_file Transducer.hs "$TRANSDUCER"
+
+perl -0pi -e 's/let edgeIndex = layoutOutgoingIndex entry/let edgeIndex = 0/' "$SCAFFOLD_SOURCE"
+expect_focused_test_red "reset source-wide predicate edge indices"
+restore_file Scaffold.hs "$SCAFFOLD_SOURCE"
 
 restore_all
 run_report >/dev/null

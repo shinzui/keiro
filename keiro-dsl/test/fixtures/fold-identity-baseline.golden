@@ -72,16 +72,18 @@ surface-end
 
 fixture=behavior-complete
 aggregate=Journey
-fingerprint=6a9b89765aef0e4cd37ce6a7ea34514a
+fingerprint=e85712b75ccd98ea3eebdf59164c4993
 surface-begin
 semantic-contract:keiro-dsl/runtime-semantics/2
 state:Empty|terminal=false
 state:Active|terminal=false
 state:Closed|terminal=true
 reg:lastAmount:Natural=0
-transition:live|Empty|Start|implementation=generated|guard=|writes=lastAmount:=cmd.amount|emits=Started|outputs=Started=generated-command-identity:Start[requestId=requestId:RequestId,observedAt=observedAt:Time,amount=amount:Natural,details=details:StartPayload]|goto=Active
+transition:live|Empty|Start|implementation=generated|guard=cmd.amount <= 0|writes=lastAmount:=cmd.amount|emits=Started|outputs=Started=generated-command-identity:Start[requestId=requestId:RequestId,observedAt=observedAt:Time,amount=amount:Natural,details=details:StartPayload]|goto=Active
 transition:live|Active|Decide|implementation=generated|guard=cmd.amount <= 5|writes=lastAmount:=cmd.amount|emits=DecisionRecorded|outputs=DecisionRecorded=generated-command-identity:Decide[amount=amount:Natural]|goto=Active
+transition:replay-only|Empty|Start|implementation=generated|guard=cmd.amount > 0|writes=lastAmount:=cmd.amount|emits=Started|outputs=Started=generated-command-identity:Start[requestId=requestId:RequestId,observedAt=observedAt:Time,amount=amount:Natural,details=details:StartPayload]|goto=Active
 transition:live|Active|Decide|implementation=generated|guard=cmd.amount > 5|writes=lastAmount:=cmd.amount|emits=DecisionRecorded|outputs=DecisionRecorded=generated-command-identity:Decide[amount=amount:Natural]|goto=Active
+transition:replay-only|Empty|LegacyStart|implementation=generated|guard=|writes=lastAmount:=cmd.amount|emits=LegacyStarted|outputs=LegacyStarted=generated-command-identity:LegacyStart[amount=amount:Natural]|goto=Active
 transition:live|Active|Ping|implementation=generated|guard=|writes=|emits=|outputs=|goto=Active
 transition:live|Active|Retire|implementation=generated|guard=cmd.amount > 0|writes=lastAmount:=cmd.amount|emits=Retired,RetirementAudited|outputs=Retired=generated-command-identity:Retire[amount=amount:Natural],RetirementAudited=generated-command-identity:Retire[amount=amount:Natural]|goto=Closed
 transition:replay-only|Active|Retire|implementation=generated|guard=cmd.amount <= 0|writes=lastAmount:=cmd.amount|emits=Retired,RetirementAudited|outputs=Retired=generated-command-identity:Retire[amount=amount:Natural],RetirementAudited=generated-command-identity:Retire[amount=amount:Natural]|goto=Closed

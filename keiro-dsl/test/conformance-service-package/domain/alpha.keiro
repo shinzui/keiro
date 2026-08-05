@@ -5,9 +5,13 @@ aggregate Alpha
   regs
   states Active
 
-  command PingAlpha { proofId }
+  command PingAlpha { proofId current:Bool }
+  command LegacyPingAlpha { proofId }
   event AlphaPinged = fields(PingAlpha)
+  event LegacyAlphaPinged = fields(LegacyPingAlpha)
 
-  Active -- PingAlpha --> emit AlphaPinged ; goto Active
+  Active -- PingAlpha --> guard cmd.current == false ; emit AlphaPinged ; goto Active
+  replay-only Active -- PingAlpha --> guard cmd.current == true ; emit AlphaPinged ; goto Active
+  replay-only Active -- LegacyPingAlpha --> emit LegacyAlphaPinged ; goto Active
 
   wire kind=ctorName fields=camelCase schemaVersion=1
