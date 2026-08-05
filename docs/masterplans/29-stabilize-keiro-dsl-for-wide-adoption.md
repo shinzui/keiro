@@ -121,7 +121,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 | 192 | Decouple wire keys from generated Haskell selectors with field aliases | docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md | None | None | Complete |
 | 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | Complete |
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Complete |
-| 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Not Started |
+| 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | In Progress |
 | 195 | Build conformance corpus regeneration tooling | docs/plans/195-build-conformance-corpus-regeneration-tooling.md | None | None | Not Started |
 | 196 | Polish generated conformance output for maintainers | docs/plans/196-polish-generated-conformance-output-for-maintainers.md | EP-195 | EP-191, EP-192, EP-198 | Not Started |
 | 197 | Enforce or refuse every accepted spec surface | docs/plans/197-enforce-or-refuse-every-accepted-spec-surface.md | None | EP-193 | Not Started |
