@@ -30,8 +30,8 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (checkServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), diagnosticCodeText, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
@@ -214,19 +214,59 @@ denyCodesOptions =
           (long "deny" <> metavar "CODE[,CODE...]" <> help "Exit non-zero for warning diagnostics with these stable codes (repeatable)")
       )
 
+-- | Parse a @--deny@ argument, refusing codes @check@ can never emit.
+--
+-- A denial that can never match is worse than no denial: it reads like a gate in
+-- a CI file and silently is not one. Diff-side and codec-comparison codes are
+-- therefore rejected outright here. Coverage codes are accepted at this stage
+-- and validated against @--coverage-report@ once the whole invocation is known,
+-- because an option reader cannot see its sibling options.
 parseDenyCodes :: String -> Either String [DiagnosticCode]
 parseDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
   where
     parseOne token
       | T.null token = Left "--deny requires one or more comma-separated diagnostic codes"
       | otherwise = case parseDiagnosticCode token of
-          Just diagnosticCode -> Right diagnosticCode
+          Just diagnosticCode -> classify token diagnosticCode
           Nothing ->
             Left
               ( "unknown diagnostic code `"
                   <> T.unpack token
                   <> "`; copy the spelling exactly from warning[Code] output"
               )
+    classify token diagnosticCode = case diagnosticOrigin diagnosticCode of
+      CheckDiagnostic -> Right diagnosticCode
+      CoverageDiagnostic -> Right diagnosticCode
+      DiffDiagnostic ->
+        Left
+          ( "diagnostic code `"
+              <> T.unpack token
+              <> "` is emitted by `keiro-dsl diff`, which compares two revisions; `check` can never emit it, so denying it here would never match"
+          )
+      CodecCompareDiagnostic ->
+        Left
+          ( "diagnostic code `"
+              <> T.unpack token
+              <> "` is emitted only by the generated codec-comparison path; `check` can never emit it, so denying it here would never match"
+          )
+
+-- | Reject a @--deny@ selection of a coverage code when this invocation never
+-- runs the coverage pass, for the same reason 'parseDenyCodes' rejects
+-- diff-side codes: the denial could not fire.
+validateCheckDenyCodes :: CheckOptions -> IO ()
+validateCheckDenyCodes options =
+  case [diagnosticCode | diagnosticCode <- checkDenyCodes options, diagnosticOrigin diagnosticCode == CoverageDiagnostic] of
+    [] -> pure ()
+    unreachable
+      | Just _ <- checkCoverage options -> pure ()
+      | otherwise -> do
+          TIO.hPutStrLn
+            stderr
+            ( "check: --deny "
+                <> T.intercalate ", " (map diagnosticCodeText unreachable)
+                <> " selects a structural-coverage code, which only the coverage pass emits; add --coverage-report FILE or drop the code"
+            )
+          exitFailure
 
 checkReportOutOpt :: Parser FilePath
 checkReportOutOpt =
@@ -366,41 +406,65 @@ checkReportEnforcement options =
       CheckReport.reportDenyCodes = checkDenyCodes options
     }
 
-writeSourceCheckReport :: FilePath -> ParsedSource -> CheckedService -> CheckOptions -> [Diagnostic] -> IO ()
-writeSourceCheckReport subject parsedSource service options diagnostics =
+-- | Write a check report to @--report-out@, creating any missing parent
+-- directories first. CI recipes routinely point this at a not-yet-created
+-- artifact directory; the coverage writer has always done this.
+writeCheckReportFile :: CheckOptions -> CheckReport.CheckReport -> IO ()
+writeCheckReportFile options report =
   mapM_
-    ( \path ->
-        Aeson.encodeFile
-          path
-          ( CheckReport.checkReport
-              subject
-              (parsedSourceLanguage parsedSource)
-              (checkedLanguageContract service)
-              enforcement
-              diagnostics
-              (CheckReport.effectiveDenyCodes enforcement)
-          )
+    ( \path -> do
+        createDirectoryIfMissing True (takeDirectory path)
+        Aeson.encodeFile path report
     )
     (checkReportOut options)
+
+writeSourceCheckReport :: FilePath -> ParsedSource -> CheckedService -> CheckOptions -> [Diagnostic] -> IO ()
+writeSourceCheckReport subject parsedSource service options diagnostics =
+  writeCheckReportFile
+    options
+    ( CheckReport.checkReport
+        subject
+        (parsedSourceLanguage parsedSource)
+        (checkedLanguageContract service)
+        enforcement
+        diagnostics
+        (CheckReport.effectiveDenyCodes enforcement)
+    )
   where
     enforcement = checkReportEnforcement options
 
 writeWorkspaceCheckReport :: FilePath -> WorkspaceSpec -> CheckedService -> CheckOptions -> [WorkspaceDiagnostic] -> IO ()
 writeWorkspaceCheckReport subject workspace service options diagnostics =
-  mapM_
-    ( \path ->
-        Aeson.encodeFile
-          path
-          ( CheckReport.workspaceCheckReport
-              subject
-              workspace
-              (checkedLanguageContract service)
-              enforcement
-              diagnostics
-              (CheckReport.effectiveDenyCodes enforcement)
-          )
+  writeCheckReportFile
+    options
+    ( CheckReport.workspaceCheckReport
+        subject
+        workspace
+        (checkedLanguageContract service)
+        enforcement
+        diagnostics
+        (CheckReport.effectiveDenyCodes enforcement)
     )
-    (checkReportOut options)
+  where
+    enforcement = checkReportEnforcement options
+
+-- | Write the machine report for a workspace refused during composition. The
+-- single-spec path already reports the equivalent failure, so a CI job that
+-- consumes @--report-out@ must not lose the workspace one.
+writeWorkspaceRefusalReport :: FilePath -> CheckOptions -> WorkspaceFailure -> IO ()
+writeWorkspaceRefusalReport subject options failure = case failure of
+  WorkspaceRefused diagnostics ->
+    writeCheckReportFile
+      options
+      ( CheckReport.workspaceRefusalReport
+          subject
+          enforcement
+          diagnostics
+          (CheckReport.effectiveDenyCodes enforcement)
+      )
+  -- An unreadable or unparseable manifest has no coded diagnostic, exactly as a
+  -- `.keiro` parse error has none on the single-spec path. Both write no report.
+  _ -> pure ()
   where
     enforcement = checkReportEnforcement options
 
@@ -433,16 +497,25 @@ run (Check fp options) = do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
     Right parsedSource -> do
+      validateCheckDenyCodes options
       let service = checkedSource parsedSource
           spec = checkedSpec service
           floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
-          diags = floorDiags <> checkServiceDiagnostics Nothing (mkContext Nothing False spec) service
-          deniedWarningCodes = deniedSourceWarningCodes options diags
+          semanticDiags = floorDiags <> checkServiceDiagnostics Nothing (mkContext Nothing False spec) service
+          semanticFailed = any ((== Error) . severity) semanticDiags
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
-      mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
+      mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) semanticDiags
+      -- Coverage is part of this invocation's diagnostic surface, not a
+      -- success-path artifact: its findings must reach the deny policy, the exit
+      -- code, and the check report. It still runs only after semantic validation
+      -- passes, because an unresolvable graph has nothing to cover.
+      coveragePlan <- planCheckCoverage fp spec (if semanticFailed then Nothing else checkCoverage options)
+      coverageOk <- emitPlannedCoverage coveragePlan
+      let diags = semanticDiags <> plannedCoverageDiagnostics coveragePlan
+          deniedWarningCodes = deniedSourceWarningCodes options diags
       emitDeniedWarningSummary deniedWarningCodes
       writeSourceCheckReport fp parsedSource service options diags
-      if any ((== Error) . severity) diags || not (null deniedWarningCodes)
+      if semanticFailed || not coverageOk || not (null deniedWarningCodes)
         then exitFailure
         else do
           when (checkEmit options) (TIO.putStrLn (renderSource parsedSource))
@@ -453,9 +526,7 @@ run (Check fp options) = do
                 exitFailure
               Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
             else pure ()
-          coverageOk <- runCheckCoverage fp spec (checkCoverage options)
-          when (coverageOk && not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
-          when (not coverageOk) exitFailure
+          when (not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
 run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
   case parseSource fp input of
@@ -657,22 +728,30 @@ renderBehaviorErrors errors = do
 -- mapped-type graph with the manifest as the report's subject.
 runWorkspaceCheck :: FilePath -> CheckOptions -> IO ()
 runWorkspaceCheck fp options = do
+  validateCheckDenyCodes options
   loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
   case loaded of
     Left failure -> do
       mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
+      writeWorkspaceRefusalReport fp options failure
       exitFailure
     Right workspace -> do
       let service = checkedWorkspace workspace
           floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) (checkMinLanguage options)
-          diags = floorDiags <> checkWorkspace workspace
+          semanticDiags = floorDiags <> checkWorkspace workspace
           spec = checkedSpec service
-          deniedWarningCodes = deniedWorkspaceWarningCodes options diags
+          semanticFailed = any ((== Error) . wdSeverity) semanticDiags
       emitWorkspaceLanguageContractNotice fp workspace
-      mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
+      mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) semanticDiags
+      -- Same contract as the single-spec path: coverage findings are gated
+      -- diagnostics, not success-path output. See `run (Check …)` above.
+      coveragePlan <- planCheckCoverage fp spec (if semanticFailed then Nothing else checkCoverage options)
+      coverageOk <- emitPlannedCoverage coveragePlan
+      let diags = semanticDiags <> map (workspaceCoverageDiagnostic fp) (plannedCoverageFindings coveragePlan)
+          deniedWarningCodes = deniedWorkspaceWarningCodes options diags
       emitDeniedWarningSummary deniedWarningCodes
       writeWorkspaceCheckReport fp workspace service options diags
-      if any ((== Error) . wdSeverity) diags || not (null deniedWarningCodes)
+      if semanticFailed || not coverageOk || not (null deniedWarningCodes)
         then exitFailure
         else do
           when (checkEmit options) (TIO.putStrLn (renderSpec spec))
@@ -683,9 +762,7 @@ runWorkspaceCheck fp options = do
                 exitFailure
               Right obligations -> TIO.putStrLn (renderBindingObligations (wsContext workspace) obligations)
             else pure ()
-          coverageOk <- runCheckCoverage fp spec (checkCoverage options)
-          when (coverageOk && not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
-          when (not coverageOk) exitFailure
+          when (not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
 
 -- | @scaffold@ on a workspace manifest: compose the whole service, then plan
 -- and emit the complete module set for every member in one invocation.
@@ -984,16 +1061,62 @@ writeComparison (Just (_, path)) (Just comparisonModule) = do
   TIO.hPutStrLn stderr ("comparison generated " <> T.pack path <> " (migration evidence only)")
 writeComparison _ _ = hPutStrLn stderr "internal error: incomplete codec-comparison output" >> exitFailure
 
-runCheckCoverage :: FilePath -> Spec -> Maybe CheckCoverageOptions -> IO Bool
-runCheckCoverage _ _ Nothing = pure True
-runCheckCoverage specPath spec (Just options) =
-  case Coverage.coverageReport specPath spec of
-    Left graphErrors -> do
-      hPutStrLn stderr ("validated spec did not resolve its mapped type graph for coverage: " <> show graphErrors)
-      pure False
-    Right baseReport -> do
-      let report = if checkFailOnOpaque options then Coverage.failOnOpaque baseReport else baseReport
-      emitCoverageReport (checkCoveragePath options) report
+-- | What this @check@ invocation's coverage pass will do, decided before the
+-- warning policy is applied so the findings can take part in it.
+data PlannedCoverage
+  = -- | @--coverage-report@ was not supplied, or semantic validation already failed.
+    NoCoverage
+  | -- | The report to render, and the path to write it to.
+    PlannedCoverage !FilePath !Coverage.CoverageReport
+  | -- | The mapped-type graph did not resolve; the pass cannot run.
+    CoverageUnresolved !String
+
+planCheckCoverage :: FilePath -> Spec -> Maybe CheckCoverageOptions -> IO PlannedCoverage
+planCheckCoverage _ _ Nothing = pure NoCoverage
+planCheckCoverage specPath spec (Just options) =
+  pure $ case Coverage.coverageReport specPath spec of
+    Left graphErrors -> CoverageUnresolved (show graphErrors)
+    Right baseReport ->
+      PlannedCoverage
+        (checkCoveragePath options)
+        (if checkFailOnOpaque options then Coverage.failOnOpaque baseReport else baseReport)
+
+plannedCoverageFindings :: PlannedCoverage -> [Coverage.CoverageFinding]
+plannedCoverageFindings (PlannedCoverage _ report) = Coverage.coverageFindings report
+plannedCoverageFindings _ = []
+
+-- | Coverage findings as ordinary source diagnostics. They carry no line, which
+-- the rendered form has always shown as @:0:@.
+plannedCoverageDiagnostics :: PlannedCoverage -> [Diagnostic]
+plannedCoverageDiagnostics plan =
+  [ Diagnostic
+      { line = 0,
+        severity = Coverage.findingSeverity finding,
+        code = Coverage.findingCode finding,
+        relatedLocations = [],
+        message = Coverage.coverageFindingMessage finding
+      }
+  | finding <- plannedCoverageFindings plan
+  ]
+
+-- | The workspace twin: coverage runs on the merged graph, so every finding is
+-- attributed to the manifest rather than to one member.
+workspaceCoverageDiagnostic :: FilePath -> Coverage.CoverageFinding -> WorkspaceDiagnostic
+workspaceCoverageDiagnostic _ finding =
+  WorkspaceDiagnostic
+    { wdLocations = NE.fromList [WorkspaceLocation WorkspaceManifestFile 0 ""],
+      wdSeverity = Coverage.findingSeverity finding,
+      wdCode = Coverage.findingCode finding,
+      wdSourceLanguageCause = Nothing,
+      wdMessage = Coverage.coverageFindingMessage finding
+    }
+
+emitPlannedCoverage :: PlannedCoverage -> IO Bool
+emitPlannedCoverage NoCoverage = pure True
+emitPlannedCoverage (CoverageUnresolved graphErrors) = do
+  hPutStrLn stderr ("validated spec did not resolve its mapped type graph for coverage: " <> graphErrors)
+  pure False
+emitPlannedCoverage (PlannedCoverage path report) = emitCoverageReport path report
 
 runDiffCoverage :: FilePath -> T.Text -> Spec -> Spec -> Maybe DiffCoverageOptions -> IO Bool
 runDiffCoverage _ _ _ _ Nothing = pure True

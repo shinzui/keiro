@@ -27,6 +27,7 @@ module Keiro.Dsl.Coverage
     coverageSucceeded,
     renderCoverageSummary,
     renderCoverageFinding,
+    coverageFindingMessage,
     writeCoverageReport,
   )
 where
@@ -275,11 +276,16 @@ renderCoverageFinding specPath finding =
     <> "["
     <> T.pack (show (findingCode finding))
     <> "]: "
-    <> findingMessage finding
-    <> rootsSuffix
+    <> coverageFindingMessage finding
   where
     severityText Error = "error"
     severityText Warning = "warning"
+
+-- | The finding's message with its root list appended, shared by the rendered
+-- stderr line and the machine check-report entry so both say the same thing.
+coverageFindingMessage :: CoverageFinding -> Text
+coverageFindingMessage finding = findingMessage finding <> rootsSuffix
+  where
     rootsSuffix = case findingRoots finding of
       [] -> ""
       roots -> " (roots: " <> T.intercalate ", " roots <> ")"
@@ -612,8 +618,11 @@ instance ToJSON CoverageFinding where
         "message" .= findingMessage finding
       ]
     where
+      -- One severity vocabulary across every keiro-dsl JSON report. The check
+      -- report has always spelled this "warning"; coverage spelled the same
+      -- severity "advisory" until ExecPlan 199 unified them.
       severityValue Error = "error" :: Text
-      severityValue Warning = "advisory"
+      severityValue Warning = "warning"
 
 instance ToJSON CoveragePrevious where
   toJSON previous =

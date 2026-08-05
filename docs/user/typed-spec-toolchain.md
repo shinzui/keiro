@@ -1050,9 +1050,11 @@ their values are not field-resolution programs. An emit is validated and
 diff-classified but produces no generated module today.
 
 `derive ["prefix"] hole` documents a hand-owned derivation responsibility; it
-does not create a module or typed signature. Every emit therefore produces the
-`EmitDeriveHoleUnrealized` warning. The hand-owned implementation must be
-deterministic so retries reproduce the same IDs.
+does not create a module or typed signature. Because the clause is mandatory
+grammar, this is true of every emit in every spec, so it carries no per-spec
+diagnostic; the scaffold report's no-modules line names each emit node that
+contributed nothing. The hand-owned implementation must be deterministic so
+retries reproduce the same IDs.
 
 A publisher owns delivery policy for one emit:
 
@@ -1617,17 +1619,25 @@ cabal run -v0 keiro-dsl -- check service.keiro \
 `N`; `--min-language 4` is the standard stable-contract gate.
 `--deny-warnings` makes every warning fail this invocation without changing its
 severity. `--deny CODE[,CODE...]` applies the same exit policy selectively; it
-is repeatable, and the spelling is copied exactly from `warning[Code]`.
+is repeatable, and the spelling is copied exactly from `warning[Code]`. A code
+`check` cannot emit is refused rather than silently accepted: cross-revision
+codes belong to `diff`, and structural-coverage codes require
+`--coverage-report` in the same invocation. This makes a denial in a CI file
+either effective or an immediate error, never a decoration.
 `--report-out` writes `keiro-dsl/check-report/1` after source or workspace
-validation, on success or failure. It records language provenance, enforcement
-flags, diagnostics and related locations, summary counts, and the validation
-outcome. Object and array-element keys are append-only; readers must ignore
-unknown keys. Parse or workspace-composition failures occur before the report
-exists. The report's `ok` excludes the separate structural/opaque coverage
-gate, whose artifact remains `--coverage-report`.
+validation, on success or failure, creating missing parent directories. It
+records language provenance, enforcement flags, diagnostics and related
+locations, summary counts, and the validation outcome. Object and array-element
+keys are append-only; readers must ignore unknown keys. A parse failure and an
+unreadable or unparseable workspace manifest occur before any coded diagnostic
+exists and therefore write no report; a *composed* workspace refusal does write
+one, with `"language": null` because no service graph was formed.
 `--coverage-report` inventories structural, opaque, explicit-`Json`, and
 consumer-JSON register boundaries. `--fail-on-opaque` turns named private
-persisted opaque boundaries into a CI gate.
+persisted opaque boundaries into a CI gate. Coverage findings are part of this
+invocation's diagnostic surface: they are subject to the same warning policy and
+appear in the check report as line-0 entries, so the report's `ok` covers them.
+Both reports spell severity `"error"` or `"warning"`.
 
 #### CI recipe
 
@@ -1640,9 +1650,8 @@ cabal run -v0 keiro-dsl -- check service.keiro \
 
 A red result means the source did not parse or compose, selected a language
 below 4, emitted an error, or emitted a warning denied by this invocation. The
-JSON report distinguishes those outcomes whenever parsing and composition
-succeeded. Ensure the report's parent directory exists before invoking the
-command.
+JSON report distinguishes those outcomes whenever a coded diagnostic could be
+produced. The report's parent directory is created if it does not exist.
 
 ### `inspect`
 
@@ -1777,10 +1786,10 @@ operational history and therefore remain warnings: `DeprecatedEventReplayHazard`
 until the database-backed audit establishes the relevant fleet fact. Five
 warnings describe deliberate or currently accepted policy:
 `WqUnloggedDurability`, `ProcessBenignInversion`, `RouterBenignInversion`,
-`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Four more make
+`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Three more make
 accepted but currently inert declarations explicit:
-`IntakeBindFlagUnenforced`, `EmitDeriveHoleUnrealized`,
-`WqFieldOptionalUnsupported`, and `RmInlineSubscriptionIgnored`. Teams may deny
+`IntakeBindFlagUnenforced`, `WqFieldOptionalUnsupported`, and
+`RmInlineSubscriptionIgnored`. Teams may deny
 any of these warnings without changing the shared language contract. Two internally decidable
 warnings, `WireSchemaVersionMismatch` and `RmProjectionWithoutNode`, are
 candidates for an error in a future language version rather than retroactive

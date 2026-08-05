@@ -278,6 +278,121 @@ main = hspec $ do
       unknownErr `shouldContain` "unknown diagnostic code `NotACode`"
       unknownErr `shouldContain` "warning[Code]"
 
+    -- A denial that can never match reads like a CI gate and is not one. Every
+    -- code `check` cannot emit is refused at the point of use instead.
+    it "refuses a denial of a code check can never emit" $ do
+      let fixture = "test/fixtures/deny-unlogged.keiro"
+
+      (diffCode, _, diffErr) <- runKeiroDsl ["check", fixture, "--deny", "EvtFieldWireKeyChanged"]
+      diffCode `shouldBe` ExitFailure 1
+      diffErr `shouldContain` "`EvtFieldWireKeyChanged` is emitted by `keiro-dsl diff`"
+      diffErr `shouldContain` "would never match"
+
+      -- Rejection survives being hidden inside a comma-separated list.
+      (mixedCode, _, mixedErr) <-
+        runKeiroDsl ["check", fixture, "--deny", "WqUnloggedDurability,WorkflowShapeChanged"]
+      mixedCode `shouldBe` ExitFailure 1
+      mixedErr `shouldContain` "`WorkflowShapeChanged` is emitted by `keiro-dsl diff`"
+
+      (codecCode, _, codecErr) <- runKeiroDsl ["check", fixture, "--deny", "CodecCompareDifference"]
+      codecCode `shouldBe` ExitFailure 1
+      codecErr `shouldContain` "generated codec-comparison path"
+
+      -- A coverage code is emittable, but only by an invocation that asks for
+      -- the coverage pass, so the requirement is stated rather than ignored.
+      (noPassCode, _, noPassErr) <- runKeiroDsl ["check", fixture, "--deny", "CoverageOpaqueSurface"]
+      noPassCode `shouldBe` ExitFailure 1
+      noPassErr `shouldContain` "add --coverage-report FILE or drop the code"
+
+    it "applies the warning policy to structural-coverage findings" $ do
+      withTempDirectory "keiro-dsl-coverage-deny" $ \out -> do
+        let fixture = "test/fixtures/structural-conformance.keiro"
+            coveragePath = out </> "coverage.json"
+            reportPath = out </> "nested" </> "dir" </> "check.json"
+            warningText = "warning[CoverageOpaqueSurface]"
+
+        -- Reporting-only by default: the finding prints and the check passes.
+        (plainCode, _, plainErr) <-
+          runKeiroDsl ["check", fixture, "--coverage-report", coveragePath]
+        plainCode `shouldBe` ExitSuccess
+        plainErr `shouldContain` warningText
+        plainErr `shouldNotContain` "escalated to failure"
+
+        -- Before ExecPlan 199 this combination exited 0 with the warning printed.
+        (deniedCode, _, deniedErr) <-
+          runKeiroDsl
+            [ "check",
+              fixture,
+              "--coverage-report",
+              coveragePath,
+              "--deny-warnings",
+              -- The nested path also proves --report-out creates parent dirs.
+              "--report-out",
+              reportPath
+            ]
+        deniedCode `shouldBe` ExitFailure 1
+        deniedErr `shouldContain` warningText
+        deniedErr `shouldContain` "escalated to failure (denied: CoverageOpaqueSurface)"
+
+        report <- decodeJsonValue reportPath
+        jsonField "ok" report `shouldBe` Just (Aeson.Bool False)
+        (jsonField "summary" report >>= jsonField "deniedWarnings") `shouldBe` Just (Aeson.Number 1)
+        case jsonField "diagnostics" report of
+          Just (Aeson.Array entries) ->
+            [entry | entry <- toList entries, jsonField "code" entry == Just (Aeson.String "CoverageOpaqueSurface")]
+              `shouldSatisfy` \matching -> case matching of
+                entry : _ ->
+                  jsonField "severity" entry == Just (Aeson.String "warning")
+                    && jsonField "denied" entry == Just (Aeson.Bool True)
+                [] -> False
+          other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
+        -- Selecting the code by name gates it just as precisely.
+        (selectedCode, _, _) <-
+          runKeiroDsl
+            ["check", fixture, "--coverage-report", coveragePath, "--deny", "CoverageOpaqueSurface"]
+        selectedCode `shouldBe` ExitFailure 1
+
+    it "spells warning severity the same way in both JSON reports" $ do
+      withTempDirectory "keiro-dsl-severity-vocabulary" $ \out -> do
+        let coveragePath = out </> "coverage.json"
+        (exitCode, _, _) <-
+          runKeiroDsl
+            ["check", "test/fixtures/structural-conformance.keiro", "--coverage-report", coveragePath]
+        exitCode `shouldBe` ExitSuccess
+        coverage <- decodeJsonValue coveragePath
+        case jsonField "findings" coverage of
+          Just (Aeson.Array entries) -> case toList entries of
+            entry : _ -> jsonField "severity" entry `shouldBe` Just (Aeson.String "warning")
+            [] -> expectationFailure "coverage report had no findings"
+          other -> expectationFailure ("expected findings array, got " <> show other)
+
+    it "writes the machine report when a workspace is refused during composition" $ do
+      withTempDirectory "keiro-dsl-workspace-refusal-report" $ \out -> do
+        let reportPath = out </> "made" </> "up" </> "refusal.json"
+        (exitCode, stdoutText, _) <-
+          runKeiroDsl
+            [ "check",
+              "test/fixtures/workspace-dup-decl/service.keiro-workspace",
+              "--report-out",
+              reportPath
+            ]
+        exitCode `shouldBe` ExitFailure 1
+        stdoutText `shouldBe` ""
+        report <- decodeJsonValue reportPath
+        jsonField "schema" report `shouldBe` Just (Aeson.String "keiro-dsl/check-report/1")
+        jsonField "kind" report `shouldBe` Just (Aeson.String "workspace")
+        jsonField "ok" report `shouldBe` Just (Aeson.Bool False)
+        -- No service graph was composed, so there is no language contract.
+        jsonField "language" report `shouldBe` Just Aeson.Null
+        case jsonField "diagnostics" report of
+          Just (Aeson.Array entries) -> case toList entries of
+            entry : _ -> do
+              jsonField "code" entry `shouldBe` Just (Aeson.String "WorkspaceDuplicateDeclaration")
+              jsonField "severity" entry `shouldBe` Just (Aeson.String "error")
+            [] -> expectationFailure "workspace refusal report had no diagnostics"
+          other -> expectationFailure ("expected diagnostics array, got " <> show other)
+
     it "applies the same warning policy to a composed workspace" $ do
       warningSource <- readTestText "test/fixtures/deny-unlogged.keiro"
       withInlineWorkspace
@@ -3243,7 +3358,6 @@ main = hspec $ do
       codes <- diagnosticCodesOf "test/fixtures/reservation.keiro"
       codes
         `shouldNotContain` [ IntakeBindFlagUnenforced,
-                             EmitDeriveHoleUnrealized,
                              WqFieldOptionalUnsupported,
                              RmInlineSubscriptionIgnored
                            ]
@@ -4233,9 +4347,14 @@ main = hspec $ do
     it "accepts the emit/publisher spec (skip present, coupling resolves)" $ do
       codes <- errorCodesOf "test/fixtures/emit.keiro"
       codes `shouldBe` []
-    it "warns that emit derive holes remain wholly hand-owned" $ do
-      codes <- diagnosticCodesOf "test/fixtures/emit.keiro"
-      codes `shouldContain` [EmitDeriveHoleUnrealized]
+    -- `derive … hole` is mandatory emit grammar, so a diagnostic saying it
+    -- generates nothing would fire on every emit node in every spec and could
+    -- never be resolved. It is the scaffold report's inert-node line (asserted
+    -- immediately below) that carries the fact, once per run. See ExecPlan 199.
+    it "leaves an emit-bearing spec clean enough for --deny-warnings" $ do
+      (exitCode, out, err) <- runKeiroDsl ["check", "test/fixtures/emit.keiro", "--deny-warnings"]
+      unless (exitCode == ExitSuccess) (expectationFailure (out <> err))
+      err `shouldNotContain` "escalated to failure"
     it "reports emit nodes that contribute no generated modules" $
       withTempDirectory "keiro-dsl-inert-report" $ \out -> do
         spec <- specOf "test/fixtures/emit.keiro"
@@ -6176,6 +6295,19 @@ main = hspec $ do
       mapM_ assertSkeletonValid skeletonKinds
     it "every skeleton passes the scaffold refusal gates" $
       mapM_ assertSkeletonScaffoldable skeletonKinds
+    -- `derive … hole` is mandatory emit grammar. While it carried a warning, a
+    -- freshly generated emit service could never satisfy the documented CI
+    -- recipe, no matter what its author did. See ExecPlan 199.
+    it "the emit skeleton satisfies the documented --deny-warnings CI gate" $
+      withTempDirectory "keiro-dsl-emit-skeleton-deny" $ \out -> case skeletonFor "emit" of
+        Left err -> expectationFailure (T.unpack err)
+        Right source -> do
+          let specPath = out </> "emit.keiro"
+          TIO.writeFile specPath source
+          (exitCode, stdoutText, stderrText) <-
+            runKeiroDsl ["check", specPath, "--min-language", "4", "--deny-warnings"]
+          unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
+          stderrText `shouldNotContain` "escalated to failure"
     it "stable skeleton scaffolds match the committed compiling modules" $
       mapM_ (uncurry assertStableSkeletonMatchesCommitted) skeletonModuleRoots
     it "rejects an unknown kind with a helpful message" $

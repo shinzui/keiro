@@ -4,8 +4,14 @@
 -- array element keys are append-only, and consumers must ignore unknown keys.
 -- Source and workspace checks share the schema; workspace inputs add a
 -- top-level @members@ array. The report's @ok@ field covers parse-successful
--- semantic validation, minimum-language enforcement, and denied warnings. It
--- deliberately excludes structural/opaque coverage, which has its own report.
+-- semantic validation, minimum-language enforcement, denied warnings, and — when
+-- the invocation supplies @--coverage-report@ — the structural-coverage
+-- findings, which appear as ordinary diagnostic entries at line 0 so one warning
+-- policy governs every warning @check@ can emit. The separate coverage report
+-- remains the place for the full root and boundary inventory.
+--
+-- Severity is spelled @"error"@ or @"warning"@ here and in the coverage report;
+-- there is exactly one severity vocabulary across keiro-dsl's JSON.
 module Keiro.Dsl.CheckReport
   ( CheckReportLanguage (..),
     CheckReportEnforcement (..),
@@ -17,6 +23,7 @@ module Keiro.Dsl.CheckReport
     effectiveDenyCodes,
     checkReport,
     workspaceCheckReport,
+    workspaceRefusalReport,
   )
 where
 
@@ -85,7 +92,10 @@ data CheckReportKind = SourceReport | WorkspaceReport
 data CheckReport = CheckReport
   { reportKind :: !CheckReportKind,
     reportSubject :: !FilePath,
-    reportLanguage :: !CheckReportLanguage,
+    -- | 'Nothing' only for a workspace that was refused during composition:
+    -- there is no composed service, so no effective language contract exists to
+    -- describe. Such a report serializes @"language": null@.
+    reportLanguage :: !(Maybe CheckReportLanguage),
     reportEnforcement :: !CheckReportEnforcement,
     reportDiagnostics :: ![CheckReportEntry],
     reportSummary :: !CheckReportSummary,
@@ -113,7 +123,7 @@ checkReport subject sourceLanguage contract enforcement diagnostics deniedCodes 
   buildReport
     SourceReport
     subject
-    (sourceLanguageValue sourceLanguage contract)
+    (Just (sourceLanguageValue sourceLanguage contract))
     enforcement
     (map (sourceEntry subject deniedCodes) diagnostics)
     []
@@ -130,15 +140,35 @@ workspaceCheckReport subject workspace contract enforcement diagnostics deniedCo
   buildReport
     WorkspaceReport
     subject
-    (workspaceLanguageValue contract)
+    (Just (workspaceLanguageValue contract))
     enforcement
     (map (workspaceEntry subject deniedCodes) diagnostics)
     (map memberValue (wsMembers workspace))
 
+-- | The report for a workspace refused during composition, before any service
+-- graph exists. Composition refusals are coded diagnostics, so they belong in
+-- the same machine contract as every other refusal; the single-spec path has
+-- always written one for the equivalent failure. There is no composed language
+-- contract and no member inventory to report, so both are omitted.
+workspaceRefusalReport ::
+  FilePath ->
+  CheckReportEnforcement ->
+  NE.NonEmpty WorkspaceDiagnostic ->
+  Set DiagnosticCode ->
+  CheckReport
+workspaceRefusalReport subject enforcement diagnostics deniedCodes =
+  buildReport
+    WorkspaceReport
+    subject
+    Nothing
+    enforcement
+    (map (workspaceEntry subject deniedCodes) (NE.toList diagnostics))
+    []
+
 buildReport ::
   CheckReportKind ->
   FilePath ->
-  CheckReportLanguage ->
+  Maybe CheckReportLanguage ->
   CheckReportEnforcement ->
   [CheckReportEntry] ->
   [CheckReportMember] ->
@@ -238,7 +268,7 @@ instance ToJSON CheckReport where
       ( [ "schema" .= ("keiro-dsl/check-report/1" :: Text),
           "kind" .= kindText (reportKind report),
           "subject" .= reportSubject report,
-          "language" .= languageJson (reportLanguage report),
+          "language" .= fmap languageJson (reportLanguage report),
           "enforcement" .= enforcementJson (reportEnforcement report),
           "diagnostics" .= map entryJson (reportDiagnostics report),
           "summary" .= summaryJson (reportSummary report),

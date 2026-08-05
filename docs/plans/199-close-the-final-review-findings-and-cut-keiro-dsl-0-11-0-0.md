@@ -53,10 +53,15 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
       dated amendment (history preserved), `docs/user/typed-spec-toolchain.md` and
       `keiro-dsl/test/README.md` moved to ledger/Cabal-fragment vocabulary. `okf validate`
       strict: "OK: 22 concepts".
-- [ ] M2: CI gate integrity — deny policy covers coverage warnings, `--deny` rejects
+- [x] M2: CI gate integrity — deny policy covers coverage warnings, `--deny` rejects
       never-emittable codes, workspace composition refusals write the check report,
       `--report-out` creates parent dirs, one severity vocabulary across reports,
-      `EmitDeriveHoleUnrealized` removed.
+      `EmitDeriveHoleUnrealized` removed. *(2026-08-05)* All six landed;
+      `keiro-dsl-test` 603 examples / 0 failures. Coverage findings are now planned
+      before the deny decision and emitted with the other diagnostics (ahead of
+      `--emit`/`--explain-bindings` output rather than after), so one warning policy
+      governs every warning `check` can emit. `--deny` is backed by the new
+      `diagnosticOrigin` registry in `Validate.hs`.
 - [ ] M3: inert surfaces refused/enforced — decode body posture, process `dispatch-id`
       parser parity, `on-appended` arm, timer `not-mine` arm, intake bind header names,
       workqueue required-by-default, workspace scaffold-report inert-node parity, and the
@@ -80,6 +85,22 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   `/package/keiki/preferred` still lists 0.8.0.0 as latest). Candidates are not in the
   package index, so index-state–pinned consumers (mori) cannot solve against them until they
   are published. M7 depends on that publish.
+- (M2, 2026-08-05) **The plan's premise for the severity-vocabulary change was wrong.** M2
+  asserted "since the coverage report is new in this release, this is not a compat break".
+  `--coverage-report` and `Keiro.Dsl.Coverage` actually shipped in **0.4.0.0** (2026-07-28,
+  `keiro-dsl/CHANGELOG.md:720`), so `keiro-dsl/coverage-report/1` has spelled Warning as
+  `"advisory"` across four released versions. Renaming it to `"warning"` is a genuine
+  breaking change for any consumer matching that literal. The change still lands — the
+  owner's one-vocabulary mandate holds and the breaking window is open — but it is recorded
+  under Breaking Changes rather than as a silent unification.
+- (M2, 2026-08-05) The `--deny` emittable-set registry could not be derived from severity, so
+  it was derived mechanically from the sources: for each of the 301 `DiagnosticCode`
+  constructors, count its mentions in `Validate.hs` (exactly one = the enum declaration, so
+  the validator never emits it) and list which other modules mention it. That partitions
+  cleanly into 93 diff-only codes, 3 codec-comparison codes, `CoverageOpaqueSurface` /
+  `CoverageOpaqueGateExceeded` (check-reachable coverage), `CoverageOpaqueBoundaryAdded`
+  (diff-coverage only), and the rest check-emittable — including the five `ScaffoldRun`
+  planning codes, which `check` does emit because it replays the scaffold planner.
 - (Pre-plan, 2026-08-05) `cabal test keiro-dsl` runs **only** `keiro-dsl-test` ("1 of 1 test
   suites") despite the package declaring 37 test-suites and the Justfile comment claiming
   otherwise; the 36 conformance/auxiliary suites only run when named individually. Root cause
@@ -128,6 +149,28 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   adopter compile time — the refusal is strictly more honest, and no mori aggregate has
   duplicate pairs. If the shape is ever needed, uniquifying probe names is a compatible
   follow-up.
+  Date: 2026-08-05
+- Decision (M2): Default an unclassified `DiagnosticCode` to check-emittable in
+  `diagnosticOrigin` (a `_ -> CheckDiagnostic` fallthrough) rather than forcing an
+  exhaustive 301-arm table.
+  Rationale: The two failure directions are not symmetric. Wrongly classifying a code as
+  non-check *rejects a working adopter CI invocation*; wrongly falling through merely
+  preserves the pre-199 behavior of accepting it. Only codes positively proven non-check by
+  the source survey are listed, so the registry is sound in the direction that matters.
+  Date: 2026-08-05
+- Decision (M2): Coverage output moves ahead of `--emit`/`--explain-bindings` output.
+  Rationale: Gating coverage requires knowing its findings before the exit decision, and a
+  denied run must not print success-path artifacts. Treating coverage as a diagnostic pass
+  rather than a success-path artifact is the only ordering that makes both true. Reports and
+  the `OK` line keep their existing relative order, so the common invocations are unchanged.
+  Date: 2026-08-05
+- Decision (M2): Model a composition-refused workspace report with
+  `reportLanguage :: Maybe CheckReportLanguage` serialized as `"language": null`.
+  Rationale: No service graph was composed, so no effective language contract exists to
+  describe; inventing one would put a false fact in a machine contract. No existing consumer
+  regresses because this report previously did not exist at all. Rejected alternatives: a new
+  `kind` value (widens an existing enum for every consumer) and omitting the key (a reader
+  cannot distinguish "absent" from "old writer").
   Date: 2026-08-05
 - Decision (M1): Leave `keiro-dsl/test/README.md:44` saying "record/disk consistency"
   unchanged while moving the rest of the file to ledger vocabulary.

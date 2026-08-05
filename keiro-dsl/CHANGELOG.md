@@ -8,6 +8,36 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- `check`'s warning policy now covers structural coverage. When an invocation
+  supplies `--coverage-report`, its findings are ordinary diagnostics of this
+  run: `--deny-warnings` and `--deny CoverageOpaqueSurface` escalate them, they
+  appear in the `keiro-dsl/check-report/1` diagnostics array as line-0 entries,
+  and the report's `ok` therefore accounts for them. Previously
+  `check spec --coverage-report r --deny-warnings` printed coverage warnings and
+  exited 0, so a CI job that believed it had a no-warning gate did not have one.
+  Coverage output is now emitted with the other diagnostics, before `--emit` and
+  `--explain-bindings` output rather than after.
+- `check --deny CODE` now refuses a code `check` cannot emit instead of
+  accepting a denial that can never match. Cross-revision codes (for example
+  `EvtFieldWireKeyChanged`, `WorkflowShapeChanged`) are a `diff` concern and are
+  rejected outright; structural-coverage codes are rejected unless the same
+  invocation passes `--coverage-report`. Any CI file that named such a code was
+  not gating on it and now fails loudly. `Keiro.Dsl.Validate` exports the
+  underlying `DiagnosticOrigin` and `diagnosticOrigin` registry.
+- The `keiro-dsl/coverage-report/1` JSON now spells warning severity `"warning"`
+  rather than `"advisory"`, matching `keiro-dsl/check-report/1`. There is one
+  severity vocabulary across keiro-dsl's JSON. Consumers matching the literal
+  string `"advisory"` (available since 0.4.0.0) must be updated.
+- `DiagnosticCode` loses `EmitDeriveHoleUnrealized`; exhaustive matches must be
+  extended. The code fired unconditionally on every `emit` node because
+  `derive … hole` is mandatory grammar, so it carried no information and made
+  `check --deny-warnings` permanently red for any emit-bearing service. The
+  scaffold report's no-modules line already names each emit node that
+  contributes nothing.
+- `Keiro.Dsl.CheckReport`'s `reportLanguage` is now
+  `Maybe CheckReportLanguage`, and the new `workspaceRefusalReport` builds the
+  report for a workspace refused during composition. Such a report serializes
+  `"language": null` because no service graph was composed.
 - Scaffold sidecars now use role-bearing names. On disk,
   `keiro-dsl-scaffold-record.<context>.txt` becomes
   `keiro-dsl-ledger.context.<context>.txt`, the workspace form becomes
@@ -92,6 +122,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- `check --report-out` creates missing parent directories, and a workspace
+  refused during composition now writes the report a single spec has always
+  written for the equivalent failure. A parse failure and an unreadable or
+  unparseable workspace manifest still write none: they precede any coded
+  diagnostic.
 - `scaffold --apply-name-migrations` applies an explicitly reviewed legacy-to-current
   source move, backs up original generated and create-once files, rewrites exact
   Haskell module references outside comments/literals, journals content digests, and

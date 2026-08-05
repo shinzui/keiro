@@ -10,8 +10,10 @@
 module Keiro.Dsl.Validate
   ( Severity (..),
     DiagnosticCode (..),
+    DiagnosticOrigin (..),
     Diagnostic (..),
     diagnosticCodeText,
+    diagnosticOrigin,
     parseDiagnosticCode,
     renderDiagnostic,
     minimumLanguageDiagnostics,
@@ -405,7 +407,6 @@ data DiagnosticCode
   | -- ExecPlan 197: accepted but currently inert spec surfaces are reported
     -- through the ordinary warning pipeline.
     IntakeBindFlagUnenforced
-  | EmitDeriveHoleUnrealized
   | WqFieldOptionalUnsupported
   | RmInlineSubscriptionIgnored
   | -- ExecPlan 197: process and router references close under language 4.
@@ -420,6 +421,141 @@ data DiagnosticCode
   | PublisherOutboxFieldUnresolved
   | RouterBenignInversion
   deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+-- | Which command pipeline can actually produce a given 'DiagnosticCode'.
+--
+-- The registry exists so a CI warning policy cannot silently name a code the
+-- selected command never emits. Before ExecPlan 199, @keiro-dsl check --deny
+-- EvtFieldWireKeyChanged@ was accepted and then matched nothing forever,
+-- because that code is only reachable from @diff@'s cross-revision comparison.
+data DiagnosticOrigin
+  = -- | Reachable from @check@ on a single spec or a workspace. This includes
+    -- the pure scaffold-planning gates that @check@ replays, and it is the
+    -- default for any code not positively classified below.
+    CheckDiagnostic
+  | -- | Reachable only from the structural-coverage pass, which runs only when
+    -- @--coverage-report@ is supplied.
+    CoverageDiagnostic
+  | -- | Reachable only from @diff@, which compares two revisions of a spec.
+    -- Nothing in a single-revision @check@ can produce these.
+    DiffDiagnostic
+  | -- | Reachable only from the generated codec-comparison path, which no
+    -- @check@ or @diff@ invocation runs.
+    CodecCompareDiagnostic
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+-- | Classify a code by the pipeline that emits it.
+--
+-- Only codes proven non-@check@ are listed; everything else falls through to
+-- 'CheckDiagnostic'. The default is deliberately the permissive one: a
+-- misclassification here would reject a working CI invocation, whereas falling
+-- through merely preserves the pre-199 behavior of accepting the code.
+diagnosticOrigin :: DiagnosticCode -> DiagnosticOrigin
+diagnosticOrigin diagnosticCode = case diagnosticCode of
+  -- Structural coverage, reachable from `check --coverage-report`.
+  CoverageOpaqueSurface -> CoverageDiagnostic
+  CoverageOpaqueGateExceeded -> CoverageDiagnostic
+  -- Coverage delta, computed only against a previous revision.
+  CoverageOpaqueBoundaryAdded -> DiffDiagnostic
+  -- Generated codec comparison.
+  CodecCompareDifference -> CodecCompareDiagnostic
+  CodecCompareCoverageGap -> CodecCompareDiagnostic
+  CodecCompareInvalidInput -> CodecCompareDiagnostic
+  -- Cross-revision evolution facts.
+  AggFoldSurfaceChanged -> DiffDiagnostic
+  AggGuardTightened -> DiffDiagnostic
+  CompatibilityStrengthened -> DiffDiagnostic
+  ContractDiscriminatorChanged -> DiffDiagnostic
+  ContractEventAdded -> DiffDiagnostic
+  ContractEventRemoved -> DiffDiagnostic
+  ContractFieldChanged -> DiffDiagnostic
+  ContractSchemaVersionBumped -> DiffDiagnostic
+  ContractSchemaVersionDecreased -> DiffDiagnostic
+  ContractTopicAdded -> DiffDiagnostic
+  ContractTopicChanged -> DiffDiagnostic
+  ContractTypeIdDomainChanged -> DiffDiagnostic
+  DeclarationAdded -> DiffDiagnostic
+  DecodePostureChanged -> DiffDiagnostic
+  DedupeIdentityChanged -> DiffDiagnostic
+  DerivedIdentityChanged -> DiffDiagnostic
+  DispatchRetargeted -> DiffDiagnostic
+  EmitMappingChanged -> DiffDiagnostic
+  EnumCtorAdded -> DiffDiagnostic
+  EnumCtorRemoved -> DiffDiagnostic
+  EnumWireSpellingChanged -> DiffDiagnostic
+  EventRetirementAbandoned -> DiffDiagnostic
+  EventUndeprecated -> DiffDiagnostic
+  EvtFieldAddedWithoutBump -> DiffDiagnostic
+  EvtFieldRemovedSameVersion -> DiffDiagnostic
+  EvtFieldTypeChanged -> DiffDiagnostic
+  EvtFieldWireKeyChanged -> DiffDiagnostic
+  EvtRemovedNotDeprecated -> DiffDiagnostic
+  EvtVersionDecreased -> DiffDiagnostic
+  GeneratedHaskellNameChanged -> DiffDiagnostic
+  IdDomainContractChanged -> DiffDiagnostic
+  IdPrefixChanged -> DiffDiagnostic
+  IntakePersistenceChanged -> DiffDiagnostic
+  MappedArmAdded -> DiffDiagnostic
+  MappedArmRemoved -> DiffDiagnostic
+  MappedArmTagChanged -> DiffDiagnostic
+  MappedBindingChanged -> DiffDiagnostic
+  MappedCanonicalTypeChanged -> DiffDiagnostic
+  MappedDeclAdded -> DiffDiagnostic
+  MappedDeclRemoved -> DiffDiagnostic
+  MappedDefaultChanged -> DiffDiagnostic
+  MappedDefaultRemoved -> DiffDiagnostic
+  MappedEnumSpellingChanged -> DiffDiagnostic
+  MappedEnumValueAdded -> DiffDiagnostic
+  MappedEnumValueRemoved -> DiffDiagnostic
+  MappedFieldAddedNoDefault -> DiffDiagnostic
+  MappedFieldAddedWithDefault -> DiffDiagnostic
+  MappedFieldRemoved -> DiffDiagnostic
+  MappedFieldTypeChanged -> DiffDiagnostic
+  MappedFixturesChanged -> DiffDiagnostic
+  MappedHaskellSourceChanged -> DiffDiagnostic
+  MappedInitialChanged -> DiffDiagnostic
+  MappedModeCrossed -> DiffDiagnostic
+  MappedNullabilityChanged -> DiffDiagnostic
+  MappedOpaqueCodecChanged -> DiffDiagnostic
+  MappedPresenceChanged -> DiffDiagnostic
+  MappedRecordConstructorChanged -> DiffDiagnostic
+  MappedUnionEncodingChanged -> DiffDiagnostic
+  MappedWireKeyChanged -> DiffDiagnostic
+  NominalBindingChanged -> DiffDiagnostic
+  NominalCanonicalTypeChanged -> DiffDiagnostic
+  NominalFixturesChanged -> DiffDiagnostic
+  NominalIdDecoderTightened -> DiffDiagnostic
+  NominalInitialChanged -> DiffDiagnostic
+  NominalRepresentationChanged -> DiffDiagnostic
+  OwnershipMoved -> DiffDiagnostic
+  ProcessDecideSurfaceChanged -> DiffDiagnostic
+  ProcessInputChanged -> DiffDiagnostic
+  ProcessTimerPayloadChanged -> DiffDiagnostic
+  ProjectionChanged -> DiffDiagnostic
+  PublisherPolicyChanged -> DiffDiagnostic
+  QueueIdentityChanged -> DiffDiagnostic
+  ReadModelConsistencyWeakened -> DiffDiagnostic
+  ReadModelFeedChanged -> DiffDiagnostic
+  ReadModelShapeChangedWithoutBump -> DiffDiagnostic
+  ReadModelVersionDecreased -> DiffDiagnostic
+  RouterDecideSurfaceChanged -> DiffDiagnostic
+  RouterStableNameChanged -> DiffDiagnostic
+  SourceLanguageDeclarationChanged -> DiffDiagnostic
+  TimerWindowChanged -> DiffDiagnostic
+  VersionBumped -> DiffDiagnostic
+  WireSpecChanged -> DiffDiagnostic
+  WorkflowBodyChanged -> DiffDiagnostic
+  WorkflowContinueSeedChanged -> DiffDiagnostic
+  WorkflowEvolutionGuardAdded -> DiffDiagnostic
+  WorkflowPatchRemoved -> DiffDiagnostic
+  WorkflowShapeChanged -> DiffDiagnostic
+  WorkflowStableNameChanged -> DiffDiagnostic
+  WorkspaceAuthorityChanged -> DiffDiagnostic
+  WqGroupKeyChanged -> DiffDiagnostic
+  WqOrderingChanged -> DiffDiagnostic
+  WqPayloadFieldChanged -> DiffDiagnostic
+  WqProvisionChanged -> DiffDiagnostic
+  _ -> CheckDiagnostic
 
 -- | A line-numbered, structured diagnostic.
 data Diagnostic = Diagnostic
@@ -2307,8 +2443,12 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ contractCoupling
       (False, True) -> "a 'cross-check body' flag"
       (False, False) -> "no enforcement flags"
 
+-- Note: @derive … hole@ is mandatory emit grammar, so a per-emit warning about
+-- it would fire on every emit node in every spec and carry no information. The
+-- fact that an emit generates no module is reported once, per scaffold run, by
+-- the report's inert-node line. See ExecPlan 199.
 validateEmit :: EffectiveLanguageContract -> Spec -> EmitNode -> [Diagnostic]
-validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling ++ deriveWarning
+validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
   where
     el = locLine (emLoc e)
     skipRule =
@@ -2338,15 +2478,6 @@ validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling ++
                ceName event == emrEvent row,
                ceTopic event /= emTopic e
              ]
-    deriveWarning =
-      [ Diagnostic
-          { line = el,
-            severity = Warning,
-            code = EmitDeriveHoleUnrealized,
-            relatedLocations = [],
-            message = "emit '" <> emName e <> "': derive ... hole declarations name hand-owned responsibilities but generate no module or typed signature"
-          }
-      ]
 
 validatePublisher :: EffectiveLanguageContract -> Spec -> PublisherNode -> [Diagnostic]
 validatePublisher languageContract spec p =
