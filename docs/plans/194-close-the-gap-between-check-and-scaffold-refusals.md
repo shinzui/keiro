@@ -48,9 +48,12 @@ changes for any valid spec: this plan changes gates only, never output.
   unrepresentable aggregate field, and missing mapped initial refusals. The focused `empty`
   match passes 7 examples, the sampled-lowering match passes 1 example, and the complete suite
   passes 578 examples with zero failures.
-- [ ] Milestone 2: factor the one shared planning-gate pipeline consumed by both
-  scaffold planners and both `check` paths, map planner refusals to located
-  diagnostics with new appended codes, and pin the gate order with a test.
+- [x] (2026-08-05 09:40 PDT) Milestone 2: factor the one shared planning-gate pipeline
+  consumed by both scaffold planners and both `check` paths, map planner refusals to
+  located diagnostics with five new appended codes, and pin the gate order with a test.
+  Focused `empty` and `scaffold gates` matches pass 7 and 11 examples respectively;
+  the live CLI collision assertion exits 1 with `GeneratedPathCollision`; the complete
+  suite passes 581 examples with zero failures.
 - [ ] Milestone 3: update `docs/user/typed-spec-toolchain.md`, amend the ADR 0004
   inventory, write both changelogs, and pass the full closure (package tests, repo
   build, policy scripts, strict OKF ADR validation, diff hygiene).
@@ -92,6 +95,16 @@ changes for any valid spec: this plan changes gates only, never output.
   Evidence: the first complete run reported 578 examples and exactly five failures headed by
   `AggregateEmpty`. Each source now declares the smallest valid command/event/transition surface
   while preserving its original tested fact; the second complete run passes all 578 examples.
+
+- Observation: the case-fold regression necessarily raises the pre-existing
+  `GeneratedOccurrenceCollision` validation error before planning because occurrence identity and
+  generated module identity use the same case-folded node name. The workspace checker already
+  treats that one error as nonblocking for collision planning; applying a literal "zero errors"
+  guard to the new source checker hid the stronger whole-path diagnostics.
+  Evidence: the first focused gate run returned no `GeneratedPathCollision`; after giving
+  `checkServiceDiagnostics` the same `GeneratedOccurrenceCollision` exception as
+  `blocksCollisionPlanning`, it reports nine path-specific diagnostics (one for each colliding
+  generated module path), and the focused CLI assertion exits 1 with the expected code.
 
 
 ## Decision Log
@@ -153,19 +166,24 @@ changes for any valid spec: this plan changes gates only, never output.
   because ordering here affects reporting only.
   Date: 2026-08-04
 
-- Decision: `check` runs the planning gates only after `validateService` reports zero
-  errors, and single-file `check` evaluates them under the spec-declared context
-  (`mkContext Nothing False spec`) with no runtime package and no goldens.
+- Decision: `check` runs the planning gates only after `validateService` reports no
+  blocking errors. `GeneratedOccurrenceCollision` is the sole nonblocking error so the
+  planner can report the stronger whole-path collision with every claimant; this is the
+  existing workspace exception. Single-file `check` evaluates the gates under the
+  spec-declared context (`mkContext Nothing False spec`) with no runtime package and no
+  goldens.
   Rationale: the workspace path already guards planner consultation behind
-  validation (`blocksCollisionPlanning` in `Keiro.Dsl.Workspace`) because the planner
-  is only designed for validated graphs. Scaffold-time CLI overrides
+  validation (`blocksCollisionPlanning` in `Keiro.Dsl.Workspace`) and already excludes
+  `GeneratedOccurrenceCollision` from the blocking set. Every other validation error,
+  including the new empty-node diagnostics, suppresses planning because the planner is
+  only designed for validated graphs. Scaffold-time CLI overrides
   (`--module-root`, `--collocate`, `--runtime-package`, goldens) can change module
   placement, but scaffold re-runs the identical shared pipeline under its own
   context, so an override-induced collision still refuses before any write; `check`
   states what the spec itself declares, exactly as workspace `check` derives its
   planner context from the manifest. Adding `check`-side flags is EP-193's surface
   and out of scope here.
-  Date: 2026-08-04
+  Date: 2026-08-05
 
 - Decision: refusals that a validated spec should never be able to cause — firewall
   breaches, generated-name audit failures, fold-surface resolution failures, residual
@@ -472,15 +490,16 @@ Third, wire `check`. Add to `ScaffoldRun.hs` the semantic core both the CLI and 
 use, so tests exercise the real check path:
 
 ```haskell
--- | validateService plus, when validation is error-free, the shared
--- planning gates under the given context. This is the complete semantic
--- content of `keiro-dsl check`.
+-- | validateService plus, when validation has no blocking error, the shared
+-- planning gates under the given context. GeneratedOccurrenceCollision is
+-- nonblocking so whole-path collision evidence remains available. This is
+-- the complete semantic content of `keiro-dsl check`.
 checkServiceDiagnostics :: Maybe RuntimePackageName -> Context -> CheckedService -> [Diagnostic]
 ```
 
-It returns `validateService service` unchanged when any error is present (the
-planner only sees validated graphs — the guard workspace `check` already applies via
-`blocksCollisionPlanning`), and otherwise appends
+It returns `validateService service` unchanged when any blocking error is present (the
+planner only sees validated graphs — with the same `GeneratedOccurrenceCollision`
+exception the workspace guard already applies via `blocksCollisionPlanning`), and otherwise appends
 `planningRefusalDiagnostics` of the pipeline run with no goldens. In `app/Main.hs`,
 the single-file `run (Check ...)` clause replaces its `validateService` call with
 `checkServiceDiagnostics Nothing (mkContext Nothing False spec) service`, keeping the

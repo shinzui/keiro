@@ -399,6 +399,13 @@ data DiagnosticCode
     -- the owning declaration before planning begins.
     AggregateEmpty
   | ContractEmpty
+  | -- ExecPlan 194: pure scaffold-planning gates share check's located,
+    -- machine-readable diagnostic pipeline.
+    GeneratedPathCollision
+  | GeneratedImportCycle
+  | BehaviorDerivationInvalid
+  | ConformanceFactKeyCollision
+  | GeneratedPlanningInvariantViolation
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line-numbered, structured diagnostic.

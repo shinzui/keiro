@@ -60,7 +60,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -3134,14 +3134,17 @@ main = hspec $ do
           let emptyAggregate = aggregate {aggCommands = [], aggEvents = [], aggTransitions = []}
               emptySpec = spec {specNodes = [NAggregate emptyAggregate]}
               expectedLine = unLoc (aggLoc aggregate)
+              planningCodes = [GeneratedPathCollision, GeneratedImportCycle, BehaviorDerivationInvalid, ConformanceFactKeyCollision, GeneratedPlanningInvariantViolation]
               expectedMessage =
                 "aggregate 'Reservation' declares no commands, no events, and no transitions; scaffold cannot lower an empty aggregate -- declare at least one command, one event, and one transition"
-          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service ->
+          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service -> do
+            let diagnostics = checkServiceDiagnostics Nothing (defaultContext (specContext emptySpec)) service
             [ (severity diagnostic, line diagnostic, message diagnostic)
-            | diagnostic <- validateService service,
-              code diagnostic == AggregateEmpty
-            ]
+              | diagnostic <- diagnostics,
+                code diagnostic == AggregateEmpty
+              ]
               `shouldBe` [(Error, expectedLine, expectedMessage)]
+            filter (`elem` planningCodes) (map code diagnostics) `shouldBe` []
           scaffoldRefusals emptySpec `shouldSatisfy` any (T.isPrefixOf "AggregateEmpty:")
         [] -> expectationFailure "reservation fixture has no aggregate"
     it "reports empty contracts at their declaration under legacy and stable contracts" $ do
@@ -3151,14 +3154,17 @@ main = hspec $ do
           let emptyContract = contract {ctrEvents = []}
               emptySpec = spec {specNodes = [NContract emptyContract]}
               expectedLine = unLoc (ctrLoc contract)
+              planningCodes = [GeneratedPathCollision, GeneratedImportCycle, BehaviorDerivationInvalid, ConformanceFactKeyCollision, GeneratedPlanningInvariantViolation]
               expectedMessage =
                 "contract 'emergency' declares no events; scaffold cannot lower an empty contract -- declare at least one event"
-          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service ->
+          forM_ [legacyCheckedService emptySpec, stableCheckedService emptySpec] $ \service -> do
+            let diagnostics = checkServiceDiagnostics Nothing (defaultContext (specContext emptySpec)) service
             [ (severity diagnostic, line diagnostic, message diagnostic)
-            | diagnostic <- validateService service,
-              code diagnostic == ContractEmpty
-            ]
+              | diagnostic <- diagnostics,
+                code diagnostic == ContractEmpty
+              ]
               `shouldBe` [(Error, expectedLine, expectedMessage)]
+            filter (`elem` planningCodes) (map code diagnostics) `shouldBe` []
           scaffoldRefusals emptySpec `shouldSatisfy` any (T.isPrefixOf "ContractEmpty:")
         [] -> expectationFailure "contract fixture has no contract"
     it "keeps a check-time error counterpart for every sampled lowering refusal class" $ do
@@ -5897,6 +5903,72 @@ main = hspec $ do
         `shouldContain` ["id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text"]
 
   describe "scaffold gates" $ do
+    it "reports case-folded generated paths through the complete check diagnostics" $ do
+      spec <- specOf "test/fixtures/reservation.keiro"
+      case [aggregate | NAggregate aggregate <- specNodes spec] of
+        aggregate : _ -> do
+          let caseVariant =
+                spec
+                  { specNodes =
+                      [ NAggregate aggregate,
+                        NAggregate aggregate {aggName = T.toUpper (aggName aggregate)}
+                      ]
+                  }
+              diagnostics =
+                checkServiceDiagnostics
+                  Nothing
+                  (defaultContext (specContext caseVariant))
+                  (legacyCheckedService caseVariant)
+          map code diagnostics `shouldContain` [GeneratedPathCollision]
+          case [ diagnostic
+               | diagnostic <- diagnostics,
+                 code diagnostic == GeneratedPathCollision,
+                 "Domain.hs" `T.isInfixOf` message diagnostic
+               ] of
+            [diagnostic] -> do
+              line diagnostic `shouldBe` unLoc (aggLoc aggregate)
+              relatedLocations diagnostic `shouldSatisfy` (not . null)
+              message diagnostic `shouldSatisfy` T.isInfixOf "case-insensitive filesystem"
+            found -> expectationFailure ("expected one generated-path diagnostic, got " <> show found)
+          withTempDirectory "keiro-dsl-check-path-collision" $ \root -> do
+            let sourcePath = root </> "collision.keiro"
+            version <- maybe (expectationFailure "language version 4 missing" >> fail "unreachable") pure (languageVersion 4)
+            TIO.writeFile sourcePath (renderSource (ParsedSource (DeclaredLanguage version noLoc) caseVariant))
+            (exitCode, out, err) <- runKeiroDsl ["check", sourcePath]
+            exitCode `shouldBe` ExitFailure 1
+            out `shouldBe` ""
+            err `shouldContain` "error[GeneratedPathCollision]"
+        [] -> expectationFailure "reservation fixture has no aggregate"
+    it "uses lowering before module planning in both scaffold planners" $ do
+      spec <- specOf "test/fixtures/emit.keiro"
+      case [contract | NContract contract <- specNodes spec] of
+        contract : _ -> do
+          let defective =
+                mapPublisher
+                  (\publisher -> publisher {pubBackoff = BackoffSpec "exponential" "2s" Nothing Nothing})
+                  spec
+                    { specNodes = NContract contract : specNodes spec
+                    }
+              ctx = defaultContext (specContext defective)
+              workspace = oneMemberWorkspace "emit.keiro" defective
+          case (planScaffold ctx defective, planWorkspaceScaffold "goldens" ctx workspace) of
+            (Left (LoweringRefusal singleReasons : _), Left (LoweringRefusal workspaceReasons : _)) ->
+              workspaceReasons `shouldBe` singleReasons
+            results -> expectationFailure ("expected lowering first from both planners, got " <> show results)
+        [] -> expectationFailure "emit fixture has no contract"
+    it "maps import cycles and planner invariants into stable check codes" $ do
+      planningRefusalDiagnostics [ImportCycle ["A", "B", "A"]]
+        `shouldSatisfy` any ((== GeneratedImportCycle) . code)
+      planningRefusalDiagnostics [BehaviorRefusal [Behavior.DuplicateBehaviorIdentity "duplicate" [Loc 9]]]
+        `shouldSatisfy` any (\diagnostic -> code diagnostic == BehaviorDerivationInvalid && line diagnostic == 9)
+      planningRefusalDiagnostics [DuplicateConformanceFactKeys [DuplicateServiceFactKey "duplicate"]]
+        `shouldSatisfy` any ((== ConformanceFactKeyCollision) . code)
+      planningRefusalDiagnostics [SemanticContractMismatch "test mismatch"]
+        `shouldSatisfy` any ((== GeneratedPlanningInvariantViolation) . code)
+      spec <- specOf "test/fixtures/consumer-types.keiro"
+      let cyclic = spec {specMapped = map moveArtifactBindingIntoGenerated (specMapped spec)}
+      checkServiceDiagnostics Nothing (defaultContext (specContext cyclic)) (stableCheckedService cyclic)
+        `shouldSatisfy` any ((== GeneratedImportCycle) . code)
     it "refuses duplicate and case-folded module paths with both origins" $ do
       spec <- specOf "test/fixtures/reservation.keiro"
       case [aggregate | NAggregate aggregate <- specNodes spec] of

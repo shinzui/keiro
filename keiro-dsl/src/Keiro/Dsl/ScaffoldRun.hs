@@ -30,6 +30,10 @@ module Keiro.Dsl.ScaffoldRun
 
     --
     -- $shared
+    planningGatePipeline,
+    planningRefusalDiagnostics,
+    checkServiceDiagnostics,
+    originLine,
     pureRefusals,
     auditGeneratedHaskell,
     missingGeneratedBanners,
@@ -55,6 +59,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.ConformancePackage
   ( ConformancePackageFailure,
     ConformancePackageReport,
@@ -68,7 +73,7 @@ import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
-import Keiro.Dsl.Grammar (Node (..), Spec (..))
+import Keiro.Dsl.Grammar (Loc (..), Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
@@ -84,8 +89,10 @@ import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.FilePath (takeDirectory, (</>))
+import Text.Read (readMaybe)
 
 -- $shared
 -- These are the pieces whole-workspace scaffolding reuses verbatim rather than
@@ -222,22 +229,134 @@ planServiceScaffoldWithRuntimePackage = planServiceScaffoldWithRuntimePackageAnd
 
 planServiceScaffoldWithRuntimePackageAndGoldens :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
 planServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage ctx service =
+  planningGatePipeline ctx service modulePlan (Right ())
+  where
+    facadeModules = case runtimePackage of
+      Nothing -> Right []
+      Just _ -> fmap pure (serviceHarnessModule ctx service)
+    modulePlan =
+      case facadeModules of
+        Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+        Right facades ->
+          Right $
+            stampGeneratedModules
+              (checkedLanguageContract service)
+              (scaffoldServiceModulesWithGoldens goldens ctx service <> facades)
+
+-- | The one pure scaffold-planning gate sequence. Both scaffold planners and
+-- both check paths consume this function, so the first reported refusal cannot
+-- drift by input shape.
+planningGatePipeline ::
+  Context ->
+  CheckedService ->
+  Either [Refusal] [ScaffoldModule] ->
+  Either [Refusal] () ->
+  Either [Refusal] [ScaffoldModule]
+planningGatePipeline ctx service modulePlan packagePlan =
   case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes spec] of
     Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
     Right _ -> case scaffoldRefusals spec of
       lowering@(_ : _) -> Left [LoweringRefusal lowering]
-      [] -> case facadeModules of
-        Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
-        Right facades ->
-          let modules = stampGeneratedModules (checkedLanguageContract service) (scaffoldServiceModulesWithGoldens goldens ctx service <> facades)
-           in case pureRefusals ctx spec modules of
-                [] -> Right modules
-                refusals -> Left refusals
+      [] -> case modulePlan of
+        Left refusals -> Left refusals
+        Right modules -> case packagePlan of
+          Left refusals -> Left refusals
+          Right () -> case pureRefusals ctx spec modules of
+            [] -> Right modules
+            refusals -> Left refusals
   where
     spec = checkedSpec service
-    facadeModules = case runtimePackage of
-      Nothing -> Right []
-      Just _ -> fmap pure (serviceHarnessModule ctx service)
+
+-- | Validate a checked service, then run the shared planning gates unless an
+-- error makes module generation unsound. 'GeneratedOccurrenceCollision' is the
+-- deliberate exception: the workspace path already plans through it so the
+-- stronger whole-path collision can cite every claimant. Existing diagnostics
+-- retain their order and planning diagnostics follow them.
+checkServiceDiagnostics :: Maybe RuntimePackageName -> Context -> CheckedService -> [Diagnostic]
+checkServiceDiagnostics runtimePackage ctx service
+  | any blocksPlanning validationDiagnostics = validationDiagnostics
+  | otherwise =
+      validationDiagnostics
+        <> case planServiceScaffoldWithRuntimePackage runtimePackage ctx service of
+          Right _ -> []
+          Left refusals -> planningRefusalDiagnostics refusals
+  where
+    validationDiagnostics = validateService service
+    blocksPlanning diagnostic =
+      severity diagnostic == Error
+        && code diagnostic /= GeneratedOccurrenceCollision
+
+-- | Present pure planning refusals through check's stable located diagnostic
+-- vocabulary. Planner-invariant failures retain the detailed scaffold refusal
+-- text in their message while receiving one machine code.
+planningRefusalDiagnostics :: [Refusal] -> [Diagnostic]
+planningRefusalDiagnostics = concatMap diagnosticsFor
+  where
+    diagnosticsFor (PathCollision path origins) = [pathCollisionDiagnostic path origins]
+    diagnosticsFor (ImportCycle path) =
+      [ planningError 1 GeneratedImportCycle $
+          "generated/consumer import cycle "
+            <> T.intercalate " -> " path
+            <> "; keep bindings in a leaf module that imports only Structural.Shape.* and Keiro.Codec.Structural"
+      ]
+    diagnosticsFor (BehaviorRefusal errors) =
+      [ planningError (behaviorErrorLine behaviorError) BehaviorDerivationInvalid $
+          "behavior obligations cannot be derived soundly: " <> T.pack (show behaviorError)
+      | behaviorError <- errors
+      ]
+    diagnosticsFor (DuplicateConformanceFactKeys duplicates) =
+      [ planningError 1 ConformanceFactKeyCollision $
+          "normalized service conformance fact key '"
+            <> duplicateServiceFactKey duplicate
+            <> "' is produced more than once"
+      | duplicate <- duplicates
+      ]
+    diagnosticsFor refusal =
+      [ planningError 1 GeneratedPlanningInvariantViolation $
+          "validated service failed an internal scaffold-planning invariant: "
+            <> T.intercalate " | " (renderRefusals [refusal])
+      ]
+
+    pathCollisionDiagnostic path origins =
+      Diagnostic
+        { line = primaryLine,
+          severity = Error,
+          code = GeneratedPathCollision,
+          relatedLocations =
+            [ (claimLine, "claimed here by " <> claimOrigin)
+            | (claimLine, claimOrigin) <- remainingClaims
+            ],
+          message =
+            "generated module path '"
+              <> T.pack path
+              <> "' is claimed more than once; on a case-insensitive filesystem these are one file; claimants: "
+              <> T.intercalate "; " origins
+        }
+      where
+        orderedClaims = reverse (sortOn fst [(claimLine, claimOrigin) | claimOrigin <- origins, Just claimLine <- [originLine claimOrigin]])
+        (primaryLine, remainingClaims) = case orderedClaims of
+          (claimLine, _) : rest -> (claimLine, rest)
+          [] -> (1, [])
+
+    behaviorErrorLine (Behavior.DuplicateBehaviorIdentity _ locations) = maximum (1 : map unLoc locations)
+    behaviorErrorLine _ = 1
+
+    planningError diagnosticLine diagnosticCode diagnosticMessage =
+      Diagnostic
+        { line = diagnosticLine,
+          severity = Error,
+          code = diagnosticCode,
+          relatedLocations = [],
+          message = diagnosticMessage
+        }
+
+-- | Recover the source line embedded in a generated module's origin text,
+-- which scaffold formats as @<kind> <name> (line N)@.
+originLine :: Text -> Maybe Int
+originLine originText = do
+  withoutClose <- T.stripSuffix ")" originText
+  let (before, after) = T.breakOnEnd " (line " withoutClose
+  if T.null before then Nothing else readMaybe (T.unpack after)
 
 -- | Run every pure refusal gate. A successful result is the exact write set;
 -- a refusal has no write set and therefore cannot be accidentally executed.

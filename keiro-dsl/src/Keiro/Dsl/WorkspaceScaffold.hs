@@ -67,7 +67,6 @@ import Keiro.Dsl.ConformancePackage
     renderConformancePackageReport,
   )
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
-import Keiro.Dsl.FoldFingerprint (aggregateFoldSurfaceForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -94,9 +93,9 @@ import Keiro.Dsl.ScaffoldRun
     missingGeneratedBanners,
     newBindingObligations,
     obligationKindLabel,
+    planningGatePipeline,
     preflightSourceMoves,
     preparedSourceMove,
-    pureRefusals,
     renderMappingIdentity,
     staleAgainst,
   )
@@ -170,14 +169,14 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens ::
   Context ->
   WorkspaceSpec ->
   Either [Refusal] WorkspacePlan
-planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenRoot ctx workspace = case workspaceModules goldens runtimePackage ctx workspace of
-  Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
-  Right tagged -> case packagePlan of
-    Left failures -> Left (map ConformancePackageRefusal failures)
-    Right plannedPackage -> case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes merged] of
-      Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
-      Right _ -> case pureRefusals ctx merged (map fst tagged) of
-        [] ->
+planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenRoot ctx workspace =
+  case planningGatePipeline ctx service modulePlan packageGate of
+    Left refusals -> Left refusals
+    Right _ -> case taggedModules of
+      Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+      Right tagged -> case packagePlan of
+        Left failures -> Left (map ConformancePackageRefusal failures)
+        Right plannedPackage ->
           Right
             WorkspacePlan
               { wpWorkspace = workspace,
@@ -188,14 +187,19 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenR
                 wpGoldenRoot = goldenRoot,
                 wpModules = tagged
               }
-        refusals -> Left refusals
   where
     service = checkedWorkspace workspace
-    merged = checkedSpec service
+    taggedModules = workspaceModules goldens runtimePackage ctx workspace
+    modulePlan = case taggedModules of
+      Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+      Right tagged -> Right (map fst tagged)
     packagePlan =
       traverse
         (\packageName -> planConformancePackage (WorkspaceConformanceService (wsService workspace)) packageName (serviceConformanceModuleName ctx) service)
         runtimePackage
+    packageGate = case packagePlan of
+      Left failures -> Left (map ConformancePackageRefusal failures)
+      Right _ -> Right ()
 
 -- | The tagged module set, in exactly the order
 -- 'Keiro.Dsl.ScaffoldRun.scaffoldModulesWithGoldens' produces for the merged spec.

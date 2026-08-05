@@ -27,7 +27,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (checkServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), diagnosticCodeText, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
@@ -436,7 +436,7 @@ run (Check fp options) = do
       let service = checkedSource parsedSource
           spec = checkedSpec service
           floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
-          diags = floorDiags <> validateService service
+          diags = floorDiags <> checkServiceDiagnostics Nothing (mkContext Nothing False spec) service
           deniedWarningCodes = deniedSourceWarningCodes options diags
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags

@@ -104,7 +104,7 @@ import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), Source
 import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSource, renderParseFailure)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
-import Keiro.Dsl.ScaffoldRun (Refusal (..), planServiceScaffoldWithRuntimePackageAndGoldens)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateService)
 import System.Directory (doesFileExist)
@@ -112,7 +112,6 @@ import System.FilePath (takeBaseName, takeDirectory, takeFileName, (</>))
 import Text.Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char (char, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
-import Text.Read (readMaybe)
 
 -- | A parsed workspace manifest. Members are held in canonical order
 -- (codepoint-sorted normalized paths), so two manifests that list the same
@@ -1065,7 +1064,25 @@ composeWorkspace manifestPath manifest supplied
       | any blocksCollisionPlanning (validateService (checkedWorkspace composed)) = []
       | otherwise = case planServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) plannerContext (checkedWorkspace composed) of
           Right _ -> []
-          Left plannerRefusals -> concatMap crossMemberCollision plannerRefusals
+          Left plannerRefusals -> concatMap planningRefusal plannerRefusals
+    planningRefusal refusal = case crossMemberCollision refusal of
+      [] -> map liftPlanningDiagnostic (planningRefusalDiagnostics [refusal])
+      workspaceDiagnostics -> workspaceDiagnostics
+    liftPlanningDiagnostic diagnostic =
+      WorkspaceDiagnostic
+        { wdLocations =
+            planningLocation (line diagnostic) ""
+              :| [ planningLocation noteLine note
+                 | (noteLine, note) <- relatedLocations diagnostic
+                 ],
+          wdSeverity = severity diagnostic,
+          wdCode = code diagnostic,
+          wdSourceLanguageCause = Nothing,
+          wdMessage = message diagnostic
+        }
+    planningLocation mergedLine role = case lookupLine mergedLine of
+      Just (owner, original) -> WorkspaceLocation (WorkspaceMemberFile owner) original role
+      Nothing -> WorkspaceLocation WorkspaceManifestFile (max 1 mergedLine) role
     crossMemberCollision (PathCollision path origins) =
       [ WorkspaceDiagnostic
           { wdLocations =
@@ -1186,17 +1203,6 @@ clauseLine clauseKeyword source =
       (leading : _) <- [T.words (T.takeWhile (/= '#') raw)],
       leading == clauseKeyword
     ]
-
--- | The merged-spec line embedded in a scaffold module's origin string, which
--- "Keiro.Dsl.Scaffold" formats as @\<kind\> \<name\> (line N)@. Context-level
--- modules carry no line and yield 'Nothing', which is correct: they belong to the
--- workspace, not to any one member, so they can never be a cross-member
--- collision.
-originLine :: Text -> Maybe Int
-originLine origin = do
-  withoutClose <- T.stripSuffix ")" origin
-  let (before, after) = T.breakOnEnd " (line " withoutClose
-  if T.null before then Nothing else readMaybe (T.unpack after)
 
 --------------------------------------------------------------------------------
 -- Loading
