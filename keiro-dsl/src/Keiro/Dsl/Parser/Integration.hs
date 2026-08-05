@@ -7,15 +7,17 @@ module Keiro.Dsl.Parser.Integration
   )
 where
 
+import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (LanguageFeature (FieldAliasSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
 -- Integration contract (EP-4)
 --------------------------------------------------------------------------------
 
-pContract :: P ContractNode
-pContract = do
+pContract :: FrontendContext -> P ContractNode
+pContract context = do
   loc <- getLoc
   keyword "contract"
   nm <- ident
@@ -50,11 +52,14 @@ pContract = do
       fs <- braces (many pContractField)
       pure ContractEvent {ceName = nm, ceTopic = topicAlias, ceFields = fs}
     pContractField = do
+      loc <- getLoc
       n <- ident
+      selector <- optionalLanguageFeature context FieldAliasSyntax "haskell" (try (keyword "haskell" *> ident))
+      wireKey <- optionalLanguageFeature context FieldAliasSyntax "as" (try (keyword "as" *> stringLit))
       _ <- symbol ":"
       ty <- pContractType
       _ <- optional (symbol ";")
-      pure ContractField {cfName = n, cfType = ty}
+      pure ContractField {cfName = n, cfSelector = selector, cfWireKey = wireKey, cfType = ty, cfLoc = loc}
     pContractType =
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),

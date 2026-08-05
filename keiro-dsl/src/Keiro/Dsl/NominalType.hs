@@ -38,6 +38,7 @@ import Data.Text qualified as T
 import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName (haskellKeywords)
 import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile)
@@ -421,33 +422,3 @@ asciiLetter c = asciiUpper c || asciiLower c
 asciiAlphaNum c = asciiLetter c || (isAscii c && isDigit c)
 asciiAlphaNumOrUnderscore c = asciiAlphaNum c || c == '_'
 asciiControl c = ord c < 32 || ord c == 127
-
-haskellKeywords :: Set.Set Text
-haskellKeywords =
-  Set.fromList
-    [ "case",
-      "class",
-      "data",
-      "default",
-      "deriving",
-      "do",
-      "else",
-      "foreign",
-      "if",
-      "import",
-      "in",
-      "infix",
-      "infixl",
-      "infixr",
-      "instance",
-      "let",
-      "module",
-      "newtype",
-      "of",
-      "then",
-      "type",
-      "where",
-      "mdo",
-      "rec",
-      "proc"
-    ]

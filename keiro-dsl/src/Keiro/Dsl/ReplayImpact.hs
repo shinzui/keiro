@@ -29,6 +29,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalExpr, canonicalTransition)
+import Keiro.Dsl.FieldIdentity (ResolvedFieldIdentity (..), resolveAggregateFieldIdentity)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
@@ -137,13 +138,19 @@ decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate =
       | aggWire oldAggregate == aggWire newAggregate = Set.empty
       | otherwise = Set.fromList (evName <$> aggEvents oldAggregate)
 
-eventDecodeSurface :: Event -> (EventBody, Int, Maybe (Int, Hole))
-eventDecodeSurface event =
-  (evBody event, evVersion event, evUpcastFrom event)
+eventDecodeSurface :: Aggregate -> Event -> (Int, Maybe (Int, Hole), [(Name, Text, Maybe TypeExpr)])
+eventDecodeSurface aggregate event =
+  ( evVersion event,
+    evUpcastFrom event,
+    [ (fieldDslName identity, fieldWireKey identity, aggregateFieldType field)
+    | field <- eventFields aggregate event,
+      let identity = resolveAggregateFieldIdentity field
+    ]
+  )
 
-eventSurface :: Spec -> Aggregate -> Event -> ((EventBody, Int, Maybe (Int, Hole)), [(Name, Text)])
+eventSurface :: Spec -> Aggregate -> Event -> ((Int, Maybe (Int, Hole), [(Name, Text, Maybe TypeExpr)]), [(Name, Text)])
 eventSurface spec aggregate event =
-  (eventDecodeSurface event, mappedFieldSurface spec aggregate event)
+  (eventDecodeSurface aggregate event, mappedFieldSurface spec aggregate event)
 
 mappedFieldSurface :: Spec -> Aggregate -> Event -> [(Name, Text)]
 mappedFieldSurface spec aggregate event = mapped <> nominal

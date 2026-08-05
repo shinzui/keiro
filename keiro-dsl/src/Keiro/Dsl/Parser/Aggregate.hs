@@ -153,8 +153,17 @@ pAggregateField :: FrontendContext -> P AggregateField
 pAggregateField context = do
   loc <- getLoc
   n <- ident
+  selector <- optionalLanguageFeature context FieldAliasSyntax "haskell" (try (keyword "haskell" *> ident))
+  wireKey <- optionalLanguageFeature context FieldAliasSyntax "as" (try (keyword "as" *> stringLit))
   mty <- optional (symbol ":" *> pMappedTypeExpr context)
-  pure AggregateField {aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
+  pure
+    AggregateField
+      { aggregateFieldName = n,
+        aggregateFieldSelector = selector,
+        aggregateFieldWireKey = wireKey,
+        aggregateFieldType = mty,
+        aggregateFieldLoc = loc
+      }
 
 pEvent :: FrontendContext -> P (Event, [Located SurfaceElement])
 pEvent context = do

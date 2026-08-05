@@ -318,20 +318,20 @@ asciiToLower character
   | asciiUpper character = toLower character
   | otherwise = character
 
--- Haskell 2010 reserved identifiers plus keywords introduced by extensions
--- enabled or accepted by keiro-dsl generated modules.
+-- | Words GHC rejects as term-level identifiers under the generated manifest
+-- contract (GHC2024 plus the closed local-extension set in ADR 0019). Contextual
+-- words are deliberately absent; widening this refusal set requires compile
+-- evidence against that exact contract.
 haskellKeywords :: Set Text
 haskellKeywords =
   Set.fromList
-    [ "as",
-      "case",
+    [ "case",
       "class",
       "data",
       "default",
       "deriving",
       "do",
       "else",
-      "family",
       "foreign",
       "forall",
       "if",
@@ -342,19 +342,10 @@ haskellKeywords =
       "infixr",
       "instance",
       "let",
-      "mdo",
       "module",
       "newtype",
       "of",
-      "proc",
-      "qualified",
-      "rec",
-      "safe",
-      "signature",
-      "stock",
       "then",
       "type",
-      "unsafe",
-      "via",
       "where"
     ]

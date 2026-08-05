@@ -26,6 +26,16 @@ main = hspec $ do
       deriveHaskellName LogicalIdentifier (logicalSite "Module")
         `shouldBe` Left (ReservedGeneratedOccurrence (logicalSite "Module") "module")
 
+    it "admits contextual words accepted by the generated-language contract" $
+      mapM_
+        (\word -> checkedLowerOccurrence (logicalSite word) word `shouldSatisfy` isRight)
+        contextualWords
+
+    it "refuses every term-level word rejected by the generated-language contract" $
+      mapM_
+        (\word -> checkedLowerOccurrence (logicalSite word) word `shouldBe` Left (ReservedGeneratedOccurrence (logicalSite word) word))
+        reservedWords
+
     it "checks explicit consumer names without recasing them" $ do
       fmap renderModuleName (checkedModuleName explicitSite "Consumer.Legacy_name.Types")
         `shouldBe` Right "Consumer.Legacy_name.Types"
@@ -73,6 +83,41 @@ isLeft :: Either a b -> Bool
 isLeft = \case
   Left _ -> True
   Right _ -> False
+
+isRight :: Either a b -> Bool
+isRight = \case
+  Left _ -> False
+  Right _ -> True
+
+contextualWords :: [Text]
+contextualWords = ["as", "family", "mdo", "proc", "qualified", "rec", "safe", "signature", "stock", "unsafe", "via"]
+
+reservedWords :: [Text]
+reservedWords =
+  [ "case",
+    "class",
+    "data",
+    "default",
+    "deriving",
+    "do",
+    "else",
+    "foreign",
+    "forall",
+    "if",
+    "import",
+    "in",
+    "infix",
+    "infixl",
+    "infixr",
+    "instance",
+    "let",
+    "module",
+    "newtype",
+    "of",
+    "then",
+    "type",
+    "where"
+  ]
 
 logicalSite :: Text -> NameSite
 logicalSite raw = NameSite GeneratedTypeSite raw ("owner:" <> raw) 1

@@ -35,6 +35,7 @@ import Data.Word (Word64)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Expression
+import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
@@ -374,6 +375,12 @@ data DiagnosticCode
   | -- ExecPlan 190: an unchanged semantic/external declaration now presents a
     -- different generated Haskell occurrence.
     GeneratedHaskellNameChanged
+  | -- ExecPlan 192: resolved field wire identities are checked before lowering.
+    FieldWireKeyCollision
+  | FieldWireKeyInvalid
+  | -- ExecPlan 192: changing an aggregate event field's resolved wire key
+    -- changes the persisted event decode surface.
+    EvtFieldWireKeyChanged
   deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -1141,7 +1148,7 @@ validateNames spec =
       NContract contract ->
         pascalizedNodeName "contract" (ctrName contract) (ctrLoc contract)
           ++ concatMap
-            (\event -> constructorName "contract event name" (ceName event) (ctrLoc contract) ++ concatMap (contractFieldName contract) (ceFields event))
+            (\event -> constructorName "contract event name" (ceName event) (ctrLoc contract) ++ concatMap contractFieldName (ceFields event))
             (ctrEvents contract)
       NIntake intake -> pascalizedNodeName "intake" (inkName intake) (inkLoc intake)
       NEmit emitNode -> pascalizedNodeName "emit" (emName emitNode) (emLoc emitNode)
@@ -1167,11 +1174,11 @@ validateNames spec =
       where
         commandNames command =
           constructorName "command name" (cmdName command) (cmdLoc command)
-            ++ concatMap (\field -> fieldNameRule "command field" (aggregateFieldName field) (aggregateFieldLoc field)) (cmdFields command)
+            ++ concatMap (aggregateFieldNameRule "command field") (cmdFields command)
         eventNames event =
           constructorName "event name" (evName event) (evLoc event)
             ++ case evBody event of
-              EventFields fields -> concatMap (\field -> fieldNameRule "event field" (aggregateFieldName field) (aggregateFieldLoc field)) fields
+              EventFields fields -> concatMap (aggregateFieldNameRule "event field") fields
               EventFromCommand _ -> []
 
     processNames process =
@@ -1200,7 +1207,30 @@ validateNames spec =
         dispatch = rtDispatch router
 
     bindingName category anchor binding = fieldNameRule category (fbName binding) anchor
-    contractFieldName contract field = fieldNameRule "contract field" (cfName field) (ctrLoc contract)
+    contractFieldName = contractFieldNameRule "contract field"
+
+    aggregateFieldNameRule category field =
+      case aggregateFieldSelector field of
+        Nothing -> fieldNameRule category (aggregateFieldName field) (aggregateFieldLoc field)
+        Just selector -> explicitFieldSelectorRule category (aggregateFieldName field) selector (aggregateFieldLoc field)
+
+    contractFieldNameRule category field =
+      case cfSelector field of
+        Nothing -> fieldNameRule category (cfName field) (cfLoc field)
+        Just selector -> explicitFieldSelectorRule category (cfName field) selector (cfLoc field)
+
+    explicitFieldSelectorRule category dslName selector anchor =
+      case HaskellName.checkedLowerOccurrence site selector of
+        Right _ -> []
+        Left nameError -> [nameErrorDiagnostic (category <> " selector") nameError]
+      where
+        site =
+          HaskellName.NameSite
+            { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
+              HaskellName.siteLogicalName = selector,
+              HaskellName.siteOwner = category <> ":" <> dslName,
+              HaskellName.siteLine = locLine anchor
+            }
 
     constructorName category name anchor = checkedLogicalName HaskellName.GeneratedTypeSite category name anchor
 
@@ -1241,9 +1271,14 @@ validateNames spec =
 
     normalizedCollisions = map collisionDiagnostic (HaskellName.detectNameCollisions collisionOccurrences)
 
-    collisionOccurrences = nodeModuleOccurrences <> sharedTypeOccurrences <> concatMap aggregateFieldOccurrences aggregates
+    collisionOccurrences =
+      nodeModuleOccurrences
+        <> sharedTypeOccurrences
+        <> concatMap aggregateFieldOccurrences aggregates
+        <> concatMap contractFieldOccurrences contracts
 
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    contracts = [contract | NContract contract <- specNodes spec]
 
     contextSegment =
       case deriveAt HaskellName.LogicalWireWord HaskellName.ContextModuleSite "context" (specContext spec) (Loc 1) of
@@ -1281,15 +1316,50 @@ validateNames spec =
         eventFields =
           [ fieldOccurrence targetModule (evName event) "event field" field
           | event <- aggEvents aggregate,
-            field <- case evBody event of EventFields fields -> fields; EventFromCommand _ -> []
+            field <- eventFieldsFor aggregate event
+          ]
+
+    eventFieldsFor aggregate event =
+      case evBody event of
+        EventFields fields -> fields
+        EventFromCommand commandName ->
+          [ field
+          | command <- aggCommands aggregate,
+            cmdName command == commandName,
+            field <- cmdFields command
           ]
 
     fieldOccurrence targetModule scope category field =
       let raw = aggregateFieldName field
           site = nameSite HaskellName.GeneratedFieldSite category raw (aggregateFieldLoc field)
-          rendered = case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-            Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
-            Left _ -> raw
+          rendered = case aggregateFieldSelector field of
+            Just selector -> selector
+            Nothing -> case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+              Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+              Left _ -> raw
+       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
+
+    contractFieldOccurrences contract =
+      [ contractFieldOccurrence targetModule (ceName event <> "Data") field
+      | event <- ctrEvents contract,
+        field <- ceFields event
+      ]
+      where
+        targetModule =
+          "Generated."
+            <> contextSegment
+            <> "."
+            <> normalizedUpper "contract" (ctrName contract) (ctrLoc contract)
+            <> ".Contract"
+
+    contractFieldOccurrence targetModule scope field =
+      let identity = resolveContractFieldIdentity field
+          site = nameSite HaskellName.GeneratedFieldSite "contract field" (fieldDslName identity) (fieldLoc identity)
+          rendered = case cfSelector field of
+            Just selector -> selector
+            Nothing -> case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
+              Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+              Left _ -> fieldSelector identity
        in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
 
     normalizedUpper category raw anchor =
@@ -1489,10 +1559,11 @@ validateContract languageContract contract =
     <> duplicateTopicAliases
     <> duplicateFields
     <> discriminatorShadows
+    <> fieldWireKeyRules
     <> unresolvedTopicAliases
   where
     typeIdPrefixErrors =
-      [ mkErr (locLine (ctrLoc contract)) ContractInvalidTypeIdPrefix $
+      [ mkErr (locLine (cfLoc field)) ContractInvalidTypeIdPrefix $
           "contract '"
             <> ctrName contract
             <> "' event '"
@@ -1533,13 +1604,13 @@ validateContract languageContract contract =
       | (alias, _) <- duplicatesBy fst (ctrTopics contract)
       ]
     duplicateFields =
-      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateFieldName $
+      [ mkErr (locLine (cfLoc field)) ContractDuplicateFieldName $
           "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' declares field '" <> cfName field <> "' more than once"
       | event <- ctrEvents contract,
         field <- duplicatesBy cfName (ceFields event)
       ]
     discriminatorShadows =
-      [ mkErr (locLine (ctrLoc contract)) ContractFieldShadowsDiscriminator $
+      [ mkErr (locLine (cfLoc field)) ContractFieldShadowsDiscriminator $
           "contract '"
             <> ctrName contract
             <> "' event '"
@@ -1550,8 +1621,16 @@ validateContract languageContract contract =
       | enforcesSpecSurfaceClosures languageContract,
         event <- ctrEvents contract,
         field <- ceFields event,
-        cfName field == ctrDiscriminator contract
+        fieldWireKey (resolveContractFieldIdentity field) == ctrDiscriminator contract
       ]
+    fieldWireKeyRules =
+      concat
+        [ wireKeyRulesForRecord
+            ("contract '" <> ctrName contract <> "' event '" <> ceName event <> "'")
+            (Just (ctrDiscriminator contract, "payload discriminator"))
+            (map resolveContractFieldIdentity (ceFields event))
+        | event <- ctrEvents contract
+        ]
     unresolvedTopicAliases =
       [ mkErr (locLine (ctrLoc contract)) ContractTopicAliasUnresolved $
           "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' names undeclared topic alias '" <> ceTopic event <> "'"
@@ -2482,7 +2561,8 @@ validateAggregate languageContract spec agg =
       snapshotRules,
       replayOnlyRules,
       eventlessStateChangeRules,
-      wirePolicyRules
+      wirePolicyRules,
+      fieldWireKeyRules
     ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -2494,6 +2574,32 @@ validateAggregate languageContract spec agg =
     enumCtorNames = Set.fromList [c | e <- specEnums spec, (c, _) <- enumCtors e]
     ruleNames = Set.fromList (map ruleName (specRules spec))
     registerNames = Set.fromList (map regName (aggRegs agg))
+
+    eventFieldsFor event =
+      case evBody event of
+        EventFields fields -> fields
+        EventFromCommand commandName ->
+          [ field
+          | command <- aggCommands agg,
+            cmdName command == commandName,
+            field <- cmdFields command
+          ]
+
+    fieldWireKeyRules =
+      concat
+        [ wireKeyRulesForRecord
+            ("aggregate '" <> aggName agg <> "' command '" <> cmdName command <> "'")
+            Nothing
+            (map resolveAggregateFieldIdentity (cmdFields command))
+        | command <- aggCommands agg
+        ]
+        <> concat
+          [ wireKeyRulesForRecord
+              ("aggregate '" <> aggName agg <> "' event '" <> evName event <> "'")
+              (Just ("kind", "event envelope key"))
+              (map resolveAggregateFieldIdentity (eventFieldsFor event))
+          | event <- aggEvents agg
+          ]
 
     snapshotRules = case aggSnapshot agg of
       Nothing -> []
@@ -3004,6 +3110,40 @@ tInt = T.pack . show
 
 mkErr :: Int -> DiagnosticCode -> Text -> Diagnostic
 mkErr l c m = Diagnostic {line = l, severity = Error, code = c, relatedLocations = [], message = m}
+
+wireKeyRulesForRecord :: Text -> Maybe (Text, Text) -> [ResolvedFieldIdentity] -> [Diagnostic]
+wireKeyRulesForRecord owner reservedKey fields = invalidKeys <> duplicateKeys <> reservedCollisions
+  where
+    invalidKeys =
+      [ mkErr (locLine (fieldLoc field)) FieldWireKeyInvalid $
+          owner <> " field '" <> fieldDslName field <> "' resolves to an empty wire key"
+      | field <- fields,
+        T.null (fieldWireKey field)
+      ]
+    duplicateKeys =
+      [ Diagnostic
+          { line = locLine (fieldLoc field),
+            severity = Error,
+            code = FieldWireKeyCollision,
+            relatedLocations = [(locLine (fieldLoc earlier), "wire key '" <> fieldWireKey field <> "' is first declared here")],
+            message = owner <> " fields resolve to duplicate wire key '" <> fieldWireKey field <> "'"
+          }
+      | (index, field) <- zip [0 :: Int ..] fields,
+        earlier : _ <- [[candidate | candidate <- take index fields, fieldWireKey candidate == fieldWireKey field]]
+      ]
+    reservedCollisions =
+      [ mkErr (locLine (fieldLoc field)) FieldWireKeyCollision $
+          owner
+            <> " field '"
+            <> fieldDslName field
+            <> "' resolves to wire key '"
+            <> key
+            <> "', which collides with the "
+            <> description
+      | Just (key, description) <- [reservedKey],
+        field <- fields,
+        fieldWireKey field == key
+      ]
 
 locLine :: Loc -> Int
 locLine = unLoc

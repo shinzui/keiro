@@ -31,7 +31,7 @@ hospitalIdValue = either (error . show) id (parseKindIdV7Text @"hsp" ("hsp_" <> 
 incidentPayload :: EmergencyPayload
 incidentPayload =
   IncidentTransferNeedDeclared
-    (IncidentTransferNeedDeclaredData incidentIdValue "tri-1" "north" 3)
+    (IncidentTransferNeedDeclaredData incidentIdValue "tri-1" "adoption" "payload-type" "north" 3)
 
 reservationPayload :: EmergencyPayload
 reservationPayload =
@@ -44,7 +44,9 @@ incidentJson rawIncidentId =
     [ "messageType" .= ("IncidentTransferNeedDeclared" :: Text),
       "incidentId" .= rawIncidentId,
       "triageRecordId" .= ("tri-1" :: Text),
-      "region" .= ("north" :: Text),
+      "family" .= ("adoption" :: Text),
+      "type" .= ("payload-type" :: Text),
+      "region_code" .= ("north" :: Text),
       "redCount" .= (3 :: Int)
     ]
 
@@ -67,6 +69,14 @@ main = do
           ( "IncidentTransferNeedDeclared round-trip",
             encodeEmergencyPayload incidentPayload == validIncidentJson
               && parseEmergencyPayload validIncidentJson == Right incidentPayload
+          ),
+          ( "contract selectors are distinct from wire keys",
+            case incidentPayload of
+              IncidentTransferNeedDeclared payload ->
+                family payload == "adoption"
+                  && payloadType payload == "payload-type"
+                  && serviceRegion payload == "north"
+              _ -> False
           ),
           ( "TransferReservationAccepted round-trip",
             encodeEmergencyPayload reservationPayload == validReservationJson

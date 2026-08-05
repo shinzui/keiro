@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-05
+* **Update**: Add the field-identity validation, selector-only build advisory, and aggregate/public wire-key evolution boundaries (plan 192).
+* **Update**: Make the generated occurrence reserved set exactly the 23 GHC-rejected term identifiers and record the contextual-word compile probe (plan 192).
+* **Add**: Define independent DSL, generated-selector, and wire-key identities for direct aggregate and contract fields (plan 192).
+
 ## 2026-08-04
 * **Update**: Define the generated Haskell naming edition and idiomatic occurrence policy (plan 190).
 * **Update**: Record explicit backup-backed source moves for generated-name migrations (plan 190).

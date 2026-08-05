@@ -27,6 +27,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `Service_oncall` → `ServiceOncall`), and public diagnostic, refusal, report, and
   additive scaffold-history surfaces expose normalization, collision, and migration
   evidence.
+- **keiro-dsl**: `DiagnosticCode` gains `FieldWireKeyCollision`,
+  `FieldWireKeyInvalid`, and `EvtFieldWireKeyChanged`; exhaustive matches must be
+  extended.
 
 ### New Features
 
@@ -34,12 +37,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   backup-backed and digest-journaled source move with token-aware Haskell module
   rewriting and crash recovery. Generated-only renames are consumer-build advisories;
   external and replay identities remain unchanged.
+- **keiro-dsl**: language 4 direct aggregate and integration-contract fields may
+  declare independent `haskell <selector>` and `as "<wire-key>"` aliases. Records
+  use selectors, codecs and goldens use wire keys, and `fields(Command)` copies the
+  resolved three-namespace identity.
 
 ### Other Changes
 
 - The development project pins `mori://shinzui/keiki/repos/keiki` at the commit
   behind `v0.9.0.0` for both `keiki` and `keiki-codec-json` until the coordinated
   0.9 packages are published to Hackage.
+- **keiro-dsl**: language 4 now selects syntax profile 3 for field aliases. The
+  generated occurrence reserved set narrows to the 23 words GHC actually rejects;
+  previously refused contextual identifiers such as `family`, `via`, and
+  `qualified` now check and compile.
 
 ## 0.10.0.0 — 2026-08-03
 

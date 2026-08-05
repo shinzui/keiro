@@ -160,7 +160,12 @@ source or workspace manifest rather than relying on repeated CLI flags.
 - Identifiers contain ASCII letters, digits, and underscores and cannot contain
   hyphens. Generated Haskell type and constructor names must begin with an
   uppercase ASCII letter; fields and registers must begin with a lowercase
-  ASCII letter or underscore. Haskell keywords are rejected.
+  ASCII letter or underscore. Generated field selectors reject exactly the
+  term-level GHC keywords `case`, `class`, `data`, `default`, `deriving`, `do`,
+  `else`, `foreign`, `forall`, `if`, `import`, `in`, `infix`, `infixl`,
+  `infixr`, `instance`, `let`, `module`, `newtype`, `of`, `then`, `type`, and
+  `where`. Contextual words such as `family`, `via`, and `qualified` are valid.
+  Use a field's `haskell` alias when its DSL name must remain a hard keyword.
 - A *wire word* may also contain hyphens. Context names, ID prefixes, enum wire
   values, state-map values, and workflow labels use this form.
 - Double-quoted strings support `\"`, `\\`, `\n`, `\t`, and `\r`. Raw newlines
@@ -602,6 +607,10 @@ single lifecycle authority.
 command Request { reservationId amount:Integer }
 event Requested = fields(Request)
 event Rejected { reservationId reason:Text }
+event PayloadObserved {
+  type haskell payloadType:Text
+  region haskell serviceRegion as "region_code":Text
+}
 ```
 
 Command names, event names, and fields within each constructor are unique.
@@ -610,6 +619,16 @@ emits that event, it must consume the named command; the generated transducer
 then owns the identity output. An event with an explicit field block needs a
 hand-owned output constructor because the source-to-event transformation is not
 fully expressed.
+
+A direct field has three names. Its first token is the stable DSL identity;
+`haskell <selector>` optionally changes only the generated record selector;
+`as "<wire-key>"` optionally changes only the JSON key. When both are present,
+write them in that order. Thus `type haskell payloadType:Text` exposes
+`payload.payloadType` while encoding the key `"type"`, and the `region` example
+exposes `payload.serviceRegion` while encoding `"region_code"`.
+`fields(Command)` copies all three identities. Selector and wire-key collisions
+are checked independently, and event wire keys may not equal the codec envelope
+key `"kind"`.
 
 ### Transitions
 
@@ -857,6 +876,9 @@ contract emergency {
     incidentId: typeid "inc"
     reservationId: typeid "rsv"
     hospitalId: typeid "hsp"
+    family: text
+    type haskell payloadType: text
+    region haskell serviceRegion as "region_code": text
     expirationDeadline: text
   }
 }
@@ -878,6 +900,15 @@ Field names are unique within an event and cannot equal the contract
 discriminator. TypeID prefixes follow the same validity rules as shared IDs.
 The generated decoder rejects malformed, non-canonical, non-v7, and
 wrong-prefix values at the field path.
+
+Contract fields use the same optional `haskell` selector and `as "wire-key"`
+aliases as aggregate fields. The generated record uses `payloadType` and
+`serviceRegion` in the example, while JSON retains `"type"` and
+`"region_code"`. Resolved selectors must be valid and unique within the event
+record; wire keys must be non-empty, unique, and distinct from the declared
+discriminator. A selector-only diff requires re-scaffolding and recompilation;
+changing a public wire key is a breaking contract change and consumers deploy
+before producers.
 
 ## Intakes
 

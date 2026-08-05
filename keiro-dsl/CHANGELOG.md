@@ -27,6 +27,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   evidence. `ScaffoldRecord` and `WorkspaceRecord` gain a generated-Haskell naming
   edition and stable module-role rows; missing additive rows decode as the legacy
   naming edition.
+- `DiagnosticCode` gains `FieldWireKeyCollision`, `FieldWireKeyInvalid`, and
+  `EvtFieldWireKeyChanged`. Exhaustive matches must be extended.
 
 ### New Features
 
@@ -38,12 +40,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Generated-only source evolution is classified as consumer-build advisory with
   re-scaffold, recompile, and conformance remedies while wire, replay, SQL, runtime,
   and persisted identities remain compatible.
+- Language 4 direct aggregate and integration-contract fields accept independent
+  `haskell <selector>` and `as "<wire-key>"` aliases. Generated records use the
+  selector, codecs/goldens use the wire key, and `fields(Command)` preserves both.
 
 ### Other Changes
 
 - Adds the exported stable `ModuleRole`/`moduleRole` projection for
   `ScaffoldModule` artifacts and a generated-source naming audit plus repository
   policy gate.
+- Language 4 selects syntax profile 3. The generated occurrence reserved set is
+  narrowed to the 23 term identifiers GHC rejects under the advertised GHC2024
+  contract, so contextual words including `family`, `via`, and `qualified` are
+  accepted and compile-proven.
 
 ## 0.10.0.0 — 2026-08-03
 

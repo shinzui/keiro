@@ -493,7 +493,14 @@ docContract c =
         ["event" <+> pretty (ceName e) <+> "on" <+> pretty (ceTopic e) <+> "{"]
           ++ map (indent 2 . docContractField) (ceFields e)
           ++ ["}"]
-    docContractField f = pretty (cfName f) <> ":" <+> docContractType (cfType f)
+    docContractField f =
+      hsep
+        ( [pretty (cfName f)]
+            ++ maybe [] (\selector -> ["haskell", pretty selector]) (cfSelector f)
+            ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) (cfWireKey f)
+        )
+        <> ":"
+        <+> docContractType (cfType f)
     docContractType (CTypeId p) = "typeid" <+> dquoted p
     docContractType CText = "text"
     docContractType CInt = "int"
@@ -723,9 +730,13 @@ docCommand :: Command -> Doc ann
 docCommand c = "command" <+> pretty (cmdName c) <+> braced (map docAggregateField (cmdFields c))
 
 docAggregateField :: AggregateField -> Doc ann
-docAggregateField f = case aggregateFieldType f of
-  Nothing -> pretty (aggregateFieldName f)
-  Just ty -> pretty (aggregateFieldName f) <> ":" <> docTypeExpr ty
+docAggregateField f =
+  hsep
+    ( [pretty (aggregateFieldName f)]
+        ++ maybe [] (\selector -> ["haskell", pretty selector]) (aggregateFieldSelector f)
+        ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) (aggregateFieldWireKey f)
+    )
+    <> maybe mempty (\ty -> ":" <> docTypeExpr ty) (aggregateFieldType f)
 
 docField :: Field -> Doc ann
 docField f = case fieldType f of

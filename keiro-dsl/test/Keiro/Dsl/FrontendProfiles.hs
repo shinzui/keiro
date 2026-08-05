@@ -25,7 +25,7 @@ frontendProfilesSpec = do
         `shouldBe` [ (1, Nothing, "keiro-dsl/syntax-profile/1", "keiro-dsl/runtime-semantics/1"),
                      (2, Just 1, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/1"),
                      (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2"),
-                     (4, Just 3, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/3")
+                     (4, Just 3, "keiro-dsl/syntax-profile/3", "keiro-dsl/runtime-semantics/3")
                    ]
       map definitionCapabilities (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -58,11 +58,11 @@ frontendProfilesSpec = do
               not wasSupported
                 || runtimeProfileHasCapability (definitionRuntimeSemanticsProfile successor) capability
       forM_ allFeatures $ \feature -> do
-        languageFeatureMinimumVersion feature `shouldBe` version 2
-        languageSupportsFeature (version 1) feature `shouldBe` False
-        languageSupportsFeature (version 2) feature `shouldBe` True
-        languageSupportsFeature (version 3) feature `shouldBe` True
-        languageSupportsFeature (version 4) feature `shouldBe` True
+        let minimumVersion = if feature == FieldAliasSyntax then version 4 else version 2
+        languageFeatureMinimumVersion feature `shouldBe` minimumVersion
+        forM_ [1, 2, 3, 4] $ \versionNumber ->
+          languageSupportsFeature (version versionNumber) feature
+            `shouldBe` (version versionNumber >= minimumVersion)
 
     it "does not infer a hypothetical successor profile or runtime contract" $ do
       lookupLanguageDefinition (version 5) `shouldBe` Nothing
@@ -88,16 +88,16 @@ frontendProfilesSpec = do
         forM_ [1, 2, 3, 4] $ \versionNumber -> do
           let sourceName = "profile-" <> show versionNumber <> ".keiro"
               source = preamble versionNumber <> body
-          case (versionNumber, parseSurfaceSource sourceName source) of
-            (1, Left FrontendFailure {phase, code, span, supportedVersions}) -> do
+          case (languageSupportsFeature (version versionNumber) feature, parseSurfaceSource sourceName source) of
+            (False, Left FrontendFailure {phase, code, span, supportedVersions}) -> do
               phase `shouldBe` BodyParsingPhase
               code `shouldBe` SourceLanguageError LanguageFeatureRequiresVersion
               spanText source span `shouldBe` marker
-              supportedVersions `shouldBe` [version 2, version 3, version 4]
+              supportedVersions `shouldBe` languageVersionsSupportingFeature feature
               languageSupportsFeature (version versionNumber) feature `shouldBe` False
-            (1, result) -> expectationFailure ("expected v1 feature refusal, got " <> show result)
-            (_, Right _) -> languageSupportsFeature (version versionNumber) feature `shouldBe` True
-            (_, Left failure) -> expectationFailure (T.unpack (renderFrontendFailure failure))
+            (False, result) -> expectationFailure ("expected feature refusal, got " <> show result)
+            (True, Right _) -> languageSupportsFeature (version versionNumber) feature `shouldBe` True
+            (True, Left failure) -> expectationFailure (T.unpack (renderFrontendFailure failure))
 
     it "keeps feature spellings inert in comments, strings, wire keys, and identifiers" $ do
       inertBody <- readRepoText "keiro-dsl/test/fixtures/language-identifier-v1.keiro"
@@ -163,7 +163,8 @@ featureCases =
   [ FeatureCase NominalBindingSyntax "using" (featureBody NominalBindingSyntax),
     FeatureCase IntegerScalarSyntax "Integer" (featureBody IntegerScalarSyntax),
     FeatureCase TypedAggregateExpressionSyntax "cmd." (featureBody TypedAggregateExpressionSyntax),
-    FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax)
+    FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
+    FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -191,9 +192,17 @@ featureBody = \case
         "  event Ticked = fields(Tick)",
         "  Open -- Tick --> implementation hole ; emit Ticked ; goto Open"
       ]
+  FieldAliasSyntax ->
+    T.unlines
+      [ "context profile",
+        "aggregate Profile",
+        "  regs",
+        "  states Open",
+        "  command Rename { type haskell payloadType as \"type\":Text }"
+      ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax]
 
 allRuntimeCapabilities :: [RuntimeCapability]
 allRuntimeCapabilities = [minBound .. maxBound]

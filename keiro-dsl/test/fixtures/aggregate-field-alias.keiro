@@ -1,0 +1,15 @@
+language keiro-dsl 4
+context field-alias
+
+aggregate FieldAliasProof
+  regs
+  states Open
+
+  command Observe {
+    family:Text
+    type haskell payloadType:Text
+    region haskell serviceRegion as "region_code":Text
+  }
+  event FieldsCopied = fields(Observe)
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

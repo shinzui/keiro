@@ -69,6 +69,16 @@ wire keys/tags, queue names, registry/subscription identities, fingerprints, and
 spellings retain their declared bytes. Explicit consumer Haskell references are validated but not
 normalized. A generated-name-only diff is advisory on the consumer-build axis and replay-neutral.
 
+The generated occurrence reserved set is exactly the words GHC rejects as term-level identifiers
+under this compilation contract: `case`, `class`, `data`, `default`, `deriving`, `do`, `else`,
+`foreign`, `forall`, `if`, `import`, `in`, `infix`, `infixl`, `infixr`, `instance`, `let`, `module`,
+`newtype`, `of`, `then`, `type`, and `where`. Contextual words such as `as`, `family`, `mdo`,
+`proc`, `qualified`, `rec`, `safe`, `signature`, `stock`, `unsafe`, and `via` are not reserved by
+the closed extension set and remain valid selectors. The committed aggregate-scalars conformance
+component compiles all eleven as record selectors under the advertised GHC2024 contract. Direct
+fields whose DSL identity is one of the 23 rejected words must declare an explicit Haskell
+selector; their wire key and semantic identity need not change.
+
 This automated extension cleanup and ordinary regeneration applies only to overwriteable
 `Generated` modules.
 Create-once `HoleStub` modules, including behavior holes, application holes,
@@ -95,6 +105,9 @@ comments, literals, or its application-owned body.
 - A consumer can distinguish a source rebuild from a wire/runtime migration:
   generated naming changes require re-scaffold, recompile, and conformance, but do
   not change persisted identities or replay behavior.
+- The reserved-word refusal surface cannot grow merely because a word is contextual in an
+  extension the generator does not enable; changing the compilation contract requires reviewing
+  and recompiling the complete selector probe.
 
 
 ## Related decisions

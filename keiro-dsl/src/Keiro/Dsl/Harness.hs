@@ -43,6 +43,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
@@ -709,7 +710,7 @@ ctorExpr :: Agg -> ResolvedCtor -> Text
 ctorExpr a rc =
   "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
   where
-    args = T.concat [" " <> sampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
+    args = T.concat [" " <> sampleValue a (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
 
 -- | A transition command sample prefers the initial value of a same-named,
 -- same-typed register only when the guard explicitly equates those two paths.
@@ -719,7 +720,7 @@ commandCtorExpr :: Agg -> Transition -> ResolvedCtor -> Text
 commandCtorExpr a transition rc =
   "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
   where
-    args = T.concat [" " <> commandSampleValue a transition fieldName ty | (fieldName, ty) <- rcFields rc]
+    args = T.concat [" " <> commandSampleValue a transition (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
 
 commandSampleValue :: Agg -> Transition -> Text -> ResolvedAggregateType -> Text
 commandSampleValue aggregate transition fieldName fieldType = case fieldType of
@@ -1139,9 +1140,9 @@ mappedHarnessDeclarations aggregate
     opaque = [declaration | ResolvedOpaque declaration <- declarations]
     structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
     mappedEventFields =
-      [ (event, fieldName, fieldType, declaration)
+      [ (event, fieldDslName identity, fieldType, declaration)
       | event <- aEvents aggregate,
-        (fieldName, fieldType) <- rcFields event,
+        (identity, fieldType) <- rcFields event,
         declaration <- maybeToListHarness (mappedDeclaration aggregate fieldType)
       ]
     assertionLists =
@@ -1444,8 +1445,8 @@ ctorExprWithOverride aggregate constructor target replacement =
   where
     arguments =
       T.concat
-        [ " " <> if fieldName == target then replacement else sampleValue aggregate fieldName fieldType
-        | (fieldName, fieldType) <- rcFields constructor
+        [ " " <> if fieldDslName identity == target then replacement else sampleValue aggregate (fieldDslName identity) fieldType
+        | (identity, fieldType) <- rcFields constructor
         ]
 
 projectionAssertionDecls :: Agg -> [(StructuralDecl, ResolvedMappedShape)] -> [Text]

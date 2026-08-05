@@ -11,7 +11,9 @@ contract emergency {
   event IncidentTransferNeedDeclared on incidentEvents {
     incidentId: typeid "inc"
     triageRecordId: text
-    region: text
+    family: text
+    type haskell payloadType: text
+    region haskell serviceRegion as "region_code": text
     redCount: text
   }
   event TransferReservationAccepted on hospitalEvents {

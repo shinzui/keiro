@@ -27,6 +27,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.FieldIdentity (fieldWireKey)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (Agg (..), ResolvedCtor (..), defaultContext, resolveAgg)
@@ -150,7 +151,7 @@ renderGolden spec aggregate event =
     graph = either (const Nothing) Just (resolveTypeGraph spec)
     entries =
       (Key.fromText "kind", String (rcName event))
-        : [(Key.fromText fieldName, sampleValue graph spec aggregate fieldType) | (fieldName, fieldType) <- rcFields event]
+        : [(Key.fromText (fieldWireKey identity), sampleValue graph spec aggregate fieldType) | (identity, fieldType) <- rcFields event]
 
 sampleValue :: Maybe TypeGraph -> Spec -> Agg -> ResolvedAggregateType -> Value
 sampleValue graph spec _aggregate resolvedType =

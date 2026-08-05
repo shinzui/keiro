@@ -9,6 +9,21 @@ aggregate ScalarLedger
 
   command Record { observedAt:Time revision:Natural }
   event ScalarsRecorded { observedAt:Time revision:Natural }
+  event FieldIdentityObserved {
+    as:Text
+    family:Text
+    mdo:Text
+    proc:Text
+    qualified:Text
+    rec:Text
+    safe:Text
+    signature:Text
+    stock:Text
+    unsafe:Text
+    via:Text
+    type haskell payloadType:Text
+    region haskell serviceRegion as "region_code":Text
+  }
 
   Empty -- Record -->
     guard cmd.observedAt >= reg.observedAt && cmd.revision >= reg.revision

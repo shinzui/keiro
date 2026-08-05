@@ -1,0 +1,21 @@
+language keiro-dsl 4
+context signals
+
+contract projectSignals {
+  schemaVersion 1
+  discriminator messageType
+
+  topic projectEvents "signals.project.v1"
+
+  event ProjectChanged on projectEvents {
+    projectId: typeid "proj"
+    family: text
+    action: text
+  }
+
+  event ProjectArtifactChanged on projectEvents {
+    projectId: typeid "proj"
+    family: text
+    artifact: text
+  }
+}

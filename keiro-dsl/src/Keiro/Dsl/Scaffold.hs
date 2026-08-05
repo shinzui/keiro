@@ -110,6 +110,7 @@ import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (.
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.Expression
+import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFoldSurfaceError)
 import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Grammar
@@ -443,11 +444,12 @@ data ResolvedRegister = ResolvedRegister
   }
   deriving stock (Eq, Show)
 
--- | A command or event constructor with its fully-resolved field types.
+-- | A command or event constructor with its fully-resolved field identities and
+-- aggregate types.
 data ResolvedCtor = ResolvedCtor
   { rcName :: !Text,
-    -- | (field name, canonical aggregate type)
-    rcFields :: ![(Text, ResolvedAggregateType)],
+    -- | (DSL/selector/wire identity, canonical aggregate type)
+    rcFields :: ![(ResolvedFieldIdentity, ResolvedAggregateType)],
     -- | EP-2: schema version (1 for commands and unversioned events).
     rcVersion :: !Int,
     -- | EP-2: the source version this event migrates from (the upcaster step).
@@ -518,7 +520,7 @@ resolveAggForService ctx service agg =
     mkCtor useSite cn fs =
       ResolvedCtor
         { rcName = cn,
-          rcFields = map (\field -> (aggregateFieldName field, orDie (inferAggregateFieldType symbols agg useSite field))) fs,
+          rcFields = map (\field -> (resolveAggregateFieldIdentity field, orDie (inferAggregateFieldType symbols agg useSite field))) fs,
           rcVersion = 1,
           rcUpcastFrom = Nothing
         }
@@ -2911,20 +2913,24 @@ emitContractGen languageContract genPrefix c =
                  ]
               ++ ["                )"]
     encodeField field =
-      tshow (cfName field)
+      tshow (fieldWireKey identity)
         <> " .= "
         <> case cfType field of
           CTypeId prefix
-            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> cfName field
-          _ -> "payload." <> cfName field
+            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> fieldSelector identity
+          _ -> "payload." <> fieldSelector identity
+      where
+        identity = resolveContractFieldIdentity field
     decodeField field = case cfType field of
       CTypeId prefix
         | isJust (contractIdDomainContractFor languageContract prefix) ->
-            "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow (cfName field)
-      _ -> "o .: " <> tshow (cfName field)
+            "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
+      _ -> "o .: " <> tshow wireKey
+      where
+        wireKey = fieldWireKey (resolveContractFieldIdentity field)
 
 contractNeedsDuplicateRecordFields :: ContractNode -> Bool
-contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map cfName . ceFields) . ctrEvents
+contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map (fieldSelector . resolveContractFieldIdentity) . ceFields) . ctrEvents
 
 contractUsesRecordDot :: ContractNode -> Bool
 contractUsesRecordDot = any (not . null . ceFields) . ctrEvents
@@ -2947,7 +2953,7 @@ emitPayloadAdt languageContract tyName events =
         <> "Data = "
         <> ceName e
         <> (if hasTypedTypeIds then "Data {" else "Data { ")
-        <> T.intercalate ", " [cfName f <> " :: !" <> hsType (cfType f) | f <- ceFields e]
+        <> T.intercalate ", " [fieldSelector (resolveContractFieldIdentity f) <> " :: !" <> hsType (cfType f) | f <- ceFields e]
         <> (if hasTypedTypeIds then "}\n  deriving stock (Eq, Show)" else " }\n  deriving stock (Eq, Show)")
     arm e = ceName e <> " !" <> ceName e <> "Data"
     sumDecl = case events of
@@ -3879,8 +3885,8 @@ emitDomain a =
 domainNeedsDuplicateRecordFields :: Agg -> Bool
 domainNeedsDuplicateRecordFields aggregate = hasDuplicateNames selectorNames
   where
-    commandSelectors = concatMap (map fst . rcFields) (aCommands aggregate)
-    eventSelectors = concatMap (map fst . rcFields) (aEvents aggregate)
+    commandSelectors = concatMap (map (fieldSelector . fst) . rcFields) (aCommands aggregate)
+    eventSelectors = concatMap (map (fieldSelector . fst) . rcFields) (aEvents aggregate)
     registerSelectors = map rrName (aRegs aggregate)
     -- deriveWireCtorsAll creates one event TermFields record that repeats each
     -- payload selector, so every field-bearing event contributes twice.
@@ -3912,7 +3918,7 @@ emitRecord importPlan a rc =
   nl $
     [ "data " <> rcName rc <> "Data = " <> rcName rc <> "Data"
     ]
-      ++ recordFields [(name, renderDomainType importPlan a fieldType) | (name, fieldType) <- rcFields rc]
+      ++ recordFields [(fieldSelector identity, renderDomainType importPlan a fieldType) | (identity, fieldType) <- rcFields rc]
       ++ ["  deriving stock (Generic, Eq, Show)"]
 
 recordFields :: [(Text, Text)] -> [Text]
@@ -4337,16 +4343,16 @@ emitEncode importPlan a =
         ++ ["      ]"]
     lead 0 = "      [ "
     lead _ = "      , "
-    encodeField (n, ty) =
-      tshow n
+    encodeField (identity, ty) =
+      tshow (fieldWireKey identity)
         <> " .= "
-        <> encodeFieldValue n ty
-    encodeFieldValue name ty = case ty of
-      AggregateNominal nominal -> encodeNominalValue nominal ("payload." <> name)
+        <> encodeFieldValue (fieldSelector identity) ty
+    encodeFieldValue selector ty = case ty of
+      AggregateNominal nominal -> encodeNominalValue nominal ("payload." <> selector)
       _ -> case fieldCat a ty of
-        MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> name
-        MappedOpaqueCat {} -> "toJSON payload." <> name
-        _ -> "payload." <> name
+        MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> selector
+        MappedOpaqueCat {} -> "toJSON payload." <> selector
+        _ -> "payload." <> selector
     encodeNominalValue nominal value = case resolvedNominalOwnership nominal of
       GeneratedNominal -> case resolvedNominalRepresentation nominal of
         IdRepresentation {} -> lowerFirst (resolvedNominalName nominal) <> "Text " <> value
@@ -4388,12 +4394,12 @@ emitDecode importPlan a =
                  | (index, field) <- zip [(0 :: Int) ..] fields
                  ]
               ++ ["                )"]
-    decodeField (n, ty) = case ty of
-      AggregateNominal nominal -> decodeNominalField n nominal
+    decodeField (identity, ty) = case ty of
+      AggregateNominal nominal -> decodeNominalField (fieldWireKey identity) nominal
       _ -> case fieldCat a ty of
-        MappedStructuralCat declaration _ -> "explicitParseField parse" <> sdName declaration <> "Mapped o " <> tshow n
-        MappedOpaqueCat {} -> "o .: " <> tshow n
-        _ -> "o .: " <> tshow n
+        MappedStructuralCat declaration _ -> "explicitParseField parse" <> sdName declaration <> "Mapped o " <> tshow (fieldWireKey identity)
+        MappedOpaqueCat {} -> "o .: " <> tshow (fieldWireKey identity)
+        _ -> "o .: " <> tshow (fieldWireKey identity)
     decodeNominalField name nominal = case resolvedNominalOwnership nominal of
       GeneratedNominal -> case resolvedNominalRepresentation nominal of
         IdRepresentation prefix -> case idDomainContractFor (aLanguageContract a) prefix of
@@ -5612,15 +5618,15 @@ renderAssignmentOperand expression
 generatedOutputLines :: Agg -> Int -> Transition -> Int -> Name -> [Text]
 generatedOutputLines aggregate transitionIndex transition emitIndex eventName =
   case outputMappingFor aggregate transitionIndex emitIndex of
-    GeneratedCommandIdentity _ fields -> case fields of
+    GeneratedCommandIdentity sourceCommand fields -> case fields of
       [] -> ["        B.emit wire" <> eventName <> " B.oNil"]
       _ ->
         [ "        B.emit wire" <> eventName <> " (" <> eventName <> "TermFields"
         ]
           <> [ lead fieldIndex
-                 <> outputSelector field
+                 <> resolvedSelector sourceCommand field
                  <> " = d."
-                 <> outputSelector field
+                 <> resolvedSelector sourceCommand field
              | (fieldIndex, field) <- zip [0 :: Int ..] fields
              ]
           <> ["          })"]
@@ -5634,6 +5640,15 @@ generatedOutputLines aggregate transitionIndex transition emitIndex eventName =
   where
     lead 0 = "          { "
     lead _ = "          , "
+    resolvedSelector sourceCommand copiedField =
+      case [ fieldSelector identity
+           | command <- aCommands aggregate,
+             rcName command == sourceCommand,
+             (identity, _) <- rcFields command,
+             fieldDslName identity == outputSelector copiedField
+           ] of
+        selector : _ -> selector
+        [] -> error "validated generated output selector was not found"
 
 outputMappingFor :: Agg -> Int -> Int -> EventOutputMapping
 outputMappingFor aggregate transitionIndex emitIndex =
@@ -6032,16 +6047,21 @@ emitOutputHook aggregate transitionIndex transition emitIndex event =
       | otherwise =
           rcName event
             <> "TermFields\n"
-            <> nl (valueRecord [(fieldName, outputFieldValue fieldName fieldType) | (fieldName, fieldType) <- rcFields event])
+            <> nl
+              ( valueRecord
+                  [ (fieldSelector identity, outputFieldValue identity fieldType)
+                  | (identity, fieldType) <- rcFields event
+                  ]
+              )
     command = commandForTransition aggregate transition
-    outputFieldValue fieldName fieldType
-      | Just commandType <- lookup fieldName (rcFields command),
+    outputFieldValue identity fieldType
+      | Just (commandIdentity, commandType) <- find ((== fieldDslName identity) . fieldDslName . fst) (rcFields command),
         commandType == fieldType =
-          "d." <> fieldName
-      | Just register <- find ((== fieldName) . rrName) (aRegs aggregate),
+          "d." <> fieldSelector commandIdentity
+      | Just register <- find ((== fieldDslName identity) . rrName) (aRegs aggregate),
         rrType register == fieldType =
-          "B.reg @" <> tshow fieldName
-      | otherwise = "error " <> tshow ("HOLE: fill output field " <> rcName event <> "." <> fieldName)
+          "B.reg @" <> tshow (fieldDslName identity)
+      | otherwise = "error " <> tshow ("HOLE: fill output field " <> rcName event <> "." <> fieldDslName identity)
     valueRecord fields =
       [ lead fieldIndex <> fieldName <> " = " <> fieldValue
       | (fieldIndex, (fieldName, fieldValue)) <- zip [0 :: Int ..] fields

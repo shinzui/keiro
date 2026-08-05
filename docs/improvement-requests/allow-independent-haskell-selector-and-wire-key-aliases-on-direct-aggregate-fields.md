@@ -6,8 +6,9 @@ description: >-
   wire key so reserved names and brownfield contracts do not force domain renaming.
 timestamp: 2026-07-31T15:03:54Z
 requestId: IR-6
-status: proposed
+status: implemented
 origin: mori://shinzui/keiro
+plan: docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,7 +28,14 @@ reviews:
 
 ## Status
 
-Proposed for later compatibility/ergonomics work.
+**Implemented.**
+[Plan 192](../plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md)
+under [MasterPlan 29](../masterplans/29-stabilize-keiro-dsl-for-wide-adoption.md) separates DSL
+identity, generated selector, and wire key for direct aggregate command/event fields and widens
+the request to integration-contract event fields because the motivating Mori regression was on
+that public surface. Language-4 syntax, check-time namespace collisions, alias-aware generated
+records/codecs/goldens, `fields(Command)` propagation, fold neutrality, diff/replay
+classification, and compiled aggregate/contract conformance now cover the requested contract.
 
 ## Context
 

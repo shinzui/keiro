@@ -508,6 +508,43 @@ main = hspec $ do
       failureCode ("language keiro-dsl 1\n" <> body) `shouldBe` Just LanguageFeatureRequiresVersion
       failureCode body `shouldBe` Just LanguageFeatureRequiresVersion
 
+    it "parses and canonically round-trips field aliases only in language 4" $ do
+      let v4Source =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change { type haskell payloadType as \"type\":Text haskell as }",
+                "contract publicOrder {",
+                "  schemaVersion 1",
+                "  discriminator kind",
+                "  topic changes \"orders.v1\"",
+                "  event Changed on changes {",
+                "    region haskell serviceRegion as \"region_code\": text",
+                "  }",
+                "}"
+              ]
+          v3Source = T.replace "language keiro-dsl 4" "language keiro-dsl 3" v4Source
+      parsed <- parseRight "field-aliases.keiro" v4Source
+      parseSource "field-aliases-round-trip.keiro" (renderSource parsed) `shouldBe` Right parsed
+      case specNodes (parsedSpec parsed) of
+        [NAggregate aggregate, NContract contract] -> do
+          case cmdFields =<< aggCommands aggregate of
+            aliased : haskellField : asField : _ -> do
+              (aggregateFieldName aliased, aggregateFieldSelector aliased, aggregateFieldWireKey aliased)
+                `shouldBe` ("type", Just "payloadType", Just "type")
+              map aggregateFieldName [haskellField, asField] `shouldBe` ["haskell", "as"]
+            fields -> expectationFailure ("unexpected aggregate alias fields: " <> show fields)
+          case ceFields =<< ctrEvents contract of
+            [field] ->
+              (cfName field, cfSelector field, cfWireKey field, cfLoc field)
+                `shouldBe` ("region", Just "serviceRegion", Just "region_code", Loc 12)
+            fields -> expectationFailure ("unexpected contract alias fields: " <> show fields)
+        nodes -> expectationFailure ("unexpected alias nodes: " <> show nodes)
+      failureCode v3Source `shouldBe` Just LanguageFeatureRequiresVersion
+
     it "attributes every successor feature gate to its owning grammar production" $ do
       let featureFailureAt expectedLine source =
             case parseSource "feature.keiro" source of
@@ -729,7 +766,7 @@ main = hspec $ do
       case validateService (checkedSource v4) of
         [diagnostic] -> do
           code diagnostic `shouldBe` ContractInvalidTypeIdPrefix
-          line diagnostic `shouldBe` 3
+          line diagnostic `shouldBe` 8
           message diagnostic `shouldSatisfy` T.isInfixOf "contract 'emergency' event 'IncidentDeclared' field 'incidentId'"
           message diagnostic `shouldSatisfy` T.isInfixOf "invalid TypeID prefix 'Bad'"
         diagnostics -> expectationFailure ("expected one invalid contract prefix diagnostic, got " <> show diagnostics)
@@ -2278,6 +2315,125 @@ main = hspec $ do
           relatedLocations diagnostic `shouldBe` [(3, "'fooBar' also normalizes here")]
           renderDiagnostic "<normalized-collision>" diagnostic `shouldSatisfy` T.isInfixOf "fooBar"
         diagnostics -> expectationFailure ("expected one normalized collision, got " <> show diagnostics)
+    it "validates explicit selectors and detects selector collisions in aggregate and contract records" $ do
+      service <-
+        checkedServiceFromText
+          "<field-selector-validation>"
+          ( T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change {",
+                "    first haskell shared:Text",
+                "    second haskell shared:Text",
+                "    reserved haskell type:Text",
+                "    invalid haskell Bad:Text",
+                "  }",
+                "contract publicOrder {",
+                "  schemaVersion 1",
+                "  discriminator kind",
+                "  topic changes \"orders.v1\"",
+                "  event Changed on changes {",
+                "    first haskell duplicate: text",
+                "    second haskell duplicate: text",
+                "  }",
+                "}"
+              ]
+          )
+      let diagnostics = validateService service
+          selectorCollisions = [diagnostic | diagnostic <- diagnostics, code diagnostic == GeneratedOccurrenceCollision]
+      [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, code diagnostic `elem` [GeneratedOccurrenceReserved, IdentUnsafeNormalization]]
+        `shouldBe` [(GeneratedOccurrenceReserved, 9), (IdentUnsafeNormalization, 10)]
+      map line selectorCollisions `shouldBe` [8, 18]
+      map relatedLocations selectorCollisions
+        `shouldBe` [ [(7, "'first' also normalizes here")],
+                     [(17, "'first' also normalizes here")]
+                   ]
+    it "rejects empty, duplicate, and envelope-colliding resolved wire keys with field-local evidence" $ do
+      service <-
+        checkedServiceFromText
+          "<field-wire-validation>"
+          ( T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change {",
+                "    first as \"same\":Text",
+                "    second as \"same\":Text",
+                "    empty as \"\":Text",
+                "  }",
+                "  event Changed { value as \"kind\":Text }",
+                "contract publicOrder {",
+                "  schemaVersion 1",
+                "  discriminator kind",
+                "  topic changes \"orders.v1\"",
+                "  event Published on changes { value as \"kind\": text }",
+                "}"
+              ]
+          )
+      let diagnostics = validateService service
+          wireDiagnostics = [diagnostic | diagnostic <- diagnostics, code diagnostic `elem` [FieldWireKeyCollision, FieldWireKeyInvalid]]
+      map (\diagnostic -> (code diagnostic, line diagnostic)) wireDiagnostics
+        `shouldBe` [ (FieldWireKeyCollision, 8),
+                     (FieldWireKeyInvalid, 9),
+                     (FieldWireKeyCollision, 11),
+                     (FieldWireKeyCollision, 16)
+                   ]
+      case wireDiagnostics of
+        firstDiagnostic : _ -> relatedLocations firstDiagnostic `shouldBe` [(7, "wire key 'same' is first declared here")]
+        [] -> expectationFailure "expected resolved wire-key diagnostics"
+    it "checks copied command selectors in both generated record scopes" $ do
+      service <-
+        checkedServiceFromText
+          "<copied-selector-collision>"
+          ( T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "aggregate Order",
+                "  regs",
+                "  states Open",
+                "  command Change { first haskell shared:Text second haskell shared:Text }",
+                "  event Changed = fields(Change)"
+              ]
+          )
+      [line diagnostic | diagnostic <- validateService service, code diagnostic == GeneratedOccurrenceCollision]
+        `shouldBe` [6, 6]
+    it "anchors repeated reserved contract fields at their own lines and maps them through workspaces" $ do
+      service <-
+        checkedServiceFromText
+          "domain/member.keiro"
+          ( T.unlines
+              [ "language keiro-dsl 4",
+                "context aliases",
+                "contract publicOrder {",
+                "  schemaVersion 1",
+                "  discriminator kind",
+                "  topic changes \"orders.v1\"",
+                "  event First on changes { where: text }",
+                "  event Second on changes { where: text }",
+                "}"
+              ]
+          )
+      [line diagnostic | diagnostic <- validateService service, code diagnostic == GeneratedOccurrenceReserved]
+        `shouldBe` [7, 8]
+      let workspaceDiagnostics =
+            [ diagnostic
+            | diagnostic <- checkWorkspace (oneMemberWorkspace "domain/member.keiro" (checkedSpec service)),
+              wdCode diagnostic == GeneratedOccurrenceReserved
+            ]
+          workspaceLocations =
+            [ (wlFile location, wlLine location)
+            | diagnostic <- workspaceDiagnostics,
+              location <- NE.toList (wdLocations diagnostic)
+            ]
+      workspaceLocations
+        `shouldBe` [ (WorkspaceMemberFile "member.keiro", 7),
+                     (WorkspaceMemberFile "member.keiro", 8)
+                   ]
     it "rejects non-ASCII identifier characters in the parser" $
       parseSpec "<unicode-identifier>" unicodeIdentifierSpec `shouldSatisfy` leftContains "unexpected"
 
@@ -3324,9 +3480,9 @@ main = hspec $ do
         parseWorkspaceRecord (contents <> "id-domain " <> duplicateIdentity <> "\n") `shouldBe` Nothing
     it "round-trips the contract spec through parse . pretty" $ do
       input <- readTestText "test/fixtures/contract.keiro"
-      case parseSpec "in" input of
-        Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+      case parseSource "in" input of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right source -> parseSource "in" (renderSource source) `shouldBe` Right source
     it "round-trips the intake (inbox) spec through parse . pretty" $ do
       input <- readTestText "test/fixtures/intake.keiro"
       case parseSpec "in" input of
@@ -3940,6 +4096,90 @@ main = hspec $ do
     it "uses EvtFieldRemovedSameVersion for an unchanged-version removal" $ do
       cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldremove.keiro"
       [ckCode k | Breaking k <- cs] `shouldContain` [EvtFieldRemovedSameVersion]
+    it "classifies selector aliases as build-only and wire aliases as replay-affecting" $ do
+      let sourceFor field =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context field-alias-diff",
+                "aggregate AliasDiff",
+                "  regs",
+                "  states Open",
+                "  command Observe { " <> field <> " }",
+                "  event Observed = fields(Observe)",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+      base <- checkedServiceFromText "field-alias-diff-base.keiro" (sourceFor "region:Text")
+      selectorAlias <- checkedServiceFromText "field-alias-diff-selector.keiro" (sourceFor "region haskell serviceRegion:Text")
+      wireAlias <- checkedServiceFromText "field-alias-diff-wire.keiro" (sourceFor "region as \"region_code\":Text")
+      let selectorChanges = diffServices base selectorAlias
+          wireChanges = diffServices base wireAlias
+          selectorFindings = [finding | Advisory finding <- selectorChanges, ckCode finding == GeneratedHaskellNameChanged]
+          wireFindings = [finding | Breaking finding <- wireChanges, ckCode finding == EvtFieldWireKeyChanged]
+      selectorChanges `shouldSatisfy` all (not . isBreaking)
+      map ckFacet selectorFindings `shouldContain` ["command-field-selector", "event-field-selector"]
+      map (verdictFor ConsumerBuild . ckVector) selectorFindings `shouldSatisfy` all (== VAdvisory)
+      resolvedFold (ReplayImpact.replayImpactServices base selectorAlias) `shouldBe` ReplayNeutral
+      case wireFindings of
+        [finding] -> do
+          ckSubject finding `shouldBe` "Observed.region"
+          verdictFor PrivateHistoryRead (ckVector finding) `shouldBe` VBreaking
+          verdictFor OldBinaryReadNewEvents (ckVector finding) `shouldBe` VBreaking
+          ckDetail finding `shouldSatisfy` T.isInfixOf "'region' -> 'region_code'"
+        findings -> expectationFailure ("expected one event wire-key finding, got " <> show findings)
+      resolvedFold (ReplayImpact.replayImpactServices base wireAlias)
+        `shouldSatisfy` \case
+          ReplayAffected impacts ->
+            maybe False ((== Set.singleton "Observed") . ReplayImpact.eventTypes) (Map.lookup "AliasDiff" impacts)
+          ReplayNeutral -> False
+    it "classifies contract selector aliases separately from public wire changes" $ do
+      let sourceFor field =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context contract-field-alias-diff",
+                "contract emergency {",
+                "  schemaVersion 1",
+                "  discriminator messageType",
+                "  topic events \"emergency.events\"",
+                "  event IncidentDeclared on events {",
+                "    " <> field,
+                "  }",
+                "}"
+              ]
+      base <- checkedServiceFromText "contract-field-alias-base.keiro" (sourceFor "region: text")
+      selectorAlias <- checkedServiceFromText "contract-field-alias-selector.keiro" (sourceFor "region haskell serviceRegion: text")
+      wireAlias <- checkedServiceFromText "contract-field-alias-wire.keiro" (sourceFor "region as \"region_code\": text")
+      let selectorChanges = diffServices base selectorAlias
+          wireChanges = diffServices base wireAlias
+      selectorChanges `shouldSatisfy` \case
+        [Advisory finding] ->
+          ckCode finding == GeneratedHaskellNameChanged
+            && ckFacet finding == "contract-field-selector"
+            && verdictFor ConsumerBuild (ckVector finding) == VAdvisory
+        _ -> False
+      case [finding | Breaking finding <- wireChanges, ckCode finding == ContractFieldChanged] of
+        [finding] -> do
+          verdictFor PublicConsumer (ckVector finding) `shouldBe` VBreaking
+          cvRollout (ckVector finding) `shouldBe` Set.singleton RolloutProducerLast
+          ckDetail finding `shouldSatisfy` T.isInfixOf "consumer-first rollout"
+        findings -> expectationFailure ("expected one contract wire-key finding, got " <> show findings)
+    it "keeps an alias-free field rename on the existing add/remove path" $ do
+      let sourceFor field =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context field-rename-diff",
+                "aggregate RenameDiff",
+                "  regs",
+                "  states Open",
+                "  event Renamed { " <> field <> ":Text }",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+      old <- checkedServiceFromText "field-rename-old.keiro" (sourceFor "region")
+      new <- checkedServiceFromText "field-rename-new.keiro" (sourceFor "zone")
+      let changes = diffServices old new
+      [ckCode finding | Breaking finding <- changes]
+        `shouldContain` [EvtFieldAddedWithoutBump, EvtFieldRemovedSameVersion]
+      [finding | Advisory finding <- changes, ckCode finding == GeneratedHaskellNameChanged]
+        `shouldBe` []
     it "uses EvtVersionDecreased for a version decrease" $ do
       cs <- diffFixtures "test/fixtures/reservation-v2.keiro" "test/fixtures/reservation.keiro"
       [ckCode k | Breaking k <- cs] `shouldContain` [EvtVersionDecreased]
@@ -5404,6 +5644,63 @@ main = hspec $ do
         [] -> expectationFailure "exact-status spec has no aggregate"
 
   describe "scaffold" $ do
+    it "keeps field DSL names, generated selectors, and wire keys independent" $ do
+      source <- readTestText "test/fixtures/aggregate-field-alias.keiro"
+      service <- checkedServiceFromText "aggregate-field-alias.keiro" source
+      let spec = checkedSpec service
+          ctx = defaultContext (specContext spec)
+          modules = scaffoldServiceModules ctx service
+          domain = generatedTextEndingIn "Domain.hs" modules
+          codec = generatedTextEndingIn "Codec.hs" modules
+          workspace = oneMemberWorkspace "aggregate-field-alias.keiro" spec
+      validateService service `shouldBe` []
+      domain `shouldSatisfy` ((== 2) . T.count "payloadType :: !Text")
+      domain `shouldSatisfy` ((== 2) . T.count "serviceRegion :: !Text")
+      domain `shouldSatisfy` ((== 2) . T.count "family :: !Text")
+      codec `shouldSatisfy` T.isInfixOf "\"type\" .= payload.payloadType"
+      codec `shouldSatisfy` T.isInfixOf "\"region_code\" .= payload.serviceRegion"
+      codec `shouldSatisfy` T.isInfixOf "o .: \"region_code\""
+      scaffoldServiceModules ctx service `shouldBe` modules
+      fmap (map fst . wpModules) (planWorkspaceScaffold "goldens" ctx workspace)
+        `shouldBe` planScaffold ctx spec
+
+      newSpec <- parseInlineSpec "aggregate-field-alias-v2.keiro" (T.replace "event FieldsCopied =" "event FieldsCopied v2 =" source)
+      case goldensForDiff spec newSpec of
+        [golden] -> do
+          goldenJson golden `shouldSatisfy` T.isInfixOf "\"family\":\"sample\""
+          goldenJson golden `shouldSatisfy` T.isInfixOf "\"type\":\"sample\""
+          goldenJson golden `shouldSatisfy` T.isInfixOf "\"region_code\":\"sample\""
+          goldenJson golden `shouldSatisfy` (not . T.isInfixOf "payloadType")
+          goldenJson golden `shouldSatisfy` (not . T.isInfixOf "serviceRegion")
+        goldens -> expectationFailure ("expected one field-alias golden, got " <> show goldens)
+
+    it "keeps aggregate fold identity neutral across field aliases" $ do
+      let sourceFor field =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context field-alias-neutrality",
+                "aggregate AliasNeutrality",
+                "  regs",
+                "  states Open",
+                "  command Observe { " <> field <> " }",
+                "  event Observed = fields(Observe)",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+      base <- checkedServiceFromText "field-alias-base.keiro" (sourceFor "region:Text")
+      selectorAlias <- checkedServiceFromText "field-alias-selector.keiro" (sourceFor "region haskell serviceRegion:Text")
+      wireAlias <- checkedServiceFromText "field-alias-wire.keiro" (sourceFor "region as \"region_code\":Text")
+      let fingerprint service = aggregateFoldFingerprintForService service (onlyAggregate (checkedSpec service))
+          codecFor service =
+            generatedTextEndingIn
+              "Codec.hs"
+              (scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service)
+      fingerprint selectorAlias `shouldBe` fingerprint base
+      fingerprint wireAlias `shouldBe` fingerprint base
+      codecFor base `shouldSatisfy` T.isInfixOf "\"region\" .= payload.region"
+      codecFor selectorAlias `shouldSatisfy` T.isInfixOf "\"region\" .= payload.serviceRegion"
+      codecFor selectorAlias `shouldSatisfy` (not . T.isInfixOf "region_code")
+      codecFor wireAlias `shouldSatisfy` T.isInfixOf "\"region_code\" .= payload.region"
+
     it "synthesizes the exact old wire shape and embeds it in the harness" $ do
       oldSpec <- specOf "test/fixtures/reservation.keiro"
       newSpec <- specOf "test/fixtures/reservation-v2.keiro"
@@ -7858,6 +8155,11 @@ parseInlineSpec sourceName src = case parseSpec sourceName src of
   Left err -> expectationFailure (T.unpack err) >> error "unreachable"
   Right spec -> pure spec
 
+checkedServiceFromText :: FilePath -> T.Text -> IO CheckedService
+checkedServiceFromText sourceName src = case parseSource sourceName src of
+  Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> error "unreachable"
+  Right parsed -> pure (checkedSource parsed)
+
 parseStableRenderedSpec :: FilePath -> Spec -> Either T.Text Spec
 parseStableRenderedSpec sourceName spec =
   case parseSource sourceName stableSource of
@@ -8691,7 +8993,7 @@ genField :: Gen Field
 genField = Field <$> genName <*> oneof [pure Nothing, Just <$> genName]
 
 genAggregateField :: Gen AggregateField
-genAggregateField = AggregateField <$> genName <*> genMaybe (genTypeExpr []) <*> pure noLoc
+genAggregateField = AggregateField <$> genName <*> pure Nothing <*> pure Nothing <*> genMaybe (genTypeExpr []) <*> pure noLoc
 
 genReg :: Gen RegDecl
 genReg = RegDecl <$> genName <*> genTypeExpr [] <*> genRegInitial <*> pure noLoc
@@ -8865,7 +9167,7 @@ genRouter =
     <*> pure noLoc
 
 genContractField :: Gen ContractField
-genContractField = ContractField <$> genName <*> oneof [CTypeId <$> genAdversarialText, pure CText, pure CInt]
+genContractField = ContractField <$> genName <*> pure Nothing <*> pure Nothing <*> oneof [CTypeId <$> genAdversarialText, pure CText, pure CInt] <*> pure noLoc
 
 genContractEvent :: Gen ContractEvent
 genContractEvent = ContractEvent <$> genName <*> genName <*> smallList genContractField

@@ -458,11 +458,16 @@ data StateDecl = StateDecl
   }
   deriving stock (Eq, Show, Generic)
 
--- | An aggregate command/event field. A bare name reuses the field's inferred
--- aggregate type; @name:Type@ accepts the complete 'TypeExpr' grammar so semantic
--- validation can reject unsupported direct shapes with a located diagnostic.
+-- | An aggregate command/event field. The logical DSL name remains the identity
+-- used by expressions and evolution pairing. Optional aliases independently
+-- select the generated Haskell record selector and serialized wire key.
+-- A bare name reuses the field's inferred aggregate type; @name:Type@ accepts
+-- the complete 'TypeExpr' grammar so semantic validation can reject unsupported
+-- direct shapes with a located diagnostic.
 data AggregateField = AggregateField
   { aggregateFieldName :: !Name,
+    aggregateFieldSelector :: !(Maybe Name),
+    aggregateFieldWireKey :: !(Maybe Text),
     aggregateFieldType :: !(Maybe TypeExpr),
     aggregateFieldLoc :: !Loc
   }
@@ -813,7 +818,10 @@ data ContractType = CTypeId !Text | CText | CInt
 
 data ContractField = ContractField
   { cfName :: !Name,
-    cfType :: !ContractType
+    cfSelector :: !(Maybe Name),
+    cfWireKey :: !(Maybe Text),
+    cfType :: !ContractType,
+    cfLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 

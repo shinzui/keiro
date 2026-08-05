@@ -25,7 +25,8 @@ churn. This initiative closes all seven.
 
 After the initiative is complete: the next keiro-dsl release scaffolds Mori's existing workspace
 unchanged (today's unreleased naming enforcement refuses it because the contract field `family`
-in `domain/project-signals.keiro` normalizes to a conservatively reserved Haskell word, and
+in `mori://shinzui/mori`, project-relative path `domain/project-signals.keiro` (artifact-level
+source URI pending), normalizes to a conservatively reserved Haskell word, and
 renaming the field would break the Kafka wire contract on `mori.project.v1`); a spec author can
 give any field an independent generated Haskell selector while keeping its wire key, so a
 reserved-name refusal is always actionable and never wire-breaking; `keiro-dsl check` states the
@@ -113,7 +114,7 @@ The audit findings behind EP 193–197 are recorded in each child plan's Context
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 192 | Decouple wire keys from generated Haskell selectors with field aliases | docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md | None | None | Not Started |
+| 192 | Decouple wire keys from generated Haskell selectors with field aliases | docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md | None | None | Complete |
 | 191 | Unify generated transition layout for replay-only conformance | docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md | None | None | Not Started |
 | 193 | Surface the effective language contract and enforce warnings in CI | docs/plans/193-surface-the-effective-language-contract-and-enforce-warnings-in-ci.md | None | None | Not Started |
 | 194 | Close the gap between check and scaffold refusals | docs/plans/194-close-the-gap-between-check-and-scaffold-refusals.md | None | EP-193 | Not Started |
@@ -203,10 +204,10 @@ alias-free spec generates byte-identical output.
 
 ## Progress
 
-- [ ] EP-192 M1: Reserved-list trim, field-identity model, `haskell`/`as` alias grammar with pretty-print round-trip
-- [ ] EP-192 M2: Checked alias/collision resolution with per-field source locations (fixes the doubled Mori diagnostic)
-- [ ] EP-192 M3: Alias-aware generation, Mori-shape `contract-reserved-family` fixture, byte/fingerprint neutrality
-- [ ] EP-192 M4: Diff/replay classification, ADR 0019/0004 amendments, new field-identity ADR, IR-6 closure
+- [x] EP-192 M1: Reserved-list trim, field-identity model, `haskell`/`as` alias grammar with pretty-print round-trip
+- [x] EP-192 M2: Checked alias/collision resolution with per-field source locations (fixes the doubled Mori diagnostic)
+- [x] EP-192 M3: Alias-aware generation, Mori-shape `contract-reserved-family` fixture, byte/fingerprint neutrality
+- [x] EP-192 M4: Diff/replay classification, ADR 0019/0004 amendments, new field-identity ADR, IR-6 closure
 - [ ] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
 - [ ] EP-191 M2: Duplicate generated declarations refused before writes
 - [ ] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
@@ -322,4 +323,11 @@ tree by the drafting research and recorded in the owning child plan:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-192 is complete. Direct aggregate and contract fields now have independent DSL, generated
+selector, and wire-key identities under language 4; the generated-Haskell keyword policy admits
+contextual words that compile, while explicit aliases provide a wire-stable escape for hard
+keywords. Generation, diff, replay-impact, documentation, ADRs, and IR-6 all use the same resolved
+identity contract. The 560-example DSL suite, all conformance components, the repository build,
+and both generated-code policy checks pass. Strict improvement-request validation retains one
+unrelated baseline failure in IR-19 for a missing recommended `reviews` field; EP-192's plan
+records the exact exception. The remaining master-plan children are not yet implemented.

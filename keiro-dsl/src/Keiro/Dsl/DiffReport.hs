@@ -268,6 +268,7 @@ remediationFor context code
     eventDecodeCodes =
       [ EvtFieldAddedWithoutBump,
         EvtFieldRemovedSameVersion,
+        EvtFieldWireKeyChanged,
         EvtFieldTypeChanged,
         EvtVersionDecreased,
         EvtVersionMissingUpcaster,

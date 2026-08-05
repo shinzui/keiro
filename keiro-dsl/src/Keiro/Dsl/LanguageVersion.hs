@@ -219,7 +219,7 @@ languageRegistry =
   LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly
     :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly,
          LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly,
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV2 runtimeProfileV3 Stable
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 Stable
        ]
 
 profileV1 :: SyntaxProfile
@@ -235,6 +235,15 @@ profileV2 =
           TypedAggregateExpressionSyntax,
           ExplicitTransitionImplementationSyntax
         ]
+    )
+
+profileV3 :: SyntaxProfile
+profileV3 =
+  SyntaxProfile
+    "keiro-dsl/syntax-profile/3"
+    ( Set.insert
+        FieldAliasSyntax
+        (profileFeatures profileV2)
     )
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
@@ -287,6 +296,7 @@ data LanguageFeature
   | IntegerScalarSyntax
   | TypedAggregateExpressionSyntax
   | ExplicitTransitionImplementationSyntax
+  | FieldAliasSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

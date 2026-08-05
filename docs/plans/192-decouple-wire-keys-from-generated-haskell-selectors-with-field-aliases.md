@@ -18,7 +18,8 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 Today the unreleased keiro-dsl refuses to scaffold Mori's committed, previously working
-workspace. The contract field `family: text` in Mori's `domain/project-signals.keiro` is refused
+workspace. The contract field `family: text` in `mori://shinzui/mori`, project-relative path
+`domain/project-signals.keiro` (artifact-level source URI pending), is refused
 with `error[GeneratedOccurrenceReserved]: contract field 'family' normalizes to reserved Haskell
 occurrence 'family'`, printed twice, and `scaffold` exits 1 without writing a file. The refusal
 is doubly wrong. First, `family` is not actually reserved: GHC accepts it as an ordinary
@@ -56,19 +57,36 @@ the motivating regression is a contract field.
   `keiro-dsl/src/Keiro/Dsl/Validate.hs`, the contract and domain emitters in
   `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, the fold-identity encoder, the diff classifier, and the
   language feature-gate mechanism. Authored this plan under MasterPlan 29.
-- [ ] Milestone 1: trim the reserved-word policy to the generated-language contract, add the
+- [x] (2026-08-05 05:02 PDT) Milestone 1: trimmed the reserved-word policy to the generated-language contract, added the
   resolved field-identity model, admit `haskell`/`as` alias syntax on direct aggregate and
-  contract fields under language 4, and round-trip it through the pretty printer.
-- [ ] Milestone 2: checked resolution — selector validation, reserved residuals, selector and
+  contract fields under language 4, and round-tripped it through the pretty printer. Verified
+  with `cabal build keiro-dsl`, 22 naming examples plus 100 collision-order properties, five
+  released-profile examples, the focused alias round trip, and all six frontend-0.7
+  compatibility examples.
+- [x] (2026-08-05 05:14 PDT) Milestone 2: completed checked resolution — selector validation, reserved residuals, selector and
   wire-key collision refusal at `check` with per-field locations, including the contract-field
-  location fix that removes the doubled diagnostic.
-- [ ] Milestone 3: alias-aware generation — records use selectors, codecs use wire keys,
-  `fields(Command)` copies resolved identities, goldens and harness follow, committed fixtures
-  including the Mori-shape reproducer compile, and fingerprint/byte neutrality is proven over
-  the existing corpus.
-- [ ] Milestone 4: diff and replay classification for selector-only and wire-key changes, ADR
-  0019 amendment plus the new field-identity ADR, ADR 0004 inventory row, IR-6 closure, user
-  documentation, changelogs, and full repository closure.
+  location fix that removes the doubled diagnostic. The nine focused identifier-hygiene examples
+  cover selector validity/collisions, empty/duplicate/envelope wire keys, copied command fields,
+  field-local contract diagnostics, and workspace member mapping; the Mori-shape CLI check exits
+  0 with `OK`.
+- [x] (2026-08-05 06:08 PDT) Milestone 3: made records consume selectors and codecs/goldens consume wire keys while
+  `fields(Command)` and hand-owned output hooks continue pairing by DSL identity. Regenerated
+  the contract and aggregate-scalars conformance trees through the public scaffolder; both
+  compiled suites pass, including all eleven contextual selectors. Added the ordinary
+  aggregate-field-alias fixture and regressions for copied identities, golden keys,
+  deterministic/single-workspace generation, and exact fold-fingerprint neutrality. The full
+  557-example unit run found two stale fixture-shape expectations; both focused reruns pass
+  after anchoring the TypeID diagnostic at its field and retaining the language declaration in
+  the alias-bearing pretty-print round trip. The frozen fold baseline remains bit-identical.
+- [x] (2026-08-05 PDT) Milestone 4: classified selector-only changes as build advisories and
+  aggregate event wire-key changes as breaking `EvtFieldWireKeyChanged` replay hazards, while
+  contract wire changes reuse `ContractFieldChanged`. Published ADR 0021, amended ADRs 0019 and
+  0004, closed IR-6 with its contract-field scope, and updated user docs and changelogs. The full
+  560-example DSL suite and every conformance component pass, as do `cabal build all`, both
+  generated-code policy scripts, strict ADR validation, and `git diff --check`. Strict
+  improvement-request validation reaches the pre-existing IR-19 record and fails only because
+  that unrelated record lacks the profile-recommended `reviews` field; this inherited
+  repository baseline is recorded below rather than repaired without review evidence.
 
 
 ## Surprises & Discoveries
@@ -80,7 +98,8 @@ the motivating regression is a contract field.
   the same line and message twice.
   Evidence: `contractFieldName contract field = fieldNameRule "contract field" (cfName field)
   (ctrLoc contract)` at `keiro-dsl/src/Keiro/Dsl/Validate.hs:1203`, and `family` appearing in
-  both `ProjectChanged` and `ProjectArtifactChanged` in Mori's `domain/project-signals.keiro`.
+  both `ProjectChanged` and `ProjectArtifactChanged` in `mori://shinzui/mori`, project-relative
+  path `domain/project-signals.keiro` (an artifact-level URI for this source file is pending).
 
 - Observation: the repository already contains three divergent Haskell keyword sets:
   `HaskellName.haskellKeywords` (34 words, the over-broad set behind the regression), a private
@@ -94,7 +113,36 @@ the motivating regression is a contract field.
   Fingerprint neutrality therefore requires pinning both slots to the DSL identity forever;
   resolved aliases must never flow into them.
 
-(Record further discoveries here during implementation.)
+- Observation: the pre-change Mori-shape fixture reproduced the regression exactly before any
+  policy edit: `keiro-dsl check` exited 1 and printed two byte-identical
+  `GeneratedOccurrenceReserved` errors at contract line 4. After Milestone 1's truthful keyword
+  set, the same source exits 0 and prints `OK`; Milestone 2 still owns proving field-local errors
+  for genuinely reserved selectors.
+  Evidence:
+
+  ```console
+  $ nix develop -c cabal run keiro-dsl -- check keiro-dsl/test/fixtures/contract-reserved-family.keiro
+  # before: exit 1 and two identical line-4 errors
+  # after:  exit 0 and OK
+  ```
+
+- Observation: the stable contract component now names `contract-v4.keiro` in the conformance
+  baseline, while older generator and diff tests continue to use the byte-identical
+  `contract.keiro`. The alias proof must update both source fixtures and their single-fault diff
+  derivatives so existing evolution tests remain single-variable comparisons.
+  Evidence: the public scaffold record reported the prior `contract-v4.keiro` source when the
+  plan-prescribed `contract.keiro` command regenerated the same module; the focused contract
+  test group passes after both fixtures and seven derivatives carry the common fields.
+
+- Observation: repository-wide strict improvement-request validation has an inherited failure
+  outside EP-192. It accepts the implemented IR-6 record and log far enough to report only IR-19,
+  whose existing concept lacks the profile-recommended `reviews` field. Adding fabricated review
+  evidence would be worse than preserving the truthful baseline, so EP-192 records the exception;
+  strict ADR validation succeeds for all 21 ADR concepts.
+  Evidence: `okf validate docs/improvement-requests --strict --profile
+  mori/improvement-requests-profile.dhall --profile-enforce --log-enforce` reports
+  `give-keiro-dsl-generated-sidecars-honest-names-and-one-durability-contract: missing
+  profile-recommended field: reviews`.
 
 
 ## Decision Log
@@ -204,12 +252,29 @@ the motivating regression is a contract field.
 
 ## Outcomes & Retrospective
 
-Implementation has not started. At completion, record: the final trimmed keyword list as
-shipped, the exact compile evidence for each removed word, byte-neutrality results over the
-committed corpus, the new diagnostic and diff codes with test counts, whether Mori's workspace
-scaffolds unchanged against the release candidate, and any deviation from the syntax decided
-here. Perform the ADR distillation pass (amend ADR 0019 and ADR 0004, create the field-identity
-ADR) before marking the plan complete.
+EP-192 shipped the planned three-part field identity without syntax deviation: direct aggregate
+and contract fields accept `<name> [haskell <selector>] [as "<wireKey>"] : <type>` under language
+4, defaulting both aliases to the DSL name. The Haskell refusal set is now the exact 23-word
+generated-language set; the committed aggregate scalar conformance component compile-proves all
+eleven removed contextual words (`as`, `family`, `mdo`, `proc`, `qualified`, `rec`, `safe`,
+`signature`, `stock`, `unsafe`, and `via`) as selectors.
+
+Validation adds append-only `FieldWireKeyCollision` and `FieldWireKeyInvalid` diagnostics with
+field-local evidence. Evolution adds append-only `EvtFieldWireKeyChanged`; selector changes remain
+`GeneratedHaskellNameChanged`, contract wire changes remain `ContractFieldChanged`, and
+alias-free renames retain the old add/remove classification. The full DSL run finished with 560
+examples and zero failures, including selector/wire diff, replay-impact, workspace, generated
+codec, and copied `fields(Command)` coverage. Both compiled alias-bearing conformance components,
+all contextual-selector probes, and the Mori-shaped `family` regression pass.
+
+The frozen fold-identity baseline is bit-identical, alias edits are fingerprint-neutral, ordinary
+single-file and workspace scaffolds are deterministic, and no generated file outside the
+deliberately refreshed contract and aggregate-scalar fixtures changed. No external Mori source or
+workspace required a compatibility edit: its reproduced contract shape now checks successfully.
+ADR 0021 captures the durable identity contract, ADRs 0019 and 0004 carry the reserved-set and
+inventory consequences, and IR-6 is implemented with the widened contract-field scope. The sole
+closure exception is the inherited IR-19 metadata failure described above; all code, build,
+policy, ADR, and whitespace gates pass.
 
 
 ## Context and Orientation
@@ -334,10 +399,11 @@ inventory table must gain a row for field-identity changes), ADR 0018
 frozen fold encoder this plan must not disturb), and ADR 0016
 (`docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md` — language
 provenance wrapping, relevant to the feature gate). No cross-repository ADR is required; the
-Mori evidence is the workspace at `mori://shinzui/mori` (`domain/project-signals.keiro`,
-contract `projectSignals`, topic `mori.project.v1`). The sibling `keiro-syntax` highlighting
-repository follows grammar changes through existing cross-repository automation and is out of
-scope here.
+Mori evidence is the workspace at `mori://shinzui/mori` (project-relative path
+`domain/project-signals.keiro`, whose artifact-level source URI is pending; contract
+`projectSignals`; topic `mori.project.v1`). The sibling highlighting repository
+`mori://shinzui/keiro-syntax` follows grammar changes through existing cross-repository automation
+and is out of scope here.
 
 
 ## Plan of Work
@@ -650,18 +716,18 @@ $ scripts/check-generated-name-policy.sh
 generated Haskell naming policy: ok
 
 $ okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
-...
-validation succeeded
+OK: 21 concepts
 
 $ okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
-...
-validation succeeded
+profile: give-keiro-dsl-generated-sidecars-honest-names-and-one-durability-contract: missing profile-recommended field: reviews
 
 $ git diff --check
 ```
 
-A blank `git diff --check` is success. Update the transcripts and exact counts in this plan as
-implementation proceeds.
+A blank `git diff --check` is success. The improvement-request command's sole failure is the
+pre-existing IR-19 metadata omission recorded in Surprises & Discoveries; IR-6 itself is
+implemented and logged. Update the transcripts and exact counts in this plan as implementation
+proceeds.
 
 
 ## Validation and Acceptance
@@ -705,9 +771,10 @@ Acceptance is behavioral, not merely a successful build:
    contract wire-key change as breaking `ContractFieldChanged` naming both keys. An alias-free
    field rename classifies exactly as on HEAD today.
 9. ADR 0019 states the corrected reserved policy, ADR 0004's inventory has the field-identity
-   row, the new field-identity ADR exists under its `okf id next` handle, IR-6 is
-   `implemented` with the widened-scope note, both logs are updated, and both strict `okf
-   validate` commands pass.
+   row, the new field-identity ADR exists under its `okf id next` handle, and IR-6 is
+   `implemented` with the widened-scope note and both logs updated. Strict ADR validation passes;
+   repository-wide strict improvement-request validation reports only the inherited IR-19
+   `reviews` omission documented above.
 10. `cabal test keiro-dsl`, `cabal build all`, both policy scripts, and `git diff --check`
     pass.
 

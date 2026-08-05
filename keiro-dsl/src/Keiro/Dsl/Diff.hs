@@ -62,6 +62,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
+import Keiro.Dsl.FieldIdentity
+  ( ResolvedFieldIdentity (..),
+    resolveAggregateFieldIdentity,
+    resolveContractFieldIdentity,
+  )
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
@@ -322,6 +327,7 @@ classifyCompatibility context code
     privateDecodeCodes =
       [ EvtFieldAddedWithoutBump,
         EvtFieldRemovedSameVersion,
+        EvtFieldWireKeyChanged,
         EvtFieldTypeChanged,
         EvtVersionDecreased,
         EvtVersionMissingUpcaster,
@@ -1075,7 +1081,8 @@ aggregateDiff env =
 
 aggregatePairDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
 aggregatePairDiff oldSpec newSpec oldAgg newAgg =
-  concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
+  commandFieldIdentityDiff oldAgg newAgg
+    ++ concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
     ++ removedEvents oldAgg newAgg
     ++ wireDiff oldAgg newAgg
     ++ projectionDiff oldAgg newAgg
@@ -1230,33 +1237,67 @@ hasReplayOnlyEmitter aggregate eventName =
     (\transition -> tMode transition == TmReplayOnly && eventName `elem` tEmits transition)
     (aggTransitions aggregate)
 
-eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe TypeExpr)]
+data EventFieldSig = EventFieldSig
+  { eventFieldDslName :: !Name,
+    eventFieldSelector :: !Name,
+    eventFieldWireKey :: !Text,
+    eventFieldType :: !(Maybe TypeExpr)
+  }
+  deriving stock (Eq, Show)
+
+eventFieldSigs :: Aggregate -> Event -> [EventFieldSig]
 eventFieldSigs agg e = case evBody e of
   EventFields fs -> map fieldSig fs
   EventFromCommand cn ->
     maybe [] (map fieldSig . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
   where
-    fieldSig f = (aggregateFieldName f, aggregateFieldType f)
+    fieldSig field =
+      let identity = resolveAggregateFieldIdentity field
+       in EventFieldSig
+            { eventFieldDslName = fieldDslName identity,
+              eventFieldSelector = fieldSelector identity,
+              eventFieldWireKey = fieldWireKey identity,
+              eventFieldType = aggregateFieldType field
+            }
+
+commandFieldIdentityDiff :: Aggregate -> Aggregate -> [Change]
+commandFieldIdentityDiff oldAggregate newAggregate =
+  [ fieldSelectorChange
+      (aggName newAggregate)
+      "command-field-selector"
+      (cmdName newCommand <> "." <> aggregateFieldName newField)
+      (fieldSelector (resolveAggregateFieldIdentity oldField))
+      (fieldSelector (resolveAggregateFieldIdentity newField))
+      "command field selector"
+  | newCommand <- aggCommands newAggregate,
+    Just oldCommand <- [find ((== cmdName newCommand) . cmdName) (aggCommands oldAggregate)],
+    newField <- cmdFields newCommand,
+    Just oldField <- [find ((== aggregateFieldName newField) . aggregateFieldName) (cmdFields oldCommand)],
+    fieldSelector (resolveAggregateFieldIdentity oldField)
+      /= fieldSelector (resolveAggregateFieldIdentity newField)
+  ]
 
 sameVersionEventDiff :: Aggregate -> Aggregate -> Event -> Event -> [Change]
 sameVersionEventDiff oldAgg newAgg oldE newE =
   addedChanges
     ++ removedChanges
     ++ typeChanges
+    ++ selectorChanges
+    ++ wireKeyChanges
     ++ deprecationChanges
     ++ retirementChanges
   where
     oldFields = eventFieldSigs oldAgg oldE
     newFields = eventFieldSigs newAgg newE
-    oldNames = map fst oldFields
-    newNames = map fst newFields
+    oldNames = map eventFieldDslName oldFields
+    newNames = map eventFieldDslName newFields
     added = newNames \\ oldNames
     removed = oldNames \\ newNames
     changed =
-      [ (field, oldType, newType)
-      | (field, oldType) <- oldFields,
-        Just newType <- [lookup field newFields],
-        oldType /= newType
+      [ (eventFieldDslName oldField, eventFieldType oldField, eventFieldType newField)
+      | oldField <- oldFields,
+        Just newField <- [find ((== eventFieldDslName oldField) . eventFieldDslName) newFields],
+        eventFieldType oldField /= eventFieldType newField
       ]
     addedChanges =
       [ breaking (aggName newAgg) "event" (evName newE) EvtFieldAddedWithoutBump ("field(s) " <> commas added <> " added at the same version v" <> tInt (evVersion newE) <> " without a version bump or upcaster")
@@ -1274,6 +1315,34 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
           EvtFieldTypeChanged
           ("type changed " <> renderAggregateFieldType oldType <> " -> " <> renderAggregateFieldType newType <> " at the same version v" <> tInt (evVersion newE))
       | (field, oldType, newType) <- changed
+      ]
+    selectorChanges =
+      [ fieldSelectorChange
+          (aggName newAgg)
+          "event-field-selector"
+          (evName newE <> "." <> eventFieldDslName newField)
+          (eventFieldSelector oldField)
+          (eventFieldSelector newField)
+          "event field selector"
+      | newField <- newFields,
+        Just oldField <- [find ((== eventFieldDslName newField) . eventFieldDslName) oldFields],
+        eventFieldSelector oldField /= eventFieldSelector newField
+      ]
+    wireKeyChanges =
+      [ breaking
+          (aggName newAgg)
+          "event-field-wire-key"
+          (evName newE <> "." <> eventFieldDslName newField)
+          EvtFieldWireKeyChanged
+          ( "wire key changed '"
+              <> eventFieldWireKey oldField
+              <> "' -> '"
+              <> eventFieldWireKey newField
+              <> "'; restore the old key, or version the event and retain an upcaster"
+          )
+      | newField <- newFields,
+        Just oldField <- [find ((== eventFieldDslName newField) . eventFieldDslName) oldFields],
+        eventFieldWireKey oldField /= eventFieldWireKey newField
       ]
     deprecationChanges
       | not (evDeprecated oldE) && evDeprecated newE =
@@ -1572,10 +1641,11 @@ enumUsageSuffix spec enumType = case enumUsages spec enumType of
 enumUsages :: Spec -> Name -> [Text]
 enumUsages spec enumType =
   [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == TRef enumType]
-    ++ [ aggName agg <> ".event." <> evName event <> "." <> field
+    ++ [ aggName agg <> ".event." <> evName event <> "." <> eventFieldDslName field
        | agg <- aggregates,
          event <- aggEvents agg,
-         (field, Just fieldTypeName) <- eventFieldSigs agg event,
+         field <- eventFieldSigs agg event,
+         Just fieldTypeName <- [eventFieldType field],
          fieldTypeName == TRef enumType
        ]
   where
@@ -1678,6 +1748,8 @@ contractEventDiff oldContract newContract oldEvent newEvent =
   topicAliasChange
     ++ removedFieldChanges
     ++ changedFieldChanges
+    ++ selectorFieldChanges
+    ++ wireKeyFieldChanges
     ++ addedFieldChanges
   where
     fieldPairs = pairDeclarations cfName (ceFields oldEvent) (ceFields newEvent)
@@ -1703,6 +1775,34 @@ contractEventDiff oldContract newContract oldEvent newEvent =
           ("field type changed " <> renderContractType (cfType oldField) <> " -> " <> renderContractType (cfType newField))
       | (oldField, newField) <- prMatched fieldPairs,
         cfType oldField /= cfType newField
+      ]
+    selectorFieldChanges =
+      [ fieldSelectorChange
+          (ctrName newContract)
+          "contract-field-selector"
+          (ceName newEvent <> "." <> cfName newField)
+          (fieldSelector (resolveContractFieldIdentity oldField))
+          (fieldSelector (resolveContractFieldIdentity newField))
+          "contract field selector"
+      | (oldField, newField) <- prMatched fieldPairs,
+        fieldSelector (resolveContractFieldIdentity oldField)
+          /= fieldSelector (resolveContractFieldIdentity newField)
+      ]
+    wireKeyFieldChanges =
+      [ breaking
+          (ctrName newContract)
+          "contract-field"
+          (ceName newEvent <> "." <> cfName newField)
+          ContractFieldChanged
+          ( "wire key changed '"
+              <> fieldWireKey (resolveContractFieldIdentity oldField)
+              <> "' -> '"
+              <> fieldWireKey (resolveContractFieldIdentity newField)
+              <> "'; restore the old key or revise the public contract with a consumer-first rollout"
+          )
+      | (oldField, newField) <- prMatched fieldPairs,
+        fieldWireKey (resolveContractFieldIdentity oldField)
+          /= fieldWireKey (resolveContractFieldIdentity newField)
       ]
     addedFieldChanges =
       [ if ctrSchemaVersion newContract > ctrSchemaVersion oldContract
@@ -1835,6 +1935,21 @@ generatedNameChange node facet subject oldLogical newLogical occurrenceKind =
         <> "' -> '"
         <> normalizedGeneratedUpper newLogical
         <> "' while wire, SQL, queue, registry, subscription, and persisted runtime identities remain unchanged; re-scaffold and recompile consumers"
+    )
+
+fieldSelectorChange :: Name -> Text -> Text -> Text -> Text -> Text -> Change
+fieldSelectorChange node facet subject oldSelector newSelector occurrenceKind =
+  advisory
+    node
+    facet
+    subject
+    GeneratedHaskellNameChanged
+    ( occurrenceKind
+        <> " changed '"
+        <> oldSelector
+        <> "' -> '"
+        <> newSelector
+        <> "' while DSL and wire identities remain unchanged; re-scaffold and recompile consumers"
     )
 
 normalizedGeneratedUpper :: Text -> Text
@@ -2370,6 +2485,7 @@ contextFor label root facet subject code =
     privateCodes =
       [ EvtFieldAddedWithoutBump,
         EvtFieldRemovedSameVersion,
+        EvtFieldWireKeyChanged,
         EvtFieldTypeChanged,
         EvtVersionDecreased,
         EvtVersionMissingUpcaster,
