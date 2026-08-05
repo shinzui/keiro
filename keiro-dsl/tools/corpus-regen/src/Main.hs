@@ -1,19 +1,18 @@
 module Main (main) where
 
 import Control.Monad (forM_, unless)
-import CorpusPlan (CorpusEntry (..), entryOutDir, loadCorpusPlan, renderInvocation)
+import CorpusPlan (CorpusEntry (..), checkCabalInventory, checkRecordDiskConsistency, entryOutDir, loadCorpusPlan, renderInvocation)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, nub, sort)
 import Data.Text qualified as T
 import System.Directory (setCurrentDirectory)
-import System.Environment (getArgs)
+import System.Environment (getArgs, getEnvironment)
 import System.Exit (ExitCode (..), exitFailure)
 import System.IO (hPutStr, hPutStrLn, stderr)
-import System.Process (callProcess, readProcessWithExitCode)
+import System.Process (CreateProcess (..), callProcess, proc, readCreateProcessWithExitCode, readProcessWithExitCode)
 
 data Command
   = Regenerate [FilePath]
-  | Check
   | UpdateGoldens [String]
   | Help
 
@@ -23,13 +22,12 @@ main = do
   case command of
     Left message -> hPutStrLn stderr message >> hPutStrLn stderr helpText >> exitFailure
     Right Help -> putStrLn helpText
-    Right Check -> notImplemented "check"
-    Right (UpdateGoldens _) -> notImplemented "update-goldens"
+    Right (UpdateGoldens testArguments) -> updateGoldens testArguments
     Right (Regenerate onlyPaths) -> do
       repoRoot <- resolveRepoRoot
       setCurrentDirectory repoRoot
       planResult <- loadCorpusPlan repoRoot
-      (allEntries, _) <- either dieMany pure planResult
+      (allEntries, exemptions) <- either dieMany pure planResult
       selected <- selectEntries onlyPaths allEntries
       putStrLn
         ( "corpus: "
@@ -40,6 +38,7 @@ main = do
         )
       keiroDsl <- resolveKeiroDsl
       forM_ selected (runEntry keiroDsl)
+      runConsistencyChecks repoRoot allEntries exemptions
       printGitSummary (corpusPaths allEntries)
 
 parseCommand :: [String] -> Either String Command
@@ -47,7 +46,6 @@ parseCommand [] = Right Help
 parseCommand ["--help"] = Right Help
 parseCommand ["-h"] = Right Help
 parseCommand ("regenerate" : args) = Regenerate <$> parseOnly args
-parseCommand ["check"] = Right Check
 parseCommand ("update-goldens" : args) = Right (UpdateGoldens args)
 parseCommand args = Left ("unknown arguments: " <> unwords args)
 
@@ -100,6 +98,33 @@ runEntry keiroDsl entry = do
     ExitSuccess -> pure ()
     ExitFailure _ -> dieInvocation entry arguments
 
+runConsistencyChecks :: FilePath -> [CorpusEntry] -> [FilePath] -> IO ()
+runConsistencyChecks repoRoot entries exemptions = do
+  recordErrors <- checkRecordDiskConsistency repoRoot entries
+  unless (null recordErrors) (dieMany recordErrors)
+  putStrLn "record/disk consistency: ok"
+  cabalErrors <- checkCabalInventory repoRoot entries exemptions
+  unless (null cabalErrors) (dieMany cabalErrors)
+  putStrLn ("cabal inventory consistency: ok (" <> show (length exemptions) <> " exempted module(s))")
+
+updateGoldens :: [String] -> IO ()
+updateGoldens testArguments = do
+  repoRoot <- resolveRepoRoot
+  setCurrentDirectory repoRoot
+  planResult <- loadCorpusPlan repoRoot
+  (entries, _) <- either dieMany pure planResult
+  environment <- getEnvironment
+  let command =
+        (proc "cabal" (["test", "keiro-dsl-test"] <> testArguments))
+          { env = Just (("KEIRO_DSL_UPDATE_GOLDENS", "1") : filter ((/= "KEIRO_DSL_UPDATE_GOLDENS") . fst) environment)
+          }
+  (exitCode, stdoutText, stderrText) <- readCreateProcessWithExitCode command ""
+  putStr stdoutText
+  hPutStr stderr stderrText
+  case exitCode of
+    ExitFailure _ -> exitFailure
+    ExitSuccess -> printGitSummary (corpusPaths entries)
+
 dieInvocation :: CorpusEntry -> [String] -> IO a
 dieInvocation entry arguments = do
   hPutStrLn stderr ("corpus invocation failed for " <> entryOutDir entry <> ": " <> unwords arguments)
@@ -131,11 +156,6 @@ dieMany messages = do
   forM_ messages (hPutStrLn stderr . T.unpack)
   exitFailure
 
-notImplemented :: String -> IO a
-notImplemented command = do
-  hPutStrLn stderr (command <> " is introduced by the driver but completed in a later milestone")
-  exitFailure
-
 helpText :: String
 helpText =
   unlines
@@ -143,7 +163,6 @@ helpText =
       "",
       "Usage:",
       "  keiro-dsl-corpus-regen regenerate [--only REPOSITORY-RELATIVE-OUT-DIR]...",
-      "  keiro-dsl-corpus-regen check",
       "  keiro-dsl-corpus-regen update-goldens [TEST-ARGUMENT]...",
       "",
       "The driver derives ordinary scaffold invocations from tracked records and",

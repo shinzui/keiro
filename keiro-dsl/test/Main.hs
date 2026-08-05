@@ -426,8 +426,7 @@ main = hspec $ do
                 renderFoldBaseline "behavior-complete" behavior,
                 renderFoldBaseline "workspace-nominals" (checkedWorkspace workspace)
               ]
-      golden <- readTestText "test/fixtures/fold-identity-baseline.golden"
-      T.stripEnd actual `shouldBe` T.stripEnd golden
+      assertMatchesGolden "test/fixtures/fold-identity-baseline.golden" actual
 
     it "pins all four runtime gates and fingerprint segment projections" $ do
       nominalSpec <- specOf "test/fixtures/id-domain-migration-v3.keiro"
@@ -539,8 +538,7 @@ main = hspec $ do
                   : map renderFinding changes
                     <> ["replay:", ReplayImpact.renderReplayImpact impact]
               )
-      golden <- readTestText "test/fixtures/fold-identity-diff-replay.golden"
-      T.stripEnd actual `shouldBe` T.stripEnd golden
+      assertMatchesGolden "test/fixtures/fold-identity-diff-replay.golden" actual
 
     it "pins unrelated public 64-bit identities outside the fold digest" $ do
       readModelSpec <- specOf "test/fixtures/readmodel.keiro"
@@ -4401,11 +4399,10 @@ main = hspec $ do
                 == LabelBreaking
     it "renders the consumer-neutral matrix with separate private, snapshot, and public surfaces" $ do
       changes <- diffFixtures "test/fixtures/compatibility-vector-old.keiro" "test/fixtures/compatibility-vector-new.keiro"
-      golden <- readTestText "test/fixtures/compatibility-vector.diff.golden"
       let rendered = T.intercalate "\n" (map renderFinding changes)
           explained = T.intercalate "\n" (map renderExplainBlock changes)
           reportJson = T.pack (show (Aeson.toJSON (diffReport defaultGate changes)))
-      T.stripEnd rendered `shouldBe` T.stripEnd golden
+      assertMatchesGolden "test/fixtures/compatibility-vector.diff.golden" rendered
       rendered `shouldSatisfy` T.isInfixOf "Reservation.event.TransferReservationCreated.patientAcuity"
       rendered `shouldSatisfy` T.isInfixOf "old-binary-read-new-events=breaking"
       rendered `shouldSatisfy` T.isInfixOf "snapshot-hydration=advisory"
@@ -4775,10 +4772,8 @@ main = hspec $ do
           textGolden = T.intercalate "\n" (map renderFinding changes)
           jsonGolden = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReport defaultGate changes)))
           findings = [kind | Breaking kind <- changes, ckCode kind == ContractTypeIdDomainChanged]
-      expectedText <- readTestText "test/fixtures/contract-typeid-domain.diff.golden"
-      expectedJson <- readTestText "test/fixtures/contract-typeid-domain.diff.json.golden"
-      T.stripEnd textGolden `shouldBe` T.stripEnd expectedText
-      T.stripEnd jsonGolden `shouldBe` T.stripEnd expectedJson
+      assertMatchesGolden "test/fixtures/contract-typeid-domain.diff.golden" textGolden
+      assertMatchesGolden "test/fixtures/contract-typeid-domain.diff.json.golden" jsonGolden
       case findings of
         [finding] -> do
           verdictFor PublicConsumer (ckVector finding) `shouldBe` VBreaking
@@ -6813,8 +6808,7 @@ main = hspec $ do
       rendered `shouldSatisfy` T.isInfixOf "    use-site: Order"
       rendered `shouldSatisfy` T.isInfixOf "(domain/order.keiro:"
       rendered `shouldSatisfy` T.isInfixOf "(domain/shipment.keiro:"
-      golden <- readTestText "test/fixtures/workspace-diff-new/workspace.diff.golden"
-      T.unlines (map renderWorkspaceFinding changes) `shouldBe` golden
+      assertMatchesGolden "test/fixtures/workspace-diff-new/workspace.diff.golden" (T.unlines (map renderWorkspaceFinding changes))
 
     it "emits one additive version-1 report with workspace provenance" $ do
       old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
@@ -8673,6 +8667,16 @@ normalizeGenerated text =
 -- of whether the suite was launched from the package directory or repo root.
 readTestText :: FilePath -> IO T.Text
 readTestText path = resolveTestPath path >>= TIO.readFile
+
+assertMatchesGolden :: FilePath -> T.Text -> IO ()
+assertMatchesGolden path actual = do
+  resolved <- resolveTestPath path
+  update <- lookupEnv "KEIRO_DSL_UPDATE_GOLDENS"
+  if update == Just "1"
+    then TIO.writeFile resolved (T.stripEnd actual <> "\n")
+    else do
+      golden <- TIO.readFile resolved
+      T.stripEnd actual `shouldBe` T.stripEnd golden
 
 -- | Locate a repo file regardless of the test process's current directory.
 resolveTestPath :: FilePath -> IO FilePath

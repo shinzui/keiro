@@ -4,6 +4,7 @@ keiro-dsl conformance corpus manifest v1
 # skeleton <kind> <module-root> <out-dir>
 # extra-args <out-dir> <keiro-dsl scaffold arguments...>
 # uncompiled-generated <generated-module-path>
+# legacy-generated <generated-module-path>
 
 workspace keiro-dsl/test/fixtures/workspace-nominals/service.keiro-workspace keiro-dsl/test/conformance-workspace-nominals
 workspace keiro-dsl/test/conformance-service-package/service.keiro-workspace keiro-dsl/test/conformance-service-package/runtime/src
@@ -18,3 +19,114 @@ skeleton workqueue SkelQueue keiro-dsl/test/conformance-skeletons
 skeleton workflow SkelWorkflow keiro-dsl/test/conformance-skeletons
 
 extra-args keiro-dsl/test/conformance-structural --codec-comparison ArtifactInfo --comparison-out keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs
+
+uncompiled-generated keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs
+# Reviewed legacy suites intentionally compile only the output surface under test.
+uncompiled-generated keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/ReplayAudit.hs
+uncompiled-generated keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs
+uncompiled-generated keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/Emergency/Contract.hs
+uncompiled-generated keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/SurgeFlow/ProcessHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Codec.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Domain.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/HospitalSurge/ProcessHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/ReplayAudit.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Codec.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Domain.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/HospitalSurge/Process.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Nominals.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Nominals/Internal.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/ReplayAudit.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Codec.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Domain.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-publisher-runtime/Generated/HospitalCapacity/Emergency/Contract.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/ReservationWork/QueuePolicy.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Codec.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Domain.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ReplayAudit.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Codec.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Domain.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/EventStream.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Transducer.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/PagingRouter/Router.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/ReplayAudit.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/ServiceOncall/ReadModel.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/ServiceOncall/ReadModelHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-workflow-full/Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs
+uncompiled-generated keiro-dsl/test/conformance-workflow-runtime/Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs
+uncompiled-generated keiro-dsl/test/conformance-workflow/Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs
+uncompiled-generated keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs
+legacy-generated keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs
