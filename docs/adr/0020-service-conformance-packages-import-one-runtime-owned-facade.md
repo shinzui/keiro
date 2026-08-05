@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service conformance packages import one runtime-owned facade
 description: A configured Keiro service generates at most one local conformance package whose runner imports one generated facade from an explicitly named runtime package while create-once expectations remain application-owned.
-timestamp: 2026-08-03T18:16:03Z
+timestamp: 2026-08-05T22:40:00Z
 docId: ADR-20
 status: Accepted
 date: 2026-08-03
@@ -77,6 +77,15 @@ inventory and compatibility artifact. A runnable conformance package removes
 the need to translate that manifest into a hand-written runner; it does not
 remove the runtime library's obligation to compile generated modules and their
 dependencies.
+
+> **Amendment (2026-08-05).** The generated build inventory was renamed by
+> [ADR 0022](0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md).
+> Read every `keiro-dsl-manifest.*` reference above as the role-bearing
+> `keiro-dsl-cabal-fragment.context.<context>.<ext>` or
+> `keiro-dsl-cabal-fragment.workspace.<service>.<ext>` file, which now holds the
+> authority this record assigns to the manifest. The decision itself is
+> unchanged: exactly one generated artifact is the authoritative build
+> inventory, and the conformance package consumes rather than restates it.
 
 All package planning participates in the existing detection-before-write
 scaffold boundary. Runtime and package preflights must both succeed before

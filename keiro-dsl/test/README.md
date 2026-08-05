@@ -26,10 +26,12 @@ never overwrites create-once modules, and never commits. Review `git status` and
 `git diff` after every run.
 
 Ordinary single-spec and workspace invocations are derived from the committed
-scaffold records. `conformance-corpus-manifest.txt` stores only provenance the
-records cannot retain: workspace manifest locations, ordered stdin skeleton runs,
-extra arguments, reviewed Cabal-inventory exemptions, and one legacy generated
-file that predates the current record grammar. The driver rejects missing record
+scaffold ledgers (`keiro-dsl-ledger.context.<context>.txt` and
+`keiro-dsl-ledger.workspace.<service>.txt`).
+`conformance-corpus-manifest.txt` stores only provenance the ledgers cannot
+retain: workspace manifest locations, ordered stdin skeleton runs, extra
+arguments, reviewed Cabal-inventory exemptions, and one legacy generated file
+that predates the current ledger grammar. The driver rejects missing ledger
 files, unrecorded generated files, dangling Cabal modules, and stale exemptions.
 
 To verify the committed baseline without accepting drift, run:
@@ -62,7 +64,8 @@ commit the resulting golden diff.
 
 1. Scaffold the fixture once with the public `keiro-dsl` CLI and fill its
    create-once modules.
-2. Force-add the suite's scaffold record and build manifest. The global ignore
+2. Force-add the suite's scaffold ledger (`keiro-dsl-ledger.*.txt`) and its
+   generated Cabal fragment (`keiro-dsl-cabal-fragment.*`). The global ignore
    rule remains correct for non-corpus consumer output.
 3. Add a supplement row only when the history needs a workspace path, an ordered
    skeleton replay, extra scaffold arguments, or a reviewed generated-module
@@ -72,4 +75,4 @@ commit the resulting golden diff.
    from the committed baseline.
 
 Do not hand-edit a generated module to make regeneration pass. Fix the generator,
-fixture, record provenance, or Cabal inventory at its source.
+fixture, ledger provenance, or Cabal inventory at its source.

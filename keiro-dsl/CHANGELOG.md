@@ -8,6 +8,48 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Scaffold sidecars now use role-bearing names. On disk,
+  `keiro-dsl-scaffold-record.<context>.txt` becomes
+  `keiro-dsl-ledger.context.<context>.txt`, the workspace form becomes
+  `keiro-dsl-ledger.workspace.<service>.txt`, `keiro-dsl-conformance-record.txt`
+  becomes `keiro-dsl-conformance-ledger.txt`, and the generated
+  `keiro-dsl-manifest.<context>.<ext>` / `keiro-dsl-manifest.workspace.*` files
+  become `keiro-dsl-cabal-fragment.context.<context>.<ext>` and
+  `keiro-dsl-cabal-fragment.workspace.<service>.<ext>`. The Cabal fragment — not
+  the former manifest name — is the authoritative generated build inventory.
+  An out tree holding legacy names now **refuses without writing**; review the
+  listed moves and rerun `scaffold --apply-name-migrations` to rename them
+  losslessly. Duplicate old files that cannot be renamed are preserved under
+  `.keiro-dsl-name-migrations/sidecar-v1/`.
+- `Keiro.Dsl.ScaffoldRun`'s `Refusal` gains `SidecarMigrationRequired` and
+  `SidecarMigrationRefusal`; `ScaffoldReport` gains `reportSidecarMoves` and
+  `WorkspaceScaffoldReport` gains `wsrSidecarMoves`. Exhaustive matches and
+  record constructions must be extended. Two new modules are exposed:
+  `Keiro.Dsl.SidecarNames` (the role-bearing name vocabulary and legacy-name
+  recognition) and `Keiro.Dsl.SidecarMigration` (the planned move set and its
+  apply path).
+- The renamed conformance ledger also changes format: the whitespace-row
+  `keiro-dsl-conformance-record.txt` becomes the versioned
+  `keiro-dsl conformance ledger v1` with typed JSON file rows. The parser
+  ignores unknown row kinds and unknown JSON keys so future rows decode, while
+  retaining the service-key, malformed-record, unsafe-path, and case-folded
+  duplicate-path refusals. Legacy conformance records are converted **only** by
+  the explicit `--apply-name-migrations` path; no implicit upgrade exists.
+- `AggregateField` gains `aggregateFieldSelector :: Maybe Name` and
+  `aggregateFieldWireKey :: Maybe Text`, and `ContractField` gains
+  `cfSelector :: Maybe Name`, `cfWireKey :: Maybe Text`, and `cfLoc :: Loc`
+  (both in `Keiro.Dsl.Grammar`). Code that constructs these records positionally
+  or matches them exhaustively must be updated; `Nothing` selector and wire-key
+  values reproduce the pre-alias behavior exactly.
+- `RouterReadModelUnverified` previously existed as a declared but never-emitted
+  `DiagnosticCode` constructor. It now carries real semantics and is emitted
+  when a router's resolved read model cannot be verified, so a consumer that
+  matched the constructor as unreachable — or a `--deny` list that named it as a
+  no-op — now sees live diagnostics.
+- Router duplicate-disposition notices moved from `ProcessBenignInversion` to
+  the distinct `RouterBenignInversion`. An adopter CI list that passes
+  `--deny ProcessBenignInversion` silently stops matching router rows; add
+  `--deny RouterBenignInversion` to preserve the previous gate.
 - Requires `keiki >=0.9 && <0.10`, replacing `>=0.8 && <0.9`. Generated
   aggregate domains continue to use `deriveAggregateCtorsAll` and
   `deriveWireCtorsAll`, which now produce Keiki's trusted structural

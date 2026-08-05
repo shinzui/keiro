@@ -1516,7 +1516,7 @@ old/new/backup path. After review, rerun with `--apply-name-migrations`. Keiro p
 the original bytes below
 `.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/`, rewrites only exact module
 references in Haskell code (never comments or literals), and writes current-only
-manifest/record paths. Source and transformed digests plus same-directory prepared
+Cabal-fragment and ledger paths. Source and transformed digests plus same-directory prepared
 files make an interrupted source move resumable; changed backup, prepared, or destination
 bytes refuse with conflict evidence. The flag does not authorize unrelated stale,
 module-root, or layout moves, and `--force-generated-overwrite` cannot bypass it.
