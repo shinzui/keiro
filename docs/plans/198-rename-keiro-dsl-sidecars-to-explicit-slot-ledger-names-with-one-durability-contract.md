@@ -57,15 +57,17 @@ pre-rename run, with the ledgers now under their new names and no orphaned old-n
 - [x] (2026-08-05T21:03:29Z) M1: Added `SidecarMigrationRequired`, duplicate retirement,
       recoverable sidecar backups, applied-move reporting, and pre-read planning in both
       scaffold entry points.
-- [ ] M1: Add and pass refusal, apply, idempotence, duplicate-retirement, stale/drift,
-      adoption, and explicit-slot non-collision regressions.
+- [x] (2026-08-05T21:32:35Z) M1: Added and passed refusal, apply, idempotence,
+      duplicate-retirement, stale-history, dual-name adoption, workspace, and explicit-slot
+      non-collision regressions.
 - [x] (2026-08-05T21:03:29Z) M2: Renamed the conformance ledger and rebuilt its renderer
       and parser on header-plus-typed-JSON rows with unknown-extension tolerance; legacy
       conversion is part of the sidecar migration planner and the library builds.
-- [ ] M2: Add and pass unknown-row/key, mismatch, unsafe/awkward-path, and legacy
-      conversion regressions.
-- [ ] M3: Test suite and committed fixture sweep, regressions, user-guide sidecar section
-      with old-to-new glossary, CHANGELOG breaking entry, ADR distillation.
+- [x] (2026-08-05T21:32:35Z) M2: Added and passed unknown-row/key, service mismatch,
+      unsafe/awkward-path, duplicate-path, and lossless legacy-conversion regressions.
+- [x] (2026-08-05T21:32:35Z) M3: Renamed the 69 committed corpus sidecars, replayed all
+      41 scaffold invocations byte-clean, published the user-guide glossary and breaking
+      CHANGELOG entry, accepted ADR 0022, amended ADR 0015, and closed IR-19.
 
 
 ## Surprises & Discoveries
@@ -76,6 +78,20 @@ pre-rename run, with the ledgers now under their new names and no orphaned old-n
   without moving record-format ownership out of `Keiro.Dsl.ConformancePackage`.
   Evidence: `cabal build keiro-dsl` compiled the resulting acyclic dependency order
   `SidecarNames -> ConformancePackage -> SidecarMigration -> ScaffoldRun`.
+  Date: 2026-08-05.
+- Observation: The tracked corpus held 69 sidecars under historical names: one
+  conformance ledger and 34 ledger/Cabal-fragment pairs. Regeneration changed only the
+  conformance ledger's intentional format bytes; every standalone and workspace ledger
+  and fragment was a pure Git rename.
+  Evidence: the implementation commit records 68 100%-similarity renames plus the
+  conformance record delete/add, and `keiro-dsl-corpus-regen check` reports 41 of 41
+  invocations, record/disk consistency, Cabal inventory consistency, and corpus status OK.
+  Date: 2026-08-05.
+- Observation: A conformance fixture's source filename (`hospital-surge.keiro`) is not its
+  service identity; the declared checked context is `hospital-capacity`.
+  Evidence: the first full DSL run exposed an assertion that used the filename stem, while
+  the actual converted ledger correctly retained `contextName ctx`. The regression now
+  derives both its expected key and mismatch mutation from the checked context.
   Date: 2026-08-05.
 
 
@@ -124,11 +140,46 @@ pre-rename run, with the ledgers now under their new names and no orphaned old-n
   compatibility break covers both changes; sequencing the format rebuild after the naming
   rail exists avoids converting the file twice.
   Date: 2026-08-05.
+- Decision: Refuse when the required sidecar retirement path already exists; never replace
+  a previous backup, even if an active old/current-name duplicate is otherwise migratable.
+  Rationale: the backup slot is the recovery evidence for an earlier reviewed migration.
+  Overwriting it would make the apply flag destructive and would violate the plan's
+  byte-preservation guarantee. A conflict names the path and leaves the tree unchanged.
+  Date: 2026-08-05.
+- Decision: Preserve the existing standalone and workspace ledger bytes and internal v1
+  headers while changing their external filenames; only the conformance ledger receives a
+  format conversion.
+  Rationale: the standalone/workspace row formats already have the required extension
+  tolerance. Keeping their bytes unchanged makes stale, drift, mapping, adoption, and
+  ownership evidence provably continuous across a pure name migration.
+  Date: 2026-08-05.
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Plan 198 is complete. Fresh standalone and workspace scaffolds now write structurally
+disjoint `ledger.context` / `ledger.workspace` histories and equivalently slotted Cabal
+fragments; enabled service packages write `keiro-dsl-conformance-ledger.txt`. One exposed
+name authority supplies every current and historical spelling.
+
+Established trees cannot silently lose history. Both scaffold entry points plan sidecar
+moves before reading a ledger, refuse without mutation, and apply reviewed renames through
+`--apply-name-migrations`. Duplicate historical files are retained under the sidecar-v1
+backup slot, existing backups are conflicts, applied moves are reported, and a repeated run
+is a no-op. Workspace adoption deliberately retains current-first/legacy-second lookup and
+marks the actual evidence file.
+
+The conformance ledger now uses a versioned header and typed JSON file rows. Unknown row
+kinds and JSON keys are extension-safe, awkward safe paths round-trip, and corruption,
+unsafe paths, case-folded duplicates, and service-key mismatches remain refusals. Legacy
+records convert only on explicit apply and retain their original bytes as recovery evidence.
+
+Validation passed: `cabal test all` (including 598 DSL examples and every generated
+conformance component), the focused conformance suites, the 41-invocation corpus check with
+record/disk and Cabal inventory consistency, strict validation of 22 ADRs and 19 improvement
+requests, formatter/pre-commit policy, and Git whitespace checks. ADR 0022 captures the new
+durable contract, ADR 0015 uses the current names, IR-19 is implemented, and the user guide
+and Unreleased breaking notes state the upgrade behavior.
 
 
 ## Context and Orientation
@@ -523,3 +574,11 @@ No new external dependencies. At the end of the plan these interfaces exist:
   `keiro-dsl-conformance-ledger.txt` via `SidecarNames`.
 - `Keiro.Dsl.WorkspaceAdoption` locating context history under the current name first and
   the legacy name second, with `markLegacyRecordSuperseded` marking the file actually read.
+
+
+## Revision Notes
+
+- 2026-08-05: Completed all milestones after the full all-package suite, focused generated
+  conformance suites, strict OKF validation, and byte-clean 41-invocation corpus replay.
+  Recorded the explicit backup-conflict rule, retained standalone/workspace ledger bytes,
+  accepted ADR 0022, amended ADR 0015, and closed IR-19.
