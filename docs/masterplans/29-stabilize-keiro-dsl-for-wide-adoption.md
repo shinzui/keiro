@@ -215,6 +215,7 @@ alias-free spec generates byte-identical output.
 - [x] EP-192 M2: Checked alias/collision resolution with per-field source locations (fixes the doubled Mori diagnostic)
 - [x] EP-192 M3: Alias-aware generation, Mori-shape `contract-reserved-family` fixture, byte/fingerprint neutrality
 - [x] EP-192 M4: Diff/replay classification, ADR 0019/0004 amendments, new field-identity ADR, IR-6 closure
+- [x] EP-192 follow-up: Resolved command selectors in scalar/projection emitters and selector advisories across version bumps
 - [x] EP-191 M1: Source-wide transition layout authoritative for all consumers (incl. audit sibling sites)
 - [x] EP-191 M2: Duplicate generated declarations refused before writes
 - [ ] EP-191 M3: Initial replay-only conformance evidence in single, workspace, and service paths
@@ -278,6 +279,12 @@ tree by the drafting research and recorded in the owning child plan:
 - An existing test pins empty `check` stderr for compatibility-only fixtures
   (`keiro-dsl/test/Main.hs` region 611-635); EP-193's effective-language notice deliberately
   changes that tested contract, so the pin moves with it.
+- Post-closure review of EP-192 found two implementation omissions in the otherwise-complete
+  three-namespace identity contract: scalar/projection renderers still used raw command DSL names,
+  and a legal event-version bump suppressed a simultaneous selector advisory. The follow-up routes
+  all affected expression emitters through one selector lookup and classifies the advisory
+  independently of event-version movement; focused regressions pin both behaviors.
+  The complete DSL unit suite passes with 565 examples and zero failures after the repair.
 
 
 ## Decision Log
@@ -356,6 +363,11 @@ and both generated-code policy checks pass. Strict improvement-request validatio
 unrelated baseline failure in IR-19 for a missing recommended `reviews` field; EP-192's plan
 records the exact exception. The remaining master-plan children are not yet implemented.
 
+The EP-192 post-closure review also repaired selector-aware scalar/projection emission and retained
+selector advisories across legal event-version bumps. These corrections preserve the existing wire
+and fold contracts and are covered by focused regressions plus the green 565-example DSL unit
+suite.
+
 
 ## Revision Notes
 
@@ -364,3 +376,6 @@ records the exact exception. The remaining master-plan children are not yet impl
   dependency so fixture-tree sidecar renames batch into the single corpus refresh. Updated the
   decomposition prose, registry, dependency prose, phases, Progress, and Decision Log
   accordingly.
+- 2026-08-05: Recorded the EP-192 post-closure selector repair discovered after the first MP-29
+  implementation commits, updating aggregate Progress, cross-plan discoveries, and the partial
+  retrospective without changing dependencies or plan status.

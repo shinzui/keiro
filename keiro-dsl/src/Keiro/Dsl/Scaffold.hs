@@ -5149,7 +5149,7 @@ renderNominalProjectionTerm importPlan aggregate transition nominal provenance =
       <> " inCtor"
       <> tCommand transition
       <> " (#"
-      <> fieldName
+      <> commandFieldSelector aggregate (tCommand transition) fieldName
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
@@ -5168,7 +5168,8 @@ renderKeikiTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -
 renderKeikiTerm importPlan aliases aggregate transition expression = case typedScalarNode expression of
   TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate (typedScalarType expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
-  TypedRoot (ScalarCommandRoot fieldName _) -> renderedAtom ("d." <> fieldName)
+  TypedRoot (ScalarCommandRoot fieldName _) ->
+    renderedAtom ("d." <> commandFieldSelector aggregate (tCommand transition) fieldName)
   TypedProject provenance projection ->
     renderedAtom (projectionAliasFor aliases (StructuralProjectionAlias provenance projection))
   TypedAdd _ left right -> arithmetic 6 ".+" left right
@@ -5207,7 +5208,7 @@ renderStructuralProjectionTerm importPlan aggregate transition provenance projec
       <> " inCtor"
       <> tCommand transition
       <> " (#"
-      <> fieldName
+      <> commandFieldSelector aggregate (tCommand transition) fieldName
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
@@ -5649,14 +5650,18 @@ generatedOutputLines aggregate transitionIndex transition emitIndex eventName =
     lead 0 = "          { "
     lead _ = "          , "
     resolvedSelector sourceCommand copiedField =
-      case [ fieldSelector identity
-           | command <- aCommands aggregate,
-             rcName command == sourceCommand,
-             (identity, _) <- rcFields command,
-             fieldDslName identity == outputSelector copiedField
-           ] of
-        selector : _ -> selector
-        [] -> error "validated generated output selector was not found"
+      commandFieldSelector aggregate sourceCommand (outputSelector copiedField)
+
+commandFieldSelector :: Agg -> Name -> Name -> Text
+commandFieldSelector aggregate commandName dslFieldName =
+  case [ fieldSelector identity
+       | command <- aCommands aggregate,
+         rcName command == commandName,
+         (identity, _) <- rcFields command,
+         fieldDslName identity == dslFieldName
+       ] of
+    selector : _ -> selector
+    [] -> error "validated generated command-field selector was not found"
 
 outputMappingFor :: Agg -> Int -> Int -> EventOutputMapping
 outputMappingFor aggregate transitionIndex emitIndex =

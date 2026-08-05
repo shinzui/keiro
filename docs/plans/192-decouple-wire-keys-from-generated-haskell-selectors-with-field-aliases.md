@@ -87,6 +87,11 @@ the motivating regression is a contract field.
   improvement-request validation reaches the pre-existing IR-19 record and fails only because
   that unrelated record lacks the profile-recommended `reviews` field; this inherited
   repository baseline is recorded below rather than repaired without review evidence.
+- [x] (2026-08-05 06:55 PDT) Post-closure repair: routed scalar roots, nominal projections,
+  structural projections, and copied generated outputs through one resolved command-selector
+  lookup, and made event-selector advisories orthogonal to legal event-version changes. Both
+  focused regressions pass; the complete DSL unit suite passes with 565 examples and zero
+  failures.
 
 
 ## Surprises & Discoveries
@@ -143,6 +148,15 @@ the motivating regression is a contract field.
   mori/improvement-requests-profile.dhall --profile-enforce --log-enforce` reports
   `give-keiro-dsl-generated-sidecars-honest-names-and-one-durability-contract: missing
   profile-recommended field: reviews`.
+
+- Observation: the initial alias-aware emitter pass left three scalar-expression renderers using
+  a command field's DSL identity directly, and `eventDiff` evaluated selector changes only in the
+  same-version branch. These were consistency gaps in the implemented three-namespace contract:
+  aliased scalar/projection expressions could emit a missing Haskell selector, and a simultaneous
+  legal version bump could hide the required consumer-build advisory.
+  Evidence: the focused examples `renders resolved command selectors in scalar and projected
+  expressions` and `retains event selector advisories across a legal version bump` both pass
+  after the repair.
 
 
 ## Decision Log
@@ -249,6 +263,14 @@ the motivating regression is a contract field.
   the same field can no longer produce two identical lines.
   Date: 2026-08-04
 
+- Decision: Resolve command selectors through one aggregate lookup everywhere generated Haskell
+  reads a command field, and compute event-selector advisories independently of event-version
+  classification.
+  Rationale: the field identity contract applies to every generated Haskell occurrence, while a
+  version bump and a selector rename describe independent compatibility dimensions that must both
+  remain visible to consumers.
+  Date: 2026-08-05
+
 
 ## Outcomes & Retrospective
 
@@ -275,6 +297,12 @@ ADR 0021 captures the durable identity contract, ADRs 0019 and 0004 carry the re
 inventory consequences, and IR-6 is implemented with the widened contract-field scope. The sole
 closure exception is the inherited IR-19 metadata failure described above; all code, build,
 policy, ADR, and whitespace gates pass.
+
+A post-closure review repaired two omissions without changing the published contract: generated
+scalar and projection expressions now consume resolved command selectors, and selector-only
+consumer-build advisories are retained when the event version also changes legally. Focused
+regressions cover both paths, and the complete 565-example DSL unit suite passes. The repair does
+not change wire keys, fold identity, or diagnostic codes.
 
 
 ## Context and Orientation
@@ -885,3 +913,11 @@ At the end of Milestone 3, `rcFields` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` c
 explicitly: selectors in `emitRecord`, `emitPayloadAdt`, and `payload.<selector>` accessors;
 wire keys in `emitEncode`, `emitDecode`, `emitContractGen`'s `encodeField`/`decodeField`, and
 `Goldens.hs`; DSL identities everywhere else.
+
+
+---
+
+Revision note (2026-08-05): Recorded and verified the post-closure selector repair discovered
+after the first MP-29 implementation commits. The revision adds the missing scalar/projection
+selector consumers and keeps selector advisories visible across legal event-version changes; it
+does not alter EP-192's scope or durable field-identity decision.

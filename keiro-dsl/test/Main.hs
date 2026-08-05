@@ -1156,6 +1156,28 @@ main = hspec $ do
       normalizedBooleanRenderer `shouldSatisfy` T.isInfixOf "B.requireGuard $ d.enabled .== K.lit True"
       firewallBreaches modules `shouldBe` []
 
+    it "renders resolved command selectors in scalar and projected expressions" $ do
+      source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      let aliasedSource =
+            T.replace "active:Bool" "active haskell commandActive:Bool"
+              . T.replace "mode:AccountMode" "mode haskell commandMode:AccountMode"
+              . T.replace "requestId:RequestId" "requestId haskell commandRequestId:RequestId"
+              . T.replace "limits:Limits" "limits haskell commandLimits:Limits"
+              $ source
+      service <- checkedServiceFromText "aggregate-scalar-expression-aliases.keiro" aliasedSource
+      let spec = checkedSpec service
+          transducer = generatedTextEndingIn "Transducer.hs" (scaffoldServiceModules (defaultContext (specContext spec)) service)
+      validateService service `shouldBe` []
+      transducer `shouldSatisfy` T.isInfixOf "d.commandActive"
+      transducer `shouldSatisfy` T.isInfixOf "d.commandLimits"
+      transducer `shouldSatisfy` T.isInfixOf "(#commandMode :: K.Index"
+      transducer `shouldSatisfy` T.isInfixOf "(#commandRequestId :: K.Index"
+      transducer `shouldSatisfy` T.isInfixOf "(#commandLimits :: K.Index"
+      transducer `shouldSatisfy` (not . T.isInfixOf "d.active")
+      transducer `shouldSatisfy` (not . T.isInfixOf "inCtorAdjust (#mode :: K.Index")
+      transducer `shouldSatisfy` (not . T.isInfixOf "inCtorAdjust (#requestId :: K.Index")
+      transducer `shouldSatisfy` (not . T.isInfixOf "inCtorAdjust (#limits :: K.Index")
+
     it "suffixes normalized projection-alias collisions deterministically" $ do
       let source =
             T.unlines
@@ -4200,6 +4222,27 @@ main = hspec $ do
           ReplayAffected impacts ->
             maybe False ((== Set.singleton "Observed") . ReplayImpact.eventTypes) (Map.lookup "AliasDiff" impacts)
           ReplayNeutral -> False
+    it "retains event selector advisories across a legal version bump" $ do
+      let sourceFor eventDeclaration =
+            T.unlines
+              [ "language keiro-dsl 4",
+                "context field-alias-version-diff",
+                "aggregate AliasVersionDiff",
+                "  regs",
+                "  states Open",
+                "  command Observe {}",
+                eventDeclaration
+              ]
+      base <- checkedServiceFromText "field-alias-version-base.keiro" (sourceFor "  event Observed { region:Text }")
+      bumped <-
+        checkedServiceFromText
+          "field-alias-version-bumped.keiro"
+          (sourceFor "  event Observed v2 { region haskell serviceRegion:Text }\n    upcast from v1 = HOLE")
+      let changes = diffServices base bumped
+          selectorFindings = [finding | Advisory finding <- changes, ckCode finding == GeneratedHaskellNameChanged]
+      [ckCode finding | Additive finding <- changes] `shouldContain` [VersionBumped]
+      map ckFacet selectorFindings `shouldBe` ["event-field-selector"]
+      map (verdictFor ConsumerBuild . ckVector) selectorFindings `shouldBe` [VAdvisory]
     it "classifies contract selector aliases separately from public wire changes" $ do
       let sourceFor field =
             T.unlines

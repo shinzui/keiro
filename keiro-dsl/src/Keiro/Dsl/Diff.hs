@@ -1173,45 +1173,49 @@ eventDiff oldAgg newAgg e =
       [additive (aggName newAgg) "event" (evName e) DeclarationAdded "new event type"]
     Just oldE
       | evVersion e > evVersion oldE ->
-          if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
-            then
-              [additive (aggName newAgg) "event" (evName e) VersionBumped ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
-                ++ [ breaking
-                       (aggName newAgg)
-                       "event"
-                       (evName e)
-                       UpcasterChainGap
-                       ( "bumping v"
-                           <> tInt (evVersion oldE)
-                           <> " to v"
-                           <> tInt (evVersion e)
-                           <> " replaced the 'upcast from v"
-                           <> tInt vanishedSource
-                           <> "' rung; stored v"
-                           <> tInt vanishedSource
-                           <> " payloads can no longer decode"
-                       )
-                   | Just (vanishedSource, _) <- [evUpcastFrom oldE],
-                     not (aggregateHasUpcasterSource newAgg vanishedSource)
-                   ]
-            else
-              [ breaking
-                  (aggName newAgg)
-                  "event"
-                  (evName e)
-                  EvtVersionMissingUpcaster
-                  ( "version changed from v"
-                      <> tInt (evVersion oldE)
-                      <> " to v"
-                      <> tInt (evVersion e)
-                      <> " without the required contiguous upcaster from v"
-                      <> tInt (evVersion oldE)
-                  )
-              ]
+          selectorChanges oldE
+            ++ if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
+              then
+                [additive (aggName newAgg) "event" (evName e) VersionBumped ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
+                  ++ [ breaking
+                         (aggName newAgg)
+                         "event"
+                         (evName e)
+                         UpcasterChainGap
+                         ( "bumping v"
+                             <> tInt (evVersion oldE)
+                             <> " to v"
+                             <> tInt (evVersion e)
+                             <> " replaced the 'upcast from v"
+                             <> tInt vanishedSource
+                             <> "' rung; stored v"
+                             <> tInt vanishedSource
+                             <> " payloads can no longer decode"
+                         )
+                     | Just (vanishedSource, _) <- [evUpcastFrom oldE],
+                       not (aggregateHasUpcasterSource newAgg vanishedSource)
+                     ]
+              else
+                [ breaking
+                    (aggName newAgg)
+                    "event"
+                    (evName e)
+                    EvtVersionMissingUpcaster
+                    ( "version changed from v"
+                        <> tInt (evVersion oldE)
+                        <> " to v"
+                        <> tInt (evVersion e)
+                        <> " without the required contiguous upcaster from v"
+                        <> tInt (evVersion oldE)
+                    )
+                ]
       | evVersion e < evVersion oldE ->
-          [breaking (aggName newAgg) "event" (evName e) EvtVersionDecreased ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
+          selectorChanges oldE
+            ++ [breaking (aggName newAgg) "event" (evName e) EvtVersionDecreased ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
       | otherwise ->
-          sameVersionEventDiff oldAgg newAgg oldE e
+          selectorChanges oldE ++ sameVersionEventDiff oldAgg newAgg oldE e
+  where
+    selectorChanges oldEvent = eventFieldSelectorChanges oldAgg newAgg oldEvent e
 
 -- | Events present in the old aggregate but absent in the new one. Removing a
 -- tag entirely is breaking; deprecation preserves decoding but needs a retained
@@ -1260,6 +1264,20 @@ eventFieldSigs agg e = case evBody e of
               eventFieldType = aggregateFieldType field
             }
 
+eventFieldSelectorChanges :: Aggregate -> Aggregate -> Event -> Event -> [Change]
+eventFieldSelectorChanges oldAggregate newAggregate oldEvent newEvent =
+  [ fieldSelectorChange
+      (aggName newAggregate)
+      "event-field-selector"
+      (evName newEvent <> "." <> eventFieldDslName newField)
+      (eventFieldSelector oldField)
+      (eventFieldSelector newField)
+      "event field selector"
+  | newField <- eventFieldSigs newAggregate newEvent,
+    Just oldField <- [find ((== eventFieldDslName newField) . eventFieldDslName) (eventFieldSigs oldAggregate oldEvent)],
+    eventFieldSelector oldField /= eventFieldSelector newField
+  ]
+
 commandFieldIdentityDiff :: Aggregate -> Aggregate -> [Change]
 commandFieldIdentityDiff oldAggregate newAggregate =
   [ fieldSelectorChange
@@ -1282,7 +1300,6 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
   addedChanges
     ++ removedChanges
     ++ typeChanges
-    ++ selectorChanges
     ++ wireKeyChanges
     ++ deprecationChanges
     ++ retirementChanges
@@ -1315,18 +1332,6 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
           EvtFieldTypeChanged
           ("type changed " <> renderAggregateFieldType oldType <> " -> " <> renderAggregateFieldType newType <> " at the same version v" <> tInt (evVersion newE))
       | (field, oldType, newType) <- changed
-      ]
-    selectorChanges =
-      [ fieldSelectorChange
-          (aggName newAgg)
-          "event-field-selector"
-          (evName newE <> "." <> eventFieldDslName newField)
-          (eventFieldSelector oldField)
-          (eventFieldSelector newField)
-          "event field selector"
-      | newField <- newFields,
-        Just oldField <- [find ((== eventFieldDslName newField) . eventFieldDslName) oldFields],
-        eventFieldSelector oldField /= eventFieldSelector newField
       ]
     wireKeyChanges =
       [ breaking
