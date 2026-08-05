@@ -4,5 +4,8 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"WorkflowFacts","kind":"generated","ownerKind":"workflow","ownerName":"workflow HospitalTransferReservation (line 4)","path":"Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs"}
+module-role {"family":"WorkflowRuntime","kind":"generated","ownerKind":"workflow","ownerName":"workflow HospitalTransferReservation (line 4)","path":"Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs"}
 generated Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs
 generated Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs

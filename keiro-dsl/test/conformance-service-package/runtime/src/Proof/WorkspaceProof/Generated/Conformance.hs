@@ -4,21 +4,21 @@ module Proof.WorkspaceProof.Generated.Conformance
   , serviceConformanceFacts
   ) where
 
-import Proof.WorkspaceProof.Alpha.Generated.Harness qualified as Harness0
-import Proof.WorkspaceProof.Beta.Generated.Harness qualified as Harness1
-import Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness qualified as Harness2
-import Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness qualified as Harness3
-import Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts qualified as Harness4
+import Proof.WorkspaceProof.Alpha.Generated.Harness qualified as Alpha
+import Proof.WorkspaceProof.Beta.Generated.Harness qualified as Beta
+import Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness qualified as AlphaView
+import Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness qualified as BetaView
+import Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts qualified as WorkspaceProofWorkflow
 
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
   pure (
-    [("aggregate/Alpha/" <> fact, passed) | (fact, passed) <- Harness0.harnessAssertions]
-    <> [("aggregate/Beta/" <> fact, passed) | (fact, passed) <- Harness1.harnessAssertions]
-    <> [("readmodel/alpha_view/" <> fact, passed) | (fact, passed) <- Harness2.readModelFactResults]
-    <> [("readmodel/beta_view/" <> fact, passed) | (fact, passed) <- Harness3.readModelFactResults]
+    [("aggregate/Alpha/" <> fact, passed) | (fact, passed) <- Alpha.harnessAssertions]
+    <> [("aggregate/Beta/" <> fact, passed) | (fact, passed) <- Beta.harnessAssertions]
+    <> [("readmodel/alpha_view/" <> fact, passed) | (fact, passed) <- AlphaView.readModelFactResults]
+    <> [("readmodel/beta_view/" <> fact, passed) | (fact, passed) <- BetaView.readModelFactResults]
   )
 
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =
-    [("workflow/WorkspaceProofWorkflow/" <> fact, value) | (fact, value) <- Harness4.workflowFactValues]
+    [("workflow/WorkspaceProofWorkflow/" <> fact, value) | (fact, value) <- WorkspaceProofWorkflow.workflowFactValues]

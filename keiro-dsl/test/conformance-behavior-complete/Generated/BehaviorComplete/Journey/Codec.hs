@@ -9,17 +9,15 @@ module Generated.BehaviorComplete.Journey.Codec (
 ) where
 
 import Generated.BehaviorComplete.Journey.Domain
-import Generated.BehaviorComplete.Nominals (RequestId, requestIdText)
+import Generated.BehaviorComplete.Nominals (requestIdText)
 import Generated.BehaviorComplete.Nominals.Internal (unsafeRequestIdFromLegacyText)
 import Control.Monad (unless)
-import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
+import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, (.:), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec.Structural (bindingFromShape, bindingToShape)
@@ -53,7 +51,7 @@ parseStartPayloadShape = withObject "StartPayloadShape" $ \objectValue -> do
   rejectUnknownFields "StartPayload" ["display_label", "optional_note"] objectValue
   ShapeStartPayload.StartPayload
     <$> explicitParseField (parseJSON) objectValue "display_label"
-    <*> (case KeyMap.lookup (Key.fromText "optional_note") objectValue of Nothing -> pure Nothing; Just _ -> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "optional_note")
+    <*> parseOptionalField (pure Nothing) (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "optional_note"
 
 journeyEventTypes :: NonEmpty EventType
 journeyEventTypes = EventType "Started" :| [EventType "DecisionRecorded", EventType "Retired", EventType "RetirementAudited", EventType "LegacyStarted"]
@@ -149,6 +147,12 @@ renderExpectedEventTypes =
     . T.intercalate ", "
     . map (\(EventType eventTypeName) -> eventTypeName)
     . NonEmpty.toList
+
+parseOptionalField :: Parser fieldValue -> (Value -> Parser fieldValue) -> KeyMap.KeyMap Value -> Key.Key -> Parser fieldValue
+parseOptionalField onMissing parseItem objectValue key =
+  case KeyMap.lookup key objectValue of
+    Nothing -> onMissing
+    Just _ -> explicitParseField parseItem objectValue key
 
 rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()
 rejectUnknownFields label allowed objectValue =

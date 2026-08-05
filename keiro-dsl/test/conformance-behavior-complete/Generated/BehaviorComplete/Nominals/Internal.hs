@@ -11,10 +11,13 @@ import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
+import Keiki.Shape (CanonicalTypeName)
 import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)
 
 newtype RequestId = RequestId Text
   deriving stock (Generic, Eq, Ord, Show)
+
+instance CanonicalTypeName RequestId
 
 instance ToJSON RequestId where
   toJSON = toJSON . requestIdText

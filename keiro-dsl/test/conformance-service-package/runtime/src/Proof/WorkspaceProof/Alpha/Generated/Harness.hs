@@ -14,7 +14,7 @@ import Proof.WorkspaceProof.Generated.Nominals (ProofId, parseProofId)
 harnessAssertions :: [(String, Bool)]
 harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions alphaTransducer))
-  , ("clock-free: spec samples no wall clock", True)
+  -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: AlphaPinged", roundTrips sampleEventAlphaPinged)
   , ("golden round-trip: LegacyAlphaPinged", roundTrips sampleEventLegacyAlphaPinged)
   , ("accepts PingAlpha from AlphaActive", acceptPingAlpha)
@@ -24,15 +24,21 @@ harnessAssertions =
 roundTrips :: AlphaEvent -> Bool
 roundTrips e = parseAlphaEvent (eventType alphaCodec e) (encodeAlphaEvent e) == Right e
 
+sampleProofId :: ProofId
+sampleProofId =
+  case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
+
 sampleEventAlphaPinged :: AlphaEvent
-sampleEventAlphaPinged = (AlphaPinged (AlphaPingedData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") False))
+sampleEventAlphaPinged = AlphaPinged (AlphaPingedData sampleProofId False)
 
 sampleEventLegacyAlphaPinged :: AlphaEvent
-sampleEventLegacyAlphaPinged = (LegacyAlphaPinged (LegacyAlphaPingedData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse")))
+sampleEventLegacyAlphaPinged = LegacyAlphaPinged (LegacyAlphaPingedData sampleProofId)
 
 acceptPingAlpha :: Bool
 acceptPingAlpha =
-  case step alphaTransducer (AlphaActive, initialAlphaRegs) ((PingAlpha (PingAlphaData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") False))) of
+  case step alphaTransducer (AlphaActive, initialAlphaRegs) (PingAlpha (PingAlphaData sampleProofId False)) of
     Just (v, _, _) -> v == AlphaActive
     Nothing -> False
 
@@ -40,7 +46,7 @@ acceptPingAlpha =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayPingAlpha :: [(String, Bool)]
 forwardReplayPingAlpha =
-  case step alphaTransducer (AlphaActive, initialAlphaRegs) ((PingAlpha (PingAlphaData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") False))) of
+  case step alphaTransducer (AlphaActive, initialAlphaRegs) (PingAlpha (PingAlphaData sampleProofId False)) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, _forwardRegs, emitted) ->
       case mapM (\event -> parseAlphaEvent (eventType alphaCodec event) (encodeAlphaEvent event)) emitted of

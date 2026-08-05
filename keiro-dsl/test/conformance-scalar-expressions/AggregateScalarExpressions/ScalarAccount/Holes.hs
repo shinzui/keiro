@@ -17,13 +17,12 @@ module AggregateScalarExpressions.ScalarAccount.Holes
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
 import Keiki.Builder qualified as B
 import Keiki.Generics (RegFieldsOf)
-
-
 import Keiki.Core qualified as K
 import Keiro.Snapshot.Codec (FoldVersion (..))
 
 -- HOLE: add the predicate and ordered register updates for this transition.
 -- The generated transducer still owns command matching, mode, emits, and goto.
+transition2ReviewedCloseHole :: B.PayloadProj ScalarAccountRegs ScalarAccountCommand (RegFieldsOf CloseData) -> B.EdgeBuilder ScalarAccountRegs ScalarAccountCommand ScalarAccountEvent ScalarAccountVertex ('Just (RegFieldsOf CloseData)) writes writes ()
 transition2ReviewedCloseHole d =
   B.requireGuard (K.PEq (K.TApp1 id d.balance) d.balance)
 

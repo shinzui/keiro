@@ -21,7 +21,7 @@ import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.BehaviorComplete.StructuralProjections qualified as StructuralProjections
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
+import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 import BehaviorComplete.Bindings qualified as Bindings
 import BehaviorComplete.Domain (StartPayload)
 import Generated.BehaviorComplete.Structural.Shape.StartPayload qualified as ShapeStartPayload
@@ -32,7 +32,7 @@ import Generated.BehaviorComplete.Structural.Shape.StartPayload qualified as Sha
 harnessAssertions :: [(String, Bool)]
 harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions journeyTransducer))
-  , ("clock-free: spec samples no wall clock", True)
+  -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: Started", roundTrips sampleEventStarted)
   , ("golden round-trip: DecisionRecorded", roundTrips sampleEventDecisionRecorded)
   , ("golden round-trip: Retired", roundTrips sampleEventRetired)
@@ -46,24 +46,33 @@ harnessAssertions =
 roundTrips :: JourneyEvent -> Bool
 roundTrips e = parseJourneyEvent (eventType journeyCodec e) (encodeJourneyEvent e) == Right e
 
+sampleRequestId :: RequestId
+sampleRequestId =
+  case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
+
+sampleObservedAt :: UTCTime
+sampleObservedAt = UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)
+
 sampleEventStarted :: JourneyEvent
-sampleEventStarted = (Started (StartedData (case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases)))))
+sampleEventStarted = Started (StartedData sampleRequestId sampleObservedAt 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases))))
 
 sampleEventDecisionRecorded :: JourneyEvent
-sampleEventDecisionRecorded = (DecisionRecorded (DecisionRecordedData 0))
+sampleEventDecisionRecorded = DecisionRecorded (DecisionRecordedData 0)
 
 sampleEventRetired :: JourneyEvent
-sampleEventRetired = (Retired (RetiredData 0))
+sampleEventRetired = Retired (RetiredData 0)
 
 sampleEventRetirementAudited :: JourneyEvent
-sampleEventRetirementAudited = (RetirementAudited (RetirementAuditedData 0))
+sampleEventRetirementAudited = RetirementAudited (RetirementAuditedData 0)
 
 sampleEventLegacyStarted :: JourneyEvent
-sampleEventLegacyStarted = (LegacyStarted (LegacyStartedData 0))
+sampleEventLegacyStarted = LegacyStarted (LegacyStartedData 0)
 
 acceptStart :: Bool
 acceptStart =
-  case step journeyTransducer (JourneyEmpty, initialJourneyRegs) ((Start (StartData (case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases)))))) of
+  case step journeyTransducer (JourneyEmpty, initialJourneyRegs) (Start (StartData sampleRequestId sampleObservedAt 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases))))) of
     Just (v, _, _) -> v == JourneyActive
     Nothing -> False
 
@@ -71,7 +80,7 @@ acceptStart =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayStart :: [(String, Bool)]
 forwardReplayStart =
-  case step journeyTransducer (JourneyEmpty, initialJourneyRegs) ((Start (StartData (case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases)))))) of
+  case step journeyTransducer (JourneyEmpty, initialJourneyRegs) (Start (StartData sampleRequestId sampleObservedAt 0 (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseJourneyEvent (eventType journeyCodec event) (encodeJourneyEvent event)) emitted of
@@ -122,7 +131,7 @@ coverageStartPayload = any (isNothing . ShapeStartPayload.note) shapes && any (i
 
 startedDetailsAssertions :: [(String, Bool)]
 startedDetailsAssertions =
-  [ ("mapped codec round-trip: Started/details/" <> T.unpack label, roundTrips (Started (StartedData (case parseRequestId "req_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0 mappedValue)))
+  [ ("mapped codec round-trip: Started/details/" <> T.unpack label, roundTrips (Started (StartedData sampleRequestId sampleObservedAt 0 mappedValue)))
   | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.startPayloadCases)
   ]
 

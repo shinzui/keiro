@@ -32,11 +32,17 @@ extra arguments, reviewed Cabal-inventory exemptions, and one legacy generated
 file that predates the current record grammar. The driver rejects missing record
 files, unrecorded generated files, dangling Cabal modules, and stale exemptions.
 
-The current whole-corpus output refresh is intentionally owned by EP-196 in the
-stabilization master plan. Until that batched refresh lands, a full regeneration
-shows the reviewed generator drift; focused regeneration is the fast path for
-tooling work. EP-196 also activates the clean-tree policy gate after the committed
-baseline matches the current generator.
+To verify the committed baseline without accepting drift, run:
+
+```console
+scripts/check-conformance-corpus.sh
+```
+
+The check refuses immediately when any corpus path is already dirty. From a
+clean baseline it replays every invocation, verifies record/disk and Cabal/disk
+consistency, and fails if regeneration changes a byte. The equivalent repository
+recipe is `nix develop -c just conformance-corpus-policy`; it is also part of
+`just verify`.
 
 ## Updating render goldens
 
@@ -62,8 +68,8 @@ commit the resulting golden diff.
    skeleton replay, extra scaffold arguments, or a reviewed generated-module
    exemption.
 4. Add or extend the appropriate component in `keiro-dsl.cabal` and run its test.
-5. Run focused regeneration, inspect the diff, then run the whole corpus once the
-   EP-196 baseline refresh has landed.
+5. Run focused regeneration and inspect the diff, then run the whole-corpus check
+   from the committed baseline.
 
 Do not hand-edit a generated module to make regeneration pass. Fix the generator,
 fixture, record provenance, or Cabal inventory at its source.

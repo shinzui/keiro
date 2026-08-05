@@ -4,6 +4,23 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ArtifactInfo","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural ArtifactInfo (line 4)","path":"Generated/StructuralConformance/Structural/Shape/ArtifactInfo.hs"}
+module-role {"family":"ArtifactKind","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural ArtifactKind (line 34)","path":"Generated/StructuralConformance/Structural/Shape/ArtifactKind.hs"}
+module-role {"family":"ArtifactLocation","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural ArtifactLocation (line 46)","path":"Generated/StructuralConformance/Structural/Shape/ArtifactLocation.hs"}
+module-role {"family":"ArtifactMetadata","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural ArtifactMetadata (line 23)","path":"Generated/StructuralConformance/Structural/Shape/ArtifactMetadata.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context structural-conformance mapped structural facade","path":"Generated/StructuralConformance/StructuralProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.Structural.Bindings","path":"Conformance/Structural/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context structural-conformance replay-audit assembly","path":"Generated/StructuralConformance/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses ArtifactCatalog (line 69)","path":"StructuralConformance/ArtifactCatalog/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"StructuralConformance/ArtifactCatalog/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Harness.hs"}
 generated Generated/StructuralConformance/Structural/Shape/ArtifactInfo.hs
 generated Generated/StructuralConformance/Structural/Shape/ArtifactKind.hs
 generated Generated/StructuralConformance/Structural/Shape/ArtifactLocation.hs

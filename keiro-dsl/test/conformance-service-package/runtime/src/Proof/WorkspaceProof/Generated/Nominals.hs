@@ -6,11 +6,4 @@ module Proof.WorkspaceProof.Generated.Nominals
   , proofIdText
   ) where
 
-import Data.Aeson (FromJSON, ToJSON)
-import Data.Text (Text)
-import GHC.Generics (Generic)
-import Keiki.Shape (CanonicalTypeName)
 import Proof.WorkspaceProof.Generated.Nominals.Internal (ProofId, mkProofId, parseProofId, proofIdText)
-import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)
-
-instance CanonicalTypeName ProofId

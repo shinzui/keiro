@@ -261,10 +261,7 @@ aggregateConsumerHaskellSource symbols resolved = case resolved of
     mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
     mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
     timeImports =
-      Set.fromList
-        [ "Data.Time.Calendar (fromGregorian)",
-          "Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
-        ]
+      Set.singleton "Data.Time.Clock (UTCTime)"
 
 aggregateSourceReferences :: AggregateHaskellSource -> Set HaskellReference
 aggregateSourceReferences source = maybe Set.empty Set.singleton (aggregateSourceReference source)

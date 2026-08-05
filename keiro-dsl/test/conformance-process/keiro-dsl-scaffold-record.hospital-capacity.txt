@@ -4,6 +4,29 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal ID internals","path":"Generated/HospitalCapacity/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity replay-audit assembly","path":"Generated/HospitalCapacity/ReplayAudit.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"Generated/HospitalCapacity/HospitalSurge/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"HospitalCapacity/HospitalSurge/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"Generated/HospitalCapacity/HospitalSurge/ProcessHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Surge (line 35)","path":"HospitalCapacity/Surge/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 35)","path":"Generated/HospitalCapacity/Surge/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Hospital (line 47)","path":"HospitalCapacity/Hospital/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Harness.hs"}
 generated Generated/HospitalCapacity/Nominals.hs
 generated Generated/HospitalCapacity/Nominals/Internal.hs
 generated Generated/HospitalCapacity/ReplayAudit.hs

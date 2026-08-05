@@ -1272,21 +1272,30 @@ emitGeneratedNominals languageContract ctx owners =
     ( renderGeneratedLanguagePragmas localExtensions
         <> [ generatedBanner,
              moduleHeader,
-             "",
-             "import Data.Aeson (FromJSON, ToJSON)",
-             "import Data.Text (Text)",
-             "import GHC.Generics (Generic)",
-             "import Keiki.Shape (CanonicalTypeName)"
+             ""
            ]
+        <> baseImports
         <> internalImports
         <> equalityImports
-        <> [ "",
-             sectionsOf [map emitOwner owners]
-           ]
+        <> if T.null declarations then [] else ["", declarations]
     )
   where
     usesEquality = any nominalEqualityUsed owners
-    usesExactEquality = any (\owner -> nominalEqualityUsed owner && exactOwner (nominalDeclaration owner)) owners
+    exactEqualityOwners = [owner | owner <- owners, nominalEqualityUsed owner, exactOwner (nominalDeclaration owner)]
+    inexactEqualityOwners = [owner | owner <- owners, nominalEqualityUsed owner, not (exactOwner (nominalDeclaration owner))]
+    usesExactEquality = not (null exactEqualityOwners)
+    usesInexactEquality = not (null inexactEqualityOwners)
+    legacyNominals =
+      [ nominal
+      | owner <- owners,
+        let nominal = nominalDeclaration owner,
+        case resolvedNominalRepresentation nominal of
+          IdRepresentation prefix -> not (isJust (idDomainContractFor languageContract prefix))
+          EnumRepresentation {} -> True
+          ScalarRepresentation {} -> False
+      ]
+    hasExactEnum = any (\owner -> case resolvedNominalRepresentation (nominalDeclaration owner) of EnumRepresentation {} -> True; _ -> False) exactEqualityOwners
+    hasExactEnforcedId = any (\owner -> case resolvedNominalRepresentation (nominalDeclaration owner) of IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix); _ -> False) exactEqualityOwners
     enforcingIds =
       [ nominal
       | owner <- owners,
@@ -1319,12 +1328,28 @@ emitGeneratedNominals languageContract ctx owners =
     localExtensions =
       [ExtDeriveAnyClass | any (nominalUsesDeriveAnyClass . nominalDeclaration) owners]
         <> [ExtTypeFamilies | usesEquality]
+    baseImports =
+      ["import Data.Aeson (FromJSON, ToJSON)" | not (null legacyNominals)]
+        <> ["import Data.Text (Text)" | not (null legacyNominals) || usesEquality]
+        <> ["import GHC.Generics (Generic)" | not (null legacyNominals)]
+        <> ["import Keiki.Shape (CanonicalTypeName)" | not (null legacyNominals)]
     equalityImports =
-      ["import Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)" | usesEquality]
-        <> ["import Data.List.NonEmpty (NonEmpty (..))" | usesExactEquality]
-        <> ["import Keiki.ProjectionDomain (finiteProjectionDomain)" | usesExactEquality && null enforcingIds]
-        <> ["import Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, textProjectionDomain)" | usesExactEquality && not (null enforcingIds)]
-        <> ["import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)" | not (null enforcingIds)]
+      [ "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")"
+      | usesEquality
+      ]
+        <> ["import Data.List.NonEmpty (NonEmpty (..))" | hasExactEnum]
+        <> [ "import Keiki.ProjectionDomain (" <> T.intercalate ", " projectionDomainImports <> ")"
+           | not (null projectionDomainImports)
+           ]
+        <> ["import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)" | hasExactEnforcedId]
+      where
+        coreImports =
+          ["FieldProjection (..)", "FieldWitness"]
+            <> (if usesExactEquality then ["ExactFieldProjection (..)", "exactFieldWitness"] else [])
+            <> ["fieldWitness" | usesInexactEquality]
+        projectionDomainImports =
+          ["finiteProjectionDomain" | hasExactEnum]
+            <> (if hasExactEnforcedId then ["TextPattern", "textProjectionDomain"] else [])
     internalImports =
       [ "import "
           <> generatedNominalInternalModule ctx
@@ -1335,6 +1360,7 @@ emitGeneratedNominals languageContract ctx owners =
           <> ")"
       | not (null enforcingIds)
       ]
+    declarations = T.dropWhileEnd (== '\n') (sectionsOf [map emitOwner owners])
     emitOwner owner = emitGeneratedNominal languageContract (nominalEqualityUsed owner) (nominalDeclaration owner)
     exactOwner nominal = case resolvedNominalRepresentation nominal of
       EnumRepresentation {} -> True
@@ -1349,9 +1375,7 @@ emitGeneratedNominal :: EffectiveLanguageContract -> Bool -> ResolvedNominalType
 emitGeneratedNominal languageContract equalityUsed nominal = case resolvedNominalRepresentation nominal of
   IdRepresentation prefix
     | Just _ <- idDomainContractFor languageContract prefix ->
-        nl $
-          ["instance CanonicalTypeName " <> name]
-            <> equalitySection
+        nl equalitySection
   IdRepresentation {} ->
     nl $
       [ "newtype " <> name <> " = " <> name <> " Text",
@@ -1444,6 +1468,7 @@ emitGeneratedNominalInternals ctx nominals =
       "import Data.Text (Text)",
       "import Data.Text qualified as T",
       "import GHC.Generics (Generic)",
+      "import Keiki.Shape (CanonicalTypeName)",
       "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)",
       "",
       sectionsOf [map emitInternal nominals]
@@ -1460,6 +1485,8 @@ emitGeneratedNominalInternals ctx nominals =
       nl
         [ "newtype " <> name <> " = " <> name <> " Text",
           "  deriving stock (Generic, Eq, Ord, Show)",
+          "",
+          "instance CanonicalTypeName " <> name,
           "",
           "instance ToJSON " <> name <> " where",
           "  toJSON = toJSON . " <> textName,
@@ -1538,7 +1565,7 @@ generatedNominalCodecImports service ctx nominals =
       <> T.intercalate
         ", "
         ( concat
-            [ [typeImport nominal, nominalTextName nominal]
+            [ publicImports nominal
             | nominal <- stableNominals nominals
             ]
         )
@@ -1552,10 +1579,10 @@ generatedNominalCodecImports service ctx nominals =
        | not (null enforcingIds)
        ]
   where
-    typeImport nominal = case resolvedNominalRepresentation nominal of
+    publicImports nominal = case resolvedNominalRepresentation nominal of
       IdRepresentation prefix
-        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> resolvedNominalName nominal
-      _ -> resolvedNominalName nominal <> " (..)"
+        | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> [nominalTextName nominal]
+      _ -> [resolvedNominalName nominal <> " (..)", nominalTextName nominal]
     enforcingIds =
       [ nominal
       | nominal <- stableNominals nominals,
@@ -1666,8 +1693,8 @@ emitNominalProjections languageContract ctx nominals =
     moduleName = nominalProjectionModule ctx
     imports =
       sort . nub $
-        [ "Keiki.Core (ExactFieldProjection (..), FieldProjection (..), FieldWitness, exactFieldWitness, fieldWitness)",
-          "Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)"
+        [ "Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
+          "Keiro.Codec.Nominal (" <> T.intercalate ", " nominalCodecImports <> ")"
         ]
           <> ["Data.KindID qualified as KindID" | any hasId nominals]
           <> ["Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain, validateIdDomainText)" | any hasEnforcedId nominals]
@@ -1676,6 +1703,16 @@ emitNominalProjections languageContract ctx nominals =
           <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
           <> ["Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, matchesTextPattern, textCharSet, textConcat, textLiteral, textProjectionDomain, textRepeatBetween)" | any hasExactDomain nominals]
           <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
+    hasExactProjection nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
+    hasInexactProjection = any (not . hasExactProjection) nominals
+    hasReconstruction = any hasExactProjection nominals
+    coreImports =
+      ["FieldProjection (..)", "FieldWitness"]
+        <> (if hasReconstruction then ["ExactFieldProjection (..)", "exactFieldWitness"] else [])
+        <> ["fieldWitness" | hasInexactProjection]
+    nominalCodecImports =
+      ["nominalToRepresentation"]
+        <> ["nominalFromRepresentation" | hasReconstruction]
     hasScalar wanted nominal = resolvedNominalRepresentation nominal == ScalarRepresentation wanted
     hasId nominal = case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False
     hasEnforcedId nominal = case resolvedNominalRepresentation nominal of
@@ -2126,25 +2163,28 @@ projectionWitnessName graph owner pointer = do
 emitStructuralProjections :: Context -> TypeGraph -> Text
 emitStructuralProjections ctx graph =
   nl $
-    renderGeneratedLanguagePragmas [ExtTypeFamilies]
+    renderGeneratedLanguagePragmas [ExtTypeFamilies | not (null specs)]
       <> [ generatedBanner,
            "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime.",
            "-- Int, Natural, and UTCTime belong to Keiki's ordered subset.",
            "module " <> moduleName,
            "  ( " <> T.intercalate "\n  , " (map spWitness specs),
            "  ) where",
-           "",
-           "import Data.Text (Text)",
-           "import Data.Time (UTCTime)",
-           "import Numeric.Natural (Natural)",
-           "import Keiro.Codec.Structural (bindingToShape)",
-           "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
+           ""
          ]
+      <> staticImports
       <> T.lines (renderPlannedImports importPlan)
       <> concatMap renderProjection specs
   where
     moduleName = structuralProjectionModule ctx
     specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
+    resultTypes = Set.fromList (map spResult specs)
+    staticImports =
+      ["import Data.Text (Text)" | "Text" `Set.member` resultTypes]
+        <> ["import Data.Time (UTCTime)" | "UTCTime" `Set.member` resultTypes]
+        <> ["import Numeric.Natural (Natural)" | "Natural" `Set.member` resultTypes]
+        <> ["import Keiro.Codec.Structural (bindingToShape)" | not (null specs)]
+        <> ["import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)" | not (null specs)]
     importPlan =
       planImportsOrDie
         moduleName
@@ -2324,7 +2364,7 @@ emitBehaviorContract aggregate =
            "import Data.Map.Strict qualified as Map",
            "import Data.Text (Text)",
            "import Data.Text qualified as T",
-           "import Keiki.Core qualified as K (EdgeMode (..), EdgeRef (..), RegFile, ReplayAttribution (..), ReplayEventSpan (..), ReplaySuccess (..), StepFailure (..), StepSuccess (..), applyEventsDetailedEither, stepDetailedEither, (!))",
+           "import Keiki.Core qualified as K (" <> T.intercalate ", " behaviorCoreImports <> ")",
            "import Keiro.Codec qualified as Codec (Codec (eventType), EventType (..))",
            "",
            "newtype BehaviorKey = BehaviorKey { unBehaviorKey :: Text }",
@@ -2619,6 +2659,19 @@ emitBehaviorContract aggregate =
   where
     name = aName aggregate
     valueStem = lowerFirst name
+    behaviorCoreImports =
+      [ "EdgeMode (..)",
+        "EdgeRef (..)",
+        "RegFile",
+        "ReplayAttribution (..)",
+        "ReplayEventSpan (..)",
+        "ReplaySuccess (..)",
+        "StepFailure (..)",
+        "StepSuccess (..)",
+        "applyEventsDetailedEither",
+        "stepDetailedEither"
+      ]
+        <> ["(!)" | not (null (aRegs aggregate))]
 
 renderCommandKind :: Agg -> [Text]
 renderCommandKind aggregate = case aCommands aggregate of
@@ -3353,7 +3406,7 @@ emitQueuePolicy genPrefix w =
       "  , jobOrdering, jobTuningFor, queueProvision",
       "  ) where",
       "",
-      "import Keiro.PGMQ.Job (JobOrdering (..), JobOutcome (..), JobTuning, PartitionSpec (..), QueueProvision, RetryDelay (..), RetryPolicy (..), partitionedProvision, standardProvision, unloggedProvision, withFifoIndexProvision, withOrdering)",
+      "import Keiro.PGMQ.Job (" <> T.intercalate ", " queuePolicyImports <> ")",
       "",
       "jobOrdering :: JobOrdering",
       "jobOrdering = " <> orderingCtor,
@@ -3386,6 +3439,21 @@ emitQueuePolicy genPrefix w =
       ++ ["  " <> pascal (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
   where
     outcomeType = T.concat (map pascal (T.splitOn "_" (wqName w))) <> "Outcome"
+    queuePolicyImports =
+      [ "JobOrdering (..)",
+        "JobOutcome (..)",
+        "JobTuning",
+        "QueueProvision",
+        "RetryDelay (..)",
+        "RetryPolicy (..)"
+      ]
+        <> ( case wqProvision w of
+               WqStandard -> ["standardProvision"]
+               WqUnlogged -> ["unloggedProvision"]
+               WqPartitioned {} -> ["PartitionSpec (..)", "partitionedProvision"]
+           )
+        <> ["withFifoIndexProvision" | wqOrdering w /= WqUnordered]
+        <> ["withOrdering"]
     orderingCtor = case wqOrdering w of
       WqUnordered -> "Unordered"
       WqFifoThroughput -> "FifoThroughput"
@@ -3910,13 +3978,13 @@ emitDomain a =
            ""
          ]
       ++ ["import Data.Aeson (FromJSON, ToJSON)" | hasSnapshot a]
-      ++ [ "import Data.Proxy (Proxy (..))",
-           "import Data.Text (Text)",
-           "import GHC.Generics (Generic)",
+      ++ ["import Data.Proxy (Proxy (..))" | not (null (aRegs a))]
+      ++ ["import Data.Text (Text)" | AggregateText `elem` aggregateTypes a]
+      ++ [ "import GHC.Generics (Generic)",
            "import Keiki.Core (RegFile (..))"
          ]
       ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
-      ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (aGeneratedNominals a)
+      ++ generatedNominalDomainImports a
       ++ map ("import " <>) (domainStaticImports a)
       ++ T.lines (renderPlannedImports importPlan)
       ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)",
@@ -4078,8 +4146,44 @@ domainImportPlan aggregate =
                ]
         )
 
+generatedNominalDomainImports :: Agg -> [Text]
+generatedNominalDomainImports aggregate
+  | null nominals = []
+  | otherwise =
+      [ "import "
+          <> generatedNominalModule (aContext aggregate)
+          <> " ("
+          <> T.intercalate ", " (concatMap importsFor nominals)
+          <> ")"
+      ]
+  where
+    nominals = stableNominals (aGeneratedNominals aggregate)
+    importsFor nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix
+        | Just _ <- idDomainContractFor (aLanguageContract aggregate) prefix ->
+            resolvedNominalName nominal
+              : ["parse" <> resolvedNominalName nominal | needsParser nominal]
+      _ -> [resolvedNominalName nominal <> " (..)"]
+    needsParser nominal =
+      any
+        (\register -> rrType register == AggregateNominal nominal && case rrInitial register of InitialId {} -> True; _ -> False)
+        (aRegs aggregate)
+
 domainStaticImports :: Agg -> [Text]
-domainStaticImports = Set.toAscList . Set.unions . map aggregateSourceStaticImports . domainAggregateSources
+domainStaticImports aggregate =
+  Set.toAscList (Set.delete timeTypeImport sourceImports <> Set.fromList timeImports)
+  where
+    sourceImports = Set.unions (map aggregateSourceStaticImports (domainAggregateSources aggregate))
+    timeTypeImport = "Data.Time.Clock (UTCTime)"
+    usesTimeType = AggregateTime `elem` aggregateTypes aggregate
+    usesTimeLiteral = any (\register -> case rrInitial register of InitialTime {} -> True; _ -> False) (aRegs aggregate)
+    timeImports
+      | usesTimeLiteral =
+          [ "Data.Time.Calendar (fromGregorian)",
+            "Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)"
+          ]
+      | usesTimeType = [timeTypeImport]
+      | otherwise = []
 
 domainAggregateSources :: Agg -> [AggregateHaskellSource]
 domainAggregateSources aggregate =
@@ -4140,20 +4244,15 @@ emitCodec a =
            "import " <> aGenPrefix a <> ".Domain"
          ]
       ++ generatedNominalCodecImports (aggregateCheckedService a) (aContext a) (codecGeneratedNominals a)
-      ++ ( if hasMappedCodec a
-             then
-               [ "import Control.Monad (unless)",
-                 "import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))",
-                 "import Data.Aeson.Key qualified as Key",
-                 "import Data.Aeson.KeyMap qualified as KeyMap"
-               ]
-             else ["import Data.Aeson (Value, object, withObject, withText, (.:), (.=))"]
-         )
-      ++ [ "import Data.Aeson.Types (Parser, explicitParseField, parseEither)",
+      ++ ["import Control.Monad (unless)" | codecUsesUnknownFieldRejection a]
+      ++ [codecAesonImport a]
+      ++ ["import Data.Aeson.Key qualified as Key" | codecUsesKeyMap a]
+      ++ ["import Data.Aeson.KeyMap qualified as KeyMap" | codecUsesKeyMap a]
+      ++ [ "import Data.Aeson.Types (" <> T.intercalate ", " (codecAesonTypesImports a) <> ")",
            "import Data.List.NonEmpty (NonEmpty (..))",
            "import Data.List.NonEmpty qualified as NonEmpty"
          ]
-      ++ ( if hasMappedCodec a
+      ++ ( if codecUsesMap a
              then ["import Data.Map.Strict (Map)", "import Data.Map.Strict qualified as Map"]
              else []
          )
@@ -4163,7 +4262,7 @@ emitCodec a =
       ++ ["import Data.KindID qualified as KindID" | hasConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)" | hasEnforcedConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | hasConsumerNominalCodec a]
-      ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasMappedCodec a]
+      ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructuralMappedCodec a]
       ++ [ "import Keiro.Codec (Codec (..), EventType (..))",
            upcasterImport a
          ]
@@ -4194,7 +4293,18 @@ emitCodec a =
            "    . map (\\(EventType eventTypeName) -> eventTypeName)",
            "    . NonEmpty.toList"
          ]
-      ++ ( if hasMappedCodec a
+      ++ ( if codecUsesOptionalFieldHelper a
+             then
+               [ "",
+                 "parseOptionalField :: Parser fieldValue -> (Value -> Parser fieldValue) -> KeyMap.KeyMap Value -> Key.Key -> Parser fieldValue",
+                 "parseOptionalField onMissing parseItem objectValue key =",
+                 "  case KeyMap.lookup key objectValue of",
+                 "    Nothing -> onMissing",
+                 "    Just _ -> explicitParseField parseItem objectValue key"
+               ]
+             else []
+         )
+      ++ ( if codecUsesUnknownFieldRejection a
              then
                [ "",
                  "rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()",
@@ -4218,6 +4328,189 @@ codecUsesRecordDot = any (not . null . rcFields) . aEvents
 
 hasMappedCodec :: Agg -> Bool
 hasMappedCodec = not . null . codecMappedDeclarations
+
+hasStructuralMappedCodec :: Agg -> Bool
+hasStructuralMappedCodec = any isStructural . codecMappedDeclarations
+  where
+    isStructural ResolvedStructural {} = True
+    isStructural ResolvedOpaque {} = False
+
+codecAesonImport :: Agg -> Text
+codecAesonImport aggregate =
+  "import Data.Aeson (" <> T.intercalate ", " imports <> ")"
+  where
+    imports =
+      [if codecUsesValueConstructors aggregate then "Value (..)" else "Value"]
+        <> ["object" | codecUsesObject aggregate]
+        <> ["parseJSON" | codecUsesParseJSON aggregate]
+        <> ["toJSON" | codecUsesToJSON aggregate]
+        <> ["withObject"]
+        <> ["withText" | codecUsesWithText aggregate]
+        <> ["(.:)" | codecUsesDotColon aggregate]
+        <> ["(.=)" | codecUsesObject aggregate]
+
+codecUsesObject :: Agg -> Bool
+codecUsesObject aggregate =
+  not (null (aEvents aggregate)) || any structuralUsesObject (codecMappedDeclarations aggregate)
+  where
+    structuralUsesObject (ResolvedStructural _ shape) = case shape of REnum {} -> False; _ -> True
+    structuralUsesObject ResolvedOpaque {} = False
+
+codecAesonTypesImports :: Agg -> [Text]
+codecAesonTypesImports aggregate =
+  ["Parser" | codecUsesParserType aggregate]
+    <> ["explicitParseField" | codecUsesExplicitParseField aggregate]
+    <> ["parseEither"]
+
+codecUsesParserType :: Agg -> Bool
+codecUsesParserType aggregate =
+  codecUsesWithText aggregate || hasStructuralMappedCodec aggregate
+
+codecUsesExplicitParseField :: Agg -> Bool
+codecUsesExplicitParseField aggregate =
+  codecUsesWithText aggregate || any structuralUsesExplicitParseField (codecMappedDeclarations aggregate)
+  where
+    structuralUsesExplicitParseField (ResolvedStructural _ shape) = case shape of
+      RRecord _ _ fields -> not (null fields)
+      REnum {} -> False
+      RUnion {} -> True
+    structuralUsesExplicitParseField ResolvedOpaque {} = False
+
+codecUsesWithText :: Agg -> Bool
+codecUsesWithText aggregate =
+  any nominalUsesWithText (codecGeneratedNominals aggregate <> codecConsumerNominals aggregate)
+    || any mappedUsesWithText (codecMappedDeclarations aggregate)
+  where
+    nominalUsesWithText nominal = case resolvedNominalRepresentation nominal of
+      EnumRepresentation {} -> True
+      IdRepresentation {} -> case resolvedNominalOwnership nominal of ConsumerNominal {} -> True; GeneratedNominal -> False
+      ScalarRepresentation {} -> False
+    mappedUsesWithText (ResolvedStructural _ shape) = case shape of
+      REnum {} -> True
+      RUnion {} -> True
+      RRecord {} -> False
+    mappedUsesWithText ResolvedOpaque {} = False
+
+codecUsesDotColon :: Agg -> Bool
+codecUsesDotColon aggregate = any fieldUsesDotColon (concatMap rcFields (aEvents aggregate))
+  where
+    fieldUsesDotColon (_, resolvedType) = case resolvedType of
+      AggregateNominal nominal -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
+        (GeneratedNominal, EnumRepresentation {}) -> False
+        (ConsumerNominal {}, IdRepresentation {}) -> False
+        (ConsumerNominal {}, EnumRepresentation {}) -> False
+        _ -> True
+      _ -> case fieldCat aggregate resolvedType of
+        MappedStructuralCat {} -> False
+        _ -> True
+
+codecUsesKeyMap :: Agg -> Bool
+codecUsesKeyMap aggregate = codecUsesOptionalFieldHelper aggregate || codecUsesUnknownFieldRejection aggregate
+
+codecUsesUnknownFieldRejection :: Agg -> Bool
+codecUsesUnknownFieldRejection = any declarationRejectsUnknown . codecMappedDeclarations
+  where
+    declarationRejectsUnknown (ResolvedStructural _ shape) = case shape of
+      RRecord _ RejectUnknown _ -> True
+      RUnion encoding _ -> ueUnknownFields encoding == RejectUnknown
+      _ -> False
+    declarationRejectsUnknown ResolvedOpaque {} = False
+
+codecUsesMap :: Agg -> Bool
+codecUsesMap = any declarationUsesMap . codecMappedDeclarations
+  where
+    declarationUsesMap (ResolvedStructural _ shape) = any typeUsesMap (shapeTypeExpressions shape)
+    declarationUsesMap ResolvedOpaque {} = False
+
+codecUsesParseJSON :: Agg -> Bool
+codecUsesParseJSON aggregate = any (declarationUsesAesonConversion aggregate) (codecMappedDeclarations aggregate)
+
+codecUsesToJSON :: Agg -> Bool
+codecUsesToJSON aggregate =
+  any directOpaqueField (concatMap rcFields (aEvents aggregate))
+    || any (declarationUsesAesonConversion aggregate) (codecMappedDeclarations aggregate)
+  where
+    directOpaqueField (_, resolvedType) = case fieldCat aggregate resolvedType of MappedOpaqueCat {} -> True; _ -> False
+
+codecUsesValueConstructors :: Agg -> Bool
+codecUsesValueConstructors = any declarationUsesConstructors . codecMappedDeclarations
+  where
+    declarationUsesConstructors (ResolvedStructural _ shape) =
+      case shape of REnum {} -> True; _ -> any typeUsesOptional (shapeTypeExpressions shape)
+    declarationUsesConstructors ResolvedOpaque {} = False
+
+declarationUsesAesonConversion :: Agg -> ResolvedMappedDecl -> Bool
+declarationUsesAesonConversion aggregate (ResolvedStructural _ shape) =
+  any (typeUsesAesonConversion aggregate) (shapeTypeExpressions shape)
+declarationUsesAesonConversion _ ResolvedOpaque {} = False
+
+shapeTypeExpressions :: ResolvedMappedShape -> [ResolvedTypeExpr]
+shapeTypeExpressions = \case
+  RRecord _ _ fields -> map rwfType fields
+  REnum {} -> []
+  RUnion _ arms -> mapMaybe rwaPayload arms
+
+typeUsesMap :: ResolvedTypeExpr -> Bool
+typeUsesMap =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = False,
+        onInt = False,
+        onInteger = False,
+        onBool = False,
+        onNatural = False,
+        onTime = False,
+        onJson = False,
+        onOptional = id,
+        onList = id,
+        onMap = const True,
+        onRef = const False
+      }
+
+typeUsesOptional :: ResolvedTypeExpr -> Bool
+typeUsesOptional =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = False,
+        onInt = False,
+        onInteger = False,
+        onBool = False,
+        onNatural = False,
+        onTime = False,
+        onJson = False,
+        onOptional = const True,
+        onList = id,
+        onMap = id,
+        onRef = const False
+      }
+
+typeUsesAesonConversion :: Agg -> ResolvedTypeExpr -> Bool
+typeUsesAesonConversion aggregate =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = True,
+        onInt = True,
+        onInteger = True,
+        onBool = True,
+        onNatural = True,
+        onTime = True,
+        onJson = False,
+        onOptional = id,
+        onList = const True,
+        onMap = const True,
+        onRef = \key -> case aTypeGraph aggregate >>= \graph -> Map.lookup key (tgDeclarations graph) of
+          Just ResolvedOpaque {} -> True
+          _ -> False
+      }
+
+codecUsesOptionalFieldHelper :: Agg -> Bool
+codecUsesOptionalFieldHelper aggregate =
+  any structuralHasOptionalField (codecMappedDeclarations aggregate)
+  where
+    structuralHasOptionalField (ResolvedStructural _ (RRecord _ _ fields)) =
+      any ((== POptional) . rwfPresence) fields
+    structuralHasOptionalField (ResolvedStructural _ _) = False
+    structuralHasOptionalField ResolvedOpaque {} = False
 
 hasConsumerNominalCodec :: Agg -> Bool
 hasConsumerNominalCodec = not . null . codecConsumerNominals
@@ -4508,11 +4801,12 @@ codecImportPlan aggregate =
       [ reference
       | nominal <- codecConsumerNominals aggregate,
         ConsumerNominal binding <- [resolvedNominalOwnership nominal],
-        reference <-
-          [ haskellTypeReference (consumerNominalHaskell binding),
-            qualifiedValueReference (consumerNominalBinding binding)
-          ]
+        reference <- qualifiedValueReference (consumerNominalBinding binding) : nominalParserTypeReferences nominal binding
       ]
+    nominalParserTypeReferences nominal binding = case resolvedNominalRepresentation nominal of
+      IdRepresentation {} -> [haskellTypeReference (consumerNominalHaskell binding)]
+      EnumRepresentation {} -> [haskellTypeReference (consumerNominalHaskell binding)]
+      ScalarRepresentation {} -> []
     mappedReferences =
       [ reference
       | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate,
@@ -4690,7 +4984,7 @@ emitShapeDecoder importPlan a graph declaration =
             [ "parse" <> name <> "Shape = withText " <> tshow (name <> "Shape") <> " $ \\tag -> case tag of"
             ]
               <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeConstructor (weCtor entry) | entry <- entries]
-              <> ["  tag -> " <> renderUnknownFailure (name <> " wire value") "tag" (map weTag entries)],
+              <> ["  unknownTag -> " <> renderUnknownFailure (name <> " wire value") "unknownTag" (map weTag entries)],
         onUnion = \encoding arms ->
           nl $
             [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do",
@@ -4734,15 +5028,12 @@ decodeRecordField importPlan a graph field = case rwfPresence field of
   PRequired ->
     "explicitParseField (" <> decoder <> ") objectValue " <> key
   POptional ->
-    "(case KeyMap.lookup (Key.fromText "
-      <> key
-      <> ") objectValue of Nothing -> "
+    "parseOptionalField ("
       <> missing
-      <> "; Just _ -> explicitParseField ("
+      <> ") ("
       <> decoder
       <> ") objectValue "
       <> key
-      <> ")"
   where
     key = tshow (rwfKey field)
     decoder = decodeShapeExpr a graph (rwfType field)
@@ -5814,8 +6105,7 @@ transducerImport aggregate
       "import "
         <> aGenPrefix aggregate
         <> ".Transducer ("
-        <> lowerFirst (aName aggregate)
-        <> "FoldFingerprint, "
+        <> (if hasSnapshot aggregate then lowerFirst (aName aggregate) <> "FoldFingerprint, " else "")
         <> lowerFirst (aName aggregate)
         <> "Transducer)"
   | otherwise =
@@ -5872,7 +6162,15 @@ snapshotFixtureLines aggregate = case aSnapshot aggregate of
 
 emitProjection :: Agg -> Text
 emitProjection a = case aProjection a of
-  Nothing -> nl (renderGeneratedLanguagePragmas [] <> [generatedBanner, "module " <> aGenPrefix a <> ".Projection () where"])
+  Nothing ->
+    nl
+      ( renderGeneratedLanguagePragmas []
+          <> [ generatedBanner,
+               "module " <> aGenPrefix a <> ".Projection () where",
+               "",
+               "-- No projection declarations are present; this module keeps the generated manifest inventory total."
+             ]
+      )
   Just p ->
     nl
       [ generatedBanner,
@@ -6138,12 +6436,26 @@ emitOutputHook aggregate transitionIndex transition emitIndex event =
     lead _ = "  , "
 
 emitHoleImplementation :: Agg -> Int -> Transition -> [Text]
-emitHoleImplementation _ index transition
+emitHoleImplementation aggregate index transition
   | tImplementation transition /= HoleImplementation = []
   | otherwise =
       [ "",
         "-- HOLE: add the predicate and ordered register updates for this transition.",
         "-- The generated transducer still owns command matching, mode, emits, and goto.",
+        holeFunctionName index transition
+          <> " :: "
+          <> payloadProjectionType aggregate transition
+          <> " -> B.EdgeBuilder "
+          <> aName aggregate
+          <> "Regs "
+          <> aName aggregate
+          <> "Command "
+          <> aName aggregate
+          <> "Event "
+          <> aVertexType aggregate
+          <> " ('Just ("
+          <> commandFieldsType transition
+          <> ")) writes writes ()",
         holeFunctionName index transition <> " _d = B.requireGuard K.PTop",
         "",
         "-- Bump this token whenever the Hole predicate or updates change.",

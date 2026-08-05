@@ -4,6 +4,23 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing replay-audit assembly","path":"Generated/TransferRouting/ReplayAudit.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 4)","path":"Generated/TransferRouting/HospitalLoad/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 4)","path":"Generated/TransferRouting/HospitalLoad/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 4)","path":"TransferRouting/HospitalLoad/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 4)","path":"Generated/TransferRouting/HospitalLoad/ReadModelHarness.hs"}
+module-role {"family":"Router","kind":"generated","ownerKind":"router","ownerName":"router HospitalTransferRouter (line 19)","path":"Generated/TransferRouting/HospitalTransferRouter/Router.hs"}
+module-role {"family":"RouterHoles","kind":"hole","ownerKind":"router","ownerName":"router HospitalTransferRouter (line 19)","path":"TransferRouting/HospitalTransferRouter/RouterHoles.hs"}
+module-role {"family":"RouterHarness","kind":"generated","ownerKind":"router","ownerName":"router HospitalTransferRouter (line 19)","path":"Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Hospital (line 32)","path":"TransferRouting/Hospital/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 32)","path":"Generated/TransferRouting/Hospital/Harness.hs"}
 generated Generated/TransferRouting/ReplayAudit.hs
 generated Generated/TransferRouting/HospitalLoad/ReadModelTable.hs
 generated Generated/TransferRouting/HospitalLoad/ReadModel.hs

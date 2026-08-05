@@ -4,6 +4,19 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context billing generated nominal declarations","path":"Generated/Billing/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context billing generated nominal ID internals","path":"Generated/Billing/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context billing replay-audit assembly","path":"Generated/Billing/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Subscription (line 9)","path":"Billing/Subscription/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Billing/Subscription/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Harness.hs"}
 generated Generated/Billing/Nominals.hs
 generated Generated/Billing/Nominals/Internal.hs
 generated Generated/Billing/ReplayAudit.hs

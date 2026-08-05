@@ -4,6 +4,16 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence replay-audit assembly","path":"Generated/ReplayDivergence/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Note (line 4)","path":"ReplayDivergence/Note/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Harness.hs"}
 generated Generated/ReplayDivergence/ReplayAudit.hs
 generated Generated/ReplayDivergence/Note/Domain.hs
 generated Generated/ReplayDivergence/Note/Codec.hs

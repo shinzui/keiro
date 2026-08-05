@@ -20,7 +20,6 @@ skeleton workflow SkelWorkflow keiro-dsl/test/conformance-skeletons
 
 extra-args keiro-dsl/test/conformance-structural --codec-comparison ArtifactInfo --comparison-out keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs
 
-uncompiled-generated keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs
 # Reviewed legacy suites intentionally compile only the output surface under test.
 uncompiled-generated keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs

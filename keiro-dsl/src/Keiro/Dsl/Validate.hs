@@ -488,7 +488,7 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract spec =
-  sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
+  sortOn line (validateNames languageContract spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -1173,8 +1173,8 @@ headOr fallback = \case
 -- | Check every logical name before a renderer can turn it into Haskell.  The
 -- parser enforces the ASCII alphabet; 'HaskellName' owns word segmentation,
 -- casing, keywords, and normalized collision keys.
-validateNames :: Spec -> [Diagnostic]
-validateNames spec =
+validateNames :: EffectiveLanguageContract -> Spec -> [Diagnostic]
+validateNames languageContract spec =
   concat
     [ concatMap idNames (specIds spec),
       concatMap enumNames (specEnums spec),
@@ -1395,18 +1395,41 @@ validateNames spec =
        in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
 
     aggregateHarnessOccurrences aggregate =
-      concat
-        [ [helperOccurrence "accept" ("accept" <> commandName) transition]
-            <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null (tEmits transition))]
-        | transition <- aggTransitions aggregate,
-          tSource transition == initialState,
-          tMode transition == TmLive,
-          let commandName = tCommand transition
-        ]
+      transitionHelpers <> sampleConstants
       where
+        transitionHelpers =
+          concat
+            [ [helperOccurrence "accept" ("accept" <> commandName) transition]
+                <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null (tEmits transition))]
+            | transition <- aggTransitions aggregate,
+              tSource transition == initialState,
+              tMode transition == TmLive,
+              let commandName = tCommand transition
+            ]
+        sampleConstants = map idSampleOccurrence generatedIds <> maybe [] (pure . timeSampleOccurrence) timeSample
+        resolvedHarnessFields =
+          [ (field, resolvedType)
+          | (useSite, field) <- harnessFields aggregate,
+            Right resolvedType <- [inferAggregateFieldType symbols aggregate useSite field]
+          ]
+        generatedIds =
+          Map.elems . Map.fromList $
+            [ (Nominal.resolvedNominalName nominal, nominal)
+            | (_, AggregateNominal nominal) <- resolvedHarnessFields,
+              Nominal.GeneratedNominal <- [Nominal.resolvedNominalOwnership nominal],
+              Nominal.IdRepresentation prefix <- [Nominal.resolvedNominalRepresentation nominal],
+              idDomainContractFor languageContract prefix /= Nothing
+            ]
+        timeFields = [field | (field, AggregateTime) <- resolvedHarnessFields]
+        timeSample = case filter ((== "observedAt") . aggregateFieldName) timeFields of
+          field : _ -> Just ("sampleObservedAt", field)
+          [] -> case timeFields of
+            field : _ -> Just ("sampleTime", field)
+            [] -> Nothing
         initialState = case aggStates aggregate of
           state : _ -> stName state
           [] -> ""
+        symbols = aggregateSymbols spec
         targetModule =
           "Generated."
             <> contextSegment
@@ -1423,6 +1446,35 @@ validateNames spec =
                   HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":" <> helperKind <> ":line:" <> T.pack (show (locLine (tLoc transition))),
                   HaskellName.siteLine = locLine (tLoc transition)
                 }
+        idSampleOccurrence nominal =
+          HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" ("sample" <> nominalName) site
+          where
+            nominalName = Nominal.resolvedNominalName nominal
+            nominalLoc = Nominal.resolvedNominalLoc nominal
+            site =
+              HaskellName.NameSite
+                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
+                  HaskellName.siteLogicalName = nominalName,
+                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":sample-id:" <> nominalName,
+                  HaskellName.siteLine = locLine nominalLoc
+                }
+        timeSampleOccurrence (rendered, field) =
+          HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
+          where
+            site =
+              HaskellName.NameSite
+                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
+                  HaskellName.siteLogicalName = aggregateFieldName field,
+                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":sample-time",
+                  HaskellName.siteLine = locLine (aggregateFieldLoc field)
+                }
+
+    harnessFields aggregate =
+      [(CommandFieldUse, field) | command <- aggCommands aggregate, field <- cmdFields command]
+        <> [ (EventFieldUse, field)
+           | event <- aggEvents aggregate,
+             field <- eventFieldsFor aggregate event
+           ]
 
     contractFieldOccurrences contract =
       [ contractFieldOccurrence targetModule (ceName event <> "Data") field

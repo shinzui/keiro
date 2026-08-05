@@ -3,5 +3,7 @@ spec: keiro-dsl/test/fixtures/contract-v1-compat.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":1,"effectiveLanguageVersion":1,"sourceForm":"declared"}
-semantic-contract {"languageVersion":1,"runtimeSemantics":"keiro-dsl/runtime-semantics/1"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":1,"runtimeSemantics":"keiro-dsl/runtime-semantics/1"}
+naming-edition idiomatic-v1
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract emergency (line 4)","path":"Generated/HospitalCapacity/Emergency/Contract.hs"}
 generated Generated/HospitalCapacity/Emergency/Contract.hs

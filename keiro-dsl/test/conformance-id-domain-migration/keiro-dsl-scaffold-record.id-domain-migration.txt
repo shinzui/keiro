@@ -3,7 +3,19 @@ spec: keiro-dsl/test/fixtures/id-domain-migration-v3.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":3,"effectiveLanguageVersion":3,"sourceForm":"declared"}
-semantic-contract {"languageVersion":3,"runtimeSemantics":"keiro-dsl/runtime-semantics/2"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":3,"runtimeSemantics":"keiro-dsl/runtime-semantics/2"}
+naming-edition idiomatic-v1
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal declarations","path":"Generated/IdDomainMigration/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal ID internals","path":"Generated/IdDomainMigration/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration replay-audit assembly","path":"Generated/IdDomainMigration/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses OrderBook (line 6)","path":"IdDomainMigration/OrderBook/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Harness.hs"}
 generated Generated/IdDomainMigration/Nominals.hs
 generated Generated/IdDomainMigration/Nominals/Internal.hs
 generated Generated/IdDomainMigration/ReplayAudit.hs

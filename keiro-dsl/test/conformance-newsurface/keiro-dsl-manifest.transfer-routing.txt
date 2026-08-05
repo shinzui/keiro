@@ -1,7 +1,11 @@
 -- keiro-dsl build manifest for keiro-dsl/test/fixtures/transfer-routing.keiro
--- Paste the two blocks below into the consuming Cabal stanza.
+-- Paste the complete fragment below into the consuming Cabal stanza.
 -- The generated layer is overwritten on every scaffold; hole modules are
 -- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
 
 other-modules:
     Generated.TransferRouting.Hospital.BehaviorContract
@@ -11,15 +15,15 @@ other-modules:
     Generated.TransferRouting.Hospital.Harness
     Generated.TransferRouting.Hospital.Projection
     Generated.TransferRouting.Hospital.Transducer
-    Generated.TransferRouting.HospitalTransferRouter.Router
-    Generated.TransferRouting.HospitalTransferRouter.RouterHarness
     Generated.TransferRouting.HospitalLoad.ReadModel
     Generated.TransferRouting.HospitalLoad.ReadModelHarness
     Generated.TransferRouting.HospitalLoad.ReadModelTable
+    Generated.TransferRouting.HospitalTransferRouter.Router
+    Generated.TransferRouting.HospitalTransferRouter.RouterHarness
     Generated.TransferRouting.ReplayAudit
     TransferRouting.Hospital.BehaviorHoles
-    TransferRouting.HospitalTransferRouter.RouterHoles
     TransferRouting.HospitalLoad.ReadModelHoles
+    TransferRouting.HospitalTransferRouter.RouterHoles
 
 build-depends:
     , aeson

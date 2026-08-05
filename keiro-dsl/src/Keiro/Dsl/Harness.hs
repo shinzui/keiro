@@ -51,7 +51,6 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph
@@ -181,44 +180,57 @@ harnessReadModel ctx readModel =
 
 emitReadModelHarness :: Text -> Context -> ReadModelNode -> Text
 emitReadModelHarness genPrefix ctx readModel =
-  nl
-    [ generatedBanner,
-      "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, readModelFactResults, runReadModelFacts) where",
-      "",
-      "-- | (fact, expected from notation, actual shared derivation/lowering).",
-      "readModelFacts :: [(String, String, String)]",
-      "readModelFacts =",
-      "  [ (\"registryName\", " <> tshow expectedRegistry <> ", " <> tshow actualRegistry <> ")",
-      "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", " <> tshow actualSubscription <> ")",
-      "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", " <> tshow (deriveShapeHash readModel) <> ")",
-      "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", " <> tshow actualAsync <> ")",
-      "  , (\"consistency\", " <> tshow consistency <> ", " <> tshow consistency <> ")",
-      "  , (\"strongScope\", " <> tshow scope <> ", " <> tshow scope <> ")",
-      "  ]",
-      "",
-      "readModelFactResults :: [(String, Bool)]",
-      "readModelFactResults =",
-      "  [(fact, expected == actual) | (fact, expected, actual) <- readModelFacts]",
-      "",
-      "runReadModelFacts :: IO Bool",
-      "runReadModelFacts = do",
-      "  let failures = [(fact, expected, actual) | (fact, expected, actual) <- readModelFacts, expected /= actual]",
-      "  mapM_ (\\(fact, expected, actual) -> putStrLn (\"FAIL  \" <> fact <> \" expected=\" <> show expected <> \" actual=\" <> show actual)) failures",
-      "  pure (null failures)"
-    ]
+  nl $
+    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot]
+      <> [ generatedBanner,
+           "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, readModelFactResults, runReadModelFacts) where",
+           "",
+           "import " <> genPrefix <> ".ReadModel (" <> T.intercalate ", " readModelImports <> ")",
+           "import Data.Text qualified as T",
+           "import Keiro.ReadModel (ReadModel (..), StrongScope (..))"
+         ]
+      <> ["import Keiro.Projection (AsyncProjection (..))" | rmFeed readModel == RmSubscription]
+      <> [ "",
+           "-- | (fact, expected from notation, actual generated runtime value).",
+           "readModelFacts :: [(String, String, String)]",
+           "readModelFacts =",
+           "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
+           "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", T.unpack " <> readModelName <> ".subscriptionName)",
+           "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)",
+           asyncFactRow,
+           "  , (\"consistency\", " <> tshow consistency <> ", show " <> readModelName <> ".defaultConsistency)",
+           "  , (\"strongScope\", " <> tshow scope <> ", renderStrongScope " <> readModelName <> ".strongScope)",
+           "  ]",
+           "",
+           "renderStrongScope :: StrongScope -> String",
+           "renderStrongScope EntireLog = \"EntireLog\"",
+           "renderStrongScope (CategoryHead categoryName) = \"CategoryHead \" <> T.unpack categoryName",
+           "",
+           "readModelFactResults :: [(String, Bool)]",
+           "readModelFactResults =",
+           "  [(fact, expected == actual) | (fact, expected, actual) <- readModelFacts]",
+           "",
+           "runReadModelFacts :: IO Bool",
+           "runReadModelFacts = do",
+           "  let failures = [(fact, expected, actual) | (fact, expected, actual) <- readModelFacts, expected /= actual]",
+           "  mapM_ (\\(fact, expected, actual) -> putStrLn (\"FAIL  \" <> fact <> \" expected=\" <> show expected <> \" actual=\" <> show actual)) failures",
+           "  pure (null failures)"
+         ]
   where
+    stem = lowerFirst (pascal (rmName readModel))
+    readModelName = stem <> "ReadModel"
+    asyncProjectionName = stem <> "AsyncProjection"
+    readModelImports = readModelName : [asyncProjectionName | rmFeed readModel == RmSubscription]
     expectedRegistry = contextName ctx <> "-" <> T.replace "_" "-" (rmName readModel)
-    actualRegistry = registryNameFor (contextName ctx) readModel
     expectedSubscription = case rmSubscription readModel of
       Just name -> name
       Nothing -> expectedRegistry <> "-sub"
-    actualSubscription = subscriptionNameFor (contextName ctx) readModel
     expectedAsync = case rmFeed readModel of
       RmInline -> "none"
       RmSubscription -> expectedRegistry <> "-async"
-    actualAsync = case rmFeed readModel of
-      RmInline -> "none"
-      RmSubscription -> actualRegistry <> "-async"
+    asyncFactRow = case rmFeed readModel of
+      RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
+      RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
     consistency = case rmConsistency readModel of
       Strong -> "Strong"
       Eventual -> "Eventual"
@@ -465,9 +477,9 @@ emitHarness goldens a =
            "-- entry False; the scaffold cannot.",
            "harnessAssertions :: [(String, Bool)]",
            "harnessAssertions =",
-           "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))",
-           "  , (\"clock-free: spec samples no wall clock\", " <> clockFreeLit <> ")"
+           "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
          ]
+      ++ clockFreeRows
       ++ [ "  , (\"golden round-trip: " <> rcName e <> "\", roundTrips sampleEvent" <> rcName e <> ")"
          | e <- aEvents a
          ]
@@ -492,6 +504,7 @@ emitHarness goldens a =
            "roundTrips :: " <> nm <> "Event -> Bool",
            "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
          ]
+      ++ harnessSampleDeclarations a
       ++ concatMap (sampleEventDecl a) (aEvents a)
       ++ concatMap (acceptDecl a . layoutTransition) (initialLiveTransitionEntries a)
       ++ concatMap (forwardReplayDecl a) replayTransitions
@@ -500,8 +513,10 @@ emitHarness goldens a =
       ++ nominalHarnessDeclarations a
   where
     nm = aName a
-    -- Bake the clock-free result computed from the spec at scaffold time.
-    clockFreeLit = if specIsClockFree a then "True" else "False"
+    clockFreeRows =
+      if specIsClockFree a
+        then ["  -- clock-free: spec samples no wall clock (verified at scaffold time)"]
+        else ["  , (\"clock-free: spec samples no wall clock\", False)"]
     upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
     replayTransitions =
       [ t
@@ -658,6 +673,38 @@ sampleEventDecl a e =
     "sampleEvent" <> rcName e <> " = " <> ctorExpr a e
   ]
 
+harnessSampleDeclarations :: Agg -> [Text]
+harnessSampleDeclarations aggregate =
+  concatMap generatedIdDeclaration generatedIds <> timeDeclaration
+  where
+    generatedIds =
+      [ nominal
+      | nominal <- generatedNominalHarnessTypes aggregate,
+        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+        idDomainContractFor (aLanguageContract aggregate) prefix /= Nothing
+      ]
+    generatedIdDeclaration nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> case idDomainContractFor (aLanguageContract aggregate) prefix of
+        Just contract ->
+          let typeName = resolvedNominalName nominal
+              constantName = generatedIdSampleName nominal
+           in [ "",
+                constantName <> " :: " <> typeName,
+                constantName <> " =",
+                "  case parse" <> typeName <> " " <> tshow (idDomainSampleText contract) <> " of",
+                "    Right parsed -> parsed",
+                "    Left problem -> error (show problem)"
+              ]
+        Nothing -> []
+      _ -> []
+    timeDeclaration
+      | harnessUsesTime aggregate =
+          [ "",
+            harnessTimeSampleName aggregate <> " :: UTCTime",
+            harnessTimeSampleName aggregate <> " = UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)"
+          ]
+      | otherwise = []
+
 acceptDecl :: Agg -> Transition -> [Text]
 acceptDecl a t =
   [ "",
@@ -713,7 +760,7 @@ forwardReplayDecl a t =
 -- | @(<Ctor> (<Ctor>Data v1 v2 …))@ with positional sample field values.
 ctorExpr :: Agg -> ResolvedCtor -> Text
 ctorExpr a rc =
-  "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
+  rcName rc <> " (" <> rcName rc <> "Data" <> args <> ")"
   where
     args = T.concat [" " <> sampleValue a (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
 
@@ -723,7 +770,7 @@ ctorExpr a rc =
 -- not accidentally inherit a forbidden @Free@ register initial value.
 commandCtorExpr :: Agg -> Transition -> ResolvedCtor -> Text
 commandCtorExpr a transition rc =
-  "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
+  rcName rc <> " (" <> rcName rc <> "Data" <> args <> ")"
   where
     args = T.concat [" " <> commandSampleValue a transition (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
 
@@ -743,7 +790,10 @@ commandSampleValue aggregate transition fieldName fieldType = case fieldType of
       _ -> case rrType register of
         AggregateNominal nominal -> case resolvedNominalOwnership nominal of
           ConsumerNominal {} -> renderRegisterInitial (rrInitial register)
-          GeneratedNominal -> fromMaybe (renderRegisterInitial (rrInitial register)) (generatedIdSampleHaskell owner nominal)
+          GeneratedNominal ->
+            fromMaybe
+              (renderRegisterInitial (rrInitial register))
+              (generatedIdSampleName nominal <$ generatedIdSampleHaskell owner nominal)
         _ -> renderRegisterInitial (rrInitial register)
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
@@ -762,13 +812,14 @@ sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
 sampleValue a fieldName ty = case ty of
   AggregateNominal nominal
     | GeneratedNominal <- resolvedNominalOwnership nominal,
-      Just sample <- generatedIdSampleHaskell a nominal ->
-        sample
+      Just _ <- generatedIdSampleHaskell a nominal ->
+        generatedIdSampleName nominal
   AggregateNominal nominal
     | ConsumerNominal binding <- resolvedNominalOwnership nominal ->
         "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "
           <> renderHarnessReference a (harnessQualifiedValueReference (consumerNominalFixtures binding))
           <> ")))"
+  AggregateTime -> harnessTimeSampleName a
   _ -> fallback
   where
     fallback = case fieldCat a ty of
@@ -781,14 +832,27 @@ sampleValue a fieldName ty = case ty of
           | vertexType == aVertexType a -> initialVertex a
         _ -> aggregateSampleHaskell (aSymbols a) fieldName ty
 
+generatedIdSampleName :: ResolvedNominalType -> Text
+generatedIdSampleName nominal = "sample" <> resolvedNominalName nominal
+
+harnessUsesTime :: Agg -> Bool
+harnessUsesTime aggregate =
+  any ((== AggregateTime) . snd) (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
+
+harnessTimeSampleName :: Agg -> Text
+harnessTimeSampleName aggregate
+  | any isObservedAtTime (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) = "sampleObservedAt"
+  | otherwise = "sampleTime"
+  where
+    isObservedAtTime (identity, resolvedType) = fieldDslName identity == "observedAt" && resolvedType == AggregateTime
+
 aggregateHarnessImports :: Agg -> [Text]
-aggregateHarnessImports aggregate =
-  unique
-    [ "import " <> imported
-    | resolvedType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)),
-      AggregateTime <- [resolvedType],
-      imported <- Set.toAscList (aggregateSourceStaticImports (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType))
-    ]
+aggregateHarnessImports aggregate
+  | harnessUsesTime aggregate =
+      [ "import Data.Time.Calendar (fromGregorian)",
+        "import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)"
+      ]
+  | otherwise = []
 
 nominalHarnessImports :: Agg -> [Text]
 nominalHarnessImports aggregate
@@ -933,23 +997,36 @@ nominalHarnessDeclarations aggregate
 
 mappedHarnessImports :: Agg -> [Text]
 mappedHarnessImports aggregate
-  | null fixtures = []
+  | null declarations = []
   | otherwise =
-      [ "import Data.Aeson qualified as Aeson",
-        "import Data.Aeson.Key qualified as AesonKey",
-        "import Data.Aeson.KeyMap qualified as AesonKeyMap",
-        "import Data.Either (isLeft, isRight)",
-        "import Data.List (nub)",
-        "import Data.List.NonEmpty qualified as NonEmpty",
-        "import Data.Maybe (isJust, isNothing)",
-        "import Data.Proxy (Proxy (..))",
-        "import Data.Text qualified as T",
-        "import Keiki.Shape (CanonicalTypeName (..))",
-        "import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)"
-      ]
+      ["import Data.Aeson qualified as Aeson" | not (null opaque) || not (null structuralWire)]
+        ++ (if null structuralWire then [] else ["import Data.Aeson.Key qualified as AesonKey", "import Data.Aeson.KeyMap qualified as AesonKeyMap"])
+        ++ [renderImport "Data.Either" eitherImports | not (null eitherImports)]
+        ++ ["import Data.List (nub)", "import Data.List.NonEmpty qualified as NonEmpty"]
+        ++ [renderImport "Data.Maybe" ["isJust", "isNothing"] | any shapeUsesMaybe structural]
+        ++ ["import Data.Proxy (Proxy (..))" | not (null structural)]
+        ++ ["import Data.Text qualified as T"]
+        ++ ["import Keiki.Shape (CanonicalTypeName (..))" | not (null structural)]
+        ++ [renderImport "Keiro.Codec.Structural" structuralCodecImports]
         ++ ["import " <> structuralProjectionModuleName (aContext aggregate) <> " qualified as StructuralProjections" | not (null (mappedProjectionSpecs aggregate))]
   where
-    fixtures = [mappedFixtures declaration | declaration <- mappedHarnessDeclarationsResolved aggregate]
+    declarations = mappedHarnessDeclarationsResolved aggregate
+    structural = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
+    opaque = [declaration | ResolvedOpaque declaration <- declarations]
+    structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
+    eitherImports =
+      ["isLeft" | wirePoliciesUseIsLeft structuralWire]
+        <> ["isRight" | wirePoliciesUseIsRight structuralWire]
+    structuralCodecImports =
+      ["FixtureCases (..)"]
+        <> if null structural then [] else ["bindingDomainRoundTrip", "bindingShapeRoundTrip", "bindingToShape"]
+    renderImport moduleName names = "import " <> moduleName <> " (" <> T.intercalate ", " names <> ")"
+    shapeUsesMaybe (_, shape) = case shape of
+      RRecord _ _ fields -> any (isOptional . rwfType) fields
+      RUnion _ arms -> any (maybe False isOptional . rwaPayload) arms
+      REnum {} -> False
+    isOptional ROptional {} = True
+    isOptional _ = False
 
 mappedCodecHarnessExports :: Agg -> Text
 mappedCodecHarnessExports aggregate =
@@ -987,27 +1064,18 @@ harnessImportPlan aggregate =
         references
     )
   where
-    resolvedTypes =
-      map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
-        <> map rrType (aRegs aggregate)
-    aggregateReferences =
-      Set.unions
-        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
-        | resolvedType <- resolvedTypes
-        ]
     consumerNominalReferences =
       Set.fromList
         [ reference
         | nominal <- consumerNominalHarnessTypes aggregate,
           ConsumerNominal binding <- [resolvedNominalOwnership nominal],
           reference <-
-            harnessTypeReference (consumerNominalHaskell binding)
-              : map
-                harnessQualifiedValueReference
-                ( consumerNominalBinding binding
-                    : consumerNominalFixtures binding
-                    : maybeToListHarness (consumerNominalInitial binding)
-                )
+            map
+              harnessQualifiedValueReference
+              ( consumerNominalBinding binding
+                  : consumerNominalFixtures binding
+                  : maybeToListHarness (consumerNominalInitial binding)
+              )
         ]
     mappedReferences =
       Set.fromList
@@ -1020,10 +1088,9 @@ harnessImportPlan aggregate =
                   harnessQualifiedValueReference
                   (sdBinding structural : sdFixtures structural : maybeToListHarness (sdInitial structural))
             ResolvedOpaque opaque ->
-              harnessTypeReference (odHaskell opaque)
-                : map
-                  harnessQualifiedValueReference
-                  (odFixtures opaque : maybeToListHarness (odInitial opaque))
+              map
+                harnessQualifiedValueReference
+                (odFixtures opaque : maybeToListHarness (odInitial opaque))
         ]
     shapeReferences =
       Set.fromList
@@ -1037,7 +1104,7 @@ harnessImportPlan aggregate =
         | projection <- mappedProjectionSpecs aggregate,
           (shapeModule, selector) <- spSelectors projection
         ]
-    references = aggregateReferences <> consumerNominalReferences <> mappedReferences <> shapeReferences <> projectionReferences
+    references = consumerNominalReferences <> mappedReferences <> shapeReferences <> projectionReferences
 
 harnessTypeReference :: HaskellSource -> HaskellReference
 harnessTypeReference source =
@@ -1299,6 +1366,26 @@ wirePolicyAssertions aggregate (declaration, shape) = case shape of
     map (unionArmAssertion aggregate declaration encoding) arms
       <> [unknownFieldAssertion aggregate declaration (ueUnknownFields encoding)]
 
+wirePoliciesUseIsLeft :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
+wirePoliciesUseIsLeft = any $ \(_, shape) -> case shape of
+  RRecord _ unknownFields fields ->
+    unknownFields == RejectUnknown
+      || any (\field -> rwfPresence field == POptional && not (isOptionalType (rwfType field))) fields
+  REnum {} -> True
+  RUnion encoding _ -> ueUnknownFields encoding == RejectUnknown
+
+wirePoliciesUseIsRight :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
+wirePoliciesUseIsRight = any $ \(_, shape) -> case shape of
+  RRecord _ unknownFields fields ->
+    unknownFields == IgnoreUnknown
+      || any (\field -> rwfPresence field == POptional && isOptionalType (rwfType field)) fields
+  REnum {} -> False
+  RUnion encoding _ -> ueUnknownFields encoding == IgnoreUnknown
+
+isOptionalType :: ResolvedTypeExpr -> Bool
+isOptionalType ROptional {} = True
+isOptionalType _ = False
+
 recordMissingAssertions :: Agg -> StructuralDecl -> ResolvedWireField -> [Text]
 recordMissingAssertions aggregate declaration field =
   [ "(\"wire policy missing default: "
@@ -1425,20 +1512,37 @@ unionArmAssertion aggregate declaration encoding arm =
 
 wirePolicyHelpers :: [(StructuralDecl, ResolvedMappedShape)] -> [Text]
 wirePolicyHelpers [] = []
-wirePolicyHelpers _ =
-  [ "",
-    "deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value",
-    "deleteObjectField key (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.delete (AesonKey.fromText key) objectValue)",
-    "deleteObjectField _ value = value",
-    "",
-    "insertObjectField :: T.Text -> Aeson.Value -> Aeson.Value -> Aeson.Value",
-    "insertObjectField key inserted (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.insert (AesonKey.fromText key) inserted objectValue)",
-    "insertObjectField _ _ value = value",
-    "",
-    "objectField :: T.Text -> Aeson.Value -> Maybe Aeson.Value",
-    "objectField key (Aeson.Object objectValue) = AesonKeyMap.lookup (AesonKey.fromText key) objectValue",
-    "objectField _ _ = Nothing"
-  ]
+wirePolicyHelpers declarations =
+  ( if usesDelete
+      then
+        [ "",
+          "deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value",
+          "deleteObjectField key (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.delete (AesonKey.fromText key) objectValue)",
+          "deleteObjectField _ value = value"
+        ]
+      else []
+  )
+    <> [ "",
+         "insertObjectField :: T.Text -> Aeson.Value -> Aeson.Value -> Aeson.Value",
+         "insertObjectField key inserted (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.insert (AesonKey.fromText key) inserted objectValue)",
+         "insertObjectField _ _ value = value"
+       ]
+    <> ( if usesObjectField
+           then
+             [ "",
+               "objectField :: T.Text -> Aeson.Value -> Maybe Aeson.Value",
+               "objectField key (Aeson.Object objectValue) = AesonKeyMap.lookup (AesonKey.fromText key) objectValue",
+               "objectField _ _ = Nothing"
+             ]
+           else []
+       )
+  where
+    usesDelete = any hasOptionalRecordField declarations
+    usesObjectField = usesDelete || any isUnion declarations
+    hasOptionalRecordField (_, RRecord _ _ fields) = any ((== POptional) . rwfPresence) fields
+    hasOptionalRecordField _ = False
+    isUnion (_, RUnion {}) = True
+    isUnion _ = False
 
 mappedFixtures :: ResolvedMappedDecl -> QualifiedValueName
 mappedFixtures (ResolvedStructural declaration _) = sdFixtures declaration

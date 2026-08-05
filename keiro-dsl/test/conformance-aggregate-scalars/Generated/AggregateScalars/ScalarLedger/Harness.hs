@@ -8,7 +8,7 @@ import Generated.AggregateScalars.ScalarLedger.Transducer (scalarLedgerTransduce
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
+import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -16,7 +16,7 @@ import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
 harnessAssertions :: [(String, Bool)]
 harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions scalarLedgerTransducer))
-  , ("clock-free: spec samples no wall clock", True)
+  -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: ScalarsRecorded", roundTrips sampleEventScalarsRecorded)
   , ("golden round-trip: FieldIdentityObserved", roundTrips sampleEventFieldIdentityObserved)
   , ("accepts Record from ScalarLedgerEmpty", acceptRecord)
@@ -26,15 +26,18 @@ harnessAssertions =
 roundTrips :: ScalarLedgerEvent -> Bool
 roundTrips e = parseScalarLedgerEvent (eventType scalarLedgerCodec e) (encodeScalarLedgerEvent e) == Right e
 
+sampleObservedAt :: UTCTime
+sampleObservedAt = UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)
+
 sampleEventScalarsRecorded :: ScalarLedgerEvent
-sampleEventScalarsRecorded = (ScalarsRecorded (ScalarsRecordedData (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0))
+sampleEventScalarsRecorded = ScalarsRecorded (ScalarsRecordedData sampleObservedAt 0)
 
 sampleEventFieldIdentityObserved :: ScalarLedgerEvent
-sampleEventFieldIdentityObserved = (FieldIdentityObserved (FieldIdentityObservedData "sample-as" "sample-family" "sample-mdo" "sample-proc" "sample-qualified" "sample-rec" "sample-safe" "sample-signature" "sample-stock" "sample-unsafe" "sample-via" "sample-type" "sample-region"))
+sampleEventFieldIdentityObserved = FieldIdentityObserved (FieldIdentityObservedData "sample-as" "sample-family" "sample-mdo" "sample-proc" "sample-qualified" "sample-rec" "sample-safe" "sample-signature" "sample-stock" "sample-unsafe" "sample-via" "sample-type" "sample-region")
 
 acceptRecord :: Bool
 acceptRecord =
-  case step scalarLedgerTransducer (ScalarLedgerEmpty, initialScalarLedgerRegs) ((Record (RecordData (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0))) of
+  case step scalarLedgerTransducer (ScalarLedgerEmpty, initialScalarLedgerRegs) (Record (RecordData sampleObservedAt 0)) of
     Just (v, _, _) -> v == ScalarLedgerRecorded
     Nothing -> False
 
@@ -42,7 +45,7 @@ acceptRecord =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayRecord :: [(String, Bool)]
 forwardReplayRecord =
-  case step scalarLedgerTransducer (ScalarLedgerEmpty, initialScalarLedgerRegs) ((Record (RecordData (UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)) 0))) of
+  case step scalarLedgerTransducer (ScalarLedgerEmpty, initialScalarLedgerRegs) (Record (RecordData sampleObservedAt 0)) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScalarLedgerEvent (eventType scalarLedgerCodec event) (encodeScalarLedgerEvent event)) emitted of

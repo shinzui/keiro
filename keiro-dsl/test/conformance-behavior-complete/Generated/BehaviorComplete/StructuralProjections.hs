@@ -7,8 +7,6 @@ module Generated.BehaviorComplete.StructuralProjections
   ) where
 
 import Data.Text (Text)
-import Data.Time (UTCTime)
-import Numeric.Natural (Natural)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
 import BehaviorComplete.Bindings qualified as Bindings

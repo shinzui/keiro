@@ -4,6 +4,18 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel accepted_transfer_needs (line 4)","path":"Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel accepted_transfer_needs (line 4)","path":"Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel accepted_transfer_needs (line 4)","path":"HospitalCapacity/AcceptedTransferNeeds/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel accepted_transfer_needs (line 4)","path":"Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelHarness.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 17)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 17)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 17)","path":"HospitalCapacity/TransferDecisions/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 17)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs"}
+module-role {"family":"Queue","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue reservation_work (line 29)","path":"Generated/HospitalCapacity/ReservationWork/Queue.hs"}
+module-role {"family":"QueuePolicy","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue reservation_work (line 29)","path":"Generated/HospitalCapacity/ReservationWork/QueuePolicy.hs"}
+module-role {"family":"QueueCodec","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue reservation_work (line 29)","path":"Generated/HospitalCapacity/ReservationWork/QueueCodec.hs"}
 generated Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModelTable.hs
 generated Generated/HospitalCapacity/AcceptedTransferNeeds/ReadModel.hs
 hole HospitalCapacity/AcceptedTransferNeeds/ReadModelHoles.hs

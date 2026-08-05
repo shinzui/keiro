@@ -397,6 +397,7 @@ test-suite keiro-dsl-conformance-structural
   other-modules:
     Conformance.Structural.Bindings
     Conformance.Structural.Domain
+    Generated.StructuralConformance.ArtifactCatalog.BehaviorContract
     Generated.StructuralConformance.ArtifactCatalog.Codec
     Generated.StructuralConformance.ArtifactCatalog.Domain
     Generated.StructuralConformance.ArtifactCatalog.EventStream

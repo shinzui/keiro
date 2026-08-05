@@ -14,7 +14,7 @@ import Proof.WorkspaceProof.Generated.Nominals (ProofId, parseProofId)
 harnessAssertions :: [(String, Bool)]
 harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions betaTransducer))
-  , ("clock-free: spec samples no wall clock", True)
+  -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: BetaPinged", roundTrips sampleEventBetaPinged)
   , ("accepts PingBeta from BetaActive", acceptPingBeta)
   ]
@@ -23,12 +23,18 @@ harnessAssertions =
 roundTrips :: BetaEvent -> Bool
 roundTrips e = parseBetaEvent (eventType betaCodec e) (encodeBetaEvent e) == Right e
 
+sampleProofId :: ProofId
+sampleProofId =
+  case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
+
 sampleEventBetaPinged :: BetaEvent
-sampleEventBetaPinged = (BetaPinged (BetaPingedData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse")))
+sampleEventBetaPinged = BetaPinged (BetaPingedData sampleProofId)
 
 acceptPingBeta :: Bool
 acceptPingBeta =
-  case step betaTransducer (BetaActive, initialBetaRegs) ((PingBeta (PingBetaData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse")))) of
+  case step betaTransducer (BetaActive, initialBetaRegs) (PingBeta (PingBetaData sampleProofId)) of
     Just (v, _, _) -> v == BetaActive
     Nothing -> False
 
@@ -36,7 +42,7 @@ acceptPingBeta =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayPingBeta :: [(String, Bool)]
 forwardReplayPingBeta =
-  case step betaTransducer (BetaActive, initialBetaRegs) ((PingBeta (PingBetaData (case parseProofId "proof_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse")))) of
+  case step betaTransducer (BetaActive, initialBetaRegs) (PingBeta (PingBetaData sampleProofId)) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, _forwardRegs, emitted) ->
       case mapM (\event -> parseBetaEvent (eventType betaCodec event) (encodeBetaEvent event)) emitted of

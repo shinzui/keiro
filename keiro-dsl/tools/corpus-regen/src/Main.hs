@@ -13,6 +13,7 @@ import System.Process (CreateProcess (..), callProcess, proc, readCreateProcessW
 
 data Command
   = Regenerate [FilePath]
+  | Check
   | UpdateGoldens [String]
   | Help
 
@@ -23,29 +24,15 @@ main = do
     Left message -> hPutStrLn stderr message >> hPutStrLn stderr helpText >> exitFailure
     Right Help -> putStrLn helpText
     Right (UpdateGoldens testArguments) -> updateGoldens testArguments
-    Right (Regenerate onlyPaths) -> do
-      repoRoot <- resolveRepoRoot
-      setCurrentDirectory repoRoot
-      planResult <- loadCorpusPlan repoRoot
-      (allEntries, exemptions) <- either dieMany pure planResult
-      selected <- selectEntries onlyPaths allEntries
-      putStrLn
-        ( "corpus: "
-            <> show (length selected)
-            <> " of "
-            <> show (length allEntries)
-            <> " invocations selected"
-        )
-      keiroDsl <- resolveKeiroDsl
-      forM_ selected (runEntry keiroDsl)
-      runConsistencyChecks repoRoot allEntries exemptions
-      printGitSummary (corpusPaths allEntries)
+    Right Check -> runRegeneration True []
+    Right (Regenerate onlyPaths) -> runRegeneration False onlyPaths
 
 parseCommand :: [String] -> Either String Command
 parseCommand [] = Right Help
 parseCommand ["--help"] = Right Help
 parseCommand ["-h"] = Right Help
 parseCommand ("regenerate" : args) = Regenerate <$> parseOnly args
+parseCommand ["check"] = Right Check
 parseCommand ("update-goldens" : args) = Right (UpdateGoldens args)
 parseCommand args = Left ("unknown arguments: " <> unwords args)
 
@@ -62,6 +49,46 @@ selectEntries requested entries = do
   unless (null unknown) $
     dieMany ["--only path is not in the corpus plan: " <> T.pack path | path <- unknown]
   pure [entry | entry <- entries, entryOutDir entry `elem` requested]
+
+runRegeneration :: Bool -> [FilePath] -> IO ()
+runRegeneration checking onlyPaths = do
+  repoRoot <- resolveRepoRoot
+  setCurrentDirectory repoRoot
+  planResult <- loadCorpusPlan repoRoot
+  (allEntries, exemptions) <- either dieMany pure planResult
+  selected <- selectEntries onlyPaths allEntries
+  let paths = corpusPaths allEntries
+  if checking then requireCleanCorpus paths else pure ()
+  putStrLn
+    ( "corpus: "
+        <> show (length selected)
+        <> " of "
+        <> show (length allEntries)
+        <> " invocations selected"
+    )
+  keiroDsl <- resolveKeiroDsl
+  forM_ selected (runEntry keiroDsl)
+  runConsistencyChecks repoRoot allEntries exemptions
+  if checking then requireUnchangedCorpus paths else printGitSummary paths
+
+requireCleanCorpus :: [FilePath] -> IO ()
+requireCleanCorpus paths = do
+  statusText <- gitOutput (["status", "--porcelain", "--"] <> paths)
+  unless (null statusText) $ do
+    hPutStrLn stderr "conformance corpus check requires clean corpus paths before scaffolding:"
+    hPutStr stderr statusText
+    exitFailure
+
+requireUnchangedCorpus :: [FilePath] -> IO ()
+requireUnchangedCorpus paths = do
+  statusText <- gitOutput (["status", "--porcelain", "--"] <> paths)
+  diffText <- gitOutput (["diff", "--"] <> paths)
+  unless (null statusText && null diffText) $ do
+    hPutStrLn stderr "conformance corpus drifted after regeneration; review and commit the generated diff"
+    hPutStr stderr statusText
+    hPutStr stderr diffText
+    exitFailure
+  putStrLn "conformance corpus: ok"
 
 resolveRepoRoot :: IO FilePath
 resolveRepoRoot = do
@@ -163,6 +190,7 @@ helpText =
       "",
       "Usage:",
       "  keiro-dsl-corpus-regen regenerate [--only REPOSITORY-RELATIVE-OUT-DIR]...",
+      "  keiro-dsl-corpus-regen check",
       "  keiro-dsl-corpus-regen update-goldens [TEST-ARGUMENT]...",
       "",
       "The driver derives ordinary scaffold invocations from tracked records and",

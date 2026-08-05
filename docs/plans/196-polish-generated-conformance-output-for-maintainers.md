@@ -46,11 +46,16 @@ after regeneration.
   requirements and Pending rows, and subject/actual/expected failure evidence. The focused
   behavior suite passed 11 examples; a disposable public-CLI scaffold confirmed every required
   signature and annotation while leaving committed corpus bytes untouched for Milestone 4.
-- [ ] Milestone 2: Harness sample constants and paren cleanup, honest clock-free rendering,
-  runtime-backed read-model facts, codec optional-field helper, component-named facade aliases,
-  Projection module comment.
-- [ ] Milestone 3: usage-conditional import emission across all generated module families;
-  `-Wall` warning parity in generated and committed corpus cabal files.
+- [x] (2026-08-05T19:14:30Z) Milestone 2: Harness output now uses one named constant per
+  generated ID/time sample, minimal constructor parentheses, honest clock-free comments,
+  runtime-backed read-model facts, a shared optional-field decoder, node-named facade aliases,
+  and an explanatory empty-Projection comment. Focused aggregate, structural, read-model, and
+  facade assertions pass.
+- [x] (2026-08-05T19:14:30Z) Milestone 3: static and planned imports now follow emitted use,
+  workqueue provisioning imports follow the selected policy, generated Hole implementations
+  carry explicit signatures, all conformance package surfaces use `-Wall`, and the structural
+  BehaviorContract is compiled. A 37-component `cabal test keiro-dsl` compile emitted zero
+  compiler warnings.
 - [ ] Milestone 4: single corpus regeneration through EP-195's tool, deliberate create-once
   updates, activation of the clean-tree corpus policy gate, demonstration failure transcript,
   ADR/doc/changelog closure, full validation.
@@ -105,6 +110,20 @@ after regeneration.
   and event byte exactly.
   Evidence: the first focused behavior run differed only by the workspace composition's uniform
   two-line offset; the rerun passed 11 examples after extending that existing normalization.
+  Date: 2026-08-05
+
+- Observation: the compiler sweep exposed a second kind of over-planning beyond fixed static
+  imports. Codec and Harness import plans included consumer type references merely because the
+  types were reachable from commands, events, or registers, even when rendered code used only
+  their binding and fixture values. Planning the exact rendered reference removed the remaining
+  collision-fixture imports without weakening the deterministic alias planner.
+  Date: 2026-08-05
+
+- Observation: `Generated.TransferRouting.Conformance` is the corpus manifest's one explicit
+  `legacy-generated` path. Its source invocation has no runtime-package setting, so the general
+  41-invocation replay correctly preserves it but cannot plan or overwrite it. A disposable
+  public-CLI scaffold with `--runtime-package transfer-routing-runtime` produced the current
+  facade bytes, which were then applied as the deliberate legacy fixture update.
   Date: 2026-08-05
 
 
@@ -201,6 +220,15 @@ after regeneration.
   Rationale: (a) is cosmetic churn with no maintainer-evidence payoff; (b) changes the generated
   output's dependency surface, which is a separate decision with its own compatibility story.
   Date: 2026-08-04
+
+- Decision: generated Hole-owned transition functions receive their full polymorphic
+  `B.EdgeBuilder ... writes writes ()` signatures rather than suppressing
+  `-Wmissing-signatures`; deliberately obsolete hand-owned migration sentinels remain
+  compiler-visible through their module export rather than a warning-suppression pragma.
+  Rationale: the advertised warning contract applies at the generated boundary, and a stable
+  signature documents the exact capability a Hole owns while keeping the corpus genuinely
+  warning-clean.
+  Date: 2026-08-05
 
 - Decision: amend ADR 0017 with one paragraph (behavior evidence is rendered human-attributable:
   annotated keys, record-syntax requirements, failures carrying cell/spec-line/actual/expected)

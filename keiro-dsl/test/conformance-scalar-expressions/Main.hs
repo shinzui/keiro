@@ -174,9 +174,11 @@ nominalGuardBranches =
     accepts command = case K.step scalarAccountTransducer (ScalarAccountOpen, initialScalarAccountRegs) command of
       Just {} -> True
       Nothing -> False
-    withMode value (Adjust command) = Adjust command {mode = value}
+    withMode value (Adjust (AdjustData balanceValue requestedValue machineValue labelValue activeValue _ requestIdValue' observedAtValue limitsValue)) =
+      Adjust (AdjustData balanceValue requestedValue machineValue labelValue activeValue value requestIdValue' observedAtValue limitsValue)
     withMode _ command = command
-    withRequestId value (Adjust command) = Adjust command {requestId = value}
+    withRequestId value (Adjust (AdjustData balanceValue requestedValue machineValue labelValue activeValue modeValue _ observedAtValue limitsValue)) =
+      Adjust (AdjustData balanceValue requestedValue machineValue labelValue activeValue modeValue value observedAtValue limitsValue)
     withRequestId _ command = command
 
 exactEnumProjectionProof :: IO Bool

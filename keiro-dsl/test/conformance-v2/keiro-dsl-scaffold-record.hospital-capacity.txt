@@ -4,6 +4,19 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal ID internals","path":"Generated/HospitalCapacity/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity replay-audit assembly","path":"Generated/HospitalCapacity/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Reservation (line 15)","path":"HospitalCapacity/Reservation/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"HospitalCapacity/Reservation/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Harness.hs"}
 generated Generated/HospitalCapacity/Nominals.hs
 generated Generated/HospitalCapacity/Nominals/Internal.hs
 generated Generated/HospitalCapacity/ReplayAudit.hs

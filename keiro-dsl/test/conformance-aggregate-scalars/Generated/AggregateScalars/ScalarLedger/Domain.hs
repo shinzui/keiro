@@ -11,7 +11,7 @@ import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)
+import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 import Numeric.Natural (Natural)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 

@@ -4,6 +4,20 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"Details","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural Details (line 28)","path":"Generated/ImportPlanningCollisions/Structural/Shape/Details.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions mapped structural facade","path":"Generated/ImportPlanningCollisions/StructuralProjections.hs"}
+module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions nominal scalar projection facade","path":"Generated/ImportPlanningCollisions/NominalProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton ImportPlanning.Bindings","path":"ImportPlanning/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions replay-audit assembly","path":"Generated/ImportPlanningCollisions/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses CollisionLedger (line 39)","path":"ImportPlanningCollisions/CollisionLedger/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Harness.hs"}
 generated Generated/ImportPlanningCollisions/Structural/Shape/Details.hs
 generated Generated/ImportPlanningCollisions/StructuralProjections.hs
 generated Generated/ImportPlanningCollisions/NominalProjections.hs

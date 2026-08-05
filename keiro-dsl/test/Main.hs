@@ -46,7 +46,7 @@ import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessFor, harnessForService, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
@@ -1026,32 +1026,32 @@ main = hspec $ do
 
     it "keeps runtime validation and the exact Keiki text image in agreement" $ do
       let contract = typeIdV7Domain "req"
-          sample = idDomainSampleText contract
-          suffix = T.drop (T.length "req_") sample
+          sampleText = idDomainSampleText contract
+          suffix = T.drop (T.length "req_") sampleText
           replaceAt position replacement value =
             T.take position value <> T.singleton replacement <> T.drop (position + 1) value
           accepted =
-            [ sample,
-              replaceAt (T.length "req_" + 10) 'f' sample,
-              replaceAt (T.length "req_" + 13) 'v' sample
+            [ sampleText,
+              replaceAt (T.length "req_" + 10) 'f' sampleText,
+              replaceAt (T.length "req_" + 13) 'v' sampleText
             ]
           rejected =
             [ "",
               "req_",
               "other_" <> suffix,
               "req__" <> suffix,
-              T.dropEnd 1 sample,
-              sample <> "0",
-              T.toUpper sample,
-              replaceAt (T.length "req_" + 0) '8' sample,
-              replaceAt (T.length "req_" + 10) 'd' sample,
-              replaceAt (T.length "req_" + 13) 'c' sample
+              T.dropEnd 1 sampleText,
+              sampleText <> "0",
+              T.toUpper sampleText,
+              replaceAt (T.length "req_" + 0) '8' sampleText,
+              replaceAt (T.length "req_" + 10) 'd' sampleText,
+              replaceAt (T.length "req_" + 13) 'c' sampleText
             ]
           patternValue = either (error . show) id (idDomainTextPattern contract)
       idDomainVersion contract `shouldBe` "keiro-dsl/id-domain/typeid-v7/1"
       idDomainSeparator contract `shouldBe` '_'
       idDomainSuffixLength contract `shouldBe` 26
-      idDomainMaxLength contract `shouldBe` T.length sample
+      idDomainMaxLength contract `shouldBe` T.length sampleText
       forM_ accepted $ \value -> do
         validateIdDomainText contract value `shouldBe` Right ()
         matchesTextPattern patternValue value `shouldBe` True
@@ -1066,9 +1066,9 @@ main = hspec $ do
       beforeVersion <- segment 9
       version <- elements "ef"
       beforeVariant <- segment 2
-      variant <- elements "89abrstv"
+      variantDigit <- elements "89abrstv"
       afterVariant <- segment 12
-      let value = T.pack ("req_" <> [leading] <> beforeVersion <> [version] <> beforeVariant <> [variant] <> afterVariant)
+      let value = T.pack ("req_" <> [leading] <> beforeVersion <> [version] <> beforeVariant <> [variantDigit] <> afterVariant)
           contract = typeIdV7Domain "req"
           patternValue = either (error . show) id (idDomainTextPattern contract)
           invalidValues = [T.toUpper value, "other_" <> T.drop 4 value, T.dropEnd 1 value, value <> "0"]
@@ -1747,6 +1747,27 @@ main = hspec $ do
       map line collisions `shouldBe` [9, 9]
       collisions `shouldSatisfy` all (elem (8, "'Start' also normalizes here") . relatedLocations)
 
+    it "inventories generated harness sample constants before rendering" $ do
+      service <-
+        checkedServiceFromText
+          "<sample-helper-collision>"
+          ( T.unlines
+              [ "language keiro-dsl 4",
+                "context helper-collision",
+                "id ObservedAt prefix=obs",
+                "aggregate Journey",
+                "  regs",
+                "  states Empty",
+                "  command Start {",
+                "    request:ObservedAt",
+                "    observedAt:Time",
+                "  }"
+              ]
+          )
+      let collisions = [diagnostic | diagnostic <- validateService service, code diagnostic == GeneratedOccurrenceCollision]
+      map line collisions `shouldBe` [9]
+      collisions `shouldSatisfy` all (elem (3, "'ObservedAt' also normalizes here") . relatedLocations)
+
     it "inventories every live-reachable cell, guarded edge, terminal rejection, and replay edge" $ do
       spec <- specOf "test/fixtures/behavior-complete.keiro"
       requirements <- either (\errors -> expectationFailure (show errors) >> pure []) pure (Behavior.deriveBehaviorRequirements spec)
@@ -1779,16 +1800,18 @@ main = hspec $ do
       keys pretty `shouldBe` keys original
 
     it "generates direct fields(Command) output and separate create-once pending witnesses" $ do
-      spec <- specOf "test/fixtures/behavior-complete.keiro"
+      service <- checkedServiceOf "test/fixtures/behavior-complete.keiro"
+      let spec = checkedSpec service
       aggregate <- case [value | NAggregate value <- specNodes spec] of
         [value] -> pure value
         _ -> expectationFailure "expected one behavior-complete aggregate" >> fail "unreachable"
       let ctx = defaultContext (specContext spec)
           modules = scaffoldAggregate ctx spec aggregate
-          harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx spec aggregate)
+          harness = generatedTextEndingIn "Harness.hs" (harnessForService ctx service aggregate)
           transducer = generatedTextEndingIn "Transducer.hs" modules
           codec = generatedTextEndingIn "Codec.hs" modules
           contract = generatedTextEndingIn "BehaviorContract.hs" modules
+          projection = generatedTextEndingIn "Projection.hs" modules
           behaviorHoles = case [moduleText value | value <- modules, T.isSuffixOf "BehaviorHoles.hs" (T.pack (modulePath value))] of
             [value] -> value
             values -> error ("expected one BehaviorHoles module, got " <> show (length values))
@@ -1825,6 +1848,16 @@ main = hspec $ do
       behaviorHoles `shouldSatisfy` T.isInfixOf "-- JourneyEmpty x Start: live transition (spec line 38)"
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "undefined")
       behaviorHoles `shouldSatisfy` (not . T.isInfixOf "error")
+      T.count "sampleRequestId :: RequestId" harness `shouldBe` 1
+      T.count "sampleObservedAt :: UTCTime" harness `shouldBe` 1
+      harness `shouldSatisfy` T.isInfixOf "Left problem -> error (show problem)"
+      harness `shouldSatisfy` T.isInfixOf "sampleEventStarted = Started (StartedData sampleRequestId sampleObservedAt"
+      harness `shouldSatisfy` T.isInfixOf "case step journeyTransducer (JourneyEmpty, initialJourneyRegs) (Start (StartData"
+      harness `shouldSatisfy` T.isInfixOf "-- clock-free: spec samples no wall clock (verified at scaffold time)"
+      harness `shouldSatisfy` (not . T.isInfixOf "(\"clock-free: spec samples no wall clock\", True)")
+      codec `shouldSatisfy` T.isInfixOf "parseOptionalField (pure Nothing) (\\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue \"optional_note\""
+      T.count "parseOptionalField ::" codec `shouldBe` 1
+      projection `shouldSatisfy` T.isInfixOf "-- No projection declarations are present; this module keeps the generated manifest inventory total."
 
     it "rejects eventless state or register changes while accepting a true no-op" $ do
       invalid <-
@@ -2454,7 +2487,7 @@ main = hspec $ do
       domain `shouldSatisfy` T.isInfixOf "revision :: !Natural"
       domain `shouldSatisfy` T.isInfixOf "UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)"
       domain `shouldSatisfy` T.isInfixOf "import Data.Time.Calendar (fromGregorian)"
-      domain `shouldSatisfy` T.isInfixOf "import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
+      domain `shouldSatisfy` T.isInfixOf "import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)"
       domain `shouldSatisfy` T.isInfixOf "import Numeric.Natural (Natural)"
       manifestDependencies spec `shouldContain` ["time"]
       manifestDependencies spec `shouldNotContain` ["keiki-codec-json"]
@@ -3577,7 +3610,7 @@ main = hspec $ do
       let snapshot = checkedSpec snapshotService
           ordinary = checkedSpec ordinaryService
       case ([aggregate | NAggregate aggregate <- specNodes snapshot], [aggregate | NAggregate aggregate <- specNodes ordinary]) of
-        ([snapshotAggregate], [ordinaryAggregate]) -> do
+        ([_], [_]) -> do
           let snapshotModules = scaffoldServiceModules (defaultContext (specContext snapshot)) snapshotService
               ordinaryModules = scaffoldServiceModules (defaultContext (specContext ordinary)) ordinaryService
               snapshotDomain = generatedTextEndingIn "Domain.hs" snapshotModules
@@ -4175,8 +4208,11 @@ main = hspec $ do
               harnessText = generatedTextEndingIn "ReadModelHarness.hs" modules
           length modules `shouldBe` 1
           firewallBreaches modules `shouldBe` []
-          harnessText `shouldSatisfy` T.isInfixOf "(\"shapeHash\", \"fnv1a:3717f6d9e3c44bd6\", \"fnv1a:3717f6d9e3c44bd6\")"
-          harnessText `shouldSatisfy` T.isInfixOf "(\"strongScope\", \"CategoryHead reservation\", \"CategoryHead reservation\")"
+          harnessText `shouldSatisfy` T.isInfixOf "{-# LANGUAGE OverloadedRecordDot #-}"
+          harnessText `shouldSatisfy` T.isInfixOf "import Generated.HospitalCapacity.TransferDecisions.ReadModel (transferDecisionsReadModel, transferDecisionsAsyncProjection)"
+          harnessText `shouldSatisfy` T.isInfixOf "(\"shapeHash\", \"fnv1a:3717f6d9e3c44bd6\", T.unpack transferDecisionsReadModel.shapeHash)"
+          harnessText `shouldSatisfy` T.isInfixOf "(\"strongScope\", \"CategoryHead reservation\", renderStrongScope transferDecisionsReadModel.strongScope)"
+          harnessText `shouldSatisfy` T.isInfixOf "T.unpack transferDecisionsAsyncProjection.name"
           harnessText `shouldSatisfy` T.isInfixOf "runReadModelFacts"
         nodes -> expectationFailure ("expected readmodel nodes, got " <> show (length nodes))
 
@@ -5101,7 +5137,7 @@ main = hspec $ do
       domain `shouldSatisfy` (not . T.isInfixOf "Example.Artifact.Domain.ArtifactInfo")
       codec `shouldSatisfy` T.isInfixOf "\"location\" .= encodeArtifactLocationShape"
       codec `shouldSatisfy` T.isInfixOf "\"local_file\""
-      codec `shouldSatisfy` T.isInfixOf "Nothing -> pure ShapeArtifactKind.Guide"
+      codec `shouldSatisfy` T.isInfixOf "parseOptionalField (pure ShapeArtifactKind.Guide)"
       codec `shouldSatisfy` T.isInfixOf "rejectUnknownFields \"ArtifactInfo\""
       codec `shouldSatisfy` T.isInfixOf "toJSON payload.geometry"
       codec `shouldSatisfy` (not . T.isInfixOf "vendor.geometry.json")
@@ -5529,6 +5565,9 @@ main = hspec $ do
           moduleText facade `shouldSatisfy` T.isInfixOf ".readModelFactResults"
           moduleText facade `shouldSatisfy` T.isInfixOf "aggregate/Hospital/"
           moduleText facade `shouldSatisfy` T.isInfixOf "readmodel/hospital_load/"
+          moduleText facade `shouldSatisfy` T.isInfixOf "qualified as Hospital"
+          moduleText facade `shouldSatisfy` T.isInfixOf "qualified as HospitalLoad"
+          moduleText facade `shouldNotSatisfy` T.isInfixOf "qualified as Harness"
           moduleText facade `shouldNotSatisfy` T.isInfixOf "TransferRouting.Hospital.Holes"
     it "projects process, router, and workflow facts with qualified stable keys" $ do
       processService <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
@@ -5619,6 +5658,7 @@ main = hspec $ do
       cabalText `shouldSatisfy` T.isInfixOf "base >=4.18 && <5"
       T.lines cabalText `shouldSatisfy` (\lines' -> case lines' of first : _ -> first == "cabal-version: 3.0"; [] -> False)
       cabalText `shouldSatisfy` T.isInfixOf "hospital-runtime"
+      cabalText `shouldSatisfy` T.isInfixOf "ghc-options: -Wall"
       cabalText `shouldNotSatisfy` T.isInfixOf "    , keiro-dsl\n"
       recordFile <- case [file | file <- cppFiles plan, conformanceFilePath file == conformanceRecordFileName] of
         [file] -> pure file
@@ -6289,7 +6329,7 @@ main = hspec $ do
       parsed <- parsedSourceOf "test/fixtures/reservation-dup-upcast-source.keiro"
       let spec = parsedSpec parsed
       case [aggregate | NAggregate aggregate <- specNodes spec] of
-        [aggregate] -> do
+        [_] -> do
           let modules = scaffoldServiceModules (defaultContext (specContext spec)) (checkedSource parsed)
               codec = generatedTextEndingIn "Codec.hs" modules
               holes = case [moduleText m | m <- modules, "/Holes.hs" `T.isSuffixOf` T.pack (modulePath m)] of
@@ -7232,10 +7272,10 @@ main = hspec $ do
       it "is idempotent: an unchanged second run rewrites nothing and reports nothing" $
         withWorkspaceFixture "keiro-dsl-workspace-idempotent" id $ \_ out workspace -> do
           first <- executePlannedWorkspaceScaffold out workspace
-          before <- treeSnapshot out
+          treeBefore <- treeSnapshot out
           second <- executePlannedWorkspaceScaffold out workspace
-          after <- treeSnapshot out
-          after `shouldBe` before
+          treeAfter <- treeSnapshot out
+          treeAfter `shouldBe` treeBefore
           map thd3 (wsrDispositions second)
             `shouldSatisfy` all (`elem` [Unchanged, Skipped])
           wsrStale second `shouldBe` []
@@ -7290,7 +7330,7 @@ main = hspec $ do
       it "reports an aggregate moved between members as an ownership move, not stale churn" $
         withWorkspaceFixture "keiro-dsl-workspace-move" id $ \root out workspace -> do
           _ <- executePlannedWorkspaceScaffold out workspace
-          before <- treeSnapshot out
+          treeBefore <- treeSnapshot out
           moved <- moveArtifactAggregate root
           second <- executePlannedWorkspaceScaffold out moved
           wsrStale second `shouldBe` []
@@ -7313,23 +7353,23 @@ main = hspec $ do
                 [modulePath generatedModule | (generatedModule, _, Overwritten) <- wsrDispositions second]
           length overwrittenPaths `shouldBe` 2
           overwrittenPaths `shouldSatisfy` all (T.isSuffixOf "/Generated/BehaviorContract.hs" . T.pack)
-          after <- treeSnapshot out
-          map fst after `shouldBe` map fst before
+          treeAfter <- treeSnapshot out
+          map fst treeAfter `shouldBe` map fst treeBefore
           let unaffected (path, _) =
                 not ("scaffold-record" `T.isInfixOf` T.pack path)
                   && path `notElem` overwrittenPaths
-          filter unaffected after `shouldBe` filter unaffected before
+          filter unaffected treeAfter `shouldBe` filter unaffected treeBefore
           renderWorkspaceScaffoldReport second
             `shouldSatisfy` any (T.isInfixOf "changed owning member")
       it "leaves the tree, record, and manifest untouched when any member refuses" $
         withWorkspaceFixture "keiro-dsl-workspace-atomic" id $ \_ out workspace -> do
           _ <- executePlannedWorkspaceScaffold out workspace
-          before <- treeSnapshot out
+          treeBefore <- treeSnapshot out
           let broken = withCaseVariantAggregate workspace
           case planWorkspaceScaffold "goldens" (workspaceContext broken) broken of
             Right _ -> expectationFailure "expected the broken workspace to refuse"
             Left refusals -> refusals `shouldSatisfy` any isPathCollision
-          treeSnapshot out `shouldReturn` before
+          treeSnapshot out `shouldReturn` treeBefore
           -- A fresh output directory is never even created.
           withTempDirectory "keiro-dsl-workspace-atomic-fresh" $ \fresh -> do
             let target = fresh </> "out"
@@ -7339,7 +7379,7 @@ main = hspec $ do
       it "leaves prior workspace output byte-identical for parse, validation, and collision failures" $
         withWorkspaceFixture "keiro-dsl-workspace-atomic-cli" id $ \root out workspace -> do
           _ <- executePlannedWorkspaceScaffold out workspace
-          before <- treeSnapshot out
+          treeBefore <- treeSnapshot out
           let member = root </> "domain/project-artifact.keiro"
               manifest = root </> "service.keiro-workspace"
           original <- TIO.readFile member
@@ -7355,7 +7395,7 @@ main = hspec $ do
             unless (exitCode == ExitFailure 1) $
               expectationFailure
                 (failureKind <> " failure unexpectedly scaffolded:\n" <> stdoutText <> stderrText)
-            treeSnapshot out `shouldReturn` before
+            treeSnapshot out `shouldReturn` treeBefore
             TIO.writeFile member original
       it "refuses the whole workspace for one bannerless Generated target, changing nothing" $
         withWorkspaceFixture "keiro-dsl-workspace-banner" id $ \_ out workspace -> do
@@ -7367,10 +7407,10 @@ main = hspec $ do
               let path = out </> modulePath target
               createDirectoryIfMissing True (takeDirectory path)
               TIO.writeFile path "hand owned\n"
-              before <- treeSnapshot out
+              treeBefore <- treeSnapshot out
               refused <- executeWorkspaceScaffold out False plan
               refused `shouldSatisfy` isMissingBannerRefusal
-              treeSnapshot out `shouldReturn` before
+              treeSnapshot out `shouldReturn` treeBefore
               forced <- executeWorkspaceScaffold out True plan
               forced `shouldSatisfy` isSuccessfulScaffold
               TIO.readFile path `shouldReturn` moduleText target
@@ -7525,7 +7565,7 @@ main = hspec $ do
           _ <- executePlannedScaffold out "domain/a.keiro" (defaultContext "adoption-demo") specA
           first <- executePlannedWorkspaceScaffold out workspace
           wsrMigration first `shouldSatisfy` \case Just _ -> True; Nothing -> False
-          before <- treeSnapshot out
+          treeBefore <- treeSnapshot out
           reportBefore <- TIO.readFile (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
           legacyBefore <- TIO.readFile (out </> recordFileName "adoption-demo")
 
@@ -7533,7 +7573,7 @@ main = hspec $ do
           wsrMigration second `shouldBe` Nothing
           wsrStale second `shouldBe` []
           map thd3 (wsrDispositions second) `shouldSatisfy` all (`elem` [Unchanged, Skipped])
-          treeSnapshot out `shouldReturn` before
+          treeSnapshot out `shouldReturn` treeBefore
           TIO.readFile (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
             `shouldReturn` reportBefore
           legacyAfter <- TIO.readFile (out </> recordFileName "adoption-demo")

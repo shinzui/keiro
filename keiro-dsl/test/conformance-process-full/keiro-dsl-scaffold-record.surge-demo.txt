@@ -4,6 +4,31 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal declarations","path":"Generated/SurgeDemo/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal ID internals","path":"Generated/SurgeDemo/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context surge-demo replay-audit assembly","path":"Generated/SurgeDemo/ReplayAudit.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"Generated/SurgeDemo/SurgeFlow/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"SurgeDemo/SurgeFlow/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"Generated/SurgeDemo/SurgeFlow/ProcessHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Surge (line 34)","path":"SurgeDemo/Surge/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"SurgeDemo/Surge/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Surge (line 34)","path":"Generated/SurgeDemo/Surge/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Hospital (line 50)","path":"SurgeDemo/Hospital/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"SurgeDemo/Hospital/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Harness.hs"}
 generated Generated/SurgeDemo/Nominals.hs
 generated Generated/SurgeDemo/Nominals/Internal.hs
 generated Generated/SurgeDemo/ReplayAudit.hs

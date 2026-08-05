@@ -7,10 +7,10 @@ module Proof.WorkspaceProof.Beta.Generated.Codec (
 ) where
 
 import Proof.WorkspaceProof.Beta.Generated.Domain
-import Proof.WorkspaceProof.Generated.Nominals (ProofId, proofIdText)
+import Proof.WorkspaceProof.Generated.Nominals (proofIdText)
 import Proof.WorkspaceProof.Generated.Nominals.Internal (unsafeProofIdFromLegacyText)
-import Data.Aeson (Value, object, withObject, withText, (.:), (.=))
-import Data.Aeson.Types (Parser, explicitParseField, parseEither)
+import Data.Aeson (Value, object, withObject, (.:), (.=))
+import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)

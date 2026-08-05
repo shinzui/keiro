@@ -4,6 +4,19 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"OrderStatus","kind":"generated","ownerKind":"bound","ownerName":"bound nominal enum representation OrderStatus (line 13)","path":"Generated/NominalScalars/Nominal/Shape/OrderStatus.hs"}
+module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars nominal scalar projection facade","path":"Generated/NominalScalars/NominalProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton NominalConformance.Bindings","path":"NominalConformance/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars replay-audit assembly","path":"Generated/NominalScalars/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses NominalLedger (line 67)","path":"NominalScalars/NominalLedger/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Harness.hs"}
 generated Generated/NominalScalars/Nominal/Shape/OrderStatus.hs
 generated Generated/NominalScalars/NominalProjections.hs
 hole NominalConformance/Bindings.hs

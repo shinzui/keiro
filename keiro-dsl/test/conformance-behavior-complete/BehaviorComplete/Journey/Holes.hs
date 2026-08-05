@@ -10,7 +10,7 @@
 -- and every declared guard/write. This module supplies explicit event-field
 -- mappings and explicitly selected Hole behavior only; fields(Command)
 -- identity mappings are generated directly and have no hook.
-module BehaviorComplete.Journey.Holes () where
+module BehaviorComplete.Journey.Holes (transition1EmptyStartOutput1Started) where
 
 import Generated.BehaviorComplete.Journey.Domain
 import Keiki.Builder qualified as B
@@ -18,7 +18,8 @@ import Keiki.Generics (RegFieldsOf)
 
 -- Deliberately retained migration sentinel: this is the pre-IR-13 identity-copy
 -- hook name. The generated transducer neither imports nor calls it, and the
--- scaffold report names it as obsolete.
+-- scaffold report names it as obsolete. It is exported only to keep this
+-- deliberately dead migration fixture visible to the warning-clean compiler.
 transition1EmptyStartOutput1Started :: B.PayloadProj JourneyRegs JourneyCommand (RegFieldsOf StartData) -> StartedTermFields JourneyRegs JourneyCommand (RegFieldsOf StartData)
 transition1EmptyStartOutput1Started d =
   StartedTermFields

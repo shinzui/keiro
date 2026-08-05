@@ -209,6 +209,7 @@ renderCabal banner packageName runtimePackage serviceName =
       "  hs-source-dirs: src",
       "  main-is: Main.hs",
       "  other-modules: KeiroConformance.Expectations",
+      "  ghc-options: -Wall",
       "  build-depends:",
       "      base >=4.18 && <5",
       "    , " <> unRuntimePackageName runtimePackage,

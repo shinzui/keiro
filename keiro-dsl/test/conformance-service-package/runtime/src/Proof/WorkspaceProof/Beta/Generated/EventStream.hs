@@ -10,7 +10,7 @@ module Proof.WorkspaceProof.Beta.Generated.EventStream
 
 import Proof.WorkspaceProof.Beta.Generated.Domain
 import Proof.WorkspaceProof.Beta.Generated.Codec (betaCodec)
-import Proof.WorkspaceProof.Beta.Generated.Transducer (betaFoldFingerprint, betaTransducer)
+import Proof.WorkspaceProof.Beta.Generated.Transducer (betaTransducer)
 import Keiki.Core (HsPred)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)

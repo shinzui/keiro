@@ -4,6 +4,7 @@ manifest: service.keiro-workspace
 context: workspace-nominal-proof
 module-root: (none)
 layout: prefixed
+naming-edition idiomatic-v1
 member domain/project-artifact.keiro
 member domain/project.keiro
 member domain/shared.keiro
@@ -11,25 +12,25 @@ source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path"
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/project.keiro","sourceForm":"declared"}
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/shared.keiro","sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
-module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals.hs"}
-module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals/Internal.hs"}
-module {"kind":"generated","path":"Generated/WorkspaceNominalProof/ReplayAudit.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Transducer.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs"}
-module {"kind":"hole","owner":"domain/project-artifact.keiro","path":"WorkspaceNominalProof/ProjectArtifact/BehaviorHoles.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/EventStream.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Projection.hs"}
-module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Harness.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Domain.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Codec.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Transducer.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/BehaviorContract.hs"}
-module {"kind":"hole","owner":"domain/project.keiro","path":"WorkspaceNominalProof/Project/BehaviorHoles.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/EventStream.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Projection.hs"}
-module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Harness.hs"}
+module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals.hs","roleFamily":"Nominals","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof generated nominal declarations"}
+module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals/Internal.hs","roleFamily":"Internal","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof generated nominal ID internals"}
+module {"kind":"generated","path":"Generated/WorkspaceNominalProof/ReplayAudit.hs","roleFamily":"ReplayAudit","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof replay-audit assembly"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs","roleFamily":"Domain","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs","roleFamily":"Codec","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Transducer.hs","roleFamily":"Transducer","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs","roleFamily":"BehaviorContract","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"hole","owner":"domain/project-artifact.keiro","path":"WorkspaceNominalProof/ProjectArtifact/BehaviorHoles.hs","roleFamily":"BehaviorHoles","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate behavior witnesses ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/EventStream.hs","roleFamily":"EventStream","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Projection.hs","roleFamily":"Projection","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project-artifact.keiro","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Harness.hs","roleFamily":"Harness","roleOwnerKind":"domain/project-artifact.keiro:","roleOwnerName":"domain/project-artifact.keiro: aggregate ProjectArtifact (line 4)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Domain.hs","roleFamily":"Domain","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Codec.hs","roleFamily":"Codec","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Transducer.hs","roleFamily":"Transducer","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/BehaviorContract.hs","roleFamily":"BehaviorContract","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"hole","owner":"domain/project.keiro","path":"WorkspaceNominalProof/Project/BehaviorHoles.hs","roleFamily":"BehaviorHoles","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate behavior witnesses Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/EventStream.hs","roleFamily":"EventStream","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Projection.hs","roleFamily":"Projection","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
+module {"kind":"generated","owner":"domain/project.keiro","path":"Generated/WorkspaceNominalProof/Project/Harness.hs","roleFamily":"Harness","roleOwnerKind":"domain/project.keiro:","roleOwnerName":"domain/project.keiro: aggregate Project (line 24)"}
 id-domain id-domain|name=ProjectId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=proj|separator=_|json=canonical-json-text
 nominal-equality nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:proj:keiro-dsl/id-domain/typeid-v7/1|owner=generated
 nominal-equality nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated

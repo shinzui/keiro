@@ -4,6 +4,11 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+naming-edition idiomatic-v1
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 4)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 4)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 4)","path":"HospitalCapacity/TransferDecisions/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel transfer_decisions (line 4)","path":"Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs"}
 generated Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
 generated Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
 hole HospitalCapacity/TransferDecisions/ReadModelHoles.hs

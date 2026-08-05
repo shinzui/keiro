@@ -10,7 +10,7 @@ module Proof.WorkspaceProof.Alpha.Generated.EventStream
 
 import Proof.WorkspaceProof.Alpha.Generated.Domain
 import Proof.WorkspaceProof.Alpha.Generated.Codec (alphaCodec)
-import Proof.WorkspaceProof.Alpha.Generated.Transducer (alphaFoldFingerprint, alphaTransducer)
+import Proof.WorkspaceProof.Alpha.Generated.Transducer (alphaTransducer)
 import Keiki.Core (HsPred)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)

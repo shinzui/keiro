@@ -6,11 +6,4 @@ module Generated.BehaviorComplete.Nominals
   , requestIdText
   ) where
 
-import Data.Aeson (FromJSON, ToJSON)
-import Data.Text (Text)
-import GHC.Generics (Generic)
-import Keiki.Shape (CanonicalTypeName)
 import Generated.BehaviorComplete.Nominals.Internal (RequestId, mkRequestId, parseRequestId, requestIdText)
-import Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain)
-
-instance CanonicalTypeName RequestId

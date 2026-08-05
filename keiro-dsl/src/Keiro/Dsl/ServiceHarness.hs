@@ -9,7 +9,8 @@ module Keiro.Dsl.ServiceHarness
   )
 where
 
-import Data.List (group, sort, sortOn)
+import Data.List (group, mapAccumL, sort, sortOn)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -76,19 +77,30 @@ renderServiceHarness ctx service =
       <> [""]
       <> renderFacts factSources
   where
-    indexed = zip [0 :: Int ..] (serviceHarnessNodes service)
+    aliased = aliasNodes (serviceHarnessNodes service)
     importLines
-      | null indexed = []
-      | otherwise = "" : map (renderImport ctx) indexed
-    checkSources = [(node, aliasFor index) | (index, node) <- indexed, producesChecks node]
-    factSources = [(node, aliasFor index) | (index, node) <- indexed, producesFacts node]
+      | null aliased = []
+      | otherwise = "" : map (renderImport ctx) aliased
+    checkSources = [(node, alias) | (node, alias) <- aliased, producesChecks node]
+    factSources = [(node, alias) | (node, alias) <- aliased, producesFacts node]
 
-renderImport :: Context -> (Int, Node) -> Text
-renderImport ctx (index, node) =
-  "import " <> harnessModuleName ctx node <> " qualified as " <> aliasFor index
+renderImport :: Context -> (Node, Text) -> Text
+renderImport ctx (node, alias) =
+  "import " <> harnessModuleName ctx node <> " qualified as " <> alias
 
-aliasFor :: Int -> Text
-aliasFor index = "Harness" <> T.pack (show index)
+aliasNodes :: [Node] -> [(Node, Text)]
+aliasNodes nodes = snd (mapAccumL assign Map.empty nodes)
+  where
+    assign counts node =
+      let base = aliasForNode node
+          occurrence = Map.findWithDefault 0 base counts + 1
+          alias = base <> if occurrence == (1 :: Int) then "" else T.pack (show occurrence)
+       in (Map.insert base occurrence counts, (node, alias))
+
+aliasForNode :: Node -> Text
+aliasForNode node =
+  let (_, nodeName, _) = nodeIdentity node
+   in pascal nodeName
 
 harnessModuleName :: Context -> Node -> Text
 harnessModuleName ctx = \case
