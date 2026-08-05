@@ -77,10 +77,13 @@ aggregate Thing
   wire kind=ctorName fields=camelCase schemaVersion=1
 ```
 
-`check` prints `OK` and exits zero for a valid source. `scaffold` validates
-again before writing. It emits replaceable files bearing an exact `@generated`
-banner, create-once hand-owned modules, a conformance harness, a build manifest,
-and a scaffold record. Copy the manifest's `default-language`,
+`check` prints `OK` and exits zero only after semantic validation and the pure
+scaffold-planning gates succeed under the source-declared context. `scaffold`
+re-runs the same ordered gates under its CLI-effective context before writing,
+so module-root, placement, or runtime-package overrides receive the same defense
+in depth. It emits replaceable files bearing an exact `@generated` banner,
+create-once hand-owned modules, a conformance harness, a build manifest, and a
+scaffold record. Copy the manifest's `default-language`,
 `default-extensions`, `other-modules`, and `build-depends` blocks into the
 consuming Cabal component, fill the create-once modules, and run the generated
 harness in CI.
@@ -1647,6 +1650,23 @@ The tool separates three failure classes:
    operational proof, or adoption state. Warnings do not make `check` fail by
    default. `--deny-warnings` and `--deny CODE` escalate only this invocation's
    exit result; the diagnostic still renders and reports as `warning`.
+
+A green `check` also means the default scaffold plan has no refusal that is
+decidable from the checked graph. Empty aggregates and contracts are
+`AggregateEmpty` and `ContractEmpty` errors under every language version. Module
+path collisions, generated/consumer import cycles, unsound behavior derivation,
+duplicate conformance fact keys, and unexpected internal planning failures use
+`GeneratedPathCollision`, `GeneratedImportCycle`, `BehaviorDerivationInvalid`,
+`ConformanceFactKeyCollision`, and `GeneratedPlanningInvariantViolation`.
+Diagnostics retain source locations where planner evidence exposes them.
+
+Scaffold still owns evidence that exists only after an output tree and invocation
+options are known: exact generated-banner protection, golden-root divergence,
+explicit name-migration authorization, and stale generated evidence. It also
+re-runs the shared gates after applying `--module-root`, `--collocate`,
+`--runtime-package`, and golden inputs, so an override-induced refusal is detected
+before a write set exists. These checks are defense in depth, not a second
+semantic vocabulary.
 
 A source without a `language keiro-dsl N` preamble selects compatibility-only
 language 1. Declared languages 1 through 3 are also compatibility-only, and do

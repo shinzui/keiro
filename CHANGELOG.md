@@ -34,6 +34,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   derives `Ord`, `Enum`, and `Bounded`; exhaustive matches must be extended. `check`,
   `scaffold`, and the working-tree side of `diff` now add a stderr language-contract
   notice for compatibility-only sources, which changes exact-stderr consumers.
+- **keiro-dsl**: `DiagnosticCode` appends `AggregateEmpty`, `ContractEmpty`,
+  `GeneratedPathCollision`, `GeneratedImportCycle`, `BehaviorDerivationInvalid`,
+  `ConformanceFactKeyCollision`, and `GeneratedPlanningInvariantViolation`;
+  exhaustive matches must be extended. Specs that scaffold already could not lower
+  now fail earlier during `check`.
 
 ### New Features
 
@@ -65,6 +70,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   no longer emit live acceptance helpers; predicate verification, behavior attribution,
   and Keiki runtime edges share the same cumulative outgoing index. Residual duplicate
   generated declarations are refused before any scaffold write.
+- **keiro-dsl**: source and workspace checking and both scaffold planners now share
+  one pure gate order: fold surface, lowering, module construction, conformance-package
+  planning, then module-plan refusals. Workspace planning therefore reports a lowering
+  refusal before a simultaneous facade-key refusal. Valid generated output is unchanged.
 
 ## 0.10.0.0 — 2026-08-03
 
