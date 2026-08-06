@@ -60,6 +60,53 @@
 -- * Discovery (EP-42) is 'findUnfinishedWorkflowIds' plus 'completedStepName';
 --   it needs no kiroku prefix subscription.
 --
+-- == Writing a custom wake source
+--
+-- The three built-in wake sources — sleep timers ("Keiro.Workflow.Sleep"),
+-- awakeables ("Keiro.Workflow.Awakeable"), and child workflows
+-- ("Keiro.Workflow.Child") — are not privileged. Anything can resolve an
+-- 'awaitStep' by appending a 'StepRecorded' under the awaited step name. What
+-- makes the built-ins /correct/ is a property the append helper cannot give
+-- you, so a source built on 'appendJournalEntry' alone is not safe. Three
+-- obligations:
+--
+-- 1. __Keep a durable row keyed by the logical workflow, not by a generation.__
+--    Each built-in has one: the @keiro_timers@ row, the @keiro_awakeables@ row,
+--    the @keiro_workflow_children@ row. The row — not the journal — is the
+--    authority on whether the wake is pending, resolved, or abandoned, and it
+--    must outlive a 'continueAsNew' rotation. See
+--    @docs\/adr\/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md@.
+--
+-- 2. __Deliver by appending under the awaited step name, and expect to lose a
+--    rotation race.__ 'appendJournalEntry' resolves the current generation with
+--    its own query and then appends in a separate transaction. A 'continueAsNew'
+--    committing between the two strands your completion on the closed
+--    generation, and the step-index fallback deliberately does not let a closed
+--    generation resolve a live one
+--    (@docs\/adr\/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md@).
+--    An append may also be declined outright as 'JournalRefusedTerminal' when
+--    the workflow has gone terminal; that is not an error — settle your own
+--    durable row and deliver nothing.
+--
+-- 3. __Re-check the row from the arm, and re-deliver.__ This is what makes (2)
+--    harmless. The arming action runs again on every resume until the awaited
+--    result is journaled, so an arm that reads its durable row and re-appends an
+--    already-resolved result repairs a stranded delivery onto whatever
+--    generation is now current. An arm that only ever /schedules/ leaves the
+--    rotation race unrepaired.
+--
+-- Since exact discovery
+-- (@docs\/adr\/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md@)
+-- there is a fourth obligation, and it is the one that strands a workflow
+-- permanently if you skip it: __every lifecycle transition of your durable row
+-- must leave the owning @keiro_workflows@ instance row discoverable, in the same
+-- transaction that performs the transition.__ Delivering through
+-- 'appendJournalEntry' satisfies this for free (the append transaction upserts
+-- the row to @running@). A transition that appends nothing — abandoning a
+-- pending wake, say, the way 'Keiro.Workflow.Awakeable.cancelAwakeable' does —
+-- must write the instance row itself, or the workflow will never be re-examined
+-- and will never observe the abandonment.
+--
 -- > __Build gotcha__ (EP-38's migration adds @keiro_workflow_steps@): adding a
 -- > new @.sql@ file under @keiro-migrations/sql-migrations/@ does not trigger
 -- > recompilation of @Keiro.Migrations@ (cabal says "Up to date" even with
@@ -257,6 +304,17 @@ freshOrdinal namespace = send (FreshOrdinal namespace)
 -- because control never returns to the caller within /this/ run: the rotated
 -- continuation runs in the next run/resume. Read the carried seed back at the top
 -- of the workflow body with 'restoreSeed'.
+--
+-- __Rotating abandons outstanding awakeables.__
+-- 'Keiro.Workflow.Awakeable.awakeableNamed' journals a freshly allocated id
+-- under an @awkid:\<label\>@ step and then awaits @awk:\<uuid\>@. The next
+-- generation's journal has neither step, so the body re-runs the allocation and
+-- hands out a __different__ id; a signal against the id you handed out before
+-- rotating settles that awakeable's own row and resolves nothing the new
+-- generation is waiting for. Re-notify whoever holds the promise from the
+-- re-run allocation step — that step is the natural hook, and it runs exactly
+-- once per generation. This mirrors 'Keiro.Workflow.Child.spawnChild', where a
+-- fresh child after rotation needs a child id derived from the carried seed.
 continueAsNew :: (Workflow :> es, Aeson.ToJSON s) => s -> Eff es a
 continueAsNew seed = send (ContinueAsNew seed)
 
@@ -931,6 +989,12 @@ appendJournalEntry name wid event = void (appendJournalEntryReturningId name wid
 -- the entry. EP-39's fired timer needs this for @markTimerFired@. The id is
 -- returned even when the append was declined because the workflow is terminal,
 -- so the caller can still settle its own row.
+--
+-- Rotation caveat: the target generation is resolved by a query and the append
+-- commits in a separate transaction, so a 'continueAsNew' landing in between
+-- writes the entry onto the closed generation, where it resolves nothing. This
+-- is why a wake source needs a durable row its arm re-checks — see /Writing a
+-- custom wake source/ in this module's overview.
 appendJournalEntryReturningId :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es EventId
 appendJournalEntryReturningId name wid event = do
   -- EP-48: a wake source (timer fired, signalAwakeable, child completion)

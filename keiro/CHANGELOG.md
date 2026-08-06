@@ -77,6 +77,32 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   transaction instead of costing a separate query before and after each action,
   and `claimInstance` no longer resolves `MAX(generation)` on every claim.
 
+### Documentation
+
+- `Keiro.Workflow`'s overview gains a "Writing a custom wake source" section
+  stating the four obligations a third-party wake source owes — a durable row
+  keyed by the logical workflow, delivery under the awaited step name, an arm
+  that re-checks the row and re-delivers, and an instance-row write on every
+  lifecycle transition — with the rotation race spelled out on
+  `appendJournalEntryReturningId`. The same contract is written for adopters in
+  `docs/guides/durable-workflows.md` and `docs/user/durable-workflows.md`.
+
+- `continueAsNew` documents that rotating abandons any awakeable id already
+  handed out: the next generation re-runs the allocation step and hands out a
+  fresh one, so the holder must be re-notified from that step. Stated on
+  `continueAsNew`, on `Keiro.Workflow.Awakeable.awakeableNamed`, and in the
+  guide.
+
+- A "what suspension costs" section in both durable-workflow documents, the
+  roadmap, and the production-status page: parked workflows are free, and the
+  costs that remain are due sleeps awaiting a timer worker, crash retries, and
+  journal replay under the default `snapshotPolicy = Never`.
+
+- Corrected drift: `recordStepTx`'s haddock named a two-column conflict key that
+  has been four columns since migration 0008, and `Keiro.Workflow.Gc` now states
+  that collecting a terminal parent deliberately detaches its still-running
+  children.
+
 ### Fixed
 
 - A workflow that goes terminal while the resume worker is recording its crash

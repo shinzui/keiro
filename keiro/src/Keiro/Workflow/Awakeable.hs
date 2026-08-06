@@ -185,6 +185,16 @@ instance Exception WorkflowAwakeableCancelled
 -- insert or remove awakeables elsewhere in the workflow (the same robustness
 -- argument EP-38 makes for named steps over positional history). Prefer this over
 -- 'awakeable' for anything that may outlive a code change mid-flight.
+--
+-- The label is stable across code edits but __not__ across
+-- 'Keiro.Workflow.continueAsNew'. The allocated id is journaled under an
+-- @awkid:\<label\>@ step, and rotation opens a generation whose journal has no
+-- such step, so the next run allocates a fresh id under the same label. The
+-- previously handed-out id is orphaned: its row survives until workflow GC
+-- collects it, 'signalAwakeable' against it still reports whether /that row/
+-- transitioned, and nothing in the new generation is woken. Re-notify the holder
+-- from the re-run allocation step whenever a workflow both rotates and hands
+-- awakeable ids to the outside world.
 awakeableNamed ::
   (Workflow :> es, Store :> es, IOE :> es, FromJSON a) =>
   StepName ->

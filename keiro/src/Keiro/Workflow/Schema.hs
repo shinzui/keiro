@@ -66,9 +66,12 @@ data WorkflowStepRow = WorkflowStepRow
   deriving stock (Generic, Eq, Show)
 
 -- | Upsert a step row inside the caller's transaction — an
--- @INSERT ... ON CONFLICT (workflow_id, step_name) DO NOTHING@, so a replayed
--- or raced write is a no-op. Called in the same transaction as the journal
--- append so the index and the journal stay consistent.
+-- @INSERT ... ON CONFLICT (workflow_id, workflow_name, generation, step_name)
+-- DO NOTHING@, so a replayed or raced write is a no-op. The @generation@
+-- component (migration @0008-keiro-workflow-generation.sql@) is what lets the
+-- same step name exist independently on each generation a @continueAsNew@
+-- rotation opens. Called in the same transaction as the journal append so the
+-- index and the journal stay consistent.
 recordStepTx :: WorkflowStepRow -> Tx.Transaction ()
 recordStepTx row =
   Tx.statement

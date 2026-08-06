@@ -145,14 +145,70 @@ runWorkflowResumeWorker   :: (IOE :> es, Store :> es) => WorkflowRegistry es -> 
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 ```
 
-`resumeWorkflowsOnce` discovers workflows whose journal lacks a terminal marker
-(via the `keiro_workflow_steps` index, unioned with running children) and
-re-invokes each through its registered `WorkflowDef`, short-circuiting journaled
-steps. It returns a `ResumeSummary`
+`resumeWorkflowsOnce` discovers workflows with progress to make — one index
+query over `keiro_workflows` returning instances that are `running`, or
+`suspended` with a due wake hint — and re-invokes each through its registered
+`WorkflowDef`, short-circuiting journaled steps. Discovery is *exact*: a
+workflow parked on an unresolved awakeable, child, or future-dated sleep is
+deliberately not returned. It returns a `ResumeSummary`
 (`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
-`transientErrors`/`leaseSkipped`).
-`runWorkflowResumeWorker` loops it on a poll interval. No `wf:` prefix
+`transientErrors`/`leaseSkipped`), which is a `Monoid` under field-wise
+addition. `runWorkflowResumeWorker` loops it on a poll interval. No `wf:` prefix
 subscription is used, so there is no upstream dependency.
+
+Set `WorkflowResumeOptions.maxConcurrentAdvances` above its default of `1` to
+advance several discovered workflows at once, so one slow step body does not
+delay the rest of the pass. Size it against the store connection pool, not the
+candidate count. With concurrency enabled, `logEvent` is called from several
+threads and must be thread-safe.
+
+## Writing your own wake source
+
+Sleep timers, awakeables, and child workflows are not privileged: anything that
+appends a `StepRecorded` under an awaited step name resolves that `awaitStep`.
+What makes the built-ins correct is a property `appendJournalEntry` cannot give
+you on its own. A custom wake source owes four things:
+
+1. **A durable row keyed by the logical workflow, not by a generation** — the
+   authority on whether the wake is pending, resolved, or abandoned. It must
+   outlive a `continueAsNew` rotation.
+   ([ADR 6](../adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md))
+2. **Delivery by appending under the awaited step name**, accepting that the
+   append resolves the current generation with one query and commits in another,
+   so a rotation landing in between strands the entry on the closed generation.
+   A closed generation never resolves a live one.
+   ([ADR 5](../adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md))
+3. **An arm that re-checks the row and re-delivers.** The arming action re-runs
+   on every resume until the result is journaled, so re-reading your row and
+   re-appending an already-resolved result is what repairs a stranded delivery.
+   An arm that only *schedules* leaves the rotation race unrepaired.
+4. **An instance-row write on every lifecycle transition**, in the transaction
+   that performs it. Delivering through `appendJournalEntry` does this for you.
+   A transition that appends nothing — abandoning a pending wake, as
+   `cancelAwakeable` does — must write `keiro_workflows` itself, or the workflow
+   is never re-examined and never observes the abandonment.
+   ([ADR 23](../adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md))
+
+Delivering into a workflow that has gone terminal is declined, not failed:
+settle your own row and deliver nothing.
+
+## What suspension costs
+
+A workflow parked on an awakeable, a child, or a future-dated sleep costs the
+resume worker **nothing** until something happens to it. Idle cost does not
+scale with the number of parked workflows, so a thousand pending approvals are
+a thousand rows, not a thousand replays per second.
+
+What still costs a pass:
+
+- A workflow whose sleep is due, until a timer worker fires it. Drain backlogs
+  with `drainWorkflowSleepTimers` rather than one timer per poll tick.
+- A crashed workflow retrying on its backoff ladder.
+- Every re-invocation replaying its journal from the start, because
+  `defaultWorkflowRunOptions` sets `snapshotPolicy = Never`. For workflows with
+  long journals or many suspend/resume cycles, set `Every n` (or `OnTerminal`)
+  so a resume hydrates from a snapshot plus the tail. See
+  [Snapshots](snapshots.md).
 
 ## Snapshots
 

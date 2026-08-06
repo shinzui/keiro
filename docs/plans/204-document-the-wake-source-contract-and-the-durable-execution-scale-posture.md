@@ -44,16 +44,60 @@ changes.
 
 ## Progress
 
-- [ ] Wake-source authoring contract written into `Keiro.Workflow`'s module haddock and the durable-workflows guide.
-- [ ] `continueAsNew` awakeable-abandonment semantics documented (haddock + guide).
-- [ ] Scale posture and snapshot-policy guidance in `docs/user/roadmap.md`, `docs/user/production-status.md`, and both durable-workflows docs.
-- [ ] Haddock drift fixed (`recordStepTx`, GC parent/child detachment note).
-- [ ] `cabal haddock keiro` clean; ADR citations verified; full suite green.
+- [x] (2026-08-06) Wake-source authoring contract in `Keiro.Workflow`'s module
+  haddock, the guide (worked sketch), and the reference (terse, ADR-linked) —
+  four obligations, including ADR 23's instance-row clause.
+- [x] (2026-08-06) `continueAsNew` awakeable-abandonment documented on
+  `continueAsNew`, on `awakeableNamed`, in the guide, and in the
+  production-status limits section.
+- [x] (2026-08-06) Scale posture and snapshot guidance in `docs/user/roadmap.md`
+  (Phase-5 prose, resume-worker and capability-matrix rows),
+  `docs/user/production-status.md`, and both durable-workflows documents.
+- [x] (2026-08-06) Haddock drift fixed: `recordStepTx`'s four-column conflict
+  key, the GC parent-collection note, and the stale "unioned with running
+  children" discovery description in both user documents.
+- [x] (2026-08-06) `cabal haddock keiro` adds no new warnings (diffed against a
+  pre-edit baseline); every cited ADR resolves as a repository-relative path.
+- [x] (2026-08-06) Full suite green and untouched: `cabal test keiro-test` — 407
+  examples, 0 failures, no test edits. `just adr-validate`, `just
+  research-validate`, and the extension / generated-name / conformance-corpus
+  policy scripts all pass.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The wake-source contract is four obligations, not the three this plan
+  anticipated. ADR 23 did not exist when the plan was written; plan 200 added it,
+  and its clause — every lifecycle transition of a wake source's durable row must
+  leave the owning `keiro_workflows` row discoverable, in the same transaction —
+  is the one with the worst failure mode. Missing obligations 1–3 strands a
+  delivery until the next repair; missing this one strands the workflow
+  permanently, because exact discovery never re-examines it. The documentation
+  states it separately and says so.
+
+- Both user-facing documents described discovery as it worked before plan 200
+  ("via the `keiro_workflow_steps` index, unioned with running children"), which
+  the plan's inventory of drift did not include — it only listed `recordStepTx`
+  and the GC module. Correcting user-facing prose that a sibling plan
+  invalidated turned out to be as much of this plan's value as the new sections.
+  A behavioural plan that changes a documented mechanism should either fix the
+  prose itself or file it, and MasterPlan 30 had only the latter.
+
+- `cabal haddock` warnings cannot be diffed naively across a `git stash`. Haddock
+  re-emits warnings only for the modules it rebuilds, so the stashed baseline run
+  reused fresh interfaces and emitted 165 warnings against the edited tree's 188.
+  Every one of the 23 extra warnings came from `keiro-core` re-exported modules
+  (`Keiro.Codec`, `Keiro.EventStream`, `Keiro.Prelude`, `Keiro.Stream`,
+  `Keiro.Integration.Event`) and cross-package name ambiguity — none from the four
+  modules this plan touched, which is the actual finding. Compare the *identifiers*
+  in the warning set, not the count.
+
+- MasterPlan 30 asked this plan to write its author-facing documentation against
+  EP-4's worker-loop convention. It landed in the guide's operational notes
+  rather than the wake-source section: "isolate per pass and per item, and report
+  partial progress honestly" applies to anyone writing a loop around
+  `resumeWorkflowsOnce` or `gcWorkflowsOnce`, not specifically to wake-source
+  authors.
 
 
 ## Decision Log
@@ -72,10 +116,67 @@ changes.
   documented in the MasterPlan, and honest-now beats aspirational.
   Date: 2026-08-06
 
+- Decision: Both plans 200 and 203 were Complete at implementation time, so the
+  posture is written as shipped — parked workflows are free, and the remaining
+  costs are named individually (due sleeps awaiting a timer worker, crash
+  retries, journal replay under the default `snapshotPolicy = Never`).
+  Rationale: The registry, not this plan's prose, is the source of truth for
+  which state to describe; describing the pre-200 O(parked × poll) posture would
+  have been wrong the day it was written.
+  Date: 2026-08-06
+
+- Decision: Fix the stale discovery descriptions in
+  `docs/user/durable-workflows.md` and `docs/guides/durable-workflows.md` here,
+  rather than filing them back against plan 200.
+  Rationale: They are documentation drift, which is exactly this plan's scope,
+  and plan 200 is Complete — reopening a finished plan to correct prose this one
+  is already editing would cost more than it clarifies.
+  Date: 2026-08-06
+
+- Decision: Put EP-4's worker-loop convention in the guide's operational notes
+  rather than the wake-source section, and still leave the ADR to the
+  MasterPlan's completion distillation.
+  Rationale: The convention governs anyone writing a loop around
+  `resumeWorkflowsOnce` or `gcWorkflowsOnce`, which is a different audience from
+  wake-source authors; and this plan mints no ADR by its own rule (Context and
+  Orientation), so the durable record stays a MasterPlan-close-out decision.
+  Date: 2026-08-06
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete, 2026-08-06. Docs-only, as scoped: four haddock surfaces
+(`Keiro.Workflow`, `Keiro.Workflow.Awakeable`, `Keiro.Workflow.Schema`,
+`Keiro.Workflow.Gc`) and four documents (`docs/guides/durable-workflows.md`,
+`docs/user/durable-workflows.md`, `docs/user/roadmap.md`,
+`docs/user/production-status.md`), plus a CHANGELOG section. No behaviour
+changed, and the suite is untouched-green.
+
+Against the acceptance criteria, which are reading tests rather than assertions:
+
+- *What must my custom wake source persist, and why does the arm re-check it?*
+  Answerable from `Keiro.Workflow`'s overview alone — the four obligations, the
+  rotation race that motivates the third, and the exact-discovery clause that
+  motivates the fourth, each citing its ADR by relative path.
+- *What does a workflow parked on an awakeable cost me, and which snapshot policy
+  should I set?* Answerable from either durable-workflows document: nothing until
+  something happens to it, and `Every n` for suspend-heavy or long-journal
+  workflows because the default is `Never`.
+- *What is the posture, without reading source?* In the roadmap's Phase-5 prose
+  and capability matrix, and in the production-status page's adoption bullets.
+
+The lesson worth carrying: the most valuable edits were not the new sections the
+plan scoped, but the sentences that had quietly become false. Both user documents
+still described discovery as "the `keiro_workflow_steps` index, unioned with
+running children" — the mechanism plan 200 replaced. A reader would have believed
+it, because it was written with the same confidence as the parts that were still
+true. Behavioural plans in this initiative each updated the CHANGELOG and the
+ADRs; none of them swept the guides. Worth a habit: when a plan changes a
+mechanism, grep the user docs for the old mechanism's name before closing it.
+
+Deliberately not done here: no ADR was minted (this plan's own rule), and EP-4's
+worker-loop convention was written into the guide's operational notes while the
+durable record remains a MasterPlan close-out item.
 
 
 ## Context and Orientation

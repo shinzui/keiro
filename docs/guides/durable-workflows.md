@@ -243,12 +243,18 @@ jitsureiWorkflowRegistry =
 `ResumeSummary`
 (`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
 `transientErrors`/`leaseSkipped`);
-`runWorkflowResumeWorker` loops it on a poll interval. Discovery uses the
-`keiro_workflow_steps` index (a "workflows lacking a terminal marker" query) plus
-the running-children union — it does **not** use a kiroku `wf:` prefix
-subscription, so the runtime has no upstream dependency. An unfinished workflow
-whose name is absent from the registry is surfaced as `unknownName`, never
-silently dropped.
+`runWorkflowResumeWorker` loops it on a poll interval. Discovery is a single
+index query over the `keiro_workflows` instance table, and it is **exact**: an
+instance is returned when it is `running`, or `suspended` with a due wake hint,
+and never otherwise. It does **not** use a kiroku `wf:` prefix subscription, so
+the runtime has no upstream dependency. An unfinished workflow whose name is
+absent from the registry is surfaced as `unknownName`, never silently dropped.
+
+By default a pass advances its candidates one at a time. Raise
+`maxConcurrentAdvances` to advance several at once when step bodies are slow —
+the pass reports the same summary either way, since each candidate contributes
+its own counts. Size it against your store's connection pool, and make
+`logEvent` thread-safe if you replace the default.
 
 ### Lease sizing and lease loss
 
@@ -319,7 +325,94 @@ paymentWebhookAwakeableId orderId =
 `pending → completed` transition, but re-appends the stored payload to the journal
 whenever the row is `completed`, so a crash between the row update and the journal
 append heals on a later signal. A workflow parked on an awakeable that will never
-arrive is repaired with `cancelAwakeable`.
+arrive is repaired with `cancelAwakeable`, which flips the owning instance row in
+the same transaction so the workflow is re-examined and can observe the
+cancellation.
+
+One sharp edge: **`continueAsNew` abandons outstanding awakeable ids.** The
+allocated id is journaled under an `awkid:<label>` step, and a rotation opens a
+generation whose journal has no such step, so the next run allocates a *fresh*
+id under the same label. A signal against the id you handed out before rotating
+settles that awakeable's own row and wakes nothing. If a workflow both rotates
+and hands ids to the outside world, re-notify the holder from the re-run
+allocation step — it runs exactly once per generation, which is precisely the
+hook you want. (The child-workflow analogue is deriving a fresh child id from
+the carried seed.)
+
+## Writing your own wake source
+
+The three built-in wake sources are ordinary code. Anything that appends a
+`StepRecorded` under an awaited step name resolves that `awaitStep` — but
+`appendJournalEntry` alone is not enough to be correct, because it resolves the
+target generation with one query and commits in another. A `continueAsNew`
+landing in between strands your entry on a closed generation, which never
+resolves a live one.
+
+The shape that works, and what every built-in does (a sketch — `lookupMyRow`,
+`registerMyRow`, `resolvedPayload`, and the row type are yours):
+
+```haskell
+-- 1. A durable row keyed by the LOGICAL workflow, not a generation. It outlives
+--    rotation and is the authority on pending / resolved / abandoned.
+--    (keiro_timers, keiro_awakeables, keiro_workflow_children are the built-ins.)
+
+-- 2. The arm re-checks that row on every resume and re-delivers.
+myWakeSource :: (Workflow :> es, Store :> es, IOE :> es) => Text -> Eff es Payload
+myWakeSource key = awaitStep (StepName ("mysrc:" <> key)) $ do
+  (name, wid) <- currentWorkflow
+  lookupMyRow key >>= \case
+    -- First arm: register the durable row and schedule the external work.
+    Nothing -> registerMyRow key name wid
+    -- Repair: the result exists, but a rotation may have stranded its delivery
+    -- on a closed generation, so deliver it again onto the current one. The
+    -- append is idempotent, so doing this on every resume is free.
+    Just row
+      | Just payload <- resolvedPayload row -> do
+          now <- liftIO getCurrentTime
+          appendJournalEntry name wid
+            (StepRecorded ("mysrc:" <> key) payload now)
+      -- Still pending: the external system has not answered yet.
+      | otherwise -> pure ()
+
+-- 3. The external completion path appends under the awaited step name. It may be
+--    declined (the workflow went terminal) — settle your own row regardless.
+```
+
+The fourth obligation has no code in that sketch because it is easy to miss:
+**every lifecycle transition of your durable row must leave the owning
+`keiro_workflows` row discoverable, in the same transaction.** Delivering through
+`appendJournalEntry` gets this for free. A transition that appends *nothing* —
+abandoning a pending wake — must write the instance row itself. Skip it and the
+workflow is never re-examined; under exact discovery that is a permanent strand,
+not a delayed one.
+
+The governing records are
+[ADR 5](../adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md)
+(the step index is the authoritative replay-visibility fallback),
+[ADR 6](../adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md)
+(wake-source rows govern exposure and terminal races), and
+[ADR 23](../adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md)
+(discovery is exact and the instance row is the complete wake ledger).
+
+## What suspension costs
+
+A workflow parked on an awakeable, a child, or a future-dated sleep costs the
+resume worker nothing until something happens to it. Idle cost does not scale
+with the number of parked workflows: a thousand pending approvals are a thousand
+rows, not a thousand replays per poll tick.
+
+Three things still cost passes, and are worth configuring for:
+
+- **Due sleeps waiting on a timer worker.** A single-claim worker
+  (`runWorkflowTimerWorker`) drains one timer per invocation, so a backlog of `K`
+  due sleeps takes `K` ticks to clear. Use `drainWorkflowSleepTimers` with a
+  batch limit when many sleeps come due together.
+- **Crash retries**, paced by the backoff ladder on the instance row.
+- **Journal replay on every re-invocation.** `defaultWorkflowRunOptions` sets
+  `snapshotPolicy = Never`, which means a resume replays the journal from the
+  start. For workflows with long journals or many suspend/resume cycles, set
+  `Every n` (or `OnTerminal`) — this is the single most effective knob for
+  suspend-heavy workloads, and it is off by default.
 
 ## Child workflows
 
@@ -383,6 +476,14 @@ so a resumed run instruments itself. See [Operations](../user/operations.md).
 - Repair a stuck awakeable with `cancelAwakeable awkId`; repair a parent stuck on
   a never-finishing child by driving or cancelling the child.
 - Enable a `snapshotPolicy` for workflows with long journals.
+- Drain due sleeps in batches (`drainWorkflowSleepTimers`) rather than one timer
+  per tick when many sleeps can come due together.
+- If you write your own loop rather than using `runWorkflowResumeWorker` or
+  `runWorkflowGcWorkerWith`, isolate failures **per pass and per item**, and
+  report partial progress honestly. Every keiro worker loop does: a transient
+  database error must lose one tick, not end the worker, and one bad instance
+  must not take its whole batch. A summary that restates "how many I looked at"
+  as "how many I finished" turns a stalled worker into a silent one.
 
 See [Operations](../user/operations.md) for the consolidated operational
 checklist and [Durable Workflows (user reference)](../user/durable-workflows.md)

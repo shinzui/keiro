@@ -74,7 +74,17 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   (`WorkflowRunOptions.leaseHeartbeat`), so a healthy long advance is not
   charged a crash attempt;
 - the operator recovery API `Keiro.Workflow.Instance.resurrectFailedWorkflow`,
-  plus `keiro.workflow.*` observability.
+  plus `keiro.workflow.*` observability;
+- a suspension cost model you can plan against: a workflow parked on an
+  awakeable, a child, or a future-dated sleep is not discovered at all, so idle
+  cost does not scale with the number of parked workflows. Budget instead for
+  due sleeps waiting on a timer worker (batch them with
+  `drainWorkflowSleepTimers`), crash retries, and journal replay per
+  re-invocation. `WorkflowRunOptions.snapshotPolicy` defaults to `Never`, which
+  means a resume replays the whole journal — set `Every n` for suspend-heavy or
+  long-journal workflows. A pass can advance several workflows at once
+  (`WorkflowResumeOptions.maxConcurrentAdvances`, default 1); size it against
+  the store's connection pool.
 
 ### Messaging and integration
 
@@ -163,7 +173,10 @@ crash-recovery resume worker, and journal snapshots. Step identity is by **name*
 not call-order position, so it is stable across source reordering. Continue-as-new
 journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded,
 and the `patch` API gives stable, journaled branch decisions for cross-cutting
-workflow-logic changes (prefer renaming a step for single-step changes). V1 process
+workflow-logic changes (prefer renaming a step for single-step changes). One sharp
+edge to plan for: rotating with `continueAsNew` abandons any awakeable id already
+handed to an external system, because the next generation re-runs the allocation
+step and hands out a fresh id — re-notify the holder from that step. V1 process
 managers and timers remain the saga-style / time-based coordination layer; reach
 for a workflow when the process reads as one long-running function with in-line
 waits. See the [Durable Workflows guide](../guides/durable-workflows.md).

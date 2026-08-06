@@ -45,7 +45,7 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
-| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. |
+| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. A parked workflow is idle-free: discovery is exact, so idle cost does not scale with the number of suspended workflows ([what suspension costs](durable-workflows.md#what-suspension-costs)). |
 
 ## Current Baseline
 
@@ -356,7 +356,7 @@ V2 durable execution means journaled functions with named steps.
 | Step lookup | `keiro_workflow_steps` indexes journaled steps for fast lookup. |
 | External completion | `keiro_awakeables` stores externally completed durable promises (`awakeable`/`signalAwakeable`/`cancelAwakeable`). |
 | Child workflows | Parent journals child handles so it can `spawnChild`/`awaitChild`/`cancelChild`. |
-| Resume worker | `resumeWorkflowsOnce` discovers and re-invokes unfinished workflows from a registry. |
+| Resume worker | `resumeWorkflowsOnce` discovers and re-invokes unfinished workflows from a registry. Discovery is exact — a workflow parked on an unresolved wake source is not returned — and a pass can advance several candidates at once (`maxConcurrentAdvances`, default 1). |
 | Snapshots | `runWorkflowWith` + `snapshotPolicy` compact long journals via `workflowStateCodec`. |
 | Observability | `keiro.workflow.*` metrics and a `workflow <name>` span. |
 | Continue-as-new | **Available** — `continueAsNew`/`restoreSeed` rotate a long-running workflow onto a fresh journal generation, keeping per-generation history bounded without losing state (§6.4, MasterPlan 6). |
@@ -365,6 +365,15 @@ V2 durable execution means journaled functions with named steps.
 The key design decision is named steps, not positional history. Step identity is
 explicit and stable across source-code reordering, avoiding Temporal-style
 runtime nondeterminism caused by ordinary code movement.
+
+Scale posture: a workflow suspended on an awakeable, a child, or a future-dated
+sleep costs the resume worker nothing until something happens to it, so idle
+cost does not scale with the number of parked workflows. What does cost passes
+is due sleeps waiting on a timer worker (drain them in batches with
+`drainWorkflowSleepTimers`), crash retries on their backoff ladder, and journal
+replay per re-invocation — `snapshotPolicy` defaults to `Never`, so
+suspend-heavy or long-journal workflows should set `Every n`. See
+[What suspension costs](durable-workflows.md#what-suspension-costs).
 
 User impact: teams can now write imperative long-running workflows with durable
 checkpoints, sleeps, external completion handles, and child workflows, without

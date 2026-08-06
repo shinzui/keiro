@@ -164,7 +164,7 @@ none constrain this initiative. The `docs/adr` bundle is profile-governed (OKF
 | 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | Complete |
 | 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Complete |
 | 4 | Concurrent resume passes, batched timer drain, and worker pass robustness | docs/plans/203-concurrent-resume-passes-batched-timer-drain-and-worker-pass-robustness.md | None | EP-1 | Complete |
-| 5 | Document the wake-source contract and the durable-execution scale posture | docs/plans/204-document-the-wake-source-contract-and-the-durable-execution-scale-posture.md | None | EP-1, EP-4 | Not Started |
+| 5 | Document the wake-source contract and the durable-execution scale posture | docs/plans/204-document-the-wake-source-contract-and-the-durable-execution-scale-posture.md | None | EP-1, EP-4 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -259,8 +259,8 @@ that skips ADR 23's obligation.
 - [x] EP-3 (2026-08-06): All four derivations hash UTF-8 seed bytes through the internal `Keiro.DeterministicId.identitySeedBytes`; sixteen pre-change ASCII fixtures still match, five previously-colliding pairs now differ, and a DB-backed workflow with colliding step names completes (proven to fail against the old encoding); ADR 24 recorded.
 - [x] EP-4 (2026-08-06): `maxConcurrentAdvances` (default 1) advances candidates through a bounded worker pool; overlap is asserted on recorded step-body windows and a mixed pass reports identically at concurrency 1 and 3.
 - [x] EP-4 (2026-08-06): `drainDueTimersWith` / `drainWorkflowSleepTimers` clear a whole backlog in one pass with one preamble; `recordCrashTx` returns `Maybe Int32` so the terminal race skips one candidate instead of the pass; GC isolates per workflow and per pass and reports a truthful `deleted`.
-- [ ] EP-5: Wake-source authoring contract and rotation semantics documented; haddock drift fixed.
-- [ ] EP-5: Scale posture recorded in `docs/user/roadmap.md` and `docs/user/production-status.md`.
+- [x] EP-5 (2026-08-06): Wake-source authoring contract (four obligations, ADR-cited) in `Keiro.Workflow`'s overview, the guide, and the reference; `continueAsNew` awakeable abandonment documented; `recordStepTx`'s conflict key, the GC parent-collection note, and the stale discovery prose in both user documents corrected.
+- [x] EP-5 (2026-08-06): Scale posture recorded in `docs/user/roadmap.md`, `docs/user/production-status.md`, and both durable-workflows documents, including the `snapshotPolicy = Never` default and batched sleep draining.
 
 
 ## Surprises & Discoveries
@@ -305,6 +305,17 @@ that skips ADR 23's obligation.
   `keiro-migrations/CHANGELOG.md` one for migration 0021. Later plans in this
   initiative should extend those sections rather than starting new ones — the
   whole initiative ships as one release.
+
+- EP-5 (2026-08-06) found the initiative's own documentation debt, and it is a
+  process finding rather than a technical one. Both user-facing durable-workflow
+  documents still described discovery as "the `keiro_workflow_steps` index,
+  unioned with running children" — the mechanism EP-1 replaced. EP-1 updated the
+  CHANGELOG and wrote ADR 23 but swept no guides, and EP-5's inventory of
+  documentation drift (written before EP-1 ran) listed only `recordStepTx` and
+  the GC module. Nothing in the decomposition made anyone responsible for prose a
+  sibling plan invalidated. The habit worth adopting: when a plan changes a
+  documented mechanism, grep `docs/` for the old mechanism's name before closing
+  it, rather than relying on a later documentation plan to notice.
 
 - EP-4 (2026-08-06) surfaced a convention that no ADR states and whose absence
   is exactly how its bug survived: every keiro worker loop is expected to

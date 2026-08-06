@@ -7,6 +7,12 @@
 -- parent is still non-terminal and may still attach to their result. Cleanup
 -- removes workflow-sleep timers in every lifecycle state so no scheduled timer
 -- can later recreate a collected workflow.
+--
+-- The converse of that exception is deliberate and not a leak: collecting an
+-- eligible terminal /parent/ also deletes the link rows of its children that are
+-- still running. Nothing awaits those children any more — the parent that would
+-- have received their results is gone — so they finish as ordinary workflows and
+-- become eligible for collection on their own terms.
 module Keiro.Workflow.Gc
   ( WorkflowGcPolicy (..),
     WorkflowGcSummary (..),
