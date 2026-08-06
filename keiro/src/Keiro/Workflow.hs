@@ -154,7 +154,7 @@ import Keiro.Workflow.Instance
     renewInstanceLease,
     upsertInstanceTx,
   )
-import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists, workflowStepLockKey)
+import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists, terminalMarkers, terminalMarkersTx, workflowStepLockKey)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
@@ -468,13 +468,13 @@ runWorkflowWith options name wid action = do
   -- load, and append are byte-for-byte as before. A rotated workflow resolves
   -- to its newest generation, so discovery/resume transparently continue there.
   gen <- currentGeneration name wid
-  -- Cancellation short-circuit (EP-43): a workflow whose journal carries a
-  -- WorkflowCancelled marker makes no further progress. The index row for that
-  -- marker is keyed under 'cancelledStepName' on the current generation, so a
-  -- single existence check is enough and we never run the user action.
-  cancelled <- stepExists name wid gen cancelledStepName
-  failed <- stepExists name wid gen failedStepName
-  case (cancelled, failed) of
+  -- Terminal short-circuit (EP-43): a workflow whose journal carries a
+  -- WorkflowCancelled or WorkflowFailed marker makes no further progress. Both
+  -- markers are index rows on the current generation, so one query answers for
+  -- both and we never run the user action. Cancellation takes precedence when
+  -- somehow both are present.
+  markers <- terminalMarkers name wid gen
+  case (cancelledStepName `elem` markers, failedStepName `elem` markers) of
     (True, _) -> pure Cancelled
     (_, True) -> pure Failed
     _ -> runActive gen

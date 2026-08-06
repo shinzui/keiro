@@ -19,6 +19,7 @@ module Keiro.Workflow.Schema
     lookupStepResultTx,
     lockWorkflowStepTx,
     workflowStepLockKey,
+    terminalMarkersTx,
     deleteStepRowTx,
     setWorkflowWakeAfterTx,
     clearWorkflowWakeAfterTx,
@@ -27,12 +28,13 @@ module Keiro.Workflow.Schema
     loadStepIndex,
     lookupStepResult,
     stepExists,
+    terminalMarkers,
     currentGeneration,
     findUnfinishedWorkflowIds,
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -42,7 +44,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
-import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), cancelledStepName, failedStepName)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -137,6 +139,29 @@ lookupStepResult (WorkflowName name) (WorkflowId wid) gen key =
 stepExists :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Text -> Eff es Bool
 stepExists (WorkflowName name) (WorkflowId wid) gen key =
   runTransaction (Tx.statement (wid, name, fromIntegral gen :: Int32, key) stepExistsStmt)
+
+-- | Which of the two /stopping/ terminal markers — 'cancelledStepName' and
+-- 'failedStepName' — are recorded for this workflow generation, in one query.
+--
+-- Both are ordinary index rows written by the same transactional append path as
+-- any step, so this reads the authoritative record rather than a derived status.
+-- 'completedStepName' and 'continuedAsNewStepName' are deliberately excluded:
+-- they mark a run that /finished/, not one that must stop mid-flight.
+--
+-- One query rather than two 'stepExists' calls, because every caller wants both
+-- answers at the same instant: the run-entry probe and the pre-action boundary
+-- check.
+terminalMarkers :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es [Text]
+terminalMarkers (WorkflowName name) (WorkflowId wid) gen =
+  runTransaction (terminalMarkersTx wid name gen)
+
+-- | 'terminalMarkers' inside the caller's transaction, so the journal-append
+-- transaction can enforce the same check under the lock it already holds.
+terminalMarkersTx :: Text -> Text -> Int -> Tx.Transaction [Text]
+terminalMarkersTx wid name gen =
+  Tx.statement
+    (wid, name, fromIntegral gen :: Int32, cancelledStepName, failedStepName)
+    terminalMarkersStmt
 
 -- | The current (highest) generation recorded for a logical workflow, or 0 if
 -- it has no step rows yet (EP-48). Index-supported by the
@@ -265,6 +290,28 @@ stepExistsStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.singleRow (D.column (D.nonNullable D.bool)))
+
+-- The two marker names are parameters rather than SQL literals so the reserved
+-- names stay defined once, in "Keiro.Workflow.Types".
+terminalMarkersStmt :: Statement (Text, Text, Int32, Text, Text) [Text]
+terminalMarkersStmt =
+  preparable
+    """
+    SELECT step_name
+    FROM keiro.keiro_workflow_steps
+    WHERE workflow_id = $1
+      AND workflow_name = $2
+      AND generation = $3
+      AND step_name IN ($4, $5)
+    """
+    ( contrazip5
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.rowList (D.column (D.nonNullable D.text)))
 
 -- The current generation is MAX(generation) for the logical id+name, or 0 when
 -- the workflow has no rows. Index-supported by keiro_workflow_steps_workflow_idx.

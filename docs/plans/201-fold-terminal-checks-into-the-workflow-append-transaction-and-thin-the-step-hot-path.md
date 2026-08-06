@@ -39,7 +39,7 @@ and observing that the second step's action never commits — and that the run r
 
 ## Progress
 
-- [ ] Milestone 1: entry probe collapsed to one query; `claimInstance` no longer resolves `currentGeneration`.
+- [x] Milestone 1 (2026-08-06): entry probe collapsed to one `terminalMarkers` query; `claimInstance` no longer resolves `currentGeneration`. Suite green at 388 examples, behaviour unchanged.
 - [ ] Milestone 2: cancelled and failed markers checked inside `prepareJournalAppend`'s transaction; post-action standalone check removed; pre-action check covers both markers in one query.
 - [ ] Milestone 3: boundary-asymmetry and refusal tests green; full suite green.
 

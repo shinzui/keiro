@@ -125,11 +125,19 @@ lookupInstance (WorkflowName name) (WorkflowId wid) =
   runTransaction (Tx.statement (wid, name) lookupInstanceStmt)
 
 claimInstance :: (IOE :> es, Store :> es) => Text -> NominalDiffTime -> WorkflowName -> WorkflowId -> Eff es Bool
-claimInstance owner ttl name@(WorkflowName nameText) wid@(WorkflowId widText) = do
+claimInstance owner ttl (WorkflowName nameText) (WorkflowId widText) = do
   now <- liftIO getCurrentTime
-  gen <- currentGeneration name wid
   runTransaction $ do
-    Tx.statement (widText, nameText, fromIntegral gen :: Int32) ensureInstanceStmt
+    -- Generation 0, not the resolved current generation: 'ensureInstanceStmt' is
+    -- an ON CONFLICT DO NOTHING insert, so the value is used only when no row
+    -- exists at all — and every discovered workflow has one (migration 0011
+    -- backfilled the pre-existing instances, every append upserts, and spawnChild
+    -- writes the child's row inside the spawn step's transaction). Where the
+    -- insert does fire, 0 is a floor that the next truthful writer raises:
+    -- 'upsertInstanceTx' takes GREATEST(stored, supplied) on conflict. Resolving
+    -- MAX(generation) here would cost a query per claim to learn a number the
+    -- insert almost never uses.
+    Tx.statement (widText, nameText, 0 :: Int32) ensureInstanceStmt
     fromMaybe False
       <$> Tx.statement
         (widText, nameText, owner, now, addUTCTime ttl now)

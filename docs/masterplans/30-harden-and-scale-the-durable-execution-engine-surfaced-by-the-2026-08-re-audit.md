@@ -161,7 +161,7 @@ none constrain this initiative. The `docs/adr` bundle is profile-governed (OKF
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make suspended workflows quiescent and discovery index-aligned | docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md | None | None | Complete |
-| 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | Not Started |
+| 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | In Progress |
 | 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Not Started |
 | 4 | Concurrent resume passes, batched timer drain, and worker pass robustness | docs/plans/203-concurrent-resume-passes-batched-timer-drain-and-worker-pass-robustness.md | None | EP-1 | Not Started |
 | 5 | Document the wake-source contract and the durable-execution scale posture | docs/plans/204-document-the-wake-source-contract-and-the-durable-execution-scale-posture.md | None | EP-1, EP-4 | Not Started |
