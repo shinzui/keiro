@@ -49,8 +49,12 @@
 --   carrying 'runOptions', so a resumed run honours the same snapshot/telemetry
 --   options as its first run.
 --
--- Discovery is the 'findUnfinishedWorkflowIds' index query plus the child-row
--- seed query. Each candidate is claimed through an expiry-based row lease in
+-- Discovery is the single 'findUnfinishedWorkflowIds' index query, and it is
+-- exact: a workflow parked on an unresolved wake source is /not/ returned, so a
+-- pass over a thousand parked approval flows costs one query. Every path that
+-- resolves or abandons a wake (a journal append, an awakeable cancellation)
+-- writes the instance row in the same transaction, which is what makes the
+-- workflow visible again. Each candidate is claimed through an expiry-based row lease in
 -- @keiro_workflows@ before it is advanced. A live foreign lease skips only that
 -- instance and increments 'leaseSkipped'; a dead worker's lease becomes claimable
 -- after 'leaseTtl'. Each fresh workflow boundary renews the lease before running
@@ -128,7 +132,7 @@ import Keiro.Workflow
   )
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
-import Keiro.Workflow.Child.Schema (ChildRow, findRunningChildIds, lookupChild, markChildFailedTx)
+import Keiro.Workflow.Child.Schema (ChildRow, lookupChild, markChildFailedTx)
 import Keiro.Workflow.Instance (claimInstance, recordCrashTx, releaseInstance)
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -273,8 +277,10 @@ emptyResumeSummary = ResumeSummary 0 0 0 0 0 0 0 0
 
 -- | Run one discover-and-reinvoke pass.
 --
--- Discovers every unfinished workflow via 'findUnfinishedWorkflowIds', and for
--- each looks its name up in @registry@:
+-- Discovers every workflow with progress to make via
+-- 'findUnfinishedWorkflowIds' (a workflow suspended on an unresolved wake
+-- source is deliberately not discovered), and for each looks its name up in
+-- @registry@:
 --
 -- * __present__ — re-invoke through 'runWorkflowWith' (the journal pre-load
 --   short-circuits already-journaled steps, so only the un-journaled tail runs);
@@ -298,27 +304,20 @@ resumeWorkflowsOnce opts registry = do
   -- already forwarded into 'runWorkflowWith' for every re-invocation.
   pending <- countPendingAwakeables
   recordWorkflowAwakeablesPending mMetrics (fromIntegral pending)
-  -- Discovery unions two sources: workflows with steps but no terminal marker
-  -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
-  -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
-  -- still driven. The dedup collapses a child that appears in both.
+  -- Discovery is the single 'findUnfinishedWorkflowIds' query over the instance
+  -- table, and it is exact: an instance is returned only when its row says it
+  -- has progress to make. A freshly-spawned child needs no separate seed —
+  -- 'Keiro.Workflow.Child.spawnChild' upserts the child's instance row as
+  -- 'running' inside the spawn step's transaction (and migration 0011
+  -- backfilled the running children that predate the instance table), so a
+  -- zero-step child is already visible here.
   now <- liftIO getCurrentTime
-  unfinished <- findUnfinishedWorkflowIds now
-  runningChildren <- findRunningChildIds
-  let pairs = dedupeFirstSeen (unfinished <> runningChildren)
-      seed = emptyResumeSummary {discovered = length pairs}
+  pairs <- findUnfinishedWorkflowIds now
+  let seed = emptyResumeSummary {discovered = length pairs}
   owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
   foldM (advance owner) seed pairs
   where
     mMetrics = runOptions opts ^. #metrics
-    dedupeFirstSeen :: [(Text, Text)] -> [(Text, Text)]
-    dedupeFirstSeen = go Set.empty
-      where
-        go !_ [] = []
-        go !seen (pair : rest)
-          | pair `Set.member` seen = go seen rest
-          | otherwise = pair : go (Set.insert pair seen) rest
-
     advance :: Text -> ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
     advance owner acc (widText, wnameText) =
       case Map.lookup (WorkflowName wnameText) registry of

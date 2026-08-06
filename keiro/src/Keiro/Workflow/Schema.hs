@@ -18,6 +18,7 @@ module Keiro.Workflow.Schema
     recordStepTx,
     lookupStepResultTx,
     lockWorkflowStepTx,
+    workflowStepLockKey,
     deleteStepRowTx,
     setWorkflowWakeAfterTx,
     clearWorkflowWakeAfterTx,
@@ -35,6 +36,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as Text
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -85,6 +87,19 @@ lockWorkflowStepTx :: Text -> Tx.Transaction ()
 lockWorkflowStepTx key =
   void (Tx.statement key lockWorkflowStepStmt)
 
+-- | The advisory-lock key that serializes every writer of one workflow step:
+-- @\<workflowId\>\/\<workflowName\>\/\<generation\>\/\<stepName\>@.
+--
+-- Two writers must derive the identical key to be ordered against each other,
+-- so both of them go through this function: the journal-append path in
+-- "Keiro.Workflow" (@prepareJournalAppend@) and the suspend write in
+-- "Keiro.Workflow.Instance" ('Keiro.Workflow.Instance.markInstanceSuspendedAwaiting').
+-- The lock is a transaction-scoped Postgres advisory lock, so it is released at
+-- commit or rollback and never leaks.
+workflowStepLockKey :: Text -> Text -> Int -> Text -> Text
+workflowStepLockKey wid name gen stepName =
+  Text.intercalate "/" [wid, name, Text.pack (show gen), stepName]
+
 deleteStepRowTx :: Text -> Text -> Int -> Text -> Tx.Transaction ()
 deleteStepRowTx wid name gen key =
   Tx.statement
@@ -134,12 +149,25 @@ currentGeneration :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es Int
 currentGeneration (WorkflowName name) (WorkflowId wid) =
   fromIntegral <$> runTransaction (Tx.statement (wid, name) currentGenerationStmt)
 
--- | Return the @(workflow_id, workflow_name)@ of every workflow instance the
--- resume worker should examine: the active statuses @running@ and @suspended@
--- (matching 'Keiro.Workflow.Instance.WorkflowStatus'), minus any instance whose
--- @wake_after@ hint is still in the future. The supplied time is what @wake_after@
--- is compared against, so a workflow parked on a not-yet-due sleep is skipped
--- until its timer becomes due.
+-- | Return the @(workflow_id, workflow_name)@ of every workflow instance that
+-- has progress to make right now. Discovery is /exact/: an instance is returned
+-- only when its row says so, never speculatively.
+--
+-- Two arms, matching 'Keiro.Workflow.Instance.WorkflowStatus':
+--
+-- * @running@ — a wake delivery, an awakeable cancellation, a crash, a rotation,
+--   or a resurrection left work to do. (Crash retries stay visible here;
+--   'Keiro.Workflow.Instance.claimInstance''s @next_attempt_at@ gate, not
+--   discovery, is what paces their backoff.)
+-- * @suspended@ with a due @wake_after@ — a sleep whose timer is due but whose
+--   fire has not landed yet. A successful fire flips the row to @running@ and
+--   clears the hint, so this arm mostly matters when the timer worker is behind.
+--
+-- A @suspended@ instance with no due wake hint is parked on a wake source
+-- (an awakeable, a child, a future sleep) and is deliberately invisible: every
+-- path that resolves or abandons a wake writes the instance row in the same
+-- transaction, so there is nothing to notice by re-running it. The supplied time
+-- is what @wake_after@ is compared against.
 findUnfinishedWorkflowIds :: (Store :> es) => UTCTime -> Eff es [(Text, Text)]
 findUnfinishedWorkflowIds now =
   runTransaction (Tx.statement now findUnfinishedWorkflowIdsStmt)
@@ -254,27 +282,23 @@ currentGenerationStmt =
     )
     (D.singleRow (D.column (D.nonNullable D.int4)))
 
--- The active-status literals must match 'Keiro.Workflow.Instance.statusToText'
--- for running and suspended. They are stated positively (rather than as the
+-- The status literals must match 'Keiro.Workflow.Instance.statusToText' for
+-- running and suspended. Both arms are stated positively (rather than as the
 -- complement of the terminal trio) because that is the only form the planner
 -- can match against the partial index keiro_workflows_active_idx, whose
 -- predicate is @status IN ('running','suspended')@: Postgres proves
 -- partial-index applicability from the query predicate alone and never consults
--- the table's CHECK constraint, so @status NOT IN ('completed','cancelled',
--- 'failed')@ forces a sequential scan of keiro_workflows on every pass. The two
--- forms are equivalent because migration 0011 constrains status to exactly
--- those five values.
---
--- The timestamp parameter makes wake_after a self-expiring skip: future
--- sleepers disappear from discovery until their timer is due.
+-- the table's CHECK constraint. An OR of two arms that each imply the index
+-- predicate still implies it, so migration 0021's (status, wake_after) index
+-- serves this query; the covered test is "Keiro.Workflow discovery index".
 findUnfinishedWorkflowIdsStmt :: Statement UTCTime [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
   preparable
     """
     SELECT workflow_id, workflow_name
     FROM keiro.keiro_workflows
-    WHERE status IN ('running', 'suspended')
-      AND (wake_after IS NULL OR wake_after <= $1)
+    WHERE status = 'running'
+       OR (status = 'suspended' AND wake_after IS NOT NULL AND wake_after <= $1)
     ORDER BY workflow_name, workflow_id
     """
     (E.param (E.nonNullable E.timestamptz))

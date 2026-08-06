@@ -150,11 +150,11 @@ import Keiro.Telemetry
   )
 import Keiro.Workflow.Instance
   ( WorkflowStatus (..),
-    markInstanceSuspended,
+    markInstanceSuspendedAwaiting,
     renewInstanceLease,
     upsertInstanceTx,
   )
-import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
+import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists, workflowStepLockKey)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
@@ -377,11 +377,23 @@ data WorkflowLeaseLost = WorkflowLeaseLost
 
 instance Exception WorkflowLeaseLost
 
--- | Internal sentinel thrown to unwind a suspended run up to 'runWorkflowWith'.
-data WorkflowSuspend = WorkflowSuspend
+-- | Internal sentinel thrown to unwind a suspended run up to 'runWorkflowWith',
+-- carrying the step name the run parked on. The run entry point needs that name
+-- to arbitrate its suspended-status write against a wake delivery for the same
+-- step (see 'Keiro.Workflow.Instance.markInstanceSuspendedAwaiting').
+newtype WorkflowSuspend = WorkflowSuspend Text
   deriving stock (Show)
 
 instance Exception WorkflowSuspend
+
+-- | How one interpreted run finished, before its outcome is finalized.
+--
+-- A suspension is kept distinct from the other outcomes because it carries the
+-- awaited step name the suspended-status write needs; every other unwinding
+-- already resolves to a 'WorkflowOutcome'.
+data RunUnwind a
+  = RunOutcome !(WorkflowOutcome a)
+  | RunSuspendedOn !Text
 
 -- | Internal sentinel thrown when a cancellation marker appears mid-run.
 data WorkflowCancelPending = WorkflowCancelPending
@@ -490,50 +502,61 @@ runWorkflowWith options name wid action = do
           journalRef <- liftIO (newIORef initial')
           ordinalRef <- liftIO (newIORef Map.empty)
           let runHandler = interpret (handler gen journalRef ordinalRef) action
-          outcome <-
-            (Completed <$> runHandler)
-              `catch` (\WorkflowSuspend -> pure Suspended)
-              `catch` (\WorkflowCancelPending -> pure Cancelled)
+          unwound <-
+            (RunOutcome . Completed <$> runHandler)
+              `catch` (\(WorkflowSuspend awaitedStep) -> pure (RunSuspendedOn awaitedStep))
+              `catch` (\WorkflowCancelPending -> pure (RunOutcome Cancelled))
               `catch` ( \(WorkflowRotate seedJson) ->
-                          rotateGeneration
-                            mMetrics
-                            (options ^. #activePatches)
-                            name
-                            wid
-                            gen
-                            seedJson
+                          RunOutcome
+                            <$> rotateGeneration
+                              mMetrics
+                              (options ^. #activePatches)
+                              name
+                              wid
+                              gen
+                              seedJson
                       )
-          case outcome of
-            Completed result -> do
-              now <- liftIO getCurrentTime
-              finalMap <- liftIO (readIORef journalRef)
-              -- Idempotent: only appends (and so only snapshots) when the completion
-              -- marker is not already journaled. On a replay of an already-completed
-              -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
-              -- already taken on the original completing run, if the policy fired).
-              mAppend <- appendCompletion name wid gen now
-              for_ mAppend $ \appendResult ->
-                when
-                  ( shouldSnapshot
-                      (options ^. #snapshotPolicy)
-                      Terminal
-                      finalMap
-                      (appendResult ^. #streamVersion)
-                  )
-                  (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
-              -- EP-44: record one @keiro.workflow.journal.length@ observation per
-              -- completing run (the 'Completed' path only, never 'Suspended'),
-              -- including a replay that completes again. Length is the recorded
-              -- step map plus the WorkflowCompleted marker.
-              recordWorkflowJournalLength mMetrics (fromIntegral (Map.size finalMap + 1))
-              pure (Completed result)
-            Suspended -> markInstanceSuspended name wid >> pure Suspended
-            Cancelled -> pure Cancelled
-            Failed -> pure Failed
-            -- EP-48: the run unwound via 'WorkflowRotate'; 'rotateGeneration'
-            -- already journaled the seed step on the next generation and the
-            -- rotation marker on this one, so there is nothing more to do here.
-            ContinuedAsNew -> pure ContinuedAsNew
+          case unwound of
+            -- The run parked on an unresolved await. The status write arbitrates
+            -- against a wake delivery for that same step under the append path's
+            -- advisory lock, so a wake landing in this gap cannot be masked by a
+            -- 'suspended' status that exact discovery would never return.
+            RunSuspendedOn awaitedStep -> do
+              markInstanceSuspendedAwaiting name wid gen awaitedStep
+              pure Suspended
+            RunOutcome outcome -> case outcome of
+              Completed result -> do
+                now <- liftIO getCurrentTime
+                finalMap <- liftIO (readIORef journalRef)
+                -- Idempotent: only appends (and so only snapshots) when the completion
+                -- marker is not already journaled. On a replay of an already-completed
+                -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
+                -- already taken on the original completing run, if the policy fired).
+                mAppend <- appendCompletion name wid gen now
+                for_ mAppend $ \appendResult ->
+                  when
+                    ( shouldSnapshot
+                        (options ^. #snapshotPolicy)
+                        Terminal
+                        finalMap
+                        (appendResult ^. #streamVersion)
+                    )
+                    (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
+                -- EP-44: record one @keiro.workflow.journal.length@ observation per
+                -- completing run (the 'Completed' path only, never 'Suspended'),
+                -- including a replay that completes again. Length is the recorded
+                -- step map plus the WorkflowCompleted marker.
+                recordWorkflowJournalLength mMetrics (fromIntegral (Map.size finalMap + 1))
+                pure (Completed result)
+              -- Only 'RunSuspendedOn' produces a suspension, so this arm is
+              -- unreachable; it keeps the case total without a partial match.
+              Suspended -> pure Suspended
+              Cancelled -> pure Cancelled
+              Failed -> pure Failed
+              -- EP-48: the run unwound via 'WorkflowRotate'; 'rotateGeneration'
+              -- already journaled the seed step on the next generation and the
+              -- rotation marker on this one, so there is nothing more to do here.
+              ContinuedAsNew -> pure ContinuedAsNew
         -- Generation 0 has no rotation moment at which to record the patch set,
         -- so it retains the fresh-journal path. Rotated generations receive the
         -- set atomically with their seed in 'rotateGeneration'; this fallback
@@ -627,7 +650,7 @@ runWorkflowWith options name wid action = do
                 renewLease
                 checkCancellationPending name wid gen
                 localSeqUnlift env (\unlift -> unlift arm)
-                throwIO WorkflowSuspend
+                throwIO (WorkflowSuspend key)
       CurrentWorkflow -> pure (name, wid)
       CurrentRunGeneration -> pure gen
       FreshOrdinal namespace ->
@@ -772,10 +795,9 @@ prepareJournalAppend name wid gen event = do
       row = journalRow name wid gen event
       (status, mLastError) = instanceStatusForEvent event
       journalName = workflowGenerationStreamName name wid gen
-      lockKey =
-        Text.intercalate
-          "/"
-          [unWorkflowId wid, unWorkflowName name, Text.pack (show gen), key]
+      -- Shared with the suspend write in "Keiro.Workflow.Instance" so the two
+      -- writers of one step's outcome can never derive different keys.
+      lockKey = workflowStepLockKey (unWorkflowId wid) (unWorkflowName name) gen key
   base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
     Right encoded -> pure encoded
     Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))

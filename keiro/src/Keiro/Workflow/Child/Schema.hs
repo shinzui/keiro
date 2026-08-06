@@ -14,9 +14,10 @@
 --   child's result), 'markChildCancelledTx' transitions it to @cancelled@, and
 --   'markChildFailedTx' transitions it to @failed@ while preserving the reason;
 --   all guard on @status = 'running'@ so a double-resolve is a no-op.
--- * 'findRunningChildIds' is the resume worker's discovery seed for a zero-step
---   child (one that has been spawned but not yet driven, so has no
---   @keiro_workflow_steps@ rows for 'findUnfinishedWorkflowIds' to find).
+-- * 'findRunningChildIds' lists the children this table still considers
+--   @running@ (operator inspection; it was once the resume worker's extra
+--   discovery seed for a zero-step child, which the instance row written at
+--   spawn time made redundant).
 -- * 'countActiveChildren' counts outstanding children — the seam EP-44 may read
 --   for a @keiro.workflow.children.active@ gauge.
 --
@@ -155,10 +156,17 @@ countActiveChildren :: (Store :> es) => Eff es Int
 countActiveChildren =
   runTransaction (Tx.statement () countActiveChildrenStmt)
 
--- | The @(child_id, child_name)@ of every @running@ child. The resume worker
--- unions this with 'Keiro.Workflow.findUnfinishedWorkflowIds' so a freshly
--- spawned child that has no @keiro_workflow_steps@ rows yet is still discovered
--- and driven. The tuple order matches 'findUnfinishedWorkflowIds' — @(id, name)@.
+-- | The @(child_id, child_name)@ of every @running@ child, in the same
+-- @(id, name)@ tuple order as 'Keiro.Workflow.findUnfinishedWorkflowIds'.
+--
+-- The resume worker no longer unions this into discovery. It once did, so a
+-- freshly spawned child with no @keiro_workflow_steps@ rows was still driven;
+-- since migration 0011 that seed is redundant, because
+-- 'Keiro.Workflow.Child.spawnChild' upserts the child's @keiro_workflows@ row as
+-- @running@ inside the spawn step's transaction (and 0011 backfilled the running
+-- children that predate the instance table). Retained for operator inspection:
+-- it answers "which children does the child table think are still running?"
+-- directly, without going through the instance table.
 findRunningChildIds :: (Store :> es) => Eff es [(Text, Text)]
 findRunningChildIds =
   runTransaction (Tx.statement () findRunningChildIdsStmt)

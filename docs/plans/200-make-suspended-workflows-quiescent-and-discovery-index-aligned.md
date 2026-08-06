@@ -45,9 +45,9 @@ discovered and driven.
 
 - [x] Milestone 1 (2026-08-06): discovery predicate rewritten to `status IN ('running','suspended')`; index-usability test added (`Keiro.Workflow discovery index`, two examples); full suite green at 380 examples.
 - [x] Milestone 2 (2026-08-06): `cancelAwakeable` flips the owner instance row to `running`; `workflowSleepFireAction` clears `wake_after` only on a fresh append. New group `Keiro.Workflow wake-lifecycle visibility` (two examples); ADR 7 amended and `just adr-validate` green; suite at 382 examples.
-- [ ] Milestone 3: suspend/wake arbitration under the per-step advisory lock; discovery narrowed to exact wakes; redundant child seed removed; migration 0021 (index + backfill); crash-window tests green.
-- [ ] ADR recorded for the exact-discovery contract; `just adr-validate` passes.
-- [ ] Full suite green: `cabal test keiro-test` and `cabal test keiro-migrations-test`.
+- [x] Milestone 3 (2026-08-06): suspend/wake arbitration under the per-step advisory lock (`markInstanceSuspendedAwaiting`, shared `workflowStepLockKey`); discovery narrowed to exact wakes; redundant `findRunningChildIds` seed removed; migration 0021 (index swap + suspended backfill) with manifest, native lock, expected-schema snapshot, and `keiro-migrations` pins updated; new group `Keiro.Workflow exact discovery` (six examples) green.
+- [x] ADR recorded for the exact-discovery contract (`docs/adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md`, ADR-23); `just adr-validate` passes (23 concepts).
+- [x] Full suite green (2026-08-06): `cabal test keiro-test` at 388 examples, 0 failures; `cabal test keiro-migrations-test` at 26 examples, 0 failures; `cabal build all` clean.
 
 
 ## Surprises & Discoveries
@@ -73,6 +73,43 @@ discovered and driven.
   learned to prove partial-index implication from the table's CHECK constraint.
   Date: 2026-08-06
 
+- Postgres proves partial-index applicability through an `OR` of two arms when
+  each arm implies the index predicate, so Milestone 3's narrowed predicate needs
+  no special shaping — it plans as a single index scan, and the row estimate drops
+  from the whole table to the matching rows:
+
+  ```text
+  Sort  (cost=4.23..4.23 rows=2 width=64)
+    Sort Key: workflow_name, workflow_id
+    ->  Index Scan using keiro_workflows_active_idx on keiro_workflows  (cost=0.14..4.22 rows=2 width=64)
+          Filter: ((status = 'running'::text) OR ((status = 'suspended'::text)
+                   AND (wake_after IS NOT NULL) AND (wake_after <= now())))
+  ```
+
+  Date: 2026-08-06
+
+- The suspend-side arbitration turned out to matter for more than the crash
+  window it was designed for. Two arming actions resolve their own await and then
+  fall through to the suspend write: `awaitCancellable` re-appends a completed
+  awakeable's stored payload (the crash-repair path), and `awaitChild` re-delivers
+  a completed child's result onto the parent's current generation. Both used to
+  write `suspended` over a status the append had just set to `running`; harmless
+  under broad discovery, a permanent strand under exact discovery. The index
+  re-check in `markInstanceSuspendedAwaiting` covers them for free, because it
+  observes the arm's own committed append.
+  Date: 2026-08-06
+
+- Narrowing discovery broke exactly two tests whose mechanism (rather than whose
+  subject) depended on the broad poll, and both were worth keeping. The push
+  worker's recovery test hid `keiro_workflow_steps` to force a failing pass, but
+  under exact discovery a pass never reaches that table when nothing is runnable —
+  it now hides `keiro_workflows`, the table discovery itself reads. The
+  observability test relied on a parked workflow being re-invoked; it now parks on
+  the first of two gates and journals that gate, which is the real reason a
+  suspended workflow becomes discoverable, and still asserts that a re-invocation
+  which suspends again counts as a resume.
+  Date: 2026-08-06
+
 
 ## Decision Log
 
@@ -93,10 +130,73 @@ discovered and driven.
   new arbitration.
   Date: 2026-08-06
 
+- Decision: Carry the awaited step name out of the run through a local
+  `RunUnwind` type rather than an `IORef` or a payload-carrying
+  `WorkflowOutcome`.
+  Rationale: `WorkflowOutcome` is the public result type and must not grow an
+  internal field; an `IORef` would leave the "suspended but no step name" case
+  representable. `RunUnwind` keeps the case total and confines the change to the
+  run entry point.
+  Date: 2026-08-06
+
+- Decision: Update three pre-existing tests that asserted the old
+  always-discovered behaviour, rather than preserving it behind a flag.
+  Rationale: Each asserted the superseded contract, and each has an honest
+  successor. `Keiro.Workflow` "discovers unfinished workflows via the step index"
+  became "discovers a parked workflow only once its awaited step is journaled"
+  (it now asserts invisibility while parked *and* discovery after the wake — a
+  strictly stronger statement). The push-recovery and observability tests kept
+  their subjects and changed only the mechanism that made them reachable; see
+  Surprises & Discoveries.
+  Date: 2026-08-06
+
+- Decision: Keep the Milestone 2 cancelled-awakeable test as the plan's
+  cancelled-awakeable-liveness coverage rather than adding a second one under
+  exact discovery.
+  Rationale: That test asserts `findUnfinishedWorkflowIds` returns exactly the
+  owning workflow after `cancelAwakeable`, which under narrowed discovery is
+  already the strong form the milestone asked for — a duplicate would assert the
+  same rows twice.
+  Date: 2026-08-06
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones landed on 2026-08-06 across three commits, each leaving the
+tree green.
+
+What exists now that did not before: a workflow suspended on an awakeable, a
+child, or a future-dated sleep is invisible to the resume worker until something
+actually happens to it, so a pass over a thousand parked flows costs one indexed
+query instead of a thousand replays. `resumeWorkflowsOnce` reports
+`discovered = 0` for a parked workflow and exactly `1` from the moment its wake
+lands — the acceptance the plan named, asserted directly in
+`Keiro.Workflow exact discovery`. The discovery query plans as an index scan on
+`keiro_workflows_active_idx` rather than a sequential scan. Every wake-source
+lifecycle transition, including the journal-less `cancelAwakeable`, leaves the
+instance row discoverable, and the suspend write arbitrates against a
+concurrently-landing wake under the same per-step advisory lock the append path
+already held.
+
+Verification: `cabal test keiro-test` 388 examples / 0 failures (was 380 before
+this plan; +8 new examples across three new groups), `cabal test
+keiro-migrations-test` 26 / 0, `cabal build all` clean, `just adr-validate` OK at
+23 concepts. The public authoring surface is unchanged in signature and
+semantics.
+
+Lessons worth carrying forward. First, a broad poll is not just a cost — it is a
+silent correctness crutch, and removing it converts every "the next pass will
+notice" assumption into a contract. Two such assumptions were live here (the
+cancelled awakeable, and the suspend-over-wake window), and a third class (arms
+that resolve their own await) was only found by reasoning through the arbitration.
+Second, the cheapest way to prove an index-alignment claim is to run EXPLAIN in a
+test with `enable_seqscan = off` and assert the index name; flipping the predicate
+back once showed the old form still seq-scanned, which is what made the finding
+real rather than plausible.
+
+Left for sibling plans, as scoped: intra-pass concurrency and batched timer drain
+(docs/plans/203), and the author-facing wake-source contract documentation
+(docs/plans/204), which ADR 23 now backs with a normative rule.
 
 
 ## Context and Orientation

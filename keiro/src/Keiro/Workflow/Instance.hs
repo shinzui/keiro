@@ -11,7 +11,7 @@ module Keiro.Workflow.Instance
     statusToText,
     statusFromText,
     upsertInstanceTx,
-    markInstanceSuspended,
+    markInstanceSuspendedAwaiting,
     lookupInstance,
     claimInstance,
     renewInstanceLeaseTx,
@@ -33,7 +33,13 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
 import Keiro.Workflow.Child.Schema (reviveFailedChildTx)
-import Keiro.Workflow.Schema (currentGeneration, deleteStepRowTx)
+import Keiro.Workflow.Schema
+  ( currentGeneration,
+    deleteStepRowTx,
+    lockWorkflowStepTx,
+    lookupStepResultTx,
+    workflowStepLockKey,
+  )
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), failedStepName)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
@@ -73,11 +79,46 @@ upsertInstanceTx :: Text -> Text -> Int32 -> WorkflowStatus -> Maybe Text -> Tx.
 upsertInstanceTx wid name gen status mLastError =
   Tx.statement (wid, name, gen, statusToText status, mLastError) upsertInstanceStmt
 
-markInstanceSuspended :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es ()
-markInstanceSuspended name@(WorkflowName nameText) wid@(WorkflowId widText) = do
-  gen <- currentGeneration name wid
-  runTransaction $
-    upsertInstanceTx widText nameText (fromIntegral gen) WfSuspended Nothing
+-- | Record that a run parked on @awaitedStep@, arbitrating against a wake
+-- delivery that may be landing at the same moment.
+--
+-- Discovery is exact: a @suspended@ instance with no due wake hint is never
+-- returned, so a suspended status written /after/ a wake has already been
+-- delivered would strand the workflow forever. The window is real — a run
+-- consults the step index, finds the awaited step absent, runs its arm, and only
+-- then writes its status, and a wake can commit anywhere in between.
+--
+-- The fix reuses the lock the append path already takes. Every wake delivery
+-- goes through @prepareJournalAppend@, which holds the per-step advisory lock
+-- ('lockWorkflowStepTx' on 'workflowStepLockKey') while it appends and upserts
+-- the instance row. Taking the same lock here totally orders the two writers:
+--
+-- * suspend wins the lock — it writes @suspended@; the wake, queued behind it,
+--   then writes @running@;
+-- * wake wins the lock — this transaction sees the committed step-index row and
+--   writes @running@ itself.
+--
+-- Either way no resolved wake is left behind a @suspended@ status. The
+-- re-check reads the same authoritative @keiro_workflow_steps@ index the
+-- @Await@ miss path consults, which is written in the same transaction as every
+-- journal append. This also covers the self-repair arms (an awakeable or child
+-- whose arm appends the awaited result itself and then suspends): they observe
+-- their own append and end @running@.
+markInstanceSuspendedAwaiting ::
+  (Store :> es) =>
+  WorkflowName ->
+  WorkflowId ->
+  -- | The generation the run operated on.
+  Int ->
+  -- | The step name the run parked on.
+  Text ->
+  Eff es ()
+markInstanceSuspendedAwaiting (WorkflowName nameText) (WorkflowId widText) gen awaitedStep =
+  runTransaction $ do
+    lockWorkflowStepTx (workflowStepLockKey widText nameText gen awaitedStep)
+    resolved <- lookupStepResultTx widText nameText gen awaitedStep
+    let status = maybe WfSuspended (const WfRunning) resolved
+    upsertInstanceTx widText nameText (fromIntegral gen) status Nothing
 
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =

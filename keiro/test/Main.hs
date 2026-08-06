@@ -6506,7 +6506,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Store.runStoreIO storeHandle (stepExists name wid 0 "bad")
         `shouldReturn` Right True
 
-    it "discovers unfinished workflows via the step index" $ \storeHandle -> do
+    -- Discovery is exact. A completed workflow is finished, and a workflow
+    -- parked on an unresolved await has nothing to do until its wake source
+    -- resolves — the wake's own append is what makes it discoverable again.
+    it "discovers a parked workflow only once its awaited step is journaled" $ \storeHandle -> do
       counter <- newIORef (0 :: Int)
       Right (Completed _) <-
         Store.runStoreIO storeHandle $
@@ -6514,8 +6517,17 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right Suspended <-
         Store.runStoreIO storeHandle $
           runWorkflow (WorkflowName "pending") (WorkflowId "p-1") (stepThenAwaitWorkflow counter)
-      now <- getCurrentTime
-      Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+      parkedAt <- getCurrentTime
+      Right whileParked <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds parkedAt)
+      whileParked `shouldBe` []
+      Right () <- Store.runStoreIO storeHandle $ do
+        now <- liftIO getCurrentTime
+        appendJournalEntry
+          (WorkflowName "pending")
+          (WorkflowId "p-1")
+          (StepRecorded "awk:wait" (toJSON (7 :: Int)) now)
+      wokenAt <- getCurrentTime
+      Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
       unfinished `shouldBe` [("p-1", "pending")]
 
   describe "Keiro.Workflow instance table" $ around (withFreshStore fixture) $ do
@@ -6624,7 +6636,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Text.unpack (Text.intercalate "\n" planLines)
         `shouldSatisfy` isInfixOf "keiro_workflows_active_idx"
 
-    it "returns exactly the active, wake-due instances" $ \storeHandle -> do
+    -- Exact discovery: 'running' always, 'suspended' only with a due wake hint.
+    -- A suspended instance with no hint is parked on a wake source that will
+    -- flip the row itself, so returning it would be pure waste.
+    it "returns exactly the runnable and wake-due instances" $ \storeHandle -> do
       now <- getCurrentTime
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
@@ -6633,7 +6648,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
       unfinished
         `shouldBe` [ ("a-running", "discovery-index"),
-                     ("b-suspended", "discovery-index"),
                      ("c-due-sleep", "discovery-index")
                    ]
 
@@ -7844,17 +7858,20 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             _ -> False
       first <- Store.runStoreIO store (runWorkflow name wid (gateThenSignal done))
       first `shouldBe` Right Suspended
+      -- Break the table discovery itself reads, so every pass fails outright.
+      -- (Hiding keiro_workflow_steps no longer suffices: under exact discovery
+      -- the parked workflow is not returned, so a pass never reaches it.)
       Right () <-
         Store.runStoreIO store $
           Store.runTransaction $
-            Tx.sql "ALTER TABLE keiro.keiro_workflow_steps RENAME TO keiro_workflow_steps_hidden"
+            Tx.sql "ALTER TABLE keiro.keiro_workflows RENAME TO keiro_workflows_hidden"
       worker <- forkIO (runWorkflowResumeWorkerPush store opts registry)
       logged <- waitForPassFailure
       logged `shouldBe` Just ()
       Right () <-
         Store.runStoreIO store $
           Store.runTransaction $
-            Tx.sql "ALTER TABLE keiro.keiro_workflow_steps_hidden RENAME TO keiro_workflow_steps"
+            Tx.sql "ALTER TABLE keiro.keiro_workflows_hidden RENAME TO keiro_workflows"
       now <- getCurrentTime
       Right () <-
         Store.runStoreIO store $
@@ -8313,23 +8330,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       counter <- newIORef (0 :: Int)
       let name = WorkflowName "obs-resume"
           wid = WorkflowId "obs-r-1"
-      -- Suspend a workflow so it has a step row but no completion: the resume
-      -- worker will re-invoke it (and stay Suspended, which still counts as a
-      -- re-invocation).
-      suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (stepThenAwaitWorkflow counter)
+      -- Park a workflow on the first of two gates, then journal that gate's
+      -- result. The append flips the instance row to running, which is what
+      -- makes exact discovery return it; the re-invocation then parks on the
+      -- second gate and stays Suspended, which still counts as a re-invocation.
+      suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (twoGateWorkflow counter)
       suspended `shouldBe` Right Suspended
+      gateAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (StepRecorded "awk:first" (toJSON ()) gateAt)
       -- Register one pending awakeable (independent of the suspended workflow's
       -- own await) so the pending gauge has something to count.
       let aid = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "ext") (WorkflowId "1") "cb")
       Right () <-
         Store.runStoreIO storeHandle $ Store.runTransaction $ Awk.registerAwakeableTx aid "ext" "1"
       -- One resume pass with metrics threaded through the run options.
-      let registry = Map.singleton name (WorkflowDef (\_wid -> stepThenAwaitWorkflow counter))
+      let registry = Map.singleton name (WorkflowDef (\_wid -> twoGateWorkflow counter))
           resumeOpts =
             defaultWorkflowResumeOptions
               & #runOptions
               .~ (defaultWorkflowRunOptions & #metrics .~ Just metrics)
-      Right _summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce resumeOpts registry
+      Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce resumeOpts registry
+      (discovered summary, resumed summary, stillSuspended summary) `shouldBe` (1, 1, 1)
       _ <- forceFlushMeterProvider provider Nothing
       exported <- readIORef ref
       let scalars = flattenScalarPoints exported
@@ -8855,6 +8878,160 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right hintAfter <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
       hintAfter `shouldBe` Just liveHint
       readIORef counter >>= (`shouldBe` 1)
+
+  describe "Keiro.Workflow exact discovery" $ around (withFreshStore fixture) $ do
+    it "hides a workflow parked on an awakeable until it is signalled" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "quiet-awk"
+          wid = WorkflowId "qa-1"
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+          pass = Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      parkedAt <- getCurrentTime
+      Right parked <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds parkedAt)
+      parked `shouldBe` []
+      -- The whole point: a parked workflow costs a pass nothing at all.
+      Right idle <- pass
+      idle `shouldBe` emptyResumeSummary
+      Right signalled <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+      signalled `shouldBe` True
+      wokenAt <- getCurrentTime
+      Right woken <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
+      woken `shouldBe` [("qa-1", "quiet-awk")]
+      Right finish <- pass
+      (discovered finish, completed finish) `shouldBe` (1, 1)
+      doneAt <- getCurrentTime
+      Right afterCompletion <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds doneAt)
+      afterCompletion `shouldBe` []
+
+    -- The parent is invisible while it waits, but the freshly spawned child is
+    -- discovered from the instance row spawnChild writes in the spawn step's
+    -- transaction — which is why the resume worker no longer needs a separate
+    -- findRunningChildIds seed.
+    it "hides a parent parked on a child while still discovering the zero-step child" $ \storeHandle -> do
+      let parentName = WorkflowName "quiet-parent"
+          parentWid = WorkflowId "qp-1"
+          childName = WorkflowName "ship"
+          childWid = WorkflowId "ship-quiet"
+          registry = Map.singleton parentName (WorkflowDef (\_ -> parentWorkflow childWid))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow parentName parentWid (parentWorkflow childWid)
+      parkedAt <- getCurrentTime
+      Right parked <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds parkedAt)
+      parked `shouldBe` [("ship-quiet", "ship")]
+      Right (Completed _) <-
+        Store.runStoreIO storeHandle $
+          runChildWorkflow defaultWorkflowRunOptions childName childWid shipWorkflow
+      wokenAt <- getCurrentTime
+      Right woken <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
+      woken `shouldBe` [("qp-1", "quiet-parent")]
+      Right finish <-
+        Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+      (discovered finish, completed finish) `shouldBe` (1, 1)
+
+    -- Wake-wins ordering. markInstanceSuspendedAwaiting is exactly the write a
+    -- run performs after its (now stale) index miss, so calling it directly
+    -- after a signal reproduces the race deterministically.
+    it "writes running when the wake landed before the suspend write" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "race-wake-first"
+          wid = WorkflowId "rwf-1"
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      Right True <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Instance.markInstanceSuspendedAwaiting name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      Right (Just arbitrated) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      arbitrated ^. #status `shouldBe` Instance.WfRunning
+      wokenAt <- getCurrentTime
+      Right woken <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
+      woken `shouldBe` [("rwf-1", "race-wake-first")]
+      Right finish <-
+        Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+      completed finish `shouldBe` 1
+
+    -- Suspend-wins ordering: the wake, queued behind the suspend write on the
+    -- same per-step lock, flips the instance itself.
+    it "flips a suspended instance to running when the wake lands after the suspend write" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "race-suspend-first"
+          wid = WorkflowId "rsf-1"
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Instance.markInstanceSuspendedAwaiting name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      Right (Just parkedRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      parkedRow ^. #status `shouldBe` Instance.WfSuspended
+      parkedAt <- getCurrentTime
+      Right invisible <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds parkedAt)
+      invisible `shouldBe` []
+      Right True <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+      Right (Just wokenRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      wokenRow ^. #status `shouldBe` Instance.WfRunning
+      Right finish <-
+        Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+      completed finish `shouldBe` 1
+
+    it "surfaces a due sleep through the wake hint and a fired sleep through running" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "quiet-sleep"
+          wid = WorkflowId "qs-1"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 60)
+      now <- getCurrentTime
+      Right early <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+      early `shouldBe` []
+      -- Due, but the timer worker has not fired it yet: the suspended arm.
+      let dueAt = addUTCTime 61 now
+      Right due <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds dueAt)
+      due `shouldBe` [("qs-1", "quiet-sleep")]
+      Right (Just _) <-
+        Store.runStoreIO storeHandle $
+          runWorkflowTimerWorker Nothing dueAt (\_ -> pure Nothing)
+      Right (Just fired) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      fired ^. #status `shouldBe` Instance.WfRunning
+      Right hint <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+      hint `shouldBe` Nothing
+      -- Now discovered through the running arm, with no hint left to expire.
+      firedAt <- getCurrentTime
+      Right visible <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds firedAt)
+      visible `shouldBe` [("qs-1", "quiet-sleep")]
+
+    -- A crashed workflow stays 'running', so exact discovery keeps returning it;
+    -- what paces the retry is claimInstance's next_attempt_at gate, which shows
+    -- up as a lease skip rather than a disappearance.
+    it "keeps a crashed workflow discovered while its backoff gate paces retries" $ \storeHandle -> do
+      let name = WorkflowName "crash-visible"
+          wid = WorkflowId "cvz-1"
+          opts =
+            defaultWorkflowResumeOptions
+              & #maxAttempts
+              .~ 3
+              & #logEvent
+              .~ const (pure ())
+          registry = Map.singleton name (WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+          pass = Store.runStoreIO storeHandle (resumeWorkflowsOnce opts registry)
+      seededAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (StepRecorded "seed" (toJSON True) seededAt)
+      Right first <- pass
+      (discovered first, resumed first, failed first) `shouldBe` (1, 1, 0)
+      Right (Just crashed) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      crashed ^. #status `shouldBe` Instance.WfRunning
+      crashed ^. #attempts `shouldBe` 1
+      Right second <- pass
+      (discovered second, leaseSkipped second) `shouldBe` (1, 1)
 
   describe "Keiro.Workflow.Awakeable" $ do
     -- Pure (no-DB) check of the deterministic id derivation.
@@ -10153,6 +10330,15 @@ stepThenAwaitWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Int
 stepThenAwaitWorkflow counter = do
   _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
   awaitStep (StepName "awk:wait") (pure ())
+
+-- | Two sequential gates. Journaling the first makes the workflow discoverable
+-- again; the resulting re-invocation replays past it and parks on the second,
+-- so the run is re-invoked and still suspends.
+twoGateWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Int
+twoGateWorkflow counter = do
+  _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
+  (_ :: ()) <- awaitStep (StepName "awk:first") (pure ())
+  awaitStep (StepName "awk:second") (pure ())
 
 -- | A two-step child workflow used in the child-workflow tests.
 shipWorkflow :: (Workflow :> es) => Eff es Text
@@ -12865,9 +13051,10 @@ deleteGcStepsStmt =
     D.noResult
 
 -- | Instance rows covering every status the discovery predicate must classify:
--- three active-and-due rows (a running instance, a suspended instance with no
--- wake hint, a suspended instance whose sleep is due), one suspended instance
--- whose sleep is still in the future, and the three terminal statuses.
+-- a running instance, a suspended instance with no wake hint (parked on a wake
+-- source), a suspended instance whose sleep is due, one whose sleep is still in
+-- the future, and the three terminal statuses. Only the running row and the
+-- due-sleep row have progress to make.
 discoveryFixtureRows :: UTCTime -> [(Text, Text, Text, Maybe UTCTime)]
 discoveryFixtureRows now =
   [ ("a-running", "discovery-index", "running", Nothing),
@@ -12906,8 +13093,8 @@ explainDiscoveryStmt =
     EXPLAIN (FORMAT TEXT)
     SELECT workflow_id, workflow_name
     FROM keiro.keiro_workflows
-    WHERE status IN ('running', 'suspended')
-      AND (wake_after IS NULL OR wake_after <= now())
+    WHERE status = 'running'
+       OR (status = 'suspended' AND wake_after IS NOT NULL AND wake_after <= now())
     ORDER BY workflow_name, workflow_id
     """
     E.noParams
