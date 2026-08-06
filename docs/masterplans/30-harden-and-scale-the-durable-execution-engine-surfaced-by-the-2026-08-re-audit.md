@@ -160,7 +160,7 @@ none constrain this initiative. The `docs/adr` bundle is profile-governed (OKF
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Make suspended workflows quiescent and discovery index-aligned | docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md | None | None | In Progress |
+| 1 | Make suspended workflows quiescent and discovery index-aligned | docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md | None | None | Complete |
 | 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | Not Started |
 | 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Not Started |
 | 4 | Concurrent resume passes, batched timer drain, and worker pass robustness | docs/plans/203-concurrent-resume-passes-batched-timer-drain-and-worker-pass-robustness.md | None | EP-1 | Not Started |
@@ -236,16 +236,20 @@ number after EP-1's and reconciles the migration manifest/count tests in
 keep group names distinct.
 
 Cross-plan decisions that deserve ADRs: EP-1's "the instance row is the complete wake
-ledger and discovery is exact" (new ADR, extends ADR 6/7); EP-3's "deterministic ids
-hash UTF-8 bytes; ASCII derivations are frozen byte-for-byte" (new ADR). EP-2 and
-EP-4 are expected to update ADR wording only if implementation contradicts it.
+ledger and discovery is exact" (recorded 2026-08-06 as
+`docs/adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md`,
+ADR-23, extending ADR 6/7; EP-1 also amended ADR 7 so that only a fresh append counts
+as a successful sleep fire); EP-3's "deterministic ids hash UTF-8 bytes; ASCII
+derivations are frozen byte-for-byte" (new ADR). EP-2 and EP-4 are expected to update
+ADR wording only if implementation contradicts it. EP-4 in particular must not add a
+writer of the `keiro_workflows` row that skips ADR 23's obligation.
 
 
 ## Progress
 
-- [ ] EP-1: Discovery predicate rewritten to `status IN ('running','suspended')` with index-aligned wake filtering; EXPLAIN-verified test.
-- [ ] EP-1: `cancelAwakeable` flips the owner instance row; stale sleep re-fires no longer clear a live wake hint.
-- [ ] EP-1: Discovery narrowed to exact wakes; crash-window tests prove no suspended workflow is stranded; ADR recorded.
+- [x] EP-1 (2026-08-06): Discovery predicate rewritten to positive active-status arms with index-aligned wake filtering; EXPLAIN-verified test.
+- [x] EP-1 (2026-08-06): `cancelAwakeable` flips the owner instance row; stale sleep re-fires no longer clear a live wake hint (ADR 7 amended).
+- [x] EP-1 (2026-08-06): Discovery narrowed to exact wakes; both race orderings and the crash-retry window are covered by tests; ADR 23 recorded.
 - [ ] EP-2: Terminal checks (cancelled and failed) folded into the append transaction; boundary asymmetry test passes.
 - [ ] EP-2: Single entry-status query and redundant claim-time generation query removed; per-step round-trips reduced.
 - [ ] EP-3: UTF-8 id derivation for all four derivations with byte-compatibility tests for ASCII inputs; ADR recorded.
@@ -257,7 +261,38 @@ EP-4 are expected to update ADR wording only if implementation contradicts it.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- EP-1 (2026-08-06) found a third class of stranding the plan had not
+  anticipated, and it changes what any future wake source must assume. Two
+  arming actions resolve their own await and then fall through to the suspend
+  write: `awaitCancellable` re-appends a completed awakeable's stored payload
+  (the crash-repair path), and `awaitChild` re-delivers a completed child's
+  result onto the parent's current generation. Under broad discovery, writing
+  `suspended` over the `running` those appends had just set was harmless; under
+  exact discovery it would strand the workflow. The arbitration's index re-check
+  covers them, but the general rule for EP-5's author-facing documentation is
+  stronger than "a wake source must flip the instance row": an *arm* that
+  appends its own result must also not assume its run will be re-examined.
+
+- EP-1 (2026-08-06): migration numbering is now at `0021`
+  (`0021-keiro-workflows-exact-discovery.sql`); the next free number for EP-2 or
+  EP-4 is `0022`. Adding a native migration touches five places beyond the SQL
+  file — `keiro-migrations/migrations/manifest`,
+  `keiro-migrations/migrations.native.lock` (sha256 line),
+  `keiro-migrations/expected-schema/native/keiro-v18.txt` (regenerate with
+  `KEIRO_REGENERATE_EXPECTED_SCHEMA=1 cabal test keiro-migrations-test`), the
+  `nativeMigrationFiles` list in `keiro-migrations/test/Main.hs`, and that
+  suite's pinned counts (which include `postCoddImportPendingIssues`, the
+  post-import pending list — easy to miss, since it fails only in the codd-import
+  examples).
+
+- EP-1 (2026-08-06) changed one internal interface EP-4 will rebase over:
+  `resumeWorkflowsOnce` no longer unions `findRunningChildIds` into discovery and
+  no longer needs its `dedupeFirstSeen` helper, so the drive loop now folds
+  directly over `findUnfinishedWorkflowIds`' result. `Keiro.Workflow.Instance`
+  exports `markInstanceSuspendedAwaiting` in place of `markInstanceSuspended`.
+  EP-4's bounded-concurrency work should also re-baseline its motivation: the
+  candidate set a pass fans out over is now exact, so concurrency buys latency on
+  real work rather than parallelising no-progress re-runs.
 
 
 ## Decision Log
