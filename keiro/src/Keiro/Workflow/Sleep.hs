@@ -360,6 +360,13 @@ workflowSleepFireAction row =
               pure (Just (deterministicJournalId name wid targetGen full))
             JournalAlreadyPresent {} ->
               pure (Just (deterministicJournalId name wid targetGen full))
+            -- The workflow went terminal between the instance lookup above and
+            -- this transaction, so the sleep completion was declined. The timer
+            -- is still this action's to settle: returning the id marks it fired
+            -- rather than leaving it to be requeued forever against a workflow
+            -- that will never accept it.
+            JournalRefusedTerminal {} ->
+              pure (Just (deterministicJournalId name wid targetGen full))
             JournalAppendConflict err ->
               throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 

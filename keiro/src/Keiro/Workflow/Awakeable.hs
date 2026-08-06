@@ -350,14 +350,21 @@ signalAwakeableFrom row result
           for_ appendOutcome throwOnAppendConflict
           pure transitioned
 
+-- A refusal is deliberately not condemned. The owning workflow is terminal, so
+-- the journal entry must not land — but the promise itself is still resolved
+-- durably, and rolling the row transition back would leave the awakeable
+-- pending forever with no one left to signal it.
 condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
 condemnOnAppendConflict = \case
   JournalAppendConflict {} -> Tx.condemn
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 throwOnAppendConflict :: JournalAppendOutcome -> Eff es ()
 throwOnAppendConflict = \case
   JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+  -- Not an error: signalling a terminal workflow's promise is a no-op delivery.
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 -- | Abandon a still-@pending@ awakeable: flips its row to @cancelled@ and

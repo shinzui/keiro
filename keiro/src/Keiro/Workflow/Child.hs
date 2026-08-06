@@ -378,14 +378,21 @@ childCompletionHook childNm childWid resultValue = do
     ChildCancelled -> pure ()
     ChildFailed -> pure ()
 
+-- A refusal is deliberately not condemned: the parent is terminal, so its
+-- await-step sentinel must not land, but the child row transition (completed or
+-- cancelled) is the durable authority and must still commit. A parent that is
+-- later resurrected re-delivers from that row through 'awaitChild''s arm.
 condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
 condemnOnAppendConflict = \case
   JournalAppendConflict {} -> Tx.condemn
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 throwOnAppendConflict :: JournalAppendOutcome -> Eff es ()
 throwOnAppendConflict = \case
   JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+  -- Not an error: a terminal parent simply receives nothing.
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 ensureChildCancelled ::

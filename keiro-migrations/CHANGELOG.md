@@ -4,6 +4,16 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
+## Unreleased
+
+### Added
+
+- Migration `0021-keiro-workflows-exact-discovery.sql`. Widens
+  `keiro_workflows_active_idx` to `(status, wake_after)` so both arms of keiro's
+  exact workflow-discovery predicate are index-served, and returns every
+  pre-existing `suspended` instance to `running` once so it is re-examined
+  through the new suspend/wake arbitration. Forward-only and idempotent.
+
 ## [0.11.0.0] - 2026-08-05
 
 No changes this release. Released with the package set for the `keiro-dsl`

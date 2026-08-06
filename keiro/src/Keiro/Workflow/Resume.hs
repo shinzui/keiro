@@ -94,7 +94,6 @@ import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID qualified as UUID
@@ -431,14 +430,20 @@ appendFailedChildAndWakeParent childNm childWid reason now childRow = do
   throwOnAppendConflict childOutcome
   throwOnAppendConflict parentOutcome
 
+-- A refusal is deliberately not condemned: the child's own failure marker and
+-- its child-row transition must commit even when the parent is already terminal
+-- and cannot receive the failure sentinel.
 condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
 condemnOnAppendConflict = \case
   JournalAppendConflict {} -> Tx.condemn
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 throwOnAppendConflict :: JournalAppendOutcome -> Eff es ()
 throwOnAppendConflict = \case
   JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+  -- Not an error: a terminal parent simply receives nothing.
+  JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
 -- | Fold one re-invocation's outcome into the running summary. The existential
