@@ -161,7 +161,7 @@ none constrain this initiative. The `docs/adr` bundle is profile-governed (OKF
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make suspended workflows quiescent and discovery index-aligned | docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md | None | None | Complete |
-| 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | In Progress |
+| 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | Complete |
 | 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Not Started |
 | 4 | Concurrent resume passes, batched timer drain, and worker pass robustness | docs/plans/203-concurrent-resume-passes-batched-timer-drain-and-worker-pass-robustness.md | None | EP-1 | Not Started |
 | 5 | Document the wake-source contract and the durable-execution scale posture | docs/plans/204-document-the-wake-source-contract-and-the-durable-execution-scale-posture.md | None | EP-1, EP-4 | Not Started |
@@ -250,8 +250,8 @@ writer of the `keiro_workflows` row that skips ADR 23's obligation.
 - [x] EP-1 (2026-08-06): Discovery predicate rewritten to positive active-status arms with index-aligned wake filtering; EXPLAIN-verified test.
 - [x] EP-1 (2026-08-06): `cancelAwakeable` flips the owner instance row; stale sleep re-fires no longer clear a live wake hint (ADR 7 amended).
 - [x] EP-1 (2026-08-06): Discovery narrowed to exact wakes; both race orderings and the crash-retry window are covered by tests; ADR 23 recorded.
-- [ ] EP-2: Terminal checks (cancelled and failed) folded into the append transaction; boundary asymmetry test passes.
-- [ ] EP-2: Single entry-status query and redundant claim-time generation query removed; per-step round-trips reduced.
+- [x] EP-2 (2026-08-06): Terminal checks (cancelled and failed) folded into the append transaction via the new `JournalRefusedTerminal` outcome; boundary-asymmetry test passes and is pinned to the in-transaction check; ADR 6 amended with the refusal contract.
+- [x] EP-2 (2026-08-06): Single entry-status query (`terminalMarkers`) and redundant claim-time generation query removed; a fresh step now costs one fewer round-trip than before while checking strictly more.
 - [ ] EP-3: UTF-8 id derivation for all four derivations with byte-compatibility tests for ASCII inputs; ADR recorded.
 - [ ] EP-4: Bounded concurrent advancement in `resumeWorkflowsOnce` with lease-safety tests.
 - [ ] EP-4: Batched timer claim; `recordCrashTx` zero-row tolerance; GC per-pass isolation and honest summary.
@@ -284,6 +284,23 @@ writer of the `keiro_workflows` row that skips ADR 23's obligation.
   suite's pinned counts (which include `postCoddImportPendingIssues`, the
   post-import pending list — easy to miss, since it fails only in the codd-import
   examples).
+
+- EP-2 (2026-08-06): `JournalAppendOutcome` gained `JournalRefusedTerminal
+  !Text`, so any later plan that pattern-matches it must handle the arm. The
+  house rule established at those call sites, and now written into ADR 6, is
+  "settle your own durable row, deliver nothing, do not condemn and do not
+  throw" — EP-4's worker-robustness work should follow it rather than treating a
+  refusal as a transient error. Note also that the three wake-source modules'
+  `condemnOnAppendConflict`/`throwOnAppendConflict` helpers are near-duplicates
+  in `Keiro.Workflow.Awakeable`, `Keiro.Workflow.Child`, and
+  `Keiro.Workflow.Resume`; they were updated in lockstep here, and a future plan
+  that touches them should consider sharing one definition.
+
+- EP-2 (2026-08-06): `keiro/CHANGELOG.md` now carries an `Unreleased` section
+  covering EP-1's and EP-2's user-visible changes, and
+  `keiro-migrations/CHANGELOG.md` one for migration 0021. Later plans in this
+  initiative should extend those sections rather than starting new ones — the
+  whole initiative ships as one release.
 
 - EP-1 (2026-08-06) changed one internal interface EP-4 will rebase over:
   `resumeWorkflowsOnce` no longer unions `findRunningChildIds` into discovery and
