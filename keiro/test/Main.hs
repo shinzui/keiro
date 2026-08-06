@@ -6603,6 +6603,40 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                      ("rotated", "discover-rotated")
                    ]
 
+  describe "Keiro.Workflow discovery index" $ around (withFreshStore fixture) $ do
+    -- The discovery predicate must be stated as the positive active set
+    -- (status IN ('running','suspended')) rather than as the complement of the
+    -- terminal trio: Postgres proves partial-index applicability from the query
+    -- predicate alone and never consults the table's CHECK constraint, so the
+    -- complement form cannot use keiro_workflows_active_idx and seq-scans
+    -- keiro_workflows on every resume pass. With seq scans discouraged, a plan
+    -- that names the index is proof the planner can match it.
+    it "plans the discovery predicate through keiro_workflows_active_idx" $ \storeHandle -> do
+      now <- getCurrentTime
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          for_ (discoveryFixtureRows now) $ \row ->
+            Tx.statement row insertWorkflowInstanceStmt
+      Right planLines <- Store.runStoreIO storeHandle $
+        Store.runTransaction $ do
+          Tx.sql "SET LOCAL enable_seqscan = off"
+          Tx.statement () explainDiscoveryStmt
+      Text.unpack (Text.intercalate "\n" planLines)
+        `shouldSatisfy` isInfixOf "keiro_workflows_active_idx"
+
+    it "returns exactly the active, wake-due instances" $ \storeHandle -> do
+      now <- getCurrentTime
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          for_ (discoveryFixtureRows now) $ \row ->
+            Tx.statement row insertWorkflowInstanceStmt
+      Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+      unfinished
+        `shouldBe` [ ("a-running", "discovery-index"),
+                     ("b-suspended", "discovery-index"),
+                     ("c-due-sleep", "discovery-index")
+                   ]
+
   describe "Keiro.Workflow snapshots" $ around (withFreshStore fixture) $ do
     it "does not fail committed workflow steps when snapshot writes fail" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
@@ -12738,6 +12772,55 @@ deleteGcStepsStmt =
         (E.param (E.nonNullable E.text))
     )
     D.noResult
+
+-- | Instance rows covering every status the discovery predicate must classify:
+-- three active-and-due rows (a running instance, a suspended instance with no
+-- wake hint, a suspended instance whose sleep is due), one suspended instance
+-- whose sleep is still in the future, and the three terminal statuses.
+discoveryFixtureRows :: UTCTime -> [(Text, Text, Text, Maybe UTCTime)]
+discoveryFixtureRows now =
+  [ ("a-running", "discovery-index", "running", Nothing),
+    ("b-suspended", "discovery-index", "suspended", Nothing),
+    ("c-due-sleep", "discovery-index", "suspended", Just (addUTCTime (-60) now)),
+    ("d-future-sleep", "discovery-index", "suspended", Just (addUTCTime 3600 now)),
+    ("e-completed", "discovery-index", "completed", Nothing),
+    ("f-cancelled", "discovery-index", "cancelled", Nothing),
+    ("g-failed", "discovery-index", "failed", Nothing)
+  ]
+
+insertWorkflowInstanceStmt :: Statement (Text, Text, Text, Maybe UTCTime) ()
+insertWorkflowInstanceStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_workflows
+      (workflow_id, workflow_name, generation, status, wake_after)
+    VALUES ($1, $2, 0, $3, $4)
+    ON CONFLICT (workflow_id, workflow_name) DO NOTHING
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.timestamptz))
+    )
+    D.noResult
+
+-- | The discovery predicate as 'findUnfinishedWorkflowIdsStmt' states it, run
+-- through EXPLAIN so a test can assert which index the planner picks. Kept
+-- textually in step with that statement.
+explainDiscoveryStmt :: Statement () [Text]
+explainDiscoveryStmt =
+  preparable
+    """
+    EXPLAIN (FORMAT TEXT)
+    SELECT workflow_id, workflow_name
+    FROM keiro.keiro_workflows
+    WHERE status IN ('running', 'suspended')
+      AND (wake_after IS NULL OR wake_after <= now())
+    ORDER BY workflow_name, workflow_id
+    """
+    E.noParams
+    (D.rowList (D.column (D.nonNullable D.text)))
 
 deleteWorkflowInstanceStmt :: Statement (Text, Text) ()
 deleteWorkflowInstanceStmt =

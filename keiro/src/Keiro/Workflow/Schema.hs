@@ -134,11 +134,12 @@ currentGeneration :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es Int
 currentGeneration (WorkflowName name) (WorkflowId wid) =
   fromIntegral <$> runTransaction (Tx.statement (wid, name) currentGenerationStmt)
 
--- | Return the @(workflow_id, workflow_name)@ of every non-terminal workflow
--- instance. Terminal statuses are @completed@, @cancelled@, and @failed@, matching
--- 'Keiro.Workflow.Instance.WorkflowStatus'. The explicit time parameter is
--- reserved for wake-time filtering; today it keeps the call shape stable for that
--- addition.
+-- | Return the @(workflow_id, workflow_name)@ of every workflow instance the
+-- resume worker should examine: the active statuses @running@ and @suspended@
+-- (matching 'Keiro.Workflow.Instance.WorkflowStatus'), minus any instance whose
+-- @wake_after@ hint is still in the future. The supplied time is what @wake_after@
+-- is compared against, so a workflow parked on a not-yet-due sleep is skipped
+-- until its timer becomes due.
 findUnfinishedWorkflowIds :: (Store :> es) => UTCTime -> Eff es [(Text, Text)]
 findUnfinishedWorkflowIds now =
   runTransaction (Tx.statement now findUnfinishedWorkflowIdsStmt)
@@ -253,17 +254,26 @@ currentGenerationStmt =
     )
     (D.singleRow (D.column (D.nonNullable D.int4)))
 
--- The terminal-status literals must match 'Keiro.Workflow.Instance.statusToText'
--- for completed, cancelled, and failed. The timestamp parameter makes
--- wake_after a self-expiring skip: future sleepers disappear from discovery
--- until their timer is due.
+-- The active-status literals must match 'Keiro.Workflow.Instance.statusToText'
+-- for running and suspended. They are stated positively (rather than as the
+-- complement of the terminal trio) because that is the only form the planner
+-- can match against the partial index keiro_workflows_active_idx, whose
+-- predicate is @status IN ('running','suspended')@: Postgres proves
+-- partial-index applicability from the query predicate alone and never consults
+-- the table's CHECK constraint, so @status NOT IN ('completed','cancelled',
+-- 'failed')@ forces a sequential scan of keiro_workflows on every pass. The two
+-- forms are equivalent because migration 0011 constrains status to exactly
+-- those five values.
+--
+-- The timestamp parameter makes wake_after a self-expiring skip: future
+-- sleepers disappear from discovery until their timer is due.
 findUnfinishedWorkflowIdsStmt :: Statement UTCTime [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
   preparable
     """
     SELECT workflow_id, workflow_name
     FROM keiro.keiro_workflows
-    WHERE status NOT IN ('completed', 'cancelled', 'failed')
+    WHERE status IN ('running', 'suspended')
       AND (wake_after IS NULL OR wake_after <= $1)
     ORDER BY workflow_name, workflow_id
     """

@@ -43,7 +43,7 @@ discovered and driven.
 
 ## Progress
 
-- [ ] Milestone 1: discovery predicate rewritten to `status IN ('running','suspended')`; index-usability test added.
+- [x] Milestone 1 (2026-08-06): discovery predicate rewritten to `status IN ('running','suspended')`; index-usability test added (`Keiro.Workflow discovery index`, two examples); full suite green at 380 examples.
 - [ ] Milestone 2: `cancelAwakeable` flips the owner instance row to `running`; `workflowSleepFireAction` clears `wake_after` only on a fresh append.
 - [ ] Milestone 3: suspend/wake arbitration under the per-step advisory lock; discovery narrowed to exact wakes; redundant child seed removed; migration 0021 (index + backfill); crash-window tests green.
 - [ ] ADR recorded for the exact-discovery contract; `just adr-validate` passes.
@@ -52,7 +52,26 @@ discovered and driven.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The index-mismatch finding reproduces exactly as the re-audit described, and the
+  new test discriminates. With the rewritten predicate the plan names the index;
+  with the old predicate — under the same `SET LOCAL enable_seqscan = off` — the
+  planner still seq-scans and marks the node as penalised rather than reaching for
+  `keiro_workflows_active_idx`:
+
+  ```text
+  Sort  (cost=19.88..20.15 rows=109 width=64)
+    Sort Key: workflow_name, workflow_id
+    ->  Seq Scan on keiro_workflows  (cost=0.00..16.19 rows=109 width=64)
+          Disabled: true
+          Filter: ((status <> ALL ('{completed,cancelled,failed}'::text[]))
+                   AND ((wake_after IS NULL) OR (wake_after <= now())))
+  ```
+
+  The committed test asserts only the positive case (the plan text mentions
+  `keiro_workflows_active_idx`). Asserting the negative case would pin a planner
+  limitation rather than our behaviour, and would break if a future Postgres
+  learned to prove partial-index implication from the table's CHECK constraint.
+  Date: 2026-08-06
 
 
 ## Decision Log
