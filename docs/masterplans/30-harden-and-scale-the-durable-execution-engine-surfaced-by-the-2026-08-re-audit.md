@@ -417,4 +417,74 @@ that skips ADR 23's obligation.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete, 2026-08-06. All five child plans landed in registry order, each in one
+or a few commits, with one migration (`0021`) and three new ADRs (23, 24, 25).
+The suite finished at 407 examples, 0 failures, and was green at every
+milestone; EP-3 added 5 examples and EP-4 added 9. Every pre-existing example
+passed unmodified at every step — the strongest evidence that the behavioural
+changes were as scoped as they claimed, since EP-3's whole compatibility
+argument rests on ASCII identities not moving.
+
+Against the Vision's promises, all delivered:
+
+- A workflow suspended on an awakeable, a child, or a future-dated sleep costs
+  the resume worker nothing. Discovery is exact and index-aligned; every wake and
+  cancel path writes the instance row in its own transaction (EP-1, ADR 23).
+- A direct run overlapping a terminal failure stops at the next step boundary,
+  with the terminal checks folded into the append transaction — so a fresh step
+  costs one fewer round-trip than before while checking strictly more (EP-2).
+- Deterministic ids hash UTF-8 bytes. ASCII derivations are byte-identical, so no
+  deployment moved; the non-ASCII collision that wedged the append path is closed
+  and the derivation is frozen by fixtures and ADR 24 (EP-3).
+- A stale sleep re-fire cannot erase a live wake hint (EP-1, amending ADR 7).
+- A resume pass advances many instances concurrently and the timer worker drains
+  in batches (EP-4).
+- The crash-recording and GC workers survive races and transient errors, and
+  report finished work rather than attempted work (EP-4, ADR 25).
+- The wake-source authoring contract and the engine's scale posture are written
+  down for adopters (EP-5).
+
+Three things this initiative taught that were not in its plan.
+
+**Verify a regression test by restoring the regression.** EP-3 and EP-4 each
+temporarily put the old behaviour back and watched the new example fail before
+keeping it. Both times this paid: EP-3 learned that a deterministic-id collision
+surfaces as `Left (DuplicateEvent Nothing)` rather than the
+`WorkflowJournalAppendError` the re-audit assumed, and EP-4 learned that the
+crash-record race aborts the *entire* pass rather than the candidates behind it.
+Both plans had documented the wrong failure mode with complete confidence.
+
+**A decomposition that isolates risk also isolates responsibility for prose.**
+The decomposition worked exactly as intended for code — EP-1's liveness change
+and EP-3's identity change each got their own review surface, uncoupled from
+mechanical fixes. But it left nobody responsible for user documentation that a
+sibling plan invalidated: EP-1 replaced the discovery mechanism, wrote ADR 23,
+updated the CHANGELOG, and left both user-facing guides describing the old
+mechanism, which EP-5 found months of reading-time later (had anyone read them).
+When a plan changes a documented mechanism, grep `docs/` for the old mechanism's
+name before closing it.
+
+**Conventions that live only in code do not survive a new author.** ADR 25 exists
+because workflow GC was written after the resume worker and did not inherit its
+per-pass isolation — not because anyone disagreed, but because the rule was
+nowhere to disagree with. The re-audit found the same class twice in the same
+plan. A convention held by every existing instance of a pattern is exactly the
+convention most likely to be assumed self-evident and therefore never written.
+
+ADR distillation performed at close-out. Promoted: EP-4's worker-loop convention
+into ADR 25 (new). Already recorded during implementation: ADR 23 (exact
+discovery, EP-1), ADR 24 (frozen UTF-8 identity derivation, EP-3), amendments to
+ADR 6 (the terminal-refusal contract, EP-2) and ADR 7 (only a fresh append is a
+successful sleep fire, EP-1). Left in the plans: execution notes, fixture
+capture, and the per-milestone verification transcripts. Left unrecorded as
+ADR-shaped but retained in this retrospective: the two process lessons above, and
+EP-5's documentation-drift finding — habits for how work is done here rather than
+decisions about what the system is.
+
+Carried forward as known and accepted: the `keiro-dsl` scaffold's generated
+`namedUuid` and `jitsurei`'s two hand-written copies still use the truncating
+derivation (ADR 24's Consequences records the exclusion and the reason — generated
+identity is governed by ADR 18 and pinned byte-for-byte by the
+scaffold-conformance test, so it needs its own compatibility argument). MasterPlan
+16's accepted-known items remain accepted, and `PositionWait` push wiring plus
+prefix subscriptions remain Phase-3 roadmap items.

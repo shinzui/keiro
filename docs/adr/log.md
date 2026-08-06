@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-06
+* **Add**: Record the worker-loop contract: isolate per pass and per item, and report finished work rather than attempted work (plan 203).
 * **Add**: Freeze the deterministic-id derivation on UTF-8 seed bytes: ASCII ids are byte-identical, non-ASCII seeds no longer collide into a wedged append (plan 202).
 * **Update**: Amend ADR 0006: the append transaction declines delivery into a terminally cancelled or failed workflow, and a refused wake source still settles its own durable row (plan 201).
 * **Add**: Record exact workflow discovery: the keiro\_workflows row is the complete wake ledger, and the suspend write arbitrates against wake delivery under the per-step advisory lock (plan 200).

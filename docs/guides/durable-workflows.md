@@ -483,7 +483,9 @@ so a resumed run instruments itself. See [Operations](../user/operations.md).
   report partial progress honestly. Every keiro worker loop does: a transient
   database error must lose one tick, not end the worker, and one bad instance
   must not take its whole batch. A summary that restates "how many I looked at"
-  as "how many I finished" turns a stalled worker into a silent one.
+  as "how many I finished" turns a stalled worker into a silent one. The
+  contract is
+  [ADR 25](../adr/0025-worker-loops-isolate-failures-per-pass-and-per-item-and-report-partial-progress.md).
 
 See [Operations](../user/operations.md) for the consolidated operational
 checklist and [Durable Workflows (user reference)](../user/durable-workflows.md)
