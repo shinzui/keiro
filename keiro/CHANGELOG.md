@@ -17,6 +17,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   prove replay candidates disjoint. The JSON event and snapshot formats are
   unchanged.
 
+### Added
+
+- `Keiro.Timer.Schema.TimerStatus` now derives `Enum` and `Bounded`, so a
+  consumer can enumerate the complete stored lifecycle instead of restating
+  it. Stored representations are unchanged. keiro-dsl's cross-package
+  timer-vocabulary test relies on this.
+
 ## 0.10.0.0 — 2026-08-03
 
 No user-facing changes beyond the lockstep `keiro-core ^>=0.10.0.0` bound.

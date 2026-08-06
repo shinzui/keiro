@@ -64,10 +64,18 @@ compatibility-only semantics. `--deny-warnings` turns every warning this invocat
 into exit 1 without changing its severity; `--deny CODE[,CODE...]` (repeatable, comma-separated)
 does the same for named codes only. A code `check` cannot emit is rejected outright rather
 than accepted as a no-op, so a denial in CI is either effective or an immediate error: a
-cross-revision code belongs to `diff`, and a structural-coverage code needs
-`--coverage-report FILE` in the same invocation. `--report-out` writes the append-only
-`keiro-dsl/check-report/1` JSON on success or failure, creating parent directories, and
-covers coverage findings when coverage runs.
+cross-revision code belongs to `diff`, a structural-coverage code needs
+`--coverage-report FILE` in the same invocation, and `--deny CoverageOpaqueGateExceeded` is
+refused because that code is the error `--fail-on-opaque` itself raises — pass the flag
+instead. `--report-out` writes the append-only `keiro-dsl/check-report/1` JSON on success or
+failure, creating parent directories, and covers coverage findings when coverage runs.
+
+`--deny-warnings` is for a service that can be warning-free. One that cannot — a confirmed
+benign inversion (`on-duplicate => AckOk`, timer `on-reject => Fired` spell real intent and
+always warn `RouterBenignInversion`/`ProcessBenignInversion`), or a transitional baseline
+such as `ReplayOnlyCommandStillLive` during command retirement — gates CI with a selective
+`--deny CODE[,CODE...]` list of the codes it wants fatal instead. Do not respell a benign
+inversion just to silence the warning; the warning is the confirmation.
 
 Many surfaces warn on released languages 1–3 and error from language 4 on. Both severities
 print the same sentence, so an author reads one explanation either way — and a language-4

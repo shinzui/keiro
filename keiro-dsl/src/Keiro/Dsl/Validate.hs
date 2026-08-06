@@ -2719,9 +2719,6 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
 intakeDedupePolicies :: Set Name
 intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSourceEventIdentity", "KafkaDeliveryIdentity"]
 
--- | Every header name keiro's integration envelope actually uses on the wire,
--- taken from the runtime's own definitions in "Keiro.Integration.Event" rather
--- than restated here, so the two cannot drift apart.
 -- | The timer statuses a stored row can hold, mirroring @TimerStatus@ in
 -- @keiro@'s "Keiro.Timer.Schema". keiro-dsl deliberately does not depend on the
 -- runtime package, so the list is restated here; the conformance suite that does
@@ -2729,6 +2726,9 @@ intakeDedupePolicies = Set.fromList ["PreferIntegrationMessageId", "PreferSource
 runtimeTimerStatuses :: [Text]
 runtimeTimerStatuses = ["Scheduled", "Firing", "Fired", "Cancelled", "Dead"]
 
+-- | Every header name keiro's integration envelope actually uses on the wire,
+-- taken from the runtime's own definitions in "Keiro.Integration.Event" rather
+-- than restated here, so the two cannot drift apart.
 canonicalEnvelopeHeaders :: [Text]
 canonicalEnvelopeHeaders =
   [ Event.headerMessageId,
@@ -3819,6 +3819,12 @@ tInt = T.pack . show
 mkErr :: Int -> DiagnosticCode -> Text -> Diagnostic
 mkErr l c m = Diagnostic {line = l, severity = Error, code = c, relatedLocations = [], message = m}
 
+-- | A dispatch disposition as the author spelled it.
+dispText :: Disp -> Text
+dispText DAckOk = "AckOk"
+dispText DRetry = "Retry"
+dispText (DDeadLetter reason) = "DeadLetter " <> T.pack (show reason)
+
 -- | A spec surface the grammar accepts but no runtime implements.
 --
 -- Released languages below 4 keep their acceptance and only warn, so an
@@ -3826,12 +3832,6 @@ mkErr l c m = Diagnostic {line = l, severity = Error, code = c, relatedLocations
 -- language. From language 4 — which promised strict spec-surface validation —
 -- the same sentence is an error. The message never changes with the severity, so
 -- an author reads one explanation before and after the tightening.
--- | A dispatch disposition as the author spelled it.
-dispText :: Disp -> Text
-dispText DAckOk = "AckOk"
-dispText DRetry = "Retry"
-dispText (DDeadLetter reason) = "DeadLetter " <> T.pack (show reason)
-
 mkSurfaceRefusal :: EffectiveLanguageContract -> Int -> DiagnosticCode -> Text -> Diagnostic
 mkSurfaceRefusal languageContract l c m =
   Diagnostic

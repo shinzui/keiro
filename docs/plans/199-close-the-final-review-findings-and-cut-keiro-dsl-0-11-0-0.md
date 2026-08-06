@@ -100,12 +100,11 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
       finalized as `[0.11.0.0] - 2026-08-05`; mori simulation re-run green against the
       release commit `e1d4c26b`. All 38 keiro-dsl suites pass; `corpus-regen check` reports
       `conformance corpus: ok`.
-- [ ] M7 (remaining, **blocked — owner action**): publish the keiki 0.9.0.0 and
-      keiki-codec-json 0.9.0.0 Hackage candidates, then verify
-      `curl -s https://hackage.haskell.org/package/keiki/preferred` lists 0.9.0.0, then tag
-      and push. Re-verified 2026-08-05: both release URLs are still 404, both `/candidate`
-      URLs are 200, and `preferred` still tops out at 0.8.0.0. Publishing requires the
-      owner's Hackage credentials, and per Idempotence the tags must not precede it.
+- [x] M7 (remaining, owner action) — **keiki published**: the owner published the keiki
+      0.9.0.0 and keiki-codec-json 0.9.0.0 candidates on 2026-08-05; verified — both
+      release URLs return 200 and `preferred` lists 0.9.0.0 for both packages. Still
+      pending (owner): tag the five packages at the final pre-publish fix commit and
+      upload the 0.11.0.0 sdists.
 - [ ] M7 (remaining, follow-up): record the mori upgrade sequence in the release notes —
       `Justfile:130,134` tool pin, `cabal.project:5` index-state past the upload, nix overlay
       versions/hashes (`nix/haskell-overlay.nix:172,190-191`), keiki bounds `^>=0.8` →
@@ -116,6 +115,51 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
 
 ## Surprises & Discoveries
 
+- (Pre-publish verification, 2026-08-05) **M5's `-Werror` gate would have been rejected by
+  Hackage.** `cabal check` on keiro-dsl errored on the unconditional
+  `ghc-options: -Werror` in the `generated-output` stanza ("Hackage would reject this
+  package") — the upload of the already-cut 0.11.0.0 would have failed at the last step.
+  Fixed the way `cabal check` itself recommends: the option now rides a new manual flag
+  `werror-generated` (default False, so the published sdist checks clean) that this
+  repository's `cabal.project` switches on. Verified both directions: `cabal check` reports
+  no errors, and a `-v2` build shows `Flags chosen: werror-generated=True` with `-Werror`
+  on the ghc command line, so the repo-side gate still fires. The changelog bullet was
+  reworded to match.
+- (Pre-publish verification, 2026-08-05) One M3 doc sentence survived the sweep:
+  `docs/user/typed-spec-toolchain.md:1204` still called the pgmq top-level `dedup key`
+  "descriptive because committed services use both source keys and command identities
+  there", while `validatePgmqDispatch` now refuses (warn at 3 / error at 4) a `dedup key`
+  that is not a generated selector of the source read model. Corrected to state the
+  enforced rule, and the neighboring `fanout body` sentence now mentions the
+  Haskell-identifier requirement.
+- (Pre-publish verification, 2026-08-05) The one committed generated file still carrying a
+  0.10.0.0 banner (`conformance-newsurface/Generated/TransferRouting/Conformance.hs`) is
+  the deliberately registered `legacy-generated` manifest exemption, guarded against
+  staleness by the corpus check — not a regeneration escapee.
+- (Pre-publish verification, second pass, 2026-08-05) An adversarial review of the six
+  commits' source diffs confirmed the implementation sound (the `--deny` origin registry was
+  re-derived independently from every emission site and matched; all eight surface closures
+  probed at both tiers; header set, wire-key rules, collision planner, and dispatch-id
+  tuples all verified against the runtime), and found two residual items, **both fixed
+  before the release commit was tagged**: (a) `--deny CoverageOpaqueGateExceeded` was
+  accepted yet could never fire — the code is emitted only as an Error by
+  `--fail-on-opaque` itself, and the deny scan matches warnings only, so the denial was a
+  silent no-op (probed exit 0 with opaque boundaries present); it is now refused in every
+  invocation with a message pointing at `--fail-on-opaque`, with a regression test.
+  (b) plan acceptance 2 named `new intake` as passing `--deny-warnings`, but the shipped
+  intake skeleton warned on its own `required cross-check body` bind row; the flags are
+  dropped from the skeleton (they are unenforced descriptive notation), generated output is
+  unchanged (bind rows are inert — corpus regen byte-identical), and the deny-gate test now
+  pins every skeleton kind except router and process, whose idiomatic benign-inversion
+  spellings warn by design — the authoring skill now says explicitly that such services
+  (and warning-baseline services like mori) gate CI with a selective `--deny` list rather
+  than `--deny-warnings`. Two Haddock misattachments in
+  `Validate.hs` (stacked `-- |` blocks putting the envelope-header prose on
+  `runtimeTimerStatuses` and the `mkSurfaceRefusal` tiering contract on `dispText`) were
+  fixed in place. Known tension, per-plan and deliberate: the process `dispatch-id` closure
+  is a hard parse error at every language version rather than tiered — safe for the corpus
+  and mori, but an out-of-repo pre-4 process spec with a free-form line fails without a
+  deniable code.
 - (Pre-plan, 2026-08-05) keiki 0.9.0.0 and keiki-codec-json 0.9.0.0 exist on Hackage only as
   **candidates** (HTTP 200 at `/package/keiki-0.9.0.0/candidate`, 404 at the release URL;
   `/package/keiki/preferred` still lists 0.8.0.0 as latest). Candidates are not in the
@@ -376,6 +420,10 @@ that held, but three of the findings were larger than their one-line description
 **What remains.** Only the release's outward-facing half: publishing the two keiki Hackage
 candidates and tagging. Both are owner actions, and the ordering constraint (publish before
 tag) is unchanged. The mori upgrade sequence still needs writing into the release notes.
+The pre-publish verification passes (2026-08-05, see Surprises) added commits ahead of the
+tags: the `werror-generated` flag that makes keiro-dsl pass `cabal check`, the
+`--deny CoverageOpaqueGateExceeded` refusal, the intake-skeleton gate fix, and the doc
+corrections — tag the release at the last of those commits, not at `e1d4c26b`.
 
 
 ## Context and Orientation

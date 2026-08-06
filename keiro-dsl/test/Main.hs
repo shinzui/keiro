@@ -304,6 +304,19 @@ main = hspec $ do
       noPassCode `shouldBe` ExitFailure 1
       noPassErr `shouldContain` "add --coverage-report FILE or drop the code"
 
+      -- CoverageOpaqueGateExceeded is the error --fail-on-opaque itself raises,
+      -- never a warning, so denying it is a silent no-op in every invocation —
+      -- with or without the coverage pass it is refused with the real spelling.
+      withTempDirectory "keiro-dsl-gate-exceeded-deny" $ \out -> do
+        (gateCode, _, gateErr) <-
+          runKeiroDsl
+            ["check", fixture, "--coverage-report", out </> "coverage.json", "--deny", "CoverageOpaqueGateExceeded"]
+        gateCode `shouldBe` ExitFailure 1
+        gateErr `shouldContain` "pass --fail-on-opaque instead of denying it"
+      (gateNoPassCode, _, gateNoPassErr) <- runKeiroDsl ["check", fixture, "--deny", "CoverageOpaqueGateExceeded"]
+      gateNoPassCode `shouldBe` ExitFailure 1
+      gateNoPassErr `shouldContain` "pass --fail-on-opaque instead of denying it"
+
     it "applies the warning policy to structural-coverage findings" $ do
       withTempDirectory "keiro-dsl-coverage-deny" $ \out -> do
         let fixture = "test/fixtures/structural-conformance.keiro"
@@ -6607,16 +6620,23 @@ main = hspec $ do
     -- `derive … hole` is mandatory emit grammar. While it carried a warning, a
     -- freshly generated emit service could never satisfy the documented CI
     -- recipe, no matter what its author did. See ExecPlan 199.
-    it "the emit skeleton satisfies the documented --deny-warnings CI gate" $
-      withTempDirectory "keiro-dsl-emit-skeleton-deny" $ \out -> case skeletonFor "emit" of
-        Left err -> expectationFailure (T.unpack err)
-        Right source -> do
-          let specPath = out </> "emit.keiro"
-          TIO.writeFile specPath source
-          (exitCode, stdoutText, stderrText) <-
-            runKeiroDsl ["check", specPath, "--min-language", "4", "--deny-warnings"]
-          unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
-          stderrText `shouldNotContain` "escalated to failure"
+    it "every skeleton without a confirmed benign inversion satisfies the documented --deny-warnings CI gate" $
+      withTempDirectory "keiro-dsl-skeleton-deny" $ \out ->
+        -- router and process are deliberately absent: their idiomatic
+        -- on-duplicate/on-reject spellings are confirmed benign inversions
+        -- (RouterBenignInversion/ProcessBenignInversion), so those services
+        -- gate CI with a selective --deny list rather than --deny-warnings.
+        forM_ ["emit", "intake", "aggregate", "contract", "workqueue", "workflow"] $ \kind ->
+          case skeletonFor kind of
+            Left err -> expectationFailure (T.unpack err)
+            Right source -> do
+              let specPath = out </> T.unpack kind <> ".keiro"
+              TIO.writeFile specPath source
+              (exitCode, stdoutText, stderrText) <-
+                runKeiroDsl ["check", specPath, "--min-language", "4", "--deny-warnings"]
+              unless (exitCode == ExitSuccess) $
+                expectationFailure (T.unpack kind <> " skeleton failed the gate:\n" <> stdoutText <> stderrText)
+              stderrText `shouldNotContain` "escalated to failure"
     it "stable skeleton scaffolds match the committed compiling modules" $
       mapM_ (uncurry assertStableSkeletonMatchesCommitted) skeletonModuleRoots
     it "rejects an unknown kind with a helpful message" $

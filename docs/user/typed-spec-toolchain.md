@@ -1200,10 +1200,11 @@ The source and dedupe read models, dedupe column, dedupe queue, queue payload
 field, and enqueue target must resolve. Under Language 4, the source key must
 also name a generated logical selector for a column of the source read model
 (`reservationId` resolves the SQL column `reservation_id`). `fanout body` names
-a hand-owned effectful one-to-many function, not a column. The top-level
-`dedup key` is likewise descriptive because committed services use both source
-keys and command identities there; the two `seenIn` fields are the enforced
-dedupe boundaries. A dispatch is validated and diff-classified but produces no
+a hand-owned effectful one-to-many function, not a column; it must be a
+lowercase-initial identifier that could name a Haskell function. The top-level
+`dedup key` obeys the same rule as the source key: it must name a generated
+logical selector for a column of the source read model. The two `seenIn` fields
+are the enforced dedupe boundaries. A dispatch is validated and diff-classified but produces no
 generated module today. Keep the hand-owned queue-side SQL check consistent
 with the declared wire key and read-model check.
 

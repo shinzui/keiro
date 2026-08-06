@@ -197,7 +197,10 @@ intakeSkeleton =
       "  topic events",
       "  accept ThingHappened",
       "",
-      "  bind messageId from header \"keiro-message-id\" required cross-check body",
+      -- No `required`/`cross-check body` flags here: they are unenforced
+      -- descriptive notation (IntakeBindFlagUnenforced), and the skeleton must
+      -- pass the documented `--deny-warnings` CI gate as generated.
+      "  bind messageId from header \"keiro-message-id\"",
       "",
       "  dedupe key messageId policy PreferIntegrationMessageId",
       "",

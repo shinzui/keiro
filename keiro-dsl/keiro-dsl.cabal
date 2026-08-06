@@ -33,11 +33,22 @@ common shared
 -- output plus hand-filled holes. Generated code is regenerated wholesale, so a
 -- warning in it is a generator defect with nothing for a human to fix in place:
 -- -Werror keeps such a regression from building green. This is deliberately not
--- added to `warnings`, where src/ keeps -Wall non-fatal.
+-- added to `warnings`, where src/ keeps -Wall non-fatal. Hackage rejects an
+-- unconditional -Werror, so the gate rides a manual flag that this repository's
+-- cabal.project switches on; the published sdist defaults it off.
+flag werror-generated
+  description:
+    Promote warnings in committed generated conformance output to errors
+
+  manual:      True
+  default:     False
+
 common generated-output
   default-language:   GHC2024
   default-extensions: OverloadedStrings
-  ghc-options:        -Werror
+
+  if flag(werror-generated)
+    ghc-options: -Werror
 
 library
   import:          warnings, shared

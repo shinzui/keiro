@@ -253,9 +253,20 @@ parseDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
 -- | Reject a @--deny@ selection of a coverage code when this invocation never
 -- runs the coverage pass, for the same reason 'parseDenyCodes' rejects
 -- diff-side codes: the denial could not fire.
+--
+-- 'CoverageOpaqueGateExceeded' is refused outright: it is the error
+-- @--fail-on-opaque@ itself raises, never a warning, so the deny scan can never
+-- match it — without the flag the code does not fire at all, and with the flag
+-- the run already fails. A denial in CI must be either effective or an
+-- immediate error, and this one could only ever be a silent no-op.
 validateCheckDenyCodes :: CheckOptions -> IO ()
-validateCheckDenyCodes options =
-  case [diagnosticCode | diagnosticCode <- checkDenyCodes options, diagnosticOrigin diagnosticCode == CoverageDiagnostic] of
+validateCheckDenyCodes options = do
+  when (CoverageOpaqueGateExceeded `elem` checkDenyCodes options) $ do
+    TIO.hPutStrLn
+      stderr
+      "check: --deny CoverageOpaqueGateExceeded can never match; the code is the error --fail-on-opaque itself raises, so pass --fail-on-opaque instead of denying it"
+    exitFailure
+  case [diagnosticCode | diagnosticCode <- checkDenyCodes options, diagnosticOrigin diagnosticCode == CoverageDiagnostic, diagnosticCode /= CoverageOpaqueGateExceeded] of
     [] -> pure ()
     unreachable
       | Just _ <- checkCoverage options -> pure ()

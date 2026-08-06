@@ -40,9 +40,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   accepting a denial that can never match. Cross-revision codes (for example
   `EvtFieldWireKeyChanged`, `WorkflowShapeChanged`) are a `diff` concern and are
   rejected outright; structural-coverage codes are rejected unless the same
-  invocation passes `--coverage-report`. Any CI file that named such a code was
-  not gating on it and now fails loudly. `Keiro.Dsl.Validate` exports the
-  underlying `DiagnosticOrigin` and `diagnosticOrigin` registry.
+  invocation passes `--coverage-report`; `--deny CoverageOpaqueGateExceeded` is
+  rejected in every invocation, because that code is the error `--fail-on-opaque`
+  itself raises and never a deniable warning — pass the flag instead. Any CI
+  file that named such a code was not gating on it and now fails loudly.
+  `Keiro.Dsl.Validate` exports the underlying `DiagnosticOrigin` and
+  `diagnosticOrigin` registry.
+- `keiro-dsl new intake` no longer spells the unenforced `required cross-check
+  body` flags on its bind row, so the intake skeleton passes the documented
+  `check --min-language 4 --deny-warnings` CI gate as generated (previously it
+  warned `IntakeBindFlagUnenforced` out of the box). The router and process
+  skeletons keep their idiomatic benign-inversion spellings and therefore gate
+  CI with a selective `--deny` list rather than `--deny-warnings`.
 - The `keiro-dsl/coverage-report/1` JSON now spells warning severity `"warning"`
   rather than `"advisory"`, matching `keiro-dsl/check-report/1`. There is one
   severity vocabulary across keiro-dsl's JSON. Consumers matching the literal
@@ -228,9 +237,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `ledger:` to match the files they name; they read `manifest:` and `record:`
   while pointing at `keiro-dsl-cabal-fragment.*` and `keiro-dsl-ledger.*`.
   Consumers scraping those stderr labels must be updated.
-- The `generated-output` Cabal stanza adds `-Werror`, so a warning regression in
-  generated code fails the build instead of building green. `src` keeps `-Wall`
-  non-fatal. Enabling it exposed five real import over-approximations in the
+- The `generated-output` Cabal stanza adds `-Werror` behind the new manual flag
+  `werror-generated` (default off, because Hackage rejects an unconditional
+  `-Werror`; this repository's `cabal.project` turns it on), so a warning
+  regression in generated code fails the build instead of building green. `src`
+  keeps `-Wall` non-fatal. Enabling it exposed five real import over-approximations in the
   generator, all now fixed: a publisher imported `ExponentialBackoffOptions`
   under a constant backoff; a nominal-projections module imported the four
   `Keiki.ProjectionDomain` text combinators used only by the unenforced-ID
