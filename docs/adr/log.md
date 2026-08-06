@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-06
+* **Update**: Amend ADR 0007: only a fresh journal append is a successful sleep fire, so a stale re-fire never clears a live wake_after hint (plan 200).
 * **Update**: Amend ADR 0004: a warning policy may only name a code the selected command can emit (plan 199).
 * **Update**: Amend ADR 0013: coverage findings obey the invocation's warning policy and enter the check report; severity unchanged (plan 199).
 

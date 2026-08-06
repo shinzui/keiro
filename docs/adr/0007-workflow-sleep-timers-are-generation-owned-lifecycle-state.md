@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workflow sleep timers are generation-owned lifecycle state
 description: The workflow generation that first arms a sleep owns that timer, its fire_at/wake_after hint, and its completion.
-timestamp: 2026-07-23T20:59:32Z
+timestamp: 2026-08-06T04:20:00Z
 docId: ADR-7
 status: Accepted
 date: 2026-07-23
@@ -51,6 +51,13 @@ the workflow instance's `wake_after` hint. `scheduleTimerOnceTx` reports whether
 it inserted; only that successful insert writes the hint. A successful fire
 clears `wake_after` in the same transaction as its journal append.
 
+A fire is successful only when its journal append is fresh. A re-fire whose
+append reports the step already present — the first fire committed but its
+worker crashed before marking the timer fired — clears nothing. The hint is
+single-writer state owned by a first arm, so by the time a stale timer is
+requeued the workflow may have armed a later sleep whose insert wrote the
+current hint, and no replay ever rewrites it.
+
 Workflow garbage collection removes every workflow-sleep timer owned by an
 eligible terminal instance, regardless of timer status. As defense in depth, a
 claimed timer whose instance row still exists with `completed`, `cancelled`, or
@@ -69,6 +76,8 @@ the discoverable running instance.
 - Re-entering a due or already-fired sleep cannot extend its discovery delay.
 - A fired sleep becomes immediately discoverable because its journal append
   and wake-hint clear commit atomically.
+- A stale re-fire cannot erase a live hint, so a workflow that armed a second
+  sleep keeps skipping discovery until that sleep is actually due.
 - Collecting a terminal workflow also collects scheduled, firing, fired,
   cancelled, and dead workflow-sleep timers.
 - Terminal instance status prevents a surviving timer from recreating deleted

@@ -107,6 +107,7 @@ import Keiro.Workflow.Awakeable.Schema
     lookupAwakeableStatusTx,
     registerAwakeableTx,
   )
+import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -364,6 +365,22 @@ throwOnAppendConflict = \case
 -- when it transitioned a @pending@ row, 'False' otherwise (already completed,
 -- already cancelled, or unknown). A workflow that later re-enters the awakeable's
 -- @await@ then throws 'WorkflowAwakeableCancelled'.
+--
+-- Because there is no journal append, the same transaction flips the /owning
+-- workflow's/ @keiro_workflows@ row to @running@ — the status a wake delivery
+-- would have written. Cancellation is a wake-source lifecycle transition like
+-- any other, and the instance row is what the resume worker discovers: without
+-- the flip, a workflow parked on a cancelled promise would be invisible to
+-- discovery and could never reach its @await@ arm to throw
+-- 'WorkflowAwakeableCancelled'. @running@ here means "this workflow has progress
+-- to make" — here, observing the cancellation. The upsert takes @GREATEST@ of the
+-- stored and supplied generation, so passing 0 preserves whatever generation the
+-- instance is on, and it never revives a terminal instance.
 cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool
 cancelAwakeable aid =
-  runTransaction $ cancelAwakeableTx (awakeableIdToUuid aid)
+  runTransaction $
+    cancelAwakeableTx (awakeableIdToUuid aid) >>= \case
+      Nothing -> pure False
+      Just (ownerName, ownerId) -> do
+        upsertInstanceTx ownerId ownerName 0 WfRunning Nothing
+        pure True

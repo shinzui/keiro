@@ -340,7 +340,22 @@ workflowSleepFireAction row =
               wid
               targetGen
               (StepRecorded {stepName = full, result = Null, recordedAt = now})
-          runTransaction (appendTx <* clearWorkflowWakeAfterTx name wid) >>= \case
+          -- Only a *fresh* append is a successful fire, and only a successful
+          -- fire clears the wake hint. A re-fire (the first fire committed its
+          -- append but the worker crashed before marking the timer fired) sees
+          -- JournalAlreadyPresent; by then the workflow may have armed a
+          -- \*different* sleep whose insert wrote the current hint, and only a
+          -- first arm ever writes it, so clearing here would erase a live hint
+          -- that nothing rewrites — hot-polling the workflow until the newer
+          -- timer fires.
+          outcome <-
+            runTransaction $ do
+              outcome <- appendTx
+              case outcome of
+                JournalAppended {} -> clearWorkflowWakeAfterTx name wid
+                _ -> pure ()
+              pure outcome
+          case outcome of
             JournalAppended {} ->
               pure (Just (deterministicJournalId name wid targetGen full))
             JournalAlreadyPresent {} ->

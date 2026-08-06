@@ -94,9 +94,18 @@ completeAwakeableTx aid result now =
   Tx.statement (aid, result, now) completeAwakeableStmt
 
 -- | Transition a @pending@ awakeable to @cancelled@ inside the caller's
--- transaction. Only @pending@ rows match, so an already-completed (or
--- already-cancelled) awakeable is left untouched and the call returns 'False'.
-cancelAwakeableTx :: UUID -> Tx.Transaction Bool
+-- transaction, returning the owning workflow's @(name, id)@ when /this/ call
+-- performed the transition. Only @pending@ rows match, so an already-completed
+-- (or already-cancelled) awakeable is left untouched and the call returns
+-- 'Nothing'.
+--
+-- The owner coordinates are returned because cancellation writes no journal
+-- entry — there is no result value to record — so it is the only wake-source
+-- lifecycle transition that would otherwise leave the owning workflow's
+-- @keiro_workflows@ row untouched. The caller flips that row in the same
+-- transaction (see "Keiro.Workflow.Awakeable".@cancelAwakeable@) so discovery
+-- still surfaces the workflow.
+cancelAwakeableTx :: UUID -> Tx.Transaction (Maybe (Text, Text))
 cancelAwakeableTx aid =
   Tx.statement aid cancelAwakeableStmt
 
@@ -153,7 +162,7 @@ completeAwakeableStmt =
     )
     ((> 0) <$> D.rowsAffected)
 
-cancelAwakeableStmt :: Statement UUID Bool
+cancelAwakeableStmt :: Statement UUID (Maybe (Text, Text))
 cancelAwakeableStmt =
   preparable
     """
@@ -162,9 +171,15 @@ cancelAwakeableStmt =
         updated_at = now()
     WHERE awakeable_id = $1
       AND status = 'pending'
+    RETURNING owner_workflow_name, owner_workflow_id
     """
     (E.param (E.nonNullable E.uuid))
-    ((> 0) <$> D.rowsAffected)
+    ( D.rowMaybe
+        ( (,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+        )
+    )
 
 lookupAwakeableStatusStmt :: Statement UUID (Maybe AwakeableStatus)
 lookupAwakeableStatusStmt =

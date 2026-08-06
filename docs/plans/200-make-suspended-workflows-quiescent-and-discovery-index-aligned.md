@@ -44,7 +44,7 @@ discovered and driven.
 ## Progress
 
 - [x] Milestone 1 (2026-08-06): discovery predicate rewritten to `status IN ('running','suspended')`; index-usability test added (`Keiro.Workflow discovery index`, two examples); full suite green at 380 examples.
-- [ ] Milestone 2: `cancelAwakeable` flips the owner instance row to `running`; `workflowSleepFireAction` clears `wake_after` only on a fresh append.
+- [x] Milestone 2 (2026-08-06): `cancelAwakeable` flips the owner instance row to `running`; `workflowSleepFireAction` clears `wake_after` only on a fresh append. New group `Keiro.Workflow wake-lifecycle visibility` (two examples); ADR 7 amended and `just adr-validate` green; suite at 382 examples.
 - [ ] Milestone 3: suspend/wake arbitration under the per-step advisory lock; discovery narrowed to exact wakes; redundant child seed removed; migration 0021 (index + backfill); crash-window tests green.
 - [ ] ADR recorded for the exact-discovery contract; `just adr-validate` passes.
 - [ ] Full suite green: `cabal test keiro-test` and `cabal test keiro-migrations-test`.

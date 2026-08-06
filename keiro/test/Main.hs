@@ -8785,6 +8785,77 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       generationOneFireAtAfter `shouldBe` generationOneFireAt
       readIORef counter >>= (`shouldBe` 2)
 
+  describe "Keiro.Workflow wake-lifecycle visibility" $ around (withFreshStore fixture) $ do
+    -- Cancelling an awakeable writes no journal entry, so it is the one
+    -- wake-source lifecycle transition that would otherwise leave the owning
+    -- instance row untouched. It must still leave the workflow discoverable, or
+    -- the workflow can never reach its await arm to observe the cancellation.
+    it "flips the owner instance to running when its awakeable is cancelled" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "cancel-visible"
+          wid = WorkflowId "cv-1"
+          opts = defaultWorkflowResumeOptions & #logEvent .~ const (pure ())
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      Right (Just parked) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      parked ^. #status `shouldBe` Instance.WfSuspended
+      Right cancelled <- Store.runStoreIO storeHandle $ cancelAwakeable aid
+      cancelled `shouldBe` True
+      Right (Just woken) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      woken ^. #status `shouldBe` Instance.WfRunning
+      woken ^. #generation `shouldBe` 0
+      now <- getCurrentTime
+      Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+      unfinished `shouldBe` [("cv-1", "cancel-visible")]
+      -- The pass re-invokes the workflow; its await arm sees the cancelled row
+      -- and throws, which the worker records as a crash attempt.
+      Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+      (discovered summary, resumed summary, completed summary) `shouldBe` (1, 1, 0)
+      Right (Just crashed) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      crashed ^. #attempts `shouldBe` 1
+      fmap Text.unpack (crashed ^. #lastError)
+        `shouldSatisfy` maybe False (isInfixOf "WorkflowAwakeableCancelled")
+
+    -- Only the first arm writes wake_after, so a stale re-fire that clears it
+    -- erases a hint nothing will rewrite. Only a fresh append is a successful
+    -- fire in ADR 7's sense.
+    it "leaves a newer sleep's wake hint intact when a stale timer re-fires" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "sleep-refire"
+          wid = WorkflowId "sr-2"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (twoSleepWorkflow counter)
+      claimTime <- getCurrentTime
+      Right (Just claimed) <- Store.runStoreIO storeHandle $ claimDueTimer claimTime
+      claimed ^. #timerId `shouldBe` sleepTimerId name wid 0 (sleepStepName (StepName "first"))
+      -- Fire the first sleep, then "crash" before the worker marks the timer
+      -- fired: the row stays in `firing` and is requeued below.
+      Right firstFire <- Store.runStoreIO storeHandle $ workflowSleepFireAction claimed
+      firstFire `shouldSatisfy` isJust
+      Right cleared <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+      cleared `shouldBe` Nothing
+      -- The next run replays past the first sleep and arms the second one,
+      -- whose insert writes the live wake hint.
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (twoSleepWorkflow counter)
+      Right (Just liveHint) <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+      liveHint `shouldSatisfy` (> claimTime)
+      requeueTime <- getCurrentTime
+      Right requeued <-
+        Store.runStoreIO storeHandle $ requeueStuckTimers 0 (addUTCTime 1 requeueTime)
+      requeued `shouldBe` 1
+      Right (Just stale) <-
+        Store.runStoreIO storeHandle $ claimDueTimer (addUTCTime 2 requeueTime)
+      (stale ^. #timerId) `shouldBe` (claimed ^. #timerId)
+      Right staleFire <- Store.runStoreIO storeHandle $ workflowSleepFireAction stale
+      -- Still idempotent: the re-fire reports the same deterministic event id.
+      staleFire `shouldBe` firstFire
+      Right hintAfter <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+      hintAfter `shouldBe` Just liveHint
+      readIORef counter >>= (`shouldBe` 1)
+
   describe "Keiro.Workflow.Awakeable" $ do
     -- Pure (no-DB) check of the deterministic id derivation.
     it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
@@ -8823,12 +8894,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Right (Just rowA') <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable aidA
         rowA' ^. #status `shouldBe` Awk.Completed
         rowA' ^. #payload `shouldBe` Just (toJSON ("done" :: Text))
-        -- Cancel the still-pending B; both rows are now resolved.
+        -- Cancel the still-pending B; both rows are now resolved. The guarded
+        -- UPDATE returns the owner coordinates so the caller can flip the
+        -- owning instance row in the same transaction.
         Right cancelled <-
           Store.runStoreIO storeHandle $
             Store.runTransaction $
               Awk.cancelAwakeableTx aidB
-        cancelled `shouldBe` True
+        cancelled `shouldBe` Just ("sch", "1")
+        Right reCancelled <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Awk.cancelAwakeableTx aidB
+        reCancelled `shouldBe` Nothing
         Right pendingAfter <- Store.runStoreIO storeHandle Awk.countPendingAwakeables
         pendingAfter `shouldBe` 0
 
@@ -9996,6 +10074,19 @@ sleepDemoNamed counter sName delta = do
   sleepNamed sName delta
   b <- step (StepName "b") (liftIO (incrementAndRead counter))
   pure (a, b)
+
+-- | Two sleeps on one generation with a step between them: the first is due
+-- immediately, the second far in the future. Firing the first and resuming
+-- moves the live wake hint onto the second sleep, which is the state a stale
+-- re-fire of the first timer must not disturb.
+twoSleepWorkflow ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  IORef Int -> Eff es Int
+twoSleepWorkflow counter = do
+  sleepNamed (StepName "first") 0
+  n <- step (StepName "mid") (liftIO (incrementAndRead counter))
+  sleepNamed (StepName "second") 3600
+  pure n
 
 rollingSleepWorkflow ::
   (Workflow :> es, Store :> es, IOE :> es) =>
