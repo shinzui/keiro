@@ -40,13 +40,50 @@ and observing that the second step's action never commits — and that the run r
 ## Progress
 
 - [x] Milestone 1 (2026-08-06): entry probe collapsed to one `terminalMarkers` query; `claimInstance` no longer resolves `currentGeneration`. Suite green at 388 examples, behaviour unchanged.
-- [ ] Milestone 2: cancelled and failed markers checked inside `prepareJournalAppend`'s transaction; post-action standalone check removed; pre-action check covers both markers in one query.
-- [ ] Milestone 3: boundary-asymmetry and refusal tests green; full suite green.
+- [x] Milestone 2 (2026-08-06): cancelled and failed markers checked inside `prepareJournalAppend`'s transaction via the new `JournalRefusedTerminal` outcome; post-action standalone check removed; pre-action `checkTerminalPending` covers both markers in one query; every call site mapped deliberately; CHANGELOG entries added for `keiro` and `keiro-migrations`.
+- [x] Milestone 3 (2026-08-06): new group `Keiro.Workflow terminal boundaries` (five examples) covering the boundary asymmetry, refusal into a cancelled workflow, awakeable settle-without-deliver, post-resurrection delivery, and the sleep-fire refusal; full suite green at 393 examples.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The first draft of the boundary-asymmetry test did not actually test the
+  in-transaction check. With the check stubbed out to `pure Nothing` the test
+  still passed, because the *pre-action* probe before step two catches a marker
+  that landed during step one. The two mechanisms overlap by design, so proving
+  the in-transaction one needs a marker that lands after a probe and before that
+  same step's append — which is exactly what `selfFailingWorkflow` does inside
+  step one's action. Asserting that step *one* is not journaled isolates it:
+
+  ```text
+  stops at the next step boundary when a workflow is failed mid-run [✘]
+         expected: False
+          but got: True
+  ```
+
+  (that failure is with the check disabled; with it enabled the example passes).
+  The lesson generalises — when a change adds a second line of defence for an
+  existing behaviour, a test written against the *behaviour* can be satisfied by
+  the old line of defence alone.
+  Date: 2026-08-06
+
+- Adding the constructor to an exported sum type turned the compiler into the
+  call-site checklist the plan predicted: `-Wincomplete-patterns` named all nine
+  sites across `Keiro.Workflow`, `Keiro.Workflow.Sleep`, and the rotation
+  helpers. The three wake-source modules' `condemnOnAppendConflict` /
+  `throwOnAppendConflict` helpers have catch-all arms, so they were already
+  *behaviourally* correct (a refusal neither condemns nor throws, which is what
+  "settle your own row, deliver nothing" requires) but silently so. They now
+  match `JournalRefusedTerminal` explicitly with the reason written down.
+  Date: 2026-08-06
+
+- A completed workflow does not refuse appends — only the two *stopping* markers
+  (`__workflow_cancelled__`, `__workflow_failed__`) do. That keeps the
+  pre-existing "does not let a late append resurrect a terminal instance row"
+  behaviour intact: the append lands in the journal, and the instance row stays
+  `completed` because `upsertInstanceTx`'s `WHERE` freezes it. Refusing on
+  completion would have been a larger semantic change than this plan intends,
+  and it is not needed for the boundary contract.
+  Date: 2026-08-06
 
 
 ## Decision Log
@@ -70,7 +107,39 @@ and observing that the second step's action never commits — and that the run r
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones landed on 2026-08-06 across three commits, each leaving the
+tree green.
+
+What exists now that did not before: a workflow that has been terminally failed
+stops at the next step boundary from any runner, leased or not, exactly as a
+cancelled one already did — the asymmetry the plan set out to close. The
+enforcement lives inside the journal-append transaction, under the advisory lock
+and alongside the step-index re-check that transaction already performed, so it
+costs no round-trip; combined with the removal of the post-action probe, a fresh
+step now issues one fewer query than before while checking strictly more. Run
+entry probes both markers in one query instead of two, and `claimInstance` no
+longer resolves `MAX(generation)` on every claim.
+
+Refusal is modelled as data rather than an exception: `JournalAppendOutcome`
+gains `JournalRefusedTerminal`, carrying which marker refused. Every wake source
+maps it to "settle my own durable row, deliver nothing" — a signalled awakeable
+still completes, a fired timer is still marked fired, a finished child still
+records its result — so no wake source is left retrying against a workflow that
+will never accept it. Because the check reads the *derived* failure-marker index
+row, `resurrectFailedWorkflow` restores acceptance by construction, which is
+asserted directly rather than assumed.
+
+Verification: `cabal test keiro-test` 393 examples / 0 failures (388 before this
+plan; +5 new examples in `Keiro.Workflow terminal boundaries`), library builds
+with no warnings.
+
+Lessons worth carrying forward. First, overlapping defences make behavioural
+tests weak evidence — see Surprises & Discoveries; the fix was to assert the
+artefact only the new mechanism can prevent. Second, extending an exported sum
+type is a cheap way to get an exhaustive call-site audit, but only for sites that
+pattern-match exhaustively; the three helper functions with catch-all arms were
+correct by luck of their default and had to be found by reading, not by the
+compiler.
 
 
 ## Context and Orientation

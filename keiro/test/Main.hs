@@ -9033,6 +9033,122 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right second <- pass
       (discovered second, leaseSkipped second) `shouldBe` (1, 1)
 
+  describe "Keiro.Workflow terminal boundaries" $ around (withFreshStore fixture) $ do
+    -- The asymmetry this closes: cancellation stopped a run at the next step
+    -- boundary, terminal failure did not. Before the append transaction checked
+    -- both markers, this workflow ran step "two" and reported Completed.
+    it "stops at the next step boundary when a workflow is failed mid-run" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "self-fail"
+          wid = WorkflowId "sf-1"
+      outcome <-
+        Store.runStoreIO storeHandle $
+          runWorkflow name wid (selfFailingWorkflow name wid counter)
+      outcome `shouldBe` Right Keiro.Workflow.Failed
+      -- Step one's action ran (its side effect is at-least-once at boundaries);
+      -- step two's never did.
+      readIORef counter `shouldReturn` 1
+      -- Step one's own append is the one the in-transaction check has to refuse:
+      -- the marker landed *inside* that action, after the pre-action probe had
+      -- already passed. Nothing more is journaled into a terminal workflow.
+      Right recordedOne <- Store.runStoreIO storeHandle $ stepExists name wid 0 "one"
+      recordedOne `shouldBe` False
+      Right recordedTwo <- Store.runStoreIO storeHandle $ stepExists name wid 0 "two"
+      recordedTwo `shouldBe` False
+      Right recorded <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:self-fail-sf-1") (StreamVersion 0) 10
+      Right decoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded))
+      any (\case WorkflowFailed {} -> True; _ -> False) decoded `shouldBe` True
+      any (\case StepRecorded "two" _ _ -> True; _ -> False) decoded `shouldBe` False
+
+    it "declines an ordinary append into a cancelled workflow without erroring" $ \storeHandle -> do
+      let name = WorkflowName "refuse-cancelled"
+          wid = WorkflowId "rc-1"
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $ appendJournalEntry name wid (WorkflowCancelled now)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (StepRecorded "late" (toJSON True) now)
+      Right present <- Store.runStoreIO storeHandle $ stepExists name wid 0 "late"
+      present `shouldBe` False
+
+    -- A wake source settles its own durable row even when it cannot deliver:
+    -- the promise is resolved, the journal entry is not written.
+    it "completes an awakeable owned by a failed workflow but journals nothing" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "refuse-signal"
+          wid = WorkflowId "rs-1"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      failedAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (WorkflowFailed "ceiling reached" failedAt)
+      Right signalled <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+      signalled `shouldBe` True
+      Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+      row ^. #status `shouldBe` Awk.Completed
+      Right delivered <-
+        Store.runStoreIO storeHandle $
+          stepExists name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      delivered `shouldBe` False
+
+    -- The refusal reads the derived failure-marker index row, which
+    -- resurrection deletes, so a revived workflow accepts deliveries again by
+    -- construction (ADR 8: failure history is immutable, derived state is
+    -- revivable).
+    it "accepts a wake append again after the workflow is resurrected" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "revive-delivery"
+          wid = WorkflowId "rd-1"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      failedAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (WorkflowFailed "ceiling reached" failedAt)
+      Right Instance.WorkflowResurrected <-
+        Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow name wid
+      Right signalled <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+      signalled `shouldBe` True
+      Right delivered <-
+        Store.runStoreIO storeHandle $
+          stepExists name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      delivered `shouldBe` True
+      Store.runStoreIO storeHandle (runWorkflow name wid (approvalFlowWithId aidRef))
+        `shouldReturn` Right (Completed "ok!")
+
+    -- Defense in depth for the sleep fire: its instance-status guard cannot see
+    -- a cancellation whose instance row was already collected, but the append
+    -- transaction still refuses. The timer is marked fired regardless, so it is
+    -- not requeued forever against a workflow that will never accept it.
+    it "marks a sleep timer fired without delivering into a cancelled workflow" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "refuse-sleep"
+          wid = WorkflowId "rsl-1"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 0)
+      cancelledAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $ appendJournalEntry name wid (WorkflowCancelled cancelledAt)
+      -- Partial GC: the instance row is gone, so the fire action's terminal
+      -- guard finds nothing and proceeds to the append.
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement ("rsl-1", "refuse-sleep") deleteWorkflowInstanceStmt
+      claimTime <- getCurrentTime
+      Right (Just claimed) <- Store.runStoreIO storeHandle $ claimDueTimer claimTime
+      Right fired <- Store.runStoreIO storeHandle $ workflowSleepFireAction claimed
+      fired `shouldSatisfy` isJust
+      Right delivered <- Store.runStoreIO storeHandle $ stepExists name wid 0 "sleep:wait"
+      delivered `shouldBe` False
+
   describe "Keiro.Workflow.Awakeable" $ do
     -- Pure (no-DB) check of the deterministic id derivation.
     it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
@@ -10367,6 +10483,18 @@ jsonObjectParentWorkflow childWid = do
   result <- awaitChild h
   _ <- step (StepName "json-notify") (pure ())
   pure result
+
+-- | The failure counterpart of 'selfCancellingWorkflow': step one's action
+-- writes this workflow's own terminal failure marker, standing in for the
+-- resume worker marking it failed while another runner is mid-run.
+selfFailingWorkflow :: (Workflow :> es, Store :> es, IOE :> es) => WorkflowName -> WorkflowId -> IORef Int -> Eff es Int
+selfFailingWorkflow name wid counter = do
+  _ <-
+    step (StepName "one") $ do
+      now <- liftIO getCurrentTime
+      appendJournalEntry name wid (WorkflowFailed "ceiling reached" now)
+      liftIO (incrementAndRead counter)
+  step (StepName "two") (liftIO (incrementAndRead counter))
 
 selfCancellingWorkflow :: (Workflow :> es, Store :> es, IOE :> es) => WorkflowName -> WorkflowId -> IORef Int -> Eff es Int
 selfCancellingWorkflow name wid counter = do
