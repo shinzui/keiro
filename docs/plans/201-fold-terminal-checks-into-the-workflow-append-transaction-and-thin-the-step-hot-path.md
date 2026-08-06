@@ -105,6 +105,26 @@ and observing that the second step's action never commits — and that the run r
   Date: 2026-08-06
 
 
+- Decision: Record the refusal contract by amending ADR 6 rather than leaving it
+  in this plan or writing a new ADR.
+  Rationale: The plan expected no ADR change, but "an append into a terminal
+  workflow is declined, and a refused wake source still settles its own durable
+  row" is exactly the topic ADR 6 already owns — wake-source rows as the durable
+  authority versus journal entries as delivery. Any future wake source needs the
+  rule, and a second record would split one contract across two places.
+  Date: 2026-08-06
+
+- Decision: Record the plan's user-visible changes in `keiro/CHANGELOG.md` under
+  a new `Unreleased` heading, together with the still-unreleased changes from the
+  sibling plan `docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md`,
+  and add the migration note to `keiro-migrations/CHANGELOG.md`.
+  Rationale: The plan called for a breaking-change note here; 0.11.0.0 is already
+  released, so the note needs an `Unreleased` section that did not exist, and
+  leaving plan 200's equally user-visible discovery change out of the section it
+  creates would misrepresent the release.
+  Date: 2026-08-06
+
+
 ## Outcomes & Retrospective
 
 All three milestones landed on 2026-08-06 across three commits, each leaving the

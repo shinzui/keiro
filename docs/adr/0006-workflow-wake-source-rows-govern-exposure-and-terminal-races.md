@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workflow wake-source rows govern exposure and terminal races
 description: Wake-source rows are the durable authority for exposure and terminal lifecycle while generation-scoped journal entries deliver their results.
-timestamp: 2026-07-23T20:36:44Z
+timestamp: 2026-08-06T06:05:00Z
 docId: ADR-6
 status: Accepted
 date: 2026-07-23
@@ -56,6 +56,18 @@ transition, when it repairs an already-completed row from the stored payload,
 or when an in-transaction status read observes that another signal completed
 the row. If cancellation won, the signal appends nothing and returns `False`.
 
+The workflow's own terminal state governs delivery in the same way. The
+journal-append transaction declines an ordinary step append into a generation
+that already carries a stopping terminal marker — `__workflow_cancelled__` or
+`__workflow_failed__` — and reports the refusal as `JournalRefusedTerminal`
+rather than an error. A refused wake source still settles its own durable row:
+a signalled promise completes, a fired timer is marked fired, a finished child
+records its result. Delivery is what is withheld, never the source's own
+lifecycle transition, because the row is the durable authority and a workflow
+that is later resurrected recovers the result from it through the await arm.
+Completion and rotation markers do not refuse appends; only the two markers that
+mean "this run must stop" do.
+
 
 ## Consequences
 
@@ -74,3 +86,10 @@ the row. If cancellation won, the signal appends nothing and returns `False`.
   awakeables by owner coordinates, and the id was never exposed.
 - `signalAwakeableFrom` is public as a narrow deterministic race-test seam.
   Ordinary callers should continue to use `signalAwakeable`.
+- A wake source must not read a quiet return from `appendJournalEntry` as proof
+  the workflow received anything; the workflow may have been terminal. It must
+  settle its own row on that path regardless, or its work is retried forever
+  against a workflow that will never accept it.
+- Because the refusal reads the *derived* terminal-marker index row rather than
+  immutable journal history, `resurrectFailedWorkflow` restores acceptance by
+  construction, consistent with ADR 8.
