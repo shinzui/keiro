@@ -12,6 +12,7 @@ module Keiro.Workflow.Gc
     WorkflowGcSummary (..),
     gcWorkflowsOnce,
     runWorkflowGcWorker,
+    runWorkflowGcWorkerWith,
   )
 where
 
@@ -19,8 +20,12 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
 import Data.Int (Int32)
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error)
+import Effectful.Error.Static qualified as Error
+import Effectful.Exception (catchSync)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -28,10 +33,12 @@ import Keiro.Prelude
 import Keiro.Workflow.Schema (currentGeneration)
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), workflowGenerationStreamName)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Lifecycle (hardDeleteStream)
 import Kiroku.Store.Read (lookupStreamId)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (StreamId (..))
+import System.IO (hPutStrLn, stderr)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 data WorkflowGcPolicy = WorkflowGcPolicy
@@ -41,25 +48,94 @@ data WorkflowGcPolicy = WorkflowGcPolicy
   deriving stock (Generic, Eq, Show)
 
 data WorkflowGcSummary = WorkflowGcSummary
-  { scanned :: !Int,
+  { -- | Terminal instances eligibility returned this pass.
+    scanned :: !Int,
+    -- | Of those, how many were actually collected. A pass where
+    --     @deleted < scanned@ hit a per-workflow error; the survivors stay
+    --     eligible and are re-scanned next pass.
     deleted :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
-gcWorkflowsOnce :: (Store :> es) => UTCTime -> WorkflowGcPolicy -> Eff es WorkflowGcSummary
+-- | Run one garbage-collection pass.
+--
+-- Each eligible workflow is deleted in isolation: a store error or synchronous
+-- exception on one workflow leaves the rest of the batch untouched and is
+-- reported as the gap between 'scanned' and 'deleted'. A partially deleted
+-- workflow converges by construction — its instance row is what makes it
+-- eligible, and that row is deleted last, so anything left behind is selected
+-- again on the following pass.
+gcWorkflowsOnce ::
+  (Store :> es, Error StoreError :> es) =>
+  UTCTime ->
+  WorkflowGcPolicy ->
+  Eff es WorkflowGcSummary
 gcWorkflowsOnce now policy = do
   let cutoff = addUTCTime (negate (policy ^. #retention)) now
       limit = max 0 (policy ^. #batchSize)
   eligible <- runTransaction (Tx.statement (cutoff, fromIntegral limit :: Int32) eligibleWorkflowsStmt)
-  deletedCount <- length <$> traverse deleteWorkflow eligible
-  pure WorkflowGcSummary {scanned = length eligible, deleted = deletedCount}
+  outcomes <- traverse deleteWorkflowIsolated eligible
+  pure WorkflowGcSummary {scanned = length eligible, deleted = length (filter id outcomes)}
 
-runWorkflowGcWorker :: (IOE :> es, Store :> es) => WorkflowGcPolicy -> Int -> Eff es ()
+-- | 'runWorkflowGcWorkerWith' with a compact stderr logger.
+runWorkflowGcWorker ::
+  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  WorkflowGcPolicy ->
+  Int ->
+  Eff es ()
 runWorkflowGcWorker policy pollMicros =
-  forever $ do
-    now <- liftIO getCurrentTime
-    void (gcWorkflowsOnce now policy)
-    liftIO (threadDelay pollMicros)
+  runWorkflowGcWorkerWith policy pollMicros defaultGcLog
+
+-- | Poll-and-collect loop: run 'gcWorkflowsOnce' every @pollMicros@
+-- microseconds, forever.
+--
+-- A failed pass is logged through the supplied hook and retried on the next
+-- tick, mirroring 'Keiro.Workflow.Resume.runWorkflowResumeWorkerWith'. Before
+-- this loop had per-pass isolation it was a bare @forever@: the first transient
+-- database error ended garbage collection until the process restarted. A pass
+-- that collected fewer workflows than it scanned is logged too — the shortfall
+-- is otherwise invisible, because the loop discards the summary.
+runWorkflowGcWorkerWith ::
+  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  WorkflowGcPolicy ->
+  Int ->
+  -- | Logging hook for pass failures and partial passes.
+  (Text -> IO ()) ->
+  Eff es ()
+runWorkflowGcWorkerWith policy pollMicros logPass = forever $ do
+  now <- liftIO getCurrentTime
+  onePass now
+    `Error.catchError` (\_ (e :: StoreError) -> logFailure (Text.pack (show e)))
+    `catchSync` (logFailure . Text.pack . show)
+  liftIO (threadDelay pollMicros)
+  where
+    onePass now = do
+      summary <- gcWorkflowsOnce now policy
+      let skipped = (summary ^. #scanned) - (summary ^. #deleted)
+      when (skipped > 0) $
+        liftIO . logPass $
+          "pass collected "
+            <> Text.pack (show (summary ^. #deleted))
+            <> " of "
+            <> Text.pack (show (summary ^. #scanned))
+            <> " eligible workflows; the remaining "
+            <> Text.pack (show skipped)
+            <> " stay eligible and are retried next pass"
+    logFailure msg = liftIO (logPass ("pass failed: " <> msg))
+
+defaultGcLog :: Text -> IO ()
+defaultGcLog msg = hPutStrLn stderr ("keiro workflow gc: " <> Text.unpack msg)
+
+-- | 'deleteWorkflow' with per-workflow error isolation. 'False' means this
+-- workflow was not (fully) collected; the batch continues either way.
+deleteWorkflowIsolated ::
+  (Store :> es, Error StoreError :> es) =>
+  (Text, Text) ->
+  Eff es Bool
+deleteWorkflowIsolated pair =
+  (deleteWorkflow pair >> pure True)
+    `Error.catchError` (\_ (_ :: StoreError) -> pure False)
+    `catchSync` (\_ -> pure False)
 
 deleteWorkflow :: (Store :> es) => (Text, Text) -> Eff es ()
 deleteWorkflow (widText, nameText) = do

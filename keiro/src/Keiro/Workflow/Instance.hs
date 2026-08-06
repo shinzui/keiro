@@ -176,7 +176,14 @@ releaseInstance owner progressed (WorkflowName name) (WorkflowId wid) =
   runTransaction $
     Tx.statement (wid, name, owner, progressed) releaseInstanceStmt
 
-recordCrashTx :: Text -> Text -> Text -> Tx.Transaction Int32
+-- | Record a crashed advance against the instance row: bump @attempts@, store
+-- the rendered error, and push @next_attempt_at@ out along the backoff ladder.
+-- Returns the new attempt count, or 'Nothing' when the row matched nothing
+-- because the workflow reached a terminal status between the crash and this
+-- update (a parent's @cancelChild@, an operator cancellation, a concurrent
+-- failure marker). That race is ordinary, not exceptional: there is no live
+-- instance left to pace, so nothing is recorded and the caller skips it.
+recordCrashTx :: Text -> Text -> Text -> Tx.Transaction (Maybe Int32)
 recordCrashTx wid name err =
   Tx.statement (wid, name, err) recordCrashStmt
 
@@ -363,7 +370,7 @@ releaseInstanceStmt =
     )
     D.noResult
 
-recordCrashStmt :: Statement (Text, Text, Text) Int32
+recordCrashStmt :: Statement (Text, Text, Text) (Maybe Int32)
 recordCrashStmt =
   preparable
     """
@@ -382,7 +389,10 @@ recordCrashStmt =
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
-    (D.singleRow (D.column (D.nonNullable D.int4)))
+    -- 'rowMaybe', not 'singleRow': the WHERE clause deliberately matches
+    -- nothing once the workflow is terminal, and a workflow can go terminal
+    -- between its crash and this update.
+    (D.rowMaybe (D.column (D.nonNullable D.int4)))
 
 resetInstanceAttemptsStmt :: Statement (Text, Text) ()
 resetInstanceAttemptsStmt =

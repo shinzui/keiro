@@ -28,6 +28,19 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   Eff es ()`, which takes the run's generation and the awaited step name and
   arbitrates the suspended-status write against a concurrent wake delivery.
 
+- `Keiro.Workflow.Instance.recordCrashTx` returns `Maybe Int32` instead of
+  `Int32`. `Nothing` means the workflow reached a terminal status between
+  crashing and having that crash recorded, so no attempt was counted — an
+  ordinary race, not an error.
+
+- `Keiro.Workflow.Gc.gcWorkflowsOnce` and `runWorkflowGcWorker` gain an
+  `Error StoreError :> es` constraint, which they need to isolate a failing
+  deletion. Callers running them under `runStoreIO` are unaffected.
+
+- `Keiro.Workflow.Resume.ResumeLogEvent` gains a `ResumeCrashRecordSkipped
+  !Text !Text` constructor (workflow name, workflow id). Only code that
+  pattern-matches exhaustively on `ResumeLogEvent` needs to change.
+
 ### Changed
 
 - Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
@@ -61,6 +74,21 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- A workflow that goes terminal while the resume worker is recording its crash
+  no longer aborts the rest of the pass. The crash-recording `UPDATE` matches no
+  row once the workflow is terminal, which used to fail a single-row decoder;
+  because the crash record sits outside the per-advance error handling, that
+  store error escaped the whole pass and every remaining candidate was skipped
+  until the next tick. The race is now logged as `ResumeCrashRecordSkipped`,
+  counted under `transientErrors`, and the pass continues.
+
+- Workflow garbage collection survives errors. A failing deletion is isolated to
+  its own workflow instead of aborting the batch, and `WorkflowGcSummary`'s
+  `deleted` now counts workflows actually collected rather than restating
+  `scanned`. `runWorkflowGcWorker`'s loop catches store errors and synchronous
+  exceptions per pass and continues on the next tick — previously a bare
+  `forever` loop that the first transient error ended until process restart.
+
 - Deterministic ids are derived from the UTF-8 bytes of their seed text rather
   than each character's codepoint truncated to eight bits. The old encoding gave
   two different seeds the same id whenever their characters agreed modulo 256
@@ -89,6 +117,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 - `Keiro.Workflow.Schema.workflowStepLockKey` exposes the per-step advisory-lock
   key derivation shared by the append path and the suspend write.
+
+- `Keiro.Workflow.Gc.runWorkflowGcWorkerWith` takes a `Text -> IO ()` logging
+  hook, mirroring the resume worker's `logEvent`. It reports both a failed pass
+  and a partial one (fewer workflows collected than scanned).
 
 ## [0.11.0.0] - 2026-08-05
 

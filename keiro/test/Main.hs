@@ -7111,6 +7111,87 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right (Just poisonRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance poisonName poisonId
       poisonRow ^. #status `shouldBe` Instance.WfFailed
 
+    it "records no crash attempt against a workflow that already went terminal" $ \storeHandle -> do
+      let name = WorkflowName "crash-race"
+          wid = WorkflowId "cr-1"
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (StepRecorded "seed" (toJSON True) now)
+      -- A live instance paces normally.
+      Right live <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Instance.recordCrashTx "cr-1" "crash-race" "boom"
+      live `shouldBe` Just 1
+      -- Once terminal, the UPDATE's status guard matches no row. That is the
+      -- answer, not an error: there is no live instance left to pace.
+      cancelledAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (WorkflowCancelled cancelledAt)
+      Right afterTerminal <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Instance.recordCrashTx "cr-1" "crash-race" "boom"
+      afterTerminal `shouldBe` Nothing
+
+    -- The race the arm above exists for. Workflow A goes terminal inside its own
+    -- run and then crashes, so the pass records its crash against a cancelled
+    -- instance. The zero-row result used to fail a single-row decoder, and
+    -- because the crash record sits outside the per-advance catches, the store
+    -- error escaped the whole pass: `resumeWorkflowsOnce` returned Left and
+    -- every remaining candidate was skipped until the next tick.
+    it "survives a crash recorded against a just-cancelled workflow" $ \storeHandle -> do
+      healthyCounter <- newIORef (0 :: Int)
+      events <- newIORef ([] :: [ResumeLogEvent])
+      let raceName = WorkflowName "crash-race-pass"
+          raceId = WorkflowId "crp-1"
+          healthyName = WorkflowName "crash-race-healthy"
+          healthyId = WorkflowId "crh-1"
+          opts =
+            defaultWorkflowResumeOptions
+              & #maxAttempts
+              .~ 1
+              & #logEvent
+              .~ (\event -> modifyIORef' events (event :))
+          registry =
+            Map.fromList
+              [ ( raceName,
+                  WorkflowDef
+                    ( \_ -> do
+                        cancelledAt <- liftIO getCurrentTime
+                        appendJournalEntry raceName raceId (WorkflowCancelled cancelledAt)
+                        liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)
+                    )
+                ),
+                (healthyName, WorkflowDef (\_ -> threeStep healthyCounter))
+              ]
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry raceName raceId (StepRecorded "seed" (toJSON True) now)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry healthyName healthyId (StepRecorded "seed" (toJSON True) now)
+      Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+      summary
+        `shouldBe` emptyResumeSummary
+          { discovered = 2,
+            resumed = 2,
+            completed = 1,
+            transientErrors = 1
+          }
+      -- The healthy workflow ran to completion regardless of which candidate
+      -- discovery returned first, and nothing was marked failed: a workflow that
+      -- is already cancelled must not also be condemned.
+      readIORef healthyCounter `shouldReturn` 3
+      logged <- readIORef events
+      logged `shouldContain` [ResumeCrashRecordSkipped "crash-race-pass" "crp-1"]
+      Right (Just raceRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance raceName raceId
+      raceRow ^. #status `shouldBe` Instance.WfCancelled
+      raceRow ^. #attempts `shouldBe` 0
+
     it "marks a crashing workflow failed and short-circuits later direct runs" $ \storeHandle -> do
       let name = WorkflowName "terminal-poison"
           wid = WorkflowId "tp-1"
@@ -7360,7 +7441,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           Store.runTransaction $
             Instance.recordCrashTx "le-1" "lease-expire" "boom"
-      attempt `shouldBe` 1
+      attempt `shouldBe` Just 1
       Right () <-
         Store.runStoreIO storeHandle $
           Store.runTransaction $
@@ -10136,6 +10217,67 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       childGone `shouldBe` Nothing
       Right childRows <- Store.runStoreIO storeHandle $ workflowOwnedChildCount "gc-child" "gc-1"
       childRows `shouldBe` 0
+
+    -- One failing deletion used to take the whole batch with it, and the
+    -- summary claimed everything eligible had been deleted regardless. The
+    -- sabotage is a workflow id long enough that its derived journal stream
+    -- name exceeds kiroku's 512-byte limit, so `hardDeleteStream` throws
+    -- `StreamNameTooLong` every time — no timing, no concurrency.
+    it "isolates a failing deletion, reports it honestly, and re-scans it" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let healthyName = WorkflowName "gc-isolated"
+          healthyId = WorkflowId "gi-1"
+          sabotagedId = Text.replicate 600 "x"
+          policy = WorkflowGc.WorkflowGcPolicy {retention = 0, batchSize = 10}
+      Right (Completed _) <-
+        Store.runStoreIO storeHandle $
+          runWorkflow healthyName healthyId (demoWorkflow counter)
+      -- Written directly: a workflow with this id could never journal anything,
+      -- because the same limit rejects its appends. GC eligibility reads only
+      -- the instance row, which is exactly the surface under test.
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement (sabotagedId, "gc-sabotaged") insertTerminalGcInstanceStmt
+      now <- getCurrentTime
+      Right summary <-
+        Store.runStoreIO storeHandle $
+          WorkflowGc.gcWorkflowsOnce (addUTCTime 1 now) policy
+      summary `shouldBe` WorkflowGc.WorkflowGcSummary {scanned = 2, deleted = 1}
+      -- The healthy workflow was collected despite the other one failing.
+      Right healthyGone <- Store.runStoreIO storeHandle $ Instance.lookupInstance healthyName healthyId
+      healthyGone `shouldBe` Nothing
+      -- The sabotaged one kept its instance row, so it stays eligible: a
+      -- partially collected workflow converges instead of leaking.
+      Right nextSummary <-
+        Store.runStoreIO storeHandle $
+          WorkflowGc.gcWorkflowsOnce (addUTCTime 2 now) policy
+      nextSummary `shouldBe` WorkflowGc.WorkflowGcSummary {scanned = 1, deleted = 0}
+
+    it "keeps the gc loop alive across a pass it cannot finish" $ \storeHandle -> do
+      logged <- newIORef ([] :: [Text])
+      let sabotagedId = Text.replicate 600 "x"
+          policy = WorkflowGc.WorkflowGcPolicy {retention = 0, batchSize = 10}
+          -- A bare `forever` loop would report at most once and then die on the
+          -- error; per-pass isolation keeps it reporting every tick.
+          waitForTwoPasses = timeout 5_000_000 $ do
+            let go = do
+                  seen <- readIORef logged
+                  if length seen >= 2
+                    then pure ()
+                    else threadDelay 20_000 >> go
+            go
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement (sabotagedId, "gc-loop-sabotaged") insertTerminalGcInstanceStmt
+      worker <-
+        forkIO . void . Store.runStoreIO storeHandle $
+          WorkflowGc.runWorkflowGcWorkerWith policy 20_000 (\msg -> modifyIORef' logged (msg :))
+      reported <- waitForTwoPasses `finally` killThread worker
+      reported `shouldBe` Just ()
+      messages <- readIORef logged
+      messages `shouldSatisfy` all ("stay eligible" `Text.isInfixOf`)
 
 -- | Increment a shared counter and return its new value (the step's side
 -- effect, so replay can be proven by watching the counter).
@@ -13265,6 +13407,23 @@ insertGcTimerStmt =
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.timestamptz))
         (E.param (E.nonNullable E.jsonb))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+-- | Write a terminal, GC-eligible instance row directly, with no journal
+-- stream behind it. Used to plant a workflow whose deletion is guaranteed to
+-- fail without having to make a real workflow misbehave.
+insertTerminalGcInstanceStmt :: Statement (Text, Text) ()
+insertTerminalGcInstanceStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_workflows
+      (workflow_id, workflow_name, generation, status, completed_at)
+    VALUES ($1, $2, 0, 'cancelled', now())
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
     D.noResult

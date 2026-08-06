@@ -43,8 +43,11 @@ advances the other discovered workflows.
 
 ## Progress
 
-- [ ] Milestone 1: `recordCrashTx` tolerates zero rows; race no longer aborts a pass.
-- [ ] Milestone 2: GC pass error isolation (`runWorkflowGcWorkerWith`) and honest scanned/deleted summary.
+- [x] (2026-08-06) Milestone 1: `recordCrashTx` tolerates zero rows; race no
+  longer aborts a pass. Verified by temporarily restoring the single-row decoder
+  — the new example fails, then passes.
+- [x] (2026-08-06) Milestone 2: GC per-workflow isolation, per-pass isolation in
+  the new `runWorkflowGcWorkerWith`, and an honest scanned/deleted summary.
 - [ ] Milestone 3: batched timer drain (`drainDueTimers`) with tests.
 - [ ] Milestone 4: bounded concurrent advancement in `resumeWorkflowsOnce` with overlap and isolation tests.
 - [ ] Full suite green: `cabal test keiro-test`.
@@ -52,7 +55,28 @@ advances the other discovered workflows.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Milestone 1's abort blast radius is wider than "the rest of the pass": because
+  the crash record runs outside every per-advance catch, the zero-row decoder
+  failure propagates out of `resumeWorkflowsOnce` itself, so the pass returns
+  `Left` and reports *nothing* — the candidates it already advanced are not
+  summarised either. That makes the regression test order-independent (it does
+  not matter whether the racing workflow is discovered first or last), which is
+  what let the test be written as a plain summary equality.
+
+- Milestone 2 needed a deterministic way to make one deletion fail, and the
+  plan's two suggestions do not fail: deleting the instance row mid-flight just
+  makes the final `DELETE` match nothing, and `lookupStreamId` returns `Nothing`
+  for an absent stream without erroring. The lever that does work is kiroku's
+  `maxStreamNameBytes = 512` validation — `hardDeleteStream` rejects an
+  over-long stream name every time. A `keiro_workflows` row written directly
+  with a 600-character workflow id derives such a stream name, so the sabotage
+  needs no timing, no concurrency, and no fault injection hooks.
+
+- `gcWorkflowsOnce` did not need `IOE :> es` after all (`-Wredundant-constraints`
+  caught it): the isolation uses `Effectful.Error.Static.catchError` and
+  `Effectful.Exception.catchSync`, neither of which needs `IOE`. Only the loop
+  driver does, for `threadDelay`. The published constraint change is therefore
+  `Error StoreError :> es` alone.
 
 
 ## Decision Log

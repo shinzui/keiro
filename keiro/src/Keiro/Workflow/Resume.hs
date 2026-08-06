@@ -188,6 +188,9 @@ data ResumeLogEvent
   = ResumeUnknownName !Text !Text
   | ResumeTransientError !Text !Text !Text
   | ResumeWorkflowCrashed !Text !Text !Int !Int !Text
+  | -- | @name@, @id@: the workflow reached a terminal status between crashing
+    -- and having that crash recorded, so no attempt was counted against it.
+    ResumeCrashRecordSkipped !Text !Text
   | ResumeWorkflowMarkedFailed !Text !Text !Text
   | ResumePassFailed !Text
   deriving stock (Eq, Show)
@@ -230,6 +233,12 @@ defaultResumeLogEvent event =
         <> show maxAttempt
         <> ": "
         <> Text.unpack err
+    ResumeCrashRecordSkipped name wid ->
+      "keiro resume worker: workflow "
+        <> Text.unpack name
+        <> " (id "
+        <> Text.unpack wid
+        <> ") went terminal while its crash was being recorded; skipping"
     ResumeWorkflowMarkedFailed name wid err ->
       "keiro resume worker: marked workflow "
         <> Text.unpack name
@@ -373,21 +382,33 @@ resumeWorkflowsOnce opts registry = do
         pure (acc {leaseSkipped = leaseSkipped acc + 1}, False)
       AdvCrashed err -> do
         let rendered = Text.pack (show err)
-        attempt <- runTransaction (recordCrashTx widText wnameText rendered)
-        liftIO $ logEvent opts (ResumeWorkflowCrashed wnameText widText (fromIntegral attempt) (maxAttempts opts) rendered)
-        if attempt >= fromIntegral (maxAttempts opts :: Int)
-          then do
-            now <- liftIO getCurrentTime
-            mChild <- lookupChild widText wnameText
-            case mChild of
-              Nothing ->
-                appendJournalEntry name wid (WorkflowFailed rendered now)
-              Just childRow ->
-                appendFailedChildAndWakeParent name wid rendered now childRow
-            liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
-            recordWorkflowFailed mMetrics 1
-            pure (acc {resumed = resumed acc + 1, failed = failed acc + 1}, False)
-          else pure (acc {resumed = resumed acc + 1}, False)
+        mAttempt <- runTransaction (recordCrashTx widText wnameText rendered)
+        case mAttempt of
+          -- The instance went terminal between the crash and the crash record,
+          -- so the update matched no row. There is nothing left to pace and
+          -- nothing to fail: log it, count it with the other things that went
+          -- wrong while advancing this instance, and leave the rest of the pass
+          -- alone. Before this arm existed the zero-row result failed a
+          -- single-row decoder and aborted every remaining candidate.
+          Nothing -> do
+            liftIO $ logEvent opts (ResumeCrashRecordSkipped wnameText widText)
+            recordWorkflowResumeErrors mMetrics 1
+            pure (acc {resumed = resumed acc + 1, transientErrors = transientErrors acc + 1}, False)
+          Just attempt -> do
+            liftIO $ logEvent opts (ResumeWorkflowCrashed wnameText widText (fromIntegral attempt) (maxAttempts opts) rendered)
+            if attempt >= fromIntegral (maxAttempts opts :: Int)
+              then do
+                now <- liftIO getCurrentTime
+                mChild <- lookupChild widText wnameText
+                case mChild of
+                  Nothing ->
+                    appendJournalEntry name wid (WorkflowFailed rendered now)
+                  Just childRow ->
+                    appendFailedChildAndWakeParent name wid rendered now childRow
+                liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
+                recordWorkflowFailed mMetrics 1
+                pure (acc {resumed = resumed acc + 1, failed = failed acc + 1}, False)
+              else pure (acc {resumed = resumed acc + 1}, False)
 
 data AdvanceResult a
   = AdvOk !(WorkflowOutcome a)
