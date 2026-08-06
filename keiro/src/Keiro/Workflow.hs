@@ -132,6 +132,7 @@ import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, sen
 import Effectful.Error.Static (Error, tryError)
 import Effectful.Exception (bracket_, catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
 import Keiro.Prelude
 import Keiro.Snapshot (SnapshotMissReason (..))
@@ -1175,10 +1176,14 @@ journalRow name wid gen = \case
 -- event ids — they live on different physical streams, but the event id is
 -- global, so namespacing it by generation keeps rotated generations from
 -- colliding on the deterministic id.
+--
+-- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
+-- byte-identical to the original codepoint encoding for ASCII seeds and
+-- collision-free for the rest; see
+-- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
 deterministicJournalId :: WorkflowName -> WorkflowId -> Int -> Text -> EventId
 deterministicJournalId (WorkflowName name) (WorkflowId wid) gen key =
   EventId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["keiro", "workflow", name, wid, Text.pack (show gen), key]
+      identitySeedBytes $
+        Text.intercalate ":" ["keiro", "workflow", name, wid, Text.pack (show gen), key]

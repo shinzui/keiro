@@ -101,6 +101,7 @@ import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Prelude
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Timer
@@ -185,15 +186,19 @@ parseSleepPayload = \case
 -- pre-change timers remain signalable. Generations 1 and later include the
 -- generation component so a sleep after 'Keiro.Workflow.continueAsNew' never
 -- collides with a prior generation's terminal timer row.
+--
+-- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
+-- byte-identical to the original codepoint encoding for ASCII seeds and
+-- collision-free for the rest; see
+-- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
 sleepTimerId :: WorkflowName -> WorkflowId -> Int -> Text -> TimerId
 sleepTimerId name wid gen fullStep =
   TimerId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate
-            ":"
-            components
+      identitySeedBytes $
+        Text.intercalate
+          ":"
+          components
   where
     components
       | gen <= 0 =

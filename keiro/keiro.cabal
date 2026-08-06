@@ -87,7 +87,10 @@ library
     Keiro.Workflow.Snapshot
     Keiro.Workflow.Types
 
-  other-modules:      Keiro.ReplayDigest
+  other-modules:
+    Keiro.DeterministicId
+    Keiro.ReplayDigest
+
   reexported-modules:
     keiro-core:Keiro.Codec,
     keiro-core:Keiro.Codec.IdDomain,

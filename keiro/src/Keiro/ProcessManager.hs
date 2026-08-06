@@ -139,6 +139,7 @@ import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, commandErrorClass, runCommandWithSql)
 import Keiro.DeadLetter (DispatchDeadLetter (..), DispatcherKind (..), recordDispatchDeadLetter)
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
@@ -402,12 +403,20 @@ ackForCommandError delay err
 -- order for the same input. The effectful router uses
 -- 'Keiro.Router.deterministicRouterCommandId' instead, retaining this positional
 -- id only as a transition probe for pre-upgrade router dispatches.
+--
+-- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
+-- byte-identical to the original codepoint encoding for ASCII seeds and
+-- collision-free for the rest; see
+-- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
+-- Unlike 'Keiro.Router.deterministicRouterCommandId' the fields are joined with
+-- a delimiter rather than length-prefixed, so a manager name or correlation id
+-- containing @\":\"@ can still alias; new derivations should follow the router's
+-- length-prefixed encoding.
 deterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
 deterministicCommandId managerName correlationId sourceEventId emitIndex =
   EventId
     $ UUID.V5.generateNamed UUID.V5.namespaceURL
-    $ fmap (fromIntegral . fromEnum)
-    $ Text.unpack
+    $ identitySeedBytes
     $ Text.intercalate
       ":"
       [ "keiro",

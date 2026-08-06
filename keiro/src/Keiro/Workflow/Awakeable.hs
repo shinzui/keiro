@@ -78,6 +78,7 @@ import Data.UUID.V4 qualified as UUID.V4
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Prelude
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -141,13 +142,20 @@ awakeableIdText = UUID.toText . awakeableIdToUuid
 -- ids with it. It remains exported for operators and for generation-0 adoption:
 -- if a pre-change workflow already registered a row under this id, the first
 -- post-change allocation adopts that row so the in-flight promise keeps working.
+--
+-- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
+-- byte-identical to the original codepoint encoding for ASCII seeds and
+-- collision-free for the rest; see
+-- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
+-- A label with non-ASCII characters therefore derives a different legacy id
+-- than it did before that change, so a generation-0 row registered under the
+-- old id is no longer adopted.
 deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
 deterministicAwakeableId (WorkflowName name) (WorkflowId wid) label =
   AwakeableId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
+      identitySeedBytes $
+        Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
 
 -- ---------------------------------------------------------------------------
 -- Errors

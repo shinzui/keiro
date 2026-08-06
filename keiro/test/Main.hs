@@ -231,9 +231,15 @@ import Keiro.Workflow
     awaitStep,
     awakeableAllocStepPrefix,
     awakeableStepPrefix,
+    cancelledStepName,
+    completedStepName,
     continueAsNew,
+    continueSeedStepName,
+    continuedAsNewStepName,
     currentGeneration,
     defaultWorkflowRunOptions,
+    deterministicJournalId,
+    failedStepName,
     findUnfinishedWorkflowIds,
     loadStepIndex,
     mkWorkflowId,
@@ -8415,6 +8421,95 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       mkWorkflowId "customer:42" `shouldBe` Left (WorkflowIdInvalidChar ':' "customer:42")
       mkWorkflowId "customer#42" `shouldBe` Left (WorkflowIdInvalidChar '#' "customer#42")
 
+  describe "Keiro deterministic id derivation" $ do
+    -- Deterministic ids are replay identity: the same seed must yield the same
+    -- id on every deploy, forever (ADR 24). Every literal below was captured
+    -- from the *previous* derivation — which hashed each character's codepoint
+    -- modulo 256 — before it was replaced by UTF-8 seed bytes. For ASCII seeds
+    -- the two encodings agree byte for byte, so a failure here means a
+    -- deployed id moved. Regenerate a literal only alongside a versioned
+    -- derivation and a migration story, never to make the suite green.
+    let name = WorkflowName "orderFulfillment"
+        wid = WorkflowId "wf-1"
+        sourceEventId = EventId (uuidLiteral "3f2504e0-4f89-51d3-9a0c-0305e82c3301")
+
+    it "freezes the ASCII journal-event ids, reserved step names included" $ do
+      deterministicJournalId name wid 0 "charge-card"
+        `shouldBe` EventId (uuidLiteral "1618b21a-5321-536f-998b-99f88f078148")
+      deterministicJournalId name wid 1 "charge-card"
+        `shouldBe` EventId (uuidLiteral "ddbf5d19-df0d-50f7-9aa2-9c8214bfde00")
+      deterministicJournalId name wid 0 completedStepName
+        `shouldBe` EventId (uuidLiteral "5ac985e8-4168-5705-91bc-5523833d3f60")
+      deterministicJournalId name wid 0 cancelledStepName
+        `shouldBe` EventId (uuidLiteral "52493d94-d35a-5a7e-8ce9-40e1111c45f9")
+      deterministicJournalId name wid 0 failedStepName
+        `shouldBe` EventId (uuidLiteral "b7ed900d-0fac-54dd-87b1-a01f6782a298")
+      deterministicJournalId name wid 0 continuedAsNewStepName
+        `shouldBe` EventId (uuidLiteral "338f8962-ef47-5992-a4e0-c314358a2f05")
+      deterministicJournalId name wid 0 continueSeedStepName
+        `shouldBe` EventId (uuidLiteral "268c2031-b026-564a-be24-85cab59c3ce7")
+      deterministicJournalId name wid 0 patchSetStepName
+        `shouldBe` EventId (uuidLiteral "c188a7f9-617d-59e5-8e09-4498d7daf477")
+      deterministicJournalId name wid 0 (patchStepName (PatchId "new-tax"))
+        `shouldBe` EventId (uuidLiteral "64de4580-0a2d-522b-b397-e25c6ee3eacc")
+      deterministicJournalId name wid 0 (sleepStepName (StepName "cool"))
+        `shouldBe` EventId (uuidLiteral "e3a009bd-f287-5331-9f72-8e273f0040cf")
+
+    it "freezes the ASCII sleep, awakeable, and process-manager ids" $ do
+      sleepTimerId name wid 0 "sleep:cool"
+        `shouldBe` TimerId (uuidLiteral "cfebe58e-b34c-5031-af98-18e71e6f4cfa")
+      sleepTimerId name wid 1 "sleep:cool"
+        `shouldBe` TimerId (uuidLiteral "e9696450-3993-59da-902e-4e5ebcfd1ab0")
+      sleepTimerId name wid 2 "sleep:cool"
+        `shouldBe` TimerId (uuidLiteral "6affc998-5cf2-51d0-9bbb-22e792581433")
+      deterministicAwakeableId name wid "approval"
+        `shouldBe` AwakeableId (uuidLiteral "f677231c-8a27-51b6-9a5e-69015262b26f")
+      deterministicCommandId "counter-pm" "order-1" sourceEventId 0
+        `shouldBe` EventId (uuidLiteral "ff20892c-6665-5e92-8c99-d1569d2ce629")
+      deterministicCommandId "counter-pm" "order-1" sourceEventId (-1)
+        `shouldBe` EventId (uuidLiteral "4f3aa6bc-b12c-5dae-8eb5-81f6364f41ef")
+
+    -- Each pair below produced one shared id under the old derivation, because
+    -- U+0101 and U+0001 (and U+4E2D/U+2E2D, U+6587/U+2587) agree modulo 256.
+    it "separates seeds the codepoint-truncating derivation collapsed" $ do
+      deterministicJournalId name wid 0 "\x0101"
+        `shouldNotBe` deterministicJournalId name wid 0 "\SOH"
+      deterministicJournalId name wid 0 "\x4E2D\x6587"
+        `shouldNotBe` deterministicJournalId name wid 0 "\x2E2D\x2587"
+      sleepTimerId name wid 0 "\x0101"
+        `shouldNotBe` sleepTimerId name wid 0 "\SOH"
+      deterministicAwakeableId name wid "\x0101"
+        `shouldNotBe` deterministicAwakeableId name wid "\SOH"
+      deterministicCommandId "counter-pm" "\x0101" sourceEventId 0
+        `shouldNotBe` deterministicCommandId "counter-pm" "\SOH" sourceEventId 0
+
+    it "keeps the seed components positional" $ do
+      deterministicJournalId (WorkflowName "a") (WorkflowId "b") 0 "s"
+        `shouldNotBe` deterministicJournalId (WorkflowName "b") (WorkflowId "a") 0 "s"
+      deterministicCommandId "a" "b" sourceEventId 0
+        `shouldNotBe` deterministicCommandId "b" "a" sourceEventId 0
+
+    around (withFreshStore fixture) $
+      -- End to end: under the old derivation both step names hashed to one
+      -- event id, so the second append lost to the store's global event-id
+      -- uniqueness and this example returned @Left (DuplicateEvent Nothing)@ —
+      -- deterministically, on every retry, until the resume worker's
+      -- crash-backoff ladder marked the workflow failed. Now both steps
+      -- journal and the workflow completes.
+      it "runs a workflow whose step names collided under the old derivation" $ \storeHandle -> do
+        counter <- newIORef (0 :: Int)
+        let wfName = WorkflowName "unicodeSteps"
+            wfId = WorkflowId "us-1"
+        outcome <-
+          Store.runStoreIO storeHandle $
+            runWorkflow wfName wfId (collidingStepWorkflow counter)
+        outcome `shouldBe` Right (Completed (1, 2))
+        readIORef counter `shouldReturn` 2
+        Right firstRecorded <- Store.runStoreIO storeHandle $ stepExists wfName wfId 0 "\x0101"
+        firstRecorded `shouldBe` True
+        Right secondRecorded <- Store.runStoreIO storeHandle $ stepExists wfName wfId 0 "\SOH"
+        secondRecorded `shouldBe` True
+
   describe "Keiro.Workflow.Sleep" $ do
     -- Pure (no-DB) checks of the id/payload/step-name helpers.
     it "derives a deterministic, distinct timer id" $ do
@@ -10246,6 +10341,15 @@ gateThenSignal done = do
   pure "resumed"
 
 -- | A two-step workflow whose steps each bump a shared counter.
+-- | Two steps whose names collided under the codepoint-truncating id
+-- derivation: U+0101 and U+0001 both hashed as the single byte @0x01@, so the
+-- second step's journal append was rejected as a duplicate event id.
+collidingStepWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)
+collidingStepWorkflow counter = do
+  a <- step (StepName "\x0101") (liftIO (incrementAndRead counter))
+  b <- step (StepName "\SOH") (liftIO (incrementAndRead counter))
+  pure (a, b)
+
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)
 demoWorkflow counter = do
   a <- step (StepName "first") (liftIO (incrementAndRead counter))

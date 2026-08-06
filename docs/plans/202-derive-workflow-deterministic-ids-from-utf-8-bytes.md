@@ -41,15 +41,50 @@ are replay identity: they must never change for a given input across deploys.
 
 ## Progress
 
-- [ ] All four derivations hash UTF-8 bytes via a shared helper.
-- [ ] Byte-compatibility (ASCII) and collision-regression (non-ASCII) tests green.
-- [ ] ADR recorded and `just adr-validate` green; CHANGELOG note added.
-- [ ] Full suite green: `cabal test keiro-test`.
+- [x] (2026-08-06) All four derivations hash UTF-8 bytes via the shared
+  `Keiro.DeterministicId.identitySeedBytes`.
+- [x] (2026-08-06) Byte-compatibility (ASCII) and collision-regression
+  (non-ASCII) tests green, including a DB-backed end-to-end example proven to
+  fail against the old encoding.
+- [x] (2026-08-06) ADR 24 recorded, `okf log add` run, `just adr-validate`
+  green; `keiro/CHANGELOG.md` Unreleased note added.
+- [x] (2026-08-06) Full suite green: `cabal test keiro-test` — 398 examples, 0
+  failures.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The wedge does not surface as `WorkflowJournalAppendError`, as Context and
+  Orientation assumed. It surfaces as a raw store error: `runWorkflow` returns
+  `Left (DuplicateEvent Nothing)`. This was verified empirically rather than
+  reasoned about — the new end-to-end example was run once against a
+  temporarily restored truncating encoding, which failed with exactly that
+  value, and once against the fix, which completes. The test comment and ADR 24
+  record the real value.
+
+- `Keiro.Prelude` is the wrong home for the helper. It is a re-export-only
+  curated prelude, and it lives in the `keiro-core` package, not `keiro`. All
+  four call sites are in the `keiro` package, so the helper is a new internal
+  module `keiro/src/Keiro/DeterministicId.hs` listed under `other-modules`
+  (alongside the existing `Keiro.ReplayDigest`), which adds no public API
+  surface to a released package.
+
+- `Keiro.Router.deterministicRouterCommandId` (`keiro/src/Keiro/Router.hs`) is
+  not a straggler: it already encodes each seed field as length-prefixed UTF-8,
+  which avoids both truncation and delimiter ambiguity. It is the better
+  pattern, and ADR 24 names it as the model for any *new* derivation. The four
+  fixed derivations keep their `:`-joined seeds because changing the seed shape
+  would break the very byte-compatibility this plan relies on.
+
+- The same truncating encoding exists in two places outside this plan's declared
+  search scope (`keiro/src`, `keiro-pgmq/src`), and both are left alone
+  deliberately — see the Decision Log entry below:
+  - `keiro-dsl` scaffolds it into generated process managers as `namedUuid`
+    (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:3948` plus four checked-in
+    conformance trees under `keiro-dsl/test/conformance-*`, which the
+    scaffold-conformance test pins byte-for-byte).
+  - `jitsurei`, the in-repo demo service, hand-copies it twice
+    (`jitsurei/app/Main.hs:797`, `jitsurei/src/Jitsurei/EscalationProcess.hs:379`).
 
 
 ## Decision Log
@@ -68,10 +103,70 @@ are replay identity: they must never change for a given input across deploys.
   silently diverge (MasterPlan 30 Decision Log, 2026-08-06).
   Date: 2026-08-06
 
+- Decision: Do not convert the `keiro-dsl` scaffold's generated `namedUuid` or
+  `jitsurei`'s two hand-written copies in this plan; record them in ADR 24's
+  Consequences as a deliberate exclusion instead.
+  Rationale: Both are outside the search scope this plan declared, and neither
+  is a mechanical straggler. Generated code's identity is governed by ADR 18's
+  frozen-fold and generated-edition rules and by a scaffold-conformance test
+  that pins four checked-in trees byte-for-byte, so changing it needs its own
+  compatibility argument and fixture regeneration. `jitsurei` is a demo service
+  that cannot reuse the fix's helper anyway, because `Keiro.DeterministicId` is
+  internal to the `keiro` library. Silently widening the diff would have made
+  the frozen-identity change harder to review, which is exactly what
+  MasterPlan 30's decomposition set out to avoid.
+  Date: 2026-08-06
+
+- Decision: Name the shared helper's module `Keiro.DeterministicId` and keep it
+  in `other-modules` rather than exposing it.
+  Rationale: `keiro` is a released package (0.11.0.0); the four call sites are
+  all inside it, so an internal module gets one definition without adding public
+  API surface. `Keiro.Identity` was rejected as a name because it reads as
+  identity in the `Data.Functor.Identity` sense.
+  Date: 2026-08-06
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete, 2026-08-06. All four derivations —
+`Keiro.Workflow.deterministicJournalId`, `Keiro.Workflow.Sleep.sleepTimerId`,
+`Keiro.Workflow.Awakeable.deterministicAwakeableId`, and
+`Keiro.ProcessManager.deterministicCommandId` — now hash their seed's UTF-8
+bytes through the one internal helper
+`Keiro.DeterministicId.identitySeedBytes`. No signature changed, no migration
+was needed, and no public API surface was added.
+
+Both sides of the compatibility line are proven behaviorally, not argued:
+
+- Sixteen hard-coded UUID literals, captured out of `cabal repl keiro` against
+  the pre-change implementation and covering every reserved step name, both
+  sleep generation shapes, the awakeable id, and both process-manager emit
+  indices, still match exactly. The full 398-example suite — every example of
+  which uses ASCII identities — passed unchanged, which is the broader version
+  of the same evidence.
+- Five seed pairs that the truncating encoding collapsed into one id now derive
+  distinct ids, and a DB-backed workflow whose two steps are named `"\x0101"`
+  and `"\SOH"` runs to completion. That example was run against a temporarily
+  restored truncating encoding first and failed with `Left (DuplicateEvent
+  Nothing)`, so it is a real regression test rather than a test that merely
+  passes.
+
+What is worth carrying forward. Freezing an identity derivation is only as
+strong as the fixtures behind it, and fixtures are only trustworthy if they were
+captured *before* the change — a test that compares against a reimplementation
+of the old formula proves the reimplementation, not the deployed ids. The
+suite's existing golden literals for `sleepTimerId` and `deterministicAwakeableId`
+already worked this way and were a useful precedent. The other lesson is that
+this defect class propagates by copy: the same six lines exist in the `keiro-dsl`
+scaffold's generated `namedUuid` and twice in `jitsurei`, all of them predating
+the helper this plan introduced. ADR 24 names the router's length-prefixed
+encoding as the pattern for new derivations so the next copy is at least the
+right one.
+
+Not done here, deliberately (see Decision Log): the `keiro-dsl` scaffold and
+`jitsurei` copies. They need their own compatibility argument — the scaffold's
+output is pinned byte-for-byte by the scaffold-conformance test across four
+checked-in trees — and ADR 24 records the exclusion.
 
 
 ## Context and Orientation

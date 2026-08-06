@@ -162,7 +162,7 @@ none constrain this initiative. The `docs/adr` bundle is profile-governed (OKF
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make suspended workflows quiescent and discovery index-aligned | docs/plans/200-make-suspended-workflows-quiescent-and-discovery-index-aligned.md | None | None | Complete |
 | 2 | Fold terminal checks into the workflow append transaction and thin the step hot path | docs/plans/201-fold-terminal-checks-into-the-workflow-append-transaction-and-thin-the-step-hot-path.md | None | None | Complete |
-| 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Not Started |
+| 3 | Derive workflow deterministic ids from UTF-8 bytes | docs/plans/202-derive-workflow-deterministic-ids-from-utf-8-bytes.md | None | None | Complete |
 | 4 | Concurrent resume passes, batched timer drain, and worker pass robustness | docs/plans/203-concurrent-resume-passes-batched-timer-drain-and-worker-pass-robustness.md | None | EP-1 | Not Started |
 | 5 | Document the wake-source contract and the durable-execution scale posture | docs/plans/204-document-the-wake-source-contract-and-the-durable-execution-scale-posture.md | None | EP-1, EP-4 | Not Started |
 
@@ -240,9 +240,13 @@ ledger and discovery is exact" (recorded 2026-08-06 as
 `docs/adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md`,
 ADR-23, extending ADR 6/7; EP-1 also amended ADR 7 so that only a fresh append counts
 as a successful sleep fire); EP-3's "deterministic ids hash UTF-8 bytes; ASCII
-derivations are frozen byte-for-byte" (new ADR). EP-2 and EP-4 are expected to update
-ADR wording only if implementation contradicts it. EP-4 in particular must not add a
-writer of the `keiro_workflows` row that skips ADR 23's obligation.
+derivations are frozen byte-for-byte" (recorded 2026-08-06 as
+`docs/adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md`,
+ADR-24, which also names the length-prefixed router encoding as the pattern for any
+*new* derivation and records the `keiro-dsl`/`jitsurei` copies as a deliberate
+exclusion). EP-2 and EP-4 are expected to update ADR wording only if implementation
+contradicts it. EP-4 in particular must not add a writer of the `keiro_workflows` row
+that skips ADR 23's obligation.
 
 
 ## Progress
@@ -252,7 +256,7 @@ writer of the `keiro_workflows` row that skips ADR 23's obligation.
 - [x] EP-1 (2026-08-06): Discovery narrowed to exact wakes; both race orderings and the crash-retry window are covered by tests; ADR 23 recorded.
 - [x] EP-2 (2026-08-06): Terminal checks (cancelled and failed) folded into the append transaction via the new `JournalRefusedTerminal` outcome; boundary-asymmetry test passes and is pinned to the in-transaction check; ADR 6 amended with the refusal contract.
 - [x] EP-2 (2026-08-06): Single entry-status query (`terminalMarkers`) and redundant claim-time generation query removed; a fresh step now costs one fewer round-trip than before while checking strictly more.
-- [ ] EP-3: UTF-8 id derivation for all four derivations with byte-compatibility tests for ASCII inputs; ADR recorded.
+- [x] EP-3 (2026-08-06): All four derivations hash UTF-8 seed bytes through the internal `Keiro.DeterministicId.identitySeedBytes`; sixteen pre-change ASCII fixtures still match, five previously-colliding pairs now differ, and a DB-backed workflow with colliding step names completes (proven to fail against the old encoding); ADR 24 recorded.
 - [ ] EP-4: Bounded concurrent advancement in `resumeWorkflowsOnce` with lease-safety tests.
 - [ ] EP-4: Batched timer claim; `recordCrashTx` zero-row tolerance; GC per-pass isolation and honest summary.
 - [ ] EP-5: Wake-source authoring contract and rotation semantics documented; haddock drift fixed.
@@ -302,6 +306,27 @@ writer of the `keiro_workflows` row that skips ADR 23's obligation.
   initiative should extend those sections rather than starting new ones — the
   whole initiative ships as one release.
 
+- EP-3 (2026-08-06) found the truncating id derivation in two places outside
+  the workflow engine, and left both alone on purpose. `keiro-dsl` scaffolds it
+  into every generated process manager as `namedUuid`
+  (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:3948`, plus four checked-in conformance
+  trees that the scaffold-conformance test pins byte-for-byte), and `jitsurei`
+  hand-copies it twice. Neither can reuse EP-3's helper —
+  `Keiro.DeterministicId` is internal to the `keiro` library — and generated
+  identity is governed by ADR 18, so a fix there needs its own compatibility
+  argument and fixture regeneration. ADR 24 records the exclusion. This is a
+  candidate for a follow-up plan, not for EP-4 or EP-5 to absorb; EP-5's
+  author-facing documentation should point at ADR 24's "new derivations use the
+  router's length-prefixed encoding" rule so the next copy is the right one.
+
+- EP-3 (2026-08-06) corrected an assumption the re-audit and this MasterPlan
+  both carried: a deterministic-id collision does *not* surface as
+  `WorkflowJournalAppendError`. `runWorkflow` returns the store error directly —
+  `Left (DuplicateEvent Nothing)`. This was measured by running the new
+  end-to-end example against a temporarily restored truncating encoding, not
+  inferred. Any later plan describing the wedge (EP-5's documentation in
+  particular) should use the real value.
+
 - EP-1 (2026-08-06) changed one internal interface EP-4 will rebase over:
   `resumeWorkflowsOnce` no longer unions `findRunningChildIds` into discovery and
   no longer needs its `dedupeFirstSeen` helper, so the drive loop now folds
@@ -339,6 +364,18 @@ writer of the `keiro_workflows` row that skips ADR 23's obligation.
   orphan-pending-awakeable crash window as documented-not-fixed.
   Rationale: The re-audit re-confirmed the consequences are transient or GC-bounded;
   reopening them buys no behavior.
+  Date: 2026-08-06
+
+- Decision: Keep EP-3's fix inside the `keiro` library; leave the identical
+  truncating derivation in the `keiro-dsl` scaffold's generated `namedUuid` and
+  in `jitsurei` for a separate plan.
+  Rationale: EP-3's whole compatibility argument is that ASCII ids do not move,
+  which is reviewable precisely because the diff is four functions and one
+  helper. Generated identity carries a different contract (ADR 18, plus a
+  scaffold-conformance test that pins four trees byte-for-byte), so folding it
+  in would have coupled a frozen-identity change to fixture regeneration — the
+  coupling this MasterPlan's decomposition exists to avoid. Recorded as a
+  deliberate exclusion in ADR 24.
   Date: 2026-08-06
 
 - Decision: Do not add wake-time push filtering (using the NOTIFY payload to resume

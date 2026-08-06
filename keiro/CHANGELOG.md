@@ -59,6 +59,29 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   transaction instead of costing a separate query before and after each action,
   and `claimInstance` no longer resolves `MAX(generation)` on every claim.
 
+### Fixed
+
+- Deterministic ids are derived from the UTF-8 bytes of their seed text rather
+  than each character's codepoint truncated to eight bits. The old encoding gave
+  two different seeds the same id whenever their characters agreed modulo 256
+  (`"ā"` and `"\SOH"`, and many CJK pairs), which wedged the workflow journal —
+  the colliding step's append was refused as a duplicate event id on every
+  retry, until the resume worker marked the workflow failed — and silently
+  suppressed a legitimate process-manager command. Affects
+  `Keiro.Workflow.deterministicJournalId`, `Keiro.Workflow.Sleep.sleepTimerId`,
+  `Keiro.Workflow.Awakeable.deterministicAwakeableId`, and
+  `Keiro.ProcessManager.deterministicCommandId`.
+
+  **For ASCII seeds the two encodings are byte-identical, so every id in a
+  deployment that uses ASCII workflow names, ids, step names, sleep names,
+  awakeable labels, patch ids, and correlation ids is unchanged.** There is no
+  migration. Only non-ASCII seeds derive new ids; in-flight consequences are
+  bounded (a journal still replays, a sleep may arm one duplicate timer whose
+  fire collapses idempotently, a legacy generation-0 awakeable id is no longer
+  adopted, and a retried process-manager emission may emit one duplicate
+  command). The derivation is now frozen and pinned by fixtures: see
+  `docs/adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md`.
+
 ### Added
 
 - `Keiro.Workflow.Schema.terminalMarkers` / `terminalMarkersTx` report which
