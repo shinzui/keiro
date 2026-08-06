@@ -89,7 +89,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception qualified as Exception
-import Control.Monad (foldM, forever)
+import Control.Monad (forever)
 import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
@@ -98,7 +98,9 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUIDv4
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, IOE, raise, (:>))
+import Effectful.Concurrent (runConcurrent)
+import Effectful.Concurrent.Async (pooledMapConcurrentlyN)
 import Effectful.Error.Static (Error)
 import Effectful.Error.Static qualified as Error
 import Effectful.Exception (catch, catchSync, finally, throwIO)
@@ -179,7 +181,23 @@ data WorkflowResumeOptions = WorkflowResumeOptions
     --     another fresh workflow boundary. It bounds dead-worker recovery time and
     --     must exceed the longest single step action or await arm.
     leaseTtl :: !NominalDiffTime,
+    -- | How many discovered workflows one pass may advance at the same time.
+    --
+    --     The default is 1: strictly sequential, which is what every release
+    --     before this option did. Raising it is safe by construction — a pass
+    --     never advances one instance twice (discovery returns one row per
+    --     instance), each advance holds its own lease, and the per-step advisory
+    --     lock already serializes same-step writers across processes — but it
+    --     multiplies the database traffic a pass can have in flight, so it should
+    --     be set against the store's connection-pool headroom rather than the
+    --     candidate count. Values below 1 are treated as 1.
+    maxConcurrentAdvances :: !Int,
     -- | Per-worker logging hook. Defaults to a compact stderr renderer.
+    --
+    --     Called from every thread a pass advances on, so a hook must be
+    --     thread-safe when 'maxConcurrentAdvances' exceeds 1. The default
+    --     @hPutStrLn stderr@ renderer qualifies: lines may interleave with other
+    --     output but are not corrupted.
     logEvent :: !(ResumeLogEvent -> IO ())
   }
   deriving stock (Generic)
@@ -195,7 +213,8 @@ data ResumeLogEvent
   | ResumePassFailed !Text
   deriving stock (Eq, Show)
 
--- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, and a 60-second lease.
+-- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, a 60-second
+-- lease, and sequential advancement.
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 defaultWorkflowResumeOptions =
   WorkflowResumeOptions
@@ -203,6 +222,7 @@ defaultWorkflowResumeOptions =
       pollInterval = 1_000_000,
       maxAttempts = 5,
       leaseTtl = 60,
+      maxConcurrentAdvances = 1,
       logEvent = defaultResumeLogEvent
     }
 
@@ -279,6 +299,26 @@ data ResumeSummary = ResumeSummary
 emptyResumeSummary :: ResumeSummary
 emptyResumeSummary = ResumeSummary 0 0 0 0 0 0 0 0
 
+-- | Field-wise addition. A pass builds its summary by combining one
+-- single-instance delta per advanced candidate with a seed carrying
+-- 'discovered', so the result is the same whether the candidates were advanced
+-- sequentially or concurrently.
+instance Semigroup ResumeSummary where
+  a <> b =
+    ResumeSummary
+      { discovered = discovered a + discovered b,
+        resumed = resumed a + resumed b,
+        completed = completed a + completed b,
+        stillSuspended = stillSuspended a + stillSuspended b,
+        unknownName = unknownName a + unknownName b,
+        failed = failed a + failed b,
+        transientErrors = transientErrors a + transientErrors b,
+        leaseSkipped = leaseSkipped a + leaseSkipped b
+      }
+
+instance Monoid ResumeSummary where
+  mempty = emptyResumeSummary
+
 -- ---------------------------------------------------------------------------
 -- Running
 -- ---------------------------------------------------------------------------
@@ -295,6 +335,12 @@ emptyResumeSummary = ResumeSummary 0 0 0 0 0 0 0 0
 --   the outcome bumps 'completed' or 'stillSuspended'.
 -- * __absent__ — log a warning and bump 'unknownName' (a workflow whose code was
 --   removed while instances were in flight must be visible, not silently lost).
+--
+-- Candidates are advanced one at a time by default. Raising
+-- 'maxConcurrentAdvances' advances that many at once, which is what a pass
+-- wants when step bodies are slow; the reported summary is unchanged either
+-- way, because each candidate contributes its own delta and the deltas are
+-- added at the end.
 --
 -- Idempotent: a completed workflow has a @__workflow_completed__@ index row and
 -- so drops out of discovery; re-invoking an unfinished one twice converges to the
@@ -323,15 +369,32 @@ resumeWorkflowsOnce opts registry = do
   pairs <- findUnfinishedWorkflowIds now
   let seed = emptyResumeSummary {discovered = length pairs}
   owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
-  foldM (advance owner) seed pairs
+  deltas <- advanceAll owner pairs
+  pure (mconcat (seed : deltas))
   where
     mMetrics = runOptions opts ^. #metrics
-    advance :: Text -> ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
-    advance owner acc (widText, wnameText) =
+    -- Every candidate produces a summary delta for itself, and the deltas are
+    -- added at the end, so the pass's summary does not depend on the order the
+    -- candidates finish in. Concurrency is safe here for the same reason it is
+    -- safe across processes: discovery returns one row per instance, so no two
+    -- candidates address the same workflow, each advance holds its own lease,
+    -- and the append path's per-step advisory lock still serializes same-step
+    -- writers. It is opt-in because it multiplies in-flight database traffic.
+    advanceAll :: Text -> [(Text, Text)] -> Eff es [ResumeSummary]
+    advanceAll owner pairs
+      | maxConcurrentAdvances opts <= 1 = traverse (advance owner) pairs
+      | otherwise =
+          runConcurrent $
+            pooledMapConcurrentlyN
+              (maxConcurrentAdvances opts)
+              (raise . advance owner)
+              pairs
+    advance :: Text -> (Text, Text) -> Eff es ResumeSummary
+    advance owner (widText, wnameText) =
       case Map.lookup (WorkflowName wnameText) registry of
         Nothing -> do
           liftIO $ logEvent opts (ResumeUnknownName wnameText widText)
-          pure acc {unknownName = unknownName acc + 1}
+          pure emptyResumeSummary {unknownName = 1}
         Just (WorkflowDef runDef) -> do
           let wid = WorkflowId widText
               name = WorkflowName wnameText
@@ -339,7 +402,7 @@ resumeWorkflowsOnce opts registry = do
           if not claimed
             then do
               recordWorkflowLeaseSkipped mMetrics 1
-              pure acc {leaseSkipped = leaseSkipped acc + 1}
+              pure emptyResumeSummary {leaseSkipped = 1}
             else do
               progressedRef <- liftIO (newIORef False)
               ( do
@@ -351,9 +414,9 @@ resumeWorkflowsOnce opts registry = do
                       `catch` (\WorkflowLeaseLost -> pure AdvLeaseLost)
                       `catchSync` (pure . AdvCrashed)
                   recordWorkflowResumed mMetrics 1
-                  (acc', progressed) <- handleAttempt acc name wid attempt
+                  (delta, progressed) <- handleAttempt emptyResumeSummary name wid attempt
                   liftIO (writeIORef progressedRef progressed)
-                  pure acc'
+                  pure delta
                 )
                 `finally` do
                   progressed <- liftIO (readIORef progressedRef)

@@ -41,6 +41,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   !Text !Text` constructor (workflow name, workflow id). Only code that
   pattern-matches exhaustively on `ResumeLogEvent` needs to change.
 
+- `Keiro.Workflow.Resume.WorkflowResumeOptions` gains a
+  `maxConcurrentAdvances :: !Int` field. Only code that builds the record
+  without `defaultWorkflowResumeOptions` needs to change; the default is 1,
+  which is the behaviour every previous release had.
+
 ### Changed
 
 - Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
@@ -121,6 +126,21 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - `Keiro.Workflow.Gc.runWorkflowGcWorkerWith` takes a `Text -> IO ()` logging
   hook, mirroring the resume worker's `logEvent`. It reports both a failed pass
   and a partial one (fewer workflows collected than scanned).
+
+- A resume pass can advance several workflows at once. Set
+  `WorkflowResumeOptions.maxConcurrentAdvances` above 1 and `resumeWorkflowsOnce`
+  advances that many candidates concurrently, so one slow step body no longer
+  delays every other workflow in the pass. It is safe by construction —
+  discovery returns one row per instance, each advance holds its own lease, and
+  the append path's per-step advisory lock already serializes same-step writers
+  across processes — but it multiplies in-flight database traffic, so size it
+  against the store's connection-pool headroom. The default of 1 preserves the
+  previous sequential behaviour exactly. `logEvent` may now be called from
+  several threads and must be thread-safe when concurrency is enabled.
+
+- `Keiro.Workflow.Resume.ResumeSummary` has `Semigroup` and `Monoid` instances
+  that add fields, so per-candidate deltas combine into a pass summary that does
+  not depend on the order candidates finish in.
 
 - `Keiro.Timer.drainDueTimersWith` / `drainDueTimers` claim and fire up to a
   caller-supplied number of due timers in one pass, returning how many were

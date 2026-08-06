@@ -51,8 +51,12 @@ advances the other discovered workflows.
 - [x] (2026-08-06) Milestone 3: batched timer drain — `drainDueTimersWith` /
   `drainDueTimers` in `Keiro.Timer` and `drainWorkflowSleepTimers` in
   `Keiro.Workflow.Sleep`, with mixed-backlog and batch-limit tests.
-- [ ] Milestone 4: bounded concurrent advancement in `resumeWorkflowsOnce` with overlap and isolation tests.
-- [ ] Full suite green: `cabal test keiro-test`.
+- [x] (2026-08-06) Milestone 4: `maxConcurrentAdvances` (default 1) with
+  `pooledMapConcurrentlyN`-bounded advancement, a `Monoid ResumeSummary` for
+  order-independent folding, overlap/non-overlap tests, and a mixed pass that
+  reports identically at concurrency 1 and 3.
+- [x] (2026-08-06) Full suite green: `cabal test keiro-test` — 407 examples, 0
+  failures; `cabal build all` clean.
 
 
 ## Surprises & Discoveries
@@ -73,6 +77,28 @@ advances the other discovered workflows.
   over-long stream name every time. A `keiro_workflows` row written directly
   with a 600-character workflow id derives such a stream name, so the sabotage
   needs no timing, no concurrency, and no fault injection hooks.
+
+- Milestone 4 did not need the chunking the plan suggested. `effectful` re-exports
+  unliftio's `pooledMapConcurrentlyN` from `Effectful.Concurrent.Async`, which is
+  bounded concurrency directly — a worker pool of N over the whole candidate
+  list, rather than N-sized chunks with a barrier between them. Chunking would
+  have made the pass as slow as the slowest candidate in each chunk. The
+  per-candidate action is lifted into the `Concurrent`-extended row with
+  `Effectful.raise`.
+
+- Concurrency and the `Error StoreError` effect compose safely here, which was
+  worth checking rather than assuming: effectful implements `Error` by throwing
+  an exception tagged with a unique id stored in the effect environment, and
+  `pooledMapConcurrentlyN` clones that environment per thread. A `catchError`
+  inside a forked advance therefore matches its own thread's errors, and an
+  error that escapes an advance is re-thrown in the parent where the outer
+  `runError` still matches it by the same id.
+
+- The mixed-pass summary test cannot run both concurrency settings against one
+  store. An unknown-name candidate is never claimed and never advanced, so its
+  instance row stays `running` and it is discovered again by the next pass —
+  the second phase saw `discovered = 5, unknownName = 2`. Split into two
+  examples, one fresh store each.
 
 - `gcWorkflowsOnce` did not need `IOE :> es` after all (`-Wredundant-constraints`
   caught it): the isolation uses `Effectful.Error.Static.catchError` and
@@ -102,10 +128,77 @@ advances the other discovered workflows.
   pool. No new dependency, no hand-rolled unlift strategy.
   Date: 2026-08-06
 
+- Decision: Bound concurrency with `pooledMapConcurrentlyN` over the whole
+  candidate list rather than `mapConcurrently` over fixed-size chunks.
+  Rationale: chunking imposes a barrier per chunk, so each chunk costs its
+  slowest candidate; a worker pool of N keeps N advances in flight until the
+  list is exhausted. Both are one line, and effectful already re-exports the
+  pooled version.
+  Date: 2026-08-06
+
+- Decision: Give `ResumeSummary` a real `Semigroup`/`Monoid` instead of a local
+  `addSummary` helper.
+  Rationale: field-wise addition is the summary's only sensible combination, the
+  instance makes the order-independence of a concurrent pass a type-level fact
+  rather than an internal convention, and callers aggregating summaries across
+  passes get it for free.
+  Date: 2026-08-06
+
+- Decision: Do not widen milestone 1's tolerance into a general catch around
+  `handleAttempt`.
+  Rationale: a store error while appending a failure marker still aborting the
+  pass is the pre-existing, visible behaviour; converting it into a swallowed
+  per-candidate error changes which failures an operator sees, which deserves
+  its own decision rather than arriving as a side effect of a race fix.
+  Date: 2026-08-06
+
+- Decision: Record no new ADR from this plan, but flag "every keiro worker loop
+  isolates failures per pass and per item, and reports partial progress
+  honestly" as a candidate for MasterPlan 30's completion distillation.
+  Rationale: the convention existed in the resume worker and was simply missing
+  from the GC worker, which is how the bug survived; writing it down is what
+  stops the next worker from repeating it. It is cross-cutting rather than
+  specific to this plan, so it belongs to the MasterPlan's ADR pass.
+  Date: 2026-08-06
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete, 2026-08-06. Four milestones, three commits, no migration, and every
+change either opt-in or strictly more tolerant — so every pre-existing example
+passes unmodified, which is the plan's unchanged-defaults guarantee.
+
+What the engine can do now that it could not:
+
+- A resume pass advances up to `maxConcurrentAdvances` workflows at once
+  (default 1). Two workflows with ~300 ms step bodies run in overlapping
+  windows at 2 and disjoint windows at 1 — asserted on recorded timestamps, not
+  on throughput. A mixed pass covering all four outcome classes reports the
+  identical summary at concurrency 1 and 3.
+- A timer pass drains a whole backlog. Ten due timers (four workflow sleeps,
+  six process-manager rows) clear in one `drainWorkflowSleepTimers` pass with
+  one requeue-and-gauge preamble, and a batch limit of 3 leaves exactly 7
+  claimable.
+- A crash recorded against a workflow that just went terminal costs one skipped
+  candidate instead of the whole pass.
+- A failing deletion costs one uncollected workflow instead of the whole GC
+  batch, and the GC loop survives it.
+
+Two lessons worth keeping. First, the honest accounting mattered more than the
+isolation: `gcWorkflowsOnce` already returned a `deleted` count, but it was
+`length eligible` restated, so a pass that collected nothing would have reported
+full success. Isolating errors without fixing the count would have converted a
+loud failure into a silent one. Second, both robustness fixes were verified by
+briefly restoring the old behaviour and watching the new test fail — that is the
+only way to know a regression test tests the regression, and in milestone 1 it
+also corrected the blast radius the plan had assumed (the pass returns `Left`
+and reports nothing, rather than losing only the candidates behind the failure).
+
+Deliberately unchanged: a store error escaping `handleAttempt` — from a journal
+append while marking a workflow failed, say — still aborts the pass, exactly as
+before. Milestone 1 fixed the specific zero-row race the audit found; widening
+that into a general catch would change which failures are visible, which is its
+own decision rather than a side effect of this plan.
 
 
 ## Context and Orientation

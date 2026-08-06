@@ -7112,6 +7112,62 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right (Just poisonRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance poisonName poisonId
       poisonRow ^. #status `shouldBe` Instance.WfFailed
 
+    -- Concurrency is opt-in and observable. Two workflows whose step actions
+    -- take ~300 ms run in overlapping windows under `maxConcurrentAdvances = 2`
+    -- and in disjoint windows under the default, so one slow step body no
+    -- longer delays every other workflow in the pass.
+    it "advances candidates concurrently only when the option allows it" $ \storeHandle -> do
+      let slowStep windows label = do
+            start <- liftIO getCurrentTime
+            liftIO (threadDelay 300_000)
+            end <- liftIO getCurrentTime
+            liftIO (modifyMVar windows (\ws -> pure ((label, start, end) : ws, ())))
+            pure (1 :: Int)
+          runPass concurrency prefix = do
+            windows <- newMVar []
+            let nameA = WorkflowName (prefix <> "-a")
+                nameB = WorkflowName (prefix <> "-b")
+                widA = WorkflowId (prefix <> "-1")
+                widB = WorkflowId (prefix <> "-2")
+                opts =
+                  defaultWorkflowResumeOptions
+                    & #maxConcurrentAdvances
+                    .~ concurrency
+                    & #logEvent
+                    .~ const (pure ())
+                registry =
+                  Map.fromList
+                    [ (nameA, WorkflowDef (\_ -> step (StepName "slow") (slowStep windows ("a" :: Text)))),
+                      (nameB, WorkflowDef (\_ -> step (StepName "slow") (slowStep windows "b")))
+                    ]
+            now <- getCurrentTime
+            Right () <-
+              Store.runStoreIO storeHandle $
+                appendJournalEntry nameA widA (StepRecorded "seed" (toJSON True) now)
+            Right () <-
+              Store.runStoreIO storeHandle $
+                appendJournalEntry nameB widB (StepRecorded "seed" (toJSON True) now)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            completed summary `shouldBe` 2
+            readMVar windows
+      concurrentWindows <- runPass 2 "overlap"
+      windowsOverlap concurrentWindows `shouldBe` True
+      serialWindows <- runPass 1 "serial"
+      windowsOverlap serialWindows `shouldBe` False
+
+    -- Concurrency must not change what a pass reports or how it isolates a bad
+    -- candidate: the deltas are added at the end, so the summary cannot depend
+    -- on the order candidates finish in. Each phase runs against its own fresh
+    -- store, because an unknown-name candidate stays discoverable and would
+    -- otherwise carry into the next phase's counts.
+    it "reports a mixed pass the same way when advancing sequentially" $ \storeHandle -> do
+      summary <- runMixedResumePass storeHandle 1
+      summary `shouldBe` expectedMixedResumeSummary
+
+    it "reports a mixed pass the same way when advancing concurrently" $ \storeHandle -> do
+      summary <- runMixedResumePass storeHandle 3
+      summary `shouldBe` expectedMixedResumeSummary
+
     it "records no crash attempt against a workflow that already went terminal" $ \storeHandle -> do
       let name = WorkflowName "crash-race"
           wid = WorkflowId "cr-1"
@@ -10329,6 +10385,60 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       reported `shouldBe` Just ()
       messages <- readIORef logged
       messages `shouldSatisfy` all ("stay eligible" `Text.isInfixOf`)
+
+-- | One resume pass over four candidates that exercise every outcome a pass
+-- can report: one that completes, one that suspends, one whose name is absent
+-- from the registry, and one that crashes into terminal failure at a ceiling of
+-- one attempt. Parameterised by @maxConcurrentAdvances@ so the sequential and
+-- concurrent runs are literally the same scenario.
+runMixedResumePass :: Store.KirokuStore -> Int -> IO ResumeSummary
+runMixedResumePass storeHandle concurrency = do
+  healthyCounter <- newIORef (0 :: Int)
+  let healthyName = WorkflowName "mixed-healthy"
+      suspendedName = WorkflowName "mixed-suspended"
+      poisonName = WorkflowName "mixed-poison"
+      orphanName = WorkflowName "mixed-orphan"
+      opts =
+        defaultWorkflowResumeOptions
+          & #maxAttempts
+          .~ 1
+          & #maxConcurrentAdvances
+          .~ concurrency
+          & #logEvent
+          .~ const (pure ())
+      registry =
+        Map.fromList
+          [ (healthyName, WorkflowDef (\_ -> threeStep healthyCounter)),
+            (suspendedName, WorkflowDef (\_ -> neverArmingWorkflow)),
+            (poisonName, WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+          ]
+  now <- getCurrentTime
+  for_ [healthyName, suspendedName, poisonName, orphanName] $ \name ->
+    Store.runStoreIO
+      storeHandle
+      (appendJournalEntry name (WorkflowId "mixed-1") (StepRecorded "seed" (toJSON True) now))
+      `shouldReturn` Right ()
+  Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+  readIORef healthyCounter `shouldReturn` 3
+  pure summary
+
+expectedMixedResumeSummary :: ResumeSummary
+expectedMixedResumeSummary =
+  emptyResumeSummary
+    { discovered = 4,
+      resumed = 3,
+      completed = 1,
+      stillSuspended = 1,
+      unknownName = 1,
+      failed = 1
+    }
+
+-- | Do two recorded execution windows intersect? Used to tell a concurrent
+-- resume pass from a sequential one without measuring throughput.
+windowsOverlap :: [(Text, UTCTime, UTCTime)] -> Bool
+windowsOverlap = \case
+  [(_, startA, endA), (_, startB, endB)] -> startA < endB && startB < endA
+  _ -> False
 
 -- | Increment a shared counter and return its new value (the step's side
 -- effect, so replay can be proven by watching the counter).
