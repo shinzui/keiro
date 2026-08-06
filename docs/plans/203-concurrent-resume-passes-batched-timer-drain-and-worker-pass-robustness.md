@@ -48,7 +48,9 @@ advances the other discovered workflows.
   — the new example fails, then passes.
 - [x] (2026-08-06) Milestone 2: GC per-workflow isolation, per-pass isolation in
   the new `runWorkflowGcWorkerWith`, and an honest scanned/deleted summary.
-- [ ] Milestone 3: batched timer drain (`drainDueTimers`) with tests.
+- [x] (2026-08-06) Milestone 3: batched timer drain — `drainDueTimersWith` /
+  `drainDueTimers` in `Keiro.Timer` and `drainWorkflowSleepTimers` in
+  `Keiro.Workflow.Sleep`, with mixed-backlog and batch-limit tests.
 - [ ] Milestone 4: bounded concurrent advancement in `resumeWorkflowsOnce` with overlap and isolation tests.
 - [ ] Full suite green: `cabal test keiro-test`.
 

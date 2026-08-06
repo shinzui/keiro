@@ -122,6 +122,15 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   hook, mirroring the resume worker's `logEvent`. It reports both a failed pass
   and a partial one (fewer workflows collected than scanned).
 
+- `Keiro.Timer.drainDueTimersWith` / `drainDueTimers` claim and fire up to a
+  caller-supplied number of due timers in one pass, returning how many were
+  processed. Per-timer semantics are `runTimerWorkerWith`'s, unchanged; the
+  requeue-and-gauge preamble now runs once per batch instead of once per timer,
+  so a backlog of due timers no longer drains at one row per poll tick.
+  `Keiro.Workflow.Sleep.drainWorkflowSleepTimers` is the batched sibling of
+  `runWorkflowTimerWorker`, routing sleeps and process-manager timers the same
+  way. `runTimerWorker` / `runTimerWorkerWith` are unchanged.
+
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

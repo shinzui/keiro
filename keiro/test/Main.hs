@@ -294,7 +294,8 @@ import Keiro.Workflow.Resume
     runWorkflowResumeWorkerWith,
   )
 import Keiro.Workflow.Sleep
-  ( matchSleepTimerGeneration,
+  ( drainWorkflowSleepTimers,
+    matchSleepTimerGeneration,
     parseSleepPayload,
     runWorkflowTimerWorker,
     sleepNamed,
@@ -8919,6 +8920,56 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         drive (12 :: Int)
         readIORef counter >>= (`shouldBe` 3)
 
+  describe "Keiro.Timer batched drain" $ around (withFreshStore fixture) $ do
+    -- The single-claim worker drains a backlog at one timer per invocation, so
+    -- ten due sleeps take ten poll ticks and the last workflow wakes ticks late.
+    -- One drain pass wakes them all, with one requeue-and-gauge preamble instead
+    -- of ten.
+    it "drains a mixed backlog of sleeps and process-manager timers in one pass" $ \storeHandle -> do
+      firedPm <- newIORef ([] :: [Text])
+      let sleepers = [1 .. 4 :: Int]
+          sleeperName = WorkflowName "drain-sleeper"
+          sleeperId i = WorkflowId ("ds-" <> Text.pack (show i))
+      for_ sleepers $ \i -> do
+        outcome <-
+          Store.runStoreIO storeHandle $
+            runWorkflow sleeperName (sleeperId i) (sleepNamed (StepName "wait") 0)
+        outcome `shouldBe` Right Suspended
+      for_ [1 .. 6 :: Int] $ \i ->
+        Store.runStoreIO storeHandle (Store.runTransaction (scheduleTimerTx (plainTimerRequest i)))
+          `shouldReturn` Right ()
+      now <- addUTCTime 1 <$> getCurrentTime
+      Right drained <-
+        Store.runStoreIO storeHandle $
+          drainWorkflowSleepTimers Nothing now 20 $ \row -> do
+            liftIO (modifyIORef' firedPm (row ^. #correlationId :))
+            pure (Just (EventId sampleUuid2))
+      drained `shouldBe` 10
+      -- Every sleep actually woke: the completion is journaled, not merely
+      -- claimed.
+      for_ sleepers $ \i -> do
+        Right woke <- Store.runStoreIO storeHandle $ stepExists sleeperName (sleeperId i) 0 "sleep:wait"
+        woke `shouldBe` True
+      readIORef firedPm >>= \fired -> length fired `shouldBe` 6
+      -- Nothing is left claimable.
+      Right leftovers <- Store.runStoreIO storeHandle $ drainDueTimers Nothing now 20 (\_ -> pure Nothing)
+      leftovers `shouldBe` 0
+
+    it "stops at the batch limit and leaves the rest claimable" $ \storeHandle -> do
+      for_ [1 .. 10 :: Int] $ \i ->
+        Store.runStoreIO storeHandle (Store.runTransaction (scheduleTimerTx (plainTimerRequest i)))
+          `shouldReturn` Right ()
+      now <- addUTCTime 1 <$> getCurrentTime
+      let fireOne _ = pure (Just (EventId sampleUuid2))
+      Right firstBatch <- Store.runStoreIO storeHandle $ drainDueTimers Nothing now 3 fireOne
+      firstBatch `shouldBe` 3
+      Right restBatch <- Store.runStoreIO storeHandle $ drainDueTimers Nothing now 20 fireOne
+      restBatch `shouldBe` 7
+      -- A limit of zero still runs the preamble but claims nothing, and an
+      -- empty backlog costs exactly what a single-claim pass costs.
+      Right noneLeft <- Store.runStoreIO storeHandle $ drainDueTimers Nothing now 20 fireOne
+      noneLeft `shouldBe` 0
+
   describe "Keiro.Workflow sleep generation pinning" $ around (withFreshStore fixture) $ do
     it "keeps a stale re-fire on the generation that armed the sleep" $ \storeHandle -> do
       counter <- newIORef (0 :: Int)
@@ -12363,6 +12414,18 @@ counterTimerRequest =
 
 dueTimerTime :: UTCTime
 dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
+
+-- | An ordinary (non-sleep) process-manager timer, already due, distinguished
+-- only by index. Used to build a drainable backlog.
+plainTimerRequest :: Int -> TimerRequest
+plainTimerRequest i =
+  TimerRequest
+    { timerId = TimerId (fromWords64 0xd7a10 (fromIntegral i)),
+      processManagerName = "drain-pm",
+      correlationId = "drain-" <> Text.pack (show i),
+      fireAt = dueTimerTime,
+      payload = object ["kind" Aeson..= ("drain-timeout" :: Text)]
+    }
 
 timerStatusAndErrorStmt :: Statement UUID (Maybe (Text, Maybe Text))
 timerStatusAndErrorStmt =

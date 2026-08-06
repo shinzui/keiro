@@ -81,6 +81,7 @@ module Keiro.Workflow.Sleep
     -- * Firing and worker wiring
     workflowSleepFireAction,
     runWorkflowTimerWorker,
+    drainWorkflowSleepTimers,
 
     -- * Timer id, payload, and step-name helpers
     sleepTimerId,
@@ -109,6 +110,7 @@ import Keiro.Timer
     TimerRequest (..),
     TimerRow,
     cancelTimer,
+    drainDueTimers,
     runTimerWorker,
     scheduleTimerOnceTx,
   )
@@ -393,8 +395,39 @@ runWorkflowTimerWorker ::
   (TimerRow -> Eff es (Maybe EventId)) ->
   Eff es (Maybe TimerRow)
 runWorkflowTimerWorker metrics now pmFire =
-  runTimerWorker metrics now $ \row -> do
-    handled <- workflowSleepFireAction row
-    case handled of
-      Just eid -> pure (Just eid)
-      Nothing -> pmFire row
+  runTimerWorker metrics now (workflowSleepOrPmFire pmFire)
+
+-- | 'runWorkflowTimerWorker' over a whole batch: drain up to @limit@ due timers
+-- in one pass, routing each to the workflow-sleep fire action or the supplied
+-- process-manager fallback exactly as the single-claim worker does.
+--
+-- This is what a deployment wants when many sleeps come due together. The
+-- single-claim worker drains a backlog of @K@ due sleeps at one per poll tick,
+-- so the last sleeping workflow waits @K@ ticks to wake; one drain pass with a
+-- large enough limit wakes them all. Per-timer semantics are unchanged
+-- ('Keiro.Timer.drainDueTimersWith'), so a sleep still fires at-least-once and
+-- still pins to the generation that armed it.
+drainWorkflowSleepTimers ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  UTCTime ->
+  -- | Maximum timers to process in this pass.
+  Int ->
+  -- | Fallback fire action for non-sleep (process-manager) timers.
+  (TimerRow -> Eff es (Maybe EventId)) ->
+  Eff es Int
+drainWorkflowSleepTimers metrics now limit pmFire =
+  drainDueTimers metrics now limit (workflowSleepOrPmFire pmFire)
+
+-- | Route one claimed timer: a workflow sleep wakes its workflow, anything else
+-- falls through to the caller's process-manager action.
+workflowSleepOrPmFire ::
+  (IOE :> es, Store :> es) =>
+  (TimerRow -> Eff es (Maybe EventId)) ->
+  TimerRow ->
+  Eff es (Maybe EventId)
+workflowSleepOrPmFire pmFire row = do
+  handled <- workflowSleepFireAction row
+  case handled of
+    Just eid -> pure (Just eid)
+    Nothing -> pmFire row

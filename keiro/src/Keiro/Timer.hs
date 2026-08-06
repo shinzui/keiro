@@ -43,6 +43,8 @@ module Keiro.Timer
     mkTimerWorkerOptions,
     runTimerWorker,
     runTimerWorkerWith,
+    drainDueTimers,
+    drainDueTimersWith,
   )
 where
 
@@ -125,18 +127,42 @@ runTimerWorkerWith ::
   (TimerRow -> Eff es (Maybe EventId)) ->
   Eff es (Maybe TimerRow)
 runTimerWorkerWith metrics options now fire = do
+  timerPassPreamble metrics options now
+  claimAndFireOne metrics options now fire
+
+-- | The once-per-pass work: requeue stale @Firing@ rows per 'requeueStuckAfter',
+-- then record the backlog and stuck gauges. Shared by 'runTimerWorkerWith' and
+-- 'drainDueTimersWith' so a batched drain pays for it once rather than once per
+-- claimed timer. Each gauge is a no-op under a 'Nothing' handle.
+timerPassPreamble ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  TimerWorkerOptions ->
+  UTCTime ->
+  Eff es ()
+timerPassPreamble metrics options now = do
   for_ (options ^. #requeueStuckAfter) $ \ttl -> do
     requeued <- requeueStuckTimers ttl now
     recordTimerRequeued metrics (fromIntegral requeued)
-  -- Gauges recorded once per pass, before the claim, off the counts the worker
-  -- already needs its 'Store' for: the backlog as the worker sees it at the
-  -- start of the pass (including the row it is about to claim), and the number
-  -- of rows stranded in 'Firing' by earlier passes that never completed. Each
-  -- is a no-op under a 'Nothing' handle.
+  -- The backlog as the worker sees it at the start of the pass (including the
+  -- rows it is about to claim), and the number of rows stranded in 'Firing' by
+  -- earlier passes that never completed.
   backlog <- countDueTimers now
   recordTimerBacklog metrics (fromIntegral backlog)
   stuck <- countStuckTimers now anyStuckTimer
   recordTimerStuck metrics (fromIntegral stuck)
+
+-- | Claim the earliest due timer and either dead-letter or fire it. Returns the
+-- row as claimed, or 'Nothing' when nothing is due. The per-claim histograms are
+-- recorded here, so they stay one-per-claimed-timer in a batched drain.
+claimAndFireOne ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  TimerWorkerOptions ->
+  UTCTime ->
+  (TimerRow -> Eff es (Maybe EventId)) ->
+  Eff es (Maybe TimerRow)
+claimAndFireOne metrics options now fire = do
   due <- claimDueTimer now
   case due of
     Nothing -> pure Nothing
@@ -159,6 +185,55 @@ runTimerWorkerWith metrics options now fire = do
           fired <- fire timer
           for_ fired (\eventId -> void (markTimerFired (timer ^. #timerId) eventId))
           pure (Just timer)
+
+-- | Claim and fire up to @limit@ timers due at @now@ in one pass, returning how
+-- many were processed.
+--
+-- Every per-timer semantic is 'runTimerWorkerWith'’s, unchanged: earliest
+-- @fire_at@ first, @FOR UPDATE SKIP LOCKED@ so concurrent workers never claim
+-- the same row, the same attempt-ceiling dead-lettering, the same at-least-once
+-- contract. What differs is the accounting: the requeue-and-gauge preamble runs
+-- once for the whole batch instead of once per timer, so draining a backlog of
+-- @K@ due timers costs one preamble rather than @K@ of them.
+--
+-- The loop stops early when nothing is due, so an idle pass costs exactly what
+-- 'runTimerWorkerWith' costs. It also stops when a @fire@ action returns
+-- 'Nothing' for every remaining row, because such a timer stays @Firing@ and is
+-- no longer claimable — the drain cannot spin. A @limit@ of zero or less
+-- processes nothing (but still runs the preamble).
+--
+-- @now@ is read once by the caller and used for every claim in the batch, so a
+-- drain fires exactly the timers that were due at the instant the pass began.
+drainDueTimersWith ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  TimerWorkerOptions ->
+  UTCTime ->
+  -- | Maximum timers to process in this pass.
+  Int ->
+  (TimerRow -> Eff es (Maybe EventId)) ->
+  Eff es Int
+drainDueTimersWith metrics options now limit fire = do
+  timerPassPreamble metrics options now
+  go 0
+  where
+    go processed
+      | processed >= limit = pure processed
+      | otherwise =
+          claimAndFireOne metrics options now fire >>= \case
+            Nothing -> pure processed
+            Just _ -> go (processed + 1)
+
+-- | 'drainDueTimersWith' using 'defaultTimerWorkerOptions'. The batched sibling
+-- of 'runTimerWorker'.
+drainDueTimers ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  UTCTime ->
+  Int ->
+  (TimerRow -> Eff es (Maybe EventId)) ->
+  Eff es Int
+drainDueTimers metrics = drainDueTimersWith metrics defaultTimerWorkerOptions
 
 -- | Claim and fire at most one timer due at @now@ using
 -- 'defaultTimerWorkerOptions' (no attempt ceiling). Equivalent to
