@@ -100,6 +100,7 @@ import Keiro.Dsl.ScaffoldRun
     renderInertNodeSection,
     renderMappingIdentity,
     staleAgainst,
+    withSidecarMovesApplied,
   )
 import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
@@ -421,8 +422,12 @@ executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyName
           pure (Left [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)])
       | otherwise -> do
           applyPreparedSidecarMoves out preparedSidecars
+          -- Past this point the renames are on disk, so a later refusal's
+          -- "nothing was written" needs qualifying. Mirrors the single-spec path.
+          let sidecarMoves = map preparedSidecarMove preparedSidecars
+              noteApplied = withSidecarMovesApplied sidecarMoves
           previous <- readWorkspaceRecord recordPath
-          case planWorkspaceSourceMoves previous modules of
+          result <- case planWorkspaceSourceMoves previous modules of
             Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
             Right moves -> do
               preparedMoves <- preflightSourceMoves out moves
@@ -434,10 +439,11 @@ executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyName
                       executeWorkspaceScaffoldBase
                         out
                         forceGeneratedOverwrite
-                        (map preparedSidecarMove preparedSidecars)
+                        sidecarMoves
                         (map preparedSourceMove prepared)
                         prepared
                         plan
+          pure (either (Left . noteApplied) Right result)
   where
     modules = map fst (wpModules plan)
     recordPath = out </> workspaceRecordFileName (wsService (wpWorkspace plan))
@@ -679,8 +685,8 @@ renderWorkspaceScaffoldReport report =
     <> [ "firewall: OK (" <> tshow generatedCount <> " generated modules scanned, 0 forbidden operators)",
          harnessLine,
          dependencyLine,
-         "manifest: " <> T.pack (wsrBuildManifestPath report),
-         "record:   " <> T.pack (wsrRecordPath report)
+         "fragment: " <> T.pack (wsrBuildManifestPath report),
+         "ledger:   " <> T.pack (wsrRecordPath report)
        ]
     <> previousManifestNote
     <> migrationSection

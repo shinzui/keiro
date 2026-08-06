@@ -32,6 +32,11 @@ Declared version 4 is reported as `stable`. Versions 1 through 3 are reported as
 version 1. Inspection and parse/pretty preserve all of those source forms without silently
 rewriting them. An unsupported future version is rejected before its body is parsed.
 
+`check`, `scaffold`, and the working-tree side of `diff` print a one-line stderr notice
+naming the effective contract whenever a source is compatibility-only. It is a notice, not a
+diagnostic: it has no code, does not affect the exit status, and is not something to silence.
+Treat it as the prompt to declare `language keiro-dsl 4` and fix whatever that surfaces.
+
 ### 3. Check (the gate — before any Haskell)
 
 ```bash
@@ -44,13 +49,40 @@ the wrong way. Any `error[Code]` (exit non-zero) names the rule and line — fix
 the generated code. Warnings (e.g. benign-inversion notices) are informational and pass.
 For a multi-file service, pass the manifest path to the same command. `check` composes all
 members first, resolves cross-file references once, and cites each owning file and line.
+
+The canonical CI invocation is:
+
+```bash
+cabal run keiro-dsl -- check service.keiro \
+  --min-language 4 \
+  --deny-warnings \
+  --report-out build/keiro-check-report.json
+```
+
+`--min-language 4` requires the stable released contract, so a spec cannot quietly sit on
+compatibility-only semantics. `--deny-warnings` turns every warning this invocation emits
+into exit 1 without changing its severity; `--deny CODE[,CODE...]` (repeatable, comma-separated)
+does the same for named codes only. A code `check` cannot emit is rejected outright rather
+than accepted as a no-op, so a denial in CI is either effective or an immediate error: a
+cross-revision code belongs to `diff`, and a structural-coverage code needs
+`--coverage-report FILE` in the same invocation. `--report-out` writes the append-only
+`keiro-dsl/check-report/1` JSON on success or failure, creating parent directories, and
+covers coverage findings when coverage runs.
+
+Many surfaces warn on released languages 1–3 and error from language 4 on. Both severities
+print the same sentence, so an author reads one explanation either way — and a language-4
+spec cannot state something the runtime does not do. Write the spelling that describes what
+runs: `body strict`, `on-appended AckOk`, `not-mine Retry`, a `bind … from header` naming a
+canonical keiro envelope header, a timer `decode unknown-status` from
+`Scheduled`/`Firing`/`Fired`/`Cancelled`/`Dead`, and a non-blank timer `dead-letter` reason.
+
 Common diagnostics you must resolve in the spec (the warning-only codes are called out):
 
 - Syntax and generated names: positioned parse errors reject raw newlines in strings and
   duplicate `wire`, `projection`, or transition `goto` clauses. Source selection separately
   reports `InvalidLanguageVersion`, `UnsupportedLanguageVersion`,
-  `DuplicateLanguagePreamble`, or `MisplacedLanguagePreamble`. `IdentHaskellKeyword`,
-  `IdentNotConstructorSafe`, `IdentUnsafeNormalization`, `GeneratedOccurrenceReserved`,
+  `DuplicateLanguagePreamble`, or `MisplacedLanguagePreamble`. `IdentUnsafeNormalization`,
+  `GeneratedOccurrenceReserved`,
   `GeneratedOccurrenceCollision`, `VertexCtorCollision`, `DuplicateNodeName`,
   `DuplicateEnumCtor`, `DuplicateEnumWire`, `DuplicateIdPrefix`, `DuplicateCommandName`,
   and `DuplicateEventName` reject names that would collide or generate illegal Haskell.
@@ -111,18 +143,30 @@ rename hand-owned code. Only when replacing that file is deliberate, re-run with
 On success the stderr report names every module and disposition
 (`overwritten`/`created`/`skipped: already present`), the firewall verdict
 (`firewall: OK (N generated modules scanned, 0 forbidden operators)`), the harness
-component(s), and the manifest. It also rewrites
-`keiro-dsl-scaffold-record.<context>.txt`. A later run may print an exit-0 `stale:` section
+component(s), and the generated Cabal fragment
+(`keiro-dsl-cabal-fragment.context.<context>.<ext>`, the authoritative build inventory). It
+also rewrites the scaffold ledger `keiro-dsl-ledger.context.<context>.txt`.
+A later run may print an exit-0 `stale:` section
 for recorded paths it no longer emits. Nothing is deleted: a `generated` line is a
 safe-to-delete candidate after review; a `hole` line is hand-owned and must be inspected
 before any deletion. A note about a different previous spec path means two specs share the
-same context and `--out` (and therefore the same manifest/record); separate their output
+same context and `--out` (and therefore the same Cabal fragment and ledger); separate their output
 directories unless that sharing is intentional. The manual firewall `grep` is no longer
 needed.
 
-A record created by the legacy generated-Haskell naming edition may instead require exact source
+Two kinds of migration refuse before writing and are applied by the same explicit flag.
+
+An output tree still holding pre-0.11 sidecar names needs a rename. The current names are the
+scaffold ledger `keiro-dsl-ledger.context.<context>.txt` (workspace form
+`keiro-dsl-ledger.workspace.<service>.txt`), the conformance ledger
+`keiro-dsl-conformance-ledger.txt`, and the build inventory
+`keiro-dsl-cabal-fragment.context.<context>.<ext>` (workspace form
+`keiro-dsl-cabal-fragment.workspace.<service>.<ext>`). Scaffold refuses with
+`sidecar migration required` and lists every rename; nothing is written.
+
+A ledger created by the legacy generated-Haskell naming edition may instead require exact source
 moves such as `Service_oncall` → `ServiceOncall`. The first run refuses before writing and prints
-the complete move/backup plan. Review it, then opt in explicitly:
+the complete move/backup plan. Review either plan, then opt in explicitly:
 
 ```bash
 cabal run keiro-dsl -- scaffold service.keiro --out gen/ --apply-name-migrations
@@ -136,10 +180,15 @@ resume and a conflicting state refuses with recovery evidence. Backups are never
 the sole explicit exception to ordinary stale handling: unrelated module-root/layout changes and
 ordinary stale hole paths remain preserve-and-review operations.
 
+Sidecar renames are applied before the later scaffold gates run. If one of those gates then
+refuses, the refusal says so explicitly: the renames are already on disk, they are idempotent
+and carry no spec content, and re-running after fixing the refusal is correct. Nothing needs
+to be undone.
+
 To place the generated layer next to your domain code instead of a parallel `Generated.*`
 tree, pass `--module-root <Prefix>` and/or `--collocate` (or set `module <Prefix>` / `layout
 collocated` in the spec): with both, modules land at `<Prefix>.<Ctx>.<Node>.Generated.*`. The
-emitted `keiro-dsl-manifest.<context>.txt` carries paste-ready `other-modules:`/`build-depends:`
+emitted `keiro-dsl-cabal-fragment.context.<context>.txt` carries paste-ready `other-modules:`/`build-depends:`
 blocks for the consuming Cabal stanza. Re-scaffold after every spec change and resolve the
 stale report before adding the generated tree to a component.
 
@@ -203,7 +252,7 @@ edit that one hand-owned baseline; do not copy the generated actual value
 without review. Missing and unexpected keys fail too, so deleting or adding a
 node cannot silently reduce coverage.
 
-The runtime `keiro-dsl-manifest.*.txt` still needs reconciliation when generated
+The runtime `keiro-dsl-cabal-fragment.*` still needs reconciliation when generated
 modules or dependencies change. The runnable package removes the manual driver
 and test stanza, not the runtime library's ownership of generated code.
 

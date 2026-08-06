@@ -77,6 +77,16 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `renderInertNodeSection`.
 - `Keiro.Timer.Schema.TimerStatus` (in **keiro**) additionally derives `Enum` and
   `Bounded` so consumers can enumerate the lifecycle rather than restate it.
+- `Keiro.Dsl.ScaffoldRun`'s `Refusal` gains `SidecarMovesAlreadyApplied`;
+  exhaustive matches must be extended. Sidecar renames are applied before the
+  later scaffold gates run, so a refusal after that point used to claim "nothing
+  was written" while the renames were on disk. The note is appended to such a
+  refusal set and states that the renames are idempotent and need no undo.
+- A legacy `keiro-dsl-conformance-record.txt` anywhere in the output tree is now
+  migrated, not only when the run also plans a conformance package. A spec that
+  stopped generating one previously left the record orphaned and unreadable,
+  because the current reader has no legacy parser. The scan is depth-bounded and
+  skips the `.keiro-dsl-name-migrations` backup root.
 - `FieldWireKeyInvalid` additionally refuses a wire key with leading or trailing
   whitespace or a control character, naming the offending codepoint. Aliases stay
   exempt from a declared `wire … fields=camelCase` convention — preserving a
@@ -205,6 +215,22 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   representation. Released languages 1–3 keep their prior acceptance.
 
 ### Other Changes
+
+- The conformance-corpus driver cross-checks its plan against
+  `keiro-dsl.cabal`: a suite compiling generated Haskell that no plan entry
+  regenerates now fails `corpus-regen check` naming the suite, and a plan entry
+  no test-suite compiles fails too. The plan is derived from tracked ledgers
+  alone, so deleting one silently dropped a suite from regeneration *and* from
+  both existing consistency checks, which are scoped to plan entries.
+  `regenerate` also refuses a dirty corpus (with `--allow-dirty` for local
+  iteration) and prints the exact `git checkout --` recovery line.
+- The scaffold report's two sidecar lines are relabelled `fragment:` and
+  `ledger:` to match the files they name; they read `manifest:` and `record:`
+  while pointing at `keiro-dsl-cabal-fragment.*` and `keiro-dsl-ledger.*`.
+  Consumers scraping those stderr labels must be updated.
+- The `generated-output` Cabal stanza adds `-Werror`, so a warning regression in
+  generated code fails the build instead of building green. `src` keeps `-Wall`
+  non-fatal.
 
 - Generated behavior contracts and harnesses now carry complete signatures,
   annotated behavior cells, named sample constants, runtime-backed read-model

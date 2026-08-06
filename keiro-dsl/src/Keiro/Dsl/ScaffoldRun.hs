@@ -35,6 +35,7 @@ module Keiro.Dsl.ScaffoldRun
     checkServiceDiagnostics,
     inertNodesOf,
     renderInertNodeSection,
+    withSidecarMovesApplied,
     originLine,
     pureRefusals,
     auditGeneratedHaskell,
@@ -128,6 +129,12 @@ data Refusal
   | NameMigrationRefusal ![Text]
   | SidecarMigrationRequired ![SidecarMove]
   | SidecarMigrationRefusal ![Text]
+  | -- | Not a refusal on its own: an accompanying note that the run had already
+    --       applied its sidecar renames before a later gate refused. Every other
+    --       refusal says "nothing was written", which without this note is false.
+    --       The renames are idempotent and forward-consistent, so re-running after
+    --       fixing the refusal is correct and needs no undo.
+    SidecarMovesAlreadyApplied ![SidecarMove]
   deriving stock (Eq, Show)
 
 -- | What one module write did. 'Unchanged' is produced only by the workspace
@@ -705,13 +712,18 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                 pure (Left [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)])
             | otherwise -> do
                 applyPreparedSidecarMoves out preparedSidecars
-                case plannedPackage of
-                  Nothing -> executeCheckedScaffold (map preparedSidecarMove preparedSidecars) Nothing
+                let moves = map preparedSidecarMove preparedSidecars
+                    -- Past this point the renames are on disk, so a later
+                    -- refusal's "nothing was written" needs qualifying.
+                    noteApplied = withSidecarMovesApplied moves
+                result <- case plannedPackage of
+                  Nothing -> executeCheckedScaffold moves Nothing
                   Just package -> do
                     preparedPackage <- preflightConformancePackage out forceGeneratedOverwrite package
                     case preparedPackage of
                       Left failures -> pure (Left (map ConformancePackageRefusal failures))
-                      Right packageReady -> executeCheckedScaffold (map preparedSidecarMove preparedSidecars) (Just packageReady)
+                      Right packageReady -> executeCheckedScaffold moves (Just packageReady)
+                pure (either (Left . noteApplied) Right result)
   where
     spec = checkedSpec service
     modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
@@ -1084,6 +1096,16 @@ writeModule out m = do
         then pure (m, Skipped)
         else TIO.writeFile path (moduleText m) >> pure (m, Created)
 
+-- | Qualify a refusal set raised after the run's sidecar renames were applied.
+--
+-- Every refusal message says "nothing was written", which is true of the module
+-- tree but not of the renames, so the note is appended rather than the claim
+-- being weakened everywhere. A refusal set that is empty stays empty.
+withSidecarMovesApplied :: [SidecarMove] -> [Refusal] -> [Refusal]
+withSidecarMovesApplied [] refusals = refusals
+withSidecarMovesApplied _ [] = []
+withSidecarMovesApplied moves refusals = refusals <> [SidecarMovesAlreadyApplied moves]
+
 renderRefusals :: [Refusal] -> [Text]
 renderRefusals = concatMap render
   where
@@ -1132,6 +1154,15 @@ renderRefusals = concatMap render
     render (SidecarMigrationRefusal reasons) =
       ["error: sidecar migration could not be applied safely; nothing was written"]
         <> map ("  " <>) reasons
+    render (SidecarMovesAlreadyApplied moves) =
+      [ "note: this run had already applied "
+          <> tshow (length moves)
+          <> " sidecar rename(s) before the refusal above, so \"nothing was written\" excludes them:"
+      ]
+        <> map (("  " <>) . renderSidecarMove) moves
+        <> [ "The renames are idempotent and carry no spec content, so re-running scaffold",
+             "after fixing the refusal is correct; nothing needs to be undone."
+           ]
     render (FoldSurfaceRefusal surfaceError) =
       [ "error: aggregate fold identity could not be resolved -- refusing to scaffold; nothing was written",
         "  " <> renderFoldSurfaceError surfaceError
@@ -1170,8 +1201,8 @@ renderScaffoldReport report =
     <> [ "firewall: OK (" <> tshow generatedCount <> " generated modules scanned, 0 forbidden operators)",
          harnessLine,
          dependencyLine,
-         "manifest: " <> T.pack (reportManifestPath report),
-         "record:   " <> T.pack (reportRecordPath report)
+         "fragment: " <> T.pack (reportManifestPath report),
+         "ledger:   " <> T.pack (reportRecordPath report)
        ]
     <> previousSpecNote
     <> constraintSection

@@ -107,7 +107,8 @@ not emit modules for an invalid spec), then checks path collisions, faithful low
 the firewall, and existing Generated-file banners before any write. A refusal exits 1 and
 writes nothing. `--force-generated-overwrite` bypasses only the missing-banner protection;
 use it only when overwriting an adopted file is intentional. A successful run prints every
-module disposition and the manifest path and writes a per-context scaffold record. If a
+module disposition and the generated Cabal-fragment path and writes a per-context scaffold
+ledger (`keiro-dsl-ledger.context.<context>.txt`). If a
 later run no longer produces recorded paths, its exit-0 `stale:` report never deletes them:
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
 
@@ -116,5 +117,7 @@ lines. Each newly authored member declares `language keiro-dsl 4`; inspection re
 member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses
-`keiro-dsl-scaffold-record.workspace.<service>.txt`; a first run over legacy same-context
-output adopts only record- or banner-attributable files and deletes nothing.
+`keiro-dsl-ledger.workspace.<service>.txt`; a first run over legacy same-context
+output adopts only ledger- or banner-attributable files and deletes nothing. An output tree
+holding pre-0.11 sidecar names refuses with `sidecar migration required` and lists every
+rename; rerun with `--apply-name-migrations` to apply them losslessly.

@@ -75,13 +75,26 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
       `keiro-dsl-runtime-vocabulary-test` suite that depends on both packages. mori still
       checks exit-0 at its five-warning baseline; corpus regeneration produced no
       generated-output drift.
-- [ ] M4: wire/alias hardening — `contract-reserved-family.keiro` wired into a CLI test,
+- [x] M4: wire/alias hardening — `contract-reserved-family.keiro` wired into a CLI test,
       wire-key content validation, collision-planner selector normalization fixed.
-- [ ] M5: tooling hardening — corpus plan cross-checked against the cabal suite list,
+      *(2026-08-05)* All three landed with tests; ADR 0021 and the user docs gained the
+      case-convention exemption and the structural-validation rules. See the M4 note in
+      Surprises for what the collision fix does and does not change.
+- [x] M5: tooling hardening — corpus plan cross-checked against the cabal suite list,
       `regenerate` dirty-tree guard, conformance-ledger orphan migration, truthful sidecar
       refusal text, `-Werror` on corpus components, Justfile `haskell-test` actually runs
-      every suite.
-- [ ] M6: `agents/skills/keiro-dsl-authoring` refreshed to the released contract.
+      every suite. *(2026-08-05)* Root cause of the under-testing: a bare package name is a
+      single-component cabal target, so `cabal test keiro-dsl` selected only
+      `keiro-dsl-test`; `keiro-dsl:tests` expands to all 38. keiro, keiro-pgmq, and jitsurei
+      each declare exactly one suite, so only keiro-dsl was affected.
+- [x] M6: `agents/skills/keiro-dsl-authoring` refreshed to the released contract.
+      *(2026-08-05)* LOOP.md, SKILL.md, and NOTATION.md moved to ledger/Cabal-fragment
+      names, dropped the two removed diagnostic codes, and gained: the canonical
+      `--min-language 4 --deny-warnings --report-out` CI recipe with the deny-set rules, the
+      warn-at-3/error-at-4 tiering and which spelling to write, both refuse→apply migration
+      flows plus the applied-renames note, the three-namespace field aliases with the
+      brownfield-key guidance, and the compatibility-only stderr notice. Verified by running
+      the LOOP end to end against `keiro-dsl new aggregate` in a scratch tree.
 - [ ] M7: release — lockstep 0.11.0.0 bumps + bounds, corpus regeneration, changelog
       finalization, keiki 0.9.0.0 candidates published, mori simulation re-run, tag.
 
@@ -121,6 +134,43 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   be retried — `not-mine Fired` is unreachable and `not-mine Retry` is exactly true. All 13
   timer fixtures already write `Retry`, so refusing `Fired` closes the surface without
   touching a single existing spec.
+- (M6, 2026-08-05) The LOOP dry-run surfaced a defect the plan had not listed: the scaffold
+  report still labelled its two sidecar lines `manifest:` and `record:` while printing paths
+  to `keiro-dsl-cabal-fragment.*` and `keiro-dsl-ledger.*`. Relabelled to `fragment:` and
+  `ledger:` on both the single-spec and workspace renderers, and recorded as a breaking
+  stderr change. (`WorkspaceRecord.hs`'s `manifest: ` is a *persisted row key*, not a report
+  label, and was deliberately left alone.) M6's acceptance grep as written
+  (`grep -rn "scaffold-record\|manifest\|…"` returning nothing) is over-broad and cannot be
+  satisfied: "manifest" is still the correct word for a `.keiro-workspace` manifest, and the
+  legacy sidecar names must be named in the migration guidance so an author recognizes what
+  they are holding. The precise check — no stale *code* names and no legacy sidecar name used
+  as if current — does pass.
+- (M5, 2026-08-05) The new corpus suite-coverage check immediately found two directories the
+  first (over-broad) version flagged, and both were legitimate: `conformance-codec-compare`
+  is a wholly hand-written suite with fixtures and no generated output, and
+  `conformance-service-package/runtime/src` is compiled by its own
+  `keiro-dsl-conformance-service-runtime.cabal` rather than by a keiro-dsl test-suite —
+  the same exception `checkCabalInventory` already carries. The check was narrowed to flag a
+  directory only when it actually contains banner-carrying generated Haskell. Proven to work
+  by deleting `conformance-queue`'s ledger: the check fails naming
+  `test:keiro-dsl-conformance-queue`.
+- (M5, 2026-08-05) The first orphan-conformance-record scan descended into
+  `.keiro-dsl-name-migrations/`, the backup root where a *retired* legacy record lives
+  permanently by design. That made every subsequent run plan a migration of its own backup —
+  caught by the existing lossless-conversion test, which started failing with a
+  backup-of-a-backup path. The scan now skips that root.
+- (M4, 2026-08-05) **The collision-planner fix does not make any previously-refused spec
+  scaffold.** Finding 15's acceptance said "the previously-false-refusal spec now checks OK
+  and scaffolds a compiling record". It cannot: the divergence between the planner's
+  camelized rendering and generation's raw selector only arises for a name that is *not*
+  lowerCamelCase, and such a name is independently refused by the generated-name audit.
+  Verified empirically — `{foo_bar, fooBar}` before the fix reported both a
+  `GeneratedOccurrenceCollision` and `GeneratedPlanningInvariantViolation` ("generated
+  declaration 'foo_bar' is not lowerCamelCase"); after the fix only the second remains. So
+  the fix's real value is that the author now gets the accurate diagnostic instead of a
+  false claim about an unrelated sibling, and the collision registry now mirrors generation
+  exactly so it stays correct if the naming rules change. Genuine collisions (two
+  declarations that really do emit one selector) are still caught — asserted in the test.
 - (M2, 2026-08-05) The `--deny` emittable-set registry could not be derived from severity, so
   it was derived mechanically from the sources: for each of the 301 `DiagnosticCode`
   constructors, count its mentions in `Validate.hs` (exactly one = the enum declaration, so

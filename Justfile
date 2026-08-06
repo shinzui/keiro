@@ -54,10 +54,13 @@ haskell-build:
 haskell-test:
     cabal test keiro-test
     cabal test keiro-pgmq-test
-    # The whole keiro-dsl package: keiro-dsl-test plus every
-    # keiro-dsl-conformance-* suite. `cabal build all` only compiles these, so
-    # naming the package target is what actually runs their assertions.
-    cabal test keiro-dsl
+    # `<package>:tests`, not `<package>`. A bare package name resolves to a
+    # single component, so `cabal test keiro-dsl` ran only keiro-dsl-test and
+    # silently skipped the other 37 suites — the conformance corpus compiled
+    # under `cabal build all` but never had its assertions run. The `:tests`
+    # target expands to every declared test-suite, so adding one is enough to
+    # get it run. keiro, keiro-pgmq, and jitsurei each declare exactly one.
+    cabal test keiro-dsl:tests
     cabal test jitsurei-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 

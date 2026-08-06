@@ -29,9 +29,15 @@ common shared
     OverloadedLabels
     OverloadedStrings
 
+-- Every component importing this stanza compiles only `keiro-dsl scaffold`
+-- output plus hand-filled holes. Generated code is regenerated wholesale, so a
+-- warning in it is a generator defect with nothing for a human to fix in place:
+-- -Werror keeps such a regression from building green. This is deliberately not
+-- added to `warnings`, where src/ keeps -Wall non-fatal.
 common generated-output
   default-language:   GHC2024
   default-extensions: OverloadedStrings
+  ghc-options:        -Werror
 
 library
   import:          warnings, shared

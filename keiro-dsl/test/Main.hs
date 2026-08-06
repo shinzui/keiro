@@ -6320,6 +6320,86 @@ main = hspec $ do
             conformanceFileKind file == HoleStub
           ]
           `shouldBe` [ConformanceSkipped]
+    -- Migration used to be planned only when the run also planned a conformance
+    -- package, so a spec that stopped generating one left its legacy record
+    -- behind — and unreadable, since the current reader has no legacy parser.
+    -- See ExecPlan 199.
+    it "migrates an orphaned legacy conformance record even with no package planned" $
+      withTempDirectory "keiro-dsl-orphan-conformance-ledger" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            orphanDirectory = out </> "keiro-dsl-conformance.standalone.retired-service"
+            orphanPath = orphanDirectory </> legacyConformanceRecordFileName
+            -- No --runtime-package, so this run plans no conformance package at
+            -- all: the record below belongs to a package that no longer exists.
+            run apply = do
+              modules <-
+                either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure $
+                  planServiceScaffoldWithRuntimePackage Nothing ctx service
+              executeServiceScaffoldWithRuntimePackageAndNameMigrations
+                Nothing
+                apply
+                out
+                False
+                "hospital-surge.keiro"
+                (parsedSourceLanguage parsed)
+                ctx
+                service
+                modules
+        -- Build the orphan from a record the current writer produced, so the
+        -- test exercises the discovery change and not a hand-typed format.
+        withTempDirectory "keiro-dsl-orphan-source" $ \source -> do
+          let sourceRuntime = RuntimePackageName "retired-runtime"
+              sourcePackageRoot = source </> conformancePackageDirectory (StandaloneConformanceService (contextName ctx))
+          sourceModules <-
+            either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure $
+              planServiceScaffoldWithRuntimePackage (Just sourceRuntime) ctx service
+          _ <-
+            executeServiceScaffoldWithRuntimePackageAndNameMigrations
+              (Just sourceRuntime)
+              False
+              source
+              False
+              "hospital-surge.keiro"
+              (parsedSourceLanguage parsed)
+              ctx
+              service
+              sourceModules
+              >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+          ledger <- TIO.readFile (sourcePackageRoot </> conformanceLedgerFileName)
+          record <-
+            maybe (expectationFailure "conformance ledger did not parse" >> fail "unreachable") pure $
+              parseConformancePackageRecord ledger
+          createDirectoryIfMissing True orphanDirectory
+          TIO.writeFile
+            orphanPath
+            ( T.unlines $
+                [line | line <- T.lines ledger, isGeneratedBannerLine line]
+                  <> [ "schema 1",
+                       "service-key standalone " <> contextName ctx,
+                       "runtime-package " <> unRuntimePackageName (cprRuntimePackage record),
+                       "facade-module " <> cprFacadeModule record
+                     ]
+                  <> [ "file "
+                         <> (case fileKind of Generated -> "generated"; HoleStub -> "create-once")
+                         <> " "
+                         <> T.pack path
+                     | (fileKind, path) <- cprFiles record
+                     ]
+            )
+        refused <- run False
+        refused `shouldSatisfy` \case
+          Left [SidecarMigrationRequired [move]] ->
+            sidecarMoveDisposition move == ConvertLegacyConformanceLedger
+          _ -> False
+
+        applied <- run True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        map sidecarMoveDisposition (reportSidecarMoves applied) `shouldBe` [ConvertLegacyConformanceLedger]
+        doesFileExist orphanPath `shouldReturn` False
+        doesFileExist (orphanDirectory </> conformanceLedgerFileName) `shouldReturn` True
+
     it "converts a legacy conformance record losslessly and keeps service-key mismatch refusal" $
       withTempDirectory "keiro-dsl-conformance-ledger-migration" $ \out -> do
         parsed <- parsedSourceOf "test/fixtures/hospital-surge.keiro"

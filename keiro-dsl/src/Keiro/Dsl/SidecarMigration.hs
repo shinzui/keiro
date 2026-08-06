@@ -18,7 +18,7 @@ module Keiro.Dsl.SidecarMigration
 where
 
 import Control.Exception (IOException, bracketOnError, try)
-import Control.Monad (when)
+import Control.Monad (filterM, when)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -29,7 +29,7 @@ import Keiro.Dsl.ConformancePackage
   )
 import Keiro.Dsl.Scaffold (isGeneratedBannerLine)
 import Keiro.Dsl.SidecarNames
-import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, removeFile, renameFile)
 import System.FilePath (takeDirectory, takeFileName, (</>))
 import System.IO (Handle, hClose, openTempFile)
 
@@ -65,18 +65,67 @@ data PreparedSidecarMove = PreparedSidecarMove
 planSidecarMigrations :: FilePath -> SidecarScope -> Maybe ConformancePackagePlan -> IO (Either [Text] [PreparedSidecarMove])
 planSidecarMigrations out scope conformancePlan = do
   ordinaryResults <- traverse (planOrdinary out) (scopePairs scope)
-  conformanceResults <- case conformancePlan of
-    Nothing -> pure []
-    Just packagePlan ->
-      (: [])
-        <$> planConformance
-          out
-          (cppDirectory packagePlan </> legacyConformanceRecordFileName)
-          (cppDirectory packagePlan </> conformanceLedgerFileName)
+  -- Legacy conformance records are migrated wherever they are found in the out
+  -- tree, not only when this run happens to plan a conformance package. Keying
+  -- the migration on the plan left a record orphaned — and unreadable, since the
+  -- legacy parser is no longer reachable from the current reader — as soon as a
+  -- spec stopped generating a conformance package. See ExecPlan 199.
+  legacyDirectories <- legacyConformanceDirectories out plannedDirectory
+  conformanceResults <-
+    traverse
+      ( \directory ->
+          planConformance
+            out
+            (directory </> legacyConformanceRecordFileName)
+            (directory </> conformanceLedgerFileName)
+      )
+      (plannedDirectories <> legacyDirectories)
   let results = ordinaryResults <> conformanceResults
       errors = [message | Left message <- results]
       moves = [move | Right (Just move) <- results]
   pure $ if null errors then Right moves else Left errors
+  where
+    plannedDirectory = fmap cppDirectory conformancePlan
+    plannedDirectories = maybe [] (: []) plannedDirectory
+
+-- | Directories under @out@ holding a legacy conformance record, excluding the
+-- one this run already plans. Bounded to the depth generated conformance
+-- packages actually use, so it never walks a consumer's whole source tree.
+legacyConformanceDirectories :: FilePath -> Maybe FilePath -> IO [FilePath]
+legacyConformanceDirectories out planned = do
+  candidates <- descend legacyConformanceSearchDepth ""
+  filterM
+    (\directory -> doesFileExist (out </> directory </> legacyConformanceRecordFileName))
+    [directory | directory <- candidates, Just directory /= planned]
+  where
+    descend :: Int -> FilePath -> IO [FilePath]
+    descend depth relative
+      | depth < 0 = pure []
+      | otherwise = do
+          entries <- listDirectorySafe (out </> relative)
+          children <-
+            filterM
+              (\name -> doesDirectoryExist (out </> relative </> name))
+              -- Never descend into the migration backup root. A retired legacy
+              -- record lives there permanently by design, so scanning it would
+              -- make every later run want to "migrate" the backup, forever.
+              [name | name <- entries, name /= sidecarBackupRootName]
+          nested <-
+            concat
+              <$> traverse
+                (\name -> descend (depth - 1) (if null relative then name else relative </> name))
+                children
+          pure ((if null relative then [] else [relative]) <> nested)
+
+-- | Generated conformance packages sit at most this many directories below the
+-- scaffold output root (@<out>/<package-dir>/@ plus room for a nested layout).
+legacyConformanceSearchDepth :: Int
+legacyConformanceSearchDepth = 3
+
+listDirectorySafe :: FilePath -> IO [FilePath]
+listDirectorySafe path = do
+  exists <- doesDirectoryExist path
+  if exists then listDirectory path else pure []
 
 scopePairs :: SidecarScope -> [(FilePath, FilePath)]
 scopePairs = \case
@@ -162,7 +211,11 @@ prepareRetirement out oldRelative newRelative = do
           }
 
 sidecarBackupRelative :: FilePath -> FilePath
-sidecarBackupRelative oldRelative = ".keiro-dsl-name-migrations/sidecar-v1" </> oldRelative
+sidecarBackupRelative oldRelative = sidecarBackupRootName </> "sidecar-v1" </> oldRelative
+
+-- | The directory holding recoverable originals of retired legacy sidecars.
+sidecarBackupRootName :: FilePath
+sidecarBackupRootName = ".keiro-dsl-name-migrations"
 
 preserveBanner :: Text -> Text
 preserveBanner contents = T.unlines [line | line <- T.lines contents, isGeneratedBannerLine line]

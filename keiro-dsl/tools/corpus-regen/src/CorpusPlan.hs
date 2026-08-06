@@ -3,6 +3,7 @@ module CorpusPlan
     checkCabalInventory,
     checkRecordDiskConsistency,
     entryOutDir,
+    checkSuiteCoverage,
     loadCorpusPlan,
     renderInvocation,
   )
@@ -415,6 +416,73 @@ data CabalComponent = CabalComponent
     ccAutogenModules :: Set.Set CabalModule.ModuleName,
     ccMainFiles :: [FilePath]
   }
+
+-- | Every corpus directory a declared test-suite compiles from must have a plan
+-- entry that regenerates it, and vice versa.
+--
+-- The plan is derived entirely from tracked ledger files, so deleting one
+-- suite's ledger silently dropped that suite from regeneration /and/ from both
+-- consistency checks — the corpus would still compile and still pass, while no
+-- longer proving anything about that suite's generated output. Comparing the
+-- plan against the Cabal file, which is the independent record that the suite
+-- exists, is what closes that hole.
+checkSuiteCoverage :: FilePath -> [CorpusEntry] -> IO [Text]
+checkSuiteCoverage repoRoot entries = do
+  packageBytes <- BS.readFile cabalPath
+  case parseGenericPackageDescriptionMaybe packageBytes of
+    Nothing -> pure [T.pack cabalPath <> ": Cabal-syntax could not parse the package"]
+    Just description -> do
+      let plannedDirs = nub (map entryOutDir entries)
+          suiteDirs =
+            nub
+              [ (ccName component, dir)
+              | component <- cabalComponents description,
+                "test:" `T.isPrefixOf` ccName component,
+                dir <- ccSourceDirs component,
+                corpusDirPrefix `isPrefixOf` dir
+              ]
+          covers planned dir = planned == dir || planned `pathWithin` dir || dir `pathWithin` planned
+          unplanned = [pair | pair@(_, dir) <- sort suiteDirs, not (any (`covers` dir) plannedDirs)]
+      -- A conformance suite may be wholly hand-written (fixtures plus a runner),
+      -- in which case having no plan entry is correct. What must never happen is
+      -- a directory that *holds generated output* dropping out of the plan, so
+      -- the flag is generated Haskell on disk, not the suite's existence.
+      generatedUnplanned <-
+        filterM (\(_, dir) -> not . null <$> generatedHaskellUnder repoRoot dir) unplanned
+      let uncoveredSuites =
+            [ suiteName
+                <> " compiles generated Haskell in "
+                <> T.pack dir
+                <> " but no plan entry regenerates it; its scaffold ledger is missing or untracked"
+            | (suiteName, dir) <- generatedUnplanned
+            ]
+          unclaimedPlans =
+            [ "corpus plan regenerates "
+                <> T.pack dir
+                <> " but no keiro-dsl.cabal test-suite compiles it; add a component or drop the entry"
+            | dir <- sort plannedDirs,
+              not (servicePackageRoot `pathWithin` dir),
+              not (any (\(_, suiteDir) -> covers dir suiteDir) suiteDirs)
+            ]
+      pure (uncoveredSuites <> unclaimedPlans)
+  where
+    cabalPath = repoRoot </> "keiro-dsl/keiro-dsl.cabal"
+    corpusDirPrefix = "keiro-dsl/test/conformance"
+    -- Compiled by its own package (conformance-service-runtime.cabal), which is
+    -- exactly why checkCabalInventory excludes it too.
+    servicePackageRoot = "keiro-dsl/test/conformance-service-package"
+
+-- | Generated Haskell files directly under one directory, by banner.
+generatedHaskellUnder :: FilePath -> FilePath -> IO [FilePath]
+generatedHaskellUnder repoRoot dir = do
+  files <- listFilesRecursively (repoRoot </> dir)
+  filterM carriesGeneratedBanner (map (makeRelative repoRoot) files)
+  where
+    carriesGeneratedBanner path
+      | takeExtension path /= ".hs" = pure False
+      | otherwise = do
+          contents <- TIO.readFile (repoRoot </> path)
+          pure (any (\line -> isGeneratedBannerLine line || line == codecComparisonBanner) (T.lines contents))
 
 checkCabalInventory :: FilePath -> [CorpusEntry] -> [FilePath] -> IO [Text]
 checkCabalInventory repoRoot entries exemptions = do

@@ -200,6 +200,33 @@ constructor, and an id-typed register uses the bare `placeholder` source sentine
 scaffolding lowers that sentinel to a deterministic valid current TypeID-v7 sample; it does not
 construct an invalid empty-text ID.
 
+A direct aggregate or integration-contract field has **three independent names**, written in
+this order:
+
+```text
+command Change {
+  type haskell payloadType:Text      -- record selector payloadType, wire key "type"
+  region as "region_code":Text       -- record selector region,      wire key "region_code"
+  family:Text                        -- all three names are "family"
+}
+```
+
+The first token is the stable DSL identity — it is what fold identity and every cross-spec
+reference see, so renaming it is a spec change even when both aliases are preserved.
+`haskell <selector>` changes only the generated Haskell record selector; use it when the DSL
+name would be an illegal or awkward Haskell field. `as "<wire-key>"` changes only the JSON
+key; use it to **preserve a brownfield key** the current `fields=camelCase` convention would
+reject, which is the whole reason the alias exists. Omit an alias and that namespace simply
+reuses the DSL name, byte for byte — an unaliased field encodes exactly as before.
+
+Because preserving an off-convention key is the point, a wire key is deliberately *not*
+checked against the case convention. It is checked for structural usability: non-empty, no
+leading or trailing whitespace, no control character. The wire key is the exact bytes of the
+encoded field name, so a typoed `as "family "` would ship a permanently mis-keyed public field
+that no later rename could fix without breaking consumers. Selector and wire-key collisions
+are checked independently, and an aggregate event's wire key may not be the codec envelope key
+`"kind"`. `fields(Command)` copies all three identities unchanged.
+
 A bare aggregate field first inherits an exactly matching register type, then tries the
 PascalCase field name as a declared id, enum, aggregate vertex, or mapped type, and finally
 falls back to `Text`. Equality guards support the five direct scalars and two values of the same
@@ -542,7 +569,7 @@ keiro-dsl new      <kind>                       # print a minimal valid skeleton
 keiro-dsl parse    <file.keiro>                 # parse + pretty-print it back
 keiro-dsl check    <file.keiro> [--emit]        # validate; --emit pretty-prints the spec on success
 keiro-dsl inspect  <file.keiro> --format=json   # report declared/effective language provenance
-keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + manifest, self-check firewall
+keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + Cabal fragment, self-check firewall
   [--module-root Acme] [--collocate] [--force-generated-overwrite]
                                                 # placement overrides clauses; force is an explicit adoption override
 keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/BREAKING since a ref
@@ -581,15 +608,20 @@ declarations have exactly one owning member; identical duplicates do not merge.
   banner gates before writing. Any refusal exits 1 and writes nothing. A Generated target
   lacking `-- @generated` is protected unless `--force-generated-overwrite` is explicitly passed;
   use that override only when replacing the file is intentional. On success it prints modules and
-  dispositions, `firewall: OK …`, the harness component, and the manifest path. It also writes a
-  `keiro-dsl-manifest.<context>.txt` into `--out` with paste-ready `other-modules:`/`build-depends:`
-  blocks for the consuming Cabal stanza, plus a versioned
-  `keiro-dsl-scaffold-record.<context>.txt` used on the next run to report stale paths. A `stale:`
+  dispositions, `firewall: OK …`, the harness component, and the generated Cabal-fragment path.
+  It also writes a `keiro-dsl-cabal-fragment.context.<context>.txt` into `--out` with
+  paste-ready `other-modules:`/`build-depends:` blocks for the consuming Cabal stanza — this
+  fragment is the authoritative generated build inventory — plus a versioned scaffold ledger
+  `keiro-dsl-ledger.context.<context>.txt` used on the next run to report stale paths. A `stale:`
   report is informational (exit 0) and never deletes files: Generated entries are safe-to-delete
   candidates; hole entries are hand-owned and must be reviewed first. No manual firewall `grep`
   needed. A workspace instead writes one
-  `keiro-dsl-scaffold-record.workspace.<service>.txt` and one matching workspace build
-  manifest with per-module member ownership; the single-file names remain unchanged.
+  `keiro-dsl-ledger.workspace.<service>.txt` and one matching
+  `keiro-dsl-cabal-fragment.workspace.<service>.<ext>` with per-module member ownership; the
+  single-file names remain unchanged. A generated conformance package additionally carries a
+  `keiro-dsl-conformance-ledger.txt`. An output tree holding the pre-0.11 names
+  (`keiro-dsl-scaffold-record.*`, `keiro-dsl-manifest.*`, `keiro-dsl-conformance-record.txt`)
+  refuses without writing and lists every rename; rerun with `--apply-name-migrations`.
 - Exit codes gate CI: a non-zero `check`/`scaffold`/`diff` is the signal — fix the **spec**, not the
   generated code. Use `/dev/stdin` as the file to read from stdin.
 

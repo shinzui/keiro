@@ -1,7 +1,7 @@
 module Main (main) where
 
 import Control.Monad (forM_, unless)
-import CorpusPlan (CorpusEntry (..), checkCabalInventory, checkRecordDiskConsistency, entryOutDir, loadCorpusPlan, renderInvocation)
+import CorpusPlan (CorpusEntry (..), checkCabalInventory, checkRecordDiskConsistency, checkSuiteCoverage, entryOutDir, loadCorpusPlan, renderInvocation)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, nub, sort)
 import Data.Text qualified as T
@@ -12,10 +12,20 @@ import System.IO (hPutStr, hPutStrLn, stderr)
 import System.Process (CreateProcess (..), callProcess, proc, readCreateProcessWithExitCode, readProcessWithExitCode)
 
 data Command
-  = Regenerate [FilePath]
+  = -- | @regenerate [--only PATH]… [--allow-dirty]@
+    Regenerate [FilePath] AllowDirty
   | Check
   | UpdateGoldens [String]
   | Help
+
+-- | Whether @regenerate@ may start from an already-modified corpus.
+--
+-- Regeneration overwrites the corpus in place, so starting dirty destroys any
+-- uncommitted edit with no way to tell afterwards what came from the generator
+-- and what was already there. The guard is the default; local iteration that
+-- knowingly wants it can opt out.
+data AllowDirty = RefuseDirty | AllowDirty
+  deriving stock (Eq)
 
 main :: IO ()
 main = do
@@ -24,14 +34,17 @@ main = do
     Left message -> hPutStrLn stderr message >> hPutStrLn stderr helpText >> exitFailure
     Right Help -> putStrLn helpText
     Right (UpdateGoldens testArguments) -> updateGoldens testArguments
-    Right Check -> runRegeneration True []
-    Right (Regenerate onlyPaths) -> runRegeneration False onlyPaths
+    Right Check -> runRegeneration True [] RefuseDirty
+    Right (Regenerate onlyPaths allowDirty) -> runRegeneration False onlyPaths allowDirty
 
 parseCommand :: [String] -> Either String Command
 parseCommand [] = Right Help
 parseCommand ["--help"] = Right Help
 parseCommand ["-h"] = Right Help
-parseCommand ("regenerate" : args) = Regenerate <$> parseOnly args
+parseCommand ("regenerate" : args) =
+  Regenerate
+    <$> parseOnly [arg | arg <- args, arg /= "--allow-dirty"]
+    <*> Right (if "--allow-dirty" `elem` args then AllowDirty else RefuseDirty)
 parseCommand ["check"] = Right Check
 parseCommand ("update-goldens" : args) = Right (UpdateGoldens args)
 parseCommand args = Left ("unknown arguments: " <> unwords args)
@@ -50,15 +63,17 @@ selectEntries requested entries = do
     dieMany ["--only path is not in the corpus plan: " <> T.pack path | path <- unknown]
   pure [entry | entry <- entries, entryOutDir entry `elem` requested]
 
-runRegeneration :: Bool -> [FilePath] -> IO ()
-runRegeneration checking onlyPaths = do
+runRegeneration :: Bool -> [FilePath] -> AllowDirty -> IO ()
+runRegeneration checking onlyPaths allowDirty = do
   repoRoot <- resolveRepoRoot
   setCurrentDirectory repoRoot
   planResult <- loadCorpusPlan repoRoot
   (allEntries, exemptions) <- either dieMany pure planResult
   selected <- selectEntries onlyPaths allEntries
   let paths = corpusPaths allEntries
-  if checking then requireCleanCorpus paths else pure ()
+  -- Both modes start from a clean corpus. `check` always did; `regenerate` did
+  -- not, so it would silently overwrite uncommitted corpus edits.
+  if checking || allowDirty == RefuseDirty then requireCleanCorpus paths else pure ()
   putStrLn
     ( "corpus: "
         <> show (length selected)
@@ -75,8 +90,12 @@ requireCleanCorpus :: [FilePath] -> IO ()
 requireCleanCorpus paths = do
   statusText <- gitOutput (["status", "--porcelain", "--"] <> paths)
   unless (null statusText) $ do
-    hPutStrLn stderr "conformance corpus check requires clean corpus paths before scaffolding:"
+    hPutStrLn stderr "conformance corpus requires clean corpus paths before scaffolding:"
     hPutStr stderr statusText
+    hPutStrLn stderr ""
+    hPutStrLn stderr "Commit or stash the listed paths, or discard them with:"
+    hPutStrLn stderr ("  git checkout -- " <> unwords (nub (sort paths)))
+    hPutStrLn stderr "Pass --allow-dirty to regenerate over them anyway (local iteration only)."
     exitFailure
 
 requireUnchangedCorpus :: [FilePath] -> IO ()
@@ -127,6 +146,11 @@ runEntry keiroDsl entry = do
 
 runConsistencyChecks :: FilePath -> [CorpusEntry] -> [FilePath] -> IO ()
 runConsistencyChecks repoRoot entries exemptions = do
+  -- First, because the other two checks are both scoped to the plan's out-dirs:
+  -- a suite that fell out of the plan is invisible to them by construction.
+  coverageErrors <- checkSuiteCoverage repoRoot entries
+  unless (null coverageErrors) (dieMany coverageErrors)
+  putStrLn ("suite coverage: ok (" <> show (length entries) <> " plan entries)")
   recordErrors <- checkRecordDiskConsistency repoRoot entries
   unless (null recordErrors) (dieMany recordErrors)
   putStrLn "record/disk consistency: ok"
@@ -189,7 +213,7 @@ helpText =
     [ "keiro-dsl-corpus-regen — replay the committed keiro-dsl conformance corpus",
       "",
       "Usage:",
-      "  keiro-dsl-corpus-regen regenerate [--only REPOSITORY-RELATIVE-OUT-DIR]...",
+      "  keiro-dsl-corpus-regen regenerate [--only REPOSITORY-RELATIVE-OUT-DIR]... [--allow-dirty]",
       "  keiro-dsl-corpus-regen check",
       "  keiro-dsl-corpus-regen update-goldens [TEST-ARGUMENT]...",
       "",
@@ -197,5 +221,9 @@ helpText =
       "uses keiro-dsl/test/conformance-corpus-manifest.txt only for workspace paths,",
       "ordered skeleton runs, extra CLI flags, and reviewed inventory exemptions.",
       "It drives the public keiro-dsl CLI, never forces overwrites, never touches",
-      "create-once files, and never commits. Review git status and git diff afterward."
+      "create-once files, and never commits. Review git status and git diff afterward.",
+      "",
+      "Both commands refuse to start over a modified corpus, so regeneration cannot",
+      "silently overwrite an uncommitted edit. --allow-dirty opts out for local",
+      "iteration; it is never correct in CI."
     ]
