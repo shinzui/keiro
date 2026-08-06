@@ -345,8 +345,33 @@ nominalGuardBranches =
     accepts command = case K.step nominalLedgerTransducer (NominalLedgerEmpty, initialNominalLedgerRegs) command of
         Just {} -> True
         Nothing -> False
-    setOrderId value (RecordNominals command) = RecordNominals command{orderId = value}
-    setStatus value (RecordNominals command) = RecordNominals command{status = value}
+    -- Constructed field by field rather than with record-update syntax. Several
+    -- generated records share these field names, so an update — even with a type
+    -- ascription — relies on DuplicateRecordFields' type-directed
+    -- disambiguation, which GHC deprecates and which is an error under the
+    -- generated-output -Werror.
+    setOrderId value (RecordNominals command) =
+      RecordNominals
+        RecordNominalsData
+          { orderId = value,
+            status = command.status,
+            accountNumber = command.accountNumber,
+            riskScore = command.riskScore,
+            sequenceNumber = command.sequenceNumber,
+            featureFlag = command.featureFlag,
+            observedAt = command.observedAt
+          }
+    setStatus value (RecordNominals command) =
+      RecordNominals
+        RecordNominalsData
+          { orderId = command.orderId,
+            status = value,
+            accountNumber = command.accountNumber,
+            riskScore = command.riskScore,
+            sequenceNumber = command.sequenceNumber,
+            featureFlag = command.featureFlag,
+            observedAt = command.observedAt
+          }
 
 alternateOrderId :: OrderId
 alternateOrderId = case KindID.parseText @"ord" "ord_01h455vb4pex5vsknk084sn02r" of

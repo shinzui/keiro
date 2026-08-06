@@ -134,6 +134,19 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
   be retried — `not-mine Fired` is unreachable and `not-mine Retry` is exactly true. All 13
   timer fixtures already write `Retry`, so refusing `Fired` closes the surface without
   touching a single existing spec.
+- (M7, 2026-08-05) **The mori simulation passes on every stated criterion**, run against
+  commit `79522fec` in a scratch copy: `check domain/mori.keiro-workspace` exits 0 with
+  exactly the five baseline `ReplayOnlyCommandStillLive` warnings and no new diagnostic;
+  scaffold refuses with `error: sidecar migration required; nothing was written`; the rerun
+  with `--apply-name-migrations` exits 0; and all **162 golden event files are byte-identical**.
+  The generated Haskell *does* differ from mori's committed tree (100 of 359 files differ at
+  token level), which is expected rather than a regression: mori's tree was scaffolded by a
+  pre-wave keiro-dsl, and MasterPlan 29 deliberately changed generated output
+  (usage-conditional imports, complete behavior-contract signatures, named sample constants).
+  Verified non-alarming two ways — the **set** of string literals across every generated
+  `Codec.hs` is identical (only per-key occurrence counts move, from the import/decoder
+  restructuring), and the goldens prove encoded bytes are unchanged empirically. This is
+  precisely why the mori upgrade sequence requires re-scaffold + recompile + conformance.
 - (M6, 2026-08-05) The LOOP dry-run surfaced a defect the plan had not listed: the scaffold
   report still labelled its two sidecar lines `manifest:` and `record:` while printing paths
   to `keiro-dsl-cabal-fragment.*` and `keiro-dsl-ledger.*`. Relabelled to `fragment:` and

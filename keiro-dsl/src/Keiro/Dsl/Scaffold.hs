@@ -99,7 +99,7 @@ import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -1541,8 +1541,18 @@ generatedNominalTypeImports ctx nominals =
   ]
 
 generatedNominalTypeImportsForService :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
-generatedNominalTypeImportsForService _ _ [] = []
 generatedNominalTypeImportsForService service ctx nominals =
+  generatedNominalTypeImportsWithParsers service ctx nominals nominals
+
+-- | As 'generatedNominalTypeImportsForService', but importing an enforced ID's
+-- @parse\<Name\>@ only for the nominals in @parsing@.
+--
+-- The parser is emitted only where a literal of that ID is constructed. A module
+-- that merely mentions the type — a guard operand, say — needs the type name and
+-- nothing else, and importing the parser there is an unused import.
+generatedNominalTypeImportsWithParsers :: CheckedService -> Context -> [ResolvedNominalType] -> [ResolvedNominalType] -> [Text]
+generatedNominalTypeImportsWithParsers _ _ [] _ = []
+generatedNominalTypeImportsWithParsers service ctx nominals parsing =
   [ "import "
       <> generatedNominalModule ctx
       <> " ("
@@ -1550,10 +1560,12 @@ generatedNominalTypeImportsForService service ctx nominals =
       <> ")"
   ]
   where
+    parsingNames = map resolvedNominalName (stableNominals parsing)
     importsFor nominal = case resolvedNominalRepresentation nominal of
       IdRepresentation prefix
         | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix ->
-            [resolvedNominalName nominal, "parse" <> resolvedNominalName nominal]
+            [resolvedNominalName nominal]
+              <> ["parse" <> resolvedNominalName nominal | resolvedNominalName nominal `elem` parsingNames]
       _ -> [resolvedNominalName nominal <> " (..)"]
 
 generatedNominalCodecImports :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
@@ -1701,7 +1713,19 @@ emitNominalProjections languageContract ctx nominals =
           <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasExactDomain nominals]
           <> ["Data.Text (Text)" | any usesText nominals]
           <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
-          <> ["Keiki.ProjectionDomain (TextPattern, finiteProjectionDomain, matchesTextPattern, textCharSet, textConcat, textLiteral, textProjectionDomain, textRepeatBetween)" | any hasExactDomain nominals]
+          -- The four text combinators build the legacy hand-rolled TypeID
+          -- pattern and are used only by the unenforced-ID branch; importing
+          -- them unconditionally warns under -Wunused-imports whenever every
+          -- exact-domain nominal is an enum or an enforced ID.
+          <> [ "Keiki.ProjectionDomain ("
+                 <> T.intercalate
+                   ", "
+                   ( ["TextPattern", "finiteProjectionDomain", "matchesTextPattern", "textProjectionDomain"]
+                       <> (if any hasUnenforcedId nominals then ["textCharSet", "textConcat", "textLiteral", "textRepeatBetween"] else [])
+                   )
+                 <> ")"
+             | any hasExactDomain nominals
+             ]
           <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
     hasExactProjection nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
     hasInexactProjection = any (not . hasExactProjection) nominals
@@ -1717,6 +1741,9 @@ emitNominalProjections languageContract ctx nominals =
     hasId nominal = case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False
     hasEnforcedId nominal = case resolvedNominalRepresentation nominal of
       IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
+      _ -> False
+    hasUnenforcedId nominal = case resolvedNominalRepresentation nominal of
+      IdRepresentation prefix -> isNothing (idDomainContractFor languageContract prefix)
       _ -> False
     hasExactDomain nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
     usesText nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
@@ -2913,7 +2940,12 @@ emitContractGen languageContract genPrefix c =
         ++ [generatedBanner]
         ++ moduleHeader
         ++ [ "",
-             "import Data.Aeson (Value, object, withObject, withText, (.:), (.=))",
+             -- A typed-TypeID field decodes through explicitParseField, so a
+             -- contract whose every field is one never uses (.:) and would warn
+             -- under -Wunused-imports.
+             "import Data.Aeson ("
+               <> T.intercalate ", " (["Value", "object", "withObject", "withText"] <> ["(.:)" | usesPlainFieldDecode] <> ["(.=)"])
+               <> ")",
              aesonTypesImport
            ]
         ++ typedKindIdImports
@@ -2963,6 +2995,7 @@ emitContractGen languageContract genPrefix c =
   where
     payloadTy = pascal (ctrName c) <> "Payload"
     hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) (ctrEvents c)
+    usesPlainFieldDecode = any (any (not . isTypedTypeId . cfType) . ceFields) (ctrEvents c)
     pragmas =
       renderGeneratedLanguagePragmas
         ( [ExtDuplicateRecordFields | contractNeedsDuplicateRecordFields c]
@@ -3211,7 +3244,12 @@ emitPublisherGen genPrefix pb =
       "  , publisherMaxAttempts",
       "  ) where",
       "",
-      "import Keiro.Outbox.Types (BackoffSchedule (..), ExponentialBackoffOptions (..), OrderingPolicy (..))",
+      -- Only an exponential schedule mentions ExponentialBackoffOptions, and an
+      -- unconditional import makes a constant-backoff publisher warn under
+      -- -Wunused-imports. Generated code compiles under -Werror.
+      "import Keiro.Outbox.Types (BackoffSchedule (..), OrderingPolicy (..)"
+        <> (if boKind (pubBackoff pb) == "exponential" then ", ExponentialBackoffOptions (..)" else "")
+        <> ")",
       "",
       "publisherOrdering :: OrderingPolicy",
       "publisherOrdering = " <> pubOrdering pb,
@@ -5258,6 +5296,32 @@ generatedTransitionExpressions = concatMap transitionExpressions
       maybe [] pure (resolvedTransitionGuard resolved)
         <> map snd (resolvedTransitionWrites resolved)
 
+-- | Guard expressions only.
+--
+-- A guard renders its operands as @K.Index … SomeType@ annotations and so needs
+-- each operand type in scope. A write renders @B.slot \@"x" =: d.x@, whose type
+-- is inferred — importing its source type adds an unused import, which is an
+-- error under the generated-output @-Werror@. Literals name their type in either
+-- position and are collected separately.
+generatedTransitionGuards :: [ResolvedGeneratedTransition] -> [TypedScalarExpr]
+generatedTransitionGuards = concatMap (maybe [] pure . resolvedTransitionGuard)
+
+-- | Every literal node in an expression tree.
+typedExpressionLiterals :: TypedScalarExpr -> [TypedScalarExpr]
+typedExpressionLiterals expression = own <> concatMap typedExpressionLiterals (typedExpressionChildren expression)
+  where
+    own = case typedScalarNode expression of
+      TypedLiteral {} -> [expression]
+      _ -> []
+
+-- | Types named by literal construction anywhere in an expression.
+typedExpressionLiteralTypes :: TypedScalarExpr -> [ResolvedAggregateType]
+typedExpressionLiteralTypes expression = own <> concatMap typedExpressionLiteralTypes (typedExpressionChildren expression)
+  where
+    own = case typedScalarNode expression of
+      TypedLiteral {} -> [typedScalarType expression]
+      _ -> []
+
 anyTypedExpression :: (TypedScalarExpr -> Bool) -> TypedScalarExpr -> Bool
 anyTypedExpression predicate expression =
   predicate expression || any (anyTypedExpression predicate) (typedExpressionChildren expression)
@@ -5647,7 +5711,11 @@ emitGeneratedTransducer aggregate =
       ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
       ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
       ++ ["import Numeric.Natural (Natural)" | expressionUsesNaturalLiteral]
-      ++ generatedNominalTypeImportsForService (aggregateCheckedService aggregate) (aContext aggregate) generatedExpressionNominals
+      ++ generatedNominalTypeImportsWithParsers
+        (aggregateCheckedService aggregate)
+        (aContext aggregate)
+        generatedExpressionNominals
+        generatedLiteralNominals
       ++ structuralProjectionImport
       ++ generatedNominalProjectionImport
       ++ consumerNominalProjectionImport
@@ -5716,7 +5784,11 @@ emitGeneratedTransducer aggregate =
       ]
     consumerImports =
       T.lines (renderPlannedImports importPlan)
-    expressionImportTypes = nub (concatMap typedExpressionImportTypes resolvedExpressions)
+    expressionImportTypes =
+      nub
+        ( concatMap typedExpressionImportTypes (generatedTransitionGuards resolvedTransitions)
+            <> concatMap typedExpressionLiteralTypes resolvedExpressions
+        )
     consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
     importPlan = transducerImportPlan aggregate expressionImportTypes consumerLiteralNominals
     generatedExpressionNominals =
@@ -5724,6 +5796,14 @@ emitGeneratedTransducer aggregate =
         [ nominal
         | expression <- resolvedExpressions,
           nominal <- typedGeneratedNominals expression
+        ]
+    -- Only a literal names `parse<Id>`; see 'generatedNominalTypeImportsWithParsers'.
+    generatedLiteralNominals =
+      stableNominals
+        [ nominal
+        | expression <- resolvedExpressions,
+          literal <- typedExpressionLiterals expression,
+          nominal <- typedGeneratedNominals literal
         ]
     expressionUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) resolvedExpressions
     expressionUsesNaturalLiteral = any (anyTypedExpression isNaturalLiteral) resolvedExpressions

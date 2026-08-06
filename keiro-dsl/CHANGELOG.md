@@ -4,7 +4,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## [Unreleased]
+## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes
 
@@ -230,7 +230,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   Consumers scraping those stderr labels must be updated.
 - The `generated-output` Cabal stanza adds `-Werror`, so a warning regression in
   generated code fails the build instead of building green. `src` keeps `-Wall`
-  non-fatal.
+  non-fatal. Enabling it exposed five real import over-approximations in the
+  generator, all now fixed: a publisher imported `ExponentialBackoffOptions`
+  under a constant backoff; a nominal-projections module imported the four
+  `Keiki.ProjectionDomain` text combinators used only by the unenforced-ID
+  pattern; a transducer imported the type of every write source, when only guard
+  operands are rendered with a `K.Index … Type` annotation; a transducer imported
+  an enforced ID's `parse<Id>`, which only a literal names; and a contract codec
+  imported `(.:)` when every field decodes through `explicitParseField`.
+  Generated output is correspondingly smaller; no behavior changed.
+  `keiro-dsl-conformance-skeletons` keeps `-Wunused-imports`/`-Wunused-matches`
+  non-fatal, because its hole modules are deliberately unfilled templates.
 
 - Generated behavior contracts and harnesses now carry complete signatures,
   annotated behavior cells, named sample constants, runtime-backed read-model

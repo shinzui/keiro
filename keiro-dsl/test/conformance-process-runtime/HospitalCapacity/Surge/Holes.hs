@@ -13,9 +13,8 @@ module HospitalCapacity.Surge.Holes (
 ) where
 
 import Generated.HospitalCapacity.Surge.Domain
-import Keiki.Builder ((=:))
 import qualified Keiki.Builder as B
-import Keiki.Core (HsPred, RegFile, SymTransducer, lit, (./=), (.==), (.||))
+import Keiki.Core (HsPred, SymTransducer)
 
 -- HOLE: the transducer body. Reproduce the structure below, replacing each
 -- `-- HOLE` line with the keiki symbolic operators it describes.

@@ -4,7 +4,7 @@ All notable changes to the Keiro package set are recorded here. The format
 follows [Keep a Changelog](https://keepachangelog.com/), and the published
 packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## [Unreleased]
+## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes
 

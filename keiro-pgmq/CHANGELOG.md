@@ -4,7 +4,11 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## [Unreleased]
+## [0.11.0.0] - 2026-08-05
+
+No user-facing changes beyond the lockstep `keiro-core ^>=0.11.0.0` bound.
+Released with the package set for the `keiro-dsl` 0.11.0.0 work.
+
 
 ## 0.10.0.0 — 2026-08-03
 

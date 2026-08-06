@@ -4,7 +4,7 @@ All notable changes to `keiro-core` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## [Unreleased]
+## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes
 
