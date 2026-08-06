@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-08-06
+* **Update**: Amend ADR 0004: a warning policy may only name a code the selected command can emit (plan 199).
+* **Update**: Amend ADR 0013: coverage findings obey the invocation's warning policy and enter the check report; severity unchanged (plan 199).
+
 ## 2026-08-05
 * **Update**: Amend ADR 0021: wire-key aliases are exempt from the case convention and validated structurally (whitespace, control characters); collision planning uses the emitted selector (plan 199).
 * **Update**: Amend ADR 0004: refuse the eight accepted-but-unimplemented spec surfaces on the language-4 tiering; only emit source/key/discriminant names stay descriptive-only (plan 199).

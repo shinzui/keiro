@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural coverage is reporting-first and opacity gates are opt-in
 description: Keiro reports named mapped-type authority boundaries without a global percentage, and rejects opacity only under an explicit operator policy.
-timestamp: 2026-07-28T23:53:01Z
+timestamp: 2026-08-05T23:50:00Z
 docId: ADR-13
 status: Accepted
 date: 2026-07-28
@@ -61,12 +61,23 @@ behavior.
 
 Named opaque private-event roots produce the advisory
 `CoverageOpaqueSurface`. A newly added boundary produces the advisory
-`CoverageOpaqueBoundaryAdded`. Neither blocks a build. Operators may choose
-the explicit policies `check --fail-on-opaque` or
+`CoverageOpaqueBoundaryAdded`. Neither raises severity on its own. Operators may
+choose the explicit policies `check --fail-on-opaque` or
 `diff --fail-on-opaque-increase`, each accepted only beside
 `--coverage-report`; a violated policy produces the error
 `CoverageOpaqueGateExceeded`. Policy acts on named roots/boundaries, not a
 percentage.
+
+Reporting-first governs *severity*, not exemption from the invocation's warning
+policy. When `--coverage-report` is supplied, its findings are diagnostics of
+that run: `--deny-warnings` and `--deny CoverageOpaqueSurface` escalate them to
+a failing exit exactly as they escalate any other warning, and they appear in
+the `keiro-dsl/check-report/1` diagnostics array so the report's `ok` accounts
+for them. Their declared severity is unchanged either way. A coverage pass that
+was reachable by the deny policy in principle but not in practice would make
+`check --deny-warnings` a gate with a hole in it, which is the opposite of an
+opt-in policy; opt-in means the operator chooses the gate, not that a chosen
+gate silently omits a surface.
 
 Historical codec comparison is complementary migration evidence. The
 scaffolder may emit an opt-in, non-production module for a structural persisted

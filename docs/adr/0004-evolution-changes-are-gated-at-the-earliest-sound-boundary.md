@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-08-05T23:55:00Z
+timestamp: 2026-08-05T23:50:00Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -52,7 +52,11 @@ sources print one effective-language notice; `--min-language` turns a CI-require
 floor into the appended `LanguageVersionBelowMinimum` error at the source preamble or workspace
 manifest plus member locations. Warning severity remains a property of the language contract.
 `--deny-warnings` and `--deny CODE` are per-invocation policies that change only the exit result,
-never the rendered or reported severity.
+never the rendered or reported severity. A policy may only name a code the selected command can
+actually emit: cross-revision codes belong to `diff`, structural-coverage codes require the same
+invocation to request the coverage pass, and `check` refuses either rather than accepting a
+denial that can never match. A gate that cannot fire reads as enforcement in a CI file while
+enforcing nothing, so it is refused at the point of use instead of at the point of failure.
 
 Aggregate type syntax and capabilities follow the same rule. Parsing establishes
 only a `TypeExpr`; `check` resolves it at the declaration or guard use site and

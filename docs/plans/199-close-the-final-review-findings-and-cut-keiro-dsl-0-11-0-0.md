@@ -95,8 +95,23 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
       flows plus the applied-renames note, the three-namespace field aliases with the
       brownfield-key guidance, and the compatibility-only stderr notice. Verified by running
       the LOOP end to end against `keiro-dsl new aggregate` in a scratch tree.
-- [ ] M7: release — lockstep 0.11.0.0 bumps + bounds, corpus regeneration, changelog
-      finalization, keiki 0.9.0.0 candidates published, mori simulation re-run, tag.
+- [x] M7 (partial, 2026-08-05): lockstep 0.11.0.0 bumps + bounds for keiro-core, keiro,
+      keiro-dsl, keiro-pgmq, keiro-migrations; corpus regenerated for the banner; changelogs
+      finalized as `[0.11.0.0] - 2026-08-05`; mori simulation re-run green against the
+      release commit `e1d4c26b`. All 38 keiro-dsl suites pass; `corpus-regen check` reports
+      `conformance corpus: ok`.
+- [ ] M7 (remaining, **blocked — owner action**): publish the keiki 0.9.0.0 and
+      keiki-codec-json 0.9.0.0 Hackage candidates, then verify
+      `curl -s https://hackage.haskell.org/package/keiki/preferred` lists 0.9.0.0, then tag
+      and push. Re-verified 2026-08-05: both release URLs are still 404, both `/candidate`
+      URLs are 200, and `preferred` still tops out at 0.8.0.0. Publishing requires the
+      owner's Hackage credentials, and per Idempotence the tags must not precede it.
+- [ ] M7 (remaining, follow-up): record the mori upgrade sequence in the release notes —
+      `Justfile:130,134` tool pin, `cabal.project:5` index-state past the upload, nix overlay
+      versions/hashes (`nix/haskell-overlay.nix:172,190-191`), keiki bounds `^>=0.8` →
+      `^>=0.9` in `mori-core.cabal:430,687` / `mori-cli.cabal:140,240`, then scaffold (expect
+      `SidecarMigrationRequired`), rerun with `--apply-name-migrations`, recompile, run
+      conformance.
 
 
 ## Surprises & Discoveries
@@ -320,7 +335,47 @@ byte-identical golden events; and `cabal build` of a fresh scratch project depen
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Achieved (2026-08-05).** All 25 findings are closed across six commits (`303ba32a`,
+`1e11fbf1`, `b0067a92`, `d7be0fe6`, `79522fec`, `e1d4c26b`). The package set is at 0.11.0.0
+with finalized changelogs; all 38 keiro-dsl suites pass; `corpus-regen check` reports
+`conformance corpus: ok`; and the mori simulation is green against the release commit —
+check exit 0 at the five-warning baseline, scaffold refuse → apply → success, and all 162
+golden event files byte-identical.
+
+**What the work actually was.** The plan framed this as "close a finite defect list", and
+that held, but three of the findings were larger than their one-line descriptions:
+
+- Making `--deny` honest required a *registry* of which pipeline emits each of the 301
+  diagnostic codes. Deriving it mechanically from the sources (mention-counting in
+  `Validate.hs` plus per-code module usage) turned a judgment call into a verifiable
+  partition, and choosing check-emittable as the fallthrough made the failure direction safe.
+- Closing the inert surfaces meant reading the runtime for each one. That is what caught the
+  plan's two factual errors — the process/router `dispatch-id` tuples are different, and the
+  timer runtime has no not-mine branch at all — and it is why the closures describe real
+  behavior instead of guessed behavior.
+- `-Werror` on generated output was written as one line of Cabal. It found five genuine
+  import over-approximations in the generator, each fixed at its source. That was the single
+  highest-yield change in the plan per line of diff.
+
+**Lessons.**
+
+1. *A gate that cannot fire is worse than no gate.* Four separate findings (coverage escaping
+   the deny scan, `--deny` accepting diff-only codes, `EmitDeriveHoleUnrealized` firing
+   unconditionally, `-Wall` without `-Werror`) were all the same defect wearing different
+   clothes: machinery that looked like enforcement and enforced nothing. Worth grepping for
+   the pattern rather than the instances.
+2. *A record field that cannot vary is a lie.* `wqfRequired` was always the same value and
+   still carried two unreachable diff branches that told adopters a new payload field was
+   additive when it broke every queued job. Deleting it corrected the classification.
+3. *Run the documentation.* The M6 acceptance was a grep; executing the LOOP end to end is
+   what found the scaffold report calling a Cabal fragment a "manifest".
+4. *Verify the plan's own claims.* Three plan statements were wrong (coverage-report is not
+   new in this release; the dispatch-id tuples; finding 15's acceptance). Each was caught by
+   checking rather than implementing, and each is recorded in Surprises.
+
+**What remains.** Only the release's outward-facing half: publishing the two keiki Hackage
+candidates and tagging. Both are owner actions, and the ordering constraint (publish before
+tag) is unchanged. The mori upgrade sequence still needs writing into the release notes.
 
 
 ## Context and Orientation
