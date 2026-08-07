@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-07
+* **Addition**: IR-20 requests one typed runtime catalog for projection ownership, physical read-model targets, registration, and rebuild adapters, with structural missing/duplicate-owner validation and explicit brownfield-safe reconcile policy.
+
 ## 2026-08-05
 * **Implemented**: Close IR-19 after Plan 198 ships role-bearing sidecar names, explicit lossless migration, and a forward-compatible conformance ledger.
 * **Implemented**: Close IR-18 after Plan 191 unifies source-wide transition identity and proves replay-only initial conformance across single, workspace, and generated service paths.
