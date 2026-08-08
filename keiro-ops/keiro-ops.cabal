@@ -1,0 +1,72 @@
+cabal-version: 3.0
+name:          keiro-ops
+version:       0.11.0.0
+synopsis:      Operational command-line interface for Keiro deployments
+description:
+  A standalone database-only console and embeddable command tree for inspecting
+  and operating Keiro deployments.
+
+license:       BSD-3-Clause
+author:        Nadeem Bitar
+maintainer:    nadeem@gmail.com
+copyright:     2026 Nadeem Bitar
+category:      Operations
+homepage:      https://github.com/shinzui/keiro#readme
+bug-reports:   https://github.com/shinzui/keiro/issues
+build-type:    Simple
+tested-with:   GHC >=9.12 && <9.13
+
+source-repository head
+  type:     git
+  location: https://github.com/shinzui/keiro.git
+
+common warnings
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+common shared
+  default-language:   GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    ImportQualifiedPost
+    LambdaCase
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+library
+  import:          warnings, shared
+  hs-source-dirs:  src
+  exposed-modules:
+    Keiro.Ops
+    Keiro.Ops.Env
+    Keiro.Ops.Render
+    Keiro.Ops.Timer
+    Keiro.Ops.Workflow
+
+  build-depends:
+    , base                  >=4.21 && <5
+    , optparse-applicative  >=0.18 && <0.20
+    , text                  >=2.1  && <2.2
+
+executable keiro-ops
+  import:         warnings, shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base       >=4.21 && <5
+    , keiro-ops
+
+test-suite keiro-ops-test
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:
+    , base       >=4.21 && <5
+    , hspec      >=2.11
+    , keiro-ops

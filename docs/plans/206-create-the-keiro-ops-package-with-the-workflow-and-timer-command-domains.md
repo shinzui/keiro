@@ -38,7 +38,7 @@ and no command touches another library's tables directly.
 
 ## Progress
 
-- [ ] Package scaffolding: `keiro-ops.cabal`, `cabal.project` entry, nix wiring, empty command tree runs.
+- [x] (2026-08-08T23:42:49Z) Package scaffolding: `keiro-ops.cabal`, `cabal.project` entry, nix wiring, empty command tree runs.
 - [ ] Core: `OpsEnv`, connection/config plumbing, output layer (tables + `--json`), `--force` rail, schema handshake.
 - [ ] Workflow domain complete (list/show/journal/awakeables/children/cancel/resurrect/lease-release/gc-once).
 - [ ] Timer domain complete (stuck list/requeue/cancel/dead-letter/drain-once).
@@ -67,6 +67,12 @@ and no command touches another library's tables directly.
   already makes that machinery the single authority on live-schema agreement;
   a second checker would drift.
   Date: 2026-08-06
+
+- Decision: Add `keiro-ops` only to `cabal.project`; do not add package-specific
+  Nix wiring.
+  Rationale: `flake.nix` and `nix/haskell.nix` provide a dev shell and explicitly
+  do not enumerate or build project packages. Cabal is the package graph authority.
+  Date: 2026-08-08
 
 
 ## Outcomes & Retrospective

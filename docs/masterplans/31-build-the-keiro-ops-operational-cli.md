@@ -165,7 +165,7 @@ frozen identity bytes) do not constrain this initiative.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
-| 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Not Started |
+| 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | In Progress |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Not Started |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Not Started |
 
