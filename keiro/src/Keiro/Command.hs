@@ -63,6 +63,9 @@ module Keiro.Command
     runCommand,
     runCommandWithSql,
     runCommandWithSqlEvents,
+    SqlTransactionDecision (..),
+    SqlCommandOutcome (..),
+    runCommandWithSqlEventsControlled,
 
     -- * Hydration primitives (replay audit)
     Hydrated (..),
@@ -205,6 +208,21 @@ data CommandError
     --       nothing but appends still collide. Carries the observed version and the
     --       conflict.
     ConflictFixpoint !StreamVersion !StoreError
+  deriving stock (Generic, Eq, Show)
+
+-- | Whether an in-transaction command callback accepts the append or asks the
+-- runner to roll the whole transaction back while retaining a typed outcome.
+data SqlTransactionDecision a
+  = CommitSqlTransaction !a
+  | RollbackSqlTransaction !a
+  deriving stock (Generic, Eq, Show)
+
+-- | Result of a controlled transactional command. A rolled-back outcome has no
+-- 'CommandResult' because neither its event append nor its SQL effects exist.
+data SqlCommandOutcome target a
+  = SqlCommandNoOp !(CommandResult target)
+  | SqlCommandCommitted !(CommandResult target) !a
+  | SqlCommandRolledBack !a
   deriving stock (Generic, Eq, Show)
 
 -- | Why replay of stored events stalled, projected from keiki's structured
@@ -731,12 +749,46 @@ runCommandWithSqlEvents ::
   ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a) ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSqlEvents options validatedEventStream targetStream command afterAppend =
+  fmap (fmap collapse)
+    $ runCommandWithSqlEventsControlled
+      options
+      validatedEventStream
+      targetStream
+      command
+      (\pairs appendResult -> CommitSqlTransaction <$> afterAppend pairs appendResult)
+  where
+    collapse = \case
+      SqlCommandNoOp result -> (result, Nothing)
+      SqlCommandCommitted result userValue -> (result, Just userValue)
+      SqlCommandRolledBack _ ->
+        error "runCommandWithSqlEvents: an always-commit callback rolled back"
+
+-- | Variant of 'runCommandWithSqlEvents' whose callback may condemn the whole
+-- append transaction and still return a typed result. Rolled-back attempts do
+-- not run replay verification or snapshot writes. Catalog-derived projection
+-- fencing uses this boundary so discovering a rebuilding group after the append
+-- SQL has taken its locks cannot leave the event or a partial projection write.
+runCommandWithSqlEventsControlled ::
+  forall phi rs s ci co a es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  ValidatedEventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction (SqlTransactionDecision a)) ->
+  Eff es (Either CommandError (SqlCommandOutcome (EventStream phi rs s ci co) a))
+runCommandWithSqlEventsControlled options validatedEventStream targetStream command afterAppend =
   withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
     (result, attemptNo) <- attempt mSpan 1 Nothing
-    recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) attemptNo result
+    recordCommandOutcome mSpan eventCount attemptNo result
     pure result
   where
     eventStream = unvalidated validatedEventStream
+
+    eventCount = \case
+      SqlCommandNoOp result -> result ^. #eventsAppended
+      SqlCommandCommitted result _ -> result ^. #eventsAppended
+      SqlCommandRolledBack _ -> 0
 
     attempt mSpan attemptNo lastConflict = do
       hydrated <- hydrate options eventStream targetStream
@@ -748,7 +800,7 @@ runCommandWithSqlEvents options validatedEventStream targetStream command afterA
         Nothing ->
           case prepareCommandPlan options eventStream targetStream current command of
             Left err -> pure (Left err, attemptNo)
-            Right (CommandNoOp result) -> pure (Right (result, Nothing), attemptNo)
+            Right (CommandNoOp result) -> pure (Right (SqlCommandNoOp result), attemptNo)
             Right (CommandAppend current' events encoded) ->
               appendWithSqlOnce mSpan attemptNo current' events encoded
 
@@ -767,13 +819,27 @@ runCommandWithSqlEvents options validatedEventStream targetStream command afterA
                 Tx.condemn $> Left (appendConflictToStoreError conflict)
               Right appendResult -> do
                 let recordeds = reconstructRecorded appendResult now prepared
-                userValue <- afterAppend (Prelude.zip events recordeds) appendResult
-                pure (Right (appendResult, userValue))
+                decision <- afterAppend (Prelude.zip events recordeds) appendResult
+                case decision of
+                  CommitSqlTransaction userValue ->
+                    pure (Right (appendResult, Right userValue))
+                  RollbackSqlTransaction userValue -> do
+                    Tx.condemn
+                    pure (Right (appendResult, Left userValue))
       outcome <- tryError @StoreError (runTransaction body)
       case outcome of
-        Right (Right (appendResult, userValue)) -> do
+        Right (Right (appendResult, Right userValue)) -> do
           verifyAndSnapshot options mSpan eventStream current events appendResult
-          pure (Right (appendedResult targetStream appendResult (Prelude.length encoded), Just userValue), attemptNo)
+          pure
+            ( Right
+                ( SqlCommandCommitted
+                    (appendedResult targetStream appendResult (Prelude.length encoded))
+                    userValue
+                ),
+              attemptNo
+            )
+        Right (Right (_, Left userValue)) ->
+          pure (Right (SqlCommandRolledBack userValue), attemptNo)
         Right (Left storeError) ->
           retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
         Left (_, storeError) ->

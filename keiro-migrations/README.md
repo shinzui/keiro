@@ -1,7 +1,7 @@
 # Keiro database migrations
 
 `keiro-migrations` exports a native `pg-migrate` component named `keiro`. The
-component owns sixteen embedded SQL migrations and declares one dependency,
+component owns twenty-two embedded SQL migrations and declares one dependency,
 `kiroku`. Applications compose Kiroku first and Keiro second; Keiro never embeds
 or copies Kiroku's SQL.
 
@@ -53,7 +53,7 @@ schema correction.
 ## Importing the shared Codd ledger
 
 `Keiro.Migrations.History.Codd` combines Kiroku's seven mappings with Keiro's
-sixteen mappings. `frameworkCoddSourceConfig` selects both histories from the
+sixteen legacy mappings. `frameworkCoddSourceConfig` selects both histories from the
 shared `codd.sql_migrations` or legacy `codd_schema.sql_migrations` ledger,
 checks the original SHA-256 manifests and payload bytes, and produces one atomic
 history import:

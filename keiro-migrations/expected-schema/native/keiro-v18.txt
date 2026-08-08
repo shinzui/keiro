@@ -80,8 +80,22 @@ column	keiro_outbox.updated_at	timestamp with time zone not null default now()
 column	keiro_projection_dedup.applied_at	timestamp with time zone not null default now()
 column	keiro_projection_dedup.event_id	uuid not null
 column	keiro_projection_dedup.projection_name	text not null
+column	keiro_projection_rebuild_groups.active_run_id	text
+column	keiro_projection_rebuild_groups.catalog_fingerprint	text not null
+column	keiro_projection_rebuild_groups.completed_at	timestamp with time zone
+column	keiro_projection_rebuild_groups.created_at	timestamp with time zone not null default now()
+column	keiro_projection_rebuild_groups.failed_at	timestamp with time zone
+column	keiro_projection_rebuild_groups.failure_code	text
+column	keiro_projection_rebuild_groups.failure_detail	text
+column	keiro_projection_rebuild_groups.group_id	text not null
+column	keiro_projection_rebuild_groups.request_reason	text
+column	keiro_projection_rebuild_groups.requested_by	text
+column	keiro_projection_rebuild_groups.started_at	timestamp with time zone
+column	keiro_projection_rebuild_groups.status	text not null
+column	keiro_projection_rebuild_groups.updated_at	timestamp with time zone not null default now()
 column	keiro_read_models.last_built_at	timestamp with time zone
 column	keiro_read_models.name	text not null
+column	keiro_read_models.rebuild_group_id	text not null
 column	keiro_read_models.shape_hash	text not null
 column	keiro_read_models.status	text not null
 column	keiro_read_models.updated_at	timestamp with time zone not null default now()
@@ -194,8 +208,18 @@ constraint	keiro_projection_dedup.keiro_projection_dedup_applied_at_not_null	NOT
 constraint	keiro_projection_dedup.keiro_projection_dedup_event_id_not_null	NOT NULL event_id
 constraint	keiro_projection_dedup.keiro_projection_dedup_pkey	PRIMARY KEY (projection_name, event_id)
 constraint	keiro_projection_dedup.keiro_projection_dedup_projection_name_not_null	NOT NULL projection_name
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_active_run_chk	CHECK ((((status = 'live'::text) AND (active_run_id IS NULL)) OR ((status = ANY (ARRAY['rebuilding'::text, 'failed'::text])) AND (active_run_id IS NOT NULL))))
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_catalog_fingerprint_not_null	NOT NULL catalog_fingerprint
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_created_at_not_null	NOT NULL created_at
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_group_id_not_null	NOT NULL group_id
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_pkey	PRIMARY KEY (group_id)
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_status_chk	CHECK ((status = ANY (ARRAY['live'::text, 'rebuilding'::text, 'failed'::text])))
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_status_not_null	NOT NULL status
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_updated_at_not_null	NOT NULL updated_at
 constraint	keiro_read_models.keiro_read_models_name_not_null	NOT NULL name
 constraint	keiro_read_models.keiro_read_models_pkey	PRIMARY KEY (name)
+constraint	keiro_read_models.keiro_read_models_rebuild_group_fk	FOREIGN KEY (rebuild_group_id) REFERENCES keiro.keiro_projection_rebuild_groups(group_id)
+constraint	keiro_read_models.keiro_read_models_rebuild_group_id_not_null	NOT NULL rebuild_group_id
 constraint	keiro_read_models.keiro_read_models_shape_hash_not_null	NOT NULL shape_hash
 constraint	keiro_read_models.keiro_read_models_status_not_null	NOT NULL status
 constraint	keiro_read_models.keiro_read_models_updated_at_not_null	NOT NULL updated_at
@@ -270,7 +294,9 @@ index	keiro_outbox_source_message_id_key	CREATE UNIQUE INDEX keiro_outbox_source
 index	keiro_outbox_source_order_idx	CREATE INDEX keiro_outbox_source_order_idx ON keiro.keiro_outbox USING btree (source, created_at, outbox_id) WHERE (status <> ALL (ARRAY['sent'::text, 'dead'::text]))
 index	keiro_projection_dedup_applied_at_idx	CREATE INDEX keiro_projection_dedup_applied_at_idx ON keiro.keiro_projection_dedup USING btree (applied_at)
 index	keiro_projection_dedup_pkey	CREATE UNIQUE INDEX keiro_projection_dedup_pkey ON keiro.keiro_projection_dedup USING btree (projection_name, event_id)
+index	keiro_projection_rebuild_groups_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_groups_pkey ON keiro.keiro_projection_rebuild_groups USING btree (group_id)
 index	keiro_read_models_pkey	CREATE UNIQUE INDEX keiro_read_models_pkey ON keiro.keiro_read_models USING btree (name)
+index	keiro_read_models_rebuild_group_idx	CREATE INDEX keiro_read_models_rebuild_group_idx ON keiro.keiro_read_models USING btree (rebuild_group_id)
 index	keiro_snapshots_compat_idx	CREATE INDEX keiro_snapshots_compat_idx ON keiro.keiro_snapshots USING btree (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC)
 index	keiro_snapshots_pkey	CREATE UNIQUE INDEX keiro_snapshots_pkey ON keiro.keiro_snapshots USING btree (stream_id)
 index	keiro_subscription_shards_lease_idx	CREATE INDEX keiro_subscription_shards_lease_idx ON keiro.keiro_subscription_shards USING btree (subscription_name, lease_expires_at)
@@ -291,6 +317,7 @@ table	keiro_dead_letters	kind=r
 table	keiro_inbox	kind=r
 table	keiro_outbox	kind=r
 table	keiro_projection_dedup	kind=r
+table	keiro_projection_rebuild_groups	kind=r
 table	keiro_read_models	kind=r
 table	keiro_snapshots	kind=r
 table	keiro_subscription_shards	kind=r

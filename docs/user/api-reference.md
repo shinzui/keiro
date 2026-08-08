@@ -218,10 +218,19 @@ Types and functions:
 - `InlineProjection (..)`
 - `AsyncProjection (..)`
 - `AsyncApplyOutcome (..)`
+- `ProjectionCommandOutcome (..)`
+- `CatalogAsyncApplyOutcome (..)`
 - `runCommandWithProjections`
+- `runCommandWithCatalogProjections`
 - `applyAsyncProjection`
+- `applyAsyncProjectionFromCatalog`
 - `applyAsyncProjectionUnfenced`
 - `pruneAsyncProjectionDedupBefore`
+
+Use the catalog-derived entry points for managed projections: both consult the
+same rebuild-group fence inside the append or dedup/write transaction and
+return typed outcomes when the group is unavailable. The older entry points are
+the unmanaged compatibility surface.
 
 Use inline projections for same-transaction read-model writes. Use async
 projection helpers for at-least-once subscription handlers. `Router` and
@@ -320,6 +329,16 @@ Use it for metadata initialization and rebuild lifecycle coordination.
 
 Types and functions:
 
+- `RebuildRunId`, `RebuildRequest`, and `RebuildFailure`
+- `GroupLifecycleStatus` and `GroupRebuildMetadata`
+- `CatalogRegistrationError`, `RebuildStartError`, and `GroupTransitionError`
+- opaque `GroupRebuildHandle` and `GroupCompletionToken`
+- `GroupPreparation`
+- `registerProjectionCatalog`
+- `lookupProjectionRebuildGroup`
+- `beginGroupRebuild`
+- `finishGroupRebuild`
+- `abandonGroupRebuild`
 - `RebuildError (..)`
 - `startRebuild`
 - `finishRebuild`
@@ -327,8 +346,11 @@ Types and functions:
 - `promote`
 - `abandonRebuild`
 
-Use `startRebuild`, `applyAsyncProjectionUnfenced`, and `finishRebuild` for
-supported rebuild jobs. `rebuild` and `promote` are low-level status transitions.
+The catalog group API is the managed rebuild boundary. Preparation derives its
+targets and framework reset identities only from a validated catalog, and
+promotion requires an opaque completion token from the replay runner. The
+single-read-model functions are an unmanaged compatibility path;
+`rebuild` and `promote` are only low-level status transitions.
 
 ## `Keiro.ProcessManager`
 

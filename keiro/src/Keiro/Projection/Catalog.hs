@@ -92,6 +92,8 @@ module Keiro.Projection.Catalog
     AsyncProjectionRegistration (..),
     ReplayAdapterMetadata (..),
     typedInlineProjections,
+    typedProjectionRebuildGroups,
+    asyncProjectionRebuildGroup,
     catalogInventory,
     catalogFingerprint,
     catalogRegistrations,
@@ -126,7 +128,7 @@ import Data.Text.Encoding qualified as Text
 import Hasql.Transaction qualified as Tx
 import Keiro.Codec (Codec (..), decodeRecorded)
 import Keiro.Prelude
-import Keiro.Projection (AsyncProjection, InlineProjection)
+import Keiro.Projection.Types (AsyncProjection, InlineProjection)
 import Keiro.ReadModel (ReadModel)
 import Kiroku.Store.Types (CategoryName (..), RecordedEvent)
 
@@ -673,13 +675,60 @@ typedInlineProjections ::
   ProjectionSet event ->
   [InlineProjection event]
 typedInlineProjections validated projectionSet
-  | projectionSetBelongs =
+  | projectionSetBelongs validated projectionSet =
       [ projection
       | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
         handler <- NonEmpty.toList (definition ^. #handlers),
         InlineHandler projection _ <- [handler]
       ]
   | otherwise = []
+
+-- | Distinct rebuild groups touched by the same validated typed source handle,
+-- in stable lock order. A handle that does not belong to this catalog yields no
+-- groups, matching 'typedInlineProjections'.
+typedProjectionRebuildGroups ::
+  ValidatedProjectionCatalog ->
+  ProjectionSet event ->
+  [RebuildGroupId]
+typedProjectionRebuildGroups validated projectionSet
+  | projectionSetBelongs validated projectionSet =
+      List.sort
+        . Set.toList
+        . Set.fromList
+        $ [ definition ^. #rebuildGroup
+          | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions)
+          ]
+  | otherwise = []
+
+-- | Resolve one validated async handler to the group whose fence it must lock.
+-- Both the stable projection ID and the existing physical projection name must
+-- match, preventing a caller from pairing catalog metadata with another
+-- handler closure.
+asyncProjectionRebuildGroup ::
+  ValidatedProjectionCatalog ->
+  ProjectionId ->
+  Text ->
+  Maybe RebuildGroupId
+asyncProjectionRebuildGroup validated wantedProjectionId wantedProjectionName = do
+  registration <-
+    List.find
+      ( \entry ->
+          entry ^. #projectionId == wantedProjectionId
+            && entry ^. #projectionName == wantedProjectionName
+      )
+      (asyncProjectionRegistrations validated)
+  projection <-
+    List.find
+      ((== registration ^. #projectionId) . (^. #projectionId))
+      (validated ^. #validatedInventory . #inventoryProjections)
+  pure (projection ^. #rebuildGroupId)
+
+projectionSetBelongs ::
+  ValidatedProjectionCatalog ->
+  ProjectionSet event ->
+  Bool
+projectionSetBelongs validated projectionSet =
+  expectedIds `Set.isSubsetOf` validatedIds
   where
     expectedIds =
       Set.fromList
@@ -692,7 +741,6 @@ typedInlineProjections validated projectionSet
         | fact <- validated ^. #projectionFacts,
           factSourceId fact == projectionSet ^. #projectionSource
         ]
-    projectionSetBelongs = expectedIds `Set.isSubsetOf` validatedIds
 
 catalogInventory :: ValidatedProjectionCatalog -> CatalogInventory
 catalogInventory = validatedInventory

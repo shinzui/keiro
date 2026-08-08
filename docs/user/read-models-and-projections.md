@@ -66,9 +66,53 @@ Existing callers remain source-compatible. The `unmanagedInlineProjections`,
 `unmanagedAsyncProjection`, and `unmanagedReadModel` wrappers label values that
 remain outside catalog validation while an application migrates incrementally.
 
-## Initialize Metadata
+## Register And Fence Catalog Groups
 
-The `keiro_read_models` table — which stores each model's version, shape hash,
+After validation, register the complete catalog once at application startup:
+
+```haskell
+Success validated -> do
+  registration <- registerProjectionCatalog validated
+  case registration of
+    Left drift -> refuseStartup drift
+    Right groups -> startProjectionWorkers groups
+```
+
+Registration persists one row per rebuild group and binds each query model to
+that group in one transaction. Repeating the same fingerprint is idempotent; a
+different fingerprint for an existing group is a typed startup error. Existing
+unmanaged read models are migrated into deterministic
+`$legacy-read-model:<name>` singleton groups and a matching live row can be
+adopted by catalog registration.
+
+Use `runCommandWithCatalogProjections` for inline application and
+`applyAsyncProjectionFromCatalog` for async application. Both acquire shared
+locks for the catalog-derived groups in stable identity order inside the same
+transaction as the append or dedup/application work. When a group is rebuilding
+or failed, the inline runner rolls back the event append and target SQL and the
+async runner performs no dedup insert or target write. Treat the typed fenced
+outcome as retryable unavailability; an async worker must not advance its
+checkpoint for that event.
+
+Start an offline rebuild with `beginGroupRebuild validated groupId request`.
+Preparation holds the exclusive group lock while it:
+
+- moves the group and all bound query models out of live service;
+- clears every `ClearBeforeReplay` target through one quoted multi-table
+  `TRUNCATE` without `CASCADE`;
+- leaves every `PreserveAndReconcile` target untouched; and
+- resets only the replayable async dedup and subscription identities derived
+  from that group in the validated catalog.
+
+An undeclared foreign-key reference therefore rejects and rolls back the whole
+preparation instead of erasing external data. `abandonGroupRebuild` records
+structured failure evidence and deliberately keeps the group fenced. Promotion
+requires the opaque completion proof produced by the catalog replay runner; no
+individual target or query binding can be promoted independently.
+
+## Initialize Legacy Metadata
+
+The compatibility `keiro_read_models` table — which stores each model's version, shape hash,
 status, and build timestamp — is created by `keiro-migrate`; see
 [Database Migrations](migrations.md). Tests get it from the migrated template
 database (the `keiro-test-support` `withMigratedSuite` fixture).
@@ -293,7 +337,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (source_event_id) DO NOTHING;
 ```
 
-## Rebuild Lifecycle
+## Legacy Rebuild Lifecycle
 
 The supported offline workflow in `Keiro.ReadModel.Rebuild` is:
 
@@ -309,8 +353,12 @@ The supported offline workflow in `Keiro.ReadModel.Rebuild` is:
 5. On failure, call `abandonRebuild` and keep the partial model offline while it
    is repaired or restored.
 
-The low-level `rebuild` and `promote` functions change status only and bypass
-the reset and promotion safeguards; they are not the operator workflow.
+These single-read-model functions are an unmanaged compatibility path. They
+accept caller-supplied projection-name lists and cannot coordinate several
+targets. Keep them while migrating existing applications; new production code
+should register a validated catalog and use the group lifecycle above. The
+lower-level `rebuild` and `promote` functions additionally bypass reset and
+promotion safeguards.
 
 ## Errors
 

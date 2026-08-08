@@ -1,5 +1,14 @@
 module CatalogSpec
   ( spec,
+    CatalogEvent (..),
+    validCatalog,
+    validProjectionSet,
+    catalogAsyncProjection,
+    inlineProjectionId,
+    asyncProjectionId,
+    counterTargetId,
+    auditTargetId,
+    mainGroupId,
   )
 where
 

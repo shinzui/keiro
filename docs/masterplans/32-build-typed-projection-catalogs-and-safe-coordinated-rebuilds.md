@@ -228,7 +228,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1: public catalog vocabulary, typed/existential views, compatibility bridge, and ADR.
 - [x] EP-1: deterministic closed-world validation, fingerprints, inventories, and live mutation tests.
-- [ ] EP-2: group registry and atomic clear/preserve preparation with derived dedup/checkpoint resets.
+- [x] EP-2: group registry and atomic clear/preserve preparation with derived dedup/checkpoint resets.
 - [ ] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
 - [ ] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
 - [ ] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.

@@ -28,7 +28,7 @@ module Keiro.ReadModel.Schema
   )
 where
 
-import Contravariant.Extras (contrazip3, contrazip4)
+import Contravariant.Extras (contrazip4, contrazip5)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -61,6 +61,9 @@ data ReadModelMetadata = ReadModelMetadata
   { name :: !Text,
     version :: !Int,
     shapeHash :: !Text,
+    -- | The group whose lifecycle gates this query model. Legacy registration
+    -- uses a deterministic singleton group.
+    rebuildGroupId :: !Text,
     lastBuiltAt :: !(Maybe UTCTime),
     status :: !ReadModelStatus
   }
@@ -75,9 +78,11 @@ data ReadModelMetadata = ReadModelMetadata
 -- schema drift.
 registerReadModel :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 registerReadModel name version shapeHash =
-  runTransaction
-    $ Tx.statement
-      (name, Prelude.fromIntegral version, shapeHash)
+  runTransaction $ do
+    let groupId = legacyRebuildGroupId name
+    Tx.statement groupId ensureLegacyGroupStmt
+    Tx.statement
+      (name, Prelude.fromIntegral version, shapeHash, groupId)
       registerReadModelStmt
 
 -- | Look up a read model's registry row by name, if it exists.
@@ -109,24 +114,31 @@ markAbandoned name version shapeHash =
 -- orchestration uses this form so the status row lock, table reset, dedup reset,
 -- and checkpoint reset share one database transaction.
 transitionReadModelTx :: Text -> Int -> Text -> ReadModelStatus -> Tx.Transaction ReadModelMetadata
-transitionReadModelTx name version shapeHash status =
+transitionReadModelTx name version shapeHash status = do
+  let groupId = legacyRebuildGroupId name
+      (groupStatus, activeRunId, failureDetail) = legacyGroupTransition groupId status
   Tx.statement
-    (name, Prelude.fromIntegral version, shapeHash, statusToText status)
+    (groupId, groupStatus, activeRunId, failureDetail)
+    transitionLegacyGroupStmt
+  Tx.statement
+    (name, Prelude.fromIntegral version, shapeHash, statusToText status, groupId)
     transitionReadModelStmt
 
-registerReadModelStmt :: Statement (Text, Int64, Text) ReadModelMetadata
+registerReadModelStmt :: Statement (Text, Int64, Text, Text) ReadModelMetadata
 registerReadModelStmt =
   preparable
     """
-    INSERT INTO keiro.keiro_read_models (name, version, shape_hash, status, last_built_at)
-    VALUES ($1, $2, $3, 'live', now())
+    INSERT INTO keiro.keiro_read_models
+      (name, version, shape_hash, rebuild_group_id, status, last_built_at)
+    VALUES ($1, $2, $3, $4, 'live', now())
     ON CONFLICT (name) DO UPDATE
       SET name = EXCLUDED.name
-    RETURNING name, version, shape_hash, last_built_at, status
+    RETURNING name, version, shape_hash, rebuild_group_id, last_built_at, status
     """
-    ( contrazip3
+    ( contrazip4
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
     readModelMetadataSingle
@@ -135,19 +147,20 @@ lookupReadModelStmt :: Statement Text (Maybe ReadModelMetadata)
 lookupReadModelStmt =
   preparable
     """
-    SELECT name, version, shape_hash, last_built_at, status
+    SELECT name, version, shape_hash, rebuild_group_id, last_built_at, status
     FROM keiro.keiro_read_models
     WHERE name = $1
     """
     (E.param (E.nonNullable E.text))
     (D.rowMaybe readModelMetadataDecoder)
 
-transitionReadModelStmt :: Statement (Text, Int64, Text, Text) ReadModelMetadata
+transitionReadModelStmt :: Statement (Text, Int64, Text, Text, Text) ReadModelMetadata
 transitionReadModelStmt =
   preparable
     """
-    INSERT INTO keiro.keiro_read_models (name, version, shape_hash, status, last_built_at, updated_at)
-    VALUES ($1, $2, $3, $4, now(), now())
+    INSERT INTO keiro.keiro_read_models
+      (name, version, shape_hash, status, rebuild_group_id, last_built_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, now(), now())
     ON CONFLICT (name) DO UPDATE
       SET version = EXCLUDED.version,
           shape_hash = EXCLUDED.shape_hash,
@@ -157,11 +170,12 @@ transitionReadModelStmt =
             ELSE keiro_read_models.last_built_at
           END,
           updated_at = now()
-    RETURNING name, version, shape_hash, last_built_at, status
+    RETURNING name, version, shape_hash, rebuild_group_id, last_built_at, status
     """
-    ( contrazip4
+    ( contrazip5
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
@@ -177,8 +191,64 @@ readModelMetadataDecoder =
     <$> D.column (D.nonNullable D.text)
     <*> (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8))
     <*> D.column (D.nonNullable D.text)
+    <*> D.column (D.nonNullable D.text)
     <*> D.column (D.nullable D.timestamptz)
     <*> (statusFromText <$> D.column (D.nonNullable D.text))
+
+ensureLegacyGroupStmt :: Statement Text ()
+ensureLegacyGroupStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_rebuild_groups
+      (group_id, catalog_fingerprint, status)
+    VALUES ($1, '$legacy-unmanaged', 'live')
+    ON CONFLICT (group_id) DO NOTHING
+    """
+    (E.param (E.nonNullable E.text))
+    D.noResult
+
+transitionLegacyGroupStmt :: Statement (Text, Text, Maybe Text, Maybe Text) ()
+transitionLegacyGroupStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_rebuild_groups
+      (group_id, catalog_fingerprint, status, active_run_id, failure_code, failure_detail)
+    VALUES (
+      $1,
+      '$legacy-unmanaged',
+      $2,
+      $3,
+      CASE WHEN $2 = 'failed' THEN 'legacy-read-model-state' ELSE NULL END,
+      $4
+    )
+    ON CONFLICT (group_id) DO UPDATE
+      SET status = EXCLUDED.status,
+          active_run_id = EXCLUDED.active_run_id,
+          started_at = CASE WHEN EXCLUDED.status = 'rebuilding' THEN now() ELSE NULL END,
+          completed_at = CASE WHEN EXCLUDED.status = 'live' THEN now() ELSE NULL END,
+          failed_at = CASE WHEN EXCLUDED.status = 'failed' THEN now() ELSE NULL END,
+          failure_code = EXCLUDED.failure_code,
+          failure_detail = EXCLUDED.failure_detail,
+          updated_at = now()
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
+    )
+    D.noResult
+
+legacyRebuildGroupId :: Text -> Text
+legacyRebuildGroupId name = "$legacy-read-model:" <> name
+
+legacyGroupTransition :: Text -> ReadModelStatus -> (Text, Maybe Text, Maybe Text)
+legacyGroupTransition groupId = \case
+  Live -> ("live", Nothing, Nothing)
+  Rebuilding -> ("rebuilding", Just groupId, Nothing)
+  Paused -> ("failed", Just groupId, Just "paused")
+  Abandoned -> ("failed", Just groupId, Just "abandoned")
+  UnknownStatus raw -> ("failed", Just groupId, Just raw)
 
 statusToText :: ReadModelStatus -> Text
 statusToText = \case

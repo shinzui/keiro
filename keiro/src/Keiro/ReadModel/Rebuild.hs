@@ -1,6 +1,15 @@
 -- | The supported offline read-model rebuild lifecycle.
 --
--- Use this checklist rather than composing the low-level status transitions:
+-- New applications register a 'Keiro.Projection.Catalog.ValidatedProjectionCatalog'
+-- with 'registerProjectionCatalog', call 'beginGroupRebuild' for one atomic
+-- target group, replay through the dedicated catalog runner, and promote only
+-- with its opaque 'GroupCompletionToken'. Preparation derives target reset,
+-- dedup, and subscription state from the catalog; abandonment records evidence
+-- and keeps the group fenced.
+--
+-- The following single-read-model checklist is the unmanaged compatibility
+-- path for existing callers. It cannot coordinate multiple targets and accepts
+-- caller-supplied projection names:
 --
 -- 1. Call 'Keiro.ReadModel.Schema.registerReadModel' once at projection startup.
 --    Explicit registration makes misspelled or never-populated models fail with
@@ -26,7 +35,33 @@
 -- provide a shadow-table or online cutover mechanism; applications that need
 -- zero-downtime rebuilds must build that orchestration above this lifecycle API.
 module Keiro.ReadModel.Rebuild
-  ( RebuildError (..),
+  ( -- * Catalog rebuild groups
+    RebuildRunId,
+    mkRebuildRunId,
+    rebuildRunIdText,
+    RebuildRequest (..),
+    RebuildFailure (..),
+    GroupLifecycleStatus (..),
+    GroupRebuildMetadata (..),
+    CatalogRegistrationError (..),
+    RebuildStartError (..),
+    GroupTransitionError (..),
+    ProjectionWriteFence (..),
+    GroupPreparation (..),
+    GroupRebuildHandle,
+    groupRebuildHandleGroup,
+    groupRebuildHandleRun,
+    groupRebuildHandleFingerprint,
+    groupRebuildHandlePreparation,
+    GroupCompletionToken,
+    registerProjectionCatalog,
+    lookupProjectionRebuildGroup,
+    beginGroupRebuild,
+    finishGroupRebuild,
+    abandonGroupRebuild,
+
+    -- * Unmanaged single-read-model compatibility
+    RebuildError (..),
     startRebuild,
     finishRebuild,
     rebuild,
@@ -43,6 +78,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
 import Keiro.ReadModel
+import Keiro.ReadModel.Rebuild.Group
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))

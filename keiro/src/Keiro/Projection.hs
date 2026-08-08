@@ -20,11 +20,15 @@ module Keiro.Projection
   ( -- * Inline projections
     InlineProjection (..),
     runCommandWithProjections,
+    ProjectionCommandOutcome (..),
+    runCommandWithCatalogProjections,
 
     -- * Asynchronous projections
     AsyncProjection (..),
     AsyncApplyOutcome (..),
+    CatalogAsyncApplyOutcome (..),
     applyAsyncProjection,
+    applyAsyncProjectionFromCatalog,
     applyAsyncProjectionUnfenced,
     pruneAsyncProjectionDedupBefore,
     recordProjectionLag,
@@ -40,11 +44,35 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiki.Core (BoolAlg, RegFile)
-import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
+import Keiro.Command
+  ( CommandError,
+    CommandResult,
+    RunCommandOptions,
+    SqlCommandOutcome (..),
+    SqlTransactionDecision (..),
+    runCommandWithSqlEvents,
+    runCommandWithSqlEventsControlled,
+  )
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream)
 import Keiro.Prelude
+import Keiro.Projection.Catalog
+  ( ProjectionId,
+    ProjectionSet,
+    RebuildGroupId,
+    SourceId,
+    ValidatedProjectionCatalog,
+    asyncProjectionRebuildGroup,
+    typedInlineProjections,
+    typedProjectionRebuildGroups,
+  )
+import Keiro.Projection.Types
 import Keiro.ReadModel (readSubscriptionPosition, storeHeadPosition)
+import Keiro.ReadModel.Rebuild.Group
+  ( ProjectionWriteFence (..),
+    RebuildRunId,
+    lockProjectionGroupsTx,
+  )
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Telemetry qualified as Telemetry
@@ -56,34 +84,6 @@ import Kiroku.Store.Types (EventId (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
--- | A read-model update applied synchronously with the command that emits
--- the event. 'apply' receives both the decoded event @co@ and the
--- 'RecordedEvent' the store persisted, and runs in the append transaction.
--- 'name' identifies the projection for diagnostics.
-data InlineProjection co = InlineProjection
-  { name :: !Text,
-    apply :: !(co -> RecordedEvent -> Tx.Transaction ())
-  }
-  deriving stock (Generic)
-
--- | A read-model update applied asynchronously by a subscription worker.
---
--- * 'name' — identifies the projection for diagnostics.
--- * 'readModelName' — names the registry row for the model this projection writes.
--- * 'subscriptionName' — the cursor under which the worker checkpoints its
---   progress through the event log.
--- * 'applyRecorded' — folds one 'RecordedEvent' into the read model.
--- * 'idempotencyKey' — the 'EventId' used to suppress duplicate application on
---   redelivery, making the projection safe to retry.
-data AsyncProjection = AsyncProjection
-  { name :: !Text,
-    readModelName :: !Text,
-    subscriptionName :: !Text,
-    applyRecorded :: !(RecordedEvent -> Tx.Transaction ()),
-    idempotencyKey :: !(RecordedEvent -> EventId)
-  }
-  deriving stock (Generic)
-
 -- | The database-visible result of one asynchronous projection attempt.
 data AsyncApplyOutcome
   = AsyncApplied
@@ -91,10 +91,32 @@ data AsyncApplyOutcome
   | AsyncFenced
   deriving stock (Generic, Eq, Show)
 
+-- | Result of a catalog-fenced inline command. A fenced result proves the
+-- append transaction was rolled back, so neither its events nor any projection
+-- SQL committed.
+data ProjectionCommandOutcome target
+  = ProjectionCommandApplied !(CommandResult target)
+  | ProjectionCommandFenced !RebuildGroupId !RebuildRunId
+  | ProjectionCommandGroupUnregistered !RebuildGroupId
+  | ProjectionCommandCatalogMismatch !SourceId
+  deriving stock (Generic, Eq, Show)
+
+-- | Catalog-aware result of one asynchronous projection application.
+data CatalogAsyncApplyOutcome
+  = CatalogAsyncApplied
+  | CatalogAsyncDuplicate
+  | CatalogAsyncFenced !RebuildGroupId !RebuildRunId
+  | CatalogAsyncGroupUnregistered !RebuildGroupId
+  | CatalogAsyncProjectionUnknown !ProjectionId
+  deriving stock (Generic, Eq, Show)
+
 -- | Run a command and apply every supplied 'InlineProjection' to the events
 -- it emits, all inside the command's append transaction. A projection failure
 -- aborts the whole transaction, so the events and the read-model update commit
 -- together or not at all.
+--
+-- This compatibility runner does not consult catalog rebuild-group fences. New
+-- managed callers should use 'runCommandWithCatalogProjections'.
 runCommandWithProjections ::
   forall phi rs s ci co es.
   (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
@@ -122,6 +144,61 @@ runCommandWithProjections options eventStream targetStream command projections =
       )
   pure (fmap Prelude.fst result)
 
+-- | Run a command through the typed source view derived from one validated
+-- catalog. Every distinct rebuild group is locked in stable ID order inside the
+-- append transaction before any projection handler runs. A rebuilding or failed
+-- group condemns that transaction and returns a typed fence outcome.
+runCommandWithCatalogProjections ::
+  forall phi rs s ci co es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  ValidatedEventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ValidatedProjectionCatalog ->
+  ProjectionSet co ->
+  Eff es (Either CommandError (ProjectionCommandOutcome (EventStream phi rs s ci co)))
+runCommandWithCatalogProjections options eventStream targetStream command catalog projectionSet = do
+  if Prelude.null groups
+    then pure (Right (ProjectionCommandCatalogMismatch (projectionSet ^. #projectionSource)))
+    else do
+      outcome <-
+        runCommandWithSqlEventsControlled
+          options
+          eventStream
+          targetStream
+          command
+          applyCatalogProjections
+      pure (fmap toProjectionOutcome outcome)
+  where
+    projections = typedInlineProjections catalog projectionSet
+    groups = typedProjectionRebuildGroups catalog projectionSet
+
+    applyCatalogProjections pairs _appendResult = do
+      fence <- lockProjectionGroupsTx groups
+      case fence of
+        ProjectionWritesAllowed -> do
+          traverse_
+            ( \projection ->
+                traverse_
+                  (\(event, recorded) -> (projection ^. #apply) event recorded)
+                  pairs
+            )
+            projections
+          pure (CommitSqlTransaction fence)
+        _ -> pure (RollbackSqlTransaction fence)
+
+    toProjectionOutcome = \case
+      SqlCommandNoOp result -> ProjectionCommandApplied result
+      SqlCommandCommitted result _ -> ProjectionCommandApplied result
+      SqlCommandRolledBack fence -> fenceOutcome fence
+
+    fenceOutcome = \case
+      ProjectionWritesAllowed ->
+        error "runCommandWithCatalogProjections: rolled back with writes allowed"
+      ProjectionWriteFenced groupId runId -> ProjectionCommandFenced groupId runId
+      ProjectionWriteGroupUnregistered groupId -> ProjectionCommandGroupUnregistered groupId
+
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
 --
@@ -131,6 +208,9 @@ runCommandWithProjections options eventStream targetStream command projections =
 -- 'AsyncFenced' must not checkpoint past the event: fail or park the delivery and
 -- retry after promotion. Ack-coupled Kiroku delivery preserves the checkpoint
 -- when its handler does not acknowledge success.
+--
+-- This compatibility path consults only the legacy single-read-model registry.
+-- Catalog-managed workers should use 'applyAsyncProjectionFromCatalog'.
 --
 -- The projection's 'idempotencyKey' is inserted into @keiro_projection_dedup@
 -- inside the same transaction as 'applyRecorded'. When that insert conflicts,
@@ -147,6 +227,34 @@ applyAsyncProjection projection recorded = do
   case status of
     Just "live" -> applyAsyncProjectionUnfenced projection recorded
     _ -> pure AsyncFenced
+
+-- | Apply one async handler through its validated catalog identity and the same
+-- rebuild-group row lock used by inline commands and rebuild preparation.
+-- Fenced outcomes perform no dedup insert or target write; an ack-coupled worker
+-- must therefore leave its subscription checkpoint unchanged.
+applyAsyncProjectionFromCatalog ::
+  ValidatedProjectionCatalog ->
+  ProjectionId ->
+  AsyncProjection ->
+  RecordedEvent ->
+  Tx.Transaction CatalogAsyncApplyOutcome
+applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
+  case asyncProjectionRebuildGroup catalog projectionId (projection ^. #name) of
+    Nothing -> pure (CatalogAsyncProjectionUnknown projectionId)
+    Just groupId -> do
+      fence <- lockProjectionGroupsTx [groupId]
+      case fence of
+        ProjectionWritesAllowed -> do
+          outcome <- applyAsyncProjectionUnfenced projection recorded
+          pure $ case outcome of
+            AsyncApplied -> CatalogAsyncApplied
+            AsyncDuplicate -> CatalogAsyncDuplicate
+            AsyncFenced ->
+              error "applyAsyncProjectionUnfenced returned a fenced outcome"
+        ProjectionWriteFenced fencedGroup runId ->
+          pure (CatalogAsyncFenced fencedGroup runId)
+        ProjectionWriteGroupUnregistered missingGroup ->
+          pure (CatalogAsyncGroupUnregistered missingGroup)
 
 -- | Apply one event without consulting the read-model registry fence.
 --

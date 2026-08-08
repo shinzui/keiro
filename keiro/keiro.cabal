@@ -90,6 +90,8 @@ library
 
   other-modules:
     Keiro.DeterministicId
+    Keiro.Projection.Types
+    Keiro.ReadModel.Rebuild.Group
     Keiro.ReplayDigest
 
   reexported-modules:
@@ -148,7 +150,10 @@ test-suite keiro-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
-  other-modules:  CatalogSpec
+  other-modules:
+    CatalogSpec
+    GroupRebuildSpec
+
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson                                  >=2.2     && <2.3

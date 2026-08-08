@@ -16,6 +16,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   fingerprints. Reset policy is independent from replay policy, prior-inventory
   removal comparison remains a separate gate, and legacy read-model/projection
   values have explicit unmanaged compatibility wrappers.
+- **keiro**: make catalog rebuild groups the durable lifecycle and writer-fence
+  unit. Catalog registration persists group fingerprints and query bindings;
+  `beginGroupRebuild` atomically fences the group, clears all declared
+  clear-before-replay tables with one foreign-key-compatible `TRUNCATE`,
+  preserves reconcile targets, and derives async dedup/checkpoint resets from
+  the catalog. `runCommandWithCatalogProjections` and
+  `applyAsyncProjectionFromCatalog` use the same sorted group locks and return
+  typed fenced outcomes without committing append, dedup, or target writes.
+  Existing single-read-model rebuild functions remain as an unmanaged bridge.
 
 ## [0.11.0.0] - 2026-08-05
 

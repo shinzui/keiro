@@ -36,11 +36,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add Keiro-owned group lifecycle schema and migrate existing single-read-model registry
+- [x] Add Keiro-owned group lifecycle schema and migrate existing single-read-model registry
       state without touching application tables.
-- [ ] Implement validated, atomic group preparation for multi-target clear/preserve policies and
+- [x] Implement validated, atomic group preparation for multi-target clear/preserve policies and
       derived dedup/subscription reset sets.
-- [ ] Enforce the same group fence in inline and async live write transactions; retain the legacy
+- [x] Enforce the same group fence in inline and async live write transactions; retain the legacy
       one-read-model compatibility path.
 - [ ] Implement atomic group promotion and abandonment, add concurrency/policy tests, amend the
       catalog ADR, and pass focused and full verification.
@@ -51,7 +51,21 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-08-08: Native migration 0022 adds
+  `keiro.keiro_projection_rebuild_groups` and maps every existing registry row to
+  `$legacy-read-model:<name>`. Live and rebuilding states remain exact; other
+  historical non-live values become failed with the original value retained as
+  failure evidence. The schema fixture and a three-state upgrade integration
+  test cover the mapping.
+- 2026-08-08: Hasql's `condemn` returns the transaction value after forcing
+  rollback, so catalog fingerprint and query-binding drift can remain typed
+  results without committing the registration work. This was verified in the
+  Mori-located Hasql transaction source before using the API.
+- 2026-08-08: The concurrency fixtures held inline and async live transactions
+  open with one-second PostgreSQL sleeps. Preparation began 200 ms later and
+  waited more than 500 ms in both tests before clearing the committed write.
+  Effectful's `ConcUnlift Persistent Unlimited`, verified through Mori docs and
+  source, was required for the resource-backed command runner test fixture.
 
 
 ## Decision Log
@@ -82,6 +96,14 @@ Record every decision made while working on the plan.
   the transaction lock prevents reset races; a typed result gives the caller an explicit retry or
   service-unavailable choice.
   Date: 2026-08-07
+
+- Decision: Preserve the one-read-model API as a deterministic singleton-group
+  bridge, while keeping its caller-supplied reset list and catalog-free behavior
+  explicitly unmanaged.
+  Rationale: Existing applications remain source-compatible, but new group APIs
+  do not inherit the dishonest projection-name list or fabricate physical target
+  declarations for legacy rows.
+  Date: 2026-08-08
 
 
 ## Outcomes & Retrospective

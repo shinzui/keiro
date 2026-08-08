@@ -85,12 +85,41 @@ rebuild-progress schema. A future target-scoped SQL capability can strengthen
 this boundary without retroactively pretending the current catalog provides
 that proof.
 
+A rebuild group is also the durable database lifecycle and live-writer fence.
+It moves through `live -> rebuilding -> live` after verified promotion, or
+`live -> rebuilding -> failed` after abandonment. Both rebuilding and failed
+states keep ordinary writers fenced. The group row stores the active run and
+catalog fingerprint; query-model rows observe that group and transition with it.
+No target or query model can return to service independently.
+
+Live inline and async paths acquire `FOR SHARE` locks on distinct group rows in
+sorted `RebuildGroupId` order inside the same transaction as the event append,
+dedup insert, and target SQL. Preparation takes `FOR UPDATE` on the group row.
+Consequently a writer that already owns the shared lock commits before
+preparation continues, while any writer arriving after preparation sees the
+non-live state and returns a typed fenced outcome without committing work.
+
+Preparation is one transaction. It issues one quoted multi-table `TRUNCATE` for
+all declared clear-before-replay targets, in dependency order and without
+`CASCADE`; preserves reconcile targets; and resets only replayable async dedup
+and subscription identities derived from the catalog. An undeclared foreign
+key therefore rolls back registry, target, and framework-state changes together.
+Abandonment records structured failure evidence and preserves the fence because
+cleared or partially replayed application data cannot be restored automatically.
+
 
 ## Consequences
 
 - Database lifecycle and history replay code accept only a
   `ValidatedProjectionCatalog`, so invalid inventories cause no registration or
   rebuild effects.
+- Group registration is idempotent only for the same fingerprint. Existing
+  single-read-model rows migrate to deterministic singleton legacy groups so
+  compatibility calls keep their old behavior without inventing fake catalog
+  targets.
+- A failed rebuild is an offline state, not an automatic rollback. Operators
+  repair or resume it through the rebuild runner; they cannot bypass completion
+  evidence by promoting one binding.
 - Existing `InlineProjection`, `AsyncProjection`, and `ReadModel` values remain
   source-compatible. Explicit unmanaged wrappers label callers that have not
   adopted catalog validation; they do not make a legacy list safe by naming it.

@@ -41,7 +41,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Database.PostgreSQL.Migrate (MigrationComponent, defaultRunOptions, migrationPlan, runMigrationPlan)
-import Effectful (Eff, IOE, UnliftStrategy (..), runEff, withEffToIO)
+import Effectful (Eff, IOE, Limit (..), Persistence (..), UnliftStrategy (..), runEff, withEffToIO)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import EphemeralPg qualified as Pg
 import Hasql.Connection.Settings qualified as Conn
@@ -151,7 +151,7 @@ withFreshResourceStoreWith fixture modify action =
     runEff $
       withKirokuStore (modify (Store.defaultConnectionSettings connStr)) $ do
         store <- getKirokuStore
-        withEffToIO SeqUnlift \unlift ->
+        withEffToIO (ConcUnlift Persistent Unlimited) \unlift ->
           action
             ( store,
               StoreRunner (unlift . runErrorNoCallStack . runStoreResource)

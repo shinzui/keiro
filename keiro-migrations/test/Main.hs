@@ -12,6 +12,7 @@ import Data.Foldable (toList)
 import Data.Int (Int64)
 import Data.List (findIndex, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -53,7 +54,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
   describe "native Keiro migration definition" $ do
-    it "tracks twenty-one native files in manifest order" $ do
+    it "tracks twenty-two native files in manifest order" $ do
       directory <- findMigrationsDirectory
       manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
       manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -66,7 +67,7 @@ main = hspec $ do
         bytes <- ByteString.readFile (directory </> nativeName)
         lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-    it "builds component keiro with dependency kiroku and twenty-one migrations" $ do
+    it "builds component keiro with dependency kiroku and twenty-two migrations" $ do
       plan <- requirePlan
       let PlanDescription components = planDescription plan
       case toList components of
@@ -79,7 +80,7 @@ main = hspec $ do
             componentNameText keiroName `shouldBe` "keiro"
             dependencyName <- requireRight (componentName "kiroku")
             keiroDependencies `shouldBe` Set.singleton dependencyName
-            length keiroEntries `shouldBe` 21
+            length keiroEntries `shouldBe` 22
         actual -> expectationFailure ("unexpected plan description: " <> show actual)
       validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -148,7 +149,7 @@ main = hspec $ do
         [("9999-fixture.sql", "-- Never set search_path in a migration.\nSELECT 1;")]
         `shouldBe` []
 
-    it "passes all 21 embedded native bodies" $ do
+    it "passes all 22 embedded native bodies" $ do
       lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
 
   describe "startup handshake" $ do
@@ -162,7 +163,7 @@ main = hspec $ do
             plan
             >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
-        length (Keiro.pendingMigrations handshake) `shouldBe` 29
+        length (Keiro.pendingMigrations handshake) `shouldBe` 30
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -188,7 +189,7 @@ main = hspec $ do
         handshake <-
           missingMigrations defaultRunOptions provider plan >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` drop 8 (planMigrationIds plan)
-        length (Keiro.pendingMigrations handshake) `shouldBe` 21
+        length (Keiro.pendingMigrations handshake) `shouldBe` 22
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -265,12 +266,12 @@ main = hspec $ do
         assertSchema connection
         let provider = providerFor connection
         rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 29 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 30 AlreadyApplied
         verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
         case verified of
           VerificationReport verificationIssues applied pending unknown -> do
             verificationIssues `shouldBe` []
-            length applied `shouldBe` 29
+            length applied `shouldBe` 30
             pending `shouldBe` []
             unknown `shouldBe` []
       either (expectationFailure . show) pure result
@@ -284,7 +285,33 @@ main = hspec $ do
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
         sort [reportOutcomes first, reportOutcomes second]
-          `shouldBe` sort [replicate 29 AppliedNow, replicate 29 AlreadyApplied]
+          `shouldBe` sort [replicate 30 AppliedNow, replicate 30 AlreadyApplied]
+
+    it "upgrades singleton read-model rows into deterministic rebuild groups" $ do
+      fullPlan <- requirePlan
+      kiroku <- requireRight Kiroku.kirokuMigrations
+      priorKeiro <-
+        requireRight
+          ( migrationComponentFromEmbeddedSql
+              "keiro"
+              (Set.singleton "kiroku")
+              (NonEmpty.fromList (init (toList embeddedMigrationEntries)))
+          )
+      priorPlan <- requireRight (frameworkMigrationPlan kiroku priorKeiro)
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+        _ <- runMigrationPlan defaultRunOptions settings priorPlan >>= requireRight
+        withConnection settings $ \connection ->
+          useSession connection (Session.script legacyReadModelFixtureSql)
+        report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
+        last (reportOutcomes report) `shouldBe` AppliedNow
+        withConnection settings $ \connection -> do
+          rows <- useSession connection (Session.statement () legacyGroupUpgradeStatement)
+          rows
+            `shouldBe` [ ("legacy-abandoned", 9, "shape-abandoned", "abandoned", "$legacy-read-model:legacy-abandoned", "failed", Just "$legacy-read-model:legacy-abandoned", Just "abandoned"),
+                         ("legacy-live", 7, "shape-live", "live", "$legacy-read-model:legacy-live", "live", Nothing, Nothing),
+                         ("legacy-rebuilding", 8, "shape-rebuilding", "rebuilding", "$legacy-read-model:legacy-rebuilding", "rebuilding", Just "$legacy-read-model:legacy-rebuilding", Nothing)
+                       ]
 
   describe "codd-ledger preflight" $ do
     it "blocks a current codd ledger before native history exists" $
@@ -420,7 +447,7 @@ main = hspec $ do
           `shouldBe` replicate 7 AlreadyApplied
             <> [AppliedNow]
             <> replicate 16 AlreadyApplied
-            <> replicate 5 AppliedNow
+            <> replicate 6 AppliedNow
 
         verifiedAfterUp <-
           verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
@@ -428,6 +455,52 @@ main = hspec $ do
           VerificationReport verificationIssues _ _ _ ->
             verificationIssues `shouldBe` []
         withConnection settings assertSchema
+
+legacyReadModelFixtureSql :: Text
+legacyReadModelFixtureSql =
+  """
+  INSERT INTO keiro.keiro_read_models
+    (name, version, shape_hash, last_built_at, status, updated_at)
+  VALUES
+    ('legacy-live', 7, 'shape-live', '2026-01-01 00:00:00+00', 'live', '2026-01-01 00:00:00+00'),
+    ('legacy-rebuilding', 8, 'shape-rebuilding', '2026-01-01 00:00:00+00', 'rebuilding', '2026-01-02 00:00:00+00'),
+    ('legacy-abandoned', 9, 'shape-abandoned', '2026-01-01 00:00:00+00', 'abandoned', '2026-01-03 00:00:00+00');
+  """
+
+legacyGroupUpgradeStatement ::
+  Statement () [(Text, Int64, Text, Text, Text, Text, Maybe Text, Maybe Text)]
+legacyGroupUpgradeStatement =
+  Statement.preparable
+    """
+    SELECT rm.name,
+           rm.version,
+           rm.shape_hash,
+           rm.status,
+           rm.rebuild_group_id,
+           rg.status,
+           rg.active_run_id,
+           rg.failure_detail
+    FROM keiro.keiro_read_models AS rm
+    JOIN keiro.keiro_projection_rebuild_groups AS rg
+      ON rg.group_id = rm.rebuild_group_id
+    ORDER BY rm.name
+    """
+    Encoders.noParams
+    ( Decoders.rowList
+        ( (,,,,,,,)
+            <$> column Decoders.text
+            <*> column Decoders.int8
+            <*> column Decoders.text
+            <*> column Decoders.text
+            <*> column Decoders.text
+            <*> column Decoders.text
+            <*> nullableColumn Decoders.text
+            <*> nullableColumn Decoders.text
+        )
+    )
+  where
+    column = Decoders.column . Decoders.nonNullable
+    nullableColumn = Decoders.column . Decoders.nullable
 
 assertBlockedCoddPreflight :: Text -> Expectation
 assertBlockedCoddPreflight sourceSchema =
@@ -471,12 +544,12 @@ importFixture sourceSchema = do
       `shouldBe` replicate 7 AlreadyApplied
         <> [AppliedNow]
         <> replicate 16 AlreadyApplied
-        <> [AppliedNow, AppliedNow, AppliedNow, AppliedNow, AppliedNow]
+        <> replicate 6 AppliedNow
     verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
     case verifiedAfterCanaries of
       VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
     rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-    reportOutcomes rerun `shouldBe` replicate 29 AlreadyApplied
+    reportOutcomes rerun `shouldBe` replicate 30 AlreadyApplied
     second <-
       importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
         >>= requireRight
@@ -486,7 +559,7 @@ importFixture sourceSchema = do
       sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
       sourceRows `shouldBe` 23
       facts <- useSession connection (Session.statement () importFactsStatement)
-      facts `shouldBe` (29, 23, True)
+      facts `shouldBe` (30, 23, True)
 
 postCoddImportPendingIssues :: IO [VerificationIssue]
 postCoddImportPendingIssues =
@@ -501,7 +574,8 @@ postCoddImportPendingIssues =
         ("keiro", "0018"),
         ("keiro", "0019-keiro-snapshots-state-shape-hash"),
         ("keiro", "0020-keiro-workflow-children-failure-reason"),
-        ("keiro", "0021-keiro-workflows-exact-discovery")
+        ("keiro", "0021-keiro-workflows-exact-discovery"),
+        ("keiro", "0022")
       ]
 
 assertPoisonedLedger :: Settings.Settings -> Expectation
@@ -535,7 +609,8 @@ nativeMigrationFiles =
     "0018.sql",
     "0019-keiro-snapshots-state-shape-hash.sql",
     "0020-keiro-workflow-children-failure-reason.sql",
-    "0021-keiro-workflows-exact-discovery.sql"
+    "0021-keiro-workflows-exact-discovery.sql",
+    "0022.sql"
   ]
 
 findMigrationsDirectory :: IO FilePath

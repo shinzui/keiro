@@ -32,6 +32,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Exception qualified as EffException
 import GHC.Conc (ThreadStatus (..), threadStatus)
+import GroupRebuildSpec qualified
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -384,6 +385,128 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogSpec.spec
+  GroupRebuildSpec.spec fixture
+
+  describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
+    it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
+      validated <-
+        case validateProjectionCatalog catalogInlineProjectionCatalog of
+          Failure diagnostics ->
+            expectationFailure ("catalog fixture failed validation: " <> show diagnostics)
+              >> error "unreachable"
+          Success value -> pure value
+      Right () <- runStore $ Store.runTransaction (Tx.sql catalogInlineFixtureSql)
+      Right (Right _) <- runStore $ Rebuild.registerProjectionCatalog validated
+
+      let targetStream = stream "counter-catalog-fence" :: Stream CounterEventStream
+      first <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            targetStream
+            (Add 4)
+            validated
+            catalogInlineProjectionSet
+      first `shouldSatisfy` \case
+        Right (Right (ProjectionCommandApplied result)) -> result ^. #eventsAppended == 1
+        _ -> False
+      Right 1 <- runStore $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+
+      Right (Right _) <-
+        runStore $
+          Rebuild.beginGroupRebuild
+            validated
+            catalogInlineGroupId
+            Rebuild.RebuildRequest
+              { rebuildRunId = catalogInlineRunId,
+                requestedBy = "keiro-test",
+                requestReason = "inline fence proof",
+                replayFrom = GlobalPosition 0
+              }
+      Right 0 <- runStore $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+
+      second <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            targetStream
+            (Add 5)
+            validated
+            catalogInlineProjectionSet
+      second
+        `shouldBe` Right (Right (ProjectionCommandFenced catalogInlineGroupId catalogInlineRunId))
+      Right 0 <- runStore $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+      Right recorded <-
+        runStore $
+          Store.readStreamForward (StreamName "counter-catalog-fence") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 1
+
+      let foreignSource = catalogIdentity mkSourceId "catalog-inline-foreign-source"
+          foreignSet = catalogInlineProjectionSet & #projectionSource .~ foreignSource
+          foreignStream = stream "counter-catalog-mismatch" :: Stream CounterEventStream
+      mismatch <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            foreignStream
+            (Add 6)
+            validated
+            foreignSet
+      mismatch `shouldBe` Right (Right (ProjectionCommandCatalogMismatch foreignSource))
+      Right absent <-
+        runStore $
+          Store.readStreamForward (StreamName "counter-catalog-mismatch") (StreamVersion 0) 10
+      Vector.null absent `shouldBe` True
+
+    it "waits for an in-flight writer before preparing and clearing its group" $ \(_storeHandle, StoreRunner runStore) -> do
+      validated <-
+        case validateProjectionCatalog catalogInlineProjectionCatalog of
+          Failure diagnostics ->
+            expectationFailure ("catalog fixture failed validation: " <> show diagnostics)
+              >> error "unreachable"
+          Success value -> pure value
+      Right () <- runStore $ Store.runTransaction (Tx.sql catalogInlineFixtureSql)
+      Right (Right _) <- runStore $ Rebuild.registerProjectionCatalog validated
+
+      writerDone <- newEmptyMVar
+      let targetStream = stream "counter-catalog-lock-order" :: Stream CounterEventStream
+      _ <-
+        forkIO $
+          runStore
+            ( runCommandWithCatalogProjections
+                defaultRunCommandOptions
+                counterEventStream
+                targetStream
+                (Add 9)
+                validated
+                catalogSlowInlineProjectionSet
+            )
+            >>= putMVar writerDone
+      threadDelay 200_000
+      startedAt <- getCurrentTime
+      Right (Right _) <-
+        runStore $
+          Rebuild.beginGroupRebuild
+            validated
+            catalogInlineGroupId
+            Rebuild.RebuildRequest
+              { rebuildRunId = catalogInlineRunId,
+                requestedBy = "keiro-test",
+                requestReason = "in-flight inline lock proof",
+                replayFrom = GlobalPosition 0
+              }
+      finishedAt <- getCurrentTime
+
+      writer <- takeMVar writerDone
+      writer `shouldSatisfy` \case
+        Right (Right (ProjectionCommandApplied result)) -> result ^. #eventsAppended == 1
+        _ -> False
+      diffUTCTime finishedAt startedAt `shouldSatisfy` (> 0.5)
+      Right 0 <- runStore $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+      pure ()
 
   describe "Keiro" $ do
     it "exposes the scaffold version" $
@@ -12574,6 +12697,125 @@ sleepTimerFireAtStmt =
     """
     (E.param (E.nonNullable E.uuid))
     (D.rowMaybe (D.column (D.nonNullable D.timestamptz)))
+
+catalogInlineProjectionCatalog :: ProjectionCatalog
+catalogInlineProjectionCatalog =
+  ProjectionCatalog
+    { sources =
+        [ SourceDeclaration
+            { sourceId = catalogInlineSourceId,
+              sourceScope = CategorySource (CategoryName "counter"),
+              codecFingerprint = "counter-codec-v1",
+              claimSite = catalogClaimSite "test:catalog-inline-source"
+            }
+        ],
+      targets =
+        [ TargetDeclaration
+            { targetId = catalogInlineTargetId,
+              qualifiedTable = QualifiedTable "app" "catalog_inline_counter",
+              resetPolicy = ClearBeforeReplay,
+              dependsOn = [],
+              claimSite = catalogClaimSite "test:catalog-inline-target"
+            }
+        ],
+      rebuildGroups =
+        [ RebuildGroupDeclaration
+            { rebuildGroupId = catalogInlineGroupId,
+              orderedTargets = [catalogInlineTargetId],
+              claimSite = catalogClaimSite "test:catalog-inline-group"
+            }
+        ],
+      subscriptions = [],
+      dedupKeys = [],
+      queryModels = [],
+      projectionSets = [SomeProjectionSet catalogInlineProjectionSet]
+    }
+
+catalogInlineProjectionSet :: ProjectionSet CounterEvent
+catalogInlineProjectionSet = catalogInlineProjectionSetWith applyCatalogInlineCounter
+
+catalogSlowInlineProjectionSet :: ProjectionSet CounterEvent
+catalogSlowInlineProjectionSet = catalogInlineProjectionSetWith applySlowCatalogInlineCounter
+
+catalogInlineProjectionSetWith :: (CounterEvent -> RecordedEvent -> Tx.Transaction ()) -> ProjectionSet CounterEvent
+catalogInlineProjectionSetWith applyEvent =
+  ProjectionSet
+    { projectionSource = catalogInlineSourceId,
+      projectionDefinitions =
+        ProjectionDefinition
+          { projectionId = catalogInlineProjectionId,
+            rebuildGroup = catalogInlineGroupId,
+            ownedTargets = catalogInlineTargetId :| [],
+            replayPolicy = Replayable (replayAdapterFromCodec counterCodec applyCatalogInlineCounter),
+            handlers =
+              InlineHandler
+                InlineProjection
+                  { name = "catalog-inline-counter",
+                    apply = applyEvent
+                  }
+                (catalogClaimSite "test:catalog-inline-handler")
+                :| [],
+            claimSite = catalogClaimSite "test:catalog-inline-projection"
+          }
+          :| [],
+      claimSite = catalogClaimSite "test:catalog-inline-set"
+    }
+
+applyCatalogInlineCounter :: CounterEvent -> RecordedEvent -> Tx.Transaction ()
+applyCatalogInlineCounter event _recorded =
+  case event of
+    CounterAdded amount -> Tx.statement (Prelude.fromIntegral amount) catalogInlineInsertStmt
+    CounterAudited amount -> Tx.statement (Prelude.fromIntegral amount) catalogInlineInsertStmt
+
+applySlowCatalogInlineCounter :: CounterEvent -> RecordedEvent -> Tx.Transaction ()
+applySlowCatalogInlineCounter event recorded = do
+  Tx.sql "SELECT pg_sleep(1)"
+  applyCatalogInlineCounter event recorded
+
+catalogInlineSourceId :: SourceId
+catalogInlineSourceId = catalogIdentity mkSourceId "catalog-inline-source"
+
+catalogInlineTargetId :: TargetId
+catalogInlineTargetId = catalogIdentity mkTargetId "catalog-inline-target"
+
+catalogInlineGroupId :: RebuildGroupId
+catalogInlineGroupId = catalogIdentity mkRebuildGroupId "catalog-inline-group"
+
+catalogInlineProjectionId :: ProjectionId
+catalogInlineProjectionId = catalogIdentity mkProjectionId "catalog-inline-projection"
+
+catalogInlineRunId :: Rebuild.RebuildRunId
+catalogInlineRunId =
+  case Rebuild.mkRebuildRunId "catalog-inline-run" of
+    Left err -> error (Text.unpack err)
+    Right value -> value
+
+catalogClaimSite :: Text -> ClaimSite
+catalogClaimSite = catalogIdentity mkClaimSite
+
+catalogIdentity :: (Text -> Either CatalogIdentityError identity) -> Text -> identity
+catalogIdentity constructor raw =
+  case constructor raw of
+    Left err -> error (show err)
+    Right value -> value
+
+catalogInlineFixtureSql :: ByteString
+catalogInlineFixtureSql =
+  "CREATE SCHEMA app; CREATE TABLE app.catalog_inline_counter (amount bigint NOT NULL);"
+
+catalogInlineInsertStmt :: Statement Int64 ()
+catalogInlineInsertStmt =
+  preparable
+    "INSERT INTO app.catalog_inline_counter (amount) VALUES ($1)"
+    (E.param (E.nonNullable E.int8))
+    D.noResult
+
+catalogInlineCountStmt :: Statement () Int64
+catalogInlineCountStmt =
+  preparable
+    "SELECT count(*) FROM app.catalog_inline_counter"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event =
