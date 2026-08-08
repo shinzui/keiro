@@ -1,0 +1,35 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/projection-catalog.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    CatalogDemo.CatalogAudit.ReadModelHoles
+    CatalogDemo.Orders.BehaviorHoles
+    CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
+    Generated.CatalogDemo.CatalogAudit.ReadModel
+    Generated.CatalogDemo.CatalogAudit.ReadModelHarness
+    Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.Orders.BehaviorContract
+    Generated.CatalogDemo.Orders.Codec
+    Generated.CatalogDemo.Orders.Domain
+    Generated.CatalogDemo.Orders.EventStream
+    Generated.CatalogDemo.Orders.Harness
+    Generated.CatalogDemo.Orders.Projection
+    Generated.CatalogDemo.Orders.Transducer
+    Generated.CatalogDemo.ProjectionCatalog
+    Generated.CatalogDemo.ReplayAudit
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , kiroku-store
+    , text

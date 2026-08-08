@@ -90,7 +90,7 @@ languageContractNotice subject sourceFormSummary contract
             <> languageVersionText currentStableLanguageVersion
             <> " strict spec-surface validation is not applied — declare `language keiro-dsl "
             <> languageVersionText currentStableLanguageVersion
-            <> "` to adopt the stable contract"
+            <> "` to adopt the active authoring contract"
         )
 
 instance ToJSON EffectiveLanguageContract where

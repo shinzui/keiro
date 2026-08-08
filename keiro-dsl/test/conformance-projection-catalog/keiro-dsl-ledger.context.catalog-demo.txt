@@ -1,0 +1,46 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/projection-catalog.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"stable","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+naming-edition idiomatic-v1
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo replay-audit assembly","path":"Generated/CatalogDemo/ReplayAudit.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"Generated/CatalogDemo/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"CatalogDemo/CatalogAudit/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Orders (line 60)","path":"CatalogDemo/Orders/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Harness.hs"}
+generated Generated/CatalogDemo/ReplayAudit.hs
+generated Generated/CatalogDemo/ProjectionCatalog.hs
+hole CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/CatalogDemo/CatalogAudit/ReadModelTable.hs
+generated Generated/CatalogDemo/CatalogAudit/ReadModel.hs
+hole CatalogDemo/CatalogAudit/ReadModelHoles.hs
+generated Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs
+generated Generated/CatalogDemo/Orders/Domain.hs
+generated Generated/CatalogDemo/Orders/Codec.hs
+generated Generated/CatalogDemo/Orders/Transducer.hs
+generated Generated/CatalogDemo/Orders/BehaviorContract.hs
+hole CatalogDemo/Orders/BehaviorHoles.hs
+generated Generated/CatalogDemo/Orders/EventStream.hs
+generated Generated/CatalogDemo/Orders/Projection.hs
+generated Generated/CatalogDemo/Orders/Harness.hs
+behavior {"aggregate":"Orders","command":"RecordOrder","evidence":"generated-authoritative","key":"behavior-v1-3c2d2fb10ac96bf0","kind":"live-transition","outputs":[{"command":"RecordOrder","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Orders","command":"RecordOrder","evidence":"generated-authoritative","key":"behavior-v1-badd7ebab3a3a844","kind":"required-rejection","outputs":[],"source":"Recorded"}
+projection-catalog-fact group|reporting|order_summary,order_totals,audit_log|order_summary,order_totals,audit_log|23
+projection-catalog-fact owner|audit_writer|category:audit|subscription|reporting|audit_log|20|catalog-demo-audit|catalog-demo-audit-v1|explicit|49
+projection-catalog-fact owner|order_summary_writer|aggregate:Orders|inline|reporting|order_summary,order_totals|10|||explicit|28
+projection-catalog-fact query|catalogAudit|reporting|audit_log|37
+projection-catalog-fact target|audit_log|sales|audit_log|preserve||10
+projection-catalog-fact target|order_summary|sales|order_summary|clear||4
+projection-catalog-fact target|order_totals|sales|order_totals|clear|order_summary|16
