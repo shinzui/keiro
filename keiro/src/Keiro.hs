@@ -4,11 +4,12 @@
 -- one go: the command runner ("Keiro.Command"), event 'Codec's
 -- ("Keiro.Codec"), the 'EventStream' definition and its snapshot policy
 -- ("Keiro.EventStream"), the content-based 'Router' ("Keiro.Router"),
--- snapshot helpers ("Keiro.Snapshot"), and typed 'Stream' handles
--- ("Keiro.Stream").
+-- snapshot helpers ("Keiro.Snapshot"), typed 'Stream' handles
+-- ("Keiro.Stream"), and the validated projection-catalog facade
+-- ("Keiro.Projection.Catalog").
 --
 -- The more specialized subsystems are not re-exported here and are imported
--- directly when needed: read models ("Keiro.ReadModel"), projections
+-- directly when needed: read models ("Keiro.ReadModel"), low-level projections
 -- ("Keiro.Projection"), process managers ("Keiro.ProcessManager"), the
 -- integration in/outbox ("Keiro.Inbox", "Keiro.Outbox"), timers
 -- ("Keiro.Timer"), and telemetry ("Keiro.Telemetry").
@@ -39,6 +40,9 @@ module Keiro
     -- * Routing and snapshots
     module Keiro.Router,
     module Keiro.Snapshot,
+
+    -- * Projection catalogs
+    module Keiro.Projection.Catalog,
   )
 where
 
@@ -47,6 +51,7 @@ import Keiro.Command
 import Keiro.EventStream
 import Keiro.EventStream.Validate
 import Keiro.Prelude
+import Keiro.Projection.Catalog hiding (AllStreams, version)
 import Keiro.Router
 import Keiro.Snapshot
 import Keiro.Stream

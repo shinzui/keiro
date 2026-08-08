@@ -45,8 +45,8 @@ This section must always reflect the actual current state of the work.
       ordering, fingerprints, inventories, and an optional previous-baseline comparison.
 - [x] (2026-08-08T13:31:09Z) Derive normal live-selection and registration inputs from only a
       `ValidatedProjectionCatalog`; add positive and mutation-tested negative cases.
-- [ ] Expose and document the API, create the projection-catalog ADR, and pass the focused and
-      full repository checks.
+- [x] (2026-08-08T13:50:33Z) Expose and document the API, create the projection-catalog ADR,
+      and pass the focused and full repository checks.
 
 
 ## Surprises & Discoveries
@@ -121,7 +121,23 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The runtime now has one additive `Keiro.Projection.Catalog` facade whose validated value is
+the only input to its live, registration, inventory, and replay-metadata selectors. The
+focused catalog suite covers the intended valid mixed-policy fleet and deterministic
+diagnostics for identity, ownership, reference, grouping, ordering, and replay-policy
+mutations. It also proves that invalid validation does not invoke an effectful callback and
+that baseline removals remain a separate evolution gate.
+
+ADR 26 records the durable four-identity model, independent reset/replay policies,
+typed/existential views, closed-world proof boundary, and consumer ownership of SQL and
+schema. Existing `InlineProjection`, `AsyncProjection`, and `ReadModel` values remain usable
+unchanged and have explicitly unmanaged wrappers for incremental adoption. No database
+migration or dependency-bound change was required.
+
+Validation evidence on 2026-08-08: nine focused catalog examples passed; public Haddock built
+without exposing the `ValidatedProjectionCatalog` constructor; strict OKF validation passed
+all 26 ADR concepts; and `just verify` passed, including 416 `keiro` examples, 610 DSL
+examples, Jitsurei integration tests, conformance regeneration, and all migration tests.
 
 
 ## Context and Orientation

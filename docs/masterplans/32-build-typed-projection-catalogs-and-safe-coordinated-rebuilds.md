@@ -121,7 +121,7 @@ plans must amend it if implementation changes the contract.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | In Progress |
+| 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | Complete |
 | 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Not Started |
 | 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Not Started |
 | 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Not Started |
@@ -226,8 +226,8 @@ if implementation changes those decisions.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: public catalog vocabulary, typed/existential views, compatibility bridge, and ADR.
-- [ ] EP-1: deterministic closed-world validation, fingerprints, inventories, and live mutation tests.
+- [x] EP-1: public catalog vocabulary, typed/existential views, compatibility bridge, and ADR.
+- [x] EP-1: deterministic closed-world validation, fingerprints, inventories, and live mutation tests.
 - [ ] EP-2: group registry and atomic clear/preserve preparation with derived dedup/checkpoint resets.
 - [ ] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
 - [ ] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
@@ -258,6 +258,10 @@ interactions between child plans. Provide concise evidence.
 - 2026-08-07: The local Mori corpus contains the motivating plan and ADR, but the current registry
   cannot resolve those artifact kinds. The documents retain their intended canonical handles
   instead of replacing them with cross-repository file paths.
+- 2026-08-08: The existing async dedup store is keyed by the physical
+  `AsyncProjection.name`, not by subscription or query-model identity. EP-1 therefore keeps
+  those logical IDs separate and validates the compatibility bridge; EP-2 can move lifecycle
+  state to group identity without silently changing current dedup semantics.
 
 
 ## Decision Log
