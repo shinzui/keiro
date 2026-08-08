@@ -145,7 +145,7 @@ contract. Plan 162 remains superseded by this completed group-oriented implement
 
 Final verification passed on 2026-08-08: `nix fmt`, 431 `keiro-test` examples, 28
 `keiro-migrations-test` examples, strict validation of all 26 ADR concepts, and the complete
-`just verify` repository gate.
+`just verify` repository gate. The implementation landed in commit `8d1b9fe9`.
 
 
 ## Context and Orientation

@@ -356,4 +356,4 @@ writers, atomic group preparation, fixed-head replay, exact resume, application 
 proof-gated atomic promotion. The principal lesson is that source exhaustion and adapter
 evaluation are separate evidence: an all-irrelevant history can be complete with zero applies,
 while one arbitrary dedup row proves neither. EP-4 and EP-5 remain to generate and adopt this
-runtime contract.
+runtime contract. EP-3 landed in commit `8d1b9fe9` with the complete repository gate green.
