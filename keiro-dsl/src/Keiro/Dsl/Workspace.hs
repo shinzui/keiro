@@ -1406,6 +1406,18 @@ instance HasLocs ProcessNode
 
 instance HasLocs ProjectionSpec
 
+instance HasLocs ProjectionTargetNode
+
+instance HasLocs RebuildGroupNode
+
+instance HasLocs CatalogSource
+
+instance HasLocs ProjectionReplayPolicy
+
+instance HasLocs ProjectionOwnerNode
+
+instance HasLocs TargetResetPolicy
+
 instance HasLocs PublisherNode
 
 instance HasLocs ReadModelNode

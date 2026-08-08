@@ -125,6 +125,14 @@ module Keiro.Dsl.Grammar
     RmScope (..),
     ReadModelNode (..),
 
+    -- * Projection catalog nodes (language 5)
+    TargetResetPolicy (..),
+    ProjectionTargetNode (..),
+    RebuildGroupNode (..),
+    CatalogSource (..),
+    ProjectionReplayPolicy (..),
+    ProjectionOwnerNode (..),
+
     -- * The workflow/operation nodes (EP-6)
     WfBodyItem (..),
     WorkflowNode (..),
@@ -1078,7 +1086,63 @@ data ReadModelNode = ReadModelNode
     rmScope :: !(Maybe RmScope),
     rmFeed :: !RmFeed,
     rmSubscription :: !(Maybe Text),
+    rmGroup :: !(Maybe Name),
+    rmObservedTargets :: ![Name],
     rmLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Destructive preparation clears a target; preserve retains brownfield rows
+-- for an application-owned reconciliation adapter.
+data TargetResetPolicy = TargetClear | TargetPreserve
+  deriving stock (Eq, Show, Generic)
+
+-- | One physical PostgreSQL target owned by exactly one catalog group.
+data ProjectionTargetNode = ProjectionTargetNode
+  { ptName :: !Name,
+    ptSchema :: !Text,
+    ptTable :: !Text,
+    ptReset :: !TargetResetPolicy,
+    ptDependsOn :: ![Name],
+    ptLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | One atomic lifecycle group and its deterministic target preparation order.
+data RebuildGroupNode = RebuildGroupNode
+  { rgName :: !Name,
+    rgTargets :: ![Name],
+    rgOrder :: ![Name],
+    rgLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | A replay source selected by a projection owner.
+data CatalogSource
+  = CatalogAggregate !Name
+  | CatalogCategory !Text
+  | CatalogAll
+  deriving stock (Eq, Show, Generic)
+
+-- | Whether a projection has an application-owned replay adapter or is
+-- intentionally live-only for the recorded reason.
+data ProjectionReplayPolicy
+  = ProjectionReplayExplicit
+  | ProjectionLiveOnly !Text
+  deriving stock (Eq, Show, Generic)
+
+-- | One ordered live/replay handler declaration in the service catalog.
+data ProjectionOwnerNode = ProjectionOwnerNode
+  { poName :: !Name,
+    poSources :: ![CatalogSource],
+    poFeed :: !RmFeed,
+    poGroup :: !Name,
+    poTargets :: ![Name],
+    poOrder :: !Int,
+    poSubscription :: !(Maybe Text),
+    poDedup :: !(Maybe Text),
+    poReplay :: !ProjectionReplayPolicy,
+    poLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1155,6 +1219,9 @@ data Node
   | NWorkqueue WorkqueueNode
   | NPgmqDispatch PgmqDispatchNode
   | NReadModel ReadModelNode
+  | NProjectionTarget ProjectionTargetNode
+  | NRebuildGroup RebuildGroupNode
+  | NProjectionOwner ProjectionOwnerNode
   | NWorkflow WorkflowNode
   | NOperation OperationNode
   deriving stock (Eq, Show, Generic)

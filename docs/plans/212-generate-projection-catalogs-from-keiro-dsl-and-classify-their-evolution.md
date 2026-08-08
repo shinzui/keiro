@@ -36,11 +36,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Release the language-5 projection-catalog syntax and semantic graph while preserving the
+- [x] Register the candidate language-5 projection-catalog syntax and semantic graph while preserving the
       immutable language-1–4 registry entries and parser behavior.
-- [ ] Validate catalog declarations and lower them into the runtime facade, typed source views,
+- [x] Validate catalog declarations and lower them into the runtime facade, typed source views,
       deterministic generated modules, and create-once behavior holes.
-- [ ] Extend diff, replay-impact, workspace records, and scaffold-ledger facts with every catalog
+- [x] Extend diff, replay-impact, workspace records, and scaffold-ledger facts with every catalog
       evolution dimension and mutation-test their gates.
 - [ ] Add compiled/runtime conformance, upgrade documentation and corpus evidence, then pass all
       DSL and repository verification.
@@ -53,6 +53,17 @@ implementation. Provide concise evidence.
 
 - 2026-08-08: Implementation started after plans 209–211 completed and the final runtime
   constructors, replay contract, and full repository gate were verified.
+- 2026-08-08: The released-frontend corpus used unreleased version 5 as an unsupported-version
+  sentinel. Treating that sentinel as an immutable contract and renumbering it to 6 was incorrect:
+  version 5 has not shipped. The sentinel is being retired, candidate 5 is corrected in place, and
+  the language ADR now distinguishes registration from external release.
+- 2026-08-08: A workspace parity test exposed a second form of the same churn: rebuilding a
+  language-4 merged graph through the active-authoring helper changed only generated banners.
+  Workspace scaffolding and its parity test now retain the workspace's checked language contract.
+- 2026-08-08: The existing runtime `ProjectionSet event` is intentionally typed to one source.
+  Accepting several DSL `source` clauses under one owner would erase that type or require an
+  application-maintained union, so validation requires one typed source and tells authors to
+  split independent sources into separately ordered owners.
 
 
 ## Decision Log
@@ -64,6 +75,13 @@ Record every decision made while working on the plan.
   same preamble mean different things across compiler versions. The language registry is
   append-only, so a new syntax profile is the honest compatibility boundary.
   Date: 2026-08-07
+
+- Decision: Keep version 5 as the sole pre-release candidate and do not invent version 6.
+  Rationale: No package has released language 5 and no external consumer has used it. Unsupported
+  version fixtures are parser-boundary test data, not compatibility contracts; when their number
+  becomes active they are retired or repurposed. Existing language-4 generated corpora remain
+  version-4 evidence, while a focused version-5 lane proves the new catalog surface.
+  Date: 2026-08-08
 
 - Decision: Generate one context-level projection-catalog facade.
   Rationale: Group validation and fleet inventory require the whole checked service, and
@@ -82,6 +100,13 @@ Record every decision made while working on the plan.
   checked specs must fail there. Calling the runtime validator in generated assembly guards
   compiler/runtime drift and proves both layers agree.
   Date: 2026-08-07
+
+- Decision: Put target dependencies on physical target declarations and sort generated owners by
+  their checked numeric handler order.
+  Rationale: A dependency constrains preparation of that physical target, while the group owns the
+  closed membership and total preparation order. Sorting at generation time makes typed live views,
+  fleet inventory, and replay-adapter order agree even when source declarations are rearranged.
+  Date: 2026-08-08
 
 
 ## Outcomes & Retrospective
@@ -113,8 +138,9 @@ hole module. The start helper emits `[]` for inline read models or a manually as
 projection-name list for subscriptions. This is exactly the list drift the generated catalog must
 remove.
 
-`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` has an append-only registry whose stable version is
-4. Versions 1–4 use immutable syntax/runtime profiles. `Keiro.Dsl.Validate`, `PrettyPrint`,
+Before this plan, `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` had an append-only registry whose
+published authoring default was 4. Versions 1–4 use immutable syntax/runtime profiles.
+`Keiro.Dsl.Validate`, `PrettyPrint`,
 `Diff`, `ReplayImpact`, `WorkspaceRecord`, `ScaffoldLedger`, and conformance packages form the
 compiler pipeline that must all learn the new nodes. A syntax-only parser change is incomplete.
 
@@ -161,12 +187,12 @@ meaning. The motivating cross-repository record is
 
 ## Plan of Work
 
-### Milestone 1: Release and check the language-5 graph
+### Milestone 1: Register and check the candidate language-5 graph
 
 Append version 5 to `Keiro.Dsl.LanguageVersion`; never edit the definitions for versions 1–4.
 Add a named syntax feature such as `ProjectionCatalogSyntax`, a monotone syntax profile derived
 from language 4, and only the runtime capability needed to fingerprint catalog semantics. Make 5
-the sole stable version for new skeletons while retaining versions 1–4 as compatibility-only.
+the sole authoring default for new skeletons while retaining versions 1–4 as compatibility-only.
 Extend language registry JSON/round-trip and unsupported-version tests.
 
 Add separate AST nodes in `Keiro.Dsl.Grammar` for physical targets, rebuild groups, and projection
@@ -252,7 +278,7 @@ remove an entire target declaration; the relevant diff/replay-impact finding mus
 test proves the guard is live. Milestone 3 passes when diff results are invariant to unrelated
 declaration ordering and workspace diff agrees with single-context diff.
 
-### Milestone 4: Document and prove the released surface
+### Milestone 4: Document and prove the candidate surface
 
 Update the language reference, authoring guide, evolution/replayability guide, API reference,
 scaffold ownership guide, and changelog. Add an upgrade example from a language-4 singleton
@@ -321,8 +347,8 @@ Acceptance requires all of these observations:
    sources, and explicit replay behavior. Parse/pretty/parse is semantically identical and keeps
    diagnostic locations.
 2. The same new syntax under language 4 returns a version-feature diagnostic. Existing language
-   1–4 fixtures retain their parsed semantics and conformance output; version 5 is the only stable
-   default for newly generated skeletons.
+   1–4 fixtures retain their parsed semantics and conformance output; candidate version 5 is the
+   only authoring default for newly generated skeletons.
 3. Missing/duplicate owner, unknown target/group/source, cycle, cross-group transaction,
    `$all`/category overlap, async identity mismatch, unordered composition, and
    clear-target/live-only combinations fail DSL validation at the claim sites. No Haskell is
@@ -354,6 +380,10 @@ Language registry entries are immutable after release. Before release, a flawed 
 profile may be corrected with its fixtures and decision log. After release, preserve version 5
 and add a later language version for incompatible syntax or runtime meaning. A failed corpus
 regeneration can be retried; review and retain unrelated hand-owned user changes.
+
+An unsupported-version sentinel is not a released registry entry. If its number becomes the
+active candidate, remove or repurpose that sentinel; never advance it to the next consecutive
+number merely to keep the same test green.
 
 If generated runtime validation exposes a compiler bug, initialization must stop before effects.
 Correct the DSL validator/generator and regenerate. Do not catch the invariant failure and proceed

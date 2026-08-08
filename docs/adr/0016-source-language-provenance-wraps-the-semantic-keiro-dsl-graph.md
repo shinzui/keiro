@@ -1,7 +1,7 @@
 ---
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
-description: A .keiro document selects a released parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
+description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
 timestamp: 2026-08-02T04:49:52Z
 docId: ADR-16
 status: Accepted
@@ -45,26 +45,43 @@ declaration unless a later upgrade operation rewrites the file. Once a language 
 released, new syntax or semantics must be registered under a successor version with its
 predecessor relation. Existing version parsers and their rejection fixtures are not widened.
 
-**Accepted language versions and the stable authoring version are distinct registry facts.** Each
-`LanguageDefinition` carries a `LanguageSupport` lifecycle value. Exactly one registered entry is
-`Stable`; every other released entry is `CompatibilityOnly`. `supportedLanguageVersions` continues
-to enumerate every accepted source contract, while `currentStableLanguageVersion` selects the
-sole stable entry and fails if the registry has zero or multiple stable entries. New skeletons,
-authoring examples, and primary conformance derive their source version from that stable entry.
-Language 4 is currently stable; versions 1 through 3 and `LegacyUnversioned` remain readable with
-their immutable released meaning and are never silently rewritten. A later stable designation
-changes the authoring and primary-test baseline, not the behavior of any predecessor.
+**Registration is not release.** A language number may be present on the development branch while
+its syntax, runtime profile, fixtures, and documentation are still being built. It becomes
+immutable only when a package containing that contract is published or an external consumer is
+otherwise authorized to depend on it. Before that boundary, correct the candidate and its tests in
+place. Do not allocate a successor merely because an unreleased candidate changed. A fixture that
+uses an unsupported positive number proves source selection only; it is not a language contract,
+has no compatibility promise, and must be retired or repurposed when that number becomes the active
+candidate. In particular, activating candidate 5 does not justify changing an old "future 5"
+sentinel to 6.
+
+**Accepted language versions, the authoring default, and publication maturity are distinct
+registry facts.** Each `LanguageDefinition` carries both `LanguageSupport` and
+`LanguageMaturity`. Exactly one registered entry is the `Stable` authoring default; every other
+registered entry is `CompatibilityOnly`. Independently, a definition is `PublishedLanguage` or
+`CandidateLanguage`. `Stable` therefore means "use this for new work on this source tree," not
+"this contract has been released." `supportedLanguageVersions` enumerates every accepted source
+contract, while `currentStableLanguageVersion` selects the sole authoring default and fails if the
+registry has zero or multiple stable entries. New skeletons, authoring examples, and focused
+conformance derive their source version from that entry. Language 5 is currently the unreleased
+candidate and authoring default. Languages 1 through 4 are published and retain their immutable
+meaning; existing language-4 sources and generated corpora are never silently rewritten. Moving
+the authoring pointer changes new-source and focused-test defaults, not any predecessor's behavior
+or publication status.
 
 **Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
 Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
-`keiro-dsl/syntax-profile/2`, and version 4 deliberately reuses that profile.
+`keiro-dsl/syntax-profile/2`, version 4 selects `keiro-dsl/syntax-profile/3`, and candidate 5
+selects `keiro-dsl/syntax-profile/4` for projection catalogs.
 Versions 1 and 2 select
 `keiro-dsl/runtime-semantics/1`, while version 3 selects
 `keiro-dsl/runtime-semantics/2` and version 4 selects
-`keiro-dsl/runtime-semantics/3`. Runtime semantics 3 preserves version 3's
+`keiro-dsl/runtime-semantics/3`. Candidate 5 selects
+`keiro-dsl/runtime-semantics/4`. Runtime semantics 3 preserves version 3's
 aggregate ID and fold projection while enabling the separate public-contract
-TypeID admission capability. The parser threads the chosen definition through every production,
+TypeID admission capability; runtime semantics 4 adds the projection-catalog fingerprint
+capability. The parser threads the chosen definition through every production,
 and semantic planning reads the runtime discriminator from that same definition. Adding a larger
 version number therefore enables neither syntax nor runtime behavior until its registry entry
 chooses both values explicitly. The historical minimum-version query remains documentation and
@@ -96,13 +113,14 @@ the predecessor's aggregate fingerprint segment; service-aware scaffold,
 manifest, durable ID-domain, and diff consumers still observe the new contract
 capability through `CheckedService`.
 
-**Primary conformance follows the stable registry entry; historical behavior uses named lanes.**
-Ordinary feature, negative-validation, diff, workspace, and skeleton fixtures declare the current
-stable language. Every compiled stable-primary component is checked against a fresh service-aware
-scaffold plan and must carry the stable language banner. Released predecessor syntax, permissive
-decoders, and migration-only replay seams remain covered by an explicit, small compatibility
-inventory whose source version and unique rationale are machine-checked. Version-independent
-comparisons are named separately rather than presented as either stable or historical authoring.
+**Primary conformance may cover the stable candidate and released predecessors concurrently.** A
+new stable authoring candidate gets focused positive, negative, generation, and compiled/runtime
+lanes. Existing source and generated corpora keep their declared released versions unless their
+subject is intentionally migrated; changing the stable pointer alone is not permission to rewrite
+their preambles or banners. The machine-readable baseline names all primary language versions and
+keeps historical compatibility or migration-only seams in explicit lanes. This avoids high-churn
+golden rewrites that prove only a banner changed while still requiring new semantics to have a
+dedicated end-to-end proof.
 
 **Parsing and semantic graph construction are separated by located surface syntax.** After source
 selection, Megaparsec produces a non-lossless `SurfaceSource`. Its document clauses and ordered
@@ -160,9 +178,10 @@ fleet planning remain in
   operation; commands that load its members apply the source gate to each member.
 - Existing unversioned sources keep working, while inspection can distinguish intentional version
   declarations from compatibility fallback.
-- Accepted does not mean recommended for new work: inspection reports `stable` or
-  `compatibility-only`, skeletons emit the sole stable version, and neither path upgrades old
-  sources as a side effect.
+- Accepted does not mean published, and published does not mean recommended for new work:
+  inspection reports the authoring support state, registry maturity records the publication
+  boundary, skeletons emit the sole authoring default, and no path upgrades old sources as a side
+  effect.
 - Workspace composition preserves truthful member provenance without contaminating the merged
   semantic graph, while exposing one checked contract to every semantic planner.
 - Exact source evidence is available before lowering without adding spans or trivia to `Spec`.
@@ -177,9 +196,9 @@ fleet planning remain in
   predecessor's aggregate-fold projection while changing another checked
   semantic consumer. Fingerprint equality is explicit and does not authorize
   scaffold or diff code to discard `CheckedService`.
-- A stable-language release requires migrating the primary conformance inventory in the same
-  change. Historical assertions remain executable through named compatibility components instead
-  of holding the ordinary corpus on an older source contract.
+- A stable-language candidate requires dedicated conformance in the same change, not wholesale
+  migration of the existing corpus. Released-version corpora remain primary evidence for their own
+  contracts until an intentional migration changes what they prove.
 - Source-aware tools can branch on frontend phase, stable code, and exact span without parsing
   human-readable Megaparsec output; compatibility callers retain the released text.
 - A version-2 expression is not accepted merely because its tokens parse. Its

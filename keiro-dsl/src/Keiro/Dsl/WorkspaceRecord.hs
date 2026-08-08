@@ -206,6 +206,7 @@ data WorkspaceRecord = WorkspaceRecord
     wrNominalEqualities :: ![Text],
     wrBindingObligations :: ![BindingHole],
     wrBehaviorRequirements :: ![BehaviorRecordRow],
+    wrProjectionCatalogFacts :: ![Text],
     wrAdopted :: ![AdoptedRow]
   }
   deriving stock (Eq, Show)
@@ -233,6 +234,7 @@ renderWorkspaceRecord record =
       <> ["nominal-equality " <> identity | identity <- wrNominalEqualities record]
       <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
       <> ["behavior " <> encodeRow requirement | requirement <- wrBehaviorRequirements record]
+      <> ["projection-catalog-fact " <> fact | fact <- wrProjectionCatalogFacts record]
       <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
   where
     rootLabel = if T.null (wrModuleRoot record) then "(none)" else wrModuleRoot record
@@ -265,6 +267,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
         behaviorRequirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
+        let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
         adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
         checkedAdopted <- traverse checkedAdoption adopted
         if hasDuplicates members
@@ -274,6 +277,7 @@ parseWorkspaceRecord contents = case T.lines contents of
           || hasDuplicates nominalEqualities
           || hasDuplicates (map bindingKey obligations)
           || hasDuplicates (map behaviorRecordKey behaviorRequirements)
+          || hasDuplicates catalogFacts
           then Nothing
           else
             pure
@@ -293,6 +297,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrNominalEqualities = nominalEqualities,
                   wrBindingObligations = obligations,
                   wrBehaviorRequirements = behaviorRequirements,
+                  wrProjectionCatalogFacts = catalogFacts,
                   wrAdopted = checkedAdopted
                 }
   _ -> Nothing

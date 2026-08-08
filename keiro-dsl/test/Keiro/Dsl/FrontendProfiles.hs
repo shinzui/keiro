@@ -25,32 +25,38 @@ frontendProfilesSpec = do
         `shouldBe` [ (1, Nothing, "keiro-dsl/syntax-profile/1", "keiro-dsl/runtime-semantics/1"),
                      (2, Just 1, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/1"),
                      (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2"),
-                     (4, Just 3, "keiro-dsl/syntax-profile/3", "keiro-dsl/runtime-semantics/3")
+                     (4, Just 3, "keiro-dsl/syntax-profile/3", "keiro-dsl/runtime-semantics/3"),
+                     (5, Just 4, "keiro-dsl/syntax-profile/4", "keiro-dsl/runtime-semantics/4")
                    ]
       map definitionCapabilities (NE.toList languageRegistry)
         `shouldBe` [ [],
                      [],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime]
                    ]
       map (runtimeProfileFoldSegments . definitionRuntimeSemanticsProfile) (NE.toList languageRegistry)
         `shouldBe` [ [],
                      [],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
-                     ["semantic-contract:keiro-dsl/runtime-semantics/2"]
+                     ["semantic-contract:keiro-dsl/runtime-semantics/2"],
+                     ["semantic-contract:keiro-dsl/projection-catalog/1", "semantic-contract:keiro-dsl/runtime-semantics/2"]
                    ]
       map definitionSupport (NE.toList languageRegistry)
-        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
-      currentStableLanguageVersion `shouldBe` version 4
+        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
+      map definitionMaturity (NE.toList languageRegistry)
+        `shouldBe` [PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, CandidateLanguage]
+      currentStableLanguageVersion `shouldBe` version 5
       languageSupportForVersion (version 1) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 2) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 3) `shouldBe` Just CompatibilityOnly
-      languageSupportForVersion (version 4) `shouldBe` Just Stable
-      languageSupportForVersion (version 5) `shouldBe` Nothing
+      languageSupportForVersion (version 4) `shouldBe` Just CompatibilityOnly
+      languageSupportForVersion (version 5) `shouldBe` Just Stable
+      languageSupportForVersion (version 999999) `shouldBe` Nothing
       [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable]
         `shouldBe` [currentStableLanguageVersion]
       definitionVersion (NE.last languageRegistry) `shouldBe` currentStableLanguageVersion
-      definitionPredecessor (NE.last languageRegistry) `shouldBe` Just (version 3)
+      definitionPredecessor (NE.last languageRegistry) `shouldBe` Just (version 4)
       forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
         forM_ allRuntimeCapabilities $ \capability ->
           runtimeProfileHasCapability (definitionRuntimeSemanticsProfile predecessor) capability
@@ -58,16 +64,16 @@ frontendProfilesSpec = do
               not wasSupported
                 || runtimeProfileHasCapability (definitionRuntimeSemanticsProfile successor) capability
       forM_ allFeatures $ \feature -> do
-        let minimumVersion = if feature == FieldAliasSyntax then version 4 else version 2
+        let minimumVersion = case feature of ProjectionCatalogSyntax -> version 5; FieldAliasSyntax -> version 4; _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
-        forM_ [1, 2, 3, 4] $ \versionNumber ->
+        forM_ [1, 2, 3, 4, 5] $ \versionNumber ->
           languageSupportsFeature (version versionNumber) feature
             `shouldBe` (version versionNumber >= minimumVersion)
 
-    it "does not infer a hypothetical successor profile or runtime contract" $ do
-      lookupLanguageDefinition (version 5) `shouldBe` Nothing
-      effectiveLanguageContractForVersion (version 5) `shouldBe` Nothing
-      forM_ allFeatures $ \feature -> languageSupportsFeature (version 5) feature `shouldBe` False
+    it "does not infer a profile or runtime contract for an unregistered sentinel" $ do
+      lookupLanguageDefinition (version 999999) `shouldBe` Nothing
+      effectiveLanguageContractForVersion (version 999999) `shouldBe` Nothing
+      forM_ allFeatures $ \feature -> languageSupportsFeature (version 999999) feature `shouldBe` False
       languageVersionPolicy <- readRepoText "keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs"
       semanticPolicy <- readRepoText "keiro-dsl/src/Keiro/Dsl/SemanticContract.hs"
       languageVersionPolicy `shouldNotSatisfy` T.isInfixOf "version >="
@@ -85,7 +91,7 @@ frontendProfilesSpec = do
 
     it "checks every real feature marker against the exact selected profile" $ do
       forM_ featureCases $ \FeatureCase {feature, marker, body} ->
-        forM_ [1, 2, 3, 4] $ \versionNumber -> do
+        forM_ [1, 2, 3, 4, 5] $ \versionNumber -> do
           let sourceName = "profile-" <> show versionNumber <> ".keiro"
               source = preamble versionNumber <> body
           case (languageSupportsFeature (version versionNumber) feature, parseSurfaceSource sourceName source) of
@@ -101,14 +107,14 @@ frontendProfilesSpec = do
 
     it "keeps feature spellings inert in comments, strings, wire keys, and identifiers" $ do
       inertBody <- readRepoText "keiro-dsl/test/fixtures/language-identifier-v1.keiro"
-      forM_ [1, 2, 3, 4] $ \versionNumber ->
+      forM_ [1, 2, 3, 4, 5] $ \versionNumber ->
         parseSurfaceSource ("inert-" <> show versionNumber <> ".keiro") (preamble versionNumber <> inertBody)
           `shouldSatisfy` isRight
 
   describe "frontend diagnostics" $ do
     it "classifies malformed and unsupported preambles at source selection with exact spans" $ do
       assertSourceSelection InvalidLanguageVersion "language keiro-dsl nope\ncontext malformed\n" "language keiro-dsl nope"
-      assertSourceSelection UnsupportedLanguageVersion "language keiro-dsl 5\ncontext future\n" "language keiro-dsl 5"
+      assertSourceSelection UnsupportedLanguageVersion "language keiro-dsl 999999\ncontext unregistered\n" "language keiro-dsl 999999"
 
     it "reports ordinary body syntax with expected items and a point span" $ do
       let source = "language keiro-dsl 1\ncontext body\nlayout\n"
@@ -143,7 +149,7 @@ frontendProfilesSpec = do
     it "keeps the released compatibility renderer byte-identical" $ do
       forM_
         [ "language keiro-dsl nope\ncontext malformed\n",
-          "language keiro-dsl 5\ncontext future\n",
+          "language keiro-dsl 999999\ncontext unregistered\n",
           preamble 1 <> featureBody TypedAggregateExpressionSyntax,
           "language keiro-dsl 1\ncontext\n"
         ]
@@ -164,7 +170,8 @@ featureCases =
     FeatureCase IntegerScalarSyntax "Integer" (featureBody IntegerScalarSyntax),
     FeatureCase TypedAggregateExpressionSyntax "cmd." (featureBody TypedAggregateExpressionSyntax),
     FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
-    FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax)
+    FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax),
+    FeatureCase ProjectionCatalogSyntax "target" (featureBody ProjectionCatalogSyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -200,9 +207,18 @@ featureBody = \case
         "  states Open",
         "  command Rename { type haskell payloadType as \"type\":Text }"
       ]
+  ProjectionCatalogSyntax ->
+    T.unlines
+      [ "context profile",
+        "target profile_view {",
+        "  schema = \"public\"",
+        "  table = \"profile_view\"",
+        "  reset = preserve",
+        "}"
+      ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax]
 
 allRuntimeCapabilities :: [RuntimeCapability]
 allRuntimeCapabilities = [minBound .. maxBound]

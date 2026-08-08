@@ -189,7 +189,7 @@ emitReadModelHarness genPrefix ctx readModel =
            "import Data.Text qualified as T",
            "import Keiro.ReadModel (ReadModel (..), StrongScope (..))"
          ]
-      <> ["import Keiro.Projection (AsyncProjection (..))" | rmFeed readModel == RmSubscription]
+      <> ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
       <> [ "",
            "-- | (fact, expected from notation, actual generated runtime value).",
            "readModelFacts :: [(String, String, String)]",
@@ -220,7 +220,7 @@ emitReadModelHarness genPrefix ctx readModel =
     stem = lowerFirst (pascal (rmName readModel))
     readModelName = stem <> "ReadModel"
     asyncProjectionName = stem <> "AsyncProjection"
-    readModelImports = readModelName : [asyncProjectionName | rmFeed readModel == RmSubscription]
+    readModelImports = readModelName : [asyncProjectionName | emitsLegacyAsync]
     expectedRegistry = contextName ctx <> "-" <> T.replace "_" "-" (rmName readModel)
     expectedSubscription = case rmSubscription readModel of
       Just name -> name
@@ -228,9 +228,12 @@ emitReadModelHarness genPrefix ctx readModel =
     expectedAsync = case rmFeed readModel of
       RmInline -> "none"
       RmSubscription -> expectedRegistry <> "-async"
-    asyncFactRow = case rmFeed readModel of
-      RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
-      RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
+    asyncFactRow
+      | rmGroup readModel /= Nothing = "  , (\"asyncProjectionName\", \"catalog-managed\", \"catalog-managed\")"
+      | otherwise = case rmFeed readModel of
+          RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
+          RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
+    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
     consistency = case rmConsistency readModel of
       Strong -> "Strong"
       Eventual -> "Eventual"

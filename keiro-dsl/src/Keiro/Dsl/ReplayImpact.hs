@@ -12,7 +12,9 @@
 module Keiro.Dsl.ReplayImpact
   ( AggregateImpact (..),
     ReplayImpact (..),
+    CatalogReplayImpact (..),
     replayImpactServices,
+    catalogReplayImpactServices,
     renderReplayImpact,
   )
 where
@@ -23,6 +25,7 @@ import Data.List (delete, sortOn)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -49,6 +52,19 @@ data ReplayImpact
   | ReplayAffected !(Map Name AggregateImpact)
   deriving stock (Eq, Show)
 
+-- | Projection-catalog replay impact is reported beside aggregate-fold impact
+-- so existing aggregate audit consumers retain their released JSON shape.
+data CatalogReplayImpact
+  = CatalogReplayNeutral
+  | CatalogReplayAffected
+      { affectedGroups :: !(Set Name),
+        affectedTargets :: !(Set Name),
+        affectedSources :: !(Set Text),
+        affectedAdapters :: !(Set Name),
+        invalidatesRunningFingerprint :: !Bool
+      }
+  deriving stock (Eq, Show)
+
 instance ToJSON AggregateImpact where
   toJSON impact =
     object
@@ -63,6 +79,63 @@ instance ToJSON ReplayImpact where
       [ "verdict" .= ("affected" :: Text),
         "aggregates" .= aggregates
       ]
+
+instance ToJSON CatalogReplayImpact where
+  toJSON CatalogReplayNeutral = object ["verdict" .= ("catalog-replay-neutral" :: Text)]
+  toJSON impact@CatalogReplayAffected {} =
+    object
+      [ "verdict" .= ("catalog-replay-affected" :: Text),
+        "groups" .= Set.toAscList (affectedGroups impact),
+        "targets" .= Set.toAscList (affectedTargets impact),
+        "sources" .= Set.toAscList (affectedSources impact),
+        "adapters" .= Set.toAscList (affectedAdapters impact),
+        "invalidatesRunningFingerprint" .= invalidatesRunningFingerprint impact
+      ]
+
+catalogReplayImpactServices :: CheckedService -> CheckedService -> CatalogReplayImpact
+catalogReplayImpactServices oldService newService
+  | Set.null groups && Set.null targets && Set.null sources && Set.null adapters = CatalogReplayNeutral
+  | otherwise =
+      CatalogReplayAffected
+        { affectedGroups = groups,
+          affectedTargets = targets,
+          affectedSources = sources,
+          affectedAdapters = adapters,
+          invalidatesRunningFingerprint = True
+        }
+  where
+    oldSpec = checkedSpec oldService
+    newSpec = checkedSpec newService
+    oldTargets = Map.fromList [(ptName target, target) | NProjectionTarget target <- specNodes oldSpec]
+    newTargets = Map.fromList [(ptName target, target) | NProjectionTarget target <- specNodes newSpec]
+    oldGroups = Map.fromList [(rgName groupNode, groupNode) | NRebuildGroup groupNode <- specNodes oldSpec]
+    newGroups = Map.fromList [(rgName groupNode, groupNode) | NRebuildGroup groupNode <- specNodes newSpec]
+    oldOwners = Map.fromList [(poName owner, owner) | NProjectionOwner owner <- specNodes oldSpec]
+    newOwners = Map.fromList [(poName owner, owner) | NProjectionOwner owner <- specNodes newSpec]
+    changedTargetNames = changedKeys oldTargets newTargets
+    changedGroupNames = changedKeys oldGroups newGroups
+    changedOwnerNames = changedKeys oldOwners newOwners
+    changedOwners = mapMaybe (`Map.lookup` oldOwners) (Set.toList changedOwnerNames) <> mapMaybe (`Map.lookup` newOwners) (Set.toList changedOwnerNames)
+    changedGroups = mapMaybe (`Map.lookup` oldGroups) (Set.toList changedGroupNames) <> mapMaybe (`Map.lookup` newGroups) (Set.toList changedGroupNames)
+    groups = changedGroupNames <> Set.fromList (map poGroup changedOwners) <> groupsContainingChangedTargets
+    targets = changedTargetNames <> Set.fromList (concatMap poTargets changedOwners <> concatMap rgTargets changedGroups)
+    sources = Set.fromList (map renderSource (concatMap poSources changedOwners))
+    adapters = changedOwnerNames
+    groupsContainingChangedTargets =
+      Set.fromList
+        [ rgName groupNode
+        | groupNode <- Map.elems oldGroups <> Map.elems newGroups,
+          any (`Set.member` changedTargetNames) (rgTargets groupNode)
+        ]
+    changedKeys oldMap newMap =
+      Set.fromList
+        [ key
+        | key <- Set.toList (Map.keysSet oldMap <> Map.keysSet newMap),
+          Map.lookup key oldMap /= Map.lookup key newMap
+        ]
+    renderSource CatalogAll = "all"
+    renderSource (CatalogCategory categoryName) = "category:" <> categoryName
+    renderSource (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
 
 -- | Compute replay impact for every aggregate that existed under the old
 -- effective semantic contract.

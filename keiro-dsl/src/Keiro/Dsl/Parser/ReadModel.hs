@@ -4,20 +4,32 @@ module Keiro.Dsl.Parser.ReadModel
   )
 where
 
+import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (LanguageFeature (ProjectionCatalogSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
-pReadModel :: P ReadModelNode
-pReadModel = do
+pReadModel :: FrontendContext -> P ReadModelNode
+pReadModel context = do
   loc <- getLoc
   keyword "readmodel"
   name <- ident
   _ <- symbol "{"
-  _ <- symbol "table" *> symbol "="
-  table <- stringLit
-  _ <- symbol "schema" *> symbol "="
-  schema <- stringLit
+  (table, schema) <-
+    if frontendSupportsFeature context ProjectionCatalogSyntax
+      then option ("", "") $ try $ do
+        _ <- symbol "table" *> symbol "="
+        table <- stringLit
+        _ <- symbol "schema" *> symbol "="
+        schema <- stringLit
+        pure (table, schema)
+      else do
+        _ <- symbol "table" *> symbol "="
+        table <- stringLit
+        _ <- symbol "schema" *> symbol "="
+        schema <- stringLit
+        pure (table, schema)
   _ <- symbol "columns"
   columns <- braces (many pColumn)
   _ <- symbol "version" *> symbol "="
@@ -30,6 +42,10 @@ pReadModel = do
   _ <- symbol "feed" *> symbol "="
   feed <- pFeed
   subscription <- optional (symbol "subscription" *> symbol "=" *> stringLit)
+  group <- optionalLanguageFeature context ProjectionCatalogSyntax "group" (try (symbol "group" *> symbol "=" *> ident))
+  observedTargets <- case group of
+    Nothing -> pure []
+    Just _ -> symbol "targets" *> symbol "=" *> brackets (many ident)
   _ <- symbol "}"
   pure
     ReadModelNode
@@ -43,6 +59,8 @@ pReadModel = do
         rmScope = scope,
         rmFeed = feed,
         rmSubscription = subscription,
+        rmGroup = group,
+        rmObservedTargets = observedTargets,
         rmLoc = loc
       }
   where

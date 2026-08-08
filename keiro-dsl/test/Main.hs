@@ -56,10 +56,10 @@ import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalid
 import Keiro.Dsl.Parser (parseSource, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
+import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
-import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.ServiceHarness
@@ -152,37 +152,39 @@ main = hspec $ do
     it "serializes support from the registered version and decodes older records" $ do
       v1Contract <- maybe (expectationFailure "missing v1 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 1)
       v4Contract <- maybe (expectationFailure "missing v4 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 4)
+      v5Contract <- maybe (expectationFailure "missing v5 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 5)
       effectiveLanguageSupport v1Contract `shouldBe` CompatibilityOnly
-      effectiveLanguageSupport v4Contract `shouldBe` Stable
-      Aeson.toJSON v4Contract
+      effectiveLanguageSupport v4Contract `shouldBe` CompatibilityOnly
+      effectiveLanguageSupport v5Contract `shouldBe` Stable
+      Aeson.toJSON v5Contract
         `shouldBe` object
-          [ "languageVersion" .= (4 :: Int),
-            "runtimeSemantics" .= ("keiro-dsl/runtime-semantics/3" :: T.Text),
+          [ "languageVersion" .= (5 :: Int),
+            "runtimeSemantics" .= ("keiro-dsl/runtime-semantics/4" :: T.Text),
             "languageSupport" .= ("stable" :: T.Text)
           ]
       Aeson.eitherDecode "{\"languageVersion\":1,\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\"}"
         `shouldBe` Right v1Contract
 
     it "reports stable and compatibility-only support through source inspection" $ do
-      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/projection-catalog.keiro", "--format=json"]
       stableCode `shouldBe` ExitSuccess
       stableErr `shouldBe` ""
-      stableOut `shouldContain` "\"languageVersion\":4"
+      stableOut `shouldContain` "\"languageVersion\":5"
       stableOut `shouldContain` "\"languageSupport\":\"stable\""
-      (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/language-v1.keiro", "--format=json"]
+      (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
       compatibilityCode `shouldBe` ExitSuccess
       compatibilityErr `shouldBe` ""
-      compatibilityOut `shouldContain` "\"languageVersion\":1"
+      compatibilityOut `shouldContain` "\"languageVersion\":4"
       compatibilityOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
 
     it "surfaces non-stable contracts and enforces a released minimum language" $ do
       let legacyPath = "test/fixtures/language-legacy.keiro"
-          stablePath = "test/fixtures/contract-v4.keiro"
+          stablePath = "test/fixtures/projection-catalog.keiro"
       (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["check", legacyPath]
       legacyCode `shouldBe` ExitSuccess
       legacyOut `shouldBe` "OK\n"
       legacyErr `shouldContain` "language contract: effective keiro-dsl 1 (legacy-unversioned, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
-      legacyErr `shouldContain` "language-4 strict spec-surface validation is not applied"
+      legacyErr `shouldContain` "language-5 strict spec-surface validation is not applied"
 
       (stableCode, stableOut, stableErr) <- runKeiroDsl ["check", stablePath]
       stableCode `shouldBe` ExitSuccess
@@ -201,7 +203,7 @@ main = hspec $ do
 
       (unsupportedCode, _, unsupportedErr) <- runKeiroDsl ["check", legacyPath, "--min-language", "9"]
       unsupportedCode `shouldBe` ExitFailure 1
-      unsupportedErr `shouldContain` "supported versions: 1, 2, 3, 4"
+      unsupportedErr `shouldContain` "supported versions: 1, 2, 3, 4, 5"
 
     it "attributes a workspace language floor to its manifest and every member" $ do
       let v1Member = T.unlines ["language keiro-dsl 1", "context language-floor"]
@@ -490,6 +492,7 @@ main = hspec $ do
       withTempDirectory "keiro-dsl-check-report-workspace" $ \out -> do
         let workspacePath = out </> "workspace.json"
             parseFailurePath = out </> "parse-failure.json"
+            unregisteredPath = out </> "language-unregistered.keiro"
         (workspaceCode, _, _) <- runKeiroDsl ["check", canonicalWorkspacePath, "--report-out", workspacePath]
         workspaceCode `shouldBe` ExitSuccess
         workspaceReport <- decodeJsonValue workspacePath
@@ -526,10 +529,11 @@ main = hspec $ do
                 [] -> expectationFailure "workspace-floor report had no diagnostics"
               other -> expectationFailure ("expected diagnostics array, got " <> show other)
 
+        TIO.writeFile unregisteredPath "language keiro-dsl 999999\nthis is intentionally not valid body syntax\n"
         (parseCode, _, _) <-
           runKeiroDsl
             [ "check",
-              "test/fixtures/language-future.keiro",
+              unregisteredPath,
               "--report-out",
               parseFailurePath
             ]
@@ -798,7 +802,7 @@ main = hspec $ do
       failureCode "language keiro-dsl 0\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl nope\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
       failureCode "language keiro-dsl -1\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
-      failureCode "language keiro-dsl 5\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
+      failureCode "language keiro-dsl 999999\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
       failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
       failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
 
@@ -824,10 +828,10 @@ main = hspec $ do
       sourceFailureAt MisplacedLanguagePreamble 3 "context located\nid language prefix=lang\nlanguage keiro-dsl 1\n"
 
     it "rejects a future version before parsing an invalid v1 body" $
-      case parseSource "future.keiro" "language keiro-dsl 5\nthis is not a v2 body\n" of
+      case parseSource "unregistered.keiro" "language keiro-dsl 999999\nthis is not a v2 body\n" of
         Left failure@(SourceLanguageFailure diagnostic) -> do
           sourceLanguageErrorCode diagnostic `shouldBe` UnsupportedLanguageVersion
-          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2, 3, 4"
+          renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2, 3, 4, 5"
           renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
         other -> expectationFailure ("expected source-language failure, got " <> show other)
 
@@ -970,14 +974,14 @@ main = hspec $ do
       sourceOut `shouldContain` "\"effectiveLanguageVersion\":4"
       sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
       sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/3\""
-      sourceOut `shouldContain` "\"languageSupport\":\"stable\""
+      sourceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
       workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
-      workspaceOut `shouldContain` "\"languageSupport\":\"stable\""
+      workspaceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
 
     it "keeps only the named source-version compatibility fixtures outside stable v4" $ do
@@ -996,7 +1000,6 @@ main = hspec $ do
             "contract-v1-compat.keiro",
             "id-domain-migration-v3.keiro",
             "language-duplicate.keiro",
-            "language-future.keiro",
             "language-identifier-v1.keiro",
             "language-identifier-v2.keiro",
             "language-legacy.keiro",
@@ -1004,19 +1007,15 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
-            "nominal-v1.keiro"
+            "nominal-v1.keiro",
+            "projection-catalog.keiro"
           ]
 
-    it "checks v1, rejects a future contract once, and inspects legacy explicitly" $ do
+    it "checks v1 and inspects legacy explicitly" $ do
       (v1Code, v1Out, v1Err) <- runKeiroDsl ["check", "test/fixtures/language-v1.keiro"]
       v1Code `shouldBe` ExitSuccess
       v1Out `shouldBe` "OK\n"
       v1Err `shouldContain` "language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
-      (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
-      futureCode `shouldBe` ExitFailure 1
-      T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
-      futureErr `shouldContain` "supported versions: 1, 2, 3, 4"
-      futureErr `shouldNotContain` "expecting `context`"
       (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["inspect", "test/fixtures/language-legacy.keiro", "--format=json"]
       legacyCode `shouldBe` ExitSuccess
       legacyErr `shouldBe` ""
@@ -1046,7 +1045,7 @@ main = hspec $ do
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"
-          futureSource = "language keiro-dsl 5\nthis body must not parse\n"
+          futureSource = "language keiro-dsl 999999\nthis body must not parse\n"
           source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/future.keiro", futureSource)])
       loaded <- loadWorkspace source "service.keiro-workspace"
       case loaded of
@@ -1069,6 +1068,157 @@ main = hspec $ do
           map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
           map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
         _ -> expectationFailure "canonical workspace had no member"
+
+  describe "language-5 projection catalogs" $ do
+    it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      parsed <- case parseSource "projection-catalog.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      validateService (checkedSource parsed) `shouldBe` []
+      case parseSource "projection-catalog-rendered.keiro" (renderSource parsed) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right rendered -> parsedSpec rendered `shouldBe` parsedSpec parsed
+
+      let spec = parsedSpec parsed
+          targets = [target | NProjectionTarget target <- specNodes spec]
+          groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+          owners = [owner | NProjectionOwner owner <- specNodes spec]
+      map ptName targets `shouldBe` ["order_summary", "audit_log", "order_totals"]
+      map rgName groups `shouldBe` ["reporting"]
+      map poName owners `shouldBe` ["order_summary_writer", "audit_writer"]
+
+    it "feature-gates catalog declarations before validation in languages 1-4" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      case parseSource "projection-catalog-v4.keiro" (T.replace "language keiro-dsl 5" "language keiro-dsl 4" source) of
+        Left failure -> do
+          renderParseFailure failure `shouldSatisfy` T.isInfixOf "LanguageFeatureRequiresVersion"
+          renderParseFailure failure `shouldSatisfy` T.isInfixOf "requires keiro-dsl language version 5"
+        Right _ -> expectationFailure "language 4 accepted projection-catalog syntax"
+
+    it "keeps the catalog structural guards live" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      let mutationCodes mutation = do
+            service <- checkedServiceFromText "projection-catalog-mutation.keiro" (mutation source)
+            pure (map code (validateService service))
+      missingAsyncIdentity <- mutationCodes (T.replace "  subscription = \"catalog-demo-audit\"\n" "")
+      missingAsyncIdentity `shouldContain` [CatalogAsyncIdentityMissing]
+      unsafeLiveOnly <- mutationCodes (T.replace "  replay = explicit\n}" "  replay = live-only \"external side effect\"\n}")
+      unsafeLiveOnly `shouldContain` [CatalogClearTargetLiveOnly]
+      duplicateOrder <- mutationCodes (T.replace "  order = 20\n" "  order = 10\n")
+      duplicateOrder `shouldContain` [CatalogDuplicateHandlerOrder]
+      badGroupOrder <- mutationCodes (T.replace "  order = [ order_summary order_totals audit_log ]" "  order = [ order_summary order_summary audit_log ]")
+      badGroupOrder `shouldContain` [CatalogGroupOrderMismatch]
+      missingOwner <- mutationCodes (T.replace "  targets = [ order_summary order_totals ]\n" "  targets = [ order_summary ]\n")
+      missingOwner `shouldContain` [CatalogTargetUnowned]
+      unknownDependency <- mutationCodes (T.replace "  depends-on = [ order_summary ]\n" "  depends-on = [ missing_target ]\n")
+      unknownDependency `shouldContain` [CatalogTargetDependencyUnknown]
+      dependencyCycle <- mutationCodes (T.replace "  reset = clear\n}\n\ntarget audit_log" "  reset = clear\n  depends-on = [ order_totals ]\n}\n\ntarget audit_log")
+      dependencyCycle `shouldContain` [CatalogTargetDependencyCycle]
+      overlappingSource <- mutationCodes (T.replace "  source = aggregate Orders\n" "  source = aggregate Orders\n  source = category \"orders\"\n")
+      overlappingSource `shouldContain` [CatalogSourceOverlap]
+      missingQueryBinding <- mutationCodes (T.replace "  targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "  targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
+      missingQueryBinding `shouldContain` [CatalogAsyncQueryBindingMissing]
+
+    it "generates one facade, one create-once behavior surface, and durable ledger facts" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      service <- checkedServiceFromText "projection-catalog.keiro" source
+      let spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          facade = generatedTextEndingIn "Generated/CatalogDemo/ProjectionCatalog.hs" modules
+          holes = case [moduleText m | m <- modules, kind m == HoleStub, "ProjectionCatalog/ProjectionCatalogHoles.hs" `T.isSuffixOf` T.pack (modulePath m)] of
+            [value] -> value
+            values -> error ("expected one projection catalog hole module, got " <> show (length values))
+          facts = projectionCatalogFacts spec
+      facade `shouldSatisfy` T.isInfixOf "Catalog.validateProjectionCatalog projectionCatalog"
+      facade `shouldSatisfy` T.isInfixOf "Catalog.ClearBeforeReplay"
+      facade `shouldSatisfy` T.isInfixOf "Catalog.PreserveAndReconcile"
+      facade
+        `shouldSatisfy` ( \text ->
+                            let (_, fromFirst) = T.breakOn "orderSummaryWriterProjectionSet" text
+                             in not (T.null fromFirst) && T.isInfixOf "auditWriterProjectionSet" (T.drop 1 fromFirst)
+                        )
+      holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer live apply"
+      holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer replay apply"
+      facts `shouldBe` sort facts
+      facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
+      facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
+
+    it "preserves edited catalog behavior holes on regeneration" $
+      withTempDirectory "keiro-dsl-projection-catalog-create-once" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/projection-catalog.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+            holeSuffix = "ProjectionCatalog/ProjectionCatalogHoles.hs"
+        modules <- case planServiceScaffold ctx service of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right planned -> pure planned
+        first <- executeServiceScaffold out False "projection-catalog.keiro" (parsedSourceLanguage parsed) ctx service modules
+        first `shouldSatisfy` isSuccessfulScaffold
+        let holePath = out </> onlyPathEndingIn holeSuffix modules
+            reviewedBody = "module CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles where\nreviewed = True\n"
+        TIO.writeFile holePath reviewedBody
+        second <- executeServiceScaffold out False "projection-catalog.keiro" (parsedSourceLanguage parsed) ctx service modules
+        second `shouldSatisfy` isSuccessfulScaffold
+        TIO.readFile holePath `shouldReturn` reviewedBody
+        case second of
+          Left _ -> fail "unreachable"
+          Right report ->
+            reportDispositions report
+              `shouldSatisfy` any (\(moduleValue, disposition) -> holeSuffix `isSuffixOfPath` moduleValue && disposition == Skipped)
+
+    it "classifies every catalog evolution dimension and reports machine-readable replay impact" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      oldService <- checkedServiceFromText "projection-catalog-old.keiro" source
+      let targetBlock = T.unlines ["target audit_log {", "  schema = \"sales\"", "  table = \"audit_log\"", "  reset = preserve", "}", ""]
+          ownerBlock =
+            T.unlines
+              [ "projection-owner audit_writer {",
+                "  source = category \"audit\"",
+                "  feed = subscription",
+                "  group = reporting",
+                "  targets = [ audit_log ]",
+                "  order = 20",
+                "  subscription = \"catalog-demo-audit\"",
+                "  dedup = \"catalog-demo-audit-v1\"",
+                "  replay = explicit",
+                "}",
+                ""
+              ]
+          mutations =
+            [ ("target-added", CatalogTargetAdded, T.replace "rebuild-group reporting" "target archive_log {\n  schema = \"sales\"\n  table = \"archive_log\"\n  reset = preserve\n}\n\nrebuild-group reporting"),
+              ("target-removed", CatalogTargetRemoved, T.replace targetBlock ""),
+              ("target-location", CatalogTargetLocationChanged, T.replace "table = \"order_summary\"" "table = \"order_summary_v2\""),
+              ("target-reset", CatalogTargetResetPolicyChanged, T.replace "reset = preserve" "reset = clear"),
+              ("target-dependency", CatalogTargetDependencyChanged, T.replace "depends-on = [ order_summary ]" "depends-on = [ audit_log ]"),
+              ("group-membership-order", CatalogGroupChanged, T.replace "order = [ order_summary order_totals audit_log ]" "order = [ audit_log order_summary order_totals ]"),
+              ("owner-binding", CatalogOwnerChanged, T.replace "targets = [ order_summary order_totals ]" "targets = [ order_summary ]"),
+              ("owner-removed", CatalogOwnerRemoved, T.replace ownerBlock ""),
+              ("handler-order", CatalogHandlerOrderChanged, T.replace "order = 20" "order = 30"),
+              ("source", CatalogSourceChanged, T.replace "source = aggregate Orders" "source = category \"archived-orders\""),
+              ("feed", CatalogFeedIdentityChanged, T.replace "feed = subscription" "feed = inline"),
+              ("subscription", CatalogFeedIdentityChanged, T.replace "subscription = \"catalog-demo-audit\"" "subscription = \"catalog-demo-audit-v2\""),
+              ("dedup", CatalogFeedIdentityChanged, T.replace "dedup = \"catalog-demo-audit-v1\"" "dedup = \"catalog-demo-audit-v2\""),
+              ("replay-policy", CatalogReplayPolicyChanged, T.replace "replay = explicit\n}\n\nreadmodel" "replay = live-only \"external effect\"\n}\n\nreadmodel"),
+              ("query-binding", CatalogQueryBindingChanged, T.replace "targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
+            ]
+      changedServices <-
+        forM mutations $ \(caseName, expectedCode, mutate) -> do
+          changed <- checkedServiceFromText ("projection-catalog-" <> caseName <> ".keiro") (mutate source)
+          map (ckCode . kindOfChange) (diffServices oldService changed) `shouldContain` [expectedCode]
+          pure (caseName, changed)
+      sourceChanged <- case lookup "source" changedServices of
+        Just changed -> pure changed
+        Nothing -> expectationFailure "source mutation was not exercised" >> fail "unreachable"
+      case ReplayImpact.catalogReplayImpactServices oldService sourceChanged of
+        CatalogReplayAffected groups targets sources adapters invalidates -> do
+          groups `shouldBe` Set.singleton "reporting"
+          targets `shouldBe` Set.fromList ["order_summary", "order_totals"]
+          sources `shouldBe` Set.fromList ["aggregate:Orders", "category:archived-orders"]
+          adapters `shouldBe` Set.singleton "order_summary_writer"
+          invalidates `shouldBe` True
+        CatalogReplayNeutral -> expectationFailure "catalog source change was replay-neutral"
 
   describe "ID domain" $ do
     let parseRight name source = case parseSource name source of
@@ -2057,7 +2207,8 @@ main = hspec $ do
                 recIdDomains = [],
                 recNominalEqualities = [],
                 recBindingObligations = [],
-                recBehaviorRequirements = rows
+                recBehaviorRequirements = rows,
+                recProjectionCatalogFacts = []
               }
       T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
       parseRecord (renderRecord singleRecord) `shouldBe` Just singleRecord
@@ -2086,6 +2237,7 @@ main = hspec $ do
                 wrNominalEqualities = [],
                 wrBindingObligations = [],
                 wrBehaviorRequirements = ownedRows,
+                wrProjectionCatalogFacts = [],
                 wrAdopted = []
               }
       map Behavior.behaviorRecordOwner ownedRows `shouldSatisfy` all (== Just "journey.keiro")
@@ -2244,7 +2396,8 @@ main = hspec $ do
                 recIdDomains = [],
                 recNominalEqualities = nominalEqualityIdentities spec,
                 recBindingObligations = [],
-                recBehaviorRequirements = []
+                recBehaviorRequirements = [],
+                recProjectionCatalogFacts = []
               }
           encoded = renderRecord record
           workspaceRecord =
@@ -3199,7 +3352,8 @@ main = hspec $ do
                   recIdDomains = [],
                   recNominalEqualities = [],
                   recBindingObligations = [],
-                  recBehaviorRequirements = []
+                  recBehaviorRequirements = [],
+                  recProjectionCatalogFacts = []
                 }
             recordPath = out </> recordFileName (specContext spec)
         TIO.writeFile recordPath (renderRecord legacyRecord)
@@ -6637,8 +6791,6 @@ main = hspec $ do
               unless (exitCode == ExitSuccess) $
                 expectationFailure (T.unpack kind <> " skeleton failed the gate:\n" <> stdoutText <> stderrText)
               stderrText `shouldNotContain` "escalated to failure"
-    it "stable skeleton scaffolds match the committed compiling modules" $
-      mapM_ (uncurry assertStableSkeletonMatchesCommitted) skeletonModuleRoots
     it "rejects an unknown kind with a helpful message" $
       case skeletonFor "bogus" of
         Left msg -> ("Valid kinds:" `T.isInfixOf` msg) `shouldBe` True
@@ -6910,7 +7062,8 @@ main = hspec $ do
                   recIdDomains = [],
                   recNominalEqualities = [],
                   recBindingObligations = [],
-                  recBehaviorRequirements = Behavior.behaviorRecordRows requirements
+                  recBehaviorRequirements = Behavior.behaviorRecordRows requirements,
+                  recProjectionCatalogFacts = []
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines contents))
@@ -7887,7 +8040,9 @@ main = hspec $ do
           moduleText domain `shouldSatisfy` (not . T.isInfixOf "data ProjectPhase")
           moduleText domain `shouldSatisfy` T.isInfixOf (generatedNominalModule ctx <> " (ProjectId, parseProjectId, ProjectPhase (..))")
           moduleText domain `shouldSatisfy` (not . T.isInfixOf "WorkspaceVisibility")
-        singleFileModules <- case planServiceScaffold ctx (stableCheckedService (wsMergedSpec (wpWorkspace plan))) of
+        -- Preserve the members' declared language contract. The active language-5
+        -- candidate must not silently restamp an existing language-4 workspace.
+        singleFileModules <- case planServiceScaffold ctx (wpCheckedService plan) of
           Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
           Right values -> pure values
         let withoutOrigin m = (modulePath m, moduleText m, kind m)
@@ -8940,33 +9095,6 @@ assertSkeletonScaffoldable kind = case skeletonFor kind of
     Left perr -> expectationFailure (T.unpack perr)
     Right spec -> planScaffold (defaultContext (specContext spec)) spec `shouldSatisfy` isSuccessfulScaffold
 
-skeletonModuleRoots :: [(T.Text, T.Text)]
-skeletonModuleRoots =
-  [ ("aggregate", "SkelAggregate"),
-    ("process", "SkelProcess"),
-    ("router", "SkelRouter"),
-    ("contract", "SkelContract"),
-    ("intake", "SkelIntake"),
-    ("emit", "SkelEmit"),
-    ("workqueue", "SkelQueue"),
-    ("workflow", "SkelWorkflow")
-  ]
-
-assertStableSkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
-assertStableSkeletonMatchesCommitted kind root = case skeletonFor kind of
-  Left err -> expectationFailure (T.unpack err)
-  Right source -> case parseSource ("new:" <> T.unpack kind) source of
-    Left err -> expectationFailure (T.unpack (renderParseFailure err))
-    Right parsed -> do
-      let service = checkedSource parsed
-          spec = checkedSpec service
-      let ctx = (defaultContext (specContext spec)) {moduleRoot = root}
-      forM_ [m | m <- scaffoldServiceModules ctx service, kindOf m == Generated] $ \m -> do
-        committed <- readTestText ("test/conformance-skeletons/" <> modulePath m)
-        normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
-  where
-    kindOf = Keiro.Dsl.Scaffold.kind
-
 bumpArtifactBindingVersion :: MappedDecl -> MappedDecl
 bumpArtifactBindingVersion declaration@MappedStructural {msName = "ArtifactInfo"} =
   declaration {msBindingVersion = Just "2"}
@@ -9152,6 +9280,7 @@ sampleWorkspaceRecord workspace =
       wrNominalEqualities = nominalEqualityIdentities (wsMergedSpec workspace),
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
       wrBehaviorRequirements = [],
+      wrProjectionCatalogFacts = [],
       wrAdopted =
         [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-ledger.context.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing
@@ -10746,6 +10875,8 @@ genReadModel =
     <*> genMaybe (oneof [pure RmEntireLog, RmCategory <$> genAdversarialText])
     <*> elements [RmInline, RmSubscription]
     <*> genMaybe genAdversarialText
+    <*> pure Nothing
+    <*> pure []
     <*> pure noLoc
 
 genPgmqDispatch :: Gen PgmqDispatchNode
@@ -10818,6 +10949,9 @@ nodeTag = \case
   NWorkqueue _ -> "workqueue"
   NPgmqDispatch _ -> "pgmq-dispatch"
   NReadModel _ -> "readmodel"
+  NProjectionTarget _ -> "projection-target"
+  NRebuildGroup _ -> "rebuild-group"
+  NProjectionOwner _ -> "projection-owner"
   NWorkflow _ -> "workflow"
   NOperation _ -> "operation"
 

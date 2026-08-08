@@ -57,6 +57,7 @@ module Keiro.Dsl.Scaffold
     scaffoldPublisher,
     scaffoldWorkqueue,
     scaffoldReadModel,
+    scaffoldProjectionCatalog,
     scaffoldRefusals,
     windowSeconds,
 
@@ -3546,6 +3547,363 @@ scaffoldReadModel ctx readModel =
           origin = readModelOrigin
         }
 
+-- | Generate one service-level catalog facade and one create-once module that
+-- owns application handler/decoder bodies. The checked DSL graph owns every
+-- identity and relationship; the hole supplies only executable projection
+-- sets, never a second inventory.
+scaffoldProjectionCatalog :: Context -> Spec -> [ScaffoldModule]
+scaffoldProjectionCatalog ctx spec
+  | null catalogNodes = []
+  | otherwise =
+      [ ScaffoldModule
+          { modulePath = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
+            moduleText = emitProjectionCatalog ctx spec,
+            kind = Generated,
+            origin = "projection-catalog " <> contextName ctx
+          },
+        ScaffoldModule
+          { modulePath = modulePathFor (holePrefixFor ctx "ProjectionCatalog") "ProjectionCatalogHoles",
+            moduleText = emitProjectionCatalogHoles ctx owners,
+            kind = HoleStub,
+            origin = "projection-catalog " <> contextName ctx
+          }
+      ]
+  where
+    catalogNodes = [() | node <- specNodes spec, isCatalogNode node]
+    owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
+    isCatalogNode NProjectionTarget {} = True
+    isCatalogNode NRebuildGroup {} = True
+    isCatalogNode NProjectionOwner {} = True
+    isCatalogNode _ = False
+
+emitProjectionCatalog :: Context -> Spec -> Text
+emitProjectionCatalog ctx spec =
+  nl $
+    [ generatedBanner,
+      "{-# LANGUAGE OverloadedStrings #-}",
+      "module " <> moduleName,
+      "  ( projectionCatalog",
+      "  , validatedProjectionCatalog",
+      "  , projectionCatalogInventory",
+      "  , projectionCatalogRegistrations",
+      "  , projectionCatalogAsyncRegistrations",
+      "  , registerProjectionCatalog"
+    ]
+      ++ map (("  , " <>) . ownerSetName) owners
+      ++ map (("  , " <>) . ownerInlineViewName) inlineOwners
+      ++ concatMap groupExports groups
+      ++ [ "  ) where",
+           "",
+           "import Data.List.NonEmpty (NonEmpty (..))",
+           "import Effectful (Eff, IOE, (:>))"
+         ]
+      ++ concatMap aggregateImports aggregateSources
+      ++ [ "import Keiro.Projection (AsyncProjection (..), InlineProjection (..))",
+           "import Keiro.Projection.Catalog qualified as Catalog",
+           "import Keiro.ReadModel.Rebuild qualified as Rebuild",
+           "import Kiroku.Store.Effect (Store)",
+           "import Kiroku.Store.Types qualified as Kiroku",
+           "import " <> holesModule <> " qualified as Holes"
+         ]
+      ++ map readModelImport readModels
+      ++ [ "",
+           "must :: Show error => Either error value -> value",
+           "must = either (error . show) id"
+         ]
+      ++ concatMap ownerDefinition owners
+      ++ [ "",
+           "projectionCatalog :: Catalog.ProjectionCatalog",
+           "projectionCatalog =",
+           "  Catalog.ProjectionCatalog",
+           "    " <> renderList sourceExpr sources,
+           "    " <> renderList targetExpr targets,
+           "    " <> renderList groupExpr groups,
+           "    " <> renderList subscriptionExpr asyncOwners,
+           "    " <> renderList dedupExpr asyncOwners,
+           "    " <> renderList queryExpr boundReadModels,
+           "    " <> renderList (("Catalog.SomeProjectionSet " <>) . ownerSetName) owners,
+           "",
+           "validatedProjectionCatalog :: Catalog.ValidatedProjectionCatalog",
+           "validatedProjectionCatalog = case Catalog.validateProjectionCatalog projectionCatalog of",
+           "  Catalog.Success catalog -> catalog",
+           "  Catalog.Failure diagnostics -> error (\"keiro-dsl generated an invalid projection catalog: \" <> show diagnostics)",
+           "",
+           "projectionCatalogInventory :: Catalog.CatalogInventory",
+           "projectionCatalogInventory = Catalog.catalogInventory validatedProjectionCatalog",
+           "",
+           "projectionCatalogRegistrations :: [Catalog.CatalogRegistration]",
+           "projectionCatalogRegistrations = Catalog.catalogRegistrations validatedProjectionCatalog",
+           "",
+           "projectionCatalogAsyncRegistrations :: [Catalog.AsyncProjectionRegistration]",
+           "projectionCatalogAsyncRegistrations = Catalog.asyncProjectionRegistrations validatedProjectionCatalog",
+           "",
+           "registerProjectionCatalog :: (Store :> es) => Eff es (Either Rebuild.CatalogRegistrationError [Rebuild.GroupRebuildMetadata])",
+           "registerProjectionCatalog = Rebuild.registerProjectionCatalog validatedProjectionCatalog"
+         ]
+      ++ concatMap groupDefinitions groups
+  where
+    moduleName = contextGeneratedPrefix ctx <> ".ProjectionCatalog"
+    holesModule = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
+    targets = [target | NProjectionTarget target <- specNodes spec]
+    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+    -- The catalog's list order is the declared total handler order. Keeping the
+    -- sort here (rather than in the runtime) makes generated inventory and replay
+    -- behavior agree even when declarations are arranged for readability.
+    owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
+    inlineOwners = [owner | owner <- owners, poFeed owner == RmInline]
+    sources = nub (concatMap poSources owners)
+    aggregateSources = nub [aggregateName | CatalogAggregate aggregateName <- sources]
+    asyncOwners = [owner | owner <- owners, poFeed owner == RmSubscription]
+    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    boundReadModels = [readModel | readModel <- readModels, isJust (rmGroup readModel)]
+    readModelAlias readModel = "RM" <> pascal (rmName readModel)
+    readModelImport readModel = "import " <> genPrefixFor ctx (pascal (rmName readModel)) <> ".ReadModel qualified as " <> readModelAlias readModel
+    aggregateImports aggregateName =
+      [ "import " <> genPrefixFor ctx aggregateName <> ".Codec qualified as " <> aggregateCodecAlias aggregateName,
+        "import " <> genPrefixFor ctx aggregateName <> ".Domain qualified as " <> aggregateDomainAlias aggregateName
+      ]
+    aggregateCodecAlias aggregateName = pascal aggregateName <> "Codec"
+    aggregateDomainAlias aggregateName = pascal aggregateName <> "Domain"
+    sourceExpr source =
+      "Catalog.SourceDeclaration "
+        <> smart "mkSourceId" (catalogSourceId source)
+        <> " "
+        <> sourceScope source
+        <> " "
+        <> tshow (sourceFingerprint source)
+        <> " "
+        <> claim ("source " <> catalogSourceId source)
+    sourceScope CatalogAll = "Catalog.AllStreams"
+    sourceScope (CatalogCategory categoryName) = "(Catalog.CategorySource (Kiroku.CategoryName " <> tshow categoryName <> "))"
+    sourceScope (CatalogAggregate aggregateName) = "(Catalog.CategorySource (Kiroku.CategoryName " <> tshow (lowerFirst aggregateName) <> "))"
+    sourceFingerprint CatalogAll = "all-streams/generated-codec/v1"
+    sourceFingerprint (CatalogCategory categoryName) = "category:" <> categoryName <> "/application-decoder/v1"
+    sourceFingerprint (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName <> "/generated-codec/v1"
+    targetExpr target =
+      "Catalog.TargetDeclaration "
+        <> smart "mkTargetId" (ptName target)
+        <> " (Catalog.QualifiedTable "
+        <> tshow (ptSchema target)
+        <> " "
+        <> tshow (ptTable target)
+        <> ") "
+        <> (case ptReset target of TargetClear -> "Catalog.ClearBeforeReplay"; TargetPreserve -> "Catalog.PreserveAndReconcile")
+        <> " "
+        <> renderList (smart "mkTargetId") (ptDependsOn target)
+        <> " "
+        <> claim ("target " <> ptName target)
+    groupExpr groupNode =
+      "Catalog.RebuildGroupDeclaration "
+        <> smart "mkRebuildGroupId" (rgName groupNode)
+        <> " "
+        <> renderList (smart "mkTargetId") (rgOrder groupNode)
+        <> " [] "
+        <> claim ("rebuild-group " <> rgName groupNode)
+    subscriptionExpr owner =
+      "Catalog.SubscriptionDeclaration "
+        <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+        <> " "
+        <> tshow (fromMaybe "" (poSubscription owner))
+        <> " "
+        <> smart "mkSourceId" (catalogSourceId (ownerPrimarySource owner))
+        <> " "
+        <> claim ("projection-owner " <> poName owner <> " subscription")
+    dedupExpr owner =
+      "Catalog.DedupKeyDeclaration "
+        <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+        <> " "
+        <> tshow (fromMaybe "" (poDedup owner))
+        <> " "
+        <> claim ("projection-owner " <> poName owner <> " dedup")
+    queryExpr readModel =
+      "Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding "
+        <> smart "mkQueryModelId" (rmName readModel)
+        <> " "
+        <> readModelAlias readModel
+        <> "."
+        <> readModelStem readModel
+        <> "ReadModel "
+        <> smart "mkRebuildGroupId" (fromMaybe "" (rmGroup readModel))
+        <> " "
+        <> renderList (smart "mkTargetId") (rmObservedTargets readModel)
+        <> " "
+        <> claim ("readmodel " <> rmName readModel)
+        <> ")"
+    ownerSetName owner = lowerFirst (pascal (poName owner)) <> "ProjectionSet"
+    ownerInlineViewName owner = lowerFirst (pascal (poName owner)) <> "InlineProjections"
+    ownerEventType owner = case ownerPrimarySource owner of
+      CatalogAggregate aggregateName -> aggregateDomainAlias aggregateName <> "." <> pascal aggregateName <> "Event"
+      _ -> "Holes." <> pascal (poName owner) <> "Event"
+    ownerDefinition owner =
+      [ "",
+        ownerSetName owner <> " :: Catalog.ProjectionSet " <> ownerEventType owner,
+        ownerSetName owner <> " =",
+        "  Catalog.ProjectionSet",
+        "    " <> smart "mkSourceId" (catalogSourceId (ownerPrimarySource owner)),
+        "    (Catalog.ProjectionDefinition",
+        "      " <> smart "mkProjectionId" (poName owner),
+        "      " <> smart "mkRebuildGroupId" (poGroup owner),
+        "      " <> nonEmptyList (smart "mkTargetId") (poTargets owner),
+        "      " <> replayPolicyExpr owner,
+        "      (" <> handlerExpr owner <> " :| [])",
+        "      " <> claim ("projection-owner " <> poName owner),
+        "      :| [])",
+        "    " <> claim ("projection-owner " <> poName owner <> " source")
+      ]
+        ++ if poFeed owner == RmInline
+          then
+            [ "",
+              ownerInlineViewName owner <> " :: [InlineProjection " <> ownerEventType owner <> "]",
+              ownerInlineViewName owner <> " = Catalog.typedInlineProjections validatedProjectionCatalog " <> ownerSetName owner
+            ]
+          else []
+    replayPolicyExpr owner = case poReplay owner of
+      ProjectionLiveOnly reason -> "(Catalog.LiveOnly (Catalog.LiveOnlyReason " <> tshow reason <> "))"
+      ProjectionReplayExplicit -> case ownerPrimarySource owner of
+        CatalogAggregate aggregateName ->
+          "(Catalog.Replayable (Catalog.replayAdapterFromCodec "
+            <> aggregateCodecAlias aggregateName
+            <> "."
+            <> lowerFirst aggregateName
+            <> "Codec Holes."
+            <> ownerReplayApplyName owner
+            <> "))"
+        _ ->
+          "(Catalog.Replayable (Catalog.ReplayAdapter Holes."
+            <> ownerReplayDecodeName owner
+            <> " Holes."
+            <> ownerReplayApplyName owner
+            <> "))"
+    handlerExpr owner = case poFeed owner of
+      RmInline ->
+        "Catalog.InlineHandler (InlineProjection "
+          <> tshow (poName owner)
+          <> " Holes."
+          <> ownerLiveApplyName owner
+          <> ") "
+          <> claim ("projection-owner " <> poName owner <> " inline-handler")
+      RmSubscription ->
+        "Catalog.AsyncHandler (AsyncProjection "
+          <> tshow (fromMaybe "" (poDedup owner))
+          <> " "
+          <> tshow (ownerQueryRegistry owner)
+          <> " "
+          <> tshow (fromMaybe "" (poSubscription owner))
+          <> " Holes."
+          <> ownerLiveApplyName owner
+          <> " Holes."
+          <> ownerIdempotencyName owner
+          <> ") "
+          <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+          <> " "
+          <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+          <> " "
+          <> claim ("projection-owner " <> poName owner <> " async-handler")
+    ownerQueryRegistry owner = case matchingReadModels owner of
+      readModel : _ -> registryNameFor (contextName ctx) readModel
+      [] -> ""
+    matchingReadModels owner =
+      [ readModel
+      | readModel <- boundReadModels,
+        rmGroup readModel == Just (poGroup owner),
+        any (`elem` poTargets owner) (rmObservedTargets readModel)
+      ]
+    ownerLiveApplyName owner = "apply" <> pascal (poName owner) <> "Live"
+    ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
+    ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
+    ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
+    groupIdName groupNode = lowerFirst (pascal (rgName groupNode)) <> "RebuildGroupId"
+    groupStartName groupNode = "start" <> pascal (rgName groupNode) <> "Rebuild"
+    groupExports groupNode = ["  , " <> groupIdName groupNode, "  , " <> groupStartName groupNode]
+    groupDefinitions groupNode =
+      [ "",
+        groupIdName groupNode <> " :: Catalog.RebuildGroupId",
+        groupIdName groupNode <> " = " <> smart "mkRebuildGroupId" (rgName groupNode),
+        "",
+        groupStartName groupNode <> " :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)",
+        groupStartName groupNode <> " = Rebuild.startCatalogRebuild validatedProjectionCatalog " <> groupIdName groupNode
+      ]
+    smart constructor value = "(must (Catalog." <> constructor <> " " <> tshow value <> "))"
+    claim value = smart "mkClaimSite" value
+    renderList render values = "[" <> T.intercalate ", " (map render values) <> "]"
+    nonEmptyList _ [] = "error \"keiro-dsl invariant: validated projection owner has no targets\""
+    nonEmptyList render (value : values) = "(" <> render value <> " :| " <> renderList render values <> ")"
+    ownerPrimarySource owner = case poSources owner of
+      source : _ -> source
+      [] -> CatalogAll
+
+emitProjectionCatalogHoles :: Context -> [ProjectionOwnerNode] -> Text
+emitProjectionCatalogHoles ctx owners =
+  nl $
+    [ "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it.",
+      "module " <> moduleName,
+      "  ( " <> T.intercalate "\n  , " exports,
+      "  ) where",
+      ""
+    ]
+      ++ ["import " <> genPrefixFor ctx aggregateName <> ".Domain (" <> pascal aggregateName <> "Event)" | aggregateName <- aggregateSources]
+      ++ [ "import Hasql.Transaction qualified as Tx",
+           "import Keiro.Projection.Catalog qualified as Catalog",
+           "import Kiroku.Store.Types (EventId, RecordedEvent)",
+           ""
+         ]
+      ++ concatMap ownerStubs owners
+  where
+    moduleName = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
+    aggregateSources = nub [aggregateName | owner <- owners, CatalogAggregate aggregateName <- poSources owner]
+    exports = concatMap ownerExports owners
+    ownerExports owner =
+      [pascal (poName owner) <> "Event" | not (isAggregateSource owner)]
+        <> [ownerLiveApplyName owner]
+        <> [ownerIdempotencyName owner | poFeed owner == RmSubscription]
+        <> case poReplay owner of
+          ProjectionLiveOnly _ -> []
+          ProjectionReplayExplicit -> [ownerReplayApplyName owner] <> [ownerReplayDecodeName owner | not (isAggregateSource owner)]
+    ownerStubs owner =
+      ["-- Projection owner " <> poName owner <> " (order " <> T.pack (show (poOrder owner)) <> ")."]
+        <> ["data " <> ownerEventType owner <> " = " <> ownerEventType owner | not (isAggregateSource owner)]
+        <> [ownerLiveSignature owner, ownerLiveApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " live apply\""]
+        <> ( if poFeed owner == RmSubscription
+               then
+                 [ ownerIdempotencyName owner <> " :: RecordedEvent -> EventId",
+                   ownerIdempotencyName owner <> " = error \"HOLE: return the durable event id for " <> poName owner <> "\""
+                 ]
+               else []
+           )
+        <> replayStubs owner
+        <> [""]
+    replayStubs owner = case poReplay owner of
+      ProjectionLiveOnly _ -> []
+      ProjectionReplayExplicit ->
+        ( if not (isAggregateSource owner)
+            then
+              [ ownerReplayDecodeName owner <> " :: RecordedEvent -> Catalog.ReplayDecodeResult " <> ownerEventType owner,
+                ownerReplayDecodeName owner <> " = error \"HOLE: classify and decode every " <> poName owner <> " source event\""
+              ]
+            else []
+        )
+          <> [ ownerReplayApplyName owner <> " :: " <> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()",
+               ownerReplayApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " replay apply without live-only side effects\""
+             ]
+    ownerLiveSignature owner =
+      ownerLiveApplyName owner <> " :: " <> case poFeed owner of
+        RmInline -> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()"
+        RmSubscription -> "RecordedEvent -> Tx.Transaction ()"
+    ownerEventType owner = case ownerPrimarySource owner of
+      CatalogAggregate aggregateName -> pascal aggregateName <> "Event"
+      _ -> pascal (poName owner) <> "Event"
+    isAggregateSource owner = case ownerPrimarySource owner of CatalogAggregate {} -> True; _ -> False
+    ownerPrimarySource owner = case poSources owner of source : _ -> source; [] -> CatalogAll
+    ownerLiveApplyName owner = "apply" <> pascal (poName owner) <> "Live"
+    ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
+    ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
+    ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
+
+catalogSourceId :: CatalogSource -> Text
+catalogSourceId CatalogAll = "all"
+catalogSourceId (CatalogCategory categoryName) = "category:" <> categoryName
+catalogSourceId (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
+
 modulePathFor :: Text -> Text -> FilePath
 modulePathFor prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
 
@@ -3571,23 +3929,22 @@ emitReadModelTable tableModule stem readModel =
 emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
   nl $
-    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | rmFeed readModel == RmSubscription]
+    renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | emitsLegacyAsync]
       <> [ generatedBanner,
            "module " <> readModelModule <> ".ReadModel",
            "  ( " <> T.intercalate "\n  , " exports,
            "  ) where",
-           "",
-           "import Data.Functor (void)",
-           "import Effectful (Eff, (:>))",
-           "import " <> tableModule <> " (" <> qualifiedName <> ")",
+           ""
+         ]
+      ++ (if not catalogManaged then ["import Data.Functor (void)", "import Effectful (Eff, (:>))"] else [])
+      ++ [ "import " <> tableModule <> " (" <> qualifiedName <> ")",
            "import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"
          ]
       ++ asyncImports
-      ++ [ "import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), ReadModelMetadata, StrongScope (..), registerReadModel)",
-           "import Keiro.ReadModel.Rebuild qualified as Rebuild",
-           "import Kiroku.Store.Effect (Store)",
-           "import Kiroku.Store.Types (" <> kirokuTypes <> ")",
-           "",
+      ++ [ "import Keiro.ReadModel (" <> readModelImports <> ")"
+         ]
+      ++ (if not catalogManaged then ["import Keiro.ReadModel.Rebuild qualified as Rebuild", "import Kiroku.Store.Effect (Store)", "import Kiroku.Store.Types (" <> kirokuTypes <> ")"] else [])
+      ++ [ "",
            readModelName <> " :: ReadModel " <> queryInputType <> " " <> queryResultType,
            readModelName <> " =",
            "  ReadModel",
@@ -3600,26 +3957,13 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
            "    , defaultConsistency = " <> consistencyExpr (rmConsistency readModel),
            "    , strongScope = " <> scopeExpr (rmScope readModel),
            "    , query = " <> queryName,
-           "    }",
-           "",
-           "-- Call once at projection startup before serving queries.",
-           registerName <> " :: (Store :> es) => Eff es ()",
-           registerName <> " =",
-           "  void (registerReadModel " <> tshow registryName <> " " <> tshow' (rmVersion readModel) <> " " <> tshow (rmShape readModel) <> ")",
-           "",
-           startName <> " :: (Store :> es) => GlobalPosition -> Eff es ReadModelMetadata",
-           startName <> " =",
-           "  Rebuild.startRebuild " <> readModelName <> " " <> projectionNames,
-           "",
-           finishName <> " :: (Store :> es) => GlobalPosition -> Eff es (Either Rebuild.RebuildError ReadModelMetadata)",
-           finishName <> " =",
-           "  Rebuild.finishRebuild " <> readModelName <> " " <> projectionNames,
-           "",
-           abandonName <> " :: (Store :> es) => Eff es ReadModelMetadata",
-           abandonName <> " = Rebuild.abandonRebuild " <> readModelName
+           "    }"
          ]
+      ++ legacyLifecycleDefinitions
       ++ asyncDefinition
   where
+    catalogManaged = rmGroup readModel /= Nothing
+    emitsLegacyAsync = not catalogManaged && rmFeed readModel == RmSubscription
     registryName = registryNameFor (contextName ctx) readModel
     subscriptionName = subscriptionNameFor (contextName ctx) readModel
     asyncName = registryName <> "-async"
@@ -3636,37 +3980,55 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
     applyName = "apply" <> pascal stem
     exports =
       [ readModelName,
-        qualifiedName,
-        registerName,
-        startName,
-        finishName,
-        abandonName
+        qualifiedName
       ]
-        ++ [asyncValueName | rmFeed readModel == RmSubscription]
-    holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | rmFeed readModel == RmSubscription]
-    asyncImports = case rmFeed readModel of
-      RmInline -> []
-      RmSubscription -> ["import Keiro.Projection (AsyncProjection (..))"]
+        ++ (if not catalogManaged then [registerName, startName, finishName, abandonName] else [])
+        ++ [asyncValueName | emitsLegacyAsync]
+    holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
+    asyncImports = ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
+    readModelImports =
+      "ConsistencyMode (..), ReadModel (..), StrongScope (..)"
+        <> if catalogManaged then "" else ", ReadModelMetadata, registerReadModel"
     kirokuTypes = case rmFeed readModel of
       RmInline -> "GlobalPosition"
       RmSubscription -> "GlobalPosition, RecordedEvent (..)"
     projectionNames = case rmFeed readModel of
       RmInline -> "[]"
       RmSubscription -> "[" <> tshow asyncName <> "]"
-    asyncDefinition = case rmFeed readModel of
-      RmInline -> []
-      RmSubscription ->
-        [ "",
-          asyncValueName <> " :: AsyncProjection",
-          asyncValueName <> " =",
-          "  AsyncProjection",
-          "    { name = " <> tshow asyncName,
-          "    , readModelName = " <> tshow registryName,
-          "    , subscriptionName = " <> tshow subscriptionName,
-          "    , applyRecorded = " <> applyName,
-          "    , idempotencyKey = \\recorded -> recorded.eventId",
-          "    }"
-        ]
+    legacyLifecycleDefinitions
+      | not catalogManaged =
+          [ "",
+            "-- Call once at projection startup before serving queries.",
+            registerName <> " :: (Store :> es) => Eff es ()",
+            registerName <> " =",
+            "  void (registerReadModel " <> tshow registryName <> " " <> tshow' (rmVersion readModel) <> " " <> tshow (rmShape readModel) <> ")",
+            "",
+            startName <> " :: (Store :> es) => GlobalPosition -> Eff es ReadModelMetadata",
+            startName <> " =",
+            "  Rebuild.startRebuild " <> readModelName <> " " <> projectionNames,
+            "",
+            finishName <> " :: (Store :> es) => GlobalPosition -> Eff es (Either Rebuild.RebuildError ReadModelMetadata)",
+            finishName <> " =",
+            "  Rebuild.finishRebuild " <> readModelName <> " " <> projectionNames,
+            "",
+            abandonName <> " :: (Store :> es) => Eff es ReadModelMetadata",
+            abandonName <> " = Rebuild.abandonRebuild " <> readModelName
+          ]
+      | otherwise = []
+    asyncDefinition
+      | emitsLegacyAsync =
+          [ "",
+            asyncValueName <> " :: AsyncProjection",
+            asyncValueName <> " =",
+            "  AsyncProjection",
+            "    { name = " <> tshow asyncName,
+            "    , readModelName = " <> tshow registryName,
+            "    , subscriptionName = " <> tshow subscriptionName,
+            "    , applyRecorded = " <> applyName,
+            "    , idempotencyKey = \\recorded -> recorded.eventId",
+            "    }"
+          ]
+      | otherwise = []
     consistencyExpr Strong = "Strong"
     consistencyExpr Eventual = "Eventual"
     scopeExpr Nothing = "EntireLog"
@@ -3684,7 +4046,7 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
       "import " <> tableModule <> " (" <> qualifiedName <> ")",
       "import Hasql.Transaction qualified as Tx"
     ]
-      ++ ["import Kiroku.Store.Types (RecordedEvent(..))" | rmFeed readModel == RmSubscription]
+      ++ ["import Kiroku.Store.Types (RecordedEvent(..))" | emitsLegacyAsync]
       ++ [ "",
            "-- HOLE: replace these aliases with the real query input and result types.",
            "type " <> queryInputType <> " = ()",
@@ -3704,15 +4066,16 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
     queryResultType = pascal stem <> "QueryResult"
     queryName = stem <> "Query"
     applyName = "apply" <> pascal stem
-    exports = [queryInputType, queryResultType, queryName] ++ [applyName | rmFeed readModel == RmSubscription]
-    applyStub = case rmFeed readModel of
-      RmInline -> []
-      RmSubscription ->
-        [ "",
-          "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe.",
-          applyName <> " :: RecordedEvent -> Tx.Transaction ()",
-          applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
-        ]
+    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
+    exports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
+    applyStub
+      | emitsLegacyAsync =
+          [ "",
+            "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe.",
+            applyName <> " :: RecordedEvent -> Tx.Transaction ()",
+            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
+          ]
+      | otherwise = []
 
 qualifiedTableLiteral :: ReadModelNode -> Text
 qualifiedTableLiteral readModel = quoteSqlIdentifier (rmSchema readModel) <> "." <> quoteSqlIdentifier (rmTable readModel)

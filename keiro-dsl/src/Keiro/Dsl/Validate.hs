@@ -29,6 +29,7 @@ where
 
 import Data.Bits (xor)
 import Data.Char (isControl, isSpace, ord)
+import Data.Graph (SCC (..), stronglyConnComp)
 import Data.List (sortOn)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
@@ -204,6 +205,42 @@ data DiagnosticCode
   | QueryConsistencyInvalid
   | DispatchReadModelUnresolved
   | DispatchReadModelFieldUnknown
+  | -- MasterPlan 32 / EP-4 projection catalogs.
+    CatalogTargetUnknown
+  | CatalogGroupUnknown
+  | CatalogGroupEmpty
+  | CatalogGroupOrderMismatch
+  | CatalogTargetUnowned
+  | CatalogTargetMultiplyOwned
+  | CatalogPhysicalTargetDuplicate
+  | CatalogTargetDependencyUnknown
+  | CatalogTargetDependencyOutsideGroup
+  | CatalogTargetDependencyCycle
+  | CatalogProjectionNoSource
+  | CatalogProjectionNoTarget
+  | CatalogProjectionTargetOutsideGroup
+  | CatalogSourceUnresolved
+  | CatalogSourceOverlap
+  | CatalogAsyncIdentityMissing
+  | CatalogAsyncQueryBindingMissing
+  | CatalogInlineIdentityUnexpected
+  | CatalogClearTargetLiveOnly
+  | CatalogDuplicateHandlerOrder
+  | CatalogReadModelBindingMissing
+  | CatalogReadModelTargetOutsideGroup
+  | CatalogTargetAdded
+  | CatalogTargetRemoved
+  | CatalogTargetLocationChanged
+  | CatalogTargetResetPolicyChanged
+  | CatalogTargetDependencyChanged
+  | CatalogGroupChanged
+  | CatalogOwnerChanged
+  | CatalogOwnerRemoved
+  | CatalogHandlerOrderChanged
+  | CatalogSourceChanged
+  | CatalogFeedIdentityChanged
+  | CatalogReplayPolicyChanged
+  | CatalogQueryBindingChanged
   | -- EP-107 diff-only read-model evolution rules.
     ReadModelVersionDecreased
   | ReadModelShapeChangedWithoutBump
@@ -659,6 +696,10 @@ validateCheckedSpec languageContract spec =
 enforcesSpecSurfaceClosures :: EffectiveLanguageContract -> Bool
 enforcesSpecSurfaceClosures languageContract =
   runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) StrictSpecSurfaceValidation
+
+hasProjectionCatalog :: EffectiveLanguageContract -> Bool
+hasProjectionCatalog languageContract =
+  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) ProjectionCatalogRuntime
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors
@@ -1369,6 +1410,9 @@ validateNames languageContract spec =
           ++ concatMap (\field -> fieldNameRule "workqueue payload field" (wqfName field) (wqLoc workqueue)) (wqPayload workqueue)
       NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" (pdName dispatch) (pdLoc dispatch)
       NReadModel readModel -> pascalizedNodeName "readmodel" (rmName readModel) (rmLoc readModel)
+      NProjectionTarget target -> pascalizedNodeName "target" (ptName target) (ptLoc target)
+      NRebuildGroup groupNode -> pascalizedNodeName "rebuild group" (rgName groupNode) (rgLoc groupNode)
+      NProjectionOwner owner -> pascalizedNodeName "projection owner" (poName owner) (poLoc owner)
       NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
       NOperation _ -> []
 
@@ -1673,6 +1717,9 @@ validateNames languageContract spec =
       NWorkqueue value -> ("workqueue", wqName value, wqLoc value)
       NPgmqDispatch value -> ("dispatch", pdName value, pdLoc value)
       NReadModel value -> ("readmodel", rmName value, rmLoc value)
+      NProjectionTarget value -> ("target", ptName value, ptLoc value)
+      NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
+      NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
       NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
       NOperation value -> ("operation", opName value, opLoc value)
 
@@ -1762,7 +1809,7 @@ validPostgresIdentifier identifier =
 
 -- | Rules over namespaces shared by the whole specification.
 specLevelRules :: EffectiveLanguageContract -> Spec -> [Diagnostic]
-specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ runtimeIdentities ++ duplicateRuntimeIdentities ++ ruleDiagnostics
+specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ runtimeIdentities ++ duplicateRuntimeIdentities ++ catalogRules ++ ruleDiagnostics
   where
     duplicateNodes =
       [ mkErr (locLine loc) DuplicateNodeName $
@@ -1815,6 +1862,9 @@ specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++
       [("workflow", wfStable workflow, workflowNodeLoc workflow) | NWorkflow workflow <- specNodes spec]
         <> [("process", procName process, procLoc process) | NProcess process <- specNodes spec]
         <> [("router", rtName router, rtLoc router) | NRouter router <- specNodes spec]
+    catalogRules
+      | hasProjectionCatalog languageContract = validateProjectionCatalogFleet spec
+      | otherwise = []
     ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
 
 nodeIdentity :: Node -> (Text, Name, Loc)
@@ -1828,6 +1878,9 @@ nodeIdentity (NPublisher p) = ("publisher", pubName p, pubLoc p)
 nodeIdentity (NWorkqueue w) = ("workqueue", wqName w, wqLoc w)
 nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
 nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
+nodeIdentity (NProjectionTarget target) = ("target", ptName target, ptLoc target)
+nodeIdentity (NRebuildGroup groupNode) = ("rebuild-group", rgName groupNode, rgLoc groupNode)
+nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc owner)
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
@@ -1842,6 +1895,9 @@ validateNode languageContract spec (NPublisher p) = validatePublisher languageCo
 validateNode languageContract _spec (NWorkqueue w) = validateWorkqueue languageContract w
 validateNode languageContract spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
 validateNode languageContract spec (NReadModel readModel) = validateReadModel languageContract spec readModel
+validateNode languageContract _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
+validateNode languageContract spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
+validateNode languageContract spec (NProjectionOwner owner) = validateProjectionOwner languageContract spec owner
 validateNode _languageContract _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract spec (NOperation o) = validateOperation spec o
 
@@ -2124,10 +2180,176 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   | name `notElem` [rmName readModel | NReadModel readModel <- specNodes spec]
   ]
 
+validateProjectionCatalogFleet :: Spec -> [Diagnostic]
+validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders
+  where
+    targets = [target | NProjectionTarget target <- specNodes spec]
+    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+    owners = [owner | NProjectionOwner owner <- specNodes spec]
+    physicalDuplicates =
+      [ mkErr (locLine (ptLoc target)) CatalogPhysicalTargetDuplicate $
+          "target '" <> ptName target <> "' reuses physical table " <> ptSchema target <> "." <> ptTable target
+      | target <- duplicatesBy (\target -> (ptSchema target, ptTable target)) targets
+      ]
+    targetClaims = [(targetName, rgName groupNode, rgLoc groupNode) | groupNode <- groups, targetName <- rgTargets groupNode]
+    groupOwnership =
+      [ mkErr (locLine (ptLoc target)) CatalogTargetUnowned $
+          "target '" <> ptName target <> "' is not owned by any rebuild group"
+      | target <- targets,
+        null [() | (targetName, _, _) <- targetClaims, targetName == ptName target]
+      ]
+        <> [ mkErr (locLine claimLoc) CatalogTargetMultiplyOwned $
+               "target '" <> targetName <> "' is owned by more than one rebuild group"
+           | (targetName, _, claimLoc) <- duplicatesBy (\(targetName, _, _) -> targetName) targetClaims
+           ]
+    projectionClaims = [(targetName, poName owner, poLoc owner) | owner <- owners, targetName <- poTargets owner]
+    projectionOwnership =
+      [ mkErr (locLine (ptLoc target)) CatalogTargetUnowned $
+          "target '" <> ptName target <> "' has no projection owner"
+      | target <- targets,
+        null [() | (targetName, _, _) <- projectionClaims, targetName == ptName target]
+      ]
+        <> [ mkErr (locLine claimLoc) CatalogTargetMultiplyOwned $
+               "target '" <> targetName <> "' is claimed by more than one projection owner"
+           | (targetName, _, claimLoc) <- duplicatesBy (\(targetName, _, _) -> targetName) projectionClaims
+           ]
+    groupForTarget = Map.fromList [(targetName, groupName) | (targetName, groupName, _) <- targetClaims]
+    targetDependencies =
+      [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyUnknown $
+          "target '" <> ptName target <> "' depends on undeclared target '" <> dependency <> "'"
+      | target <- targets,
+        dependency <- ptDependsOn target,
+        dependency `notElem` map ptName targets
+      ]
+        <> [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyOutsideGroup $
+               "target '" <> ptName target <> "' depends on target '" <> dependency <> "' in another rebuild group"
+           | target <- targets,
+             dependency <- ptDependsOn target,
+             Just ownerGroup <- [Map.lookup (ptName target) groupForTarget],
+             Just dependencyGroup <- [Map.lookup dependency groupForTarget],
+             ownerGroup /= dependencyGroup
+           ]
+        <> [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyCycle $
+               "target dependency cycle includes '" <> ptName target <> "'"
+           | CyclicSCC cycleTargets <- stronglyConnComp [(target, ptName target, ptDependsOn target) | target <- targets],
+             target <- cycleTargets
+           ]
+    handlerOrders =
+      [ mkErr (locLine (poLoc owner)) CatalogDuplicateHandlerOrder $
+          "projection owner '" <> poName owner <> "' reuses handler order " <> T.pack (show (poOrder owner)) <> " in group '" <> poGroup owner <> "'"
+      | owner <- duplicatesBy (\owner -> (poGroup owner, poOrder owner)) owners
+      ]
+
+validateProjectionTarget :: EffectiveLanguageContract -> ProjectionTargetNode -> [Diagnostic]
+validateProjectionTarget languageContract target =
+  [ mkErr (locLine (ptLoc target)) ReadModelIdentifierInvalid $
+      "target '" <> ptName target <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
+  | hasProjectionCatalog languageContract,
+    (kind, identifier) <- [("schema", ptSchema target), ("table", ptTable target)],
+    not (validPostgresIdentifier identifier)
+  ]
+
+validateRebuildGroup :: EffectiveLanguageContract -> Spec -> RebuildGroupNode -> [Diagnostic]
+validateRebuildGroup languageContract spec groupNode
+  | not (hasProjectionCatalog languageContract) = []
+  | otherwise = emptyTargets <> unknownTargets <> invalidOrder
+  where
+    targetNames = [ptName target | NProjectionTarget target <- specNodes spec]
+    emptyTargets =
+      [ mkErr (locLine (rgLoc groupNode)) CatalogGroupEmpty $
+          "rebuild group '" <> rgName groupNode <> "' must own at least one target"
+      | null (rgTargets groupNode)
+      ]
+    unknownTargets =
+      [ mkErr (locLine (rgLoc groupNode)) CatalogTargetUnknown $
+          "rebuild group '" <> rgName groupNode <> "' references undeclared target '" <> targetName <> "'"
+      | targetName <- rgTargets groupNode,
+        targetName `notElem` targetNames
+      ]
+    invalidOrder =
+      [ mkErr (locLine (rgLoc groupNode)) CatalogGroupOrderMismatch $
+          "rebuild group '" <> rgName groupNode <> "' order must contain each owned target exactly once"
+      | Set.fromList (rgOrder groupNode) /= Set.fromList (rgTargets groupNode)
+          || length (rgOrder groupNode) /= Set.size (Set.fromList (rgOrder groupNode))
+          || length (rgTargets groupNode) /= Set.size (Set.fromList (rgTargets groupNode))
+      ]
+
+validateProjectionOwner :: EffectiveLanguageContract -> Spec -> ProjectionOwnerNode -> [Diagnostic]
+validateProjectionOwner languageContract spec owner
+  | not (hasProjectionCatalog languageContract) = []
+  | otherwise = noSources <> noTargets <> unknownGroup <> outsideGroup <> sourceRules <> identityRules <> asyncQueryBinding <> replayRules
+  where
+    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+    targets = [target | NProjectionTarget target <- specNodes spec]
+    aggregates = [aggName aggregate | NAggregate aggregate <- specNodes spec]
+    selectedGroupTargets = case [rgTargets groupNode | groupNode <- groups, rgName groupNode == poGroup owner] of
+      groupTargets : _ -> groupTargets
+      [] -> []
+    noSources =
+      [mkErr (locLine (poLoc owner)) CatalogProjectionNoSource ("projection owner '" <> poName owner <> "' must declare at least one source") | null (poSources owner)]
+    noTargets =
+      [mkErr (locLine (poLoc owner)) CatalogProjectionNoTarget ("projection owner '" <> poName owner <> "' must declare at least one target") | null (poTargets owner)]
+    unknownGroup =
+      [ mkErr (locLine (poLoc owner)) CatalogGroupUnknown $
+          "projection owner '" <> poName owner <> "' references undeclared rebuild group '" <> poGroup owner <> "'"
+      | poGroup owner `notElem` map rgName groups
+      ]
+    outsideGroup =
+      [ mkErr (locLine (poLoc owner)) CatalogProjectionTargetOutsideGroup $
+          "projection owner '" <> poName owner <> "' writes target '" <> targetName <> "' outside group '" <> poGroup owner <> "'"
+      | targetName <- poTargets owner,
+        targetName `notElem` selectedGroupTargets
+      ]
+    sourceRules =
+      [ mkErr (locLine (poLoc owner)) CatalogSourceUnresolved $
+          "projection owner '" <> poName owner <> "' references undeclared aggregate source '" <> aggregateName <> "'"
+      | CatalogAggregate aggregateName <- poSources owner,
+        aggregateName `notElem` aggregates
+      ]
+        <> [ mkErr (locLine (poLoc owner)) CatalogSourceOverlap $
+               "projection owner '" <> poName owner <> "' must select exactly one typed replay source; split independent sources into separate owners"
+           | length (poSources owner) > 1
+           ]
+        <> [ mkErr (locLine (poLoc owner)) RuntimeIdentityInvalid $
+               "projection owner '" <> poName owner <> "' category source " <> T.pack (show categoryName) <> " " <> reason
+           | CatalogCategory categoryName <- poSources owner,
+             Just reason <- [runtimeIdentityError False categoryName]
+           ]
+    identityRules = case poFeed owner of
+      RmSubscription ->
+        [ mkErr (locLine (poLoc owner)) CatalogAsyncIdentityMissing $
+            "projection owner '" <> poName owner <> "' with subscription feed requires both subscription and dedup identities"
+        | poSubscription owner == Nothing || poDedup owner == Nothing
+        ]
+      RmInline ->
+        [ mkErr (locLine (poLoc owner)) CatalogInlineIdentityUnexpected $
+            "projection owner '" <> poName owner <> "' with inline feed cannot declare subscription or dedup identities"
+        | poSubscription owner /= Nothing || poDedup owner /= Nothing
+        ]
+    asyncQueryBinding =
+      [ mkErr (locLine (poLoc owner)) CatalogAsyncQueryBindingMissing $
+          "projection owner '" <> poName owner <> "' has no query model in group '" <> poGroup owner <> "' observing one of its targets"
+      | poFeed owner == RmSubscription,
+        null
+          [ ()
+          | NReadModel readModel <- specNodes spec,
+            rmGroup readModel == Just (poGroup owner),
+            any (`elem` poTargets owner) (rmObservedTargets readModel)
+          ]
+      ]
+    replayRules =
+      [ mkErr (locLine (poLoc owner)) CatalogClearTargetLiveOnly $
+          "projection owner '" <> poName owner <> "' is live-only but writes a clear-before-replay target"
+      | ProjectionLiveOnly _ <- [poReplay owner],
+        target <- targets,
+        ptName target `elem` poTargets owner,
+        ptReset target == TargetClear
+      ]
+
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -2191,7 +2413,10 @@ validateReadModel languageContract spec readModel =
           "readmodel '" <> rmName readModel <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
       | enforcesSpecSurfaceClosures languageContract,
         (kind, identifier) <-
-          [("schema", rmSchema readModel), ("table", rmTable readModel)]
+          [ (kind, identifier)
+          | rmGroup readModel == Nothing,
+            (kind, identifier) <- [("schema", rmSchema readModel), ("table", rmTable readModel)]
+          ]
             <> [("column", rmcName columnDecl) | columnDecl <- rmColumns readModel],
         not (validPostgresIdentifier identifier)
       ]
@@ -2214,6 +2439,36 @@ validateReadModel languageContract spec readModel =
       | enforcesSpecSurfaceClosures languageContract,
         columnDecl <- duplicatesBy rmcName (rmColumns readModel)
       ]
+    catalogBinding
+      | not (hasProjectionCatalog languageContract) = []
+      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup
+      where
+        groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+        missingGroup =
+          [ mkErr readModelLine CatalogReadModelBindingMissing $
+              "readmodel '" <> rmName readModel <> "' must bind to a projection catalog group"
+          | rmGroup readModel == Nothing
+          ]
+        unknownGroup =
+          [ mkErr readModelLine CatalogGroupUnknown $
+              "readmodel '" <> rmName readModel <> "' references undeclared rebuild group '" <> groupName <> "'"
+          | Just groupName <- [rmGroup readModel],
+            groupName `notElem` map rgName groups
+          ]
+        missingTargets =
+          [ mkErr readModelLine CatalogReadModelBindingMissing $
+              "readmodel '" <> rmName readModel <> "' must observe at least one target in its projection catalog group"
+          | null (rmObservedTargets readModel)
+          ]
+        groupTargets = case [rgTargets groupNode | groupNode <- groups, Just (rgName groupNode) == rmGroup readModel] of
+          targets : _ -> targets
+          [] -> []
+        targetOutsideGroup =
+          [ mkErr readModelLine CatalogReadModelTargetOutsideGroup $
+              "readmodel '" <> rmName readModel <> "' observes target '" <> targetName <> "' outside its bound group"
+          | targetName <- rmObservedTargets readModel,
+            targetName `notElem` groupTargets
+          ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
 -- derivation; the disposition inversions (storeFailure transient => must retry;

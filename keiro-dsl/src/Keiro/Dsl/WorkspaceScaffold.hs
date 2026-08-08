@@ -79,6 +79,7 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
+import Keiro.Dsl.ScaffoldRecord (projectionCatalogFacts)
 import Keiro.Dsl.ScaffoldRun
   ( MappingDrift (..),
     PreparedSourceMove,
@@ -221,6 +222,7 @@ workspaceModules goldens runtimePackage ctx workspace = do
   pure $
     [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
       <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
+      <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalog ctx merged]
       <> concat
         [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
         | node <- specNodes merged
@@ -243,7 +245,12 @@ workspaceModules goldens runtimePackage ctx workspace = do
       NIntake intake -> scaffoldIntake ctx intake
       NPublisher publisher -> scaffoldPublisher ctx publisher
       NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
-      NReadModel readModel -> scaffoldReadModel ctx readModel <> harnessReadModel ctx readModel
+      NReadModel readModel ->
+        let resolved = resolveCatalogReadModel merged readModel
+         in scaffoldReadModel ctx resolved <> harnessReadModel ctx resolved
+      NProjectionTarget _ -> []
+      NRebuildGroup _ -> []
+      NProjectionOwner _ -> []
       NWorkflow workflow -> harnessWorkflow ctx workflow
       NEmit _ -> []
       NPgmqDispatch _ -> []
@@ -252,6 +259,15 @@ workspaceModules goldens runtimePackage ctx workspace = do
     nodeProvenance node =
       let (kind', name, _) = nodeIdentity node
        in maybe ContextLevel (MemberOwned . fst) (nodeOwner ownership kind' name)
+
+    resolveCatalogReadModel spec readModel =
+      case rmGroup readModel of
+        Nothing -> readModel
+        Just _ -> case rmObservedTargets readModel of
+          targetName : _ -> case [target | NProjectionTarget target <- specNodes spec, ptName target == targetName] of
+            target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
+            [] -> readModel
+          [] -> readModel
 
     -- A structural module belongs to a member only when every declaration it
     -- was emitted for has the same owner. A binding skeleton shared by
@@ -584,6 +600,7 @@ currentWorkspaceRecord plan adopted =
       wrNominalEqualities = nominalEqualityIdentitiesForService checkedService,
       wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
+      wrProjectionCatalogFacts = projectionCatalogFacts merged,
       wrAdopted = adopted
     }
   where

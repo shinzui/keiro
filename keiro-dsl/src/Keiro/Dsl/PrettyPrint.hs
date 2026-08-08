@@ -257,6 +257,9 @@ docNode (NPublisher p) = docPublisher p
 docNode (NWorkqueue w) = docWorkqueue w
 docNode (NPgmqDispatch d) = docPgmqDispatch d
 docNode (NReadModel r) = docReadModel r
+docNode (NProjectionTarget target) = docProjectionTarget target
+docNode (NRebuildGroup groupNode) = docRebuildGroup groupNode
+docNode (NProjectionOwner owner) = docProjectionOwner owner
 docNode (NWorkflow w) = docWorkflow w
 docNode (NOperation o) = docOperation o
 
@@ -374,11 +377,15 @@ docPgmqDispatch d =
 docReadModel :: ReadModelNode -> Doc ann
 docReadModel readModel =
   vsep $
-    [ "readmodel" <+> pretty (rmName readModel) <+> "{",
-      indent 2 ("table =" <+> dquoted (rmTable readModel)),
-      indent 2 ("schema =" <+> dquoted (rmSchema readModel)),
-      indent 2 "columns {"
-    ]
+    ["readmodel" <+> pretty (rmName readModel) <+> "{"]
+      ++ ( if not (T.null (rmTable readModel)) || not (T.null (rmSchema readModel))
+             then
+               [ indent 2 ("table =" <+> dquoted (rmTable readModel)),
+                 indent 2 ("schema =" <+> dquoted (rmSchema readModel))
+               ]
+             else []
+         )
+      ++ [indent 2 "columns {"]
       ++ map (indent 4 . docColumn) (rmColumns readModel)
       ++ [ indent 2 "}",
            indent 2 ("version =" <+> pretty (rmVersion readModel)),
@@ -388,6 +395,8 @@ docReadModel readModel =
       ++ maybe [] (pure . indent 2 . ("scope =" <+>) . docScope) (rmScope readModel)
       ++ [indent 2 ("feed =" <+> docFeed (rmFeed readModel))]
       ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (rmSubscription readModel)
+      ++ maybe [] (pure . indent 2 . ("group =" <+>) . pretty) (rmGroup readModel)
+      ++ [indent 2 ("targets =" <+> bracketed (map pretty (rmObservedTargets readModel))) | rmGroup readModel /= Nothing]
       ++ ["}"]
   where
     docColumn columnDecl =
@@ -398,6 +407,46 @@ docReadModel readModel =
     docScope (RmCategory categoryName) = "category" <+> dquoted categoryName
     docFeed RmInline = "inline"
     docFeed RmSubscription = "subscription"
+
+docProjectionTarget :: ProjectionTargetNode -> Doc ann
+docProjectionTarget target =
+  vsep $
+    [ "target" <+> pretty (ptName target) <+> "{",
+      indent 2 ("schema =" <+> dquoted (ptSchema target)),
+      indent 2 ("table =" <+> dquoted (ptTable target)),
+      indent 2 ("reset =" <+> case ptReset target of TargetClear -> "clear"; TargetPreserve -> "preserve")
+    ]
+      ++ [indent 2 ("depends-on =" <+> bracketed (map pretty (ptDependsOn target))) | not (null (ptDependsOn target))]
+      ++ ["}"]
+
+docRebuildGroup :: RebuildGroupNode -> Doc ann
+docRebuildGroup groupNode =
+  vsep
+    [ "rebuild-group" <+> pretty (rgName groupNode) <+> "{",
+      indent 2 ("targets =" <+> bracketed (map pretty (rgTargets groupNode))),
+      indent 2 ("order =" <+> bracketed (map pretty (rgOrder groupNode))),
+      "}"
+    ]
+
+docProjectionOwner :: ProjectionOwnerNode -> Doc ann
+docProjectionOwner owner =
+  vsep $
+    ["projection-owner" <+> pretty (poName owner) <+> "{"]
+      ++ map (indent 2 . ("source =" <+>) . docSource) (poSources owner)
+      ++ [ indent 2 ("feed =" <+> case poFeed owner of RmInline -> "inline"; RmSubscription -> "subscription"),
+           indent 2 ("group =" <+> pretty (poGroup owner)),
+           indent 2 ("targets =" <+> bracketed (map pretty (poTargets owner))),
+           indent 2 ("order =" <+> pretty (poOrder owner))
+         ]
+      ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (poSubscription owner)
+      ++ maybe [] (pure . indent 2 . ("dedup =" <+>) . dquoted) (poDedup owner)
+      ++ [indent 2 ("replay =" <+> docReplay (poReplay owner)), "}"]
+  where
+    docSource (CatalogAggregate aggregateName) = "aggregate" <+> pretty aggregateName
+    docSource (CatalogCategory categoryName) = "category" <+> dquoted categoryName
+    docSource CatalogAll = "all"
+    docReplay ProjectionReplayExplicit = "explicit"
+    docReplay (ProjectionLiveOnly reason) = "live-only" <+> dquoted reason
 
 docEmit :: EmitNode -> Doc ann
 docEmit e =

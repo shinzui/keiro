@@ -137,6 +137,9 @@ depsForNode service spec n = case n of
   NWorkqueue {} -> ["aeson", "keiro-core", "keiro-pgmq", "text"]
   NPgmqDispatch {} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
   NReadModel {} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
+  NProjectionTarget {} -> ["keiro", "kiroku-store", "text"]
+  NRebuildGroup {} -> ["keiro", "kiroku-store", "text"]
+  NProjectionOwner {} -> ["keiro", "kiroku-store", "text"]
   NWorkflow {} -> ["containers", "effectful-core", "keiro", "text"]
   NOperation {} -> ["effectful-core", "keiro", "text"]
   where

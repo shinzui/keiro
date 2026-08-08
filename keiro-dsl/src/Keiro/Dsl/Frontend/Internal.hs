@@ -231,6 +231,9 @@ setNodeLoc loc = \case
   NWorkqueue value -> NWorkqueue value {wqLoc = loc}
   NPgmqDispatch value -> NPgmqDispatch value {pdLoc = loc}
   NReadModel value -> NReadModel value {rmLoc = loc}
+  NProjectionTarget value -> NProjectionTarget value {ptLoc = loc}
+  NRebuildGroup value -> NRebuildGroup value {rgLoc = loc}
+  NProjectionOwner value -> NProjectionOwner value {poLoc = loc}
   NWorkflow
     WorkflowNode
       { wfId,

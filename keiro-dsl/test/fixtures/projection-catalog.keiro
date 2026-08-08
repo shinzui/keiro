@@ -1,0 +1,70 @@
+language keiro-dsl 5
+context catalog-demo
+
+target order_summary {
+  schema = "sales"
+  table = "order_summary"
+  reset = clear
+}
+
+target audit_log {
+  schema = "sales"
+  table = "audit_log"
+  reset = preserve
+}
+
+target order_totals {
+  schema = "sales"
+  table = "order_totals"
+  reset = clear
+  depends-on = [ order_summary ]
+}
+
+rebuild-group reporting {
+  targets = [ order_summary order_totals audit_log ]
+  order = [ order_summary order_totals audit_log ]
+}
+
+projection-owner order_summary_writer {
+  source = aggregate Orders
+  feed = inline
+  group = reporting
+  targets = [ order_summary order_totals ]
+  order = 10
+  replay = explicit
+}
+
+readmodel catalogAudit {
+  columns {
+    event_id text required
+  }
+  version = 1
+  shape = "fnv1a:9682af3ada04bf50"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ audit_log ]
+}
+
+projection-owner audit_writer {
+  source = category "audit"
+  feed = subscription
+  group = reporting
+  targets = [ audit_log ]
+  order = 20
+  subscription = "catalog-demo-audit"
+  dedup = "catalog-demo-audit-v1"
+  replay = explicit
+}
+
+aggregate Orders
+  regs
+    total Natural = 0
+  states Empty Recorded!
+
+  command RecordOrder { amount:Natural }
+  event OrderRecorded = fields(RecordOrder)
+
+  Empty -- RecordOrder --> write total := amount ; emit OrderRecorded ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

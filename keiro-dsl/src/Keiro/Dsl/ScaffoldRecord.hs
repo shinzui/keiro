@@ -9,18 +9,20 @@ module Keiro.Dsl.ScaffoldRecord
     renderRecord,
     parseRecord,
     recordFileName,
+    projectionCatalogFacts,
   )
 where
 
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
-import Data.List (nub)
+import Data.List (nub, sort)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
+import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
@@ -42,7 +44,8 @@ data ScaffoldRecord = ScaffoldRecord
     recIdDomains :: ![Text],
     recNominalEqualities :: ![Text],
     recBindingObligations :: ![BindingHole],
-    recBehaviorRequirements :: ![BehaviorRecordRow]
+    recBehaviorRequirements :: ![BehaviorRecordRow],
+    recProjectionCatalogFacts :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -101,6 +104,7 @@ renderRecord record =
       <> map ("nominal-equality " <>) (recNominalEqualities record)
       <> map renderBindingObligation (recBindingObligations record)
       <> map renderBehaviorRequirement (recBehaviorRequirements record)
+      <> map ("projection-catalog-fact " <>) (recProjectionCatalogFacts record)
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
     renderFile (Generated, path) = "generated " <> T.pack path
@@ -134,7 +138,8 @@ parseRecord contents = case T.lines contents of
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
         behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries
+        let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts
           then Nothing
           else
             pure
@@ -151,7 +156,8 @@ parseRecord contents = case T.lines contents of
                   recIdDomains = idDomains,
                   recNominalEqualities = nominalEqualities,
                   recBindingObligations = bindingEntries,
-                  recBehaviorRequirements = behaviorEntries
+                  recBehaviorRequirements = behaviorEntries,
+                  recProjectionCatalogFacts = catalogFacts
                 }
   _ -> Nothing
   where
@@ -230,3 +236,42 @@ recordFileName = contextLedgerFileName
 mappingRowPrefix :: MappingIdentity -> Text
 mappingRowPrefix NominalMapping {} = "nominal-mapping "
 mappingRowPrefix _ = "mapping "
+
+-- | Canonical durable catalog identities used when a declaration disappears
+-- from the next graph. Source lines remain part of the attribution evidence.
+projectionCatalogFacts :: Spec -> [Text]
+projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
+  where
+    nodeFacts (NProjectionTarget target) =
+      [T.intercalate "|" ["target", ptName target, ptSchema target, ptTable target, resetText (ptReset target), T.intercalate "," (ptDependsOn target), lineText (ptLoc target)]]
+    nodeFacts (NRebuildGroup groupNode) =
+      [T.intercalate "|" ["group", rgName groupNode, T.intercalate "," (rgTargets groupNode), T.intercalate "," (rgOrder groupNode), lineText (rgLoc groupNode)]]
+    nodeFacts (NProjectionOwner owner) =
+      [ T.intercalate
+          "|"
+          [ "owner",
+            poName owner,
+            T.intercalate "," (map sourceText (poSources owner)),
+            feedText (poFeed owner),
+            poGroup owner,
+            T.intercalate "," (poTargets owner),
+            T.pack (show (poOrder owner)),
+            maybe "" id (poSubscription owner),
+            maybe "" id (poDedup owner),
+            replayText (poReplay owner),
+            lineText (poLoc owner)
+          ]
+      ]
+    nodeFacts (NReadModel readModel)
+      | Just groupName <- rmGroup readModel = [T.intercalate "|" ["query", rmName readModel, groupName, T.intercalate "," (rmObservedTargets readModel), lineText (rmLoc readModel)]]
+    nodeFacts _ = []
+    resetText TargetClear = "clear"
+    resetText TargetPreserve = "preserve"
+    sourceText CatalogAll = "all"
+    sourceText (CatalogCategory categoryName) = "category:" <> categoryName
+    sourceText (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
+    feedText RmInline = "inline"
+    feedText RmSubscription = "subscription"
+    replayText ProjectionReplayExplicit = "explicit"
+    replayText (ProjectionLiveOnly reason) = "live-only:" <> reason
+    lineText (Loc lineNumber) = T.pack (show lineNumber)

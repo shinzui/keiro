@@ -295,6 +295,10 @@ classifyCompatibility context code
   | code `elem` publicBreakingCodes = publicBreakingVector
   | code `elem` queueBreakingCodes = queueBreakingVector
   | code `elem` readModelBreakingCodes = persistedIdentityBreakingVector
+  | code `elem` catalogIdentityCodes = persistedIdentityBreakingVector
+  | code `elem` catalogReplayCodes = privateDecodeBreakingVector
+  | code == CatalogHandlerOrderChanged =
+      (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
   | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
   | code == AggFoldSurfaceChanged =
       (advisoryVector PrivateHistoryRead Set.empty) {cvSnapshotHydration = VAdvisory}
@@ -365,6 +369,16 @@ classifyCompatibility context code
         ReadModelFeedChanged,
         ReadModelConsistencyWeakened
       ]
+    catalogIdentityCodes =
+      [ CatalogTargetRemoved,
+        CatalogTargetLocationChanged,
+        CatalogTargetDependencyChanged,
+        CatalogGroupChanged,
+        CatalogOwnerRemoved,
+        CatalogFeedIdentityChanged,
+        CatalogQueryBindingChanged
+      ]
+    catalogReplayCodes = [CatalogSourceChanged, CatalogReplayPolicyChanged]
     additiveCodes =
       [ DeclarationAdded,
         VersionBumped,
@@ -581,6 +595,9 @@ data NodeFamily
   | FamWorkqueue
   | FamPgmqDispatch
   | FamReadModel
+  | FamProjectionTarget
+  | FamRebuildGroup
+  | FamProjectionOwner
   | FamWorkflow
   | FamOperation
   deriving stock (Eq, Ord, Show, Enum, Bounded)
@@ -597,6 +614,9 @@ familyOf (NPublisher _) = FamPublisher
 familyOf (NWorkqueue _) = FamWorkqueue
 familyOf (NPgmqDispatch _) = FamPgmqDispatch
 familyOf (NReadModel _) = FamReadModel
+familyOf (NProjectionTarget _) = FamProjectionTarget
+familyOf (NRebuildGroup _) = FamRebuildGroup
+familyOf (NProjectionOwner _) = FamProjectionOwner
 familyOf (NWorkflow _) = FamWorkflow
 familyOf (NOperation _) = FamOperation
 
@@ -651,6 +671,9 @@ familyRegistry =
     (FamWorkqueue, DiffFamily workqueueDiff),
     (FamPgmqDispatch, DiffFamily pgmqDispatchDiff),
     (FamReadModel, DiffFamily readModelDiff),
+    (FamProjectionTarget, DiffFamily projectionTargetDiff),
+    (FamRebuildGroup, DiffFamily rebuildGroupDiff),
+    (FamProjectionOwner, DiffFamily projectionOwnerDiff),
     (FamWorkflow, DiffFamily workflowDiff),
     (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
   ]
@@ -920,6 +943,18 @@ nodeReadModel :: Node -> Maybe ReadModelNode
 nodeReadModel (NReadModel readModel) = Just readModel
 nodeReadModel _ = Nothing
 
+nodeProjectionTarget :: Node -> Maybe ProjectionTargetNode
+nodeProjectionTarget (NProjectionTarget target) = Just target
+nodeProjectionTarget _ = Nothing
+
+nodeRebuildGroup :: Node -> Maybe RebuildGroupNode
+nodeRebuildGroup (NRebuildGroup groupNode) = Just groupNode
+nodeRebuildGroup _ = Nothing
+
+nodeProjectionOwner :: Node -> Maybe ProjectionOwnerNode
+nodeProjectionOwner (NProjectionOwner owner) = Just owner
+nodeProjectionOwner _ = Nothing
+
 nodeWorkflow :: Node -> Maybe WorkflowNode
 nodeWorkflow (NWorkflow workflow) = Just workflow
 nodeWorkflow _ = Nothing
@@ -992,6 +1027,7 @@ readModelPairDiff env oldReadModel newReadModel =
     ++ feedChanges
     ++ consistencyChanges
     ++ scopeChanges
+    ++ bindingChanges
   where
     nodeName = rmName newReadModel
     versionChanges
@@ -1041,6 +1077,83 @@ readModelPairDiff env oldReadModel newReadModel =
           [additive nodeName "read-model-scope" nodeName CompatibilityStrengthened ("Strong scope widened " <> renderScope oldScope <> " -> " <> renderScope newScope)]
       | otherwise =
           [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
+    bindingChanges =
+      [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group or observed target binding changed; persisted lifecycle identity and rebuild completeness changed"
+      | (rmGroup oldReadModel, rmObservedTargets oldReadModel) /= (rmGroup newReadModel, rmObservedTargets newReadModel)
+      ]
+
+projectionTargetDiff :: DiffEnv -> [Change]
+projectionTargetDiff env =
+  concatMap (uncurry projectionTargetPairDiff) (prMatched paired)
+    <> [additive (ptName target) "projection-target" (ptName target) CatalogTargetAdded "new application-owned target; consumer DDL is still required" | target <- prAdded paired]
+    <> [breaking (ptName target) "projection-target" (ptName target) CatalogTargetRemoved "target declaration removed while table data and rebuild evidence may remain" | target <- prRemoved paired]
+  where
+    paired = pairByName nodeProjectionTarget ptName env
+
+projectionTargetPairDiff :: ProjectionTargetNode -> ProjectionTargetNode -> [Change]
+projectionTargetPairDiff oldTarget newTarget = locationChange <> resetChange <> dependencyChange
+  where
+    targetName = ptName newTarget
+    locationChange =
+      [ breaking targetName "projection-target-location" targetName CatalogTargetLocationChanged $
+          "qualified target changed " <> ptSchema oldTarget <> "." <> ptTable oldTarget <> " -> " <> ptSchema newTarget <> "." <> ptTable newTarget <> "; Keiro does not move application data"
+      | (ptSchema oldTarget, ptTable oldTarget) /= (ptSchema newTarget, ptTable newTarget)
+      ]
+    resetChange = case (ptReset oldTarget, ptReset newTarget) of
+      (TargetPreserve, TargetClear) -> [breaking targetName "projection-target-reset" targetName CatalogTargetResetPolicyChanged "reset changed preserve -> clear; a rebuild can now delete retained brownfield data"]
+      (TargetClear, TargetPreserve) -> [advisory targetName "projection-target-reset" targetName CatalogTargetResetPolicyChanged "reset changed clear -> preserve; application reconciliation must now prove retained rows"]
+      _ -> []
+    dependencyChange =
+      [ breaking targetName "projection-target-dependencies" targetName CatalogTargetDependencyChanged "target dependency order changed; abandon any active fingerprint and start a fresh group rebuild"
+      | ptDependsOn oldTarget /= ptDependsOn newTarget
+      ]
+
+rebuildGroupDiff :: DiffEnv -> [Change]
+rebuildGroupDiff env =
+  concatMap (uncurry rebuildGroupPairDiff) (prMatched paired)
+    <> [additive (rgName groupNode) "rebuild-group" (rgName groupNode) DeclarationAdded "new rebuild group" | groupNode <- prAdded paired]
+    <> [breaking (rgName groupNode) "rebuild-group" (rgName groupNode) CatalogGroupChanged "rebuild group removed while lifecycle and run evidence may remain" | groupNode <- prRemoved paired]
+  where
+    paired = pairByName nodeRebuildGroup rgName env
+
+rebuildGroupPairDiff :: RebuildGroupNode -> RebuildGroupNode -> [Change]
+rebuildGroupPairDiff oldGroup newGroup =
+  [ breaking (rgName newGroup) "rebuild-group-membership-order" (rgName newGroup) CatalogGroupChanged "target membership or deterministic preparation order changed; abandon any active fingerprint and start a fresh rebuild"
+  | (rgTargets oldGroup, rgOrder oldGroup) /= (rgTargets newGroup, rgOrder newGroup)
+  ]
+
+projectionOwnerDiff :: DiffEnv -> [Change]
+projectionOwnerDiff env =
+  concatMap (uncurry projectionOwnerPairDiff) (prMatched paired)
+    <> [additive (poName owner) "projection-owner" (poName owner) DeclarationAdded "new projection owner" | owner <- prAdded paired]
+    <> [breaking (poName owner) "projection-owner" (poName owner) CatalogOwnerRemoved "projection owner removed while targets and replay evidence remain" | owner <- prRemoved paired]
+  where
+    paired = pairByName nodeProjectionOwner poName env
+
+projectionOwnerPairDiff :: ProjectionOwnerNode -> ProjectionOwnerNode -> [Change]
+projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> sourceChange <> feedIdentityChange <> replayChange
+  where
+    ownerName = poName newOwner
+    groupAndTargets =
+      [ breaking ownerName "projection-owner-group-targets" ownerName CatalogOwnerChanged "rebuild group or owned target set changed"
+      | (poGroup oldOwner, poTargets oldOwner) /= (poGroup newOwner, poTargets newOwner)
+      ]
+    orderChange =
+      [ advisory ownerName "projection-owner-order" ownerName CatalogHandlerOrderChanged "handler order changed; replay materialization and resume fingerprint change"
+      | poOrder oldOwner /= poOrder newOwner
+      ]
+    sourceChange =
+      [ breaking ownerName "projection-owner-sources" ownerName CatalogSourceChanged "source selection changed; historical coverage and active resume fingerprint change"
+      | poSources oldOwner /= poSources newOwner
+      ]
+    feedIdentityChange =
+      [ breaking ownerName "projection-owner-feed-identity" ownerName CatalogFeedIdentityChanged "feed, subscription, or dedup identity changed; cursors or dedup evidence remain under the old identity"
+      | (poFeed oldOwner, poSubscription oldOwner, poDedup oldOwner) /= (poFeed newOwner, poSubscription newOwner, poDedup newOwner)
+      ]
+    replayChange =
+      [ breaking ownerName "projection-owner-replay-policy" ownerName CatalogReplayPolicyChanged "replay policy changed; abandon any active run before rebuilding under the new contract"
+      | poReplay oldOwner /= poReplay newOwner
+      ]
 
 addedReadModelDiff :: ReadModelNode -> [Change]
 addedReadModelDiff readModel =

@@ -76,7 +76,7 @@ import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
-import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), Spec (..))
+import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), ProjectionTargetNode (..), ReadModelNode (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
@@ -88,7 +88,7 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consum
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
@@ -203,6 +203,7 @@ scaffoldServiceModulesWithGoldens :: [GoldenPayload] -> Context -> CheckedServic
 scaffoldServiceModulesWithGoldens goldens ctx service =
   scaffoldStructuralForService ctx service
     <> scaffoldReplayAudit ctx spec
+    <> scaffoldProjectionCatalog ctx spec
     <> concat
       [ case node of
           NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
@@ -212,7 +213,12 @@ scaffoldServiceModulesWithGoldens goldens ctx service =
           NIntake intake -> scaffoldIntake ctx intake
           NPublisher publisher -> scaffoldPublisher ctx publisher
           NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
-          NReadModel readModel -> scaffoldReadModel ctx readModel <> harnessReadModel ctx readModel
+          NReadModel readModel ->
+            let resolved = resolveCatalogReadModel spec readModel
+             in scaffoldReadModel ctx resolved <> harnessReadModel ctx resolved
+          NProjectionTarget _ -> []
+          NRebuildGroup _ -> []
+          NProjectionOwner _ -> []
           NWorkflow workflow -> harnessWorkflow ctx workflow
           NEmit _ -> []
           NPgmqDispatch _ -> []
@@ -221,6 +227,16 @@ scaffoldServiceModulesWithGoldens goldens ctx service =
       ]
   where
     spec = checkedSpec service
+
+resolveCatalogReadModel :: Spec -> ReadModelNode -> ReadModelNode
+resolveCatalogReadModel spec readModel =
+  case rmGroup readModel of
+    Nothing -> readModel
+    Just _ -> case rmObservedTargets readModel of
+      targetName : _ -> case [target | NProjectionTarget target <- specNodes spec, ptName target == targetName] of
+        target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
+        [] -> readModel
+      [] -> readModel
 
 -- | Compatibility wrapper that explicitly selects legacy/version-1 semantics.
 scaffoldModules :: Context -> Spec -> [ScaffoldModule]
@@ -1064,7 +1080,8 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recIdDomains = idDomainIdentitiesForService service,
       recNominalEqualities = nominalEqualityIdentitiesForService service,
       recBindingObligations = either (const []) id (bindingHolesForService service),
-      recBehaviorRequirements = currentBehavior
+      recBehaviorRequirements = currentBehavior,
+      recProjectionCatalogFacts = projectionCatalogFacts spec
     }
   where
     spec = checkedSpec service

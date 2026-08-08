@@ -118,6 +118,7 @@ library
     Keiro.Dsl.Parser.Integration
     Keiro.Dsl.Parser.Mapped
     Keiro.Dsl.Parser.Preamble
+    Keiro.Dsl.Parser.ProjectionCatalog
     Keiro.Dsl.Parser.Queue
     Keiro.Dsl.Parser.ReadModel
     Keiro.Dsl.Parser.Workflow
@@ -862,6 +863,42 @@ test-suite keiro-dsl-conformance-readmodel-runtime
     , base               >=4.21 && <5
     , effectful-core
     , hasql-transaction
+    , keiro
+    , kiroku-store
+    , text               >=2.1  && <2.2
+
+-- MasterPlan 32 / EP-4: language-5 catalog declarations lower into one
+-- generated runtime-owned facade with typed inline views, catalog-derived
+-- async/query registration, and a group-scoped history-runner entry point.
+test-suite keiro-dsl-conformance-projection-catalog
+  import:         warnings, generated-output
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-projection-catalog
+  main-is:        Main.hs
+  other-modules:
+    CatalogDemo.CatalogAudit.ReadModelHoles
+    CatalogDemo.Orders.BehaviorHoles
+    CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
+    Generated.CatalogDemo.CatalogAudit.ReadModel
+    Generated.CatalogDemo.CatalogAudit.ReadModelHarness
+    Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.Orders.BehaviorContract
+    Generated.CatalogDemo.Orders.Codec
+    Generated.CatalogDemo.Orders.Domain
+    Generated.CatalogDemo.Orders.EventStream
+    Generated.CatalogDemo.Orders.Harness
+    Generated.CatalogDemo.Orders.Projection
+    Generated.CatalogDemo.Orders.Transducer
+    Generated.CatalogDemo.ProjectionCatalog
+    Generated.CatalogDemo.ReplayAudit
+
+  build-depends:
+    , aeson              >=2.2  && <2.3
+    , base               >=4.21 && <5
+    , containers         >=0.6  && <0.8
+    , effectful-core
+    , hasql-transaction
+    , keiki              >=0.9  && <0.10
     , keiro
     , kiroku-store
     , text               >=2.1  && <2.2

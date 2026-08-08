@@ -18,11 +18,16 @@ import Data.Word (Word64)
 import Keiro.Dsl.Grammar (Name, ReadModelNode (..), RmColumn (..))
 import Numeric (showHex)
 
--- | The ordered table-and-column identity hashed into 'deriveShapeHash'.
+-- | The ordered query-row identity hashed into 'deriveShapeHash'. Legacy read
+-- models include their table identity; catalog-bound query models deliberately
+-- do not duplicate physical authority owned by their target declarations.
 canonicalShape :: ReadModelNode -> Text
 canonicalShape readModel =
-  T.intercalate "|" (rmTable readModel : map columnSegment (rmColumns readModel))
+  T.intercalate "|" (shapeRoot : map columnSegment (rmColumns readModel))
   where
+    shapeRoot = case rmGroup readModel of
+      Nothing -> rmTable readModel
+      Just _ -> "query-model"
     columnSegment columnDecl =
       T.intercalate
         ":"

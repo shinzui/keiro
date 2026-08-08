@@ -26,6 +26,7 @@ module Keiro.Dsl.LanguageVersion
     RuntimeCapability (..),
     capabilityFoldSegment,
     LanguageSupport (..),
+    LanguageMaturity (..),
     languageSupportText,
     LanguageDefinition (..),
     definitionRuntimeSemantics,
@@ -61,7 +62,7 @@ import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar (Loc (..), Spec, noLoc)
 import Numeric.Natural (Natural)
 
--- | A positive released Keiro DSL language version.
+-- | A positive registered Keiro DSL language version.
 newtype LanguageVersion = LanguageVersion Natural
   deriving stock (Eq, Ord)
 
@@ -126,8 +127,9 @@ syntaxProfileIdentifier SyntaxProfile {profileIdentifier} = profileIdentifier
 syntaxProfileSupportsFeature :: SyntaxProfile -> LanguageFeature -> Bool
 syntaxProfileSupportsFeature SyntaxProfile {profileFeatures} feature = Set.member feature profileFeatures
 
--- | One independently selectable runtime behavior in a released language
--- contract.  Constructors are append-only: registry profiles are monotone, and
+-- | One independently selectable runtime behavior in a registered language
+-- contract. Constructors shipped in a release are append-only; the active
+-- pre-release candidate may be corrected in place before that boundary.
 -- 'capabilityFoldSegment' must make an explicit fingerprint decision for every
 -- new constructor.
 data RuntimeCapability
@@ -135,6 +137,7 @@ data RuntimeCapability
   | NominalEqualityV2
   | ContractIdDomainTypeIdV7
   | StrictSpecSurfaceValidation
+  | ProjectionCatalogRuntime
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -161,6 +164,7 @@ capabilityFoldSegment GeneratedIdDomainTypeIdV7 = Just "semantic-contract:keiro-
 capabilityFoldSegment NominalEqualityV2 = Just "semantic-contract:keiro-dsl/runtime-semantics/2"
 capabilityFoldSegment ContractIdDomainTypeIdV7 = Nothing
 capabilityFoldSegment StrictSpecSurfaceValidation = Nothing
+capabilityFoldSegment ProjectionCatalogRuntime = Just "semantic-contract:keiro-dsl/projection-catalog/1"
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities} =
@@ -183,7 +187,16 @@ languageSupportText :: LanguageSupport -> Text
 languageSupportText CompatibilityOnly = "compatibility-only"
 languageSupportText Stable = "stable"
 
--- | One append-only released-language registry entry.
+-- | Whether a recognized contract has crossed the external compatibility
+-- boundary. The active candidate is accepted for development and authoring,
+-- but may still be corrected in place until it is published.
+data LanguageMaturity
+  = PublishedLanguage
+  | CandidateLanguage
+  deriving stock (Eq, Ord, Show)
+
+-- | One language-registry entry. Published entries are immutable; an active
+-- pre-release candidate is not a published compatibility contract yet.
 data LanguageDefinition = LanguageDefinition
   { definitionVersion :: !LanguageVersion,
     definitionPredecessor :: !(Maybe LanguageVersion),
@@ -192,7 +205,8 @@ data LanguageDefinition = LanguageDefinition
     definitionBodyParser :: !LanguageBodyParser,
     definitionSyntaxProfile :: !SyntaxProfile,
     definitionRuntimeSemanticsProfile :: !RuntimeSemanticsProfile,
-    definitionSupport :: !LanguageSupport
+    definitionSupport :: !LanguageSupport,
+    definitionMaturity :: !LanguageMaturity
   }
   deriving stock (Eq, Show, Generic)
 
@@ -213,13 +227,18 @@ version3 = LanguageVersion 3
 version4 :: LanguageVersion
 version4 = LanguageVersion 4
 
--- | The authoritative, append-only registry of released language contracts.
+version5 :: LanguageVersion
+version5 = LanguageVersion 5
+
+-- | The authoritative registry of recognized language contracts. Published
+-- entries are append-only; the active pre-release candidate is amended in place.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
-  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly
-    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly,
-         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly,
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 Stable
+  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly PublishedLanguage
+    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly PublishedLanguage,
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly PublishedLanguage,
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 CompatibilityOnly PublishedLanguage,
+         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Stable CandidateLanguage
        ]
 
 profileV1 :: SyntaxProfile
@@ -246,6 +265,12 @@ profileV3 =
         (profileFeatures profileV2)
     )
 
+profileV4 :: SyntaxProfile
+profileV4 =
+  SyntaxProfile
+    "keiro-dsl/syntax-profile/4"
+    (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
   RuntimeSemanticsProfile
@@ -269,6 +294,12 @@ runtimeProfileV3 =
           StrictSpecSurfaceValidation
         ]
     )
+
+runtimeProfileV4 :: RuntimeSemanticsProfile
+runtimeProfileV4 =
+  RuntimeSemanticsProfile
+    "keiro-dsl/runtime-semantics/4"
+    (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -297,6 +328,7 @@ data LanguageFeature
   | TypedAggregateExpressionSyntax
   | ExplicitTransitionImplementationSyntax
   | FieldAliasSyntax
+  | ProjectionCatalogSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.
@@ -403,9 +435,18 @@ sourceLanguageDiagnosticMessage diagnostic = detail
         "misplaced language preamble; it must be the first significant clause before `context`"
       LanguageFeatureRequiresVersion ->
         "selected syntax requires keiro-dsl language version "
-          <> languageVersionText (NE.last (sourceLanguageSupportedVersions diagnostic))
+          <> languageVersionText requiredVersion
           <> "; selected version "
           <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)
+        where
+          requiredVersion =
+            case [ version
+                 | version <- NE.toList (sourceLanguageSupportedVersions diagnostic),
+                   Just definition <- [lookupLanguageDefinition version],
+                   definitionMaturity definition == PublishedLanguage
+                 ] of
+              [] -> NE.last (sourceLanguageSupportedVersions diagnostic)
+              published -> last published
 
 -- | A parsed document with its source declaration preserved beside its graph.
 data ParsedSource = ParsedSource

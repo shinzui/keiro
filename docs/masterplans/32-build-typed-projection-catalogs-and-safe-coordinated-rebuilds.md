@@ -317,12 +317,19 @@ plan.
   only the catalog-backed rebuild hook and must reconcile at that boundary.
   Date: 2026-08-07
 
-- Decision: Release catalog syntax under `language keiro-dsl 5` and keep language versions 1–4
+- Decision: Register catalog syntax under the candidate `language keiro-dsl 5` and keep language versions 1–4
   immutable.
-  Rationale: The current stable language is 4. Adding required ownership declarations and new
+  Rationale: The current published authoring language is 4. Adding required ownership declarations and new
   generated runtime meaning to that released preamble would violate the append-only language
   registry; EP-4 must introduce a new syntax profile and an explicit upgrade path.
   Date: 2026-08-07
+
+- Decision: Amend pre-release language 5 in place; do not allocate language 6.
+  Rationale: Language 5 has not been published or used externally. The former unsupported-version
+  fixture was a parser sentinel rather than a contract. Existing version-4 corpora remain valid
+  primary evidence, and EP-4 adds a focused version-5 conformance lane without rewriting unrelated
+  generated banners.
+  Date: 2026-08-08
 
 - Decision: Keep the catalog rebuild command absent until the typed adapter and `keiro-ops` both
   exist.

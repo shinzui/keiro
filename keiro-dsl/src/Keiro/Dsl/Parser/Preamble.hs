@@ -7,6 +7,7 @@ module Keiro.Dsl.Parser.Preamble
 where
 
 import Data.Char (isAscii, isDigit)
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as TR
@@ -31,7 +32,11 @@ contextualDiagnostic src sourceLanguage contextual =
       sourceLanguageDeclaredVersion = case code of
         LanguageFeatureRequiresVersion -> Just effectiveVersion
         _ -> Nothing,
-      sourceLanguageSupportedVersions = supportedLanguageVersions
+      sourceLanguageSupportedVersions = case contextualFailureFeature contextual of
+        Nothing -> supportedLanguageVersions
+        Just feature -> case NE.nonEmpty (languageVersionsSupportingFeature feature) of
+          Just versions -> versions
+          Nothing -> supportedLanguageVersions
     }
   where
     code = contextualFailureCode contextual
