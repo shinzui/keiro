@@ -34,6 +34,7 @@ module Keiro.Workflow.Types
     -- * Journal events and codec
     WorkflowJournalEvent (..),
     workflowJournalCodec,
+    WorkflowError (..),
 
     -- * Accumulated state and run outcome
     WorkflowState,
@@ -55,6 +56,7 @@ module Keiro.Workflow.Types
   )
 where
 
+import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
@@ -63,6 +65,17 @@ import Data.Text qualified as Text
 import Keiro.Codec (Codec (..))
 import Keiro.Prelude
 import Kiroku.Store.Types (EventType (..), StreamName (..))
+
+-- | Errors raised while encoding, appending, loading, or decoding a workflow
+-- journal.
+data WorkflowError
+  = WorkflowStepDecodeError !Text !Text
+  | WorkflowJournalDecodeError !Text
+  | WorkflowJournalEncodeError !Text
+  | WorkflowJournalAppendError !Text
+  deriving stock (Eq, Show)
+
+instance Exception WorkflowError
 
 -- | The stable name of a workflow /definition/ (for example
 -- @"orderFulfillment"@). Part of the journal stream name and of every

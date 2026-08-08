@@ -106,11 +106,10 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
+import Keiro.Workflow.Child.Cancel (ensureChildCancelled)
 import Keiro.Workflow.Child.Schema
-  ( ChildRow,
-    ChildStatus (..),
+  ( ChildStatus (..),
     lookupChild,
-    markChildCancelledTx,
     markChildResultTx,
     registerChildTx,
   )
@@ -394,52 +393,6 @@ throwOnAppendConflict = \case
   -- Not an error: a terminal parent simply receives nothing.
   JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
-
-ensureChildCancelled ::
-  (IOE :> es, Store :> es) =>
-  ChildRow ->
-  Eff es (Bool, JournalAppendOutcome, JournalAppendOutcome)
-ensureChildCancelled row = do
-  now <- liftIO getCurrentTime
-  let childNm = WorkflowName (row ^. #childName)
-      childWid = WorkflowId (row ^. #childId)
-      parentNm = WorkflowName (row ^. #parentName)
-      parentWid = WorkflowId (row ^. #parentId)
-  childGen <- currentGeneration childNm childWid
-  parentGen <- currentGeneration parentNm parentWid
-  childAppendTx <- prepareJournalAppend childNm childWid childGen WorkflowCancelled {recordedAt = now}
-  parentAppendTx <-
-    prepareJournalAppend
-      parentNm
-      parentWid
-      parentGen
-      StepRecorded
-        { stepName = row ^. #awaitStep,
-          result = cancelledSentinel,
-          recordedAt = now
-        }
-  runTransaction $ do
-    transitioned <-
-      if row ^. #status == Running
-        then markChildCancelledTx (row ^. #childId) (row ^. #childName)
-        else pure False
-    if transitioned || row ^. #status == ChildCancelled
-      then do
-        childOutcome <- childAppendTx
-        parentOutcome <- parentAppendTx
-        condemnOnAppendConflict childOutcome
-        condemnOnAppendConflict parentOutcome
-        pure (transitioned, childOutcome, parentOutcome)
-      else pure (False, JournalAlreadyPresent Aeson.Null, JournalAlreadyPresent Aeson.Null)
-
--- ---------------------------------------------------------------------------
--- The cancellation sentinel
--- ---------------------------------------------------------------------------
-
--- | The @{"cancelled": true}@ value 'cancelChild' writes as a cancelled child's
--- await-step result so 'awaitChild' can detect it and throw.
-cancelledSentinel :: Aeson.Value
-cancelledSentinel = Aeson.object ["cancelled" Aeson..= True]
 
 childOkEnvelope :: Aeson.Value -> Aeson.Value
 childOkEnvelope value = Aeson.object ["ok" Aeson..= value]

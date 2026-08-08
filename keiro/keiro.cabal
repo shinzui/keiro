@@ -95,6 +95,9 @@ library
     Keiro.ReadModel.Rebuild.Group
     Keiro.ReadModel.Rebuild.Runner
     Keiro.ReplayDigest
+    Keiro.Workflow.Child.Cancel
+    Keiro.Workflow.Instance.Schema
+    Keiro.Workflow.Journal
 
   reexported-modules:
     keiro-core:Keiro.Codec,

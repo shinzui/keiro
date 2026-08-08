@@ -141,7 +141,6 @@ module Keiro.Workflow
     deterministicJournalId,
 
     -- * Errors thrown by the runtime
-    WorkflowError (..),
     WorkflowLeaseLost (..),
 
     -- * Re-exported core contracts
@@ -152,6 +151,14 @@ module Keiro.Workflow
     stepExists,
     currentGeneration,
     findUnfinishedWorkflowIds,
+    WorkflowStatus (..),
+    WorkflowInstanceRow (..),
+    WorkflowInstanceFilter (..),
+    defaultWorkflowInstanceFilter,
+    listWorkflowInstances,
+    CancelWorkflowOutcome (..),
+    cancelWorkflow,
+    forceReleaseInstanceLease,
     setWorkflowWakeAfterTx,
     clearWorkflowWakeAfterTx,
   )
@@ -173,13 +180,11 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
-import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
 import Effectful.Error.Static (Error, tryError)
 import Effectful.Exception (bracket_, catch, throwIO)
-import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
-import Keiro.DeterministicId (identitySeedBytes)
+import Keiro.Codec (decodeRecorded)
 import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
 import Keiro.Prelude
 import Keiro.Snapshot (SnapshotMissReason (..))
@@ -198,19 +203,33 @@ import Keiro.Telemetry
     withWorkflowSpan,
   )
 import Keiro.Workflow.Instance
-  ( WorkflowStatus (..),
+  ( CancelWorkflowOutcome (..),
+    WorkflowInstanceFilter (..),
+    WorkflowInstanceRow (..),
+    WorkflowStatus (..),
+    cancelWorkflow,
+    defaultWorkflowInstanceFilter,
+    forceReleaseInstanceLease,
+    listWorkflowInstances,
     markInstanceSuspendedAwaiting,
     renewInstanceLease,
-    upsertInstanceTx,
   )
-import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists, terminalMarkers, terminalMarkersTx, workflowStepLockKey)
+import Keiro.Workflow.Journal
+  ( JournalAppendOutcome (..),
+    appendJournal,
+    appendJournalEntry,
+    appendJournalEntryReturningId,
+    deterministicJournalId,
+    prepareJournalAppend,
+  )
+import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lookupStepResult, recordStepTx, setWorkflowWakeAfterTx, stepExists, terminalMarkers)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (readStreamForwardStream)
-import Kiroku.Store.Transaction (AppendConflict, appendToStreamTx, prepareEventsIO, runTransaction)
-import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamId, StreamVersion (..))
+import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types (StreamId, StreamVersion (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 import System.IO.Unsafe (unsafePerformIO)
@@ -410,23 +429,6 @@ defaultWorkflowRunOptions =
 -- Errors and the suspension sentinel
 -- ---------------------------------------------------------------------------
 
--- | Errors the workflow runtime raises (via 'throwIO', so they surface
--- through the surrounding store/IO error channel).
-data WorkflowError
-  = -- | A journaled step result could not be decoded into the type the
-    --       replaying @step@/@awaitStep@ expects (step name, decode message). The
-    --       result type changed incompatibly — a programmer error.
-    WorkflowStepDecodeError !Text !Text
-  | -- | A journal event could not be decoded during pre-load.
-    WorkflowJournalDecodeError !Text
-  | -- | A journal event could not be encoded for append.
-    WorkflowJournalEncodeError !Text
-  | -- | Appending a journal entry failed for a non-conflict reason.
-    WorkflowJournalAppendError !Text
-  deriving stock (Eq, Show)
-
-instance Exception WorkflowError
-
 -- | The resume worker no longer owns the workflow instance lease.
 --
 -- Thrown before a fresh step action or unresolved await arm, so the run stops
@@ -603,24 +605,33 @@ runWorkflowWith options name wid action = do
                 finalMap <- liftIO (readIORef journalRef)
                 -- Idempotent: only appends (and so only snapshots) when the completion
                 -- marker is not already journaled. On a replay of an already-completed
-                -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
-                -- already taken on the original completing run, if the policy fired).
-                mAppend <- appendCompletion name wid gen now
-                for_ mAppend $ \appendResult ->
-                  when
-                    ( shouldSnapshot
-                        (options ^. #snapshotPolicy)
-                        Terminal
-                        finalMap
-                        (appendResult ^. #streamVersion)
-                    )
-                    (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
-                -- EP-44: record one @keiro.workflow.journal.length@ observation per
-                -- completing run (the 'Completed' path only, never 'Suspended'),
-                -- including a replay that completes again. Length is the recorded
-                -- step map plus the WorkflowCompleted marker.
-                recordWorkflowJournalLength mMetrics (fromIntegral (Map.size finalMap + 1))
-                pure (Completed result)
+                -- workflow this is 'JournalAlreadyPresent' and no terminal snapshot is
+                -- taken (one was already taken on the original completing run, if the
+                -- policy fired).
+                appendCompletion name wid gen now >>= \case
+                  JournalAppended appendResult -> do
+                    when
+                      ( shouldSnapshot
+                          (options ^. #snapshotPolicy)
+                          Terminal
+                          finalMap
+                          (appendResult ^. #streamVersion)
+                      )
+                      (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
+                    recordCompletedLength finalMap
+                    pure (Completed result)
+                  JournalAlreadyPresent {} -> do
+                    recordCompletedLength finalMap
+                    pure (Completed result)
+                  JournalRefusedTerminal marker
+                    | marker == cancelledStepName -> pure Cancelled
+                    | marker == failedStepName -> pure Failed
+                    | marker == continuedAsNewStepName -> pure ContinuedAsNew
+                    | otherwise ->
+                        throwIO
+                          (WorkflowJournalAppendError ("completion refused by terminal marker " <> marker))
+                  JournalAppendConflict err ->
+                    throwIO (WorkflowJournalAppendError (Text.pack (show err)))
               -- Only 'RunSuspendedOn' produces a suspension, so this arm is
               -- unreachable; it keeps the case total without a partial match.
               Suspended -> pure Suspended
@@ -651,6 +662,13 @@ runWorkflowWith options name wid action = do
                   throwIO (WorkflowJournalAppendError ("patch set refused by terminal marker " <> marker))
                 JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
             else pure initial
+        -- EP-44: one journal-length observation per genuinely completed run,
+        -- including an idempotent replay. A run that loses the lifecycle race
+        -- to cancellation/failure/rotation reports that winner instead.
+        recordCompletedLength finalMap =
+          recordWorkflowJournalLength
+            mMetrics
+            (fromIntegral (Map.size finalMap + 1))
     handler ::
       Int ->
       IORef (Map Text Aeson.Value) ->
@@ -866,185 +884,23 @@ loadJournal options name wid gen = do
 -- Journal append helpers
 -- ---------------------------------------------------------------------------
 
--- | What a journal append did.
---
--- * 'JournalAppended' — the entry was written; the index row and instance row
---   were updated in the same transaction.
--- * 'JournalAlreadyPresent' — the step was already journaled (a replay, a
---   retry, or a raced writer); the stored result is returned and nothing is
---   written.
--- * 'JournalRefusedTerminal' — the workflow generation already carries a
---   stopping terminal marker ('cancelledStepName' or 'failedStepName', which is
---   the name carried here), so the append was declined. This is __not__ an
---   error: the workflow is over, and the caller should settle its own durable
---   state and stop rather than deliver into a terminal journal. Only ordinary
---   'StepRecorded' appends can be refused — terminal, completion, and rotation
---   markers are exempt, since refusing them would break first-terminal-wins
---   arbitration and idempotent re-marking.
--- * 'JournalAppendConflict' — the event store rejected the append; a real
---   error, which callers surface as 'WorkflowJournalAppendError'.
-data JournalAppendOutcome
-  = JournalAppended !AppendResult
-  | JournalAlreadyPresent !Aeson.Value
-  | JournalRefusedTerminal !Text
-  | JournalAppendConflict !AppendConflict
-  deriving stock (Eq, Show)
-
--- | Build the transaction that journals one workflow event.
---
--- The returned transaction takes the per-step advisory lock, re-checks the step
--- index (so a replay or a raced writer collapses to 'JournalAlreadyPresent'),
--- refuses ordinary step appends into a terminally cancelled or failed
--- generation ('JournalRefusedTerminal'), appends to the journal stream, and
--- writes the step-index and instance rows — all in one round-trip from the
--- caller's perspective.
---
--- The terminal check rides that transaction rather than adding a query, and it
--- is race-free in the same sense cancellation always was: a marker committing
--- after this transaction's snapshot refuses the /next/ boundary, which is the
--- at-least-once boundary semantics workflow steps already document.
-prepareJournalAppend ::
-  (IOE :> es) =>
-  WorkflowName ->
-  WorkflowId ->
-  Int ->
-  WorkflowJournalEvent ->
-  Eff es (Tx.Transaction JournalAppendOutcome)
-prepareJournalAppend name wid gen event = do
-  let key = journalKey event
-      entryId = deterministicJournalId name wid gen key
-      requestedEntryId = case event of
-        -- Resurrection removes the derived failure-marker index row while
-        -- retaining append-only journal history. A later failure on the
-        -- same generation therefore needs a fresh UUIDv7; step locking and
-        -- the in-transaction index check still deduplicate concurrent
-        -- failure writers.
-        WorkflowFailed {} -> Nothing
-        _ -> Just entryId
-      row = journalRow name wid gen event
-      (status, mLastError) = instanceStatusForEvent event
-      journalName = workflowGenerationStreamName name wid gen
-      -- Shared with the suspend write in "Keiro.Workflow.Instance" so the two
-      -- writers of one step's outcome can never derive different keys.
-      lockKey = workflowStepLockKey (unWorkflowId wid) (unWorkflowName name) gen key
-      -- Which stopping marker, if any, refuses this append. Only ordinary steps
-      -- are refusable: a terminal, completion, or rotation marker must still be
-      -- writable on a terminal generation, or first-terminal-wins arbitration
-      -- and idempotent re-marking would break. Reads the same index rows the
-      -- run-entry probe reads, so a resurrection (which deletes the failed
-      -- marker row) restores acceptance by construction.
-      refusingMarker = case event of
-        StepRecorded {} ->
-          listToMaybe
-            <$> terminalMarkersTx (unWorkflowId wid) (unWorkflowName name) gen
-        _ -> pure Nothing
-  base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
-    Right encoded -> pure encoded
-    Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
-  let entry = base & #eventId .~ requestedEntryId :: EventData
-  prepared <- prepareEventsIO [entry]
-  now <- liftIO getCurrentTime
-  pure $ do
-    lockWorkflowStepTx lockKey
-    lookupStepResultTx (unWorkflowId wid) (unWorkflowName name) gen key >>= \case
-      Just stored -> pure (JournalAlreadyPresent stored)
-      Nothing ->
-        refusingMarker >>= \case
-          Just marker -> pure (JournalRefusedTerminal marker)
-          Nothing ->
-            appendToStreamTx journalName AnyVersion prepared now >>= \case
-              Left err -> pure (JournalAppendConflict err)
-              Right appendResult ->
-                JournalAppended appendResult
-                  <$ recordStepTx row
-                  <* upsertInstanceTx
-                    (unWorkflowId wid)
-                    (unWorkflowName name)
-                    (fromIntegral gen)
-                    status
-                    mLastError
-
-appendJournal :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es JournalAppendOutcome
-appendJournal name wid gen event =
-  prepareJournalAppend name wid gen event >>= runTransaction
-
--- | Append a journal event to a workflow's journal stream (and keep its
--- index row consistent), idempotently. If the entry already exists this is a
--- no-op returning the would-be event id.
---
--- This is the integration helper a wake source's external-completion path uses
--- to record an awaited step's resolution. The append uses a deterministic event
--- id derived from @("keiro" : "workflow" : name : id : stepName)@ so concurrent
--- or retried writes collapse to one row.
---
--- Delivering into a workflow that has already been cancelled or terminally
--- failed is a __no-op, not an error__: the append transaction declines it and
--- this returns normally. A wake source should therefore still settle its own
--- durable row (mark its timer fired, its promise completed) and must not treat
--- a quiet return as proof the workflow received anything.
-appendJournalEntry :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es ()
-appendJournalEntry name wid event = void (appendJournalEntryReturningId name wid event)
-
--- | Like 'appendJournalEntry' but returns the (deterministic) 'EventId' of
--- the entry. EP-39's fired timer needs this for @markTimerFired@. The id is
--- returned even when the append was declined because the workflow is terminal,
--- so the caller can still settle its own row.
---
--- Rotation caveat: the target generation is resolved by a query and the append
--- commits in a separate transaction, so a 'continueAsNew' landing in between
--- writes the entry onto the closed generation, where it resolves nothing. This
--- is why a wake source needs a durable row its arm re-checks — see /Writing a
--- custom wake source/ in this module's overview.
-appendJournalEntryReturningId :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es EventId
-appendJournalEntryReturningId name wid event = do
-  -- EP-48: a wake source (timer fired, signalAwakeable, child completion)
-  -- resolves the awaited step on whichever generation the suspended run is
-  -- parked on — always the current (highest) one, since runs only ever operate
-  -- on the current generation. Resolve it here so the append and its
-  -- deterministic id are namespaced by that generation.
-  gen <- currentGeneration name wid
-  let key = journalKey event
-      entryId = deterministicJournalId name wid gen key
-  appendJournal name wid gen event >>= \case
-    JournalAppended {} -> pure entryId
-    JournalAlreadyPresent {} -> pure entryId
-    -- The owning workflow is terminal, so nothing was delivered. The would-be
-    -- id is still returned: callers use it to settle their own durable row (a
-    -- fired timer, a completed awakeable), and a terminal workflow is not an
-    -- error condition for a wake source that arrives late.
-    JournalRefusedTerminal {} -> pure entryId
-    JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
-
--- | Append a journal entry only if it is not already journaled, returning the
--- 'AppendResult' of the fresh append (or 'Nothing' if it already existed). Used
--- on the completion path so a terminal ('OnTerminal') snapshot can be taken from
--- the completing run's 'AppendResult', while a replay of an already-completed
--- workflow is a no-op.
-appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> UTCTime -> Eff es (Maybe AppendResult)
-appendCompletion name wid gen now = do
-  appendJournal name wid gen (WorkflowCompleted now) >>= \case
-    JournalAppended appendResult -> pure (Just appendResult)
-    JournalAlreadyPresent {} -> pure Nothing
-    -- Terminal markers are exempt from the refusal check, so this cannot happen;
-    -- surfacing it as an error beats silently reporting "already completed".
-    JournalRefusedTerminal marker ->
-      throwIO (WorkflowJournalAppendError ("completion refused by terminal marker " <> marker))
-    JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+-- | Attempt the completion marker append. The caller maps a lifecycle refusal
+-- to the winning workflow outcome instead of reporting a spurious append error.
+appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> UTCTime -> Eff es JournalAppendOutcome
+appendCompletion name wid gen now =
+  appendJournal name wid gen (WorkflowCompleted now)
 
 -- | Perform a continue-as-new rotation (EP-48): close generation @gen@ and open
 -- generation @gen + 1@, seeded with @seedJson@ and the deployed patch set. Returns
 -- 'ContinuedAsNew'.
 --
--- The next generation's seed and non-empty patch set are appended in one
--- transaction before the old generation's rotation marker. The seed advances
--- @MAX(generation)@ — and therefore 'currentGeneration' — to @gen + 1@, while the
--- same commit makes patch decisions available before any asynchronous wake writer
--- can append to the new generation. After that commit, any re-run resolves the
--- current generation to @gen + 1@, hydrates from the seed and patch set, and never
--- re-enters generation @gen@. We then append the terminal
--- 'WorkflowContinuedAsNew' marker on generation @gen@. Every append is guarded by
--- an existence check and uses a deterministic, generation-namespaced id, so the
--- whole rotation is idempotent.
+-- The old generation's rotation marker, the next generation's seed, and its
+-- non-empty patch set are appended in one transaction. The lifecycle marker is
+-- attempted first under the shared generation lock, so cancellation/failure
+-- either wins without exposing a new generation or loses before the seed makes
+-- @currentGeneration@ advance. Every append is guarded by an existence check
+-- and uses a deterministic, generation-namespaced id, so the whole rotation is
+-- idempotent.
 --
 -- The seed carries state forward and the patch-set entry freezes code-evolution
 -- decisions. We snapshot their map at the newest fresh append's version so the
@@ -1083,51 +939,70 @@ rotateGeneration mMetrics patches name wid gen seedJson = do
             wid
             nextGen
             (patchEvent now)
-  -- 1. Seed and patch set on the NEXT generation in one transaction. A
-  -- conflict condemns the whole transaction before it returns its diagnostic
-  -- outcome, so no seed-without-patch intermediate state can commit.
-  (seedOutcome, patchOutcome) <-
+  rotationTx <-
+    prepareJournalAppend
+      name
+      wid
+      gen
+      (WorkflowContinuedAsNew nextGen now)
+  -- The CURRENT generation's lifecycle winner and the NEXT generation's seed
+  -- are one commit. If another lifecycle marker won, no new-generation row can
+  -- leak; if rotation won, a cancellation prepared against the old generation
+  -- observes the marker, retries, and follows the now-current generation.
+  (rotationOutcome, maybeSeedOutcome, patchOutcome) <-
     runTransaction $ do
-      seedResult <- seedTx
-      condemnOnConflict seedResult
-      patchResult <- traverse id patchTx
-      traverse_ condemnOnConflict patchResult
-      pure (seedResult, patchResult)
-  throwOnConflict seedOutcome
-  traverse_ throwOnConflict patchOutcome
-  let seedValue = recordedValue seedJson seedOutcome
-      snapshotState =
-        maybe
-          (Map.singleton continueSeedStepName seedValue)
-          ( \outcome ->
-              Map.fromList
-                [ (continueSeedStepName, seedValue),
-                  (patchSetStepName, recordedValue encodedPatches outcome)
-                ]
-          )
-          patchOutcome
-      snapshotAppend =
-        case patchOutcome of
-          Just (JournalAppended appendResult) -> Just appendResult
-          _ -> case seedOutcome of
-            JournalAppended appendResult -> Just appendResult
-            _ -> Nothing
-  for_ snapshotAppend $ \appendResult ->
-    writeWorkflowSnapshotAdvisory
-      mMetrics
-      (appendResult ^. #streamId)
-      (appendResult ^. #streamVersion)
-      snapshotState
-  -- 2. Terminal rotation marker on the CURRENT generation (audit + closes it).
-  appendJournal name wid gen (WorkflowContinuedAsNew nextGen now) >>= \case
-    JournalAppended {} -> pure ()
-    JournalAlreadyPresent {} -> pure ()
-    -- Rotation markers are exempt from the refusal check (see
-    -- 'JournalAppendOutcome'), so this arm is unreachable in practice.
-    JournalRefusedTerminal marker ->
-      throwIO (WorkflowJournalAppendError ("rotation refused by terminal marker " <> marker))
-    JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
-  pure ContinuedAsNew
+      rotationResult <- rotationTx
+      let seedNextGeneration = do
+            seedResult <- seedTx
+            condemnOnConflict seedResult
+            patchResult <- traverse id patchTx
+            traverse_ condemnOnConflict patchResult
+            pure (rotationResult, Just seedResult, patchResult)
+      case rotationResult of
+        JournalAppended {} -> seedNextGeneration
+        JournalAlreadyPresent {} -> seedNextGeneration
+        JournalRefusedTerminal {} -> pure (rotationResult, Nothing, Nothing)
+        JournalAppendConflict {} -> do
+          Tx.condemn
+          pure (rotationResult, Nothing, Nothing)
+  case rotationOutcome of
+    JournalRefusedTerminal marker
+      | marker == cancelledStepName -> pure Cancelled
+      | marker == failedStepName -> pure Failed
+      | otherwise ->
+          throwIO (WorkflowJournalAppendError ("rotation refused by terminal marker " <> marker))
+    JournalAppendConflict err ->
+      throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+    _ -> case maybeSeedOutcome of
+      Nothing ->
+        throwIO (WorkflowJournalAppendError "rotation committed without a next-generation seed outcome")
+      Just seedOutcome -> do
+        throwOnConflict seedOutcome
+        traverse_ throwOnConflict patchOutcome
+        let seedValue = recordedValue seedJson seedOutcome
+            snapshotState =
+              maybe
+                (Map.singleton continueSeedStepName seedValue)
+                ( \outcome ->
+                    Map.fromList
+                      [ (continueSeedStepName, seedValue),
+                        (patchSetStepName, recordedValue encodedPatches outcome)
+                      ]
+                )
+                patchOutcome
+            snapshotAppend =
+              case patchOutcome of
+                Just (JournalAppended appendResult) -> Just appendResult
+                _ -> case seedOutcome of
+                  JournalAppended appendResult -> Just appendResult
+                  _ -> Nothing
+        for_ snapshotAppend $ \appendResult ->
+          writeWorkflowSnapshotAdvisory
+            mMetrics
+            (appendResult ^. #streamId)
+            (appendResult ^. #streamVersion)
+            snapshotState
+        pure ContinuedAsNew
   where
     -- The seed and patch-set appends target the NEXT generation, which is fresh
     -- and cannot carry a terminal marker, so a refusal there is an invariant
@@ -1163,91 +1038,3 @@ writeWorkflowSnapshotAdvisory mMetrics streamId version state = do
   case outcome of
     Right () -> pure ()
     Left _ -> recordSnapshotWriteFailures mMetrics 1
-
-instanceStatusForEvent :: WorkflowJournalEvent -> (WorkflowStatus, Maybe Text)
-instanceStatusForEvent = \case
-  StepRecorded {} -> (WfRunning, Nothing)
-  WorkflowCompleted {} -> (WfCompleted, Nothing)
-  WorkflowCancelled {} -> (WfCancelled, Nothing)
-  WorkflowFailed reason _ -> (WfFailed, Just reason)
-  WorkflowContinuedAsNew {} -> (WfRunning, Nothing)
-
--- | The reserved step-name key a journal event indexes under.
-journalKey :: WorkflowJournalEvent -> Text
-journalKey = \case
-  StepRecorded {stepName = key} -> key
-  WorkflowCompleted {} -> completedStepName
-  WorkflowCancelled {} -> cancelledStepName
-  WorkflowFailed {} -> failedStepName
-  WorkflowContinuedAsNew {} -> continuedAsNewStepName
-
--- | The index row corresponding to a journal event, on the given generation.
-journalRow :: WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> WorkflowStepRow
-journalRow name wid gen = \case
-  StepRecorded key value t ->
-    WorkflowStepRow
-      { workflowId = unWorkflowId wid,
-        workflowName = unWorkflowName name,
-        generation = gen,
-        stepName = key,
-        result = value,
-        recordedAt = t
-      }
-  WorkflowCompleted t ->
-    WorkflowStepRow
-      { workflowId = unWorkflowId wid,
-        workflowName = unWorkflowName name,
-        generation = gen,
-        stepName = completedStepName,
-        result = Aeson.Null,
-        recordedAt = t
-      }
-  WorkflowCancelled t ->
-    WorkflowStepRow
-      { workflowId = unWorkflowId wid,
-        workflowName = unWorkflowName name,
-        generation = gen,
-        stepName = cancelledStepName,
-        result = Aeson.Null,
-        recordedAt = t
-      }
-  WorkflowFailed r t ->
-    WorkflowStepRow
-      { workflowId = unWorkflowId wid,
-        workflowName = unWorkflowName name,
-        generation = gen,
-        stepName = failedStepName,
-        result = Aeson.toJSON r,
-        recordedAt = t
-      }
-  WorkflowContinuedAsNew g t ->
-    WorkflowStepRow
-      { workflowId = unWorkflowId wid,
-        workflowName = unWorkflowName name,
-        generation = gen,
-        stepName = continuedAsNewStepName,
-        result = Aeson.toJSON g, -- the NEXT generation this rotation opens
-        recordedAt = t
-      }
-
--- | A stable, collision-resistant journal-event id from
--- @("keiro" : "workflow" : name : id : generation : stepName)@ via a v5 UUID.
--- Mirrors 'Keiro.ProcessManager.deterministicCommandId': the same inputs always
--- yield the same id, so a re-append of the same step collapses to the same row.
---
--- The /generation/ (EP-48) is part of the id so a step named @"s1"@ in
--- generation 0 and the same name in generation 1 produce __different__ kiroku
--- event ids — they live on different physical streams, but the event id is
--- global, so namespacing it by generation keeps rotated generations from
--- colliding on the deterministic id.
---
--- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
--- byte-identical to the original codepoint encoding for ASCII seeds and
--- collision-free for the rest; see
--- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
-deterministicJournalId :: WorkflowName -> WorkflowId -> Int -> Text -> EventId
-deterministicJournalId (WorkflowName name) (WorkflowId wid) gen key =
-  EventId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      identitySeedBytes $
-        Text.intercalate ":" ["keiro", "workflow", name, wid, Text.pack (show gen), key]

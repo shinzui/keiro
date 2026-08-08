@@ -38,16 +38,41 @@ applications directly and become thin CLI wrappers in
 
 ## Progress
 
-- [ ] `listWorkflowInstances` with filters and keyset paging, tested.
-- [ ] `cancelWorkflow` with outcome type, child-awareness, and race tests.
-- [ ] `forceReleaseInstanceLease`, tested including the mid-run-owner case.
-- [ ] Cancellation contract recorded in `docs/adr/` (extend ADR 8 or new record — decide and log).
-- [ ] Full suite green: `cabal test keiro-test`.
+- [x] (2026-08-08T23:16:21Z) `listWorkflowInstances` with status/name filters,
+  bounded page size, and `(workflow_name, workflow_id)` keyset paging, tested.
+- [x] (2026-08-08T23:16:21Z) `cancelWorkflow` with honest outcomes,
+  child-aware parent delivery, append-only terminal state, and lifecycle race
+  arbitration, tested.
+- [x] (2026-08-08T23:16:21Z) `forceReleaseInstanceLease`, tested for immediate
+  reclaim and a live old owner stopping at its next boundary.
+- [x] (2026-08-08T23:16:21Z) Cancellation and lifecycle-marker contract recorded
+  in `docs/adr/0027-workflow-lifecycle-markers-are-append-only-and-first-writer-wins.md`;
+  ADR 6 amended and strict validation passed for 27 concepts.
+- [x] (2026-08-08T23:16:21Z) Full suite green: `cabal test keiro-test` — 441
+  examples, 0 failures. `nix fmt` and `git diff --check` also pass.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The planned `cancelWorkflow` location exposed a real module cycle:
+  `Keiro.Workflow` owned journal appends and imported `Keiro.Workflow.Instance`
+  for instance upserts, while the new instance API needed to append a
+  cancellation marker. The implementation extracted the shared append engine
+  into internal `Keiro.Workflow.Journal` and the shared row state into
+  `Keiro.Workflow.Instance.Schema`; the public API remains exactly where EP-2
+  expects it.
+
+- The pre-existing per-step advisory lock could deduplicate two writers of the
+  same reserved marker, but it could not arbitrate completion, cancellation,
+  failure, and rotation because they use different step names. A focused race
+  test proved the required shape and led to one generation-scoped lifecycle
+  lock. Rotation also had to commit its old-generation marker and
+  new-generation seed in one transaction; otherwise cancellation could win on
+  the old generation after the seed had already made a new generation current.
+
+- No listing migration was necessary. The primary key and existing status
+  indexes cover the selected order and filters well enough for this operator
+  surface; EP-1 claims no migration number.
 
 
 ## Decision Log
@@ -66,10 +91,48 @@ applications directly and become thin CLI wrappers in
   terminal instance row out of nothing; an operator typo must not mint state.
   Date: 2026-08-06
 
+- Decision: Keep `cancelWorkflow` in `Keiro.Workflow.Instance` and factor the
+  shared journal/instance storage machinery into internal modules.
+  Rationale: This preserves the public contract consumed by EP-2 and keeps one
+  transactional append implementation. Duplicating journal SQL inside the
+  operator API would violate the MasterPlan's central ownership rule.
+  Date: 2026-08-08
+
+- Decision: All distinct generation lifecycle markers share one advisory lock,
+  and rotation commits its marker and next-generation seed atomically.
+  Rationale: Per-marker locks cannot prevent contradictory terminal markers;
+  atomic rotation is required so cancellation either stops the old generation
+  or follows a fully committed rotation to the new current generation.
+  Date: 2026-08-08
+
+- Decision: Record the cancellation contract in new ADR 27 and amend ADR 6,
+  rather than broadening failure-specific ADR 8.
+  Rationale: The durable rule governs completion, cancellation, failure, and
+  rotation together; ADR 8 remains the narrower resurrection exception for
+  failed workflows.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete, 2026-08-08. The `keiro` library now exposes the three primitives EP-2
+needs without any CLI-side SQL: filtered, stable workflow enumeration;
+top-level and linked-child cancellation with honest outcomes; and immediate
+operator lease release. The public surface is re-exported from `Keiro.Workflow`,
+and 441 examples pass.
+
+The most important result is stronger than the initial API checklist. Workflow
+lifecycle markers now have one first-writer-wins contract across normal runtime
+completion, operator cancellation, failure, and `continueAsNew`. A cancellation
+cannot coexist with a completion marker, and a cancellation racing rotation
+cannot strand a runnable new generation. Linked children retain their atomic
+child-row, child-marker, and parent-sentinel behavior.
+
+No database migration or new dependency was needed. The internal module split
+is deliberately not a second public surface: `Keiro.Workflow.Journal`,
+`Keiro.Workflow.Instance.Schema`, and `Keiro.Workflow.Child.Cancel` exist only so
+runtime execution and operator APIs share the same invariants without a module
+cycle.
 
 
 ## Context and Orientation
@@ -82,7 +145,8 @@ running/suspended/completed/cancelled/failed with a CHECK constraint, crash
 `attempts`/`next_attempt_at`, lease columns `leased_by`/`lease_expires_at`,
 timestamps, `wake_after`). Row maintenance goes through
 `keiro/src/Keiro/Workflow/Instance.hs`. Journal writes go through
-`prepareJournalAppend` in `keiro/src/Keiro/Workflow.hs`: one transaction taking a
+`prepareJournalAppend` in `keiro/src/Keiro/Workflow/Journal.hs` (re-exported by
+`Keiro.Workflow`): one transaction taking a
 per-step advisory lock, re-checking the `keiro.keiro_workflow_steps` index,
 appending to the kiroku stream, writing the index row, and upserting the instance
 row — terminal markers are index rows under reserved names from
@@ -133,17 +197,15 @@ root provisions ephemeral Postgres via `keiro-test-support`.
 In `keiro/src/Keiro/Workflow/Instance.hs`, add a filter record and a listing
 function:
 
-```haskell
-data WorkflowInstanceFilter = WorkflowInstanceFilter
-  { statuses :: !(Maybe (NonEmpty WorkflowStatus)),  -- Nothing = all
-    workflowName :: !(Maybe Text),                    -- exact name match
-    afterKey :: !(Maybe (Text, Text)),                -- keyset cursor: (name, id) of the last row seen
-    pageSize :: !Int
-  }
+    data WorkflowInstanceFilter = WorkflowInstanceFilter
+      { statuses :: !(Maybe (NonEmpty WorkflowStatus)),  -- Nothing = all
+        workflowName :: !(Maybe Text),                    -- exact name match
+        afterKey :: !(Maybe (Text, Text)),                -- keyset cursor: (name, id) of the last row seen
+        pageSize :: !Int
+      }
 
-listWorkflowInstances ::
-  (Store :> es) => WorkflowInstanceFilter -> Eff es [WorkflowInstanceRow]
-```
+    listWorkflowInstances ::
+      (Store :> es) => WorkflowInstanceFilter -> Eff es [WorkflowInstanceRow]
 
 The statement selects the full `WorkflowInstanceRow` column set (reuse
 `instanceRowDecoder`), filtered by `status = ANY($1)` when statuses are given and
@@ -165,16 +227,14 @@ exactly once with page size 2.
 In `keiro/src/Keiro/Workflow/Instance.hs` (beside `resurrectFailedWorkflow`, its
 dual), add:
 
-```haskell
-data CancelWorkflowOutcome
-  = WorkflowCancelRecorded          -- this call wrote the cancellation
-  | WorkflowAlreadyTerminal !WorkflowStatus
-  | WorkflowCancelUnknown           -- no instance row and no step rows: refused
+    data CancelWorkflowOutcome
+      = WorkflowCancelRecorded          -- this call wrote the cancellation
+      | WorkflowAlreadyTerminal !WorkflowStatus
+      | WorkflowCancelUnknown           -- no instance row and no step rows: refused
 
-cancelWorkflow ::
-  (IOE :> es, Store :> es) =>
-  WorkflowName -> WorkflowId -> Eff es CancelWorkflowOutcome
-```
+    cancelWorkflow ::
+      (IOE :> es, Store :> es) =>
+      WorkflowName -> WorkflowId -> Eff es CancelWorkflowOutcome
 
 Behavior, in order. Resolve existence: look up the instance row; if absent, check
 `currentGeneration`/step rows; if neither exists, return `WorkflowCancelUnknown`
@@ -185,15 +245,19 @@ distinct from `WorkflowCancelRecorded` so the CLI can render honestly). Otherwis
 look up a child link row (`lookupChild` from
 `keiro/src/Keiro/Workflow/Child/Schema.hs`): when one exists, cancel through the
 child path so the parent sentinel is written — reuse the logic of
-`ensureChildCancelled` (`keiro/src/Keiro/Workflow/Child.hs`); export it from that
-module if it is not already exported, rather than duplicating its transaction.
+`ensureChildCancelled`. The landed implementation shares that transaction
+through internal `keiro/src/Keiro/Workflow/Child/Cancel.hs`, rather than
+duplicating it or widening the public child module.
 When no link row exists, append `WorkflowCancelled` on the *current generation*
 through `appendJournalEntry`'s machinery (`prepareJournalAppend` + one
 `runTransaction`), which freezes the instance row in the same transaction via the
 standard upsert. All paths are idempotent and race-safe by construction: the
-append takes the per-step advisory lock and index re-check, and a cancellation
-racing a wake completion is arbitrated exactly as ADR 6 specifies for
-`cancelChild` today.
+landed append path takes a common generation-lifecycle lock before its per-step
+advisory lock and index re-check, so completion, cancellation, failure, and
+rotation are first-writer-wins. Rotation commits its old-generation marker and
+next-generation seed atomically, allowing a losing cancellation to follow the
+new current generation. ADR 27 records that durable contract and ADR 6 retains
+the wake-source arbitration rules.
 
 Interplay note for the haddock: cancellation stops *step progress* at the next
 boundary (entry check plus the boundary checks in `keiro/src/Keiro/Workflow.hs`;
@@ -228,10 +292,8 @@ never both compensation and completion (mirror the existing ADR-6 race tests).
 
 In `keiro/src/Keiro/Workflow/Instance.hs`:
 
-```haskell
-forceReleaseInstanceLease ::
-  (Store :> es) => WorkflowName -> WorkflowId -> Eff es Bool
-```
+    forceReleaseInstanceLease ::
+      (Store :> es) => WorkflowName -> WorkflowId -> Eff es Bool
 
 One UPDATE clearing `leased_by`/`lease_expires_at` unconditionally for the key,
 returning whether a live lease (non-null `leased_by`) was actually cleared. The
@@ -254,21 +316,18 @@ step rows.
 
 All commands run from the repository root.
 
-```bash
-cabal build keiro
-cabal test keiro-test
-just adr-validate          # after the ADR edit in Milestone 2
-```
+    cabal build keiro
+    cabal test keiro-test
+    just adr-validate          # after the ADR edit in Milestone 2
 
-Expected: suite ends `N examples, 0 failures`. Commit per milestone:
+Expected and observed: suite ends `441 examples, 0 failures`. Commit per
+milestone:
 
-```text
-feat(workflow): add operator listing, cancellation, and lease-release APIs
+    feat(workflow): add operator listing, cancellation, and lease-release APIs
 
-MasterPlan: docs/masterplans/31-build-the-keiro-ops-operational-cli.md
-ExecPlan: docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md
-Intention: intention_01kzagac32ehp93amx1sfar2ab
-```
+    MasterPlan: docs/masterplans/31-build-the-keiro-ops-operational-cli.md
+    ExecPlan: docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md
+    Intention: intention_01kzagac32ehp93amx1sfar2ab
 
 
 ## Validation and Acceptance
@@ -301,6 +360,13 @@ No new libraries. End-state additions to `keiro`:
 `Keiro.Workflow.Instance.{WorkflowInstanceFilter, defaultWorkflowInstanceFilter,
 listWorkflowInstances, CancelWorkflowOutcome, cancelWorkflow,
 forceReleaseInstanceLease}`, re-exported from `Keiro.Workflow` as appropriate;
-`ensureChildCancelled` exported from `Keiro.Workflow.Child` if not already. The
+internal `Keiro.Workflow.Journal`, `Keiro.Workflow.Instance.Schema`, and
+`Keiro.Workflow.Child.Cancel` hold shared implementation without becoming new
+public modules. The
 consumer is `docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md`,
 which must use these signatures unchanged (MasterPlan 31 Integration Points).
+
+
+Revision note: Completed all milestones, reconciled the planned module ownership
+with the landed cycle-free shared internals, and recorded the lifecycle-race
+contract and validation evidence, 2026-08-08.

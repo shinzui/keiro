@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workflow wake-source rows govern exposure and terminal races
 description: Wake-source rows are the durable authority for exposure and terminal lifecycle while generation-scoped journal entries deliver their results.
-timestamp: 2026-08-06T06:05:00Z
+timestamp: 2026-08-08T23:02:27Z
 docId: ADR-6
 status: Accepted
 date: 2026-07-23
@@ -65,8 +65,12 @@ a signalled promise completes, a fired timer is marked fired, a finished child
 records its result. Delivery is what is withheld, never the source's own
 lifecycle transition, because the row is the durable authority and a workflow
 that is later resurrected recovers the result from it through the await arm.
-Completion and rotation markers do not refuse appends; only the two markers that
-mean "this run must stop" do.
+Completion, cancellation, failure, and rotation additionally arbitrate distinct
+lifecycle outcomes under the shared generation lock defined by
+[ADR 27](0027-workflow-lifecycle-markers-are-append-only-and-first-writer-wins.md).
+An idempotent retry of the winning marker remains accepted as already present;
+a different lifecycle marker is refused, so the journal and derived instance
+row cannot disagree about which lifecycle transition won.
 
 
 ## Consequences
@@ -93,3 +97,6 @@ mean "this run must stop" do.
 - Because the refusal reads the *derived* terminal-marker index row rather than
   immutable journal history, `resurrectFailedWorkflow` restores acceptance by
   construction, consistent with ADR 8.
+- Distinct lifecycle markers are mutually exclusive within a generation. The
+  shared lifecycle lock does not serialize ordinary step appends or unrelated
+  workflows.

@@ -164,7 +164,7 @@ frozen identity bytes) do not constrain this initiative.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Not Started |
+| 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Not Started |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Not Started |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Not Started |
@@ -228,8 +228,8 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 
 ## Progress
 
-- [ ] EP-1: `listWorkflowInstances` with status/name filters and keyset paging, tested.
-- [ ] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
+- [x] EP-1: `listWorkflowInstances` with status/name filters and keyset paging, tested.
+- [x] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
 - [ ] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
 - [ ] EP-2: workflow + timer domains complete; ADR for the operator-command contract recorded.
 - [ ] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
@@ -250,6 +250,13 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   inventory, pure and registered-state preview, and start/inspect/resume/abandon actions. The
   `keiro-ops` package is still absent, so EP-4 must mount these values after EP-2 creates the
   command tree rather than asking applications for any parallel action map.
+- 2026-08-08: EP-1 found that same-marker step locks were insufficient for
+  operator cancellation: completion, cancellation, failure, and rotation use
+  distinct reserved names. The runtime now arbitrates those markers under one
+  generation lifecycle lock and commits rotation with its next-generation seed
+  atomically. EP-2's public inputs remain the planned
+  `listWorkflowInstances`, `cancelWorkflow`, and
+  `forceReleaseInstanceLease`; no migration or CLI workaround is required.
 
 
 ## Decision Log
@@ -294,6 +301,14 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   command until the adapter lands.
   Date: 2026-08-07
 
+- Decision: Treat completion, cancellation, failure, and rotation as one
+  first-writer-wins generation lifecycle for journal appends.
+  Rationale: EP-1 proved that per-marker idempotence alone can leave
+  contradictory terminal markers. The shared lifecycle lock and atomic rotation
+  preserve one journal/instance winner for every operator command EP-2 exposes;
+  the durable contract is ADR 27.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -305,3 +320,6 @@ operations and removed the free-form rebuild-map contract, 2026-08-07.
 
 Revision note: Reconciled EP-4 with the landed `ProjectionCatalogOperations` API while the
 `keiro-ops` package remains pending behind EP-2, 2026-08-08.
+
+Revision note: Completed EP-1, recorded its lifecycle-arbitration discovery and
+ADR, and unblocked EP-2 with the planned public operator APIs, 2026-08-08.

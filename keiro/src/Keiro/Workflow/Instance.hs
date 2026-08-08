@@ -7,16 +7,22 @@
 module Keiro.Workflow.Instance
   ( WorkflowStatus (..),
     WorkflowInstanceRow (..),
+    WorkflowInstanceFilter (..),
+    defaultWorkflowInstanceFilter,
     ResurrectOutcome (..),
+    CancelWorkflowOutcome (..),
     statusToText,
     statusFromText,
     upsertInstanceTx,
     markInstanceSuspendedAwaiting,
     lookupInstance,
+    listWorkflowInstances,
+    cancelWorkflow,
     claimInstance,
     renewInstanceLeaseTx,
     renewInstanceLease,
     releaseInstance,
+    forceReleaseInstanceLease,
     recordCrashTx,
     resetInstanceAttempts,
     reviveFailedInstanceTx,
@@ -26,32 +32,53 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.Int (Int32)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Effectful (Eff, IOE, (:>))
+import Effectful.Exception (throwIO)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
-import Keiro.Workflow.Child.Schema (reviveFailedChildTx)
+import Keiro.Workflow.Child.Cancel (ensureChildCancelled)
+import Keiro.Workflow.Child.Schema
+  ( ChildStatus (..),
+    lookupChild,
+    reviveFailedChildTx,
+  )
+import Keiro.Workflow.Instance.Schema
+  ( WorkflowStatus (..),
+    statusFromText,
+    statusToText,
+    upsertInstanceTx,
+  )
+import Keiro.Workflow.Journal
+  ( JournalAppendOutcome (..),
+    prepareJournalAppend,
+  )
 import Keiro.Workflow.Schema
   ( currentGeneration,
     deleteStepRowTx,
+    loadStepIndex,
     lockWorkflowStepTx,
     lookupStepResultTx,
     workflowStepLockKey,
   )
-import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), failedStepName)
+import Keiro.Workflow.Types
+  ( WorkflowError (..),
+    WorkflowId (..),
+    WorkflowJournalEvent (..),
+    WorkflowName (..),
+    cancelledStepName,
+    completedStepName,
+    continuedAsNewStepName,
+    failedStepName,
+  )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
-
-data WorkflowStatus
-  = WfRunning
-  | WfSuspended
-  | WfCompleted
-  | WfCancelled
-  | WfFailed
-  deriving stock (Generic, Eq, Show)
 
 data WorkflowInstanceRow = WorkflowInstanceRow
   { workflowId :: !Text,
@@ -69,15 +96,43 @@ data WorkflowInstanceRow = WorkflowInstanceRow
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Filters and keyset cursor for operator-facing workflow enumeration.
+--
+-- Results are ordered by @(workflow_name, workflow_id)@. Pass the final row's
+-- name and id as 'afterKey' to fetch the next page without the instability and
+-- growing scan cost of an @OFFSET@ query. A non-positive 'pageSize' returns an
+-- empty page.
+data WorkflowInstanceFilter = WorkflowInstanceFilter
+  { statuses :: !(Maybe (NonEmpty WorkflowStatus)),
+    workflowName :: !(Maybe Text),
+    afterKey :: !(Maybe (Text, Text)),
+    pageSize :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | List every status and workflow name, starting at the first key, 100 rows
+-- at a time.
+defaultWorkflowInstanceFilter :: WorkflowInstanceFilter
+defaultWorkflowInstanceFilter =
+  WorkflowInstanceFilter
+    { statuses = Nothing,
+      workflowName = Nothing,
+      afterKey = Nothing,
+      pageSize = 100
+    }
+
 data ResurrectOutcome
   = WorkflowResurrected
   | WorkflowNotFailed
   | WorkflowNotFound
   deriving stock (Generic, Eq, Show)
 
-upsertInstanceTx :: Text -> Text -> Int32 -> WorkflowStatus -> Maybe Text -> Tx.Transaction ()
-upsertInstanceTx wid name gen status mLastError =
-  Tx.statement (wid, name, gen, statusToText status, mLastError) upsertInstanceStmt
+-- | Honest result of an operator cancellation request.
+data CancelWorkflowOutcome
+  = WorkflowCancelRecorded
+  | WorkflowAlreadyTerminal !WorkflowStatus
+  | WorkflowCancelUnknown
+  deriving stock (Generic, Eq, Show)
 
 -- | Record that a run parked on @awaitedStep@, arbitrating against a wake
 -- delivery that may be landing at the same moment.
@@ -123,6 +178,109 @@ markInstanceSuspendedAwaiting (WorkflowName nameText) (WorkflowId widText) gen a
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =
   runTransaction (Tx.statement (wid, name) lookupInstanceStmt)
+
+-- | Enumerate workflow instance summaries using stable keyset pagination.
+--
+-- Status and name filters are exact. Rows inserted before the supplied cursor
+-- are intentionally not revisited; rows deleted or updated concurrently never
+-- cause later keys to be skipped as an @OFFSET@ query could.
+listWorkflowInstances ::
+  (Store :> es) =>
+  WorkflowInstanceFilter ->
+  Eff es [WorkflowInstanceRow]
+listWorkflowInstances filters
+  | filters ^. #pageSize <= 0 = pure []
+  | otherwise =
+      runTransaction $
+        Tx.statement
+          ( NonEmpty.toList . fmap statusToText <$> filters ^. #statuses,
+            filters ^. #workflowName,
+            fst <$> filters ^. #afterKey,
+            snd <$> filters ^. #afterKey,
+            fromIntegral
+              ( min
+                  (filters ^. #pageSize)
+                  (fromIntegral (maxBound :: Int32))
+              ) ::
+              Int32
+          )
+          listWorkflowInstancesStmt
+
+-- | Stop a top-level or linked-child workflow at its next durable boundary.
+--
+-- Cancellation is an append-only journal marker. Linked children delegate to
+-- the same transaction as 'Keiro.Workflow.Child.cancelChild' so their parent is
+-- woken with the typed cancellation sentinel. Children are not cascaded: an
+-- operator must cancel descendants explicitly. A step action already in flight
+-- may finish and journal idempotently; no later boundary may start.
+cancelWorkflow ::
+  (IOE :> es, Store :> es) =>
+  WorkflowName ->
+  WorkflowId ->
+  Eff es CancelWorkflowOutcome
+cancelWorkflow name@(WorkflowName nameText) wid@(WorkflowId widText) =
+  lookupInstance name wid >>= \case
+    Just row
+      | Just terminal <- terminalStatus (row ^. #status) ->
+          pure (WorkflowAlreadyTerminal terminal)
+    mrow -> do
+      exists <- case mrow of
+        Just _ -> pure True
+        Nothing -> do
+          gen <- currentGeneration name wid
+          not . Map.null <$> loadStepIndex name wid gen
+      if not exists
+        then pure WorkflowCancelUnknown
+        else
+          lookupChild widText nameText >>= \case
+            Just child -> cancelLinkedChild child
+            Nothing -> cancelTopLevel
+  where
+    terminalStatus = \case
+      WfCompleted -> Just WfCompleted
+      WfCancelled -> Just WfCancelled
+      WfFailed -> Just WfFailed
+      _ -> Nothing
+
+    cancelLinkedChild child = do
+      (transitioned, childOutcome, parentOutcome) <- ensureChildCancelled child
+      traverse_ throwOnJournalConflict [childOutcome, parentOutcome]
+      if transitioned
+        then pure WorkflowCancelRecorded
+        else case child ^. #status of
+          ChildCancelled -> pure (WorkflowAlreadyTerminal WfCancelled)
+          ChildCompleted -> pure (WorkflowAlreadyTerminal WfCompleted)
+          ChildFailed -> pure (WorkflowAlreadyTerminal WfFailed)
+          -- The guarded child-row transition lost a race. Re-read both the
+          -- instance and child rows before deciding which terminal state won.
+          Running -> cancelWorkflow name wid
+
+    cancelTopLevel = do
+      gen <- currentGeneration name wid
+      now <- liftIO getCurrentTime
+      appendTx <-
+        prepareJournalAppend
+          name
+          wid
+          gen
+          WorkflowCancelled {recordedAt = now}
+      runTransaction appendTx >>= \case
+        JournalAppended {} -> pure WorkflowCancelRecorded
+        JournalAlreadyPresent {} ->
+          pure (WorkflowAlreadyTerminal WfCancelled)
+        JournalRefusedTerminal marker
+          | marker == continuedAsNewStepName -> cancelWorkflow name wid
+          | marker == completedStepName -> pure (WorkflowAlreadyTerminal WfCompleted)
+          | marker == failedStepName -> pure (WorkflowAlreadyTerminal WfFailed)
+          | marker == cancelledStepName -> pure (WorkflowAlreadyTerminal WfCancelled)
+          | otherwise -> cancelWorkflow name wid
+        conflict@JournalAppendConflict {} ->
+          throwOnJournalConflict conflict *> pure WorkflowCancelUnknown
+
+    throwOnJournalConflict = \case
+      JournalAppendConflict err ->
+        throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+      _ -> pure ()
 
 claimInstance :: (IOE :> es, Store :> es) => Text -> NominalDiffTime -> WorkflowName -> WorkflowId -> Eff es Bool
 claimInstance owner ttl (WorkflowName nameText) (WorkflowId widText) = do
@@ -176,6 +334,21 @@ releaseInstance owner progressed (WorkflowName name) (WorkflowId wid) =
   runTransaction $
     Tx.statement (wid, name, owner, progressed) releaseInstanceStmt
 
+-- | Clear any current instance lease, returning 'True' only when a lease was
+-- present.
+--
+-- A previous live owner is not interrupted inside an action already in flight.
+-- Its next owner-guarded 'renewInstanceLease' matches no row and raises
+-- 'Keiro.Workflow.WorkflowLeaseLost' before a later workflow boundary, while a
+-- replacement owner can claim immediately instead of waiting for the old TTL.
+forceReleaseInstanceLease ::
+  (Store :> es) =>
+  WorkflowName ->
+  WorkflowId ->
+  Eff es Bool
+forceReleaseInstanceLease (WorkflowName name) (WorkflowId wid) =
+  runTransaction (Tx.statement (wid, name) forceReleaseInstanceLeaseStmt)
+
 -- | Record a crashed advance against the instance row: bump @attempts@, store
 -- the rendered error, and push @next_attempt_at@ out along the backoff ladder.
 -- Returns the new attempt count, or 'Nothing' when the row matched nothing
@@ -225,52 +398,6 @@ resurrectFailedWorkflow name@(WorkflowName nameText) wid@(WorkflowId widText) =
               then WorkflowResurrected
               else WorkflowNotFailed
 
-statusToText :: WorkflowStatus -> Text
-statusToText = \case
-  WfRunning -> "running"
-  WfSuspended -> "suspended"
-  WfCompleted -> "completed"
-  WfCancelled -> "cancelled"
-  WfFailed -> "failed"
-
-statusFromText :: Text -> WorkflowStatus
-statusFromText = \case
-  "running" -> WfRunning
-  "suspended" -> WfSuspended
-  "completed" -> WfCompleted
-  "cancelled" -> WfCancelled
-  "failed" -> WfFailed
-  _ -> WfFailed
-
-upsertInstanceStmt :: Statement (Text, Text, Int32, Text, Maybe Text) ()
-upsertInstanceStmt =
-  preparable
-    """
-    INSERT INTO keiro.keiro_workflows
-      (workflow_id, workflow_name, generation, status, last_error, completed_at)
-    VALUES ($1, $2, $3, $4, $5,
-            CASE WHEN $4 IN ('completed', 'cancelled', 'failed') THEN now() ELSE NULL END)
-    ON CONFLICT (workflow_id, workflow_name) DO UPDATE
-    SET generation = GREATEST(keiro_workflows.generation, EXCLUDED.generation),
-        status = EXCLUDED.status,
-        last_error = EXCLUDED.last_error,
-        updated_at = now(),
-        completed_at = CASE
-          WHEN EXCLUDED.status IN ('completed', 'cancelled', 'failed')
-            THEN COALESCE(keiro_workflows.completed_at, now())
-          ELSE keiro_workflows.completed_at
-        END
-    WHERE keiro_workflows.status NOT IN ('completed', 'cancelled', 'failed')
-    """
-    ( contrazip5
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.int4))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nullable E.text))
-    )
-    D.noResult
-
 lookupInstanceStmt :: Statement (Text, Text) (Maybe WorkflowInstanceRow)
 lookupInstanceStmt =
   preparable
@@ -286,6 +413,32 @@ lookupInstanceStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.rowMaybe instanceRowDecoder)
+
+listWorkflowInstancesStmt :: Statement (Maybe [Text], Maybe Text, Maybe Text, Maybe Text, Int32) [WorkflowInstanceRow]
+listWorkflowInstancesStmt =
+  preparable
+    """
+    SELECT workflow_id, workflow_name, generation, status, attempts,
+           last_error, next_attempt_at, leased_by, lease_expires_at,
+           created_at, updated_at, completed_at
+    FROM keiro.keiro_workflows
+    WHERE ($1::text[] IS NULL OR status = ANY($1))
+      AND ($2::text IS NULL OR workflow_name = $2)
+      AND (
+        $3::text IS NULL
+        OR (workflow_name, workflow_id) > ($3, $4)
+      )
+    ORDER BY workflow_name, workflow_id
+    LIMIT $5
+    """
+    ( contrazip5
+        (E.param (E.nullable (E.foldableArray (E.nonNullable E.text))))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nonNullable E.int4))
+    )
+    (D.rowList instanceRowDecoder)
 
 ensureInstanceStmt :: Statement (Text, Text, Int32) ()
 ensureInstanceStmt =
@@ -369,6 +522,24 @@ releaseInstanceStmt =
         (E.param (E.nonNullable E.bool))
     )
     D.noResult
+
+forceReleaseInstanceLeaseStmt :: Statement (Text, Text) Bool
+forceReleaseInstanceLeaseStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_workflows
+    SET leased_by = NULL,
+        lease_expires_at = NULL,
+        updated_at = now()
+    WHERE workflow_id = $1
+      AND workflow_name = $2
+      AND leased_by IS NOT NULL
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    ((> 0) <$> D.rowsAffected)
 
 recordCrashStmt :: Statement (Text, Text, Text) (Maybe Int32)
 recordCrashStmt =

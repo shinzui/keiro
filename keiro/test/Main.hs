@@ -6668,6 +6668,177 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       unfinished `shouldBe` [("p-1", "pending")]
 
   describe "Keiro.Workflow instance table" $ around (withFreshStore fixture) $ do
+    it "lists workflow instances with filters and stable keyset pages" $ \storeHandle -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $ do
+            Instance.upsertInstanceTx "b-2" "beta" 0 Instance.WfFailed (Just "boom")
+            Instance.upsertInstanceTx "a-2" "alpha" 0 Instance.WfCompleted Nothing
+            Instance.upsertInstanceTx "b-1" "beta" 0 Instance.WfRunning Nothing
+            Instance.upsertInstanceTx "a-1" "alpha" 0 Instance.WfFailed (Just "bad")
+
+      let firstPageFilter =
+            Instance.defaultWorkflowInstanceFilter
+              { Instance.pageSize = 2
+              }
+      Right firstPage <- Store.runStoreIO storeHandle $ Instance.listWorkflowInstances firstPageFilter
+      fmap (\row -> (row ^. #workflowName, row ^. #workflowId)) firstPage
+        `shouldBe` [("alpha", "a-1"), ("alpha", "a-2")]
+
+      let secondPageFilter =
+            firstPageFilter
+              { Instance.afterKey = Just ("alpha", "a-2")
+              }
+      Right secondPage <- Store.runStoreIO storeHandle $ Instance.listWorkflowInstances secondPageFilter
+      fmap (\row -> (row ^. #workflowName, row ^. #workflowId)) secondPage
+        `shouldBe` [("beta", "b-1"), ("beta", "b-2")]
+
+      let failedBetaFilter =
+            Instance.defaultWorkflowInstanceFilter
+              { Instance.statuses = Just (Instance.WfFailed :| []),
+                Instance.workflowName = Just "beta"
+              }
+      Right failedBeta <- Store.runStoreIO storeHandle $ Instance.listWorkflowInstances failedBetaFilter
+      fmap (\row -> (row ^. #workflowName, row ^. #workflowId, row ^. #status)) failedBeta
+        `shouldBe` [("beta", "b-2", Instance.WfFailed)]
+
+    it "cancels active workflows idempotently without minting unknown state" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "operator-cancel"
+          wid = WorkflowId "operator-cancel-1"
+          completedName = WorkflowName "operator-completed"
+          completedId = WorkflowId "operator-completed-1"
+      Left (_ :: SimulatedCrash) <-
+        try $
+          Store.runStoreIO storeHandle $
+            runWorkflow name wid (crashAfterStep1 counter)
+
+      Right Instance.WorkflowCancelRecorded <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow name wid
+      Right Keiro.Workflow.Cancelled <-
+        Store.runStoreIO storeHandle $
+          runWorkflow name wid (threeStep counter)
+      readIORef counter `shouldReturn` 1
+      Right (Instance.WorkflowAlreadyTerminal Instance.WfCancelled) <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow name wid
+
+      Right (Completed _) <-
+        Store.runStoreIO storeHandle $
+          runWorkflow completedName completedId (demoWorkflow counter)
+      Right (Instance.WorkflowAlreadyTerminal Instance.WfCompleted) <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow completedName completedId
+
+      Right Instance.WorkflowCancelUnknown <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow (WorkflowName "missing") (WorkflowId "missing-1")
+      Right Nothing <-
+        Store.runStoreIO storeHandle $
+          Instance.lookupInstance (WorkflowName "missing") (WorkflowId "missing-1")
+      pure ()
+
+    it "cancels suspended and linked-child workflows through supported paths" $ \storeHandle -> do
+      let suspendedName = WorkflowName "operator-suspended"
+          suspendedId = WorkflowId "operator-suspended-1"
+          parentName = WorkflowName "operator-parent"
+          parentId = WorkflowId "operator-parent-1"
+          childName = WorkflowName "ship"
+          childId = WorkflowId "operator-child-1"
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow suspendedName suspendedId neverArmingWorkflow
+      Right Instance.WorkflowCancelRecorded <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow suspendedName suspendedId
+      now <- getCurrentTime
+      Right discovered <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+      discovered `shouldNotContain` [("operator-suspended-1", "operator-suspended")]
+
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow parentName parentId (parentWorkflow childId)
+      Right Instance.WorkflowCancelRecorded <-
+        Store.runStoreIO storeHandle $
+          Instance.cancelWorkflow childName childId
+      Store.runStoreIO storeHandle (runWorkflow parentName parentId (parentWorkflow childId))
+        `shouldThrow` (== WorkflowChildCancelled childName childId)
+
+    it "serializes cancellation against completion so exactly one marker wins" $ \storeHandle -> do
+      let name = WorkflowName "operator-terminal-race"
+          wid = WorkflowId "operator-terminal-race-1"
+      seededAt <- getCurrentTime
+      Right () <-
+        Store.runStoreIO storeHandle $
+          appendJournalEntry name wid (StepRecorded "seed" (toJSON True) seededAt)
+      start <- newEmptyMVar
+      cancelDone <- newEmptyMVar
+      completeDone <- newEmptyMVar
+      _ <- forkIO $ do
+        takeMVar start
+        result <- Store.runStoreIO storeHandle $ Instance.cancelWorkflow name wid
+        putMVar cancelDone result
+      _ <- forkIO $ do
+        takeMVar start
+        completedAt <- getCurrentTime
+        result <- Store.runStoreIO storeHandle $ appendJournalEntry name wid (WorkflowCompleted completedAt)
+        putMVar completeDone result
+      putMVar start ()
+      putMVar start ()
+      _ <- takeMVar cancelDone
+      _ <- takeMVar completeDone
+      Right hasCancelled <- Store.runStoreIO storeHandle $ stepExists name wid 0 cancelledStepName
+      Right hasCompleted <- Store.runStoreIO storeHandle $ stepExists name wid 0 completedStepName
+      (hasCancelled, hasCompleted) `shouldSatisfy` \case
+        (True, False) -> True
+        (False, True) -> True
+        _ -> False
+
+    it "force-releases leases and makes the old owner stop at its next boundary" $ \storeHandle -> do
+      firstEffect <- newIORef (0 :: Int)
+      secondEffect <- newIORef (0 :: Int)
+      let name = WorkflowName "operator-force-release"
+          wid = WorkflowId "operator-force-release-1"
+          options owner =
+            defaultWorkflowRunOptions
+              & #leaseHeartbeat
+              .~ Just LeaseHeartbeat {owner, ttl = 60}
+          body = do
+            first <-
+              step (StepName "first") $ do
+                value <- liftIO (incrementAndRead firstEffect)
+                released <- Instance.forceReleaseInstanceLease name wid
+                liftIO (released `shouldBe` True)
+                pure value
+            second <- step (StepName "second") (liftIO (incrementAndRead secondEffect))
+            pure (first, second)
+      Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 60 name wid
+      claimedA `shouldBe` True
+      lost <-
+        try
+          ( Store.runStoreIO storeHandle $
+              runWorkflowWith (options "owner-a") name wid body
+          ) ::
+          IO
+            ( Either
+                WorkflowLeaseLost
+                (Either Store.StoreError (WorkflowOutcome (Int, Int)))
+            )
+      lost `shouldBe` Left WorkflowLeaseLost
+      readIORef firstEffect `shouldReturn` 1
+      readIORef secondEffect `shouldReturn` 0
+      Right releasedAgain <- Store.runStoreIO storeHandle $ Instance.forceReleaseInstanceLease name wid
+      releasedAgain `shouldBe` False
+
+      Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 60 name wid
+      claimedB `shouldBe` True
+      Right (Completed (1, 1)) <-
+        Store.runStoreIO storeHandle $
+          runWorkflowWith (options "owner-b") name wid body
+      readIORef firstEffect `shouldReturn` 1
+      readIORef secondEffect `shouldReturn` 1
+
     it "creates and completes a workflow instance row transactionally with the journal" $ \storeHandle -> do
       counter <- newIORef (0 :: Int)
       let name = WorkflowName "inst-complete"

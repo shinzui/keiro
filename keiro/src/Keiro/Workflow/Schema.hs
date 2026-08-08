@@ -20,6 +20,7 @@ module Keiro.Workflow.Schema
     lockWorkflowStepTx,
     workflowStepLockKey,
     terminalMarkersTx,
+    workflowLifecycleMarkersTx,
     deleteStepRowTx,
     setWorkflowWakeAfterTx,
     clearWorkflowWakeAfterTx,
@@ -44,7 +45,14 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
-import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), cancelledStepName, failedStepName)
+import Keiro.Workflow.Types
+  ( WorkflowId (..),
+    WorkflowName (..),
+    cancelledStepName,
+    completedStepName,
+    continuedAsNewStepName,
+    failedStepName,
+  )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -165,6 +173,20 @@ terminalMarkersTx wid name gen =
   Tx.statement
     (wid, name, fromIntegral gen :: Int32, cancelledStepName, failedStepName)
     terminalMarkersStmt
+
+-- | Every marker that ends one generation's active lifecycle. Operator
+-- cancellation and the normal completion/failure/rotation paths take a shared
+-- advisory lock before consulting this set, so only one distinct lifecycle
+-- marker can win a race.
+workflowLifecycleMarkersTx :: Text -> Text -> Int -> Tx.Transaction [Text]
+workflowLifecycleMarkersTx wid name gen =
+  Tx.statement
+    ( wid,
+      name,
+      fromIntegral gen :: Int32,
+      [completedStepName, cancelledStepName, failedStepName, continuedAsNewStepName]
+    )
+    workflowLifecycleMarkersStmt
 
 -- | The current (highest) generation recorded for a logical workflow, or 0 if
 -- it has no step rows yet (EP-48). Index-supported by the
@@ -313,6 +335,25 @@ terminalMarkersStmt =
         (E.param (E.nonNullable E.int4))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
+    )
+    (D.rowList (D.column (D.nonNullable D.text)))
+
+workflowLifecycleMarkersStmt :: Statement (Text, Text, Int32, [Text]) [Text]
+workflowLifecycleMarkersStmt =
+  preparable
+    """
+    SELECT step_name
+    FROM keiro.keiro_workflow_steps
+    WHERE workflow_id = $1
+      AND workflow_name = $2
+      AND generation = $3
+      AND step_name = ANY($4)
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     )
     (D.rowList (D.column (D.nonNullable D.text)))
 
