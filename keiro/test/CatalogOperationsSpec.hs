@@ -74,9 +74,18 @@ spec fixture = do
       let operations = Operations.projectionCatalogOperations validated
       beforePreview <- expectStore store (Operations.previewRegisteredGroupRebuild operations Catalog.mainGroupId) >>= shouldBeRight
       beforePreview ^. #registeredState `shouldBe` Nothing
+      beforePreview ^. #registeredFingerprintMatches `shouldBe` Nothing
       _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
       registered <- expectStore store (Operations.previewRegisteredGroupRebuild operations Catalog.mainGroupId) >>= shouldBeRight
       registered ^? #registeredState . _Just . #status `shouldBe` Just GroupLive
+      registered ^. #registeredFingerprintMatches `shouldBe` Just True
+      different <- expectValid Catalog.validCatalog
+      mismatchedPreview <-
+        expectStore
+          store
+          (Operations.previewRegisteredGroupRebuild (Operations.projectionCatalogOperations different) Catalog.mainGroupId)
+          >>= shouldBeRight
+      mismatchedPreview ^. #registeredFingerprintMatches `shouldBe` Just False
       started <-
         expectStore
           store
@@ -96,6 +105,17 @@ spec fixture = do
         _ -> False
       inspected <- expectStore store (Operations.inspectGroupRebuild faultedOperations (runId "operations-resume")) >>= shouldBeRight
       inspected ^. #run . #runStatus `shouldBe` RebuildRunFailed
+      foreignCatalog <- expectValid Catalog.validCatalog
+      foreignInspection <-
+        expectStore
+          store
+          ( Operations.inspectGroupRebuild
+              (Operations.projectionCatalogOperations foreignCatalog)
+              (runId "operations-resume")
+          )
+      foreignInspection `shouldSatisfy` \case
+        Left (Operations.CatalogOpsRunCatalogMismatch mismatchedRun _ _) -> mismatchedRun == runId "operations-resume"
+        _ -> False
 
       repaired <- expectValid (operationsCatalog passingVerification)
       resumed <-

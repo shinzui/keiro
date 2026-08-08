@@ -87,7 +87,8 @@ data RebuildPreview = RebuildPreview
 data RegisteredRebuildPreview = RegisteredRebuildPreview
   { reportSchema :: !Text,
     preview :: !RebuildPreview,
-    registeredState :: !(Maybe GroupRebuildMetadata)
+    registeredState :: !(Maybe GroupRebuildMetadata),
+    registeredFingerprintMatches :: !(Maybe Bool)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -101,6 +102,7 @@ data CatalogRunReport = CatalogRunReport
 
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
+  | CatalogOpsRunCatalogMismatch !RebuildRunId !Text !Text
   | CatalogOpsRebuildError !CatalogRebuildError
   deriving stock (Eq, Show, Generic)
 
@@ -168,12 +170,14 @@ previewRegisteredGroupRebuild operations wantedGroup =
     Left err -> pure (Left err)
     Right purePreview -> do
       state <- lookupProjectionRebuildGroup wantedGroup
+      let expectedFingerprint = purePreview ^. #catalogFingerprint
       pure
         ( Right
             RegisteredRebuildPreview
               { reportSchema = "keiro/catalog-registered-rebuild-preview/v1",
                 preview = purePreview,
-                registeredState = state
+                registeredState = state,
+                registeredFingerprintMatches = ((== expectedFingerprint) . (^. #catalogFingerprint)) <$> state
               }
         )
 
@@ -193,7 +197,15 @@ inspectGroupRebuild ::
   ProjectionCatalogOperations ->
   RebuildRunId ->
   Eff es (Either CatalogOpsError CatalogRunReport)
-inspectGroupRebuild _ runId = wrapRun <$> inspectCatalogRebuild runId
+inspectGroupRebuild (ProjectionCatalogOperations catalog) runId =
+  inspectCatalogRebuild runId <&> \case
+    Left err -> Left (CatalogOpsRebuildError err)
+    Right report ->
+      let expected = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog)
+          actual = report ^. #catalogFingerprint
+       in if actual == expected
+            then Right (catalogRunReport report)
+            else Left (CatalogOpsRunCatalogMismatch runId expected actual)
 
 resumeGroupRebuild ::
   (IOE :> es, Store :> es) =>
@@ -216,12 +228,14 @@ abandonGroupRebuild (ProjectionCatalogOperations catalog) runId failure =
 wrapRun :: Either CatalogRebuildError RebuildRunReport -> Either CatalogOpsError CatalogRunReport
 wrapRun = \case
   Left err -> Left (CatalogOpsRebuildError err)
-  Right report ->
-    Right
-      CatalogRunReport
-        { reportSchema = "keiro/catalog-rebuild-run/v1",
-          run = report
-        }
+  Right report -> Right (catalogRunReport report)
+
+catalogRunReport :: RebuildRunReport -> CatalogRunReport
+catalogRunReport report =
+  CatalogRunReport
+    { reportSchema = "keiro/catalog-rebuild-run/v1",
+      run = report
+    }
 
 instance Aeson.ToJSON CatalogInventoryReport where
   toJSON report =
@@ -254,7 +268,8 @@ instance Aeson.ToJSON RegisteredRebuildPreview where
     Aeson.object
       [ "schema" Aeson..= (report ^. #reportSchema),
         "preview" Aeson..= (report ^. #preview),
-        "registeredState" Aeson..= fmap groupMetadataValue (report ^. #registeredState)
+        "registeredState" Aeson..= fmap groupMetadataValue (report ^. #registeredState),
+        "registeredFingerprintMatches" Aeson..= (report ^. #registeredFingerprintMatches)
       ]
 
 instance Aeson.ToJSON CatalogRunReport where
