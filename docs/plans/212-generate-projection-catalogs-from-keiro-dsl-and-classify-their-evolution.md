@@ -51,7 +51,8 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-08-08: Implementation started after plans 209–211 completed and the final runtime
+  constructors, replay contract, and full repository gate were verified.
 
 
 ## Decision Log
