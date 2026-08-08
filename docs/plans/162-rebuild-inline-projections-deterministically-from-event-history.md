@@ -12,6 +12,11 @@ This ExecPlan is a living document. The sections Progress, Surprises & Discoveri
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 If durable project context changes, update or create ADRs in docs/adr/ in the same change.
 
+**Status: Superseded before implementation.** The requirements and uncompleted work in this plan
+are absorbed by [plan 211](211-replay-catalogued-projections-deterministically-and-resumably.md)
+under [MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md).
+This document remains as the historical design record; do not implement its one-read-model API.
+
 
 ## Purpose / Big Picture
 
@@ -33,14 +38,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: make managed inline projection writes participate in the read-model registry
-  fence without weakening command/projection atomicity.
-- [ ] Milestone 2: define replayable inline projections and a bounded, deterministic event-history
-  scan with progress and failure results.
-- [ ] Milestone 3: integrate the full lifecycle with `startRebuild`/promotion/abandonment and
-  generated Keiro DSL read-model modules.
-- [ ] Milestone 4: add concurrency, crash/restart, parity, telemetry, documentation, and full
-  repository validation.
+- [x] 2026-08-07: Transferred the managed inline fence and typed fenced outcome to plan 210; no
+  implementation was performed under this plan.
+- [x] 2026-08-07: Transferred total relevance/decode, fixed-head ordered scanning, progress, and
+  resume to plan 211; no implementation was performed under this plan.
+- [x] 2026-08-07: Replaced the one-`ReadModel` lifecycle with catalogued atomic groups in plans
+  209–211 and transferred DSL generation to plan 212.
+- [x] 2026-08-07: Transferred concurrency, crash/restart, parity, telemetry, documentation, and
+  full validation acceptance to MasterPlan 32.
 
 
 ## Surprises & Discoveries
@@ -57,6 +62,9 @@ implementation. Provide concise evidence.
 - 2026-07-31: Completed plan 101 hardened async rebuild fencing and explicitly documents the empty
   inline list exception. It does not cover a managed inline replay runner, so this is new work in
   the same command/read-model hardening group.
+- 2026-08-07: A one-read-model replay unit cannot represent normalized multi-table ownership,
+  preserve-and-reconcile brownfield targets, or async and inline projections in one atomic group.
+  The broader IR-20 review therefore superseded this plan before implementation.
 
 
 ## Decision Log
@@ -96,6 +104,14 @@ Record every decision made while working on the plan.
   review initiative makes that initiative and this plan harder to track accurately.
   Date: 2026-07-31
 
+- Decision: Supersede this plan with plans 209–212 rather than layer a catalog on top of its
+  proposed one-read-model API.
+  Rationale: The fence, fixed range, total decoder, transactional progress, and resume decisions
+  remain correct, but the lifecycle unit must be a rebuild group and the completion proof must
+  account for every source and adapter. Implementing this plan first would create a public API and
+  migration that the catalog initiative would immediately replace.
+  Date: 2026-08-07
+
 
 ## Outcomes & Retrospective
 
@@ -104,7 +120,10 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Superseded before implementation. MasterPlan 32 retained the useful safety requirements and
+expanded them to typed catalogs, multi-target groups, async projections, preserve/reconcile
+policy, global ordering across sources, and per-adapter completion. No code, migrations, or ADRs
+were produced by this plan.
 
 
 ## Context and Orientation
@@ -275,3 +294,6 @@ decision is recorded in an ADR.
 
 Revision note: Detached this plan from the completed command/coordination hardening MasterPlan so
 it is an independent implementation unit, 2026-07-31.
+
+Revision note: Marked superseded before implementation and transferred all work to MasterPlan 32,
+2026-08-07.

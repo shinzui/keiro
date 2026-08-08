@@ -59,7 +59,8 @@ transitions, lease arbitration) the libraries enforce; where a needed primitive 
 not exist, it is added to the owning library first (EP-1 does exactly this for
 workflow listing, top-level cancellation, and lease release). Second, **schema
 ownership is respected across libraries**: kiroku-domain commands call
-`kiroku-store` functions (`Kiroku.Store.Lifecycle`, `Subscription`, `Causation`),
+`mori://shinzui/kiroku/packages/kiroku-store` functions (`Kiroku.Store.Lifecycle`,
+`Subscription`, `Causation`),
 pgmq-domain commands call `keiro-pgmq`/`pgmq-hs`, and no command reaches into
 another library's tables directly.
 
@@ -79,9 +80,12 @@ the CLI offers one-shot passes like `timer drain-once` and `wf gc run-once` for
 cron-driven operation); merging with the `keiro-dsl` CLI (dev-time spec toolchain,
 different audience and release cadence — deliberately separate binaries); any new
 kiroku/pgmq server-side capability (the CLI composes what the libraries already
-expose; upstream additions are filed upstream); and read-model *rebuild* execution
-beyond the embedding hook (rebuild procedures are application-owned; the hook gives
-them a mount point).
+expose; upstream additions are filed upstream); and defining read-model rebuild
+semantics inside the CLI. Typed catalog validation, fencing, clear/preserve policy,
+history replay, progress, and promotion are owned by
+[MasterPlan 32](32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md);
+this initiative owns the command mount, rendering, safety rails, and embedding
+around that supported library API.
 
 Relationship to MasterPlan 30
 (`docs/masterplans/30-harden-and-scale-the-durable-execution-engine-surfaced-by-the-2026-08-re-audit.md`):
@@ -124,7 +128,8 @@ following the patterns EP-2 froze.
 
 EP-4 (plan 208) makes the tree embeddable (`Keiro.Ops.commandTree` taking an
 application environment with optional registry/audit hooks), ships the
-code-dependent commands (`wf resume-once`, `replay-audit`, a rebuild mount point),
+code-dependent commands (`wf resume-once`, `replay-audit`, and a typed
+projection-catalog rebuild mount when MasterPlan 32 is available),
 demonstrates embedding in `jitsurei`, and rewrites the operational docs around the
 CLI.
 
@@ -193,7 +198,10 @@ and `keiro-dsl/keiro-dsl.cabal`).
 The ops environment type (working name `OpsEnv`: store handle, schema names,
 output mode, force flag) — EP-2 defines it in `Keiro.Ops.Env`; EP-3 consumes it
 unchanged; EP-4 *extends* it with the optional application hooks (registry, audit
-targets, rebuild actions). EP-4 owns that extension; EP-3 must not pre-empt it.
+targets, and `ProjectionCatalogOps`). EP-4 owns that extension; EP-3 must not
+pre-empt it. The rebuild hook is operator-neutral and comes from
+`Keiro.Projection.Catalog.Operations`; no `Map Text (OpsEnv -> IO ExitCode)` or
+CLI-side target inventory is permitted.
 
 The command-tree module layout (`Keiro.Ops.Cli` root; one module per domain,
 `Keiro.Ops.Workflow`, `Keiro.Ops.Timer`, then EP-3's `Keiro.Ops.Outbox`, `.Inbox`,
@@ -231,7 +239,12 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-08-07: The projection ownership review found that a free-form application
+  rebuild map would preserve duplicate target/projection inventories and could not
+  render an authoritative destructive preview. MasterPlan 32 now owns a validated
+  catalog and supported rebuild runner; EP-4 mounts that adapter when available.
+  At this date `keiro-ops` does not yet exist, so the integration order is explicit
+  rather than assumed.
 
 
 ## Decision Log
@@ -267,7 +280,20 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   audiences, failure modes, and release cadences.
   Date: 2026-08-06
 
+- Decision: Replace EP-4's free-form rebuild action map with the typed
+  `ProjectionCatalogOps` adapter from MasterPlan 32.
+  Rationale: Applications continue to own schema and handlers, but catalog
+  membership, reset and replay policy, fixed-head completion, and safe lifecycle
+  are Keiro runtime invariants. The ops package should present those invariants,
+  not provide a bypass. If MasterPlan 31 reaches EP-4 first, it omits the rebuild
+  command until the adapter lands.
+  Date: 2026-08-07
+
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+
+Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
+operations and removed the free-form rebuild-map contract, 2026-08-07.

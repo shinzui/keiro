@@ -21,9 +21,9 @@ The standalone `keiro-ops` binary can only ever cover database-only operations,
 because keiro is a library: resuming a workflow needs the application's
 `WorkflowRegistry` (a name-to-Haskell-code map that no external binary can
 possess), replay auditing needs the candidate binary's own codecs and streams
-(`Keiro.ReplayAudit` is *designed* to run inside it), and read-model rebuilds are
-application-owned procedures. This plan closes that gap the way the MasterPlan's
-design dictates: the command tree becomes an embeddable library surface, so an
+(`Keiro.ReplayAudit` is *designed* to run inside it), and read-model rebuilds need
+the application's validated projection catalog. This plan closes that gap the way
+the MasterPlan's design dictates: the command tree becomes an embeddable library surface, so an
 application mounts the entire console into its own executable —
 `yourapp ops wf resume-once …`, `yourapp ops replay-audit …`, `yourapp ops rebuild
 <model>` — gaining the code-dependent commands next to every database-only one,
@@ -38,7 +38,7 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
 ## Progress
 
 - [ ] Embedding surface: `AppHooks`, `opsCommandTree`, standalone binary refactored onto it.
-- [ ] Code-dependent commands: `wf resume-once`, `replay-audit`, `rebuild` mount point.
+- [ ] Code-dependent commands: `wf resume-once`, `replay-audit`, catalog-backed `rebuild` mount.
 - [ ] `jitsurei` embeds the console; transcript captured.
 - [ ] Docs flip: operations.md, durable-workflows guide/reference, roadmap.md, production-status.md, README.
 - [ ] `cabal test keiro-ops-test` and full repo `just verify` green.
@@ -51,12 +51,21 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
 
 ## Decision Log
 
-- Decision: The rebuild command is a *mount point* (`Map Text (OpsEnv -> IO
-  ExitCode)` supplied by the application), not a keiro-implemented procedure.
-  Rationale: Read-model rebuild strategies are application-owned by design
-  (`docs/user/roadmap.md` Phase 4 lists the migration guide as such); the CLI
-  standardizes discovery (`rebuild --list`) and invocation, nothing more.
-  Date: 2026-08-06
+- Decision: The rebuild command mounts `ProjectionCatalogOps` from MasterPlan 32 rather than an
+  application-supplied `Map Text (OpsEnv -> IO ExitCode)`.
+  Rationale: Applications still own schema, handlers, and verification, but Keiro's validated
+  catalog and replay runner own safe discovery, fencing, clear/preserve policy, fixed-head replay,
+  progress, and promotion. A free-form map would retain a second rebuild inventory and bypass the
+  command's ability to render an honest preview. If this plan lands before plans 209–213, the
+  rebuild command remains absent until that typed hook is available; do not ship the map as a
+  temporary public contract.
+  Date: 2026-08-07
+
+- Decision: Retain command parsing, rendering, preview/`--force`, JSON, exit codes, and embedding
+  in `keiro-ops`; keep `ProjectionCatalogOps` operator-neutral in `keiro`.
+  Rationale: Runtime rebuild invariants belong with the runtime, while presentation and operator
+  policy belong with the operations package. This preserves the MasterPlan's no-invented-SQL rule.
+  Date: 2026-08-07
 
 
 ## Outcomes & Retrospective
@@ -76,7 +85,8 @@ returns a `ResumeSummary` (discovered/resumed/completed/stillSuspended/
 unknownName/failed/transientErrors/leaseSkipped) — already the perfect one-shot
 command backend. The registry's effect row must be pinned for embedding the same
 way `runWorkflowResumeWorkerPush` pins it: `'[Store, Error StoreError, IOE]`
-interpreted by `Kiroku.Store.Effect.runStoreIO` (see
+interpreted by `Kiroku.Store.Effect.runStoreIO` from
+`mori://shinzui/kiroku/packages/kiroku-store` (see
 `keiro/src/Keiro/Workflow/Resume.hs`).
 
 Replay audit: `Keiro.ReplayAudit` exports `auditStream`/`auditStreams`/
@@ -86,11 +96,12 @@ binary and exit nonzero on drift) is documented in
 `docs/user/replay-safety.md`. The embedding hook carries the application's audit
 target configuration.
 
-Rebuild: `docs/user/read-models-and-projections.md` and the rebuild scaffolding
-in `keiro/src/Keiro/ReadModel/` describe application-owned rebuild flows (the
-test suite exercises one at `keiro/test/Main.hs` "rebuild repopulates the
-projection table through the supported workflow"). The CLI ships invocation
-plumbing only (Decision Log).
+Rebuild: [MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md)
+and [plan 213](213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md)
+replace independent application lists with `ProjectionCatalogOps`. The application still supplies
+the validated catalog, target schema, live/replay handlers, and verification hooks; Keiro supplies
+the safe operation. This plan mounts and renders that adapter and does not inspect application
+tables or invent SQL.
 
 Docs to flip at the end: `docs/user/operations.md` (the runbook — §Timers
 stuck-row runbook, §Durable Workflows operational tasks, §Stream Truncation,
@@ -125,7 +136,7 @@ In `keiro-ops`, add `Keiro.Ops.Embed`:
 data AppHooks = AppHooks
   { registry :: !(Maybe (WorkflowRegistry '[Store, Error StoreError, IOE], WorkflowResumeOptions)),
     auditTargets :: !(Maybe OpsAuditConfig),   -- streams/categories + budget for Keiro.ReplayAudit
-    rebuilds :: !(Map Text (OpsEnv -> IO ExitCode))
+    projectionCatalog :: !(Maybe (ProjectionCatalogOps '[Store, Error StoreError, IOE]))
   }
 
 emptyAppHooks :: AppHooks
@@ -148,17 +159,21 @@ handshake like any mutation: resume executes application code, so it requires
 `--force` if drift was detected). `replay-audit [--target …|--full]
 [--budget …]` — wrap `auditTargets`/`auditStreams` + `renderAuditReport`,
 exiting via `auditExitCode` so CI can use the embedded command as the deploy
-gate directly. `rebuild --list` / `rebuild --force <name>` — dispatch into the
-`rebuilds` map.
+gate directly. `rebuild --list`, preview/start, status, resume, and abandon render and invoke the
+mounted `ProjectionCatalogOps`. The exact subcommand spelling follows the frozen EP-2 command
+conventions. List and preview are read-only. Start/resume/abandon require the schema handshake,
+preview, and `--force`; the adapter, not the CLI, resolves groups, targets, sources, and handlers.
 
 ### Milestone 3 — jitsurei embedding
 
 Add an `ops` subcommand to `jitsurei-demo` (or a dedicated `jitsurei-ops`
 executable if the demo's argument surface fights optparse composition — decide
-and log): mount `opsCommandTree` with jitsurei's real registry and one example
-rebuild hook. Acceptance transcript: run a jitsurei workflow to suspension with
+and log): mount `opsCommandTree` with jitsurei's real registry and validated projection catalog.
+Acceptance transcript: run a jitsurei workflow to suspension with
 the demo, then `jitsurei-demo ops wf list`, `… ops wf resume-once`, `… ops
-replay-audit --target <its stream>`, each also with `--json`.
+replay-audit --target <its stream>`, and catalog list/preview/rebuild/status, each also with
+`--json`. Plan 213 owns the catalog fixture and its brownfield/multi-target assertions; this plan
+owns command mounting and rendering.
 
 ### Milestone 4 — the documentation flip
 
@@ -178,11 +193,11 @@ per the repo's changelog convention (the package likely warrants its own
 
 Handler-level: `opsCommandTree emptyAppHooks` hides the three commands;
 mounting a registry surfaces `wf resume-once`, and a pass over a seeded
-suspended-then-signalled workflow reports `completed = 1`; `rebuild --list`
-renders the mounted names and `rebuild` without `--force` previews only;
+suspended-then-signalled workflow reports `completed = 1`; mounting a validated catalog surfaces
+only its group identities, and a rebuild without `--force` previews without creating a run;
 `replay-audit` against a seeded stream returns exit 0 and, with a deliberately
-broken decoder in a test-only registry, nonzero. The jitsurei transcript is
-manual acceptance recorded in Outcomes, not CI.
+broken decoder in a test-only registry, nonzero. Text and JSON reports are rendered from the same
+operator-neutral values. The jitsurei transcript supplements automated assertions in plan 213.
 
 
 ## Concrete Steps
@@ -215,7 +230,9 @@ the standalone binary, knows which operations require embedding and how to mount
 the tree (copying jitsurei's example), and finds every runbook procedure as a
 command. The initiative-level acceptance from MasterPlan 31 — "the runbook is
 the CLI" — is checked here: every procedure in the pre-change operations.md maps
-to a command or is explicitly documented as application-owned.
+to a command or is explicitly documented as application-owned. Rebuild acceptance additionally
+requires no parallel name-to-action map, read-only list/preview, `--force` on mutations, stable JSON,
+and exact agreement with the mounted catalog's groups and plan-213 run reports.
 
 
 ## Idempotence and Recovery
@@ -229,7 +246,15 @@ reversible; coordinate with MasterPlan 30's plan 204 on shared files as noted.
 ## Interfaces and Dependencies
 
 End-state additions: `Keiro.Ops.Embed.{AppHooks, emptyAppHooks, opsCommandTree,
-OpsAuditConfig}`; `jitsurei` gains an ops mount and a dependency on `keiro-ops`.
+OpsAuditConfig}`; `AppHooks` optionally mounts
+`Keiro.Projection.Catalog.Operations.ProjectionCatalogOps`; `jitsurei` gains an ops mount and a
+dependency on `keiro-ops`.
 This plan owns the `OpsEnv` extension point (MasterPlan 31 Integration Points);
 plans 206/207's modules are consumed unchanged. Soft dependency on plan 207 for
-the docs flip only — the embedding mechanics need nothing from it.
+the docs flip only — the embedding mechanics need nothing from it. The projection rebuild command
+has an external integration dependency on MasterPlan 32 plans 211 and 213; when those have not
+landed, omit the rebuild hook/command rather than publish a free-form substitute.
+
+
+Revision note: Replaced the proposed free-form rebuild map with the validated projection-catalog
+operations adapter coordinated by MasterPlan 32, 2026-08-07.

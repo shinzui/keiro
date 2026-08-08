@@ -1,7 +1,10 @@
 # Bundle Update Log
 
-## 2026-08-07
-* **Addition**: IR-20 requests one typed runtime catalog for projection ownership, physical read-model targets, registration, and rebuild adapters, with structural missing/duplicate-owner validation and explicit brownfield-safe reconcile policy.
+## 2026-08-08
+* **Acceptance and planning**: IR-20 requests one typed runtime catalog for projection ownership,
+physical read-model targets, registration, and rebuild adapters, with structural
+missing/duplicate-owner validation and explicit brownfield-safe reconcile policy. MasterPlan 32
+and plans 209–213 define the implementation; Kiroku IR-1 is a non-blocking bounded-read companion.
 
 ## 2026-08-05
 * **Implemented**: Close IR-19 after Plan 198 ships role-bearing sidecar names, explicit lossless migration, and a forward-compatible conformance ledger.
