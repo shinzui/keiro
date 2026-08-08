@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate extension-policy generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate extension-policy generated-name-policy conformance-corpus-policy
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -45,6 +45,15 @@ conformance-corpus-policy:
 [group('docs')]
 research-validate:
     okf validate docs/research --strict --profile docs/research/profile.dhall --profile-enforce --log-enforce
+
+# Not `--strict`: the records are machine-authored and carry no `reviews` family,
+# which `--strict` would report. Enforces the shared coordination.capabilities
+# profile and the log for the "capabilities" bundle registered in mori.dhall, and
+# checks that every `requires` is mirrored as a graph edge.
+[group('docs')]
+capabilities-validate:
+    okf validate docs/capabilities --profile docs/capabilities/profile.dhall --profile-enforce --log-enforce
+    okf graph docs/capabilities
 
 [group('haskell')]
 haskell-build:
