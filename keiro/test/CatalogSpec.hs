@@ -137,6 +137,7 @@ spec = describe "Keiro.Projection.Catalog" $ do
           RebuildGroupDeclaration
             { rebuildGroupId = otherGroupId,
               orderedTargets = [auditTargetId],
+              verificationHooks = [],
               claimSite = site "catalog:other-group"
             }
         crossGroupCatalog =
@@ -167,6 +168,25 @@ spec = describe "Keiro.Projection.Catalog" $ do
     _ <- expectValid categoryCatalog
     diagnosticsFor overlappingCatalog
       `shouldSatisfy` any ((== AmbiguousSourceOrdering) . (^. #diagnosticCode))
+
+  it "rejects duplicate and malformed rebuild verification identities" $ do
+    let verification identity version =
+          RebuildVerification
+            { verificationId = identity,
+              verificationVersion = version,
+              verifyRebuild = pure (Right ())
+            }
+        withHooks hooks =
+          validCatalog
+            { rebuildGroups =
+                [validGroup {verificationHooks = hooks}]
+            }
+        duplicate = diagnosticsFor (withHooks [verification "row-count" "v1", verification "row-count" "v2"])
+        malformed = diagnosticsFor (withHooks [verification " row-count" ""])
+    duplicate
+      `shouldSatisfy` any ((== DuplicateRebuildVerificationId) . (^. #diagnosticCode))
+    malformed
+      `shouldSatisfy` any ((== InvalidRebuildVerificationIdentity) . (^. #diagnosticCode))
 
   it "keeps baseline removal comparison separate from single-catalog validity" $ do
     previous <- expectValid validCatalog
@@ -350,6 +370,7 @@ validGroup =
   RebuildGroupDeclaration
     { rebuildGroupId = mainGroupId,
       orderedTargets = [counterTargetId, auditTargetId],
+      verificationHooks = [],
       claimSite = site "catalog:group"
     }
 

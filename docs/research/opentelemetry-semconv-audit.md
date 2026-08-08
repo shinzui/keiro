@@ -604,6 +604,14 @@ generated module
   Recorded on the position-wait path when a read gives up before the projection
   catches up (`recordProjectionWaitTimeouts`). Description: "Position-wait calls
   that timed out before the projection caught up." Semconv alignment: none.
+- **`keiro.projection.rebuild.starts`**, **`.resumes`**, **`.pages`**,
+  **`.events`**, **`.failures`**, and **`.promotions`** are monotonic `Int64`
+  counters recorded by the catalog replay runner at the named lifecycle or
+  commit boundary. Units are `{run}`, `{run}`, `{page}`, `{event}`, `{failure}`,
+  and `{run}` respectively. **`keiro.projection.rebuild.page.duration`** is a
+  millisecond `Double` histogram covering one page read plus its atomic target
+  and progress commit. No instrument carries payloads or secrets. Semconv
+  alignment: none; fixed-head event-sourcing rebuilds have no standard metric.
 
 ### Command and snapshot
 
@@ -679,6 +687,13 @@ options.
 | keiro.timer.stuck                | {timer}    | Gauge     | timer worker, per poll pass (after EP-34) | none                                                |
 | keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
 | keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
+| keiro.projection.rebuild.starts  | {run}      | Counter   | catalog runner, after durable start       | none                                                |
+| keiro.projection.rebuild.resumes | {run}      | Counter   | catalog runner, after accepted resume     | none                                                |
+| keiro.projection.rebuild.pages   | {page}     | Counter   | catalog runner, after chunk commit        | none                                                |
+| keiro.projection.rebuild.events  | {event}    | Counter   | catalog runner, after chunk commit        | none                                                |
+| keiro.projection.rebuild.failures| {failure}  | Counter   | catalog runner, on structured failure     | none                                                |
+| keiro.projection.rebuild.promotions| {run}    | Counter   | catalog runner, after atomic promotion    | none                                                |
+| keiro.projection.rebuild.page.duration| ms    | Histogram | catalog runner, page read and commit      | none                                                |
 | keiro.snapshot.apply.divergence  | {failure}  | Counter   | command epilogue, on replay divergence    | none                                                |
 | keiro.snapshot.seed.divergence   | {failure}  | Counter   | sampled hydration verifier, on divergence | none                                                |
 | keiro.workflow.steps.executed    | {step}     | Counter   | workflow handler, on step miss            | none                                                |

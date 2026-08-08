@@ -60,6 +60,20 @@ module Keiro.ReadModel.Rebuild
     finishGroupRebuild,
     abandonGroupRebuild,
 
+    -- * Catalog history runner
+    RebuildOptions (..),
+    defaultRebuildOptions,
+    CatalogRebuildError (..),
+    RebuildRunStatus (..),
+    RebuildFailureEvidence (..),
+    RebuildSourceProgress (..),
+    RebuildAdapterProgress (..),
+    RebuildVerificationProgress (..),
+    RebuildRunReport (..),
+    startCatalogRebuild,
+    resumeCatalogRebuild,
+    inspectCatalogRebuild,
+
     -- * Unmanaged single-read-model compatibility
     RebuildError (..),
     startRebuild,
@@ -79,6 +93,7 @@ import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
+import Keiro.ReadModel.Rebuild.Runner
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))

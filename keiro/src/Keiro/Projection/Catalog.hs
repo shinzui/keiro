@@ -45,6 +45,7 @@ module Keiro.Projection.Catalog
     QualifiedTable (..),
     TargetResetPolicy (..),
     TargetDeclaration (..),
+    RebuildVerification (..),
     RebuildGroupDeclaration (..),
     SourceScope (..),
     SourceDeclaration (..),
@@ -91,6 +92,12 @@ module Keiro.Projection.Catalog
     CatalogRegistration (..),
     AsyncProjectionRegistration (..),
     ReplayAdapterMetadata (..),
+    CatalogReplayAdapter,
+    catalogReplayAdapterProjectionId,
+    catalogReplayAdapterSourceId,
+    catalogReplayAdapterGroupId,
+    catalogReplayAdapterOrder,
+    runCatalogReplayAdapter,
     typedInlineProjections,
     typedProjectionRebuildGroups,
     asyncProjectionRebuildGroup,
@@ -99,6 +106,8 @@ module Keiro.Projection.Catalog
     catalogRegistrations,
     asyncProjectionRegistrations,
     replayAdapterMetadata,
+    catalogReplayAdapters,
+    catalogRebuildVerifications,
     renderCatalogInventory,
     compareCatalogBaseline,
 
@@ -240,15 +249,26 @@ data TargetDeclaration = TargetDeclaration
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | An application-owned, read-only proof run after replay and before
+-- promotion. Identity and version are durable parts of the catalog contract;
+-- the transaction closure is deliberately excluded from rendered inventory.
+data RebuildVerification = RebuildVerification
+  { verificationId :: !Text,
+    verificationVersion :: !Text,
+    verifyRebuild :: !(Tx.Transaction (Either Text ()))
+  }
+  deriving stock (Generic)
+
 -- | Targets are listed in their declared deterministic preparation order.
 -- Validation rejects an empty list, duplicates, unknown targets, and a list
 -- inconsistent with target dependencies.
 data RebuildGroupDeclaration = RebuildGroupDeclaration
   { rebuildGroupId :: !RebuildGroupId,
     orderedTargets :: ![TargetId],
+    verificationHooks :: ![RebuildVerification],
     claimSite :: !ClaimSite
   }
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Generic)
 
 data SourceScope
   = AllStreams
@@ -425,6 +445,8 @@ data CatalogDiagnosticCode
   | ClearTargetRequiresReplayableOwner
   | MixedResetGroupRequiresReplayAdapter
   | AmbiguousSourceOrdering
+  | DuplicateRebuildVerificationId
+  | InvalidRebuildVerificationIdentity
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 diagnosticCodeText :: CatalogDiagnosticCode -> Text
@@ -460,6 +482,8 @@ diagnosticCodeText = \case
   ClearTargetRequiresReplayableOwner -> "catalog.clear-target-requires-replayable-owner"
   MixedResetGroupRequiresReplayAdapter -> "catalog.mixed-reset-group-requires-replay-adapter"
   AmbiguousSourceOrdering -> "catalog.ambiguous-source-ordering"
+  DuplicateRebuildVerificationId -> "catalog.duplicate-rebuild-verification-id"
+  InvalidRebuildVerificationIdentity -> "catalog.invalid-rebuild-verification-identity"
 
 data CatalogDiagnostic = CatalogDiagnostic
   { diagnosticCode :: !CatalogDiagnosticCode,
@@ -487,7 +511,8 @@ data InventoryTarget = InventoryTarget
 
 data InventoryGroup = InventoryGroup
   { rebuildGroupId :: !RebuildGroupId,
-    orderedTargets :: ![TargetId]
+    orderedTargets :: ![TargetId],
+    verifications :: ![(Text, Text)]
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -593,6 +618,44 @@ data ReplayAdapterMetadata = ReplayAdapterMetadata
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | One existential replay closure in deterministic catalog order. The event
+-- type stays sealed inside this value, so the runner can route raw history
+-- without weakening the typed live projection API.
+data CatalogReplayAdapter
+  = forall event.
+    CatalogReplayAdapter
+      !ProjectionId
+      !SourceId
+      !RebuildGroupId
+      !Int
+      !(ReplayAdapter event)
+
+catalogReplayAdapterProjectionId :: CatalogReplayAdapter -> ProjectionId
+catalogReplayAdapterProjectionId (CatalogReplayAdapter projectionId _ _ _ _) = projectionId
+
+catalogReplayAdapterSourceId :: CatalogReplayAdapter -> SourceId
+catalogReplayAdapterSourceId (CatalogReplayAdapter _ sourceId _ _ _) = sourceId
+
+catalogReplayAdapterGroupId :: CatalogReplayAdapter -> RebuildGroupId
+catalogReplayAdapterGroupId (CatalogReplayAdapter _ _ groupId _ _) = groupId
+
+catalogReplayAdapterOrder :: CatalogReplayAdapter -> Int
+catalogReplayAdapterOrder (CatalogReplayAdapter _ _ _ adapterOrder _) = adapterOrder
+
+-- | Evaluate a raw event through one total adapter. @Right False@ is an
+-- irrelevant event; @Right True@ means the replay transaction applied it.
+runCatalogReplayAdapter ::
+  CatalogReplayAdapter ->
+  RecordedEvent ->
+  Tx.Transaction (Either ReplayDecodeError Bool)
+runCatalogReplayAdapter (CatalogReplayAdapter _ _ _ _ adapter) recorded =
+  case (adapter ^. #decodeForReplay) recorded of
+    ReplayIrrelevant -> pure (Right False)
+    ReplayRelevant event -> do
+      (adapter ^. #applyForReplay) event recorded
+      pure (Right True)
+    ReplayDecodeFailure decodeError -> pure (Left decodeError)
+
 data ProjectionFacts = ProjectionFacts
   { factProjectionId :: !ProjectionId,
     factSourceId :: !SourceId,
@@ -643,6 +706,7 @@ validateProjectionCatalog catalog =
             <> groupDiagnostics catalog facts queryFacts
             <> replayDiagnostics catalog facts
             <> sourceOrderingDiagnostics catalog facts
+            <> verificationDiagnostics catalog
         )
 
 -- | Validate and invoke a consumer only on success. This is the pure boundary
@@ -807,6 +871,45 @@ replayAdapterMetadata validated =
           replayable = factReplayable fact
         }
     | fact <- validated ^. #projectionFacts
+    ]
+
+-- | Replayable definitions for one group, preserving projection-set and
+-- definition declaration order. Live-only definitions are intentionally
+-- absent from the replay fleet.
+catalogReplayAdapters ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  [CatalogReplayAdapter]
+catalogReplayAdapters validated wantedGroup =
+  List.zipWith assignOrder [0 ..] unordered
+  where
+    unordered =
+      concatMap adaptersForSet (validated ^. #originalCatalog . #projectionSets)
+
+    adaptersForSet (SomeProjectionSet projectionSet) =
+      [ CatalogReplayAdapter
+          (definition ^. #projectionId)
+          (projectionSet ^. #projectionSource)
+          (definition ^. #rebuildGroup)
+          0
+          adapter
+      | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+        definition ^. #rebuildGroup == wantedGroup,
+        Replayable adapter <- [definition ^. #replayPolicy]
+      ]
+
+    assignOrder adapterOrder (CatalogReplayAdapter projectionId sourceId groupId _ adapter) =
+      CatalogReplayAdapter projectionId sourceId groupId adapterOrder adapter
+
+catalogRebuildVerifications ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  [RebuildVerification]
+catalogRebuildVerifications validated wantedGroup =
+  concat
+    [ group ^. #verificationHooks
+    | group <- validated ^. #originalCatalog . #rebuildGroups,
+      group ^. #rebuildGroupId == wantedGroup
     ]
 
 renderCatalogInventory :: ValidatedProjectionCatalog -> Text
@@ -1162,6 +1265,32 @@ sourceOrderingDiagnostics catalog facts =
     isCategory (CategorySource _) = True
     isCategory AllStreams = False
 
+verificationDiagnostics :: ProjectionCatalog -> [CatalogDiagnostic]
+verificationDiagnostics catalog = concatMap verificationGroupDiagnostics (catalog ^. #rebuildGroups)
+  where
+    verificationGroupDiagnostics group = duplicateIds group <> invalidIdentities group
+
+    duplicateIds group =
+      [ diagnostic
+          DuplicateRebuildVerificationId
+          verificationId
+          [group ^. #claimSite]
+          "verification identities must be unique within a rebuild group"
+      | verificationId <- duplicates (map (^. #verificationId) (group ^. #verificationHooks))
+      ]
+
+    invalidIdentities group =
+      [ diagnostic
+          InvalidRebuildVerificationIdentity
+          (hook ^. #verificationId)
+          [group ^. #claimSite]
+          "verification identity and version must be non-empty and have no surrounding whitespace"
+      | hook <- group ^. #verificationHooks,
+        invalid (hook ^. #verificationId) || invalid (hook ^. #verificationVersion)
+      ]
+
+    invalid value = Text.null value || Text.strip value /= value
+
 collectProjectionFacts :: [SomeProjectionSet] -> [ProjectionFacts]
 collectProjectionFacts projectionSetEntries =
   [ ProjectionFacts
@@ -1227,7 +1356,14 @@ buildInventory catalog facts queryFacts =
           ],
       inventoryGroups =
         List.sort
-          [ InventoryGroup (group ^. #rebuildGroupId) (group ^. #orderedTargets)
+          [ InventoryGroup
+              { rebuildGroupId = group ^. #rebuildGroupId,
+                orderedTargets = group ^. #orderedTargets,
+                verifications =
+                  [ (hook ^. #verificationId, hook ^. #verificationVersion)
+                  | hook <- group ^. #verificationHooks
+                  ]
+              }
           | group <- catalog ^. #rebuildGroups
           ],
       inventoryProjections = List.sort (map inventoryProjection facts),
@@ -1327,7 +1463,12 @@ renderInventory inventory =
         "|"
         [ "group",
           rebuildGroupIdText (group ^. #rebuildGroupId),
-          commaSeparated targetIdText (group ^. #orderedTargets)
+          commaSeparated targetIdText (group ^. #orderedTargets),
+          Text.intercalate
+            ","
+            [ verificationId <> "@" <> verificationVersion
+            | (verificationId, verificationVersion) <- group ^. #verifications
+            ]
         ]
     renderProjection :: InventoryProjection -> Text
     renderProjection projection =

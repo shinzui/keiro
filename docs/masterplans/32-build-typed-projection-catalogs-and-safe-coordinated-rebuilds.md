@@ -123,7 +123,7 @@ plans must amend it if implementation changes the contract.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | Complete |
 | 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Complete |
-| 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | In Progress |
+| 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Complete |
 | 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Not Started |
 | 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | Not Started |
 
@@ -230,8 +230,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: deterministic closed-world validation, fingerprints, inventories, and live mutation tests.
 - [x] EP-2: group registry and atomic clear/preserve preparation with derived dedup/checkpoint resets.
 - [x] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
-- [ ] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
-- [ ] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.
+- [x] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
+- [x] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.
 - [ ] EP-4: checked DSL notation and generated runtime catalog/source views compile in conformance.
 - [ ] EP-4: diff, replay-impact, scaffold-ledger, and workspace evolution classifications are complete.
 - [ ] EP-5: hand-written and generated adoption examples, compatibility migration guide, and docs.
@@ -267,6 +267,12 @@ interactions between child plans. Provide concise evidence.
   One-second held-writer fixtures showed preparation beginning 200 ms later
   waits beyond 500 ms, while later writers return typed fenced outcomes without
   append, dedup, checkpoint, or target changes.
+- 2026-08-08: Kiroku 0.3.1.0 remains the current Hackage/upstream release, so EP-3 shipped against
+  the existing `>=0.3 && <0.4` bound. Its released exclusive-cursor reads were sufficient behind
+  one compatibility layer; the Kiroku IR remains an optimization rather than a prerequisite.
+- 2026-08-08: Atomic page/progress rollback and committed-page resume were demonstrated without a
+  process-kill surface: a deterministic third-event decode failure exercises pre-commit rollback,
+  while a verification failure exercises resume after every page committed.
 
 
 ## Decision Log
@@ -331,6 +337,12 @@ plan.
   catalog initiative.
   Date: 2026-08-08
 
+- Decision: Version the replay contract independently as `keiro/projection-replay/v1` and keep
+  page size operational.
+  Rationale: The catalog fingerprint covers the whole read-side inventory, while the runner format,
+  adapter order, and verifier versions govern resume. Transaction chunk size may change safely.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -339,4 +351,9 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 through EP-3 now provide the complete hand-written runtime: one validated catalog feeds live
+writers, atomic group preparation, fixed-head replay, exact resume, application verification, and
+proof-gated atomic promotion. The principal lesson is that source exhaustion and adapter
+evaluation are separate evidence: an all-irrelevant history can be complete with zero applies,
+while one arbitrary dedup row proves neither. EP-4 and EP-5 remain to generate and adopt this
+runtime contract.

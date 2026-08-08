@@ -92,6 +92,7 @@ library
     Keiro.DeterministicId
     Keiro.Projection.Types
     Keiro.ReadModel.Rebuild.Group
+    Keiro.ReadModel.Rebuild.Runner
     Keiro.ReplayDigest
 
   reexported-modules:
@@ -153,6 +154,7 @@ test-suite keiro-test
   other-modules:
     CatalogSpec
     GroupRebuildSpec
+    ProjectionReplaySpec
 
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:

@@ -370,6 +370,7 @@ import OpenTelemetry.Trace.Core
     SpanKind,
     getSpanContext,
   )
+import ProjectionReplaySpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -386,6 +387,7 @@ main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogSpec.spec
   GroupRebuildSpec.spec fixture
+  ProjectionReplaySpec.spec fixture
 
   describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
     it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
@@ -12722,6 +12724,7 @@ catalogInlineProjectionCatalog =
         [ RebuildGroupDeclaration
             { rebuildGroupId = catalogInlineGroupId,
               orderedTargets = [catalogInlineTargetId],
+              verificationHooks = [],
               claimSite = catalogClaimSite "test:catalog-inline-group"
             }
         ],

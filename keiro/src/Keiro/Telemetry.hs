@@ -84,6 +84,13 @@ module Keiro.Telemetry
     keiroTimerRequeuedName,
     keiroProjectionLagName,
     keiroProjectionWaitTimeoutsName,
+    keiroProjectionRebuildStartsName,
+    keiroProjectionRebuildResumesName,
+    keiroProjectionRebuildPagesName,
+    keiroProjectionRebuildEventsName,
+    keiroProjectionRebuildFailuresName,
+    keiroProjectionRebuildPromotionsName,
+    keiroProjectionRebuildPageDurationName,
     keiroCommandConflictsName,
     keiroCommandRetriesName,
     keiroCommandDuplicatesName,
@@ -127,6 +134,13 @@ module Keiro.Telemetry
     recordTimerRequeued,
     recordProjectionLag,
     recordProjectionWaitTimeouts,
+    recordProjectionRebuildStarts,
+    recordProjectionRebuildResumes,
+    recordProjectionRebuildPages,
+    recordProjectionRebuildEvents,
+    recordProjectionRebuildFailures,
+    recordProjectionRebuildPromotions,
+    recordProjectionRebuildPageDuration,
     recordCommandConflicts,
     recordCommandRetries,
     recordCommandDuplicates,
@@ -580,6 +594,27 @@ keiroProjectionLagName = "keiro.projection.lag"
 keiroProjectionWaitTimeoutsName :: Text
 keiroProjectionWaitTimeoutsName = "keiro.projection.wait.timeouts"
 
+keiroProjectionRebuildStartsName :: Text
+keiroProjectionRebuildStartsName = "keiro.projection.rebuild.starts"
+
+keiroProjectionRebuildResumesName :: Text
+keiroProjectionRebuildResumesName = "keiro.projection.rebuild.resumes"
+
+keiroProjectionRebuildPagesName :: Text
+keiroProjectionRebuildPagesName = "keiro.projection.rebuild.pages"
+
+keiroProjectionRebuildEventsName :: Text
+keiroProjectionRebuildEventsName = "keiro.projection.rebuild.events"
+
+keiroProjectionRebuildFailuresName :: Text
+keiroProjectionRebuildFailuresName = "keiro.projection.rebuild.failures"
+
+keiroProjectionRebuildPromotionsName :: Text
+keiroProjectionRebuildPromotionsName = "keiro.projection.rebuild.promotions"
+
+keiroProjectionRebuildPageDurationName :: Text
+keiroProjectionRebuildPageDurationName = "keiro.projection.rebuild.page.duration"
+
 keiroCommandConflictsName :: Text
 keiroCommandConflictsName = "keiro.command.conflicts"
 
@@ -680,6 +715,13 @@ data KeiroMetrics = KeiroMetrics
     timerRequeued :: Counter Int64,
     projectionLag :: Gauge Int64,
     projectionWaitTimeouts :: Counter Int64,
+    projectionRebuildStarts :: Counter Int64,
+    projectionRebuildResumes :: Counter Int64,
+    projectionRebuildPages :: Counter Int64,
+    projectionRebuildEvents :: Counter Int64,
+    projectionRebuildFailures :: Counter Int64,
+    projectionRebuildPromotions :: Counter Int64,
+    projectionRebuildPageDuration :: Histogram,
     commandConflicts :: Counter Int64,
     commandRetries :: Counter Int64,
     commandDuplicates :: Counter Int64,
@@ -731,6 +773,13 @@ newKeiroMetrics meter = liftIO $ do
   timerRequeued' <- counterI64 keiroTimerRequeuedName "{timer}" "Timers moved from firing back to scheduled after a stale claim."
   projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
   projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+  projectionRebuildStarts' <- counterI64 keiroProjectionRebuildStartsName "{run}" "Catalog projection rebuild runs started."
+  projectionRebuildResumes' <- counterI64 keiroProjectionRebuildResumesName "{run}" "Catalog projection rebuild invocations resumed."
+  projectionRebuildPages' <- counterI64 keiroProjectionRebuildPagesName "{page}" "Catalog replay chunks committed."
+  projectionRebuildEvents' <- counterI64 keiroProjectionRebuildEventsName "{event}" "History events committed through catalog replay chunks."
+  projectionRebuildFailures' <- counterI64 keiroProjectionRebuildFailuresName "{failure}" "Catalog replay decode, invariant, or verification failures."
+  projectionRebuildPromotions' <- counterI64 keiroProjectionRebuildPromotionsName "{run}" "Catalog rebuild groups promoted after completion proof."
+  projectionRebuildPageDuration' <- histogram keiroProjectionRebuildPageDurationName "ms" "Elapsed time to read and commit one replay chunk."
   commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
   commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
   commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
@@ -774,6 +823,13 @@ newKeiroMetrics meter = liftIO $ do
         timerRequeued = timerRequeued',
         projectionLag = projectionLag',
         projectionWaitTimeouts = projectionWaitTimeouts',
+        projectionRebuildStarts = projectionRebuildStarts',
+        projectionRebuildResumes = projectionRebuildResumes',
+        projectionRebuildPages = projectionRebuildPages',
+        projectionRebuildEvents = projectionRebuildEvents',
+        projectionRebuildFailures = projectionRebuildFailures',
+        projectionRebuildPromotions = projectionRebuildPromotions',
+        projectionRebuildPageDuration = projectionRebuildPageDuration',
         commandConflicts = commandConflicts',
         commandRetries = commandRetries',
         commandDuplicates = commandDuplicates',
@@ -878,6 +934,27 @@ recordProjectionLag = recordGaugeI64 projectionLag
 
 recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionWaitTimeouts = recordCounter projectionWaitTimeouts
+
+recordProjectionRebuildStarts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildStarts = recordCounter projectionRebuildStarts
+
+recordProjectionRebuildResumes :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildResumes = recordCounter projectionRebuildResumes
+
+recordProjectionRebuildPages :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildPages = recordCounter projectionRebuildPages
+
+recordProjectionRebuildEvents :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildEvents = recordCounter projectionRebuildEvents
+
+recordProjectionRebuildFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildFailures = recordCounter projectionRebuildFailures
+
+recordProjectionRebuildPromotions :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionRebuildPromotions = recordCounter projectionRebuildPromotions
+
+recordProjectionRebuildPageDuration :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
+recordProjectionRebuildPageDuration = recordHistogram projectionRebuildPageDuration
 
 recordCommandConflicts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandConflicts = recordCounter commandConflicts

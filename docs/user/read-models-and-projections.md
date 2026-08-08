@@ -110,6 +110,77 @@ structured failure evidence and deliberately keeps the group fenced. Promotion
 requires the opaque completion proof produced by the catalog replay runner; no
 individual target or query binding can be promoted independently.
 
+## Replay A Catalog Group
+
+Declare application-owned verification on the rebuild group. Hook identity and
+version are durable catalog facts; the transaction must only query rebuilt
+state and return structured pass/fail evidence:
+
+```haskell
+RebuildGroupDeclaration
+  { rebuildGroupId = orderReadGroup
+  , orderedTargets = [orderSummaryTarget, orderAuditTarget]
+  , verificationHooks =
+      [ RebuildVerification
+          { verificationId = "order-summary-shape"
+          , verificationVersion = "v2"
+          , verifyRebuild = verifyOrderSummary
+          }
+      ]
+  , claimSite = orderReadGroupSite
+  }
+```
+
+Start and drive the whole offline rebuild with only the validated catalog,
+group identity, and operational options:
+
+```haskell
+let request =
+      RebuildRequest
+        { rebuildRunId = runId
+        , requestedBy = operator
+        , requestReason = reason
+        , replayFrom = GlobalPosition 0
+        }
+    options =
+      (defaultRebuildOptions request)
+        { replayPageSize = 500
+        , rebuildMetrics = Just metrics
+        }
+
+startCatalogRebuild validated orderReadGroup options
+```
+
+The runner captures one immutable global head after fencing writers. It scans
+either `$all` or distinct categories in exclusive-cursor pages; multiple
+categories are merged by global position. Each bounded transaction commits
+target writes with source cursors and adapter counters. Events appended after
+the captured head are never included.
+
+`ReplayIrrelevant` still advances its source cursor and evaluation count.
+`ReplayDecodeFailure` rolls back the whole current chunk, records the run,
+source, projection, and position without recording payload, and leaves the
+group fenced. Replay adapters must contain database-transactional behavior only:
+never perform network calls or other external side effects from them.
+
+Resume a failed or interrupted run with `resumeCatalogRebuild validated runId
+options`. Page size may change. The catalog, source/codec facts, adapter order,
+target/reset/query facts, verification identity/version, and runner format must
+produce the exact stored contract fingerprint before any handler runs. Inspect
+durable state at any time with `inspectCatalogRebuild runId`.
+
+Promotion requires every source to prove exhaustion through the captured head,
+every required adapter/source row to be complete, and every verification hook
+to pass. Zero applies are valid when the adapters evaluated the selected history
+and classified every event as irrelevant. Dedup rows are never substituted for
+missing participation evidence.
+
+The default page size is 500 and the persisted format is
+`keiro/projection-replay/v1`. Optional metrics expose rebuild starts, resumes,
+committed pages/events, failures, promotions, and page duration. Durable reports
+also expose captured head, per-source cursor/target, evaluation/apply counts,
+and verification evidence; neither surface contains raw event payloads.
+
 ## Initialize Legacy Metadata
 
 The compatibility `keiro_read_models` table — which stores each model's version, shape hash,

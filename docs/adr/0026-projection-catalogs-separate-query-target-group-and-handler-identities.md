@@ -107,6 +107,30 @@ key therefore rolls back registry, target, and framework-state changes together.
 Abandonment records structured failure evidence and preserves the fence because
 cleared or partially replayed application data cannot be restored automatically.
 
+Catalog history replay captures the greatest Kiroku global position after the
+group fence is active and treats it as an immutable inclusive target. The
+released Kiroku 0.3 API is adapted through exclusive-cursor `$all` and category
+pages; category pages are merged by `RecordedEvent.globalPosition`, never
+concatenated. The compatibility reader remains behind one internal boundary so
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-1` can replace it
+with bounded store primitives after those primitives are released.
+
+Every committed replay chunk contains application target writes, consumed
+source cursors, and adapter evaluation/apply counters in one transaction. A
+decode failure condemns the whole chunk. Resume accepts a different page size
+but requires the exact `keiro/projection-replay/v1` contract fingerprint, which
+combines the catalog fingerprint with normalized sources, codec fingerprints,
+adapter identities and order, verification identity/version, and runner format.
+Function closures and page size are excluded.
+
+Promotion is proof-driven. Every source must record exhaustion through the
+captured head, the persisted adapter/source set must exactly match the catalog
+and be complete, and every catalog-supplied verification hook must pass.
+Evaluation counts prove participation even when all selected events are
+irrelevant and apply counts are zero. Only that verifier constructs the opaque
+group completion token, and it promotes the run and group in one transaction;
+dedup rows are not completion evidence.
+
 
 ## Consequences
 
@@ -129,6 +153,14 @@ cleared or partially replayed application data cannot be restored automatically.
 - `$all` and category sources cannot feed the same rebuild group because that
   would replay overlapping events. Several distinct categories are allowed and
   later orchestration must merge them by `RecordedEvent.globalPosition`.
+- Replay handlers must be transaction-local and must not perform external side
+  effects. Live behavior with external effects needs a dedicated replay adapter.
+  Verification hooks are application-owned, read-only transactions whose stable
+  identity and version are part of the catalog fingerprint.
+- Rebuild progress, failures, source exhaustion, adapter participation, and
+  verification results remain inspectable after failure. Metrics report starts,
+  resumes, committed pages/events, failures, promotions, and page duration
+  without event payloads.
 - Generated DSL values and operational commands consume the runtime catalog;
   neither defines a second inventory.
 - Online shadow-table cutover, dynamic plugin discovery, automatic

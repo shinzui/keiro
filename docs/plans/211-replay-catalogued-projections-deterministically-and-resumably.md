@@ -37,13 +37,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Persist rebuild-run fingerprints, captured source heads, source/adapter progress, failures,
+- [x] Persist rebuild-run fingerprints, captured source heads, source/adapter progress, failures,
       and verification evidence in a new Keiro migration.
-- [ ] Implement fixed-head paged `$all` and category scanning with deterministic global-position
+- [x] Implement fixed-head paged `$all` and category scanning with deterministic global-position
       merge and total decode/relevance outcomes.
-- [ ] Apply bounded pages with target writes and progress in one transaction; resume only an exact
+- [x] Apply bounded pages with target writes and progress in one transaction; resume only an exact
       run contract and record structured failures.
-- [ ] Prove source and adapter completion, run application verification, issue the opaque group
+- [x] Prove source and adapter completion, run application verification, issue the opaque group
       completion token, document telemetry, and pass all replay/concurrency tests.
 
 
@@ -57,6 +57,15 @@ implementation. Provide concise evidence.
   have no inclusive upper bound. The dependency-side request is
   `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-1`. This plan keeps a released-API
   compatibility reader so the request remains an optional simplification, not a gate.
+- 2026-08-08: Hackage `preferred.json` and upstream release tags both identify
+  `kiroku-store-0.3.1.0` as current. Keiro's existing `>=0.3 && <0.4` bound already covers the
+  released exclusive-cursor reads, so the runner required no dependency-bound change.
+- 2026-08-08: A category can prove exhaustion through H without ever observing an event at H.
+  The implementation marks exhaustion only when a short/empty page, a lookahead beyond H, or an
+  event exactly at H proves the range; a full page ending below H forces another read.
+- 2026-08-08: Decode failure at the third event of a four-event chunk left both application rows
+  and all source cursors at zero. Replacing only the decoder closure under the same declared
+  contract resumed successfully and materialized each of six events once.
 
 
 ## Decision Log
@@ -88,6 +97,27 @@ Record every decision made while working on the plan.
   fabricated apply or dedup row.
   Date: 2026-08-07
 
+- Decision: Persist runner contract format `keiro/projection-replay/v1`; fingerprint catalog
+  inventory plus normalized source/codec facts, adapter identity/order, and verification
+  identity/version, while excluding page size and closures.
+  Rationale: Page size changes transaction granularity rather than meaning. Function bytes are
+  not stable identities; explicit application versions make decoder or verifier changes auditable.
+  Date: 2026-08-08
+
+- Decision: Keep a replay failure on the run while leaving the group in `rebuilding`, rather than
+  using group abandonment for every decode or verification failure.
+  Rationale: The partially materialized group must remain fenced, but an exact-contract resume
+  needs the active run authorization. Explicit operator abandonment remains a separate terminal
+  action when the contract must change.
+  Date: 2026-08-08
+
+- Decision: Use deterministic decode and verification failures as the two transaction-boundary
+  fault-injection points.
+  Rationale: Decode failure condemns a page before commit; verification failure occurs only after
+  all replay pages commit. Resuming those fixtures proves both sides of the crash boundary without
+  exposing a production API that kills a process on demand.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -96,7 +126,26 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed 2026-08-08. Migration 0023 adds runs, normalized source progress, adapter
+participation, and verification evidence with foreign keys and exact-set constraints. The public
+`startCatalogRebuild`, `resumeCatalogRebuild`, and `inspectCatalogRebuild` facade drives the plan
+210 group lifecycle through a hidden runner authorization and completion token.
+
+The released-Kiroku compatibility reader captures one immutable head, pages `$all` or distinct
+categories, and k-way merges category candidates by global position. Target SQL and progress
+commit together. Structured decode/verification failures keep the active group fenced; resume
+accepts a new page size only under the same `keiro/projection-replay/v1` contract.
+
+PostgreSQL evidence covers three interleaved categories, irrelevant-only history, events appended
+after capture, preserve-and-reconcile roots, pre-commit decode rollback, post-page verification
+failure, exact and drifted resume, and missing adapter evidence. Optional metrics cover starts,
+resumes, committed pages/events, failures, promotions, and page duration without payloads. ADR 26,
+the read-model guide, API reference, telemetry catalogue, and changelog now carry the durable
+contract. Plan 162 remains superseded by this completed group-oriented implementation.
+
+Final verification passed on 2026-08-08: `nix fmt`, 431 `keiro-test` examples, 28
+`keiro-migrations-test` examples, strict validation of all 26 ADR concepts, and the complete
+`just verify` repository gate.
 
 
 ## Context and Orientation

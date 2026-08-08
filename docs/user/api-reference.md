@@ -253,6 +253,8 @@ registration or rebuild work. The public boundary includes:
   group, source, subscription, dedup, and query-model declarations;
 - independent `TargetResetPolicy` and `ProjectionReplayPolicy event` values;
 - `ReplayAdapter`, `ReplayDecodeResult`, and `replayAdapterFromCodec`;
+- `RebuildVerification`, whose identity/version are fingerprinted while its
+  application-owned transaction closure is not;
 - `validateProjectionCatalog`, `useProjectionCatalog`, and
   `useProjectionCatalogM`;
 - `ValidatedProjectionCatalog`, whose constructor is hidden;
@@ -339,6 +341,13 @@ Types and functions:
 - `beginGroupRebuild`
 - `finishGroupRebuild`
 - `abandonGroupRebuild`
+- `RebuildOptions` and `defaultRebuildOptions`
+- `CatalogRebuildError` and `RebuildRunStatus`
+- `RebuildRunReport`, `RebuildSourceProgress`, `RebuildAdapterProgress`, and
+  `RebuildVerificationProgress`
+- `startCatalogRebuild`
+- `resumeCatalogRebuild`
+- `inspectCatalogRebuild`
 - `RebuildError (..)`
 - `startRebuild`
 - `finishRebuild`
@@ -349,6 +358,9 @@ Types and functions:
 The catalog group API is the managed rebuild boundary. Preparation derives its
 targets and framework reset identities only from a validated catalog, and
 promotion requires an opaque completion token from the replay runner. The
+runner captures an immutable Kiroku head, globally merges category pages,
+commits target writes with durable progress, enforces exact-fingerprint resume,
+and promotes only complete source/adapter/verification evidence. The
 single-read-model functions are an unmanaged compatibility path;
 `rebuild` and `promote` are only low-level status transitions.
 

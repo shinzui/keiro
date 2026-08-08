@@ -23,10 +23,12 @@ module Keiro.ReadModel.Rebuild.Group
     groupRebuildHandlePreparation,
     GroupCompletionToken,
     completionTokenForHandle,
+    groupRebuildHandleFor,
     registerProjectionCatalog,
     lookupProjectionRebuildGroup,
     beginGroupRebuild,
     finishGroupRebuild,
+    finishGroupRebuildTx,
     abandonGroupRebuild,
     lockProjectionGroupsTx,
   )
@@ -185,6 +187,24 @@ completionTokenForHandle handle =
       completionRun = handleRun handle,
       completionFingerprint = handleFingerprint handle
     }
+
+-- | Reconstruct the opaque authorization for a persisted run. The replay
+-- runner must still prove the active group/run/fingerprint in the same
+-- transaction as every use of this value.
+groupRebuildHandleFor ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  RebuildRunId ->
+  Maybe GroupRebuildHandle
+groupRebuildHandleFor catalog groupId runId = do
+  preparation <- preparationFor catalog groupId
+  pure
+    GroupRebuildHandle
+      { handleGroup = groupId,
+        handleRun = runId,
+        handleFingerprint = Catalog.catalogFingerprint catalog,
+        handlePreparation = preparation
+      }
 
 registerProjectionCatalog ::
   (Store :> es) =>
@@ -353,22 +373,30 @@ finishGroupRebuild ::
 finishGroupRebuild handle token
   | not (tokenMatchesHandle handle token) =
       pure (Left (RebuildCompletionTokenMismatch (handleGroup handle) (handleRun handle)))
-  | otherwise =
-      runTransaction $ do
-        promoted <-
-          Tx.statement
-            ( rebuildGroupIdText (handleGroup handle),
-              rebuildRunIdText (handleRun handle),
-              catalogFingerprintText (handleFingerprint handle)
-            )
-            finishGroupStmt
-        case promoted of
-          Nothing ->
-            Tx.condemn
-              $> Left (RebuildHandleNoLongerActive (handleGroup handle) (handleRun handle))
-          Just metadata -> do
-            Tx.statement (rebuildGroupIdText (handleGroup handle)) markGroupQueriesLiveStmt
-            pure (Right metadata)
+  | otherwise = runTransaction (finishGroupRebuildTx handle token)
+
+finishGroupRebuildTx ::
+  GroupRebuildHandle ->
+  GroupCompletionToken ->
+  Tx.Transaction (Either GroupTransitionError GroupRebuildMetadata)
+finishGroupRebuildTx handle token
+  | not (tokenMatchesHandle handle token) =
+      pure (Left (RebuildCompletionTokenMismatch (handleGroup handle) (handleRun handle)))
+  | otherwise = do
+      promoted <-
+        Tx.statement
+          ( rebuildGroupIdText (handleGroup handle),
+            rebuildRunIdText (handleRun handle),
+            catalogFingerprintText (handleFingerprint handle)
+          )
+          finishGroupStmt
+      case promoted of
+        Nothing ->
+          Tx.condemn
+            $> Left (RebuildHandleNoLongerActive (handleGroup handle) (handleRun handle))
+        Just metadata -> do
+          Tx.statement (rebuildGroupIdText (handleGroup handle)) markGroupQueriesLiveStmt
+          pure (Right metadata)
 
 abandonGroupRebuild ::
   (Store :> es) =>

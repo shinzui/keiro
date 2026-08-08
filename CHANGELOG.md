@@ -25,6 +25,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `applyAsyncProjectionFromCatalog` use the same sorted group locks and return
   typed fenced outcomes without committing append, dedup, or target writes.
   Existing single-read-model rebuild functions remain as an unmanaged bridge.
+- **keiro**: add the catalog history runner and native migration 0023. Rebuilds
+  capture an immutable Kiroku head, k-way merge category history in global
+  order, commit target writes with per-source and per-adapter progress, resume
+  only an exact `keiro/projection-replay/v1` contract, persist structured
+  failure/verification evidence, and atomically promote only after complete
+  source exhaustion, adapter participation, and catalog verification. New
+  rebuild metrics cover starts, resumes, committed pages/events, failures,
+  promotions, and page duration.
 
 ## [0.11.0.0] - 2026-08-05
 
