@@ -26,7 +26,7 @@ import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
 import Jitsurei.Domain
 import Jitsurei.OrderStream
-import Jitsurei.ReadModels (orderSummaryInlineProjection)
+import Jitsurei.ReadModels (orderLiveProjections)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
@@ -128,7 +128,7 @@ fulfillmentProcessManager =
       eventStream = fulfillmentEventStream,
       streamFor = fulfillmentStream . OrderId,
       targetEventStream = orderEventStream,
-      targetProjections = const [orderSummaryInlineProjection],
+      targetProjections = const orderLiveProjections,
       handle = \event ->
         let orderId = eventOrderId event
             status = fulfillmentStatus event

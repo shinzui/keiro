@@ -26,7 +26,7 @@ import Jitsurei
 import Keiro
 import Keiro.Connection (keiroConnectionSettings)
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
-import Keiro.Projection (runCommandWithProjections)
+import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Workflow
@@ -131,11 +131,12 @@ runFulfillmentDemo metrics = withJitsureiStore $ \store -> do
 
   putStrLn "[jitsurei:fulfillment] appending PlaceOrder with the order-summary inline projection"
   placed <-
-    requireEither
+    requireProjectionCommand
+      =<< requireEither
       =<< requireEither
       =<< runJitsureiStore
         store
-        ( runCommandWithProjections
+        ( runCommandWithCatalogProjections
             options
             orderEventStream
             (orderStream orderId)
@@ -146,17 +147,19 @@ runFulfillmentDemo metrics = withJitsureiStore $ \store -> do
                     quantity = Quantity 3
                   }
             )
-            [orderSummaryInlineProjection]
+            jitsureiProjectionCatalog
+            orderProjectionSet
         )
   print placed
 
   putStrLn "[jitsurei:fulfillment] appending ApprovePayment with the same projection"
   paid <-
-    requireEither
+    requireProjectionCommand
+      =<< requireEither
       =<< requireEither
       =<< runJitsureiStore
         store
-        ( runCommandWithProjections
+        ( runCommandWithCatalogProjections
             options
             orderEventStream
             (orderStream orderId)
@@ -166,7 +169,8 @@ runFulfillmentDemo metrics = withJitsureiStore $ \store -> do
                     paymentRef = PaymentRef "pay_demo"
                   }
             )
-            [orderSummaryInlineProjection]
+            jitsureiProjectionCatalog
+            orderProjectionSet
         )
   print paid
 
@@ -800,3 +804,8 @@ requireEither :: (Show err) => Either err a -> IO a
 requireEither = \case
   Left err -> fail (show err)
   Right value -> pure value
+
+requireProjectionCommand :: ProjectionCommandOutcome target -> IO (CommandResult target)
+requireProjectionCommand = \case
+  ProjectionCommandApplied result -> pure result
+  outcome -> fail (show outcome)

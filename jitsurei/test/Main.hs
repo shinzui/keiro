@@ -30,7 +30,9 @@ import Keiro.PGMQ.Job (Job (..))
 import Keiro.PGMQ.Runtime (JobRuntime (..), QueueRef (..), runJobEff, withJobRuntime)
 import Keiro.ProcessManager
 import Keiro.Projection
+import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
 import Keiro.ReadModel
+import Keiro.ReadModel.Rebuild
 import Keiro.ReplayAudit
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshDatabase, withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuiteWith)
 import Keiro.Timer
@@ -185,14 +187,15 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
   describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
     it "updates and queries the inline order summary in the append transaction" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
-      Right (Right _) <-
+      Right (Right (ProjectionCommandApplied _)) <-
         runner $
-          runCommandWithProjections
+          runCommandWithCatalogProjections
             defaultRunCommandOptions
             orderEventStream
             (orderStream sampleOrderId)
             samplePlaceOrder
-            [orderSummaryInlineProjection]
+            jitsureiProjectionCatalog
+            orderProjectionSet
       Right summaryResult <-
         runner $
           runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
@@ -203,6 +206,118 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
           summary ^. #quantity `shouldBe` sampleQuantity
           summary ^. #status `shouldBe` "placed"
         other -> expectationFailure ("expected live order summary, got " <> show other)
+
+    it "drives live, async, preview, and mixed-policy rebuild paths from one catalog" $ \(_store, StoreRunner runner) -> do
+      Right () <- runner initializeJitsureiTables
+      let previewResult = CatalogOperations.previewGroupRebuild orderCatalogOperations orderReportingGroupId
+      previewReport <- case previewResult of
+        Left err -> expectationFailure ("catalog preview failed: " <> show err) >> error "unreachable"
+        Right value -> pure value
+      map (^. #resetPolicy) (previewReport ^. #targets)
+        `shouldBe` [PreserveAndReconcile, ClearBeforeReplay, ClearBeforeReplay]
+      previewReport ^. #destructive `shouldBe` True
+
+      Right (Right (ProjectionCommandApplied _)) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream sampleOrderId)
+            samplePlaceOrder
+            jitsureiProjectionCatalog
+            orderProjectionSet
+      Right recorded <-
+        runner $
+          Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
+      let placed = Vector.head recorded
+      Right CatalogAsyncApplied <-
+        runner $
+          Store.runTransaction
+            (applyAsyncProjectionFromCatalog jitsureiProjectionCatalog orderAuditProjectionId orderAuditAsyncProjection placed)
+      Right () <- runner $ Store.runTransaction seedBrownfieldRoot
+      Right beforeFacts <- runner $ Store.runTransaction (Tx.statement () orderCatalogFactsStmt)
+      beforeFacts `shouldBe` (2, 1, 1, 1)
+
+      let runId = parseRebuildRunId "jitsurei-order-rebuild"
+          rebuildOptions =
+            defaultRebuildOptions
+              RebuildRequest
+                { rebuildRunId = runId,
+                  requestedBy = "jitsurei-test",
+                  requestReason = "catalog adoption proof",
+                  replayFrom = GlobalPosition 0
+                }
+      firstAttempt <-
+        runner $
+          CatalogOperations.startGroupRebuild
+            orderCatalogOperations
+            orderReportingGroupId
+            rebuildOptions
+      firstAttempt `shouldSatisfy` \case
+        Right (Left (CatalogOperations.CatalogOpsRebuildError CatalogRebuildVerificationFailed {})) -> True
+        _ -> False
+      Right (Right failed) <-
+        runner $ CatalogOperations.inspectGroupRebuild orderCatalogOperations runId
+      failed ^. #run . #runStatus `shouldBe` RebuildRunFailed
+
+      let fencedOrderId = OrderId "order-fenced-during-repair"
+      Right (Right fenced) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream fencedOrderId)
+            ( PlaceOrder
+                PlaceOrderData
+                  { orderId = fencedOrderId,
+                    sku = sampleSku,
+                    quantity = sampleQuantity
+                  }
+            )
+            jitsureiProjectionCatalog
+            orderProjectionSet
+      fenced `shouldBe` ProjectionCommandFenced orderReportingGroupId runId
+      Right fencedEvents <-
+        runner $
+          Store.readStreamForward (StreamName "order-order-fenced-during-repair") (StreamVersion 0) 10
+      Vector.null fencedEvents `shouldBe` True
+
+      Right () <- runner $ Store.runTransaction repairBrownfieldRoot
+      Right (Right rebuilt) <-
+        runner $
+          CatalogOperations.resumeGroupRebuild
+            orderCatalogOperations
+            runId
+            rebuildOptions
+      rebuilt ^. #run . #runStatus `shouldBe` RebuildRunPromoted
+      placed ^. #globalPosition `shouldBe` GlobalPosition 0
+      rebuilt ^. #run . #capturedHead `shouldBe` GlobalPosition 1
+      Right afterFacts <- runner $ Store.runTransaction (Tx.statement () orderCatalogFactsStmt)
+      afterFacts `shouldBe` (2, 1, 1, 1)
+
+      Right brownfield <-
+        runner $
+          runQuery Nothing orderSummaryReadModel (OrderSummaryQuery (OrderId "brownfield-no-history"))
+      brownfield `shouldSatisfy` \case
+        Right (Just _) -> True
+        _ -> False
+
+      Right (Right (ProjectionCommandApplied _)) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream fencedOrderId)
+            ( PlaceOrder
+                PlaceOrderData
+                  { orderId = fencedOrderId,
+                    sku = sampleSku,
+                    quantity = sampleQuantity
+                  }
+            )
+            jitsureiProjectionCatalog
+            orderProjectionSet
+      pure ()
 
   describe "Jitsurei snapshots" $ around (withFreshResourceStore fixture) $ do
     it "writes a snapshot after the configured threshold" $ \(_store, StoreRunner runner) -> do
@@ -284,22 +399,24 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
     it "updates the target inline read model when fulfillment dispatches packing" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
       let target = orderStream sampleOrderId
-      Right (Right _) <-
+      Right (Right (ProjectionCommandApplied _)) <-
         runner $
-          runCommandWithProjections
+          runCommandWithCatalogProjections
             defaultRunCommandOptions
             orderEventStream
             target
             samplePlaceOrder
-            [orderSummaryInlineProjection]
-      Right (Right _) <-
+            jitsureiProjectionCatalog
+            orderProjectionSet
+      Right (Right (ProjectionCommandApplied _)) <-
         runner $
-          runCommandWithProjections
+          runCommandWithCatalogProjections
             defaultRunCommandOptions
             orderEventStream
             target
             sampleApprovePayment
-            [orderSummaryInlineProjection]
+            jitsureiProjectionCatalog
+            orderProjectionSet
       Right paidSummary <-
         runner $
           runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
@@ -921,3 +1038,47 @@ snapshotVersionForStreamStmt =
     """
     (E.param (E.nonNullable E.text))
     (D.rowMaybe (StreamVersion <$> D.column (D.nonNullable D.int8)))
+
+parseRebuildRunId :: Text -> RebuildRunId
+parseRebuildRunId identity =
+  case mkRebuildRunId identity of
+    Left err -> error (show err)
+    Right value -> value
+
+seedBrownfieldRoot :: Tx.Transaction ()
+seedBrownfieldRoot =
+  Tx.sql
+    """
+    INSERT INTO jitsurei.jitsurei_order_summary
+      (order_id, sku, quantity, status, last_seen)
+    VALUES ('brownfield-no-history', 'BROWNFIELD', 1, 'rebuild-blocked', 0)
+    """
+
+repairBrownfieldRoot :: Tx.Transaction ()
+repairBrownfieldRoot =
+  Tx.sql
+    """
+    UPDATE jitsurei.jitsurei_order_summary
+    SET status = 'retained'
+    WHERE order_id = 'brownfield-no-history'
+    """
+
+orderCatalogFactsStmt :: Statement () (Int64, Int64, Int64, Int64)
+orderCatalogFactsStmt =
+  preparable
+    """
+    SELECT
+      (SELECT count(*) FROM jitsurei.jitsurei_order_summary),
+      (SELECT count(*) FROM jitsurei.jitsurei_order_line),
+      (SELECT count(*) FROM jitsurei.jitsurei_order_async_audit),
+      (SELECT count(*) FROM jitsurei.jitsurei_order_live_side_effect)
+    """
+    E.noParams
+    ( D.singleRow
+        ( (,,,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+        )
+    )

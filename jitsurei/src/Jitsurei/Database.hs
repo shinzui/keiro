@@ -5,8 +5,8 @@ module Jitsurei.Database
 where
 
 import Effectful (Eff, (:>))
-import Jitsurei.ReadModels (initializeOrderSummaryTable, orderSummaryReadModel)
-import Keiro.ReadModel (ReadModel (..), registerReadModel)
+import Jitsurei.ReadModels (initializeOrderSummaryTable, jitsureiProjectionCatalog)
+import Keiro.ReadModel.Rebuild (registerProjectionCatalog)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -19,9 +19,6 @@ import Kiroku.Store.Transaction (runTransaction)
 initializeJitsureiTables :: (Store :> es) => Eff es ()
 initializeJitsureiTables = do
   runTransaction initializeOrderSummaryTable
-  _ <-
-    registerReadModel
-      orderSummaryReadModel.name
-      orderSummaryReadModel.version
-      orderSummaryReadModel.shapeHash
-  pure ()
+  registerProjectionCatalog jitsureiProjectionCatalog >>= \case
+    Left err -> error ("jitsurei projection catalog registration failed: " <> show err)
+    Right _ -> pure ()
