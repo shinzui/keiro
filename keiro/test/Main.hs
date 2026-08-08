@@ -3,6 +3,7 @@ module Main
   )
 where
 
+import CatalogSpec qualified
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
@@ -382,6 +383,8 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
+  CatalogSpec.spec
+
   describe "Keiro" $ do
     it "exposes the scaffold version" $
       KeiroRoot.version `shouldBe` ("0.4.0.0" :: Text)

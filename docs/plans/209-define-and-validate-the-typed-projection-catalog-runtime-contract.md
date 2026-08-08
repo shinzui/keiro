@@ -39,11 +39,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Define the public catalog vocabulary, typed per-source views, existential fleet view,
-      and compatibility constructors.
-- [ ] Implement deterministic closed-world validation, dependency ordering, fingerprints,
-      inventories, and an optional previous-baseline comparison.
-- [ ] Derive normal live-selection and registration inputs from only a
+- [x] (2026-08-08T13:31:09Z) Define the public catalog vocabulary, typed per-source views,
+      existential fleet view, and compatibility constructors.
+- [x] (2026-08-08T13:31:09Z) Implement deterministic closed-world validation, dependency
+      ordering, fingerprints, inventories, and an optional previous-baseline comparison.
+- [x] (2026-08-08T13:31:09Z) Derive normal live-selection and registration inputs from only a
       `ValidatedProjectionCatalog`; add positive and mutation-tested negative cases.
 - [ ] Expose and document the API, create the projection-catalog ADR, and pass the focused and
       full repository checks.
@@ -54,7 +54,16 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-08-08: Mori resolved the selected event-store API to
+  `mori://shinzui/kiroku/packages/kiroku-store` at local package version 0.3.1.0.
+  Its source confirms that `CategoryName` is the canonical category identity and
+  `RecordedEvent.globalPosition` is the only total-order cursor; the catalog
+  therefore stores those facts rather than inventing stream or ordering types.
+- 2026-08-08: Existing async dedup rows are physically keyed by
+  `AsyncProjection.name`, while subscription and query-model registry names are
+  separate runtime strings. The catalog keeps stable logical IDs for all three
+  and validates their physical bridge instead of assuming the IDs are
+  interchangeable.
 
 
 ## Decision Log
@@ -87,6 +96,22 @@ Record every decision made while working on the plan.
   describes handler behavior. A live handler with external effects may still expose a safe
   replay adapter for its read-model writes.
   Date: 2026-08-07
+
+- Decision: Fingerprint a dedicated canonical text inventory and exclude all
+  handler closures.
+  Rationale: The repository already depends on SHA-256 and base16 rendering, but
+  the runtime catalog needs a stable semantic encoding rather than `Show` output
+  or process-local function identity. Sorting declarations by stable ID while
+  retaining explicit group and handler order makes input-list reordering neutral.
+  Date: 2026-08-08
+
+- Decision: Validate physical table, registry, subscription, and dedup names in
+  addition to their typed logical IDs.
+  Rationale: Distinct typed IDs prevent accidental interchange in Haskell, while
+  database rows and current compatibility types still use textual names. Both
+  layers must be unique and their bridge must be checked until later plans move
+  lifecycle state fully onto catalog identities.
+  Date: 2026-08-08
 
 
 ## Outcomes & Retrospective

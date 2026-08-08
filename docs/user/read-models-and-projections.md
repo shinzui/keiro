@@ -4,6 +4,68 @@ Read models are query-optimized views derived from the event log. Keiro provides
 metadata, consistency helpers, inline projection support, and at-least-once async
 projection helpers.
 
+## Declare One Projection Catalog
+
+`Keiro.Projection.Catalog` lets an application declare the whole read-side
+inventory once and validate it before any registration or rebuild effect. The
+catalog deliberately separates four identities:
+
+- a query-model binding retains a typed `ReadModel q r` and says which targets
+  the query observes;
+- a physical target names one application-owned qualified PostgreSQL table and
+  its reset policy;
+- a rebuild group lists the targets that must move through one lifecycle in a
+  deterministic dependency order; and
+- a projection definition is the single owner of one or more targets and holds
+  an explicitly ordered list of inline or async handlers.
+
+Target reset policy is not replay safety. `ClearBeforeReplay` and
+`PreserveAndReconcile` say what happens to a table before replay.
+`Replayable adapter` and `LiveOnly reason` say whether a handler has a safe
+replay path. This distinction allows a live handler to omit external effects
+from its explicit replay adapter and allows brownfield tables to be reconciled
+without claiming complete historical reconstruction.
+
+Build `SourceDeclaration`, `TargetDeclaration`,
+`RebuildGroupDeclaration`, subscription/dedup declarations, query-model
+bindings, and typed `ProjectionSet event` values, then combine them in a
+`ProjectionCatalog`:
+
+```haskell
+case validateProjectionCatalog catalog of
+  Failure diagnostics ->
+    traverse_ (print . diagnosticCodeText . (^. #diagnosticCode)) diagnostics
+  Success validated -> do
+    let liveOrderHandlers = typedInlineProjections validated orderProjectionSet
+        inventory = catalogInventory validated
+        fingerprint = catalogFingerprint validated
+    registerApplicationReadSide inventory
+    runOrderWriter liveOrderHandlers
+```
+
+The `ValidatedProjectionCatalog` constructor is hidden. Use
+`useProjectionCatalogM` when registration is effectful; it does not invoke the
+callback after failed validation. Inventory rendering and SHA-256 fingerprints
+are stable for the same semantic declarations regardless of input-list order.
+Handler closures are excluded from the fingerprint.
+
+Validation reports deterministic codes and every conflicting `ClaimSite`. It
+rejects duplicate logical or physical identities, unknown references, targets
+without exactly one projection owner, cross-group writes, dependency cycles,
+unsafe clear/replay combinations, and overlapping `$all` plus category sources
+inside one group. Several distinct category sources are allowed because their
+recorded events can later be merged by global position.
+
+This is a closed-world structural proof. Keiro cannot inspect arbitrary Hasql
+transactions or discover undeclared tables. Your application continues to own
+DDL, migrations, SQL, row codecs, and the truthfulness of target declarations.
+Use `compareCatalogBaseline old new` separately when a persisted prior inventory
+must reveal a declaration that was removed completely.
+
+Existing callers remain source-compatible. The `unmanagedInlineProjections`,
+`unmanagedAsyncProjection`, and `unmanagedReadModel` wrappers label values that
+remain outside catalog validation while an application migrates incrementally.
+
 ## Initialize Metadata
 
 The `keiro_read_models` table — which stores each model's version, shape hash,

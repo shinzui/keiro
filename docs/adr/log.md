@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-08
+* **Add**: Define the typed projection catalog's four identities, independent reset and replay policies, closed-world validation, and unchecked consumer-owned SQL boundary (plan 209).
+
 ## 2026-08-06
 * **Add**: Record the worker-loop contract: isolate per pass and per item, and report finished work rather than attempted work (plan 203).
 * **Add**: Freeze the deterministic-id derivation on UTF-8 seed bytes: ASCII ids are byte-identical, non-ASCII seeds no longer collide into a wedged append (plan 202).

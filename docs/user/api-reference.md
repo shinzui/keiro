@@ -233,6 +233,38 @@ integration publishing, or any projection work that can be eventually
 consistent; inline projection SQL runs inside the append transaction and can
 slow or fail the dispatch.
 
+## `Keiro.Projection.Catalog`
+
+Use this module to declare and validate one projection inventory before startup
+registration or rebuild work. The public boundary includes:
+
+- validated identity smart constructors for projections, targets, rebuild
+  groups, sources, query models, subscriptions, dedup keys, and claim sites;
+- `ProjectionCatalog`, `ProjectionSet event`, `SomeProjectionSet`, target,
+  group, source, subscription, dedup, and query-model declarations;
+- independent `TargetResetPolicy` and `ProjectionReplayPolicy event` values;
+- `ReplayAdapter`, `ReplayDecodeResult`, and `replayAdapterFromCodec`;
+- `validateProjectionCatalog`, `useProjectionCatalog`, and
+  `useProjectionCatalogM`;
+- `ValidatedProjectionCatalog`, whose constructor is hidden;
+- typed live selection through `typedInlineProjections`;
+- deterministic inventory, registration, replay-metadata, fingerprint, and
+  rendering selectors; and
+- `compareCatalogBaseline`, which reports declarations present in an earlier
+  inventory but absent from a new one without conflating removal detection with
+  single-catalog validity.
+
+Validation is pure and closed-world. It can prove ownership, reference,
+ordering, group, source, and replay-policy consistency for declarations in the
+catalog. It cannot inspect a `Hasql.Transaction.Transaction`, discover an
+undeclared application table, or prove which table arbitrary SQL writes.
+Application DDL, migrations, codecs, and handler bodies remain application
+owned.
+
+`unmanagedInlineProjections`, `unmanagedAsyncProjection`, and
+`unmanagedReadModel` are explicit compatibility labels for existing callers.
+They preserve the wrapped value but do not imply catalog validation.
+
 ## `Keiro.Connection`
 
 Types and functions:

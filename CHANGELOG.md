@@ -4,6 +4,19 @@ All notable changes to the Keiro package set are recorded here. The format
 follows [Keep a Changelog](https://keepachangelog.com/), and the published
 packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
+## Unreleased
+
+### New Features
+
+- **keiro**: add `Keiro.Projection.Catalog`, a pure typed projection inventory
+  that separates query models, physical targets, atomic rebuild groups, and
+  ordered projection owners. Validation accumulates stable multi-site
+  diagnostics and produces typed inline views, heterogeneous registration and
+  replay metadata, deterministic inventory rendering, and SHA-256
+  fingerprints. Reset policy is independent from replay policy, prior-inventory
+  removal comparison remains a separate gate, and legacy read-model/projection
+  values have explicit unmanaged compatibility wrappers.
+
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

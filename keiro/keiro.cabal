@@ -58,6 +58,7 @@ library
     Keiro.Outbox.Types
     Keiro.ProcessManager
     Keiro.Projection
+    Keiro.Projection.Catalog
     Keiro.ReadModel
     Keiro.ReadModel.Rebuild
     Keiro.ReadModel.Schema
@@ -147,6 +148,7 @@ test-suite keiro-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
+  other-modules:  CatalogSpec
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson                                  >=2.2     && <2.3
