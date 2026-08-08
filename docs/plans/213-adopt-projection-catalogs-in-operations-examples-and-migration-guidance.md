@@ -37,16 +37,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add a stable application/operator adapter for catalog inventory, dry-run, start, inspect,
+- [x] Add a stable application/operator adapter for catalog inventory, dry-run, start, inspect,
       resume, and abandon without caller-supplied projection or target maps.
-- [ ] Migrate `jitsurei` live assembly and query registration to one hand-written catalog and add a
+- [x] Migrate `jitsurei` live assembly and query registration to one hand-written catalog and add a
       normalized clear/preserve brownfield rebuild fixture.
-- [ ] Adopt the generated language-5 catalog after plan 212, or document the hand-written/generated
+- [x] Adopt the generated language-5 catalog after plan 212, or document the hand-written/generated
       delta if that soft dependency is still in progress.
 - [ ] Replace plan 208's manual rebuild map with the catalog adapter, exercise text/JSON preview and
-      `--force`, and reconcile both MasterPlans.
-- [ ] Publish migration, API, runbook, example, and changelog documentation; pass example,
-      operator, and full repository verification.
+      `--force`, and reconcile both MasterPlans. Blocked at the command mount only: `keiro-ops`
+      and `AppHooks` do not exist; plan 208 and MasterPlan 31 now name the landed adapter.
+- [x] Publish migration, API, runbook, example, and changelog documentation; pass the available
+      example and full repository verification, and record the pending operator gate.
 
 
 ## Surprises & Discoveries
@@ -54,7 +55,15 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-08-08: `keiro-ops` and `Keiro.Ops.Embed.AppHooks` remain absent. The runtime adapter,
+  application example, and documentation can land, but text rendering, `--force`, and command
+  acceptance cannot be implemented without creating the forbidden parallel command tree.
+- 2026-08-08: The first real example assertion exposed the runner's intentional cursor boundary:
+  an event at global position 0 produces an exclusive captured head of 1. The acceptance test now
+  names both facts instead of treating the last event position as the head cursor.
+- 2026-08-08: A preserved brownfield row can make replay technically complete but promotion
+  operationally unsafe. An application verifier now blocks that row, and the example proves the
+  failed group continues to fence appends until repair and exact-run resume succeed.
 
 
 ## Decision Log
@@ -85,6 +94,20 @@ Record every decision made while working on the plan.
   rebuild callers would be a migration hazard.
   Date: 2026-08-07
 
+- Decision: Name the landed hook `ProjectionCatalogOperations` and keep its reports as explicit
+  versioned envelopes rather than an effect-polymorphic operations record.
+  Rationale: The validated catalog already closes over handler behavior. Pure inventory/preview,
+  read-only registered preview, and explicit effectful actions make mutation boundaries visible
+  and let the future CLI render the same values without accepting replacement fleet lists.
+  Date: 2026-08-08
+
+- Decision: Use the dedicated candidate-language-5 conformance service as the generated adoption
+  context and compare its semantic inventory dimensions with hand-written jitsurei.
+  Rationale: It already imports one generated context facade and executes the runtime catalog;
+  copying generated modules into jitsurei would create a second generated corpus without adding a
+  distinct guarantee.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -93,7 +116,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The available runtime and application work is complete. `ProjectionCatalogOperations` exposes
+versioned inventory, pure and registered-state preview, and start/inspect/resume/abandon without
+caller-provided fleet lists. `jitsurei` uses one validated catalog for managed inline and async
+application, startup registration, query binding, and a mixed preserve/clear group. Its acceptance
+path proves fixed-head replay, verification failure, durable inspection, append fencing, operator
+repair, exact-run resume, brownfield preservation, derived-target reconstruction, and suppression
+of a live-only side effect.
+
+The generated conformance context proves the matching candidate-language-5 dimensions through one
+generated facade. Canonical API, migration, runbook, and guide documentation now distinguish the
+available adapter from the planned CLI. The remaining gap is external and explicit: MasterPlan 31
+has not created `keiro-ops`, so this plan cannot truthfully mark command rendering, `--force`, or
+embedding complete.
+
+Verification on 2026-08-08 passed with 436 `keiro-test` examples, 22 `jitsurei-test` examples,
+615 `keiro-dsl-test` examples, the generated projection-catalog conformance executable, the
+offline changed-document link check (141 links checked, 0 errors), and the complete `just verify`
+gate. The unavailable `keiro-ops-test` gate remains coupled to the pending command-package
+milestone above rather than being represented as a passing test.
 
 
 ## Context and Orientation
@@ -349,29 +390,30 @@ already-stable adapter, and update both living plans rather than forking the int
 `Keiro.Projection.Catalog.Operations` owns an operator-neutral surface equivalent to:
 
 ```haskell
-data ProjectionCatalogOps es
+data ProjectionCatalogOperations
 data CatalogInventoryReport
 data RebuildPreview
-data RebuildRunReport
+data RegisteredRebuildPreview
+data CatalogRunReport
 
-projectionCatalogOps
+projectionCatalogOperations
   :: ValidatedProjectionCatalog
-  -> ProjectionCatalogOps es
+  -> ProjectionCatalogOperations
 
 catalogInventoryReport
-  :: ProjectionCatalogOps es
+  :: ProjectionCatalogOperations
   -> CatalogInventoryReport
 
 previewGroupRebuild
-  :: ProjectionCatalogOps es
+  :: ProjectionCatalogOperations
   -> RebuildGroupId
-  -> Eff es (Either CatalogOpsError RebuildPreview)
+  -> Either CatalogOpsError RebuildPreview
 
 startGroupRebuild
-  :: ProjectionCatalogOps es
+  :: ProjectionCatalogOperations
   -> RebuildGroupId
   -> RebuildOptions
-  -> Eff es (Either CatalogOpsError RebuildRunReport)
+  -> Eff es (Either CatalogOpsError CatalogRunReport)
 ```
 
 The final module may expose resume, inspect, and abandon as record fields or functions, following
@@ -379,7 +421,7 @@ Keiro's established style. Report types have stable `ToJSON` encodings and no CL
 The adapter delegates execution to plan 211 and cannot manufacture catalog membership.
 
 When available, `Keiro.Ops.Embed.AppHooks` replaces its `Map Text (OpsEnv -> IO ExitCode)` field
-with an optional mounted `ProjectionCatalogOps` at the package's pinned effect/runtime boundary.
+with an optional mounted `ProjectionCatalogOperations` at the package's pinned effect/runtime boundary.
 `keiro-ops` owns parsers, renderers, confirmation, and exit codes. `jitsurei` owns application
 migrations, handlers, verification hooks, and the concrete catalog value. `keiro-dsl` owns only
 generated declarations and create-once holes.

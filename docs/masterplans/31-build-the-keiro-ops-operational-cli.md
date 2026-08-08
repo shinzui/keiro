@@ -198,7 +198,7 @@ and `keiro-dsl/keiro-dsl.cabal`).
 The ops environment type (working name `OpsEnv`: store handle, schema names,
 output mode, force flag) — EP-2 defines it in `Keiro.Ops.Env`; EP-3 consumes it
 unchanged; EP-4 *extends* it with the optional application hooks (registry, audit
-targets, and `ProjectionCatalogOps`). EP-4 owns that extension; EP-3 must not
+targets, and `ProjectionCatalogOperations`). EP-4 owns that extension; EP-3 must not
 pre-empt it. The rebuild hook is operator-neutral and comes from
 `Keiro.Projection.Catalog.Operations`; no `Map Text (OpsEnv -> IO ExitCode)` or
 CLI-side target inventory is permitted.
@@ -245,6 +245,11 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   catalog and supported rebuild runner; EP-4 mounts that adapter when available.
   At this date `keiro-ops` does not yet exist, so the integration order is explicit
   rather than assumed.
+- 2026-08-08: MasterPlan 32 completed its side of the integration first. The landed public type is
+  `Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`; it provides versioned JSON
+  inventory, pure and registered-state preview, and start/inspect/resume/abandon actions. The
+  `keiro-ops` package is still absent, so EP-4 must mount these values after EP-2 creates the
+  command tree rather than asking applications for any parallel action map.
 
 
 ## Decision Log
@@ -281,7 +286,7 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   Date: 2026-08-06
 
 - Decision: Replace EP-4's free-form rebuild action map with the typed
-  `ProjectionCatalogOps` adapter from MasterPlan 32.
+  `ProjectionCatalogOperations` adapter from MasterPlan 32.
   Rationale: Applications continue to own schema and handlers, but catalog
   membership, reset and replay policy, fixed-head completion, and safe lifecycle
   are Keiro runtime invariants. The ops package should present those invariants,
@@ -297,3 +302,6 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
 operations and removed the free-form rebuild-map contract, 2026-08-07.
+
+Revision note: Reconciled EP-4 with the landed `ProjectionCatalogOperations` API while the
+`keiro-ops` package remains pending behind EP-2, 2026-08-08.

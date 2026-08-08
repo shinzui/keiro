@@ -42,6 +42,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   source exhaustion, adapter participation, and catalog verification. New
   rebuild metrics cover starts, resumes, committed pages/events, failures,
   promotions, and page duration.
+- **keiro**: add `Keiro.Projection.Catalog.Operations`, an operator-neutral
+  adapter with versioned JSON inventory, pure and registered-state preview,
+  and start/inspect/resume/abandon actions that accept no caller-supplied fleet
+  lists. Catalog abandonment now records durable group and run failure evidence.
+- **jitsurei**: adopt one validated order projection catalog for managed inline
+  and async application, startup registration, query binding, and a normalized
+  clear/preserve rebuild. The executable test proves verification failure keeps
+  appends fenced, application repair resumes the same run, a no-history
+  brownfield root survives, derived targets rebuild, and replay suppresses a
+  live-only side effect.
 - **keiro-dsl**: register unreleased candidate language 5 with checked physical
   targets, atomic rebuild groups, projection ownership/order, typed aggregate
   or category sources, independent reset/replay policies, and query-model

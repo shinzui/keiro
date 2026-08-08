@@ -376,6 +376,31 @@ shapes that today's type no longer admits. Treat public messages separately
 from private events even when their current records look alike: they have
 different owners and compatibility directions.
 
+### Inventory and catalog the projection fleet
+
+Treat projection structure as a second durable inventory beside wire shapes.
+Record every query model, qualified physical target, handler, source category,
+subscription/dedup identity, reset procedure, verification query, and live-only
+effect. Then group targets that must fence and promote atomically. A foreign-key
+root with incomplete functional history usually needs
+`PreserveAndReconcile`; fully derived children may use `ClearBeforeReplay` only
+when an explicit replay adapter can reconstruct them.
+
+Adopt the catalog incrementally: validate it while compatibility paths still
+run; switch startup registration and managed live selection; compare the
+catalog report with the recorded fleet; then move rebuild operations to
+`Keiro.Projection.Catalog.Operations`. Keep network calls and other live-only
+actions out of replay adapters, and require application verification before
+promotion. Candidate language 5 can generate the facade after the inventory is
+understood; changing only the DSL preamble cannot infer any of these facts.
+
+The proof is closed-world. Validation cannot discover undeclared tables or
+inspect arbitrary SQL. Persist the old inventory and use
+`compareCatalogBaseline` (or candidate-language-5 diff) before removing a whole
+target/owner declaration, because the new catalog alone cannot report a fact
+that has vanished completely. Application migrations continue to own all target
+DDL throughout the cutover.
+
 
 ### Capture goldens before declaring the spec
 

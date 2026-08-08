@@ -46,12 +46,16 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-08-08: MasterPlan 32 landed the operator-neutral runtime adapter before this plan's
+  prerequisite package existed. `keiro-ops` and `Keiro.Ops.Embed.AppHooks` are still absent, so
+  plan 213 stopped at the integration gate instead of creating a second parser. The available
+  public hook is `Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`, with versioned
+  inventory, preview, registered-preview, and run-report JSON values.
 
 
 ## Decision Log
 
-- Decision: The rebuild command mounts `ProjectionCatalogOps` from MasterPlan 32 rather than an
+- Decision: The rebuild command mounts `ProjectionCatalogOperations` from MasterPlan 32 rather than an
   application-supplied `Map Text (OpsEnv -> IO ExitCode)`.
   Rationale: Applications still own schema, handlers, and verification, but Keiro's validated
   catalog and replay runner own safe discovery, fencing, clear/preserve policy, fixed-head replay,
@@ -62,7 +66,7 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
   Date: 2026-08-07
 
 - Decision: Retain command parsing, rendering, preview/`--force`, JSON, exit codes, and embedding
-  in `keiro-ops`; keep `ProjectionCatalogOps` operator-neutral in `keiro`.
+  in `keiro-ops`; keep `ProjectionCatalogOperations` operator-neutral in `keiro`.
   Rationale: Runtime rebuild invariants belong with the runtime, while presentation and operator
   policy belong with the operations package. This preserves the MasterPlan's no-invented-SQL rule.
   Date: 2026-08-07
@@ -98,7 +102,7 @@ target configuration.
 
 Rebuild: [MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md)
 and [plan 213](213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md)
-replace independent application lists with `ProjectionCatalogOps`. The application still supplies
+replace independent application lists with `ProjectionCatalogOperations`. The application still supplies
 the validated catalog, target schema, live/replay handlers, and verification hooks; Keiro supplies
 the safe operation. This plan mounts and renders that adapter and does not inspect application
 tables or invent SQL.
@@ -136,7 +140,7 @@ In `keiro-ops`, add `Keiro.Ops.Embed`:
 data AppHooks = AppHooks
   { registry :: !(Maybe (WorkflowRegistry '[Store, Error StoreError, IOE], WorkflowResumeOptions)),
     auditTargets :: !(Maybe OpsAuditConfig),   -- streams/categories + budget for Keiro.ReplayAudit
-    projectionCatalog :: !(Maybe (ProjectionCatalogOps '[Store, Error StoreError, IOE]))
+    projectionCatalog :: !(Maybe ProjectionCatalogOperations)
   }
 
 emptyAppHooks :: AppHooks
@@ -160,7 +164,7 @@ handshake like any mutation: resume executes application code, so it requires
 [--budget …]` — wrap `auditTargets`/`auditStreams` + `renderAuditReport`,
 exiting via `auditExitCode` so CI can use the embedded command as the deploy
 gate directly. `rebuild --list`, preview/start, status, resume, and abandon render and invoke the
-mounted `ProjectionCatalogOps`. The exact subcommand spelling follows the frozen EP-2 command
+mounted `ProjectionCatalogOperations`. The exact subcommand spelling follows the frozen EP-2 command
 conventions. List and preview are read-only. Start/resume/abandon require the schema handshake,
 preview, and `--force`; the adapter, not the CLI, resolves groups, targets, sources, and handlers.
 
@@ -247,7 +251,7 @@ reversible; coordinate with MasterPlan 30's plan 204 on shared files as noted.
 
 End-state additions: `Keiro.Ops.Embed.{AppHooks, emptyAppHooks, opsCommandTree,
 OpsAuditConfig}`; `AppHooks` optionally mounts
-`Keiro.Projection.Catalog.Operations.ProjectionCatalogOps`; `jitsurei` gains an ops mount and a
+`Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`; `jitsurei` gains an ops mount and a
 dependency on `keiro-ops`.
 This plan owns the `OpsEnv` extension point (MasterPlan 31 Integration Points);
 plans 206/207's modules are consumed unchanged. Soft dependency on plan 207 for
@@ -258,3 +262,6 @@ landed, omit the rebuild hook/command rather than publish a free-form substitute
 
 Revision note: Replaced the proposed free-form rebuild map with the validated projection-catalog
 operations adapter coordinated by MasterPlan 32, 2026-08-07.
+
+Revision note: Reconciled the design with the landed `ProjectionCatalogOperations` interface and
+recorded the still-absent `keiro-ops` integration gate, 2026-08-08.

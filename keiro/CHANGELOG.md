@@ -143,6 +143,15 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `Keiro.Projection.Catalog.Operations` derives versioned JSON inventory,
+  pure/registered rebuild previews, and start/inspect/resume/abandon actions
+  from one `ValidatedProjectionCatalog`. Callers cannot provide replacement
+  targets, sources, handlers, subscriptions, or dedup lists.
+
+- `Keiro.ReadModel.Rebuild.abandonCatalogRebuild` records explicit failure
+  evidence against both the durable run and its catalog group while retaining
+  the writer fence.
+
 - `Keiro.Workflow.Schema.terminalMarkers` / `terminalMarkersTx` report which
   stopping terminal markers a workflow generation carries, in one query.
 

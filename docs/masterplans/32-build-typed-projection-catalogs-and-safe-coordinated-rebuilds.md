@@ -125,7 +125,7 @@ plans must amend it if implementation changes the contract.
 | 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Complete |
 | 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Complete |
 | 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Complete |
-| 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | Not Started |
+| 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -234,7 +234,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.
 - [x] EP-4: checked DSL notation and generated runtime catalog/source views compile in conformance.
 - [x] EP-4: diff, replay-impact, scaffold-ledger, and workspace evolution classifications are complete.
-- [ ] EP-5: hand-written and generated adoption examples, compatibility migration guide, and docs.
+- [x] EP-5: hand-written and generated adoption examples, compatibility migration guide, and docs.
 - [ ] EP-5: catalog-backed operator inventory/rebuild integration reconciles with MasterPlan 31.
 
 
@@ -279,6 +279,14 @@ interactions between child plans. Provide concise evidence.
 - 2026-08-08: The starter conformance suite encoded mutable `new <kind>` invocations instead of a
   historical language contract. A frozen-corpus manifest entry now keeps that v4 evidence under
   compile, ledger, disk, and Cabal checks without replaying it through candidate defaults.
+- 2026-08-08: EP-5 landed the operator-neutral adapter and application adoption before the external
+  command package. `ProjectionCatalogOperations` now supplies versioned JSON inventory, pure and
+  registered-state preview, and start/inspect/resume/abandon. `keiro-ops` is still absent, so only
+  the command mount, text rendering, and `--force` acceptance remain gated on MasterPlan 31.
+- 2026-08-08: The jitsurei brownfield proof showed why completion and promotion verification are
+  separate. Replay reached its exclusive fixed head and rebuilt every derived target, but an
+  application-marked unsafe preserved root still blocked promotion and kept appends fenced until
+  operator repair and exact-run resume.
 
 
 ## Decision Log
@@ -362,6 +370,13 @@ plan.
   adapter order, and verifier versions govern resume. Transaction chunk size may change safely.
   Date: 2026-08-08
 
+- Decision: Expose operations as an opaque `ProjectionCatalogOperations` value with pure reports,
+  a read-only registered preview, and explicit mutation functions.
+  Rationale: This preserves one catalog authority while leaving rendering, confirmation, exit
+  codes, and database connection policy to MasterPlan 31. Callers cannot smuggle a second target,
+  handler, source, subscription, or dedup inventory into execution.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -375,7 +390,11 @@ catalog feeds live writers, atomic group preparation, fixed-head replay, exact r
 verification, and proof-gated atomic promotion, while candidate language 5 generates the same
 catalog and classifies its evolution. The principal lesson is that source exhaustion and adapter
 evaluation are separate evidence: an all-irrelevant history can be complete with zero applies,
-while one arbitrary dedup row proves neither. EP-5 remains to adopt the catalog in examples and
-operations. EP-4 also made release maturity distinct from authoring defaults: v4 remains published
-stable, unreleased v5 is amended in place, and historical v4 corpora no longer churn when candidate
-authoring advances.
+while one arbitrary dedup row proves neither. EP-5 has now adopted the catalog in hand-written
+jitsurei and the generated candidate-language-5 conformance service, published the migration and
+operations contract, and landed the operator-neutral adapter. EP-4 also made release maturity
+distinct from authoring defaults: v4 remains published stable, unreleased v5 is amended in place,
+and historical v4 corpora no longer churn when candidate authoring advances. The only incomplete
+initiative item is the command mount owned by MasterPlan 31: `keiro-ops` does not yet exist, so this
+MasterPlan remains in progress rather than claiming text/JSON CLI rendering or `--force` behavior
+that has not shipped.

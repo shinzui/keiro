@@ -263,6 +263,74 @@ committed pages/events, failures, promotions, and page duration. Durable reports
 also expose captured head, per-source cursor/target, evaluation/apply counts,
 and verification evidence; neither surface contains raw event payloads.
 
+## Inspect And Operate A Catalog
+
+`Keiro.Projection.Catalog.Operations` is the operator-neutral boundary over the
+same validated catalog. Construct it once with `projectionCatalogOperations`.
+`catalogInventoryReport` and `previewGroupRebuild` are pure; the latter resolves
+the selected group's targets, clear/preserve policies, sources, projections,
+query models, subscription/dedup resets, verification hooks, lock scope, and
+destructive status without touching PostgreSQL. `previewRegisteredGroupRebuild`
+adds a read-only lifecycle lookup and an explicit
+`registeredFingerprintMatches` result but does not acquire a fence or create a
+run. Run inspection also rejects a run recorded for a different catalog
+fingerprint.
+
+The effectful actions are `startGroupRebuild`, `inspectGroupRebuild`,
+`resumeGroupRebuild`, and `abandonGroupRebuild`. Their callers provide only the
+group or run identity and operational request; target, source, handler, reset,
+subscription, and dedup lists cannot be overridden. Reports have stable,
+versioned JSON envelopes:
+
+- `keiro/catalog-inventory/v1`;
+- `keiro/catalog-rebuild-preview/v1`;
+- `keiro/catalog-registered-rebuild-preview/v1`; and
+- `keiro/catalog-rebuild-run/v1`.
+
+The adapter intentionally has no parser, text renderer, confirmation policy, or
+database credentials. A future `keiro-ops` package will mount it and own
+preview/confirmation and text/JSON presentation. That package is not present in
+this repository yet, so catalog rebuild commands are planned rather than
+available; applications can embed the adapter directly without maintaining a
+second rebuild map.
+
+The hand-written `jitsureiProjectionCatalog` is executable adoption evidence:
+one catalog drives managed inline application, async application, registration,
+preview, a mixed clear/preserve rebuild, verification failure, fencing, repair,
+resume, and promotion. Its application-owned replay adapter omits the
+live-only side effect. The candidate-language-5
+`keiro-dsl-conformance-projection-catalog` service supplies the generated path:
+it imports only `Generated.CatalogDemo.ProjectionCatalog` and proves the same
+inventory dimensions—three targets, mixed policies, a target dependency, one
+atomic ordered group, typed inline and async owners, and a query binding.
+
+## Migrate Existing Projection Fleets In Stages
+
+Do not flip a preamble or replace all paths at once. Use this sequence:
+
+1. Inventory every read model, physical table, live and replay handler,
+   subscription/dedup identity, source, verification, and current rebuild
+   procedure.
+2. Group targets that must fence, reset, verify, and promote atomically.
+3. Choose `ClearBeforeReplay` or `PreserveAndReconcile` for every target and
+   `Replayable` or `LiveOnly` for every owner independently.
+4. Add replay-specific transactional adapters that omit live-only effects and
+   add application-owned verification for brownfield assumptions.
+5. Build and validate the catalog while compatibility runners still operate;
+   compare its inventory with the recorded fleet.
+6. Switch startup registration and live selection to the catalog, then switch
+   rebuild/operations, and adopt candidate language-5 generation only after the
+   hand-written inventory is understood.
+7. Retire unmanaged compatibility calls only after inventory and persisted
+   baseline/diff evidence agree.
+
+Validation is deliberately closed-world. It cannot discover an undeclared
+table or prove what arbitrary SQL writes. Removing an owner while retaining its
+target is a validation error; removing the entire target and owner together
+requires `compareCatalogBaseline` or candidate-language-5 diff evidence because
+the new catalog alone cannot prove that a declaration used to exist. Keiro never
+creates or migrates application targets.
+
 ## Initialize Legacy Metadata
 
 The compatibility `keiro_read_models` table — which stores each model's version, shape hash,

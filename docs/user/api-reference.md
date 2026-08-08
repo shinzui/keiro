@@ -276,6 +276,28 @@ owned.
 `unmanagedReadModel` are explicit compatibility labels for existing callers.
 They preserve the wrapped value but do not imply catalog validation.
 
+## `Keiro.Projection.Catalog.Operations`
+
+Types and functions:
+
+- opaque `ProjectionCatalogOperations` and `projectionCatalogOperations`;
+- `CatalogInventoryReport` and `catalogInventoryReport`;
+- `RebuildPreview` and `previewGroupRebuild`;
+- `RegisteredRebuildPreview` and `previewRegisteredGroupRebuild`;
+- `CatalogRunReport` and `CatalogOpsError`;
+- `startGroupRebuild`;
+- `inspectGroupRebuild`;
+- `resumeGroupRebuild`; and
+- `abandonGroupRebuild`.
+
+Inventory and pure preview derive every fact from one
+`ValidatedProjectionCatalog`; registered preview performs only a lifecycle
+read and reports whether its fingerprint matches. Inspection rejects runs owned
+by a different catalog. Start, resume, and abandon are explicit mutations over
+the catalog replay runner. The module exposes versioned JSON values but
+deliberately contains no CLI parser, renderer, confirmation rule, or connection
+configuration.
+
 ## `Keiro.Connection`
 
 Types and functions:
@@ -348,6 +370,7 @@ Types and functions:
 - `startCatalogRebuild`
 - `resumeCatalogRebuild`
 - `inspectCatalogRebuild`
+- `abandonCatalogRebuild`
 - `RebuildError (..)`
 - `startRebuild`
 - `finishRebuild`

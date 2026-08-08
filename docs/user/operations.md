@@ -95,16 +95,40 @@ example package.
 
 Use `ReadModel.version` and `shapeHash` to force stale readers to fail closed.
 
-Recommended rebuild pattern:
+For catalog-managed read models, register one validated
+`Keiro.Projection.Catalog.ValidatedProjectionCatalog` at startup and operate a
+whole rebuild group rather than individual tables. Before mutation, render both
+`catalogInventoryReport` and `previewGroupRebuild` from
+`Keiro.Projection.Catalog.Operations`. Confirm the catalog fingerprint, group,
+qualified targets, clear versus preserve actions, sources, subscription/dedup
+resets, verification hooks, lock scope, and `destructive` flag. Use
+`previewRegisteredGroupRebuild` when the operator also needs the current durable
+lifecycle state and an explicit registered-fingerprint match result; it is
+read-only and creates no run. Inspection refuses a run whose stored catalog
+fingerprint belongs to another mounted catalog.
 
-1. Deploy code that can write the new model separately from old readers.
-2. Mark the new model `Rebuilding`.
-3. Rebuild from the event log.
-4. Mark it `Live`.
-5. Move readers to the new version.
-6. Mark old versions `Abandoned` when no longer needed.
+Start with `startGroupRebuild`. The runtime fences the group, captures one fixed
+head, prepares every declared target atomically, replays with durable progress,
+verifies, and promotes. If replay or verification fails, the group remains
+fenced. Inspect it with `inspectGroupRebuild`, repair the application-owned
+cause, and call `resumeGroupRebuild` with the same run identity and exact replay
+contract. Use `abandonGroupRebuild` only to record explicit failure evidence and
+leave the group unavailable for deliberate recovery; abandonment does not make
+partial data live.
 
-The exact table-swap strategy is application-owned.
+The adapter does not enforce an operator confirmation flag. An embedding command
+surface must treat start, resume, and abandon as mutations, show the preview,
+and require its established confirmation policy. The planned `keiro-ops`
+catalog commands are not available yet because that package has not been
+created; do not substitute a name-to-action rebuild map. Applications may call
+the operator-neutral adapter directly today.
+
+`ClearBeforeReplay` uses a single foreign-key-compatible multi-table truncate
+without `CASCADE`; undeclared references fail and roll the preparation back.
+`PreserveAndReconcile` retains brownfield rows and therefore needs idempotent
+replay adapters plus application verification. Keiro never creates, migrates,
+or swaps application tables. Online/shadow-table cutover remains
+application-owned.
 
 ## Snapshots
 

@@ -59,9 +59,11 @@ motivation and an honest account of what keiro deliberately gives up.
   (`runCommandWithSql`) that appends events, updates inline projections, and
   writes outbox/timer rows in one Postgres transaction (`Keiro.Command`);
 - advisory snapshots that never become load-bearing (`Keiro.Snapshot`);
-- explicitly registered read models, category-scoped strong reads,
-  inline/async projections, and atomically fenced rebuilds
-  (`Keiro.ReadModel`, `Keiro.Projection`);
+- validated projection catalogs spanning query models, application-owned
+  targets, typed inline/async owners, and deterministic sources; plus
+  category-scoped strong reads and atomically fenced, fixed-head coordinated
+  rebuilds with resumable progress (`Keiro.ReadModel`, `Keiro.Projection`,
+  `Keiro.Projection.Catalog`);
 - event-sourced process managers, routers, and durable timers
   (`Keiro.ProcessManager`, `Keiro.Router`, `Keiro.Timer`);
 - a **durable-execution runtime** — named-step journaling, crash-safe replay and
@@ -112,7 +114,9 @@ effect handling, and **Streamly** for streaming reads and worker loops.
 - `keiro-migrations/` — native `pg-migrate` component and CLI for the Kiroku and
   Keiro PostgreSQL schemas, plus verified legacy-Codd import evidence.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.
-- `jitsurei/` — guide-backed, runnable worked examples that depend on `keiro`.
+- `jitsurei/` — guide-backed, runnable worked examples, including one-catalog
+  live/async application and a mixed clear/preserve rebuild with fencing and
+  resume, that depend on `keiro`.
 
 ## Building
 

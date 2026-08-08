@@ -113,8 +113,8 @@ the predecessor's aggregate fingerprint segment; service-aware scaffold,
 manifest, durable ID-domain, and diff consumers still observe the new contract
 capability through `CheckedService`.
 
-**Primary conformance may cover the stable candidate and released predecessors concurrently.** A
-new stable authoring candidate gets focused positive, negative, generation, and compiled/runtime
+**Primary conformance may cover the active candidate and released predecessors concurrently.** An
+active authoring candidate gets focused positive, negative, generation, and compiled/runtime
 lanes. Existing source and generated corpora keep their declared released versions unless their
 subject is intentionally migrated; changing the stable pointer alone is not permission to rewrite
 their preambles or banners. The machine-readable baseline names all primary language versions and
@@ -195,7 +195,7 @@ fleet planning remain in
   predecessor's aggregate-fold projection while changing another checked
   semantic consumer. Fingerprint equality is explicit and does not authorize
   scaffold or diff code to discard `CheckedService`.
-- A stable-language candidate requires dedicated conformance in the same change, not wholesale
+- An active authoring candidate requires dedicated conformance in the same change, not wholesale
   migration of the existing corpus. Released-version corpora remain primary evidence for their own
   contracts until an intentional migration changes what they prove.
 - Source-aware tools can branch on frontend phase, stable code, and exact span without parsing

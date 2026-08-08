@@ -36,8 +36,9 @@ are adopting:
   and the goldens-first shadow-compared versioned migration path.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the
   version-1-to-version-2 upcaster.
-- [Project Read Models](project-read-models.md) builds the inline order summary
-  read model and query path.
+- [Project Read Models](project-read-models.md) builds the order read side from
+  one validated catalog, including managed inline/async application, a
+  brownfield-safe mixed-policy rebuild, fencing, repair, and resume.
 - [Process Managers And Timers](process-managers-and-timers.md) shows
   replay-safe fulfillment coordination and a due timer worker.
 - [Durable Workflows](durable-workflows.md) walks a named-step durable workflow

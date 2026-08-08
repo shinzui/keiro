@@ -33,8 +33,9 @@ pieces those modules import.
   schema versions, upcasters, structural codec authority, and decode failures.
 - [Snapshots](snapshots.md): enabling advisory snapshot hydration and assigning
   a hand-owned `FoldVersion` to hand-written folds.
-- [Read Models And Projections](read-models-and-projections.md): strong,
-  eventual, and position-wait reads.
+- [Read Models And Projections](read-models-and-projections.md): one validated
+  projection catalog, managed live/async application, strong/eventual reads,
+  coordinated rebuilds, operations reports, and staged migration.
 - [Process Managers And Timers](process-managers-and-timers.md): event-sourced
   coordination, deterministic command ids, and timer workers.
 - [Durable Workflows](durable-workflows.md): named-step workflows, durable sleep,
@@ -86,8 +87,9 @@ The v1 library includes:
 - `runCommand`, `runCommandWithSql`, and `runCommandWithSqlEvents` through
   `Keiro.Command`;
 - advisory snapshots through `Keiro.Snapshot`;
-- read models, inline projections, async projection helpers, and rebuild
-  metadata through `Keiro.ReadModel` and `Keiro.Projection`;
+- read models, validated projection catalogs, managed inline/async projection
+  helpers, and resumable coordinated rebuilds through `Keiro.ReadModel`,
+  `Keiro.Projection`, and `Keiro.Projection.Catalog`;
 - event-sourced process managers through `Keiro.ProcessManager`;
 - stateless, effectful fan-out (routers) through `Keiro.Router`;
 - durable timer storage and worker helpers through `Keiro.Timer`;

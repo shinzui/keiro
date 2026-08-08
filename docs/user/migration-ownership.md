@@ -82,6 +82,21 @@ requires application-owned reconciliation and verification behavior. Never
 use a target declaration as evidence that a brownfield table is reconstructible
 from available history.
 
+Catalog validation is a closed-world check over declared facts. It rejects an
+owner removal that leaves its target behind, but if a change removes the owner
+and target together the new catalog cannot know they ever existed. Persist the
+old inventory and run `compareCatalogBaseline`, or use candidate-language-5 DSL
+diff evidence, before applying the application migration that removes or moves
+the table. No catalog check can discover an undeclared table or prove which
+qualified objects arbitrary handler SQL writes.
+
+`jitsurei/src/Jitsurei/ReadModels.hs` demonstrates this ownership boundary. Its
+summary root, foreign-key child, async audit, and live-only side-effect tables
+are created by the application's initializer, while Keiro migrations create
+only lifecycle/progress metadata. Production applications should express the
+same DDL in their own append-only migration component rather than relying on a
+runtime initializer.
+
 ## Authoring
 
 Use the standard CLI to create and check append-only files:
