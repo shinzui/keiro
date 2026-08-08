@@ -73,6 +73,7 @@ module Keiro.ReadModel.Rebuild
     startCatalogRebuild,
     resumeCatalogRebuild,
     inspectCatalogRebuild,
+    abandonCatalogRebuild,
 
     -- * Unmanaged single-read-model compatibility
     RebuildError (..),

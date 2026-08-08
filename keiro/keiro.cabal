@@ -59,6 +59,7 @@ library
     Keiro.ProcessManager
     Keiro.Projection
     Keiro.Projection.Catalog
+    Keiro.Projection.Catalog.Operations
     Keiro.ReadModel
     Keiro.ReadModel.Rebuild
     Keiro.ReadModel.Schema
@@ -152,6 +153,7 @@ test-suite keiro-test
   hs-source-dirs: test
   main-is:        Main.hs
   other-modules:
+    CatalogOperationsSpec
     CatalogSpec
     GroupRebuildSpec
     ProjectionReplaySpec

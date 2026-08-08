@@ -14,6 +14,7 @@ module Keiro.ReadModel.Rebuild.Runner
     startCatalogRebuild,
     resumeCatalogRebuild,
     inspectCatalogRebuild,
+    abandonCatalogRebuild,
   )
 where
 
@@ -116,6 +117,7 @@ data CatalogRebuildError
   | CatalogRebuildVerificationFailed !RebuildRunId !Text !Text
   | CatalogRebuildInvariantFailed !RebuildRunId !Text
   | CatalogRebuildPromotionFailed !GroupTransitionError
+  | CatalogRebuildAbandonFailed !GroupTransitionError
   deriving stock (Eq, Show, Generic)
 
 data RebuildRunStatus
@@ -310,6 +312,37 @@ inspectCatalogRebuildMaybe runId =
               }
       )
       maybeRun
+
+abandonCatalogRebuild ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  RebuildFailure ->
+  Eff es (Either CatalogRebuildError RebuildRunReport)
+abandonCatalogRebuild catalog runId failure =
+  inspectCatalogRebuildMaybe runId >>= \case
+    Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
+    Just report -> do
+      let groupId = report ^. #rebuildGroupId
+          actual = rebuildContract catalog groupId
+          expected = report ^. #contractFingerprint
+      if expected /= actual
+        then pure (Left (CatalogRebuildContractMismatch runId expected actual))
+        else case groupRebuildHandleFor catalog groupId runId of
+          Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
+          Just handle -> do
+            abandoned <- abandonGroupRebuild handle failure
+            case abandoned of
+              Left err -> pure (Left (CatalogRebuildAbandonFailed err))
+              Right _ -> do
+                recordFailure
+                  runId
+                  (failure ^. #failureCode)
+                  (failure ^. #failureDetail)
+                  Nothing
+                  Nothing
+                  Nothing
+                inspectCatalogRebuild runId
 
 captureHead :: (Store :> es) => Eff es GlobalPosition
 captureHead = do

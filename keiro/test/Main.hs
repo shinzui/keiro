@@ -3,6 +3,7 @@ module Main
   )
 where
 
+import CatalogOperationsSpec qualified
 import CatalogSpec qualified
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
@@ -386,6 +387,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogSpec.spec
+  CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   ProjectionReplaySpec.spec fixture
 
