@@ -122,7 +122,7 @@ plans must amend it if implementation changes the contract.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | Complete |
-| 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | In Progress |
+| 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Complete |
 | 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Not Started |
 | 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Not Started |
 | 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | Not Started |
@@ -229,7 +229,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: public catalog vocabulary, typed/existential views, compatibility bridge, and ADR.
 - [x] EP-1: deterministic closed-world validation, fingerprints, inventories, and live mutation tests.
 - [x] EP-2: group registry and atomic clear/preserve preparation with derived dedup/checkpoint resets.
-- [ ] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
+- [x] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
 - [ ] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
 - [ ] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.
 - [ ] EP-4: checked DSL notation and generated runtime catalog/source views compile in conformance.
@@ -262,6 +262,11 @@ interactions between child plans. Provide concise evidence.
   `AsyncProjection.name`, not by subscription or query-model identity. EP-1 therefore keeps
   those logical IDs separate and validates the compatibility bridge; EP-2 can move lifecycle
   state to group identity without silently changing current dedup semantics.
+- 2026-08-08: PostgreSQL shared group-row locks give a clean serialization
+  boundary for both command-backed inline writes and async dedup/application.
+  One-second held-writer fixtures showed preparation beginning 200 ms later
+  waits beyond 500 ms, while later writers return typed fenced outcomes without
+  append, dedup, checkpoint, or target changes.
 
 
 ## Decision Log

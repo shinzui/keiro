@@ -42,7 +42,7 @@ This section must always reflect the actual current state of the work.
       derived dedup/subscription reset sets.
 - [x] Enforce the same group fence in inline and async live write transactions; retain the legacy
       one-read-model compatibility path.
-- [ ] Implement atomic group promotion and abandonment, add concurrency/policy tests, amend the
+- [x] Implement atomic group promotion and abandonment, add concurrency/policy tests, amend the
       catalog ADR, and pass focused and full verification.
 
 
@@ -113,7 +113,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Plan 210 is complete. Native migration 0022 establishes group lifecycle rows
+and deterministic legacy singleton groups without changing application tables.
+Catalog registration, preparation, abandonment, and promotion now share one
+opaque group/run handle and fingerprint; preparation derives every target and
+framework reset from the validated catalog and rolls the entire transaction
+back on drift or unsafe foreign keys.
+
+Inline commands and async applies consult the same sorted group-row lock before
+their writes. Integration tests prove mixed preserve/clear policy, normalized
+parent/child truncation, undeclared-FK rollback, derived dedup/checkpoint resets,
+post-fence no-op behavior, and the ordering of in-flight live transactions
+against preparation. The legacy one-read-model functions remain source-compatible
+and explicitly unmanaged. ADR 26 and the public guides now record the lifecycle,
+lock protocol, failure semantics, and application-schema ownership boundary.
+
+Verification completed with 27 migration examples, 423 Keiro examples, strict
+validation of all 26 ADR concepts, and the complete `just verify` repository
+gate, including 610 DSL examples, 58 PGMQ examples (2 environment-dependent
+pending), 21 jitsurei examples, conformance regeneration, and policy checks.
 
 
 ## Context and Orientation
