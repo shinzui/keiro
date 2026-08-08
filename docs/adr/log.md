@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-08
+* **Add**: Define the supported-library, schema-ownership, force-preview, schema-handshake, and embedding boundaries for operator commands (plan 206).
 * **Update**: Amend terminal arbitration so distinct completion, cancellation, failure, and rotation markers share one generation lifecycle lock (plan 205).
 * **Add**: Define append-only, first-writer-wins workflow lifecycle markers and supported operator cancellation (plan 205).
 * **Add**: Define the typed projection catalog's four identities, independent reset and replay policies, closed-world validation, and unchecked consumer-owned SQL boundary (plan 209).

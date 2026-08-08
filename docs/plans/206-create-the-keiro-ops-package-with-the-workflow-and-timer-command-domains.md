@@ -39,10 +39,10 @@ and no command touches another library's tables directly.
 ## Progress
 
 - [x] (2026-08-08T23:42:49Z) Package scaffolding: `keiro-ops.cabal`, `cabal.project` entry, nix wiring, empty command tree runs.
-- [ ] Core: `OpsEnv`, connection/config plumbing, output layer (tables + `--json`), `--force` rail, schema handshake.
+- [x] (2026-08-08T23:51:29Z) Core: `OpsEnv`, connection/config plumbing, output layer (tables + `--json`), `--force` rail, schema handshake.
 - [ ] Workflow domain complete (list/show/journal/awakeables/children/cancel/resurrect/lease-release/gc-once).
 - [ ] Timer domain complete (stuck list/requeue/cancel/dead-letter/drain-once).
-- [ ] ADR for the operator-command contract recorded; `just adr-validate` green.
+- [x] (2026-08-08T23:51:29Z) ADR for the operator-command contract recorded; `just adr-validate` green.
 - [ ] `cabal test keiro-ops-test` green; full repo suite unaffected.
 
 
@@ -72,6 +72,19 @@ and no command touches another library's tables directly.
   Nix wiring.
   Rationale: `flake.nix` and `nix/haskell.nix` provide a dev shell and explicitly
   do not enumerate or build project packages. Cabal is the package graph authority.
+  Date: 2026-08-08
+
+- Decision: Acquire one bracketed `Kiroku.Store.Connection.withStore` environment
+  after the schema handshake and run every handler through its `Store` effect.
+  Rationale: Workflow and timer operations already share the Kiroku store
+  interpreter, and the bracket owns the pool, notifier, and publisher lifetimes.
+  A lighter standalone Hasql connection would require a second execution path.
+  Date: 2026-08-08
+
+- Decision: Parse the command tree with optparse-applicative's `subparserInline`
+  preference.
+  Rationale: Global output and safety options must work before or after nested
+  domain commands, including the documented `wf cancel --force` form.
   Date: 2026-08-08
 
 
