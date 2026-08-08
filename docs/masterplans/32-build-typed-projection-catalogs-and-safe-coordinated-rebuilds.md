@@ -123,7 +123,7 @@ plans must amend it if implementation changes the contract.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | Complete |
 | 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Complete |
-| 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Not Started |
+| 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | In Progress |
 | 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Not Started |
 | 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | Not Started |
 
