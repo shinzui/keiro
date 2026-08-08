@@ -5,12 +5,14 @@ conformance component, and every mutation/gate script. Paths are relative to `ke
 keiro repository. Start with the stable Language-4 fixture for a surface, then use its negative or
 diff variants to see the exact guardrails.
 
-## Stable baseline
+## Published stable baseline and candidate lane
 
-Language 4 is the sole stable authoring contract. The machine-checked baseline contains 240
-fixture sources: 226 declared Language-4 sources and 14 named historical/source-selection
-exceptions. It also accounts for all 33 compiled conformance components: 30 `stable-primary`
-suites, two focused compatibility proofs, and one version-independent codec comparison.
+Language 4 remains the published stable contract; unreleased Language 5 is the development
+authoring candidate. The machine-checked baseline contains 244 fixture sources: 230 declared
+Language-4 sources, one focused Language-5 source, and 13 named historical/source-selection
+exceptions. It also accounts for all 35 compiled conformance components: 30 `stable-primary`
+suites, one `candidate-primary` suite, three focused compatibility proofs, and one
+version-independent codec comparison.
 
 Stable suites exercise syntax profile 2 and runtime semantics 3, including current TypeID-v7
 admission for generated aggregate IDs, typed `KindID` public-contract fields, nominal equality,
@@ -22,7 +24,7 @@ distinct stable starters.
 ## Historical source-language lane
 
 Versions 1 through 3 and the unversioned legacy form remain accepted compatibility-only contracts.
-They retain their released syntax and runtime selections and are not silently upgraded. The 14
+They retain their released syntax and runtime selections and are not silently upgraded. The 13
 fixture exceptions are deliberately smaller than the stable corpus:
 
 | Fixture | Compatibility boundary |
@@ -32,7 +34,6 @@ fixture exceptions are deliberately smaller than the stable corpus:
 | `test/fixtures/contract-v1-compat.keiro` | language-1 permissive `Text` contract IDs |
 | `test/fixtures/id-domain-migration-v3.keiro` | language-3 current TypeID admission versus historical replay |
 | `test/fixtures/language-duplicate.keiro` | duplicate preamble refusal |
-| `test/fixtures/language-future.keiro` | unsupported future version before body parsing |
 | `test/fixtures/language-identifier-v1.keiro` | `language` retained as an identifier in legacy grammar |
 | `test/fixtures/language-identifier-v2.keiro` | `language` retained as an identifier in language 2 |
 | `test/fixtures/language-legacy.keiro` | unversioned source with effective language 1 |
@@ -50,7 +51,7 @@ General source/workspace upgrade automation remains deferred to
 This curated inventory covers the primary feature, negative, and evolution surfaces. Every
 ordinary source below declares Language 4; names such as `reservation-v2.keiro` describe event
 schema evolution or historical fixture naming, not the source-language version. The complete
-machine-checked fixture set contains 240 `.keiro` files as of 2026-08-03.
+machine-checked fixture set contains 244 `.keiro` files as of 2026-08-08.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
@@ -99,6 +100,7 @@ machine-checked fixture set contains 240 `.keiro` files as of 2026-08-03.
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
 | `test/fixtures/process-bad-timer.keiro` | negative timer ceiling and dispatch field binding |
 | `test/fixtures/process-ghost-refs.keiro` | negative process command, timer, and projection references |
+| `test/fixtures/projection-catalog.keiro` | candidate language-5 target/group/owner/query catalog with inline, async, clear, preserve, aggregate, and category coverage |
 | `test/fixtures/readmodel-consistency-conflict.keiro` | negative projection/readmodel consistency conflict |
 | `test/fixtures/readmodel-dispatch-unresolved.keiro` | negative dispatch readmodel and column references |
 | `test/fixtures/readmodel-inline-unreferenced.keiro` | negative unowned inline readmodel feed |
@@ -178,9 +180,10 @@ machine-checked fixture set contains 240 `.keiro` files as of 2026-08-03.
 | `test/fixtures/workqueue-table-divergent.keiro` | negative captured backing-table drift |
 | `test/fixtures/workqueue-uppercase-logical.keiro` | uppercase logical name normalization parity |
 
-## Stable primary compiled suites
+## Primary compiled suites
 
-These 30 components compile generated Language-4 code and form the primary product baseline.
+These 31 components compile the released Language-4 corpus plus the focused
+candidate Language-5 catalog lane and form the primary product baseline.
 
 | Component | Proves |
 | --- | --- |
@@ -202,6 +205,7 @@ These 30 components compile generated Language-4 code and form the primary produ
 | `test/conformance-queue/` (`keiro-dsl-conformance-queue`) | generated workqueue payload codec round-trips |
 | `test/conformance-queue-runtime/` (`keiro-dsl-conformance-queue-runtime`) | queue naming parity, ordering/provisioning, retry policy, and dispositions compile against live PGMQ |
 | `test/conformance-readmodel-runtime/` (`keiro-dsl-conformance-readmodel-runtime`) | readmodel registration/rebuild/query holes use live APIs and a qualified table |
+| `test/conformance-projection-catalog/` (`keiro-dsl-conformance-projection-catalog`) | candidate language-5 generated catalog validates one runtime inventory and compiles aggregate-codec replay, category decoding, inline multi-target, async, clear, and preserve declarations |
 | `test/conformance-dispatch-full/` (`keiro-dsl-conformance-dispatch-full`) | generated queue policy plus a filled worker assemble into a live PGMQ job |
 | `test/conformance-workflow/` (`keiro-dsl-conformance-workflow`) | generated workflow facts match hand-written, mutation-pinnable expectations |
 | `test/conformance-workflow-runtime/` (`keiro-dsl-conformance-workflow-runtime`) | workflow name, awakeable ids, patches, and continuation declarations compile against live runtime |
@@ -255,5 +259,7 @@ to those trees are the worked fills. The most useful starting points are:
   resolver and target-keyed router.
 - `test/conformance-readmodel-runtime/HospitalCapacity/Transfer_decisions/ReadModelHoles.hs`
   for schema-qualified readmodel SQL.
+- `test/conformance-projection-catalog/CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs`
+  for separate live/replay applies, a total category decoder, and event-id dedup under one generated catalog.
 - `test/conformance-workflow-full/HospitalCapacity/HospitalTransferReservation/WorkflowBody.hs`
   for an ordered durable workflow body.

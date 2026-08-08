@@ -58,6 +58,9 @@ data CorpusEntry
         ceRoot :: Text,
         ceOutDir :: FilePath
       }
+  | FrozenCorpus
+      { ceOutDir :: FilePath
+      }
   deriving stock (Eq, Show)
 
 entryOutDir :: CorpusEntry -> FilePath
@@ -73,10 +76,12 @@ renderInvocation WorkspaceSpec {ceManifestPath, ceOutDir} =
   ["scaffold", ceManifestPath, "--out", ceOutDir]
 renderInvocation SkeletonRun {ceRoot, ceOutDir} =
   ["scaffold", "/dev/stdin", "--out", ceOutDir, "--module-root", T.unpack ceRoot]
+renderInvocation FrozenCorpus {} = []
 
 data Supplement = Supplement
   { supWorkspaces :: [(FilePath, FilePath)],
     supSkeletons :: [(Text, Text, FilePath)],
+    supFrozen :: [FilePath],
     supExtraArgs :: [(FilePath, [Text])],
     supExemptions :: [FilePath],
     supLegacyGenerated :: [FilePath]
@@ -138,6 +143,8 @@ parseSupplement path contents =
               checked [T.unpack manifest, T.unpack outDir] (WorkspaceRow (T.unpack manifest) (T.unpack outDir))
             ["skeleton", kind, root, outDir] ->
               checked [T.unpack outDir] (SkeletonRow kind root (T.unpack outDir))
+            ["frozen", outDir] ->
+              checked [T.unpack outDir] (FrozenRow (T.unpack outDir))
             "extra-args" : outDir : args
               | not (null args) ->
                   checked [T.unpack outDir] (ExtraArgsRow (T.unpack outDir) args)
@@ -150,17 +157,19 @@ parseSupplement path contents =
 data SupplementRow
   = WorkspaceRow FilePath FilePath
   | SkeletonRow Text Text FilePath
+  | FrozenRow FilePath
   | ExtraArgsRow FilePath [Text]
   | ExemptionRow FilePath
   | LegacyGeneratedRow FilePath
 
 emptySupplement :: Supplement
-emptySupplement = Supplement [] [] [] [] []
+emptySupplement = Supplement [] [] [] [] [] []
 
 addRow :: SupplementRow -> Supplement -> Supplement
 addRow row supplement = case row of
   WorkspaceRow manifest outDir -> supplement {supWorkspaces = (manifest, outDir) : supWorkspaces supplement}
   SkeletonRow kind root outDir -> supplement {supSkeletons = (kind, root, outDir) : supSkeletons supplement}
+  FrozenRow outDir -> supplement {supFrozen = outDir : supFrozen supplement}
   ExtraArgsRow outDir args -> supplement {supExtraArgs = (outDir, args) : supExtraArgs supplement}
   ExemptionRow path -> supplement {supExemptions = path : supExemptions supplement}
   LegacyGeneratedRow path -> supplement {supLegacyGenerated = path : supLegacyGenerated supplement}
@@ -169,6 +178,10 @@ validateSupplement :: Supplement -> [Text]
 validateSupplement supplement =
   duplicateMessages "workspace out-dir" (map snd (supWorkspaces supplement))
     <> duplicateMessages "extra-args out-dir" (map fst (supExtraArgs supplement))
+    <> duplicateMessages "frozen out-dir" (supFrozen supplement)
+    <> [ "corpus out-dir cannot be both skeleton and frozen: " <> T.pack outDir
+       | outDir <- Set.toList (Set.fromList (map (\(_, _, outDir) -> outDir) (supSkeletons supplement)) `Set.intersection` Set.fromList (supFrozen supplement))
+       ]
     <> duplicateMessages "uncompiled-generated path" (supExemptions supplement)
     <> duplicateMessages "legacy-generated path" (supLegacyGenerated supplement)
   where
@@ -226,6 +239,8 @@ buildPlan repoRoot supplement histories =
     ordinaryDirs = Set.fromList (map fst ordinaryRecords)
     workspaceDirs = Set.fromList workspaceRecords
     skeletonDirs = Set.fromList [outDir | (_, _, outDir) <- supSkeletons supplement]
+    frozenDirs = Set.fromList (supFrozen supplement)
+    stdinClaimDirs = skeletonDirs `Set.union` frozenDirs
     singleEntries = map makeSingle ordinaryRecords
     workspaceEntries =
       [ WorkspaceSpec manifest outDir
@@ -233,7 +248,8 @@ buildPlan repoRoot supplement histories =
         Just manifest <- [Map.lookup outDir workspaceRows]
       ]
     skeletonEntries = [SkeletonRun kind root outDir | (kind, root, outDir) <- supSkeletons supplement]
-    orderedEntries = sortOn entryOutDir (singleEntries <> workspaceEntries) <> skeletonEntries
+    frozenEntries = map FrozenCorpus (supFrozen supplement)
+    orderedEntries = sortOn entryOutDir (singleEntries <> workspaceEntries) <> skeletonEntries <> frozenEntries
     errors =
       ["no tracked scaffold records were found under keiro-dsl/test" | null histories]
         <> duplicateHistoryErrors
@@ -248,13 +264,16 @@ buildPlan repoRoot supplement histories =
       | outDir <- duplicates (map (historyOutDir repoRoot) histories)
       ]
     unclaimedStdinErrors =
-      [ "stdin scaffold record has no skeleton rows: " <> T.pack outDir
-      | outDir <- Set.toList (stdinDirs `Set.difference` skeletonDirs)
+      [ "stdin scaffold record has no skeleton or frozen row: " <> T.pack outDir
+      | outDir <- Set.toList (stdinDirs `Set.difference` stdinClaimDirs)
       ]
     unclaimedSkeletonErrors =
       [ "skeleton rows have no stdin scaffold record: " <> T.pack outDir
       | outDir <- Set.toList (skeletonDirs `Set.difference` stdinDirs)
       ]
+        <> [ "frozen row has no stdin scaffold record: " <> T.pack outDir
+           | outDir <- Set.toList (frozenDirs `Set.difference` stdinDirs)
+           ]
     unclaimedWorkspaceRecordErrors =
       [ "workspace scaffold record has no workspace manifest row: " <> T.pack outDir
       | outDir <- Set.toList (workspaceDirs `Set.difference` Map.keysSet workspaceRows)
@@ -321,11 +340,15 @@ checkRecordDiskConsistency repoRoot entries = do
             [ normalise (ceOutDir </> moduleRootPath ceRoot)
             | SkeletonRun {ceRoot, ceOutDir} <- entries
             ]
+          frozenClaims =
+            [ normalise ceOutDir
+            | FrozenCorpus {ceOutDir} <- entries
+            ]
           manifestClaimed =
             Set.fromList
               [ path
               | path <- generatedOnDisk,
-                any (`pathWithin` path) skeletonClaims
+                any (`pathWithin` path) (skeletonClaims <> frozenClaims)
               ]
           legacyGenerated = Set.fromList (supLegacyGenerated supplement)
           generatedSet = Set.fromList generatedOnDisk

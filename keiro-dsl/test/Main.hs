@@ -154,27 +154,32 @@ main = hspec $ do
       v4Contract <- maybe (expectationFailure "missing v4 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 4)
       v5Contract <- maybe (expectationFailure "missing v5 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 5)
       effectiveLanguageSupport v1Contract `shouldBe` CompatibilityOnly
-      effectiveLanguageSupport v4Contract `shouldBe` CompatibilityOnly
-      effectiveLanguageSupport v5Contract `shouldBe` Stable
+      effectiveLanguageSupport v4Contract `shouldBe` Stable
+      effectiveLanguageSupport v5Contract `shouldBe` Candidate
       Aeson.toJSON v5Contract
         `shouldBe` object
           [ "languageVersion" .= (5 :: Int),
             "runtimeSemantics" .= ("keiro-dsl/runtime-semantics/4" :: T.Text),
-            "languageSupport" .= ("stable" :: T.Text)
+            "languageSupport" .= ("candidate" :: T.Text)
           ]
       Aeson.eitherDecode "{\"languageVersion\":1,\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\"}"
         `shouldBe` Right v1Contract
 
-    it "reports stable and compatibility-only support through source inspection" $ do
-      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/projection-catalog.keiro", "--format=json"]
+    it "reports stable, candidate, and compatibility-only support through source inspection" $ do
+      (candidateCode, candidateOut, candidateErr) <- runKeiroDsl ["inspect", "test/fixtures/projection-catalog.keiro", "--format=json"]
+      candidateCode `shouldBe` ExitSuccess
+      candidateErr `shouldBe` ""
+      candidateOut `shouldContain` "\"languageVersion\":5"
+      candidateOut `shouldContain` "\"languageSupport\":\"candidate\""
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
       stableCode `shouldBe` ExitSuccess
       stableErr `shouldBe` ""
-      stableOut `shouldContain` "\"languageVersion\":5"
+      stableOut `shouldContain` "\"languageVersion\":4"
       stableOut `shouldContain` "\"languageSupport\":\"stable\""
-      (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
+      (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/language-v1.keiro", "--format=json"]
       compatibilityCode `shouldBe` ExitSuccess
       compatibilityErr `shouldBe` ""
-      compatibilityOut `shouldContain` "\"languageVersion\":4"
+      compatibilityOut `shouldContain` "\"languageVersion\":1"
       compatibilityOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
 
     it "surfaces non-stable contracts and enforces a released minimum language" $ do
@@ -184,7 +189,7 @@ main = hspec $ do
       legacyCode `shouldBe` ExitSuccess
       legacyOut `shouldBe` "OK\n"
       legacyErr `shouldContain` "language contract: effective keiro-dsl 1 (legacy-unversioned, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
-      legacyErr `shouldContain` "language-5 strict spec-surface validation is not applied"
+      legacyErr `shouldContain` "language-4 strict spec-surface validation is not applied"
 
       (stableCode, stableOut, stableErr) <- runKeiroDsl ["check", stablePath]
       stableCode `shouldBe` ExitSuccess
@@ -974,14 +979,14 @@ main = hspec $ do
       sourceOut `shouldContain` "\"effectiveLanguageVersion\":4"
       sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
       sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/3\""
-      sourceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
+      sourceOut `shouldContain` "\"languageSupport\":\"stable\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
       workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
-      workspaceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
+      workspaceOut `shouldContain` "\"languageSupport\":\"stable\""
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
 
     it "keeps only the named source-version compatibility fixtures outside stable v4" $ do
@@ -3686,7 +3691,7 @@ main = hspec $ do
       errorCodes unknownBackoff `shouldContain` [PublisherBackoffInvalid]
       errorCodes incompleteBackoff `shouldContain` [PublisherBackoffInvalid]
       errorCodes unknownDedupe `shouldContain` [IntakeDedupePolicyUnknown]
-    it "gates numeric floors on the unreleased language-4 contract" $ do
+    it "gates numeric floors on the published stable language-4 contract" $ do
       emitSpec <- specOf "test/fixtures/emit.keiro"
       intakeSpec <- specOf "test/fixtures/intake.keiro"
       readModelSpec <- specOf "test/fixtures/workflow.keiro"
@@ -6765,8 +6770,8 @@ main = hspec $ do
 
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->
-      it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the registered stable language") $
-        assertSkeletonUsesStableLanguage skeletonKind
+      it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the active authoring language") $
+        assertSkeletonUsesAuthoringLanguage skeletonKind
     it "every skeleton parses and validates with zero error diagnostics" $
       mapM_ assertSkeletonValid skeletonKinds
     it "every skeleton passes the scaffold refusal gates" $
@@ -9074,15 +9079,15 @@ assertSkeletonValid kind = case skeletonFor kind of
       [code d | d <- validateSpec spec, severity d == Error]
         `shouldBe` ([] :: [DiagnosticCode])
 
-assertSkeletonUsesStableLanguage :: T.Text -> IO ()
-assertSkeletonUsesStableLanguage kind = case skeletonFor kind of
+assertSkeletonUsesAuthoringLanguage :: T.Text -> IO ()
+assertSkeletonUsesAuthoringLanguage kind = case skeletonFor kind of
   Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
   Right source -> case parseSource ("new:" <> T.unpack kind) source of
     Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
     Right parsed -> do
       let service = checkedSource parsed
-      effectiveContractLanguageVersion (checkedLanguageContract service) `shouldBe` currentStableLanguageVersion
-      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Stable
+      effectiveContractLanguageVersion (checkedLanguageContract service) `shouldBe` currentAuthoringLanguageVersion
+      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Candidate
       [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
         `shouldBe` ([] :: [DiagnosticCode])
       scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service

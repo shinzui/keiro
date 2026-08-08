@@ -6,6 +6,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### Breaking Changes
+
+- **keiro-dsl**: candidate language 5 extends the exported semantic graph with
+  projection target, rebuild group, and projection owner nodes and adds catalog
+  bindings to `ReadModelNode`. `DiagnosticCode` gains the corresponding
+  validation and evolution codes, including distinct target-dependency and
+  handler-order changes; exhaustive consumers must be extended. Languages 1–4
+  retain their published parse and runtime meaning.
+
 ### New Features
 
 - **keiro**: add `Keiro.Projection.Catalog`, a pure typed projection inventory
@@ -33,6 +42,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   source exhaustion, adapter participation, and catalog verification. New
   rebuild metrics cover starts, resumes, committed pages/events, failures,
   promotions, and page duration.
+- **keiro-dsl**: register unreleased candidate language 5 with checked physical
+  targets, atomic rebuild groups, projection ownership/order, typed aggregate
+  or category sources, independent reset/replay policies, and query-model
+  bindings. Scaffolding emits one validated context catalog with typed live
+  views, catalog-derived registration and rebuild functions, aggregate-codec
+  replay adapters, and create-once live/replay/category/idempotency holes.
+  Diff, replay-impact JSON, scaffold ledgers, and workspace records carry the
+  same catalog identities. A dedicated compiled conformance service exercises
+  inline multi-target, async, clear, and preserve paths. Language 5 is amended
+  in place until publication; no language 6 contract is allocated.
 
 ## [0.11.0.0] - 2026-08-05
 

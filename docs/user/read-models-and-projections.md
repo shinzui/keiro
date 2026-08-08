@@ -66,6 +66,88 @@ Existing callers remain source-compatible. The `unmanagedInlineProjections`,
 `unmanagedAsyncProjection`, and `unmanagedReadModel` wrappers label values that
 remain outside catalog validation while an application migrates incrementally.
 
+### Generate the catalog from candidate Language 5
+
+`keiro-dsl` language 5 is the current unreleased candidate. Its checked graph
+owns the same runtime catalog described above. Language 1–4 meanings and
+generated banners remain unchanged; an existing service adopts 5 explicitly
+when it is ready to describe every physical target, rebuild group, projection
+owner, source, and query binding.
+
+A language-4 singleton read model puts physical authority on the query node:
+
+```text
+language keiro-dsl 4
+
+readmodel orderSummary {
+  schema = "sales"
+  table = "order_summary"
+  columns { order_id text required }
+  version = 1
+  shape = "fnv1a:93ea2f35f00eaf57"
+  consistency = Eventual
+  feed = subscription
+}
+```
+
+The intentional language-5 form moves physical and lifecycle authority into
+the catalog and leaves the read model as a typed query binding:
+
+```text
+language keiro-dsl 5
+
+target order_summary {
+  schema = "sales"
+  table = "order_summary"
+  reset = clear
+}
+
+rebuild-group reporting {
+  targets = [ order_summary ]
+  order = [ order_summary ]
+}
+
+projection-owner order_summary_writer {
+  source = aggregate Orders
+  feed = subscription
+  group = reporting
+  targets = [ order_summary ]
+  order = 10
+  subscription = "orders-summary"
+  dedup = "orders-summary-v1"
+  replay = explicit
+}
+
+readmodel orderSummary {
+  columns { order_id text required }
+  version = 1
+  shape = "fnv1a:784e511a19f74c58"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ order_summary ]
+}
+```
+
+Changing only the preamble does not invent ownership and will fail checking:
+the author or a future upgrade tool must add the target, group, owner, source,
+reset/replay policies, handler order, and query binding. Target declarations do
+not create or migrate the table.
+
+Scaffolding emits one generated
+`Generated.<Context>.ProjectionCatalog` facade. It validates the runtime
+catalog, exposes catalog inventory/registration, typed inline views, and
+group-scoped rebuild functions. The create-once
+`<Context>.ProjectionCatalog.ProjectionCatalogHoles` module owns live and
+replay apply functions, category decoders, and async idempotency functions;
+regeneration preserves reviewed edits. An aggregate source reuses its generated
+event codec. A category source receives a total replay decoder hole that must
+classify every recorded event as irrelevant, decoded, or failed. Keep network
+calls and other external side effects out of replay apply functions.
+
+See [Typed Specifications](typed-spec-toolchain.md#candidate-language-5-projection-catalogs)
+for the complete syntax and validation rules.
+
 ## Register And Fence Catalog Groups
 
 After validation, register the complete catalog once at application startup:

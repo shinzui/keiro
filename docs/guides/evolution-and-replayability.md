@@ -507,6 +507,44 @@ re-runs the *current* handler against the stored source event.
 > PM/router redelivery and replay any dead letters **before** deploying a decide
 > change (see [Deploy ordering](#deploy-ordering-rules)).
 
+## Changing a projection catalog
+
+Candidate language 5 makes read-side ownership an evolution surface instead of
+an application-maintained list. Run `keiro-dsl diff` before changing any
+target, group, owner, source, feed identity, replay policy, or query binding.
+The differ reports target addition/removal/location/reset/dependency changes,
+group membership/order, owner binding/removal/handler order, source selection,
+subscription/dedup identity, replay policy, and query-model binding
+independently. Adding a target is structurally additive but still requires an
+application migration; Keiro never performs that DDL.
+
+Treat removal or re-keying of a target, group, subscription, or dedup identity
+as persisted-identity breakage. A table location change does not move data.
+Preserve-to-clear is destructive for retained rows; clear-to-preserve still
+requires a reviewed reconciliation strategy. Source, dependency, handler
+order, or replay-policy changes invalidate an active rebuild contract. Abandon
+the old run and start a fresh group rebuild after deploying the matching
+generated facade and reviewed holes.
+
+`diff --replay-impact-out` reports affected catalog groups, targets, sources,
+and adapters plus `invalidatesRunningFingerprint`. Use that machine result to
+select the offline rebuild. Runtime resume independently compares the complete
+persisted catalog/replay fingerprint before invoking a handler, so an old run
+cannot silently continue under new code.
+
+Generated and hand-owned changes have different review paths. Re-scaffolding
+may replace `Generated.<Context>.ProjectionCatalog`, but it never overwrites
+`<Context>.ProjectionCatalog.ProjectionCatalogHoles`. Review changes to live
+apply, replay apply, category decoder, idempotency, and verification bodies
+alongside the DSL diff. Replay apply code must be database-transactional and
+must omit live network calls or other external side effects.
+
+Changing only a language-4 source's preamble to 5 is not an upgrade. Add the
+physical targets, reset policies, rebuild groups, projection owners and order,
+source/feed/replay facts, and query bindings explicitly. Existing language-4
+sources may remain on their published contract until that ownership work is
+ready.
+
 ## Changing the fold: same events, different state — and what snapshots do to you
 
 Changing an edge's register `update` (the fold) with unchanged event schemas is
@@ -758,6 +796,7 @@ DSL-only gates do not exist for hand-authored services.
 | Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail; `resurrectFailedWorkflow` after a code fix | operator must notice the failed instance | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
 | Job payload | workqueue changes keep normal classifications | generated queues use versioned `QueueCodec` | future version retries; malformed shape dead-letters | hand-written `aesonJobCodec` remains unversioned | Landed: [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
+| Projection catalog target/group/owner/source/policy change | dedicated `Catalog*` finding plus catalog replay-impact groups, targets, sources, and adapters | generated facade validates one closed catalog; resume requires exact stored fingerprint | managed writers fence at group state; mismatched resume fails before handlers | arbitrary SQL target truth and application DDL remain consumer-owned | Landed: [212](../plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
 | Structural/opaque adoption coverage | Reporting-only named roots by default; optional existing-level or increase gate | Generated binding/codec conformance plus finite historical comparison | No runtime codec selector is added | Finite evidence cannot prove universal historical equivalence | Landed: [152](../plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md) |
 | Workflow body reorder without patch | BREAKING | — | wrong journaled pairing | hand-written ordinals: **silent** | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) (patch/rotation race); ordinal pairing is the author's rule |

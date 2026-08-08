@@ -70,11 +70,11 @@ effectiveLanguageSupport contract =
     (error "keiro-dsl internal invariant: effective contract selected an unregistered language version")
     (languageSupportForVersion (effectiveContractLanguageVersion contract))
 
--- | One stderr line naming a non-stable effective contract. Stable sources
--- stay silent so adopting the current contract does not add CLI noise.
+-- | One stderr line naming a compatibility-only effective contract. Published
+-- stable and active candidate sources stay silent.
 languageContractNotice :: FilePath -> Text -> EffectiveLanguageContract -> Maybe Text
 languageContractNotice subject sourceFormSummary contract
-  | effectiveLanguageSupport contract == Stable = Nothing
+  | effectiveLanguageSupport contract /= CompatibilityOnly = Nothing
   | otherwise =
       Just
         ( T.pack subject
@@ -90,7 +90,7 @@ languageContractNotice subject sourceFormSummary contract
             <> languageVersionText currentStableLanguageVersion
             <> " strict spec-surface validation is not applied — declare `language keiro-dsl "
             <> languageVersionText currentStableLanguageVersion
-            <> "` to adopt the active authoring contract"
+            <> "` to adopt the published stable contract"
         )
 
 instance ToJSON EffectiveLanguageContract where

@@ -4,8 +4,9 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 4`, then
-write `context <name>` and exactly the nodes the feature needs. Language 4 includes the released
+Author `service.keiro` in the notation (`NOTATION.md`). New development work starts with the
+current candidate `language keiro-dsl 5`; use published stable `language keiro-dsl 4` when the
+service must remain on released syntax. Then write `context <name>` and exactly the nodes the feature needs. Language 4 includes the released
 consumer-owned nominal syntax, generated TypeID admission, typed contract TypeID fields, and the
 strict service surface. Prefer the smallest spec that captures the decisions;
 the deterministic boilerplate is derived, so don't hand-write it.

@@ -3987,8 +3987,10 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
     holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
     asyncImports = ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
     readModelImports =
-      "ConsistencyMode (..), ReadModel (..), StrongScope (..)"
-        <> if catalogManaged then "" else ", ReadModelMetadata, registerReadModel"
+      "ConsistencyMode (..), ReadModel (..)"
+        <> if catalogManaged
+          then ", StrongScope (..)"
+          else ", ReadModelMetadata, StrongScope (..), registerReadModel"
     kirokuTypes = case rmFeed readModel of
       RmInline -> "GlobalPosition"
       RmSubscription -> "GlobalPosition, RecordedEvent (..)"

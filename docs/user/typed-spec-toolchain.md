@@ -1254,6 +1254,88 @@ schema-qualified table facts and create-once apply/query functions. Use the
 generated table constant in SQL rather than depending on PostgreSQL
 `search_path`.
 
+### Candidate Language 5 projection catalogs
+
+Language 5 is the current unreleased authoring candidate. It adds a closed
+projection catalog without changing the meaning of any language-1–4 source. Do
+not rewrite an existing language-4 workspace merely to follow the default; opt
+in when the service is ready to declare the complete read-side inventory.
+
+```text
+language keiro-dsl 5
+context catalog-demo
+
+target order_summary {
+  schema = "sales"
+  table = "order_summary"
+  reset = clear
+}
+
+target order_totals {
+  schema = "sales"
+  table = "order_totals"
+  reset = clear
+  depends-on = [ order_summary ]
+}
+
+rebuild-group reporting {
+  targets = [ order_summary order_totals ]
+  order = [ order_summary order_totals ]
+}
+
+projection-owner order_summary_writer {
+  source = aggregate Orders
+  feed = subscription
+  group = reporting
+  targets = [ order_summary order_totals ]
+  order = 10
+  subscription = "catalog-demo-orders"
+  dedup = "catalog-demo-orders-v1"
+  replay = explicit
+}
+
+readmodel orderSummary {
+  columns {
+    order_id text required
+  }
+  version = 1
+  shape = "fnv1a:784e511a19f74c58"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ order_summary ]
+}
+```
+
+A `target` is the only physical schema/table authority. `reset = clear`
+permits group preparation to truncate it; `preserve` leaves brownfield rows in
+place for an explicit reconciliation adapter. `depends-on` names targets in
+the same group and must be acyclic. A `rebuild-group` lists exactly its targets
+and their deterministic preparation order.
+
+Each `projection-owner` selects exactly one typed source: `aggregate Name`,
+`category "name"`, or `all`. Split independent sources into separate owners.
+It owns at least one target in one group and has a globally unique numeric
+handler order. Subscription feeds also require `subscription` and `dedup`
+identities and a query model that observes one of their targets. Inline feeds
+must omit those identities. `replay = explicit` generates distinct live and
+replay apply holes. `replay = live-only "reason"` generates no replay adapter
+and is invalid for a clear target.
+
+A catalog-bound `readmodel` is a typed query contract. It names its group and
+observed targets, and deliberately omits `schema` and `table`; those belong to
+the target declarations. The generated context-level
+`Generated.<Context>.ProjectionCatalog` validates one runtime catalog, exports
+typed inline views, registration/inventory functions, and group-scoped rebuild
+starters. `<Context>.ProjectionCatalog.ProjectionCatalogHoles` is create-once
+and owns live apply, replay apply, heterogeneous decoder, and idempotency
+bodies. Regeneration never overwrites reviewed hole code.
+
+Catalog declarations do not create tables, migrations, indexes, row codecs, or
+SQL. They also cannot prove which tables an unrestricted Hasql transaction
+writes. Keep application DDL and qualified SQL under the migration ownership
+rules in [Migration Ownership](migration-ownership.md).
+
 ## Workflows
 
 ```text
@@ -1797,12 +1879,15 @@ before a write set exists. These checks are defense in depth, not a second
 semantic vocabulary.
 
 A source without a `language keiro-dsl N` preamble selects compatibility-only
-language 1. Declared languages 1 through 3 are also compatibility-only, and do
-not apply language 4's strict spec-surface validation. `check` and `scaffold`
+language 1. Declared languages 1 through 3 are compatibility-only, language 4
+remains the published stable contract, and candidate language 5 is the current
+development authoring default. Earlier languages do not gain language 5's catalog syntax.
+`check` and `scaffold`
 print one `language contract:` notice for those sources (workspace notices
 summarize member provenance); `diff` prints it for the working-tree side only.
-Use `--min-language 4` to turn that otherwise-compatible downgrade into the
-located `LanguageVersionBelowMinimum` error expected by stable-contract CI.
+Use `--min-language 5` only after a service intentionally adopts the candidate
+catalog contract; existing language-4 CI may keep `--min-language 4` without
+triggering a mechanical rewrite.
 
 The warning policy follows the evidence boundary. Three warnings depend on
 operational history and therefore remain warnings: `DeprecatedEventReplayHazard`,

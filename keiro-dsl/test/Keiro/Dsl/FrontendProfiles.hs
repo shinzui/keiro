@@ -43,19 +43,20 @@ frontendProfilesSpec = do
                      ["semantic-contract:keiro-dsl/projection-catalog/1", "semantic-contract:keiro-dsl/runtime-semantics/2"]
                    ]
       map definitionSupport (NE.toList languageRegistry)
-        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
+        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable, Candidate]
       map definitionMaturity (NE.toList languageRegistry)
         `shouldBe` [PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, CandidateLanguage]
-      currentStableLanguageVersion `shouldBe` version 5
+      currentStableLanguageVersion `shouldBe` version 4
+      currentAuthoringLanguageVersion `shouldBe` version 5
       languageSupportForVersion (version 1) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 2) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 3) `shouldBe` Just CompatibilityOnly
-      languageSupportForVersion (version 4) `shouldBe` Just CompatibilityOnly
-      languageSupportForVersion (version 5) `shouldBe` Just Stable
+      languageSupportForVersion (version 4) `shouldBe` Just Stable
+      languageSupportForVersion (version 5) `shouldBe` Just Candidate
       languageSupportForVersion (version 999999) `shouldBe` Nothing
       [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable]
         `shouldBe` [currentStableLanguageVersion]
-      definitionVersion (NE.last languageRegistry) `shouldBe` currentStableLanguageVersion
+      definitionVersion (NE.last languageRegistry) `shouldBe` currentAuthoringLanguageVersion
       definitionPredecessor (NE.last languageRegistry) `shouldBe` Just (version 4)
       forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
         forM_ allRuntimeCapabilities $ \capability ->

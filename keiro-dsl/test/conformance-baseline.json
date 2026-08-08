@@ -1,6 +1,7 @@
 {
   "schema": "keiro-dsl/conformance-baseline/1",
-  "stableLanguageVersion": 5,
+  "stableLanguageVersion": 4,
+  "authoringLanguageVersion": 5,
   "primaryLanguageVersions": [4, 5],
   "fixtureExceptions": [
     {"path": "test/fixtures/aggregate-collection-expressions-v2-rejects.keiro", "sourceForm": "declared", "effectiveVersion": 2, "role": "compatibility-proof", "reason": "version-2 grammar rejection vector"},
@@ -39,7 +40,7 @@
     {"component": "keiro-dsl-conformance-queue", "directory": "test/conformance-queue", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "workqueue scaffold proof"},
     {"component": "keiro-dsl-conformance-queue-runtime", "directory": "test/conformance-queue-runtime", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "workqueue runtime proof"},
     {"component": "keiro-dsl-conformance-readmodel-runtime", "directory": "test/conformance-readmodel-runtime", "source": "test/fixtures/readmodel-runtime.keiro", "generation": "source", "role": "stable-primary", "reason": "read-model runtime proof"},
-    {"component": "keiro-dsl-conformance-projection-catalog", "directory": "test/conformance-projection-catalog", "source": "test/fixtures/projection-catalog.keiro", "generation": "source", "role": "stable-primary", "reason": "language-5 typed projection catalog and group-scoped rebuild facade proof"},
+    {"component": "keiro-dsl-conformance-projection-catalog", "directory": "test/conformance-projection-catalog", "source": "test/fixtures/projection-catalog.keiro", "generation": "source", "role": "candidate-primary", "reason": "unreleased language-5 typed projection catalog and group-scoped rebuild facade proof"},
     {"component": "keiro-dsl-conformance-dispatch-full", "directory": "test/conformance-dispatch-full", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "stable-primary", "reason": "complete dispatch scaffold proof"},
     {"component": "keiro-dsl-conformance-workflow", "directory": "test/conformance-workflow", "source": "test/fixtures/workflow-evolution.keiro", "generation": "source", "role": "stable-primary", "reason": "workflow scaffold proof"},
     {"component": "keiro-dsl-conformance-workflow-runtime", "directory": "test/conformance-workflow-runtime", "source": "test/fixtures/workflow-evolution.keiro", "generation": "source", "role": "stable-primary", "reason": "workflow runtime proof"},

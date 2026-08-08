@@ -654,6 +654,18 @@ arithmetic evidence, and stable expression diagnostics; consumers should use
 that resolver rather than reconstructing capability rules from the raw grammar
 AST.
 
+Candidate language 5 adds projection-target, rebuild-group, projection-owner,
+and query-binding nodes. `Keiro.Dsl.Scaffold` lowers the checked service into
+one `Generated.<Context>.ProjectionCatalog` facade backed by
+`Keiro.Projection.Catalog` and `Keiro.ReadModel.Rebuild`. The facade exports the
+validated catalog, deterministic inventory and registration views, typed
+inline projection sets, and group-scoped rebuild starters. Its paired
+`<Context>.ProjectionCatalog.ProjectionCatalogHoles` file is create-once and
+contains application-owned live/replay apply, category decode, and idempotency
+functions. `Keiro.Dsl.Diff`, `Keiro.Dsl.ReplayImpact`, scaffold records, and
+workspace records expose the same stable catalog identities; consumers should
+not reconstruct a second inventory from generated module names.
+
 Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --since`, and `new <kind>`. The newer opt-in workflows include
 `check --explain-bindings`, `check|diff --coverage-report`,

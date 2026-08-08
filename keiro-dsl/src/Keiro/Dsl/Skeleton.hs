@@ -15,7 +15,7 @@ where
 
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.LanguageVersion (currentStableLanguageVersion, languageVersionText)
+import Keiro.Dsl.LanguageVersion (currentAuthoringLanguageVersion, languageVersionText)
 
 -- | The valid @new \<kind\>@ arguments, in help/listing order.
 skeletonKinds :: [Text]
@@ -52,7 +52,7 @@ skeletonFor kind = case kind of
     Left $
       "unknown kind '" <> other <> "'. Valid kinds: " <> T.intercalate ", " skeletonKinds
   where
-    versioned source = "language keiro-dsl " <> languageVersionText currentStableLanguageVersion <> "\n" <> source
+    versioned source = "language keiro-dsl " <> languageVersionText currentAuthoringLanguageVersion <> "\n" <> source
 
 aggregateSkeleton :: Text
 aggregateSkeleton =

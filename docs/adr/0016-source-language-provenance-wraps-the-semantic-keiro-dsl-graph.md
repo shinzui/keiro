@@ -55,19 +55,19 @@ has no compatibility promise, and must be retired or repurposed when that number
 candidate. In particular, activating candidate 5 does not justify changing an old "future 5"
 sentinel to 6.
 
-**Accepted language versions, the authoring default, and publication maturity are distinct
-registry facts.** Each `LanguageDefinition` carries both `LanguageSupport` and
-`LanguageMaturity`. Exactly one registered entry is the `Stable` authoring default; every other
-registered entry is `CompatibilityOnly`. Independently, a definition is `PublishedLanguage` or
-`CandidateLanguage`. `Stable` therefore means "use this for new work on this source tree," not
-"this contract has been released." `supportedLanguageVersions` enumerates every accepted source
-contract, while `currentStableLanguageVersion` selects the sole authoring default and fails if the
-registry has zero or multiple stable entries. New skeletons, authoring examples, and focused
-conformance derive their source version from that entry. Language 5 is currently the unreleased
-candidate and authoring default. Languages 1 through 4 are published and retain their immutable
-meaning; existing language-4 sources and generated corpora are never silently rewritten. Moving
-the authoring pointer changes new-source and focused-test defaults, not any predecessor's behavior
-or publication status.
+**Accepted language versions, the published stable contract, the authoring default, and
+publication maturity are distinct registry facts.** Each `LanguageDefinition` carries both
+`LanguageSupport` and `LanguageMaturity`. Support is `CompatibilityOnly`, `Stable`, or
+`Candidate`; maturity independently records `PublishedLanguage` or `CandidateLanguage`.
+`currentStableLanguageVersion` selects exactly one published `Stable` entry, while
+`currentAuthoringLanguageVersion` selects the sole active candidate when one exists and otherwise
+falls back to stable. New skeletons and focused candidate conformance use the authoring selector;
+released compatibility baselines and stable-language policy use the stable selector. Language 4
+remains the published stable contract. Language 5 is the unreleased candidate and development
+authoring default. Languages 1 through 4 retain their immutable meaning; existing language-4
+sources, generated corpora, and scaffold ledgers are never silently demoted or rewritten. Moving
+the authoring pointer changes new-source and focused-test defaults, not any predecessor's behavior,
+support status, or publication status.
 
 **Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
@@ -178,10 +178,9 @@ fleet planning remain in
   operation; commands that load its members apply the source gate to each member.
 - Existing unversioned sources keep working, while inspection can distinguish intentional version
   declarations from compatibility fallback.
-- Accepted does not mean published, and published does not mean recommended for new work:
-  inspection reports the authoring support state, registry maturity records the publication
-  boundary, skeletons emit the sole authoring default, and no path upgrades old sources as a side
-  effect.
+- Accepted does not mean published. Inspection reports `compatibility-only`, `stable`, or
+  `candidate`; registry maturity records the publication boundary; skeletons emit the separate
+  authoring default; and no path upgrades old sources as a side effect.
 - Workspace composition preserves truthful member provenance without contaminating the merged
   semantic graph, while exposing one checked contract to every semantic planner.
 - Exact source evidence is available before lowering without adding spans or trivia to `Spec`.

@@ -125,6 +125,8 @@ resolveKeiroDsl = do
     ExitFailure _ -> hPutStr stderr stderrText >> exitFailure
 
 runEntry :: FilePath -> CorpusEntry -> IO ()
+runEntry _ FrozenCorpus {ceOutDir} =
+  putStrLn ("frozen " <> ceOutDir <> " (historical authored corpus; verification only)")
 runEntry keiroDsl entry = do
   putStrLn ("scaffold " <> entryOutDir entry)
   input <- case entry of
@@ -219,7 +221,9 @@ helpText =
       "",
       "The driver derives ordinary scaffold invocations from tracked records and",
       "uses keiro-dsl/test/conformance-corpus-manifest.txt only for workspace paths,",
-      "ordered skeleton runs, extra CLI flags, and reviewed inventory exemptions.",
+      "ordered skeleton runs, explicitly frozen historical corpora, extra CLI flags,",
+      "and reviewed inventory exemptions. Frozen corpora remain covered by ledger,",
+      "disk, and Cabal checks but are not replayed through current authoring defaults.",
       "It drives the public keiro-dsl CLI, never forces overwrites, never touches",
       "create-once files, and never commits. Review git status and git diff afterward.",
       "",

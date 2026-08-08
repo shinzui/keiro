@@ -22,12 +22,12 @@ edit a `-- @generated` module.
 
 ## The load-bearing rules (read these first)
 
-1. **Declare the stable language contract.** Every new complete source starts with
-   `language keiro-dsl 4`, before `context`. Language 4 is the sole stable authoring version;
-   versions 1 through 3 and unversioned sources remain accepted compatibility contracts and are
-   never silently upgraded. Released syntax and runtime behavior are owned by explicit immutable
-   profiles, not numeric version ordering. A new feature belongs to one grammar concern and must
-   be deliberately listed in every profile that accepts it, with predecessor rejection coverage.
+1. **Declare the chosen language contract.** The development authoring default and `new <kind>`
+   use unreleased candidate `language keiro-dsl 5`; projection catalogs require it. Language 4
+   remains the published stable contract for released-only services, while versions 1 through 3
+   and unversioned sources remain accepted compatibility contracts. Language 5 is amended in
+   place until publication—never allocate language 6 merely because candidate 5 changed. Released
+   syntax and runtime behavior are owned by explicit immutable profiles, not numeric ordering.
 2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
    Language 4 generates every transition whose guards, writes, emits, and target are completely
    expressed in the source. Fill only create-if-absent modules and signatures for explicitly
@@ -113,8 +113,9 @@ later run no longer produces recorded paths, its exit-0 `stale:` report never de
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
 
 A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
-lines. Each newly authored member declares `language keiro-dsl 4`; inspection reports every
-member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
+lines. Every member declares the same selected contract; new development work defaults to
+`language keiro-dsl 5`, while a released-only workspace may stay on stable language 4. Inspection
+reports every member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses
 `keiro-dsl-ledger.workspace.<service>.txt`; a first run over legacy same-context

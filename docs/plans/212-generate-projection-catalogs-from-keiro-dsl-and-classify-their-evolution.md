@@ -42,7 +42,7 @@ This section must always reflect the actual current state of the work.
       deterministic generated modules, and create-once behavior holes.
 - [x] Extend diff, replay-impact, workspace records, and scaffold-ledger facts with every catalog
       evolution dimension and mutation-test their gates.
-- [ ] Add compiled/runtime conformance, upgrade documentation and corpus evidence, then pass all
+- [x] Add compiled/runtime conformance, upgrade documentation and corpus evidence, then pass all
       DSL and repository verification.
 
 
@@ -64,6 +64,13 @@ implementation. Provide concise evidence.
   Accepting several DSL `source` clauses under one owner would erase that type or require an
   application-maintained union, so validation requires one typed source and tells authors to
   split independent sources into separately ordered owners.
+- 2026-08-08: Marking candidate 5 as `Stable` demoted published language 4 and caused the corpus
+  driver to rewrite every language-4 ledger. The registry now represents v4 as published stable,
+  v5 as candidate, and exposes separate stable and development-authoring selectors.
+- 2026-08-08: Historical skeleton fixtures were replayed through the current `new` default, so an
+  authoring-version change rewrote their sources and generated banners. The corpus manifest now
+  declares that published-language-4 suite as frozen: it remains compiled and checked against
+  disk, ledger, and Cabal inventory, but is never regenerated through a newer default.
 
 
 ## Decision Log
@@ -81,6 +88,19 @@ Record every decision made while working on the plan.
   version fixtures are parser-boundary test data, not compatibility contracts; when their number
   becomes active they are retired or repurposed. Existing language-4 generated corpora remain
   version-4 evidence, while a focused version-5 lane proves the new catalog surface.
+  Date: 2026-08-08
+
+- Decision: Separate the published stable selector from the development authoring selector.
+  Rationale: Release status and the version emitted by development skeletons are different facts.
+  `currentStableLanguageVersion` remains 4; `currentAuthoringLanguageVersion` selects candidate 5
+  while it is active. This prevents candidate work from demoting or rewriting the published v4
+  contract.
+  Date: 2026-08-08
+
+- Decision: Freeze historical starter corpora explicitly instead of replaying them through `new`.
+  Rationale: `new` intentionally follows the active authoring candidate, whereas a committed v4
+  starter corpus is compatibility evidence. Verification still compiles and inventories the
+  frozen files and checks their tracked history without mechanically upgrading them.
   Date: 2026-08-08
 
 - Decision: Generate one context-level projection-catalog facade.
@@ -116,7 +136,22 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Candidate language 5 now owns the typed projection-catalog grammar, validation, generated runtime
+facade, create-once application boundaries, catalog evolution findings, replay-impact facts, and
+workspace/scaffold history. The compiled conformance service proves inline multi-target, async,
+clear, preserve, aggregate-codec, category-decoder, and group-scoped rebuild paths against the
+runtime delivered by plans 209–211.
+
+Language 5 was amended in place and remains explicitly unreleased. Language 4 remains the
+published stable contract, while a separate authoring selector lets new development skeletons use
+candidate 5 without mislabelling it stable. Full corpus regeneration changed only the dedicated
+v5 ledger from `stable` to `candidate`; all active language-4 suites were byte-stable, and the
+historical v4 starter corpus is now explicitly frozen against future authoring-default churn.
+
+Verification completed with 615 `keiro-dsl-test` examples, the compiled
+`keiro-dsl-conformance-projection-catalog` suite, full corpus record/disk/Cabal consistency, ADR
+validation, formatter, and `git diff --check` green. Application DDL and SQL/query/handler bodies
+remain deliberately consumer-owned.
 
 
 ## Context and Orientation
@@ -192,7 +227,8 @@ meaning. The motivating cross-repository record is
 Append version 5 to `Keiro.Dsl.LanguageVersion`; never edit the definitions for versions 1–4.
 Add a named syntax feature such as `ProjectionCatalogSyntax`, a monotone syntax profile derived
 from language 4, and only the runtime capability needed to fingerprint catalog semantics. Make 5
-the sole authoring default for new skeletons while retaining versions 1–4 as compatibility-only.
+the candidate authoring default for new skeletons while retaining language 4 as the published
+stable contract and versions 1–3 as compatibility-only.
 Extend language registry JSON/round-trip and unsupported-version tests.
 
 Add separate AST nodes in `Keiro.Dsl.Grammar` for physical targets, rebuild groups, and projection

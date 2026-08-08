@@ -2,6 +2,7 @@ keiro-dsl conformance corpus manifest v1
 # Rows supplement facts that scaffold records cannot retain. Paths are repository-relative.
 # workspace <manifest-path> <out-dir>
 # skeleton <kind> <module-root> <out-dir>
+# frozen <out-dir>
 # extra-args <out-dir> <keiro-dsl scaffold arguments...>
 # uncompiled-generated <generated-module-path>
 # legacy-generated <generated-module-path>
@@ -9,14 +10,9 @@ keiro-dsl conformance corpus manifest v1
 workspace keiro-dsl/test/fixtures/workspace-nominals/service.keiro-workspace keiro-dsl/test/conformance-workspace-nominals
 workspace keiro-dsl/test/conformance-service-package/service.keiro-workspace keiro-dsl/test/conformance-service-package/runtime/src
 
-skeleton aggregate SkelAggregate keiro-dsl/test/conformance-skeletons
-skeleton process SkelProcess keiro-dsl/test/conformance-skeletons
-skeleton router SkelRouter keiro-dsl/test/conformance-skeletons
-skeleton contract SkelContract keiro-dsl/test/conformance-skeletons
-skeleton intake SkelIntake keiro-dsl/test/conformance-skeletons
-skeleton emit SkelEmit keiro-dsl/test/conformance-skeletons
-skeleton workqueue SkelQueue keiro-dsl/test/conformance-skeletons
-skeleton workflow SkelWorkflow keiro-dsl/test/conformance-skeletons
+# This published-language-4 fixture proves compatibility and must not be rewritten
+# when `keiro-dsl new` advances to an unreleased candidate authoring language.
+frozen keiro-dsl/test/conformance-skeletons
 
 extra-args keiro-dsl/test/conformance-structural --codec-comparison ArtifactInfo --comparison-out keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs
 

@@ -10,7 +10,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.FrontendCompatibility (SourceExpectation (..), observeSource, readRepoText)
 import Keiro.Dsl.Grammar (Spec (..))
-import Keiro.Dsl.LanguageVersion (currentStableLanguageVersion, languageVersionNumber)
+import Keiro.Dsl.LanguageVersion (currentAuthoringLanguageVersion, currentStableLanguageVersion, languageVersionNumber)
 import Keiro.Dsl.Parser (parseSource)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..))
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext)
@@ -66,6 +66,7 @@ instance FromJSON CompiledSuite where
 data ConformanceBaseline = ConformanceBaseline
   { baselineSchema :: !Text,
     baselineStableLanguageVersion :: !Natural,
+    baselineAuthoringLanguageVersion :: !Natural,
     baselinePrimaryLanguageVersions :: ![Natural],
     baselineFixtureExceptions :: ![FixtureException],
     baselineCompiledSuites :: ![CompiledSuite]
@@ -77,20 +78,24 @@ instance FromJSON ConformanceBaseline where
     ConformanceBaseline
       <$> fields .: "schema"
       <*> fields .: "stableLanguageVersion"
+      <*> fields .: "authoringLanguageVersion"
       <*> fields .: "primaryLanguageVersions"
       <*> fields .: "fixtureExceptions"
       <*> fields .: "compiledSuites"
 
 conformanceBaselineSpec :: SpecWith ()
 conformanceBaselineSpec = describe "conformance baseline" $ do
-  it "uses the registered stable language and explicit non-stable fixture rows" $ do
+  it "uses the registered stable and authoring languages plus explicit compatibility rows" $ do
     baseline <- readBaseline
     baselineSchema baseline `shouldBe` "keiro-dsl/conformance-baseline/1"
     baselineStableLanguageVersion baseline
       `shouldBe` languageVersionNumber currentStableLanguageVersion
+    baselineAuthoringLanguageVersion baseline
+      `shouldBe` languageVersionNumber currentAuthoringLanguageVersion
     paths <- fixturePaths
     observations <- forM paths $ \path -> (path,) <$> observeSource path
     baselinePrimaryLanguageVersions baseline `shouldContain` [languageVersionNumber currentStableLanguageVersion]
+    baselinePrimaryLanguageVersions baseline `shouldContain` [languageVersionNumber currentAuthoringLanguageVersion]
     let primaryVersions = baselinePrimaryLanguageVersions baseline
         nonStablePaths =
           sort
@@ -112,7 +117,7 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
         `shouldBe` "compatibility-proof"
       exceptionReason exception `shouldSatisfy` (not . T.null . T.strip)
 
-  it "accounts for every compiled conformance component and stable generated banner" $ do
+  it "accounts for every compiled conformance component and primary generated banner" $ do
     baseline <- readBaseline
     cabal <- readRepoText "keiro-dsl/keiro-dsl.cabal"
     let cabalComponents = conformanceComponents cabal
@@ -123,35 +128,31 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
       `shouldBe` ([] :: [Text])
     forM_ (baselineCompiledSuites baseline) $ \suite -> do
       suiteRole suite
-        `shouldSatisfy` (`elem` ["stable-primary", "compatibility-proof", "version-independent"])
+        `shouldSatisfy` (`elem` ["stable-primary", "candidate-primary", "compatibility-proof", "version-independent"])
       suiteReason suite `shouldSatisfy` (not . T.null . T.strip)
       directory <- resolveRepoDirectory ("keiro-dsl" </> suiteDirectory suite)
       doesDirectoryExist directory `shouldReturn` True
-      case suiteRole suite of
-        "stable-primary" -> do
+      case primaryVersionForRole baseline (suiteRole suite) of
+        Just primaryVersion -> do
           unless (suiteGeneration suite `elem` ["workspace", "skeletons"]) $ do
             source <- requiredSuiteSource suite
             observation <- observeSource source
             sourceForm observation `shouldBe` "declared"
             sourceResult observation `shouldBe` "accept"
-            sourceEffectiveVersion observation
-              `shouldSatisfy` maybe False (`elem` baselinePrimaryLanguageVersions baseline)
+            sourceEffectiveVersion observation `shouldBe` Just primaryVersion
           banners <- generatedBannerLines directory
           unless (not (null banners)) $
             expectationFailure (T.unpack (suiteComponent suite <> " has no generated banners"))
-          let expectedVersions =
-                [ "language keiro-dsl " <> T.pack (show versionNumber)
-                | versionNumber <- baselinePrimaryLanguageVersions baseline
-                ]
-              stableBanners = [(path, banner) | (path, banner) <- banners, any (`T.isInfixOf` banner) expectedVersions]
+          let expectedVersion = "language keiro-dsl " <> T.pack (show primaryVersion)
+              primaryBanners = [(path, banner) | (path, banner) <- banners, expectedVersion `T.isInfixOf` banner]
               isVersionIndependentAuxiliary banner = "@generated by keiro-dsl codec comparison" `T.isInfixOf` banner
-          unless (not (null stableBanners)) $
-            expectationFailure (T.unpack (suiteComponent suite <> " has no stable generated banners"))
+          unless (not (null primaryBanners)) $
+            expectationFailure (T.unpack (suiteComponent suite <> " has no " <> T.pack (show primaryVersion) <> " generated banners"))
           forM_ banners $ \(path, banner) ->
-            unless (any (`T.isInfixOf` banner) expectedVersions || isVersionIndependentAuxiliary banner) $
-              expectationFailure (T.unpack (decorate path banner <> " (expected one of " <> T.intercalate ", " expectedVersions <> ")"))
+            unless (expectedVersion `T.isInfixOf` banner || isVersionIndependentAuxiliary banner) $
+              expectationFailure (T.unpack (decorate path banner <> " (expected " <> expectedVersion <> ")"))
           expectedPaths <- expectedStableGeneratedPaths suite
-          let actualPaths = sort (nub (map fst stableBanners))
+          let actualPaths = sort (nub (map fst primaryBanners))
           unless (actualPaths == expectedPaths) $
             expectationFailure
               ( T.unpack
@@ -162,7 +163,13 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
                       <> T.pack (show actualPaths)
                   )
               )
-        _ -> pure ()
+        Nothing -> pure ()
+
+primaryVersionForRole :: ConformanceBaseline -> Text -> Maybe Natural
+primaryVersionForRole baseline role = case role of
+  "stable-primary" -> Just (baselineStableLanguageVersion baseline)
+  "candidate-primary" -> Just (baselineAuthoringLanguageVersion baseline)
+  _ -> Nothing
 
 expectedStableGeneratedPaths :: CompiledSuite -> IO [FilePath]
 expectedStableGeneratedPaths suite = case suiteGeneration suite of

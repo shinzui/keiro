@@ -10,7 +10,9 @@ context hospital-capacity
 
 The preamble is recognized only after leading comments and whitespace and immediately before
 `context`. Nested fields, declarations, wire keys, and strings named `language` remain domain
-data. Language 4 is the sole stable authoring version. It includes the syntax introduced by
+data. Language 4 is the published stable version and the examples in this reference deliberately
+stay on that released contract. Unreleased language 5 is the development authoring candidate and
+adds projection catalogs; it is amended in place until publication rather than incremented. Language 4 includes the syntax introduced by
 language 2, the generated TypeID/current-constructor behavior introduced by language 3, and typed
 public-contract TypeID admission plus strict service-surface validation. Feature gates live at
 their grammar productions, so

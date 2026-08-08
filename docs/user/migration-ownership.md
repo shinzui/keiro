@@ -65,6 +65,23 @@ An application may instead run its existing migration tool after
 `keiro-migrate`. That keeps ownership clear but splits status and verification
 across two ledgers.
 
+### Projection catalog targets are declarations, not migrations
+
+A `Keiro.Projection.Catalog.TargetDeclaration` or candidate language-5 DSL
+`target` names an application-owned qualified table and its rebuild reset
+policy. It does not create the schema, table, indexes, constraints, or row
+codec, and it does not prove that arbitrary handler SQL writes only that table.
+Add or move the application DDL through the application's migration component
+before deploying the catalog that refers to it.
+
+Keiro migrations create only catalog registry, group fence, run, progress, and
+verification metadata under `keiro`. Group preparation may `TRUNCATE` declared
+`ClearBeforeReplay` targets at the operator's explicit rebuild request; it does
+not own those tables. `PreserveAndReconcile` leaves target rows intact and
+requires application-owned reconciliation and verification behavior. Never
+use a target declaration as evidence that a brownfield table is reconstructible
+from available history.
+
 ## Authoring
 
 Use the standard CLI to create and check append-only files:

@@ -33,6 +33,7 @@ module Keiro.Dsl.LanguageVersion
     languageRegistry,
     supportedLanguageVersions,
     currentStableLanguageVersion,
+    currentAuthoringLanguageVersion,
     languageSupportForVersion,
     lookupLanguageDefinition,
     LanguageFeature (..),
@@ -181,11 +182,13 @@ runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities
 data LanguageSupport
   = CompatibilityOnly
   | Stable
+  | Candidate
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 languageSupportText :: LanguageSupport -> Text
 languageSupportText CompatibilityOnly = "compatibility-only"
 languageSupportText Stable = "stable"
+languageSupportText Candidate = "candidate"
 
 -- | Whether a recognized contract has crossed the external compatibility
 -- boundary. The active candidate is accepted for development and authoring,
@@ -237,8 +240,8 @@ languageRegistry =
   LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly PublishedLanguage
     :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly PublishedLanguage,
          LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly PublishedLanguage,
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 CompatibilityOnly PublishedLanguage,
-         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Stable CandidateLanguage
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 Stable PublishedLanguage,
+         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Candidate CandidateLanguage
        ]
 
 profileV1 :: SyntaxProfile
@@ -305,12 +308,22 @@ runtimeProfileV4 =
 supportedLanguageVersions :: NonEmpty LanguageVersion
 supportedLanguageVersions = definitionVersion <$> languageRegistry
 
--- | The one registry entry recommended for newly-authored sources.
+-- | The one published registry entry recommended for stable sources.
 currentStableLanguageVersion :: LanguageVersion
 currentStableLanguageVersion =
   case [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable] of
     [version] -> version
     _ -> error "keiro-dsl internal invariant: language registry must contain exactly one stable version"
+
+-- | The language selected for newly-authored sources on this development
+-- branch. One active candidate takes precedence without pretending it has been
+-- published; otherwise authoring falls back to the published stable contract.
+currentAuthoringLanguageVersion :: LanguageVersion
+currentAuthoringLanguageVersion =
+  case [definitionVersion definition | definition <- NE.toList languageRegistry, definitionMaturity definition == CandidateLanguage] of
+    [] -> currentStableLanguageVersion
+    [version] -> version
+    _ -> error "keiro-dsl internal invariant: language registry must contain at most one candidate version"
 
 languageSupportForVersion :: LanguageVersion -> Maybe LanguageSupport
 languageSupportForVersion version = definitionSupport <$> lookupLanguageDefinition version

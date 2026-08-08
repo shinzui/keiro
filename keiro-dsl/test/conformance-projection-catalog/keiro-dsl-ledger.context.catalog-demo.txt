@@ -3,7 +3,7 @@ spec: keiro-dsl/test/fixtures/projection-catalog.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
-semantic-contract {"languageSupport":"stable","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
 naming-edition idiomatic-v1
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo replay-audit assembly","path":"Generated/CatalogDemo/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"Generated/CatalogDemo/ProjectionCatalog.hs"}

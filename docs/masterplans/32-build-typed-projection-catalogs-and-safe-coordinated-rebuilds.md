@@ -124,7 +124,7 @@ plans must amend it if implementation changes the contract.
 | 1 | Define and validate the typed projection catalog runtime contract | docs/plans/209-define-and-validate-the-typed-projection-catalog-runtime-contract.md | None | None | Complete |
 | 2 | Coordinate projection target groups, fencing, and rebuild policies | docs/plans/210-coordinate-projection-target-groups-fencing-and-rebuild-policies.md | EP-1 | None | Complete |
 | 3 | Replay catalogued projections deterministically and resumably | docs/plans/211-replay-catalogued-projections-deterministically-and-resumably.md | EP-1, EP-2 | None | Complete |
-| 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | In Progress |
+| 4 | Generate projection catalogs from keiro-dsl and classify their evolution | docs/plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md | EP-1, EP-3 | None | Complete |
 | 5 | Adopt projection catalogs in operations, examples, and migration guidance | docs/plans/213-adopt-projection-catalogs-in-operations-examples-and-migration-guidance.md | EP-3 | EP-4 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -232,8 +232,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2: inline and async group fencing, atomic promotion/abandonment, policy/concurrency evidence.
 - [x] EP-3: fixed-head ordered replay with total decode/relevance results and bounded transactions.
 - [x] EP-3: durable fingerprint/progress resume, completion proof, verification, and failure evidence.
-- [ ] EP-4: checked DSL notation and generated runtime catalog/source views compile in conformance.
-- [ ] EP-4: diff, replay-impact, scaffold-ledger, and workspace evolution classifications are complete.
+- [x] EP-4: checked DSL notation and generated runtime catalog/source views compile in conformance.
+- [x] EP-4: diff, replay-impact, scaffold-ledger, and workspace evolution classifications are complete.
 - [ ] EP-5: hand-written and generated adoption examples, compatibility migration guide, and docs.
 - [ ] EP-5: catalog-backed operator inventory/rebuild integration reconciles with MasterPlan 31.
 
@@ -273,6 +273,12 @@ interactions between child plans. Provide concise evidence.
 - 2026-08-08: Atomic page/progress rollback and committed-page resume were demonstrated without a
   process-kill surface: a deterministic third-event decode failure exercises pre-commit rollback,
   while a verification failure exercises resume after every page committed.
+- 2026-08-08: Candidate language 5 initially reused the `Stable` support label, which silently
+  demoted published v4 and rewrote its scaffold ledgers. EP-4 corrected the model to keep v4
+  published stable, represent v5 as candidate, and select development authoring separately.
+- 2026-08-08: The starter conformance suite encoded mutable `new <kind>` invocations instead of a
+  historical language contract. A frozen-corpus manifest entry now keeps that v4 evidence under
+  compile, ledger, disk, and Cabal checks without replaying it through candidate defaults.
 
 
 ## Decision Log
@@ -319,7 +325,7 @@ plan.
 
 - Decision: Register catalog syntax under the candidate `language keiro-dsl 5` and keep language versions 1–4
   immutable.
-  Rationale: The current published authoring language is 4. Adding required ownership declarations and new
+  Rationale: The published stable language is 4. Adding required ownership declarations and new
   generated runtime meaning to that released preamble would violate the append-only language
   registry; EP-4 must introduce a new syntax profile and an explicit upgrade path.
   Date: 2026-08-07
@@ -329,6 +335,12 @@ plan.
   fixture was a parser sentinel rather than a contract. Existing version-4 corpora remain valid
   primary evidence, and EP-4 adds a focused version-5 conformance lane without rewriting unrelated
   generated banners.
+  Date: 2026-08-08
+
+- Decision: Model published stable, active candidate, and authoring default as separate facts.
+  Rationale: Candidate development must not demote released contracts or churn their evidence.
+  Language 4 remains stable, candidate 5 is the development authoring default, and historical
+  starter corpora are frozen rather than replayed through a changing `new` command.
   Date: 2026-08-08
 
 - Decision: Keep the catalog rebuild command absent until the typed adapter and `keiro-ops` both
@@ -358,9 +370,12 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-EP-1 through EP-3 now provide the complete hand-written runtime: one validated catalog feeds live
-writers, atomic group preparation, fixed-head replay, exact resume, application verification, and
-proof-gated atomic promotion. The principal lesson is that source exhaustion and adapter
+EP-1 through EP-4 now provide the complete runtime and generated declaration path: one validated
+catalog feeds live writers, atomic group preparation, fixed-head replay, exact resume, application
+verification, and proof-gated atomic promotion, while candidate language 5 generates the same
+catalog and classifies its evolution. The principal lesson is that source exhaustion and adapter
 evaluation are separate evidence: an all-irrelevant history can be complete with zero applies,
-while one arbitrary dedup row proves neither. EP-4 and EP-5 remain to generate and adopt this
-runtime contract. EP-3 landed in commit `8d1b9fe9` with the complete repository gate green.
+while one arbitrary dedup row proves neither. EP-5 remains to adopt the catalog in examples and
+operations. EP-4 also made release maturity distinct from authoring defaults: v4 remains published
+stable, unreleased v5 is amended in place, and historical v4 corpora no longer churn when candidate
+authoring advances.
