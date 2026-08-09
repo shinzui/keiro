@@ -54,8 +54,11 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   package-set and affected package changelogs; amended ADR 28 and the telemetry audit; and removed
   the obsolete Kiroku limitation. Focused suites pass 25 and 3 examples; ADR and research strict
   validation report 28 and 17 valid concepts. (2026-08-09)
-- [ ] Milestone 4: pass focused and repository-wide validation, update the parent MasterPlan,
-  perform ADR distillation, and record the final outcomes.
+- [x] Milestone 4: passed the complete affected suites and repository-wide validation, updated
+  MasterPlan 31 to complete EP-5 and the initiative, performed ADR distillation, and recorded the
+  final outcomes. `keiro-test` passes 443 examples, `keiro-ops-test` passes 30, and `just verify`
+  exits successfully through every package, generated-corpus, policy, and documentation gate.
+  (2026-08-09)
 
 
 ## Surprises & Discoveries
@@ -177,7 +180,40 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Plan 214 completed on 2026-08-09. All 12 bounded `kiroku-store` stanzas across seven Cabal files
+now admit `>=0.4 && <0.5`. Keiro's consistency and projection-observation paths consume Kiroku's
+public one-statement `SubscriptionCheckpointInventory`: subscription-wide positions retain the
+minimum-across-members contract, store position and checkpoint rows come from the same snapshot,
+and the removed private checkpoint `SELECT` has no production replacement.
+
+The standalone CLI now exposes `stream subscriptions` and
+`projection position --subscription NAME` in human and JSON modes. Integration fixtures persist
+multiple stopped-worker rows directly, including member zero and out-of-order inserts, and prove
+durable name/member ordering, missing and empty semantics, the member-aware floor, and the captured
+store head. The preferred `keiro.projection.global_position_distance` gauge and deprecated legacy
+gauge record the same position subtraction with truthful `{position}` units.
+
+The completed validation transcript is:
+
+    cabal build all
+      Up to date / exit 0
+    cabal test keiro-test
+      443 examples, 0 failures
+    cabal test keiro-ops-test
+      30 examples, 0 failures
+    just verify
+      exit 0; includes keiro-pgmq 58/0/2 pending, all 39 keiro-dsl test components,
+      keiro-dsl-test 615/0, jitsurei 22/0, and keiro-migrations 28/0
+    just adr-validate
+      OK: 28 concepts
+    just research-validate
+      OK: 17 concepts
+
+ADR distillation reviewed this plan's Decision Log, Surprises & Discoveries, and delivered outcome.
+ADR 28 now records the durable schema-ownership boundary and the truthful position-distance naming;
+no additional project-level decision emerged, so no new ADR was created. The remaining limitation
+is intentional: a true category or relevant-event lag still requires an owning-library frontier API
+and projection source identity, and no unbounded category scan was introduced.
 
 
 ## Context and Orientation
@@ -539,3 +575,7 @@ rendering layer. No `OpsEnv` or `AppHooks` field changes.
 The existing `CategoryHead Text` compatibility helper and rebuild checkpoint reset mutations are
 not interfaces supplied by the new inventory. This plan must not route the CLI through either one
 or remove transactional reset behavior under cover of a read-only dependency upgrade.
+
+
+Revision note: Implemented all four milestones, recorded the complete validation and ADR
+distillation evidence, and completed EP-5 and MasterPlan 31, 2026-08-09.

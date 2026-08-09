@@ -181,7 +181,7 @@ frozen identity bytes) do not constrain this initiative.
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | Complete |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Complete |
-| 5 | Adopt Kiroku's durable subscription checkpoint inventory | docs/plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md | EP-3 | Kiroku 0.4.0.0 | In Progress |
+| 5 | Adopt Kiroku's durable subscription checkpoint inventory | docs/plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md | EP-3 | Kiroku 0.4.0.0 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -264,7 +264,7 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-3: deferred checkpoint slice transferred intact to EP-5 after the owning Kiroku release; no private-schema substitute shipped.
 - [x] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
 - [x] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
-- [ ] EP-5: adopt Kiroku 0.4.0.0 and mount durable inventory plus explicitly named global position-distance output.
+- [x] EP-5: adopted Kiroku 0.4.0.0 and mounted durable inventory plus explicitly named global position-distance output.
 
 
 ## Surprises & Discoveries
@@ -318,6 +318,11 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   position is suitable for a named position distance, but the API deliberately
   does not provide a category head or claim a relevant-event count. EP-5 now owns
   adoption without reopening EP-3's already delivered domains.
+- 2026-08-09: EP-5 found 12 bounded `kiroku-store` stanzas across the seven affected
+  Cabal files. The public inventory compiled through every generated read-model and
+  projection consumer without a custom `Store` interpreter change. The full repository
+  gate passed, so the dependency adoption closes the initiative without a compatibility
+  workaround or private-schema exception.
 
 
 ## Decision Log
@@ -432,10 +437,15 @@ The runbook, workflow guide/reference, roadmap, production posture, README, and
 package changelogs now describe the command surface. The expanded 27-example ops
 suite and the complete `just verify` gate pass.
 
-The initiative remains open only for EP-5's adoption of the now-released durable
-checkpoint inventory. No Keiro or CLI-side private-schema workaround remains, and
-the follow-up plan does not claim that store-wide position distance is an exact
-category, filtered, or sharded event lag.
+EP-5 completed on 2026-08-09, closing the initiative. All 12 bounded workspace
+stanzas now admit `kiroku-store` 0.4, Keiro reads durable checkpoint positions and
+the captured store head through Kiroku's public one-statement inventory, and the
+standalone CLI exposes member-aware `stream subscriptions` and
+`projection position --subscription NAME` output. The preferred telemetry and CLI
+field are explicitly named global position distance; the legacy gauge remains a
+deprecated compatibility rail and no output claims an exact category, filtered, or
+sharded event count. The final `keiro` and `keiro-ops` suites pass 443 and 30
+examples respectively, and `just verify` passes the complete repository gate.
 
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
@@ -458,3 +468,7 @@ Kiroku IR-2, 2026-08-09.
 Revision note: Registered EP-5 after Kiroku published `kiroku-store` 0.4.0.0,
 closed EP-3's historical scope, and assigned durable member-aware inventory plus
 truthfully named global position-distance adoption to plan 214, 2026-08-09.
+
+Revision note: Completed EP-5 with Kiroku's public durable checkpoint inventory,
+truthfully named position-distance output, full repository validation, and closed
+the five-plan operational CLI initiative, 2026-08-09.
