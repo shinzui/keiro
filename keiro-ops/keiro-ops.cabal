@@ -43,6 +43,7 @@ library
   exposed-modules:
     Keiro.Ops
     Keiro.Ops.Env
+    Keiro.Ops.Parse
     Keiro.Ops.Render
     Keiro.Ops.Timer
     Keiro.Ops.Workflow
@@ -51,12 +52,18 @@ library
     , aeson                 >=2.2.2     && <2.3
     , base                  >=4.21      && <5
     , bytestring            >=0.12      && <0.13
+    , containers            >=0.6       && <0.8
+    , effectful             >=2.6       && <2.7
+    , effectful-core        >=2.6       && <2.7
     , hasql                 >=1.10      && <1.11
     , keiro                 ^>=0.11.0.0
     , keiro-migrations      ^>=0.11.0.0
     , kiroku-store          >=0.3       && <0.4
     , optparse-applicative  >=0.18      && <0.20
     , text                  >=2.1       && <2.2
+    , time                  >=1.12      && <1.15
+    , uuid                  >=1.3       && <1.4
+    , vector                >=0.13      && <0.14
 
 executable keiro-ops
   import:         warnings, shared
@@ -68,14 +75,27 @@ executable keiro-ops
     , keiro-ops
 
 test-suite keiro-ops-test
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is:        Main.hs
+  import:             warnings, shared
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            Main.hs
+  ghc-options:        -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends: keiro-ops:keiro-ops
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , hspec       >=2.11
+    , aeson               >=2.2       && <2.3
+    , base                >=4.21      && <5
+    , bytestring          >=0.12      && <0.13
+    , containers          >=0.6       && <0.8
+    , effectful           >=2.6       && <2.7
+    , effectful-core      >=2.6       && <2.7
+    , hasql               >=1.10      && <1.11
+    , hspec               >=2.11
+    , keiro               ^>=0.11.0.0
     , keiro-ops
-    , text        >=2.1  && <2.2
+    , keiro-test-support
+    , kiroku-store        >=0.3       && <0.4
+    , process             >=1.6       && <1.7
+    , text                >=2.1       && <2.2
+    , time                >=1.12      && <1.15
+    , uuid                >=1.3       && <1.4
+    , vector              >=0.13      && <0.14

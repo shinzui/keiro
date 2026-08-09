@@ -88,6 +88,7 @@ data WorkflowInstanceRow = WorkflowInstanceRow
     attempts :: !Int32,
     lastError :: !(Maybe Text),
     nextAttemptAt :: !(Maybe UTCTime),
+    wakeAfter :: !(Maybe UTCTime),
     leasedBy :: !(Maybe Text),
     leaseExpiresAt :: !(Maybe UTCTime),
     createdAt :: !UTCTime,
@@ -403,7 +404,7 @@ lookupInstanceStmt =
   preparable
     """
     SELECT workflow_id, workflow_name, generation, status, attempts,
-           last_error, next_attempt_at, leased_by, lease_expires_at,
+           last_error, next_attempt_at, wake_after, leased_by, lease_expires_at,
            created_at, updated_at, completed_at
     FROM keiro.keiro_workflows
     WHERE workflow_id = $1 AND workflow_name = $2
@@ -419,7 +420,7 @@ listWorkflowInstancesStmt =
   preparable
     """
     SELECT workflow_id, workflow_name, generation, status, attempts,
-           last_error, next_attempt_at, leased_by, lease_expires_at,
+           last_error, next_attempt_at, wake_after, leased_by, lease_expires_at,
            created_at, updated_at, completed_at
     FROM keiro.keiro_workflows
     WHERE ($1::text[] IS NULL OR status = ANY($1))
@@ -616,6 +617,7 @@ instanceRowDecoder =
     <*> (statusFromText <$> D.column (D.nonNullable D.text))
     <*> D.column (D.nonNullable D.int4)
     <*> D.column (D.nullable D.text)
+    <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.text)
     <*> D.column (D.nullable D.timestamptz)

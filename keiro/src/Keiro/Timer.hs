@@ -23,6 +23,7 @@ module Keiro.Timer
     scheduleTimerTx,
     scheduleTimerOnceTx,
     claimDueTimer,
+    lookupTimer,
     markTimerFired,
     countDueTimers,
     countStuckTimers,

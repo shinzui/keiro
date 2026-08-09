@@ -90,9 +90,8 @@ around that supported library API.
 Relationship to MasterPlan 30
 (`docs/masterplans/30-harden-and-scale-the-durable-execution-engine-surfaced-by-the-2026-08-re-audit.md`):
 disjoint files, no shared edits; plan 200's exact discovery makes `wf list` status
-columns trustworthy, and plan 203's `drainDueTimersWith` is the natural backend for
-`timer drain-once` if it has landed (EP-2 falls back to looping
-`runTimerWorkerWith` otherwise).
+columns trustworthy, and plan 203's landed `drainDueTimersWith` is the backend
+EP-4 mounts as `timer drain-once` with an application-supplied fire action.
 
 
 ## Decomposition Strategy
@@ -118,8 +117,9 @@ EP-2 (plan 206) creates the `keiro-ops` package: the command-tree architecture
 connection/environment plumbing (hasql settings), the output layer (aligned tables
 for humans, `--json` for scripts), the safety rails (`--force` with an
 affected-rows preview; schema handshake through
-`Keiro.Migrations.SchemaCheck.verifyExpectedSchema`), and the workflow and timer
-domains end to end. It records the constitutional rules as a new ADR.
+`Keiro.Migrations.SchemaCheck.verifyExpectedSchema`), the workflow domain, and
+database-only timer triage end to end. It records the constitutional rules as a
+new ADR.
 
 EP-3 (plan 207) adds the remaining database-only domains — outbox, inbox, dispatch
 dead letters, pgmq DLQs, projection positions, shards, snapshots, and kiroku
@@ -127,8 +127,8 @@ streams — each a thin wrapper over the owning library's exported functions,
 following the patterns EP-2 froze.
 
 EP-4 (plan 208) makes the tree embeddable (`Keiro.Ops.commandTree` taking an
-application environment with optional registry/audit hooks), ships the
-code-dependent commands (`wf resume-once`, `replay-audit`, and a typed
+application environment with optional registry/timer-fire/audit hooks), ships the
+code-dependent commands (`timer drain-once`, `wf resume-once`, `replay-audit`, and a typed
 projection-catalog rebuild mount when MasterPlan 32 is available),
 demonstrates embedding in `jitsurei`, and rewrites the operational docs around the
 CLI.
@@ -197,8 +197,8 @@ and `keiro-dsl/keiro-dsl.cabal`).
 
 The ops environment type (working name `OpsEnv`: store handle, schema names,
 output mode, force flag) — EP-2 defines it in `Keiro.Ops.Env`; EP-3 consumes it
-unchanged; EP-4 *extends* it with the optional application hooks (registry, audit
-targets, and `ProjectionCatalogOperations`). EP-4 owns that extension; EP-3 must not
+unchanged; EP-4 *extends* it with the optional application hooks (registry,
+timer fire action, audit targets, and `ProjectionCatalogOperations`). EP-4 owns that extension; EP-3 must not
 pre-empt it. The rebuild hook is operator-neutral and comes from
 `Keiro.Projection.Catalog.Operations`; no `Map Text (OpsEnv -> IO ExitCode)` or
 CLI-side target inventory is permitted.
@@ -230,7 +230,7 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 
 - [x] EP-1: `listWorkflowInstances` with status/name filters and keyset paging, tested.
 - [x] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
-- [ ] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
+- [x] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
 - [ ] EP-2: workflow + timer domains complete; ADR for the operator-command contract recorded.
 - [ ] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
 - [ ] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
@@ -257,6 +257,12 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   atomically. EP-2's public inputs remain the planned
   `listWorkflowInstances`, `cancelWorkflow`, and
   `forceReleaseInstanceLease`; no migration or CLI workaround is required.
+- 2026-08-09: EP-2 found two read-model gaps needed for exact output and
+  previews (`WorkflowInstanceRow.wakeAfter` and
+  `listWorkflowGcCandidates`) and added them to the owning Keiro modules. It also
+  confirmed `drainDueTimersWith` requires application dispatch code, so the
+  standalone binary ships timer triage while EP-4 conditionally mounts
+  `timer drain-once` with a timer-fire hook.
 
 
 ## Decision Log
@@ -308,6 +314,13 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   preserve one journal/instance winner for every operator command EP-2 exposes;
   the durable contract is ADR 27.
   Date: 2026-08-08
+
+- Decision: Classify timer draining as code-dependent and move its command mount
+  from EP-2's standalone surface to EP-4's application hooks.
+  Rationale: `drainDueTimersWith` deliberately delegates dispatch and the fired
+  event id to its callback. A generic database binary cannot supply either, and
+  a dummy callback would leave claimed timers stranded in `firing`.
+  Date: 2026-08-09
 
 
 ## Outcomes & Retrospective

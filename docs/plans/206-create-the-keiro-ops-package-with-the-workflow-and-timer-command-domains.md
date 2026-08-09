@@ -40,15 +40,24 @@ and no command touches another library's tables directly.
 
 - [x] (2026-08-08T23:42:49Z) Package scaffolding: `keiro-ops.cabal`, `cabal.project` entry, nix wiring, empty command tree runs.
 - [x] (2026-08-08T23:51:29Z) Core: `OpsEnv`, connection/config plumbing, output layer (tables + `--json`), `--force` rail, schema handshake.
-- [ ] Workflow domain complete (list/show/journal/awakeables/children/cancel/resurrect/lease-release/gc-once).
-- [ ] Timer domain complete (stuck list/requeue/cancel/dead-letter/drain-once).
+- [x] (2026-08-09T00:13:31Z) Workflow domain complete (list/show/journal/awakeables/children/cancel/resurrect/lease-release/gc-once).
+- [x] (2026-08-09T00:13:31Z) Standalone timer domain complete (stuck list/requeue/cancel/dead-letter); `drain-once` reassigned to plan 208 with its required application fire hook.
 - [x] (2026-08-08T23:51:29Z) ADR for the operator-command contract recorded; `just adr-validate` green.
 - [ ] `cabal test keiro-ops-test` green; full repo suite unaffected.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-08-09: The workflow list API omitted the stored `wake_after` hint named
+  by this plan, and GC exposed mutation but no honest candidate preview. The
+  owning `keiro` modules now expose `wakeAfter` on `WorkflowInstanceRow` and
+  `listWorkflowGcCandidates`; the CLI did not reproduce either query.
+
+- 2026-08-09: `drainDueTimersWith` is necessarily parameterized by the
+  application's timer fire action. A standalone database-only binary cannot
+  produce the event id or dispatch behavior that completes an arbitrary process
+  manager timer. Claiming with a dummy callback would strand every timer in
+  `firing`, so `timer drain-once` moves to plan 208's hook-dependent command set.
 
 
 ## Decision Log
@@ -86,6 +95,13 @@ and no command touches another library's tables directly.
   Rationale: Global output and safety options must work before or after nested
   domain commands, including the documented `wf cancel --force` form.
   Date: 2026-08-08
+
+- Decision: Keep timer stuck-row triage in the standalone binary and mount
+  `timer drain-once` only when an embedding application supplies its fire action.
+  Rationale: Keiro's batched drain owns claiming and retry policy but deliberately
+  delegates application dispatch. This is the same code-dependent boundary as a
+  workflow registry, and a placeholder callback would be a destructive mutation.
+  Date: 2026-08-09
 
 
 ## Outcomes & Retrospective
@@ -126,10 +142,10 @@ count; awakeable mutation via `Keiro.Workflow.Awakeable.signalAwakeable` /
 `cancelAwakeable`. GC one-shot: `Keiro.Workflow.Gc.gcWorkflowsOnce` +
 `WorkflowGcPolicy`. Timers: `Keiro.Timer` — `findStuckTimers` +
 `StuckTimerFilter`/`anyStuckTimer`, `requeueStuckTimer`, `cancelTimer`,
-`deadLetterTimer`, and for one-shot draining `runTimerWorkerWith` (single claim
-per call) or, if MasterPlan 30's plan 203 has landed, `drainDueTimersWith`
-(batched) — implement `timer drain-once --limit n` against whichever exists,
-looping the single-claim worker otherwise. The timer runbook this encodes is
+`deadLetterTimer`. MasterPlan 30's plan 203 landed `drainDueTimersWith`, but its
+required fire callback is application code; plan 208 mounts
+`timer drain-once --limit n` with that hook rather than exposing an unsafe standalone substitute.
+The timer runbook this plan encodes is
 `docs/user/operations.md` §"Stuck-row recovery runbook".
 
 The schema handshake: `Keiro.Migrations.SchemaCheck` exports
@@ -238,9 +254,9 @@ landed, render scanned/deleted distinctly).
 `Keiro.Ops.Timer`, commands under `keiro-ops timer …`: `stuck list [--min-age d]
 [--min-attempts n]` over `findStuckTimers`; `requeue --force <timer-id>`,
 `cancel --force <timer-id>`, `dead-letter --force <timer-id> --reason <text>`
-over their namesake APIs; `drain-once [--limit n]` over the drain backend
-described in Context, reporting how many fired. Encode the runbook's guidance in
-`--help` text (when to requeue vs cancel vs dead-letter), citing
+over their namesake APIs. Plan 208 adds `drain-once [--limit n]` only to an
+embedded tree carrying the application's fire hook. Encode the runbook's guidance
+in `--help` text (when to requeue vs cancel vs dead-letter), citing
 `docs/user/operations.md`.
 
 ### Tests (`keiro-ops-test`)

@@ -15,7 +15,9 @@
 -- become eligible for collection on their own terms.
 module Keiro.Workflow.Gc
   ( WorkflowGcPolicy (..),
+    WorkflowGcCandidate (..),
     WorkflowGcSummary (..),
+    listWorkflowGcCandidates,
     gcWorkflowsOnce,
     runWorkflowGcWorker,
     runWorkflowGcWorkerWith,
@@ -53,6 +55,12 @@ data WorkflowGcPolicy = WorkflowGcPolicy
   }
   deriving stock (Generic, Eq, Show)
 
+data WorkflowGcCandidate = WorkflowGcCandidate
+  { workflowId :: !Text,
+    workflowName :: !Text
+  }
+  deriving stock (Generic, Eq, Show)
+
 data WorkflowGcSummary = WorkflowGcSummary
   { -- | Terminal instances eligibility returned this pass.
     scanned :: !Int,
@@ -77,11 +85,30 @@ gcWorkflowsOnce ::
   WorkflowGcPolicy ->
   Eff es WorkflowGcSummary
 gcWorkflowsOnce now policy = do
+  eligible <- listWorkflowGcCandidates now policy
+  outcomes <- traverse (deleteWorkflowIsolated . candidateCoordinates) eligible
+  pure WorkflowGcSummary {scanned = length eligible, deleted = length (filter id outcomes)}
+
+-- | Preview the exact candidates one garbage-collection pass would attempt.
+--
+-- The CLI and other operator surfaces use this instead of reproducing the
+-- eligibility query. A later 'gcWorkflowsOnce' call re-evaluates eligibility,
+-- so the preview is informational rather than a lock or reservation.
+listWorkflowGcCandidates ::
+  (Store :> es) =>
+  UTCTime ->
+  WorkflowGcPolicy ->
+  Eff es [WorkflowGcCandidate]
+listWorkflowGcCandidates now policy = do
   let cutoff = addUTCTime (negate (policy ^. #retention)) now
       limit = max 0 (policy ^. #batchSize)
-  eligible <- runTransaction (Tx.statement (cutoff, fromIntegral limit :: Int32) eligibleWorkflowsStmt)
-  outcomes <- traverse deleteWorkflowIsolated eligible
-  pure WorkflowGcSummary {scanned = length eligible, deleted = length (filter id outcomes)}
+  map (uncurry WorkflowGcCandidate)
+    <$> runTransaction
+      (Tx.statement (cutoff, fromIntegral limit :: Int32) eligibleWorkflowsStmt)
+
+candidateCoordinates :: WorkflowGcCandidate -> (Text, Text)
+candidateCoordinates candidate =
+  (candidate ^. #workflowId, candidate ^. #workflowName)
 
 -- | 'runWorkflowGcWorkerWith' with a compact stderr logger.
 runWorkflowGcWorker ::

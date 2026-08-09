@@ -2,18 +2,22 @@ module Keiro.Ops.Render
   ( OpsOutcome (..),
     OpsResult (..),
     emptyResult,
+    jsonText,
     messageResult,
     renderHuman,
     renderResult,
+    truncateCell,
   )
 where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as LazyByteString.Raw
 import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.List (transpose)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
 import Data.Text.IO qualified as Text.IO
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 
@@ -40,6 +44,15 @@ messageResult message =
       rows = [[message]],
       jsonValue = object ["message" .= message]
     }
+
+jsonText :: Value -> Text
+jsonText = Text.Encoding.decodeUtf8 . LazyByteString.Raw.toStrict . Aeson.encode
+
+truncateCell :: Int -> Text -> Text
+truncateCell limit value
+  | Text.length value <= limit = value
+  | limit <= 1 = Text.take limit value
+  | otherwise = Text.take (limit - 1) value <> "…"
 
 renderResult :: OpsEnv -> OpsResult -> IO ()
 renderResult env result =

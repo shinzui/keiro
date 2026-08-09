@@ -53,13 +53,13 @@ commandParser =
     ( command
         "wf"
         ( info
-            (Workflow <$> Workflow.commandParser <**> helper)
+            (Workflow <$> Workflow.commandParser)
             (progDesc "Inspect and operate durable workflows")
         )
         <> command
           "timer"
           ( info
-              (Timer <$> Timer.commandParser <**> helper)
+              (Timer <$> Timer.commandParser)
               (progDesc "Inspect and operate durable timers")
           )
     )

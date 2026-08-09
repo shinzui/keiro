@@ -32,6 +32,8 @@ database connection does not transfer ownership of one library's schema to anoth
 Some operations require only a database connection, while others require the
 application's compiled workflow registry, codecs, handlers, or replay-audit targets.
 A standalone executable cannot discover those application values from the database.
+Timer draining is one such operation because the worker delegates dispatch and the
+fired event id to an application-supplied callback.
 
 
 ## Decision

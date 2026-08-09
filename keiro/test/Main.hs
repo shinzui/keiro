@@ -4429,6 +4429,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       case claimed of
         Right (Just timer) -> timer ^. #status `shouldBe` Firing
         other -> expectationFailure ("expected a claimed timer, got " <> show other)
+      Right lookedUp <-
+        Store.runStoreIO storeHandle $
+          lookupTimer (counterTimerRequest ^. #timerId)
+      fmap (^. #status) lookedUp `shouldBe` Just Firing
       -- It surfaces as stuck under the permissive filter.
       Right stuck <-
         Store.runStoreIO storeHandle $

@@ -22,7 +22,9 @@ because keiro is a library: resuming a workflow needs the application's
 `WorkflowRegistry` (a name-to-Haskell-code map that no external binary can
 possess), replay auditing needs the candidate binary's own codecs and streams
 (`Keiro.ReplayAudit` is *designed* to run inside it), and read-model rebuilds need
-the application's validated projection catalog. This plan closes that gap the way
+the application's validated projection catalog. Timer draining likewise needs the
+application's fire action to dispatch opaque payloads and return the event id that
+completes each claim. This plan closes that gap the way
 the MasterPlan's design dictates: the command tree becomes an embeddable library surface, so an
 application mounts the entire console into its own executable —
 `yourapp ops wf resume-once …`, `yourapp ops replay-audit …`, `yourapp ops rebuild
@@ -38,7 +40,7 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
 ## Progress
 
 - [ ] Embedding surface: `AppHooks`, `opsCommandTree`, standalone binary refactored onto it.
-- [ ] Code-dependent commands: `wf resume-once`, `replay-audit`, catalog-backed `rebuild` mount.
+- [ ] Code-dependent commands: `timer drain-once`, `wf resume-once`, `replay-audit`, catalog-backed `rebuild` mount.
 - [ ] `jitsurei` embeds the console; transcript captured.
 - [ ] Docs flip: operations.md, durable-workflows guide/reference, roadmap.md, production-status.md, README.
 - [ ] `cabal test keiro-ops-test` and full repo `just verify` green.
@@ -51,6 +53,10 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
   plan 213 stopped at the integration gate instead of creating a second parser. The available
   public hook is `Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`, with versioned
   inventory, preview, registered-preview, and run-report JSON values.
+- 2026-08-09: Plan 206 confirmed that `drainDueTimersWith` cannot be a
+  database-only standalone command: its callback is the application's process-manager
+  dispatch. This plan therefore owns a timer-fire hook and conditionally mounts
+  `timer drain-once`; no-hook command trees omit it.
 
 
 ## Decision Log
@@ -139,6 +145,7 @@ In `keiro-ops`, add `Keiro.Ops.Embed`:
 ```haskell
 data AppHooks = AppHooks
   { registry :: !(Maybe (WorkflowRegistry '[Store, Error StoreError, IOE], WorkflowResumeOptions)),
+    timerFire :: !(Maybe (TimerRow -> Eff '[Store, Error StoreError, IOE] (Maybe EventId))),
     auditTargets :: !(Maybe OpsAuditConfig),   -- streams/categories + budget for Keiro.ReplayAudit
     projectionCatalog :: !(Maybe ProjectionCatalogOperations)
   }
@@ -156,6 +163,10 @@ there is one command tree, not two. Extend `OpsEnv` only if a hook needs it —
 this plan owns that extension per MasterPlan 31's Integration Points.
 
 ### Milestone 2 — the code-dependent commands
+
+`timer drain-once [--limit n]` — one bounded `drainDueTimersWith` pass through
+the mounted timer fire action, reporting how many timers were processed and
+requiring `--force`. The command is absent when the hook is absent.
 
 `wf resume-once [--limit n]` — one `resumeWorkflowsOnce` pass through the
 mounted registry, rendering the `ResumeSummary` (and honoring the schema
@@ -195,7 +206,9 @@ per the repo's changelog convention (the package likely warrants its own
 
 ### Tests
 
-Handler-level: `opsCommandTree emptyAppHooks` hides the three commands;
+Handler-level: `opsCommandTree emptyAppHooks` hides the hook-dependent commands;
+mounting a timer fire action surfaces `timer drain-once` and a seeded due timer
+is dispatched and marked fired;
 mounting a registry surfaces `wf resume-once`, and a pass over a seeded
 suspended-then-signalled workflow reports `completed = 1`; mounting a validated catalog surfaces
 only its group identities, and a rebuild without `--force` previews without creating a run;
@@ -251,6 +264,7 @@ reversible; coordinate with MasterPlan 30's plan 204 on shared files as noted.
 
 End-state additions: `Keiro.Ops.Embed.{AppHooks, emptyAppHooks, opsCommandTree,
 OpsAuditConfig}`; `AppHooks` optionally mounts
+the timer fire action and
 `Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`; `jitsurei` gains an ops mount and a
 dependency on `keiro-ops`.
 This plan owns the `OpsEnv` extension point (MasterPlan 31 Integration Points);

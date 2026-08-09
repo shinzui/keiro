@@ -19,6 +19,7 @@ module Keiro.Timer.Schema
     scheduleTimerTx,
     scheduleTimerOnceTx,
     claimDueTimer,
+    lookupTimer,
     markTimerFired,
 
     -- * Read-only counts
@@ -143,6 +144,15 @@ claimDueTimer :: (Store :> es) => UTCTime -> Eff es (Maybe TimerRow)
 claimDueTimer now =
   runTransaction $
     Tx.statement now claimDueTimerStmt
+
+-- | Look up one timer by its stable identifier without claiming or mutating it.
+--
+-- Operational tooling uses this to render an exact preview before invoking one
+-- of the guarded lifecycle transitions below.
+lookupTimer :: (Store :> es) => TimerId -> Eff es (Maybe TimerRow)
+lookupTimer timerId =
+  runTransaction $
+    Tx.statement (timerIdToUuid timerId) lookupTimerStmt
 
 -- | Mark a claimed timer @Fired@, recording the id of the event its firing
 -- produced. Returns 'False' when the row left @Firing@ while the fire action was
@@ -288,6 +298,18 @@ claimDueTimerStmt =
       kt.payload, kt.status, kt.attempts, kt.fired_event_id
     """
     (E.param (E.nonNullable E.timestamptz))
+    (D.rowMaybe timerRowDecoder)
+
+lookupTimerStmt :: Statement UUID (Maybe TimerRow)
+lookupTimerStmt =
+  preparable
+    """
+    SELECT timer_id, process_manager_name, correlation_id, fire_at,
+      payload, status, attempts, fired_event_id
+    FROM keiro.keiro_timers
+    WHERE timer_id = $1
+    """
+    (E.param (E.nonNullable E.uuid))
     (D.rowMaybe timerRowDecoder)
 
 markTimerFiredStmt :: Statement (UUID, UUID) Bool
