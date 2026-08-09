@@ -14,8 +14,9 @@ import Keiro.Dsl.FrontendCompatibility
   )
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
-import Keiro.Dsl.Parser (parseSource)
+import Keiro.Dsl.Parser (parseSource, parseSourceDocument)
 import Keiro.Dsl.Source
+import Keiro.Dsl.SourceIndex
 import Keiro.Dsl.Syntax
 import Test.Hspec hiding (Spec)
 import Prelude hiding (span)
@@ -145,6 +146,30 @@ frontendSurfaceSpec = do
                      ("Journey", 2, "Active -- Start --> implementation hole; goto Closed"),
                      ("Journey", 3, "Closed -- Start --> implementation hole; goto Closed")
                    ]
+      document <- case parseSourceDocument "semantic-source-index.keiro" source of
+        Left failure -> expectationFailure (show failure) >> fail "unreachable"
+        Right value -> pure value
+      let ParsedSourceDocument {documentParsedSource, documentSourceIndex} = document
+      parseSource "semantic-source-index.keiro" source `shouldBe` Right documentParsedSource
+      length (semanticSourceEntries documentSourceIndex) `shouldBe` 7
+      case lookupSourceSpan (AggregateStateSubject "Journey" "Closed") documentSourceIndex of
+        Just (ExactSourcePosition, SourceSpan {source = spanSource, start = SourcePoint {line, column}}) -> do
+          spanSource `shouldBe` "semantic-source-index.keiro"
+          (line, column) `shouldBe` (6, 23)
+        other -> expectationFailure ("expected exact terminal-state location, got " <> show other)
+      case lookupSourceSpan (AggregateTransitionSubject "Journey" (TransitionOrdinal 1)) documentSourceIndex of
+        Just (ExactSourcePosition, SourceSpan {start = SourcePoint {line, column}}) ->
+          (line, column) `shouldBe` (14, 3)
+        other -> expectationFailure ("expected exact replay-only transition location, got " <> show other)
+
+    it "refuses incomplete and duplicate semantic source indices" $ do
+      let subject = AggregateStateSubject "Journey" "Empty"
+          point = SourcePoint {offset = 0, line = 1, column = 1}
+          sourceSpan = SourceSpan {source = "index.keiro", start = point, end = point}
+      exactSemanticSourceIndex "index.keiro" [subject] []
+        `shouldSatisfy` isFailure MissingSourceSubject
+      exactSemanticSourceIndex "index.keiro" [subject] [(subject, sourceSpan), (subject, sourceSpan)]
+        `shouldSatisfy` isFailure DuplicateSourceSubject
 
   describe "surface lowering" $ do
     it "preserves top-level source order before grouping the semantic graph" $ do
@@ -255,6 +280,11 @@ spanText :: Text -> SourceSpan -> Text
 spanText source SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}} =
   T.take (endOffset - startOffset) (T.drop startOffset source)
 
+isFailure :: SourceIndexFailureCode -> Either SourceIndexFailure value -> Bool
+isFailure expected = \case
+  Left SourceIndexFailure {failureCode} -> failureCode == expected
+  Right _ -> False
+
 isFacadeImport :: Text -> Bool
 isFacadeImport line =
   let stripped = T.strip line
@@ -284,6 +314,7 @@ semanticModulePaths =
   map
     ("keiro-dsl/src/Keiro/Dsl/" <>)
     [ "Source.hs",
+      "SourceIndex.hs",
       "Syntax.hs",
       "Grammar.hs",
       "Validate.hs"

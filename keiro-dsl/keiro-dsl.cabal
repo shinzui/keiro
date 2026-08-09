@@ -94,6 +94,7 @@ library
     Keiro.Dsl.SidecarNames
     Keiro.Dsl.Skeleton
     Keiro.Dsl.Source
+    Keiro.Dsl.SourceIndex
     Keiro.Dsl.StructuralConformance
     Keiro.Dsl.Syntax
     Keiro.Dsl.TypeGraph

@@ -18,6 +18,7 @@ module Keiro.Dsl.Frontend.Internal
     LoweringFailureCode (..),
     LoweringFailure (..),
     renderLoweringFailure,
+    lowerSurfaceDocument,
     lowerSurfaceSource,
   )
 where
@@ -46,6 +47,7 @@ import Keiro.Dsl.LanguageVersion
     sourceLanguageErrorCodeText,
   )
 import Keiro.Dsl.Source
+import Keiro.Dsl.SourceIndex
 import Keiro.Dsl.Syntax
 import Prelude hiding (span)
 
@@ -136,6 +138,7 @@ data LoweringFailureCode
   = InvalidSourceSpan
   | SourceNameMismatch
   | SurfaceOrderInvalid
+  | SemanticSourceIndexInvalid !SourceIndexFailureCode
   deriving stock (Eq, Ord, Show, Generic)
 
 -- | A failure found while converting surface evidence to the semantic graph.
@@ -175,16 +178,56 @@ frontendFailureFromLowering failure@LoweringFailure {code, span, message} =
       compatibility = BodyGrammarFailure (renderLoweringFailure failure)
     }
 
--- | Remove document order and exact locations while projecting each top-level
--- span's starting line into the compatibility 'Loc'.
-lowerSurfaceSource :: SurfaceSource -> Either LoweringFailure ParsedSource
-lowerSurfaceSource surfaceSource@SurfaceSource {language, spec = locatedSpec} = do
+-- | Lower semantic data and retain a checked exact source index beside it.
+lowerSurfaceDocument :: SurfaceSource -> Either LoweringFailure ParsedSourceDocument
+lowerSurfaceDocument surfaceSource@SurfaceSource {language, spec = locatedSpec} = do
   validateSurfaceSource surfaceSource
+  let parsedSource =
+        ParsedSource
+          { parsedSourceLanguage = language,
+            parsedSpec = lowerSpec locatedSpec
+          }
+      fallbackSpan = case locatedSpec of Located {span = sourceSpan} -> sourceSpan
+  sourceIndex <-
+    either
+      (Left . sourceIndexLoweringFailure fallbackSpan)
+      Right
+      ( exactSemanticSourceIndex
+          (case surfaceSource of SurfaceSource {source} -> source)
+          (semanticSourceSubjects (parsedSpec parsedSource))
+          (surfaceSourceEntries surfaceSource)
+      )
   pure
-    ParsedSource
-      { parsedSourceLanguage = language,
-        parsedSpec = lowerSpec locatedSpec
+    ParsedSourceDocument
+      { documentParsedSource = parsedSource,
+        documentSourceIndex = sourceIndex
       }
+
+-- | Compatibility projection that drops only the checked source index.
+lowerSurfaceSource :: SurfaceSource -> Either LoweringFailure ParsedSource
+lowerSurfaceSource = fmap parsed . lowerSurfaceDocument
+  where
+    parsed ParsedSourceDocument {documentParsedSource} = documentParsedSource
+
+surfaceSourceEntries :: SurfaceSource -> [(SourceSubject, SourceSpan)]
+surfaceSourceEntries SurfaceSource {spec = Located {value = SurfaceSpec {elements}}} =
+  concatMap sourceEntry elements
+  where
+    sourceEntry Located {span = sourceSpan, value = surfaceElement} = case surfaceElement of
+      SurfaceAggregateState aggregateName stateName ->
+        [(AggregateStateSubject aggregateName stateName, sourceSpan)]
+      SurfaceAggregateTransition aggregateName ordinal ->
+        [(AggregateTransitionSubject aggregateName (TransitionOrdinal ordinal), sourceSpan)]
+      SurfaceField {} -> []
+      SurfaceExpression {} -> []
+
+sourceIndexLoweringFailure :: SourceSpan -> SourceIndexFailure -> LoweringFailure
+sourceIndexLoweringFailure fallback SourceIndexFailure {failureCode = indexCode, failureSpan, failureMessage} =
+  LoweringFailure
+    { code = SemanticSourceIndexInvalid indexCode,
+      span = maybe fallback id failureSpan,
+      message = failureMessage
+    }
 
 lowerSpec :: Located SurfaceSpec -> Spec
 lowerSpec

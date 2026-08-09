@@ -37,8 +37,9 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-09T23:18:29Z) Milestone 1: extend aggregate surface syntax to capture exact state
   and transition spans.
-- [ ] Milestone 2: build a checked, file-qualified `SemanticSourceIndex` beside `ParsedSource` while
-  preserving compatibility parser and `Spec` behavior.
+- [x] (2026-08-09T23:26:01Z) Milestone 2: build a checked, file-qualified
+  `SemanticSourceIndex` beside `ParsedSource` while preserving compatibility parser and `Spec`
+  behavior.
 - [ ] Milestone 3: compose exact member indices beside `WorkspaceSpec` without relocating points or
   changing merged semantic validation.
 - [ ] Milestone 4: audit every CLI/workspace source path, update ADRs and API tests, and prove no
@@ -75,6 +76,12 @@ Record every decision made while working on the plan.
   remain member-local.
   Rationale: Existing validation and diagnostic rendering depend on merged line numbers. Replacing
   them in the same step would widen risk; exact source consumers can use the new index directly.
+  Date: 2026-08-09
+
+- Decision: Make `parseSource` and `lowerSurfaceSource` projections of the new document-returning
+  entry points instead of maintaining a second parse/lower route.
+  Rationale: One checked parse must be the authority for both semantic data and exact provenance;
+  a compatibility caller may discard the index but may not reconstruct or bypass it.
   Date: 2026-08-09
 
 

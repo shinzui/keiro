@@ -7,11 +7,13 @@ module Keiro.Dsl.FrontendPublicApiProbe
 where
 
 import Data.Text (Text)
-import Keiro.Dsl.Frontend (FrontendFailure, LoweringFailure, lowerSurfaceSource, parseSurfaceSource)
+import Keiro.Dsl.Frontend (FrontendFailure, LoweringFailure, lowerSurfaceDocument, lowerSurfaceSource, parseSurfaceSource)
 import Keiro.Dsl.Grammar (Name, Node, Placement, Spec, specContext, specLayout, specModuleRoot, specNodes)
 import Keiro.Dsl.LanguageVersion (ParseFailure, ParsedSource, SourceLanguage, SourceLanguageDiagnostic, SourceLanguageErrorCode, parsedSourceLanguage, parsedSpec, sourceLanguageErrorCode)
-import Keiro.Dsl.Parser (ParseError, parseSource, parseSpec, parseSpecText)
+import Keiro.Dsl.Parser (ParseError, parseSource, parseSourceDocument, parseSpec, parseSpecText)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
+import Keiro.Dsl.Source (SourceSpan)
+import Keiro.Dsl.SourceIndex (ParsedSourceDocument, SemanticSourceIndex, SourcePositionQuality, SourceSubject, lookupSourceSpan)
 import Keiro.Dsl.Syntax (SurfaceSource)
 
 parseSurfaceSourceProbe :: FilePath -> Text -> Either FrontendFailure SurfaceSource
@@ -20,8 +22,17 @@ parseSurfaceSourceProbe = parseSurfaceSource
 lowerSurfaceSourceProbe :: SurfaceSource -> Either LoweringFailure ParsedSource
 lowerSurfaceSourceProbe = lowerSurfaceSource
 
+lowerSurfaceDocumentProbe :: SurfaceSource -> Either LoweringFailure ParsedSourceDocument
+lowerSurfaceDocumentProbe = lowerSurfaceDocument
+
 parseSourceProbe :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSourceProbe = parseSource
+
+parseSourceDocumentProbe :: FilePath -> Text -> Either ParseFailure ParsedSourceDocument
+parseSourceDocumentProbe = parseSourceDocument
+
+lookupSourceSpanProbe :: SourceSubject -> SemanticSourceIndex -> Maybe (SourcePositionQuality, SourceSpan)
+lookupSourceSpanProbe = lookupSourceSpan
 
 parseSpecProbe :: FilePath -> Text -> Either ParseError Spec
 parseSpecProbe = parseSpec
@@ -62,16 +73,19 @@ apiProbe :: ()
 apiProbe =
   parseSurfaceSourceProbe `seq`
     lowerSurfaceSourceProbe `seq`
-      parseSourceProbe `seq`
-        parseSpecProbe `seq`
-          parseSpecTextProbe `seq`
-            renderSourceProbe `seq`
-              renderSpecProbe `seq`
-                parsedSourceLanguageProbe `seq`
-                  parsedSpecProbe `seq`
-                    sourceLanguageErrorCodeProbe `seq`
-                      specContextProbe `seq`
-                        specModuleRootProbe `seq`
-                          specLayoutProbe `seq`
-                            specNodesProbe `seq`
-                              ()
+      lowerSurfaceDocumentProbe `seq`
+        parseSourceProbe `seq`
+          parseSourceDocumentProbe `seq`
+            lookupSourceSpanProbe `seq`
+              parseSpecProbe `seq`
+                parseSpecTextProbe `seq`
+                  renderSourceProbe `seq`
+                    renderSpecProbe `seq`
+                      parsedSourceLanguageProbe `seq`
+                        parsedSpecProbe `seq`
+                          sourceLanguageErrorCodeProbe `seq`
+                            specContextProbe `seq`
+                              specModuleRootProbe `seq`
+                                specLayoutProbe `seq`
+                                  specNodesProbe `seq`
+                                    ()

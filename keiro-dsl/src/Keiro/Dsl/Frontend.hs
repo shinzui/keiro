@@ -34,6 +34,7 @@ module Keiro.Dsl.Frontend
     renderLoweringFailure,
     frontendFailureFromLowering,
     parseSurfaceSource,
+    lowerSurfaceDocument,
     lowerSurfaceSource,
   )
 where
