@@ -33,6 +33,7 @@ module Keiro.Projection
     pruneAsyncProjectionDedupBefore,
     countAsyncProjectionDedupForBefore,
     pruneAsyncProjectionDedupForBefore,
+    recordProjectionGlobalPositionDistance,
     recordProjectionLag,
   )
 where
@@ -69,7 +70,7 @@ import Keiro.Projection.Catalog
     typedProjectionRebuildGroups,
   )
 import Keiro.Projection.Types
-import Keiro.ReadModel (readSubscriptionPosition, storeHeadPosition)
+import Keiro.ReadModel (subscriptionPositionFromInventory)
 import Keiro.ReadModel.Rebuild.Group
   ( ProjectionWriteFence (..),
     RebuildRunId,
@@ -81,6 +82,11 @@ import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Subscription
+  ( SubscriptionCheckpointInventory (..),
+    SubscriptionName (..),
+    subscriptionCheckpointInventory,
+  )
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -310,30 +316,44 @@ pruneAsyncProjectionDedupForBefore projectionName cutoff =
   runTransaction
     $ Tx.statement (projectionName, cutoff) pruneProjectionDedupForBeforeStmt
 
--- | Record 'keiro.projection.lag' for one async projection: how many events its
--- subscription is behind the global log head, computed as the store head global
--- position minus the subscription's checkpoint position (clamped at 0). A no-op
--- when no metrics handle is supplied. Call once per drain pass, after applying the
--- batch, so the gauge reflects the backlog the worker has left to catch up on.
+-- | Record the non-negative global position distance between Kiroku's captured
+-- store position and the slowest durable member checkpoint for one async
+-- projection. A global position is an opaque cursor, so this is not an exact
+-- count of relevant events for filtered, category, or sharded consumers.
 --
 -- There is no in-library polling drain loop today (the application drives
 -- 'applyAsyncProjection' per event), so this is the entry point an application
--- calls to surface lag for a subscription.
+-- calls once per drain pass after applying a batch. The preferred and legacy
+-- gauges are recorded from the same one-statement inventory snapshot during the
+-- 0.11 compatibility interval.
+recordProjectionGlobalPositionDistance ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  AsyncProjection ->
+  Eff es ()
+recordProjectionGlobalPositionDistance metrics projection = do
+  inventory <- subscriptionCheckpointInventory
+  let checkpoint =
+        fromMaybe (GlobalPosition 0)
+          $ subscriptionPositionFromInventory
+            (SubscriptionName (projection ^. #subscriptionName))
+            inventory
+      distance = globalPositionDistance (storePosition inventory) checkpoint
+  Telemetry.recordProjectionGlobalPositionDistance metrics distance
+  Telemetry.recordProjectionLag metrics distance
+
+-- | Deprecated compatibility name for 'recordProjectionGlobalPositionDistance'.
+{-# DEPRECATED recordProjectionLag "Use recordProjectionGlobalPositionDistance; the value is a global position distance, not an event count." #-}
 recordProjectionLag ::
   (IOE :> es, Store :> es) =>
   Maybe KeiroMetrics ->
   AsyncProjection ->
   Eff es ()
-recordProjectionLag metrics projection = do
-  headPos <- storeHeadPosition
-  checkpoint <-
-    fromMaybe (GlobalPosition 0)
-      <$> readSubscriptionPosition (projection ^. #subscriptionName)
-  Telemetry.recordProjectionLag metrics (positionGap headPos checkpoint)
+recordProjectionLag = recordProjectionGlobalPositionDistance
 
--- | The non-negative gap between the log head and a checkpoint, in events.
-positionGap :: GlobalPosition -> GlobalPosition -> Int64
-positionGap (GlobalPosition headP) (GlobalPosition checkP) = max 0 (headP Prelude.- checkP)
+-- | The non-negative distance between two opaque global positions.
+globalPositionDistance :: GlobalPosition -> GlobalPosition -> Int64
+globalPositionDistance (GlobalPosition headP) (GlobalPosition checkP) = max 0 (headP Prelude.- checkP)
 
 insertProjectionDedupStmt :: Statement (Text, UUID) Bool
 insertProjectionDedupStmt =

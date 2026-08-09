@@ -181,7 +181,7 @@ frozen identity bytes) do not constrain this initiative.
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | Complete |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Complete |
-| 5 | Adopt Kiroku's durable subscription checkpoint inventory | docs/plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md | EP-3 | Kiroku 0.4.0.0 | Not Started |
+| 5 | Adopt Kiroku's durable subscription checkpoint inventory | docs/plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md | EP-3 | Kiroku 0.4.0.0 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).

@@ -36,8 +36,15 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
 
 ## Progress
 
-- [ ] Milestone 1: admit `kiroku-store` 0.4.0.0 throughout the workspace and replace the
-  production checkpoint-position read with the public inventory.
+- [x] Preflight: validated the updated ExecPlan against MasterPlan 31, confirmed Hackage's
+  preferred `kiroku-store` release is 0.4.0.0, resolved upstream tag
+  `kiroku-store-v0.4.0.0`, and verified the Mori-located source contract and workspace impact.
+  (2026-08-09)
+- [x] Milestone 1: admitted `kiroku-store` 0.4.0.0 in all 12 bounded workspace stanzas, replaced
+  the production checkpoint and global-head reads with the public inventory, and added the
+  preferred position-distance metric plus compatibility recording. `cabal build keiro keiro-ops`
+  passes; the focused `Keiro.ReadModel` group passes 25 examples and the metric match passes 1.
+  The private checkpoint-read source audit is empty. (2026-08-09)
 - [ ] Milestone 2: add durable `stream subscriptions` and member-aware `projection position`
   commands with stable human and JSON output.
 - [ ] Milestone 3: cover the library and CLI behavior, correct position-distance terminology,
@@ -48,6 +55,17 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
 
 ## Surprises & Discoveries
 
+- The implementation preflight found 12 bounded dependency stanzas across the seven Cabal files,
+  rather than one stanza per file. Hackage currently marks 0.4.0.0 as a normal preferred version,
+  and upstream tag `kiroku-store-v0.4.0.0` resolves to commit
+  `146a58fc2ac29e5a9cd788ce433c12fd857d7c6b`. The release changelog confirms that only exhaustive
+  custom `Store` interpreters need a constructor arm; a focused source search found none in Keiro.
+  Evidence: `curl .../kiroku-store/preferred.json`, `git ls-remote --tags .../kiroku.git`, and
+  `rg -n 'kiroku-store\\s+.*<0\\.4' --glob '*.cabal' .` on 2026-08-09.
+- Cabal splits the original `--test-options='--match projection lag'` value before Hspec receives
+  it, producing `unexpected argument 'lag'`. A one-word Hspec match is stable: the plan now uses
+  `--test-options='--match=distance'`, which ran the intended metric example successfully.
+  Evidence: 1 example, 0 failures on 2026-08-09.
 - Kiroku's public `SubscriptionCheckpointInventory` captures the global store position and all
   persisted rows in one statement snapshot. Rows are already sorted by subscription name and
   numeric member, and a missing subscription produces no row rather than a synthetic position
@@ -129,6 +147,12 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   can identify all-stream versus category sources, but Kiroku does not yet export the category
   frontier needed for an efficient true category lag. Omitting the stronger claim keeps the
   standalone and embedded surfaces consistent.
+  Date: 2026-08-09
+
+- Decision: Proceed with implementation against `kiroku-store` 0.4.0.0 without revising the plan's
+  bounds or interfaces after the release preflight.
+  Rationale: Hackage, the upstream release tag, the Mori-located source, and the updated parent
+  MasterPlan all agree on the planned public API and 0.4-series compatibility boundary.
   Date: 2026-08-09
 
 
@@ -318,7 +342,7 @@ After Milestone 1, format and run focused library tests:
 nix fmt
 cabal build keiro keiro-ops
 cabal test keiro-test --test-options='--match Keiro.ReadModel'
-cabal test keiro-test --test-options='--match projection lag'
+cabal test keiro-test --test-options='--match=distance'
 rg -n 'SELECT min\(last_seen\)|lookupSubscriptionPositionStmt' keiro/src
 ```
 

@@ -2693,6 +2693,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           readSubscriptionPosition "counter-read-model-sub"
       position `shouldBe` Right (Just (GlobalPosition 3))
 
+    it "returns no subscription position for an empty durable inventory" $ \_ -> do
+      let inventory =
+            KirokuSub.SubscriptionCheckpointInventory
+              (GlobalPosition 17)
+              Vector.empty
+      subscriptionPositionFromInventory (SubscriptionName "missing") inventory
+        `shouldBe` Nothing
+
+    it "uses Kiroku's captured store head after a stream is hard deleted" $ \storeHandle -> do
+      let target = stream "read-model-captured-head" :: Stream CounterEventStream
+      Right (Right commandResult) <-
+        Store.runStoreIO storeHandle $
+          runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+      capturedPosition <- case commandResult ^. #globalPosition of
+        Just position -> pure position
+        Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+      Right (Just _) <-
+        Store.runStoreIO storeHandle $
+          Store.hardDeleteStream (StreamName "read-model-captured-head")
+      observedHead <- Store.runStoreIO storeHandle storeHeadPosition
+      observedHead `shouldBe` Right capturedPosition
+
     it "Strong returns immediately on an empty log" $ \storeHandle -> do
       Right () <-
         Store.runStoreIO storeHandle $
@@ -3226,7 +3248,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Rebuild.abandonRebuild counterReadModel
       abandoned ^. #status `shouldBe` Abandoned
 
-    it "records projection lag behind the log head" $ \storeHandle -> do
+    it "records matching global position distance and projection lag gauges" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
       (provider, _env) <-
         createMeterProvider
@@ -3244,17 +3266,20 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right (Right _) <-
         Store.runStoreIO storeHandle $
           runCommand defaultRunCommandOptions counterEventStream target (Add 1)
-      -- The subscription cursor is never advanced, so the read model is behind
-      -- the head by every appended event: the lag gauge records that gap.
+      -- The subscription cursor is never advanced, so both the preferred and
+      -- compatibility gauges record the same non-negative position distance.
       Right () <-
         Store.runStoreIO storeHandle $
-          recordProjectionLag (Just keiroMetrics) counterAsyncProjection
+          recordProjectionGlobalPositionDistance (Just keiroMetrics) counterAsyncProjection
       _ <- forceFlushMeterProvider provider Nothing
       exported <- readIORef metricsRef
       let scalars = flattenScalarPoints exported
-      case lookup "keiro.projection.lag" scalars of
+          preferred = lookup "keiro.projection.global_position_distance" scalars
+          compatibility = lookup "keiro.projection.lag" scalars
+      preferred `shouldBe` compatibility
+      case preferred of
         Just (IntNumber n) -> n `shouldSatisfy` (>= 1)
-        other -> expectationFailure ("expected an integer projection lag, got " <> show other)
+        other -> expectationFailure ("expected an integer global position distance, got " <> show other)
 
     it "counts a position-wait timeout in the timeout counter" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter

@@ -39,6 +39,7 @@ module Keiro.ReadModel
     runQuery,
     runQueryWith,
     waitFor,
+    subscriptionPositionFromInventory,
     readSubscriptionPosition,
     storeHeadPosition,
     categoryHeadPosition,
@@ -63,7 +64,12 @@ import Keiro.Prelude
 import Keiro.ReadModel.Schema
 import Keiro.Telemetry (KeiroMetrics, recordProjectionWaitTimeouts)
 import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Read (readAllBackward)
+import Kiroku.Store.Subscription
+  ( SubscriptionCheckpoint (..),
+    SubscriptionCheckpointInventory (..),
+    SubscriptionName (..),
+    subscriptionCheckpointInventory,
+  )
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -302,29 +308,33 @@ readSubscriptionPosition ::
   Text ->
   Eff es (Maybe GlobalPosition)
 readSubscriptionPosition subscriptionName =
-  runTransaction
-    $ Tx.statement subscriptionName lookupSubscriptionPositionStmt
+  subscriptionPositionFromInventory (SubscriptionName subscriptionName)
+    <$> subscriptionCheckpointInventory
 
-lookupSubscriptionPositionStmt :: Statement Text (Maybe GlobalPosition)
-lookupSubscriptionPositionStmt =
-  preparable
-    """
-    SELECT min(last_seen)
-    FROM subscriptions
-    WHERE subscription_name = $1
-    """
-    (E.param (E.nonNullable E.text))
-    (D.singleRow (fmap GlobalPosition <$> D.column (D.nullable D.int8)))
+-- | Derive one subscription's durable position from a captured inventory.
+-- Consumer-group members share the subscription name, so the subscription-wide
+-- position is the slowest member's checkpoint. A missing durable row is
+-- represented by 'Nothing', not a synthetic position zero.
+subscriptionPositionFromInventory ::
+  SubscriptionName ->
+  SubscriptionCheckpointInventory ->
+  Maybe GlobalPosition
+subscriptionPositionFromInventory wanted inventory =
+  minimumMay
+    [ position
+    | SubscriptionCheckpoint name _member position _updatedAt <-
+        Vector.toList (checkpoints inventory),
+      name == wanted
+    ]
+  where
+    minimumMay [] = Nothing
+    minimumMay positions = Just (Prelude.minimum positions)
 
--- | The global position of the most recent event in the @$all@ log, or
--- @GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
--- @GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
+-- | The global position captured by Kiroku's durable checkpoint inventory.
+-- This reads the authoritative @$all@ stream position even when no decodable
+-- event is visible (for example after hard deletion).
 storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
-storeHeadPosition = do
-  recent <- readAllBackward (GlobalPosition 0) 1
-  pure $ case Vector.toList recent of
-    (event : _) -> event ^. #globalPosition
-    [] -> GlobalPosition 0
+storeHeadPosition = storePosition <$> subscriptionCheckpointInventory
 
 -- | The latest global position originating in a Kiroku category, or
 -- @GlobalPosition 0@ when that category has no events. This deliberately reads

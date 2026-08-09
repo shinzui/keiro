@@ -82,6 +82,7 @@ module Keiro.Telemetry
     keiroTimerAttemptsName,
     keiroTimerStuckName,
     keiroTimerRequeuedName,
+    keiroProjectionGlobalPositionDistanceName,
     keiroProjectionLagName,
     keiroProjectionWaitTimeoutsName,
     keiroProjectionRebuildStartsName,
@@ -132,6 +133,7 @@ module Keiro.Telemetry
     recordTimerAttempts,
     recordTimerStuck,
     recordTimerRequeued,
+    recordProjectionGlobalPositionDistance,
     recordProjectionLag,
     recordProjectionWaitTimeouts,
     recordProjectionRebuildStarts,
@@ -588,6 +590,9 @@ keiroTimerStuckName = "keiro.timer.stuck"
 keiroTimerRequeuedName :: Text
 keiroTimerRequeuedName = "keiro.timer.requeued"
 
+keiroProjectionGlobalPositionDistanceName :: Text
+keiroProjectionGlobalPositionDistanceName = "keiro.projection.global_position_distance"
+
 keiroProjectionLagName :: Text
 keiroProjectionLagName = "keiro.projection.lag"
 
@@ -713,6 +718,7 @@ data KeiroMetrics = KeiroMetrics
     timerAttempts :: Histogram,
     timerStuck :: Gauge Int64,
     timerRequeued :: Counter Int64,
+    projectionGlobalPositionDistance :: Gauge Int64,
     projectionLag :: Gauge Int64,
     projectionWaitTimeouts :: Counter Int64,
     projectionRebuildStarts :: Counter Int64,
@@ -771,7 +777,8 @@ newKeiroMetrics meter = liftIO $ do
   timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
   timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
   timerRequeued' <- counterI64 keiroTimerRequeuedName "{timer}" "Timers moved from firing back to scheduled after a stale claim."
-  projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
+  projectionGlobalPositionDistance' <- gaugeI64 keiroProjectionGlobalPositionDistanceName "{position}" "Global position distance between the captured store position and a projection's slowest durable member checkpoint."
+  projectionLag' <- gaugeI64 keiroProjectionLagName "{position}" "Deprecated compatibility gauge for the global position distance between the captured store position and a projection's slowest durable member checkpoint."
   projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
   projectionRebuildStarts' <- counterI64 keiroProjectionRebuildStartsName "{run}" "Catalog projection rebuild runs started."
   projectionRebuildResumes' <- counterI64 keiroProjectionRebuildResumesName "{run}" "Catalog projection rebuild invocations resumed."
@@ -821,6 +828,7 @@ newKeiroMetrics meter = liftIO $ do
         timerAttempts = timerAttempts',
         timerStuck = timerStuck',
         timerRequeued = timerRequeued',
+        projectionGlobalPositionDistance = projectionGlobalPositionDistance',
         projectionLag = projectionLag',
         projectionWaitTimeouts = projectionWaitTimeouts',
         projectionRebuildStarts = projectionRebuildStarts',
@@ -928,6 +936,9 @@ recordTimerStuck = recordGaugeI64 timerStuck
 
 recordTimerRequeued :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordTimerRequeued = recordCounter timerRequeued
+
+recordProjectionGlobalPositionDistance :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionGlobalPositionDistance = recordGaugeI64 projectionGlobalPositionDistance
 
 recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionLag = recordGaugeI64 projectionLag
