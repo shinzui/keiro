@@ -40,8 +40,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-09T23:26:01Z) Milestone 2: build a checked, file-qualified
   `SemanticSourceIndex` beside `ParsedSource` while preserving compatibility parser and `Spec`
   behavior.
-- [ ] Milestone 3: compose exact member indices beside `WorkspaceSpec` without relocating points or
-  changing merged semantic validation.
+- [x] (2026-08-09T23:35:41Z) Milestone 3: compose exact member indices beside `WorkspaceSpec`
+  without relocating points or changing merged semantic validation.
 - [ ] Milestone 4: audit every CLI/workspace source path, update ADRs and API tests, and prove no
   generated, fold, diff, or replay drift.
 
@@ -55,6 +55,10 @@ implementation. Provide concise evidence.
   complete transition parser captured live, replay-only, generated, and Hole-owned forms without
   changing clause parsing. The focused span test passed with all four adjacent transitions and a
   trailing comment excluded from the final span.
+- The workspace regression makes the two location systems visibly independent: inserting one
+  line before member A increments member B's `wmLineBase` by one, while B's exact transition
+  remains `b.keiro:7:3`. A one-member exact document produces the same entry; the bare
+  `ParsedSource` compatibility adapter reports `CompatibilityLineOnly`.
 
 
 ## Decision Log

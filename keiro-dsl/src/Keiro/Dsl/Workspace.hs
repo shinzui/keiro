@@ -65,6 +65,7 @@ module Keiro.Dsl.Workspace
     composeWorkspace,
     oneMemberWorkspace,
     oneMemberParsedWorkspace,
+    oneMemberParsedDocumentWorkspace,
     checkedWorkspace,
     checkWorkspace,
 
@@ -101,11 +102,21 @@ import Data.Void (Void)
 import GHC.Generics
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), SourceLanguageDiagnostic, effectiveLanguageVersion, languageVersionText)
-import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSource, renderParseFailure)
+import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSourceDocument, renderParseFailure)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
 import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
+import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
+import Keiro.Dsl.SourceIndex
+  ( ParsedSourceDocument (..),
+    SemanticSourceIndex,
+    SourceIndexFailure (..),
+    compatibilitySemanticSourceIndex,
+    emptySemanticSourceIndex,
+    repathSemanticSourceIndex,
+    unionSemanticSourceIndexes,
+  )
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateService)
 import System.Directory (doesFileExist)
 import System.FilePath (takeBaseName, takeDirectory, takeFileName, (</>))
@@ -636,6 +647,9 @@ data WorkspaceMember = WorkspaceMember
     wmSpec :: !Spec,
     -- | The member's declared-versus-legacy source contract.
     wmSourceLanguage :: !SourceLanguage,
+    -- | Exact member-local semantic source provenance, using the normalized
+    -- manifest-relative member path.
+    wmSourceIndex :: !SemanticSourceIndex,
     -- | Added to this member's lines to place them in the merged spec.
     wmLineBase :: !Int,
     -- | Source lines in the member file.
@@ -668,6 +682,8 @@ data WorkspaceSpec = WorkspaceSpec
     -- | Canonical order.
     wsMembers :: ![WorkspaceMember],
     wsMergedSpec :: !Spec,
+    -- | Checked union of the members' exact, unrelocated source indices.
+    wsSourceIndex :: !SemanticSourceIndex,
     wsLineMap :: !LineMap,
     wsOwnership :: !OwnershipIndex
   }
@@ -697,6 +713,21 @@ oneMemberWorkspace path spec = oneMemberParsedWorkspace path (ParsedSource Legac
 -- | Preserve provenance when adapting one parsed source to workspace consumers.
 oneMemberParsedWorkspace :: FilePath -> ParsedSource -> WorkspaceSpec
 oneMemberParsedWorkspace path parsedSource =
+  oneMemberWithIndex path parsedSource compatibilityIndex
+  where
+    relative = takeFileName path
+    compatibilityIndex =
+      either (const emptySemanticSourceIndex) id (compatibilitySemanticSourceIndex relative (parsedSpec parsedSource))
+
+-- | Adapt an exact parsed document to one-member workspace semantics while
+-- normalizing its index source path to the member path.
+oneMemberParsedDocumentWorkspace :: FilePath -> ParsedSourceDocument -> Either SourceIndexFailure WorkspaceSpec
+oneMemberParsedDocumentWorkspace path ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} = do
+  normalized <- repathSemanticSourceIndex path (takeFileName path) sourceIndex
+  pure (oneMemberWithIndex path parsedSource normalized)
+
+oneMemberWithIndex :: FilePath -> ParsedSource -> SemanticSourceIndex -> WorkspaceSpec
+oneMemberWithIndex path parsedSource sourceIndex =
   WorkspaceSpec
     { wsService = T.pack (takeBaseName path),
       wsManifestPath = path,
@@ -710,11 +741,13 @@ oneMemberParsedWorkspace path parsedSource =
             { wmPath = relative,
               wmSpec = spec,
               wmSourceLanguage = parsedSourceLanguage parsedSource,
+              wmSourceIndex = sourceIndex,
               wmLineBase = 0,
               wmLineCount = maximum (0 : collectLocs spec)
             }
         ],
       wsMergedSpec = spec,
+      wsSourceIndex = sourceIndex,
       wsLineMap = LineMap [(0, maxBound, relative)],
       wsOwnership = ownershipOf [(relative, spec)]
     }
@@ -785,7 +818,7 @@ checkWorkspace workspace =
 composeWorkspace ::
   FilePath ->
   WorkspaceManifest ->
-  [(FilePath, Text, ParsedSource)] ->
+  [(FilePath, Text, ParsedSourceDocument)] ->
   Either (NonEmpty WorkspaceDiagnostic) WorkspaceSpec
 composeWorkspace manifestPath manifest supplied
   | (d : ds) <- unsupplied = Left (d :| ds)
@@ -793,7 +826,7 @@ composeWorkspace manifestPath manifest supplied
   | otherwise = Right composed
   where
     ordered =
-      [ (ref, lookup (wmrPath ref) [(path, (text, parsedSource)) | (path, text, parsedSource) <- supplied])
+      [ (ref, lookup (wmrPath ref) [(path, (text, document)) | (path, text, document) <- supplied])
       | ref <- NE.toList (wmfMembers manifest)
       ]
     unsupplied =
@@ -807,9 +840,45 @@ composeWorkspace manifestPath manifest supplied
       | (ref, Nothing) <- ordered
       ]
     entries =
-      [ (ref, text, parsedSourceLanguage parsedSource, parsedSpec parsedSource)
-      | (ref, Just (text, parsedSource)) <- ordered
+      [ (ref, text, parsedSourceLanguage parsedSource, parsedSpec parsedSource, sourceIndex)
+      | (ref, Just (text, ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex})) <- ordered
       ]
+
+    qualifiedIndexResults =
+      [ ( ref,
+          repathSemanticSourceIndex
+            (workspaceDisplayPath manifestPath (WorkspaceMemberFile (wmrPath ref)))
+            (wmrPath ref)
+            sourceIndex
+        )
+      | (ref, _, _, _, sourceIndex) <- entries
+      ]
+    memberSourceIndexRefusals =
+      [ WorkspaceDiagnostic
+          { wdLocations = pure (memberLocation ref (sourceIndexFailureLine indexFailure) ""),
+            wdSeverity = Error,
+            wdCode = WorkspaceSourceIndexInvalid,
+            wdSourceLanguageCause = Nothing,
+            wdMessage = "workspace member source index is incoherent: " <> sourceIndexFailureText indexFailure
+          }
+      | (ref, Left indexFailure) <- qualifiedIndexResults
+      ]
+    qualifiedIndexes = [index | (_, Right index) <- qualifiedIndexResults]
+    workspaceSourceIndexResult = unionSemanticSourceIndexes qualifiedIndexes
+    unionSourceIndexRefusals = case workspaceSourceIndexResult of
+      Left indexFailure ->
+        [ WorkspaceDiagnostic
+            { wdLocations = pure (sourceIndexFailureLocation indexFailure),
+              wdSeverity = Error,
+              wdCode = WorkspaceSourceIndexInvalid,
+              wdSourceLanguageCause = Nothing,
+              wdMessage = "workspace source-index union is incoherent: " <> sourceIndexFailureText indexFailure
+            }
+        ]
+      Right _ -> []
+    sourceIndexRefusals = memberSourceIndexRefusals <> unionSourceIndexRefusals
+    sourceIndexFor ref =
+      fromMaybe emptySemanticSourceIndex (lookup (wmrPath ref) [(wmrPath candidate, index) | (candidate, Right index) <- qualifiedIndexResults])
 
     refusals =
       languageRefusals
@@ -818,12 +887,13 @@ composeWorkspace manifestPath manifest supplied
         <> layoutRefusals
         <> declarationRefusals
         <> nodeRefusals
+        <> sourceIndexRefusals
         <> collisionRefusals
 
     --------------------------------------------------------------------------
     -- Effective source language and context
     --------------------------------------------------------------------------
-    effectiveVersions = nub [effectiveLanguageVersion sourceLanguage | (_, _, sourceLanguage, _) <- entries]
+    effectiveVersions = nub [effectiveLanguageVersion sourceLanguage | (_, _, sourceLanguage, _, _) <- entries]
     languageRefusals
       | length effectiveVersions <= 1 = []
       | otherwise =
@@ -834,7 +904,7 @@ composeWorkspace manifestPath manifest supplied
                         ref
                         (sourceLanguageLine text sourceLanguage)
                         ("member selects effective language version " <> languageVersionText (effectiveLanguageVersion sourceLanguage))
-                    | (ref, text, sourceLanguage, _) <- entries
+                    | (ref, text, sourceLanguage, _, _) <- entries
                     ],
                 wdSeverity = Error,
                 wdCode = WorkspaceLanguageVersionMismatch,
@@ -848,9 +918,9 @@ composeWorkspace manifestPath manifest supplied
     sourceLanguageLine text LegacyUnversioned = clauseLine "context" text
     sourceLanguageLine _ DeclaredLanguage {languageVersionLoc = Loc lineNumber} = Just lineNumber
 
-    declaredContexts = nub [specContext spec | (_, _, _, spec) <- entries]
+    declaredContexts = nub [specContext spec | (_, _, _, spec, _) <- entries]
     effectiveContext = case entries of
-      (_, _, _, spec) : _ -> specContext spec
+      (_, _, _, spec, _) : _ -> specContext spec
       [] -> ""
     contextRefusals
       | length declaredContexts <= 1 = []
@@ -859,7 +929,7 @@ composeWorkspace manifestPath manifest supplied
               { wdLocations =
                   NE.fromList
                     [ memberLocation ref (clauseLine "context" text) ("member declares context '" <> specContext spec <> "'")
-                    | (ref, text, _, spec) <- entries
+                    | (ref, text, _, spec, _) <- entries
                     ],
                 wdSeverity = Error,
                 wdCode = WorkspaceContextMismatch,
@@ -925,7 +995,7 @@ composeWorkspace manifestPath manifest supplied
           where
             disagreeing =
               [ (ref, text, value)
-              | (ref, text, _, spec) <- entries,
+              | (ref, text, _, spec, _) <- entries,
                 Just value <- [memberValue spec],
                 value /= authority
               ]
@@ -950,7 +1020,7 @@ composeWorkspace manifestPath manifest supplied
                 ]
               )
           where
-            declared = [(ref, text, value) | (ref, text, _, spec) <- entries, Just value <- [memberValue spec]]
+            declared = [(ref, text, value) | (ref, text, _, spec, _) <- entries, Just value <- [memberValue spec]]
       where
         thd (_, _, value) = value
 
@@ -959,7 +1029,7 @@ composeWorkspace manifestPath manifest supplied
     --------------------------------------------------------------------------
     declarationSites =
       [ (name, (namespace, ref, loc))
-      | (ref, _, _, spec) <- entries,
+      | (ref, _, _, spec, _) <- entries,
         (namespace, name, loc) <- sharedDeclarations spec
       ]
     declarationRefusals =
@@ -983,7 +1053,7 @@ composeWorkspace manifestPath manifest supplied
 
     nodeSites =
       [ ((kind, name), (ref, loc))
-      | (ref, _, _, spec) <- entries,
+      | (ref, _, _, spec, _) <- entries,
         node <- specNodes spec,
         let (kind, name, loc) = nodeIdentity node
       ]
@@ -1011,17 +1081,18 @@ composeWorkspace manifestPath manifest supplied
     --------------------------------------------------------------------------
     -- Merged spec and line map
     --------------------------------------------------------------------------
-    lineCounts = [max 1 (length (T.lines text)) | (_, text, _, _) <- entries]
+    lineCounts = [max 1 (length (T.lines text)) | (_, text, _, _, _) <- entries]
     lineBases = scanl (+) 0 lineCounts
     members =
       [ WorkspaceMember
           { wmPath = wmrPath ref,
             wmSpec = spec,
             wmSourceLanguage = sourceLanguage,
+            wmSourceIndex = sourceIndexFor ref,
             wmLineBase = base,
             wmLineCount = memberLines
           }
-      | ((ref, _, sourceLanguage, spec), base, memberLines) <- zip3 entries lineBases lineCounts
+      | ((ref, _, sourceLanguage, spec, _), base, memberLines) <- zip3 entries lineBases lineCounts
       ]
     relocatedSpecs = [relocateLocs (shiftBy (wmLineBase member)) (wmSpec member) | member <- members]
     -- The placeholder location 'Loc 0' must stay 0: shifting it would land it
@@ -1133,17 +1204,25 @@ composeWorkspace manifestPath manifest supplied
           wsLayout = effectiveLayout,
           wsMembers = members,
           wsMergedSpec = mergedSpec,
+          wsSourceIndex = either (const emptySemanticSourceIndex) id workspaceSourceIndexResult,
           wsLineMap = lineMap,
           wsOwnership = ownershipOf [(wmPath member, wmSpec member) | member <- members]
         }
 
     effectiveSourceLanguage = case entries of
-      (_, _, sourceLanguage, _) : _ -> sourceLanguage
+      (_, _, sourceLanguage, _, _) : _ -> sourceLanguage
       [] -> LegacyUnversioned
 
     manifestLocation loc role = WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc loc)) role
     memberLocation ref found role =
       WorkspaceLocation (WorkspaceMemberFile (wmrPath ref)) (fromMaybe 1 found) role
+    sourceIndexFailureLine SourceIndexFailure {failureSpan} =
+      fmap (\SourceSpan {start = SourcePoint {line}} -> line) failureSpan
+    sourceIndexFailureLocation indexFailure@SourceIndexFailure {failureSpan} = case failureSpan of
+      Just SourceSpan {source, start = SourcePoint {line}} -> WorkspaceLocation (WorkspaceMemberFile source) line ""
+      Nothing -> WorkspaceLocation WorkspaceManifestFile 1 (sourceIndexFailureText indexFailure)
+    sourceIndexFailureText SourceIndexFailure {failureCode, failureMessage} =
+      T.pack (show failureCode) <> ": " <> failureMessage
 
 -- | Group @(key, site)@ pairs by key, preserving first-appearance order.
 groupSites :: (Ord k) => [(k, v)] -> [(k, [v])]
@@ -1264,7 +1343,7 @@ loadWorkspace source manifestPath = do
       result <- csRead source (wmrPath ref)
       pure $ case result of
         Left reason -> Left (memberFailure ref WorkspaceMemberUnreadable ("workspace member '" <> T.pack (wmrPath ref) <> "' could not be read: " <> reason) Nothing)
-        Right text -> case parseSource (workspaceDisplayPath manifestPath (WorkspaceMemberFile (wmrPath ref))) text of
+        Right text -> case parseSourceDocument (workspaceDisplayPath manifestPath (WorkspaceMemberFile (wmrPath ref))) text of
           Left parseFailure ->
             Left
               ( memberFailure
@@ -1273,7 +1352,7 @@ loadWorkspace source manifestPath = do
                   ("workspace member '" <> T.pack (wmrPath ref) <> "' failed to parse:\n" <> renderParseFailure parseFailure)
                   (case parseFailure of SourceLanguageFailure diagnostic -> Just diagnostic; BodyGrammarFailure {} -> Nothing)
               )
-          Right parsedSource -> Right (wmrPath ref, text, parsedSource)
+          Right document -> Right (wmrPath ref, text, document)
     memberFailure ref failureCode note sourceLanguageCause =
       WorkspaceDiagnostic
         { wdLocations = pure (WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc (wmrLoc ref))) ""),

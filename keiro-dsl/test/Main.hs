@@ -13,7 +13,7 @@ import Data.Aeson.Types (parseEither)
 import Data.Either (isLeft, isRight)
 import Data.Foldable (toList)
 import Data.KindID qualified as KindID
-import Data.List (partition, permutations, sort, (\\))
+import Data.List (find, partition, permutations, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -53,7 +53,7 @@ import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
-import Keiro.Dsl.Parser (parseSource, parseSpec)
+import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
@@ -67,6 +67,8 @@ import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
+import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
+import Keiro.Dsl.SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, diagnosticCodeText, parseDiagnosticCode, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
@@ -7725,6 +7727,66 @@ main = hspec $ do
         canonical <- shouldComposeWorkspace canonicalWorkspacePath
         reordered <- shouldComposeWorkspace reorderedWorkspacePath
         reordered {wsManifestPath = wsManifestPath canonical} `shouldBe` canonical
+      describe "workspace source provenance" $ do
+        it "keeps a later member's exact points stable when an earlier member gains source lines" $ do
+          let manifestText = T.unlines ["service provenance", "spec a.keiro", "spec b.keiro"]
+              aSource =
+                T.unlines
+                  [ "context provenance",
+                    "aggregate Alpha",
+                    "  regs",
+                    "  states Empty",
+                    "  command Ping {}",
+                    "  event Pinged {}",
+                    "  Empty -- Ping --> emit Pinged; goto Empty"
+                  ]
+              bSource =
+                T.unlines
+                  [ "context provenance",
+                    "aggregate Beta",
+                    "  regs",
+                    "  states Empty",
+                    "  command Ping {}",
+                    "  event Pinged {}",
+                    "  Empty -- Ping --> emit Pinged; goto Empty"
+                  ]
+              sourceWith alpha =
+                ContentSource
+                  { csRead = \case
+                      "service.keiro-workspace" -> pure (Right manifestText)
+                      "a.keiro" -> pure (Right alpha)
+                      "b.keiro" -> pure (Right bSource)
+                      path -> pure (Left ("unexpected path " <> T.pack path))
+                  }
+              loadWith alpha = do
+                loaded <- loadWorkspace (sourceWith alpha) "service.keiro-workspace"
+                case loaded of
+                  Left workspaceFailure -> expectationFailure (show workspaceFailure) >> fail "unreachable"
+                  Right value -> pure value
+              betaLocation workspace =
+                lookupSourceSpan
+                  (AggregateTransitionSubject "Beta" (TransitionOrdinal 0))
+                  (wsSourceIndex workspace)
+              betaBase workspace = wmLineBase <$> find ((== "b.keiro") . wmPath) (wsMembers workspace)
+          originalWorkspace <- loadWith aSource
+          shiftedWorkspace <- loadWith ("# inserted before Alpha\n" <> aSource)
+          betaLocation shiftedWorkspace `shouldBe` betaLocation originalWorkspace
+          betaBase shiftedWorkspace `shouldBe` ((+ 1) <$> betaBase originalWorkspace)
+          case betaLocation originalWorkspace of
+            Just (ExactSourcePosition, SourceSpan {source, start = SourcePoint {line, column}}) ->
+              (source, line, column) `shouldBe` ("b.keiro", 7, 3)
+            other -> expectationFailure ("expected exact Beta transition location, got " <> show other)
+
+          document <- case parseSourceDocument "b.keiro" bSource of
+            Left parseFailure -> expectationFailure (show parseFailure) >> fail "unreachable"
+            Right value -> pure value
+          exactOneMember <- case oneMemberParsedDocumentWorkspace "b.keiro" document of
+            Left sourceIndexFailure -> expectationFailure (show sourceIndexFailure) >> fail "unreachable"
+            Right value -> pure value
+          betaLocation exactOneMember `shouldBe` betaLocation originalWorkspace
+          let ParsedSourceDocument {documentParsedSource} = document
+              compatibility = oneMemberParsedWorkspace "b.keiro" documentParsedSource
+          fmap fst (betaLocation compatibility) `shouldBe` Just CompatibilityLineOnly
       it "checks a single .keiro file as a one-member workspace, diagnostic for diagnostic" $ do
         let fixtures =
               [ "test/fixtures/reservation.keiro",
