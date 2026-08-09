@@ -496,6 +496,13 @@ spec fixture = do
       ownersAfter <- expectStore store (Shard.ownershipSnapshotFor subscription)
       ownersAfter `shouldSatisfy` all (\(_, owner, _) -> owner == Nothing)
 
+      let replacement = Shard.WorkerId (testUuid "018f5f43-8a70-7b9a-9a9b-59d391a76804")
+          replacementLease = Shard.ShardLease subscription replacement 2 300
+      _ <- expectStore store (Shard.acquireOwnedBuckets replacementLease 1)
+      _ <- expectStore store (Shard.acquireOwnedBuckets replacementLease 1)
+      replacementOwners <- expectStore store (Shard.ownershipSnapshotFor subscription)
+      replacementOwners `shouldSatisfy` all (\(_, owner, _) -> owner == Just replacement)
+
   describe "snapshot handlers" $ around (withFreshStore fixture) do
     it "refuses uncovered truncation, passes matching coverage, and deletes advisories" $ \store -> do
       appended <- seedKirokuEvent store "snapshot-ops" "018f5f43-8a70-7b9a-9a9b-59d391a76811" Nothing

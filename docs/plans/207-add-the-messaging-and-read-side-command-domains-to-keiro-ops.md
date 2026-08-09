@@ -30,19 +30,55 @@ snapshots, and kiroku streams — the rest of the runbook in
 
 ## Progress
 
-- [ ] Outbox + dispatch dead-letter domain.
-- [ ] Inbox domain.
-- [ ] pgmq DLQ domain.
-- [ ] Projection-position domain.
-- [ ] Shard-ownership domain.
-- [ ] Snapshot domain (including the truncation preflight).
-- [ ] Stream (kiroku) domain.
-- [ ] `cabal test keiro-ops-test` green with per-domain coverage.
+- [x] Outbox + dispatch dead-letter domain.
+- [x] Inbox domain.
+- [x] pgmq DLQ domain.
+- [x] Projection-position domain.
+- [x] Shard-ownership domain.
+- [x] Snapshot domain (including the truncation preflight).
+- [x] Stream (kiroku) domain.
+- [x] `cabal test keiro-ops-test` green with per-domain coverage.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-08-08: Exact previews and generic inspection needed narrow public APIs
+  that the initial inventory did not contain. The implementation added
+  read-only stale/retention candidate lists to the owning outbox and inbox
+  modules, generic snapshot lookup/delete, subscription-scoped shard reads, and
+  projection-scoped dedup count/prune operations. The CLI still contains no
+  domain SQL. `keiro-pgmq` gained only a numeric-id convenience wrapper around
+  its existing archive operation so `keiro-ops` does not need a dependency on
+  the lower PGMQ implementation package.
+- 2026-08-08: `subscriptionStates` in
+  `mori://shinzui/kiroku/packages/kiroku-store` is explicitly live,
+  process-local state, not a durable checkpoint inventory. A standalone
+  `keiro-ops` process therefore normally reports no subscriptions. The command
+  says this in its help and output instead of claiming durable state; a durable
+  checkpoint-list command requires a future public Kiroku API and was not
+  approximated with table access.
+- 2026-08-08: The standalone binary cannot infer an application's current
+  aggregate snapshot codec tuple. Workflow streams have Keiro's fixed public
+  sentinel and are recognized by their `wf:` prefix; other streams must supply
+  all three discriminator flags. Truncation remains fail-closed unless the
+  evidence covers the boundary and matches those expected values, or the
+  operator explicitly supplies `--skip-preflight`.
+- 2026-08-08: The existing projection dedup retention contract is timestamp
+  based, not global-position based, and its original mutation was global across
+  projections. The shipped command accepts an ISO-8601 UTC cutoff and uses the
+  new projection-scoped API, preventing one projection's maintenance pass from
+  shortening another projection's redelivery window.
+- 2026-08-08: PGMQ's supported `readDlq` operation claims visibility, so mutation
+  previews use non-mutating queue metrics and report an honest upper bound rather
+  than reading identities. The standalone binary also has no application job
+  codec; it uses `aesonJobCodec @Value` to preserve and display raw JSON inside
+  the versioned DLQ wrapper. Human-mode purge adds a typed queue-name
+  confirmation; `--json --force` remains non-interactive.
+- 2026-08-08: The supported outbox and inbox list functions are source-scoped,
+  and dispatch dead-letter listing is dispatcher-scoped. Their CLI flags are
+  therefore required rather than pretending that an unsupported global listing
+  exists. Inbox GC correctly removes completed rows only; a poison row explicitly
+  marked failed remains available for diagnosis.
 
 
 ## Decision Log
@@ -57,10 +93,63 @@ snapshots, and kiroku streams — the rest of the runbook in
   semantics.
   Date: 2026-08-06
 
+- Decision: Add missing preview/inspection primitives to each owning Keiro
+  module, and add a small convenience wrapper to `keiro-pgmq`, rather than
+  weakening preview accuracy or querying owned tables from the CLI.
+  Rationale: ADR 28 makes the ownership boundary part of the operator contract;
+  read-only previews are reusable library capabilities, not a reason for an SQL
+  exception.
+  Date: 2026-08-08
+
+- Decision: Expose `stream subscriptions` as the supported live process-local
+  state and describe its limitation explicitly.
+  Rationale: `mori://shinzui/kiroku/packages/kiroku-store` has no public durable
+  checkpoint inventory. Honest empty output is safer than coupling the CLI to a
+  private schema or labeling transient state as durable.
+  Date: 2026-08-08
+
+- Decision: Make aggregate snapshot discriminators explicit inputs and keep the
+  known workflow tuple automatic.
+  Rationale: The standalone executable has no application codecs. Requiring the
+  candidate tuple preserves the three-component compatibility rule without
+  extending `OpsEnv` ahead of plan 208.
+  Date: 2026-08-08
+
+- Decision: Require typed confirmation for human-mode PGMQ purge, matching the
+  hard-delete rail, while leaving JSON automation governed by `--force`.
+  Rationale: Purge and hard delete are the two irreversible deletion operations;
+  a target-name confirmation catches interactive selection mistakes without
+  making scripts prompt.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed on 2026-08-08. `keiro-ops` now mounts all nine database-only command
+domains under one root and keeps the plan-206 rendering, schema handshake, and
+preview/`--force` contract. Seven new domain modules wrap public owning-library
+operations; the supporting Keiro APIs make previews exact without adding any CLI
+SQL. The root and nested help trees were exercised, including the planned
+`outbox dead-letters list` and `pgmq dlq` hierarchy.
+
+The ephemeral PostgreSQL acceptance transcript is represented directly by the
+handler tests:
+
+```text
+outbox handlers: surfaces dispatch dead letters through the supported API [PASS]
+inbox handlers: previews poison marking and GC without bypassing inbox APIs [PASS]
+pgmq handlers: previews and redrives a DLQ entry, which is then consumable [PASS]
+projection handlers: reports lag, reaches zero after checkpointing, and prunes only the named dedup rows [PASS]
+shard handlers: previews exact buckets, relinquishes them, and another worker re-leases them [PASS]
+snapshot handlers: refuses uncovered truncation, passes matching coverage, and deletes advisories [PASS]
+stream handlers: reads causation and applies lifecycle, truncate-marker, and permanent-delete operations [PASS]
+```
+
+Validation completed with `cabal test keiro-ops-test` (23 examples),
+`cabal test keiro-test` (441 examples), and `cabal test keiro-pgmq-test`
+(58 examples, 2 pre-existing pending cases). The repository-wide `just verify`
+gate also passed, including all DSL conformance suites, `jitsurei-test`, migration
+tests, generated-corpus checks, and OKF validation.
 
 
 ## Context and Orientation
@@ -68,11 +157,12 @@ snapshots, and kiroku streams — the rest of the runbook in
 Read plan 206's Context first if the package does not yet feel familiar; this
 plan only adds `Keiro.Ops.<Domain>` modules following its conventions and adds
 `keiro-pgmq` to `keiro-ops.cabal`'s dependencies. Every command below wraps an
-exported library function — the per-domain inventory, all verified present in the
-tree:
+exported library function. The final inventory includes the narrow owning-library
+inspection APIs added while implementing exact previews:
 
 Outbox (`keiro/src/Keiro/Outbox.hs`): `countOutboxBacklog`, `listOutbox`,
-`lookupOutbox`, `requeueStuckOutbox`, `garbageCollectSent`,
+`lookupOutbox`, `listStuckOutbox`, `listSentOutboxGcCandidates`,
+`requeueStuckOutbox`, `garbageCollectSent`,
 `outboxMaintenancePass`. Dispatch dead letters
 (`keiro/src/Keiro/DeadLetter.hs`): `listDispatchDeadLetters`. There is no
 outbox-dead-letter *redrive* API; if triage shows one is needed, it is a
@@ -80,27 +170,31 @@ keiro-library addition first (MasterPlan 31's constitutional rule) — record th
 gap in Surprises & Discoveries rather than writing SQL.
 
 Inbox (`keiro/src/Keiro/Inbox.hs`): `listInbox`, `lookupInbox`,
-`countInboxBacklog`, `garbageCollectCompleted`, `markFailedTx` (transaction-level;
-wrap in `runTransaction`).
+`listCompletedInboxGcCandidates`, `countInboxBacklog`,
+`garbageCollectCompleted`, `markFailedTx` (transaction-level; wrap in
+`runTransaction`).
 
 pgmq (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`): `readDlq`, `redriveDlq`, `purgeDlq`,
-`archiveDlq`, `archiveDlqEntry`; envelopes decode through the versioned
-`keiroJobCodec` (`keiro-pgmq/src/Keiro/PGMQ/Codec.hs`) — render the envelope
-fields (original message id, enqueue time, dead-letter reason) plus the raw JSON
-payload; the telemetry/envelope contract is
+`archiveDlq`, `archiveDlqEntry`, `archiveDlqEntryById`; the generic standalone
+surface decodes raw JSON through `aesonJobCodec @Value` while preserving the
+versioned dead-letter wrapper — render the envelope fields (original message id,
+enqueue time, dead-letter reason) plus the raw JSON payload; the
+telemetry/envelope contract is
 `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md` and must not be
 bypassed. Queue names come from the operator (`--queue`).
 
 Projections (`keiro/src/Keiro/ReadModel.hs`): `readSubscriptionPosition`,
 `storeHeadPosition`, `categoryHeadPosition` — the position triple that yields a
 lag column; dedup pruning via
-`Keiro.Projection.pruneAsyncProjectionDedupBefore`.
+`Keiro.Projection.countAsyncProjectionDedupForBefore` and
+`pruneAsyncProjectionDedupForBefore`.
 
-Shards (`keiro/src/Keiro/Subscription/Shard.hs`): `ownershipSnapshot`,
-`listShardOwnership`, `listShardCounts`, `relinquish` (the coordinator-free
-failover means relinquish is safe: another worker leases the freed buckets).
+Shards (`keiro/src/Keiro/Subscription/Shard.hs`): `ownershipSnapshotFor`,
+`shardCountSnapshot`, `relinquish` (the coordinator-free failover means
+relinquish is safe: another worker leases the freed buckets).
 
-Snapshots (`keiro/src/Keiro/Snapshot/Schema.hs`): row lookup/inspection —
+Snapshots (`keiro/src/Keiro/Snapshot/Schema.hs`): `lookupSnapshotRow` and
+`deleteSnapshotRow` provide row lookup/inspection and advisory deletion —
 render stream, version, codec discriminators (`state_codec_version`,
 `regfile_shape_hash` / the workflow `keiro.workflow.stepmap.v1` sentinel), and
 sizes; row deletion (snapshots are advisory — deleting one only forces a full
@@ -111,10 +205,10 @@ truncate-before version `V+1`, verify a valid snapshot at version ≥ `V` exists
 for the stream's current discriminators and report pass/fail with the evidence.
 
 Streams (`kiroku-store`, path per `mori registry show shinzui/kiroku --full`):
-`Kiroku.Store.Read.readStreamForwardStream`/`lookupStreamId` for `stream show`;
+`Kiroku.Store.Read.readStreamForward`/`getStream` for `stream show`;
 `Kiroku.Store.Lifecycle.{softDeleteStream, hardDeleteStream, undeleteStream,
 setStreamTruncateBefore, clearStreamTruncateBefore}`;
-`Kiroku.Store.Subscription.subscriptionStates` for checkpoint listing;
+`Kiroku.Store.Subscription.subscriptionStates` for live process-local state;
 `Kiroku.Store.Causation` walkers for `stream causation <event-id>`. Event
 payloads are self-describing JSON — display is generic; validation against
 application codecs is not this binary's job (it has no codecs — that is the
@@ -133,11 +227,13 @@ whose handlers take `OpsEnv` and return table+JSON-renderable results, wired int
 the command tree, with handler-level tests against ephemeral Postgres. Command
 sketches (final flag spellings follow plan 206's conventions):
 
-`keiro-ops outbox`: `backlog`, `list [--status] [--destination] [--limit]`,
+`keiro-ops outbox`: `backlog`, `list --source <source> [--status]
+[--destination] [--limit]`,
 `show <id>`, `requeue-stuck --force [--older-than d]`, `gc-sent --force
-[--older-than d]`, `maintenance-pass --force`, `dead-letters list [--limit]`.
+[--older-than d]`, `maintenance-pass --force`, `dead-letters list --dispatcher
+<name> [--limit]`.
 
-`keiro-ops inbox`: `backlog`, `list [--source] [--status] [--limit]`,
+`keiro-ops inbox`: `backlog`, `list --source <source> [--status] [--limit]`,
 `show <source> <message-id>`, `gc --force [--older-than d]`,
 `mark-failed --force <source> <message-id> --reason <text>`.
 
@@ -147,7 +243,7 @@ sketches (final flag spellings follow plan 206's conventions):
 
 `keiro-ops projection`: `position --subscription <s> [--category <c>]`
 (subscription position, store/category head, computed lag), `prune-dedup --force
---projection <p> --before <position>`.
+--projection <p> --before <ISO-8601-UTC>`.
 
 `keiro-ops shard`: `status --subscription <s>` (ownership snapshot + counts),
 `relinquish --force --subscription <s> --worker <id>`.
@@ -160,7 +256,7 @@ sketches (final flag spellings follow plan 206's conventions):
 confirmation, per Decision Log), `truncate-before set --force <name> <version>`
 (runs the snapshot preflight automatically and refuses on failure unless
 `--skip-preflight`), `truncate-before clear --force <name>`, `subscriptions`
-(checkpoint listing), `causation <event-id>`.
+(live process-local subscription state), `causation <event-id>`.
 
 Tests mirror plan 206's style: seed through the libraries (enqueue outbox rows
 and dead-letter one; insert inbox rows through `runInboxTransaction`; enqueue and

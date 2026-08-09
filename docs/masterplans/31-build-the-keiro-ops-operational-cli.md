@@ -37,7 +37,7 @@ outbox and inbox (backlog, listing, requeue, GC, dispatch dead letters), pgmq qu
 (DLQ read/redrive/purge/archive), projections and read models (subscription
 positions, lag, dedup pruning), sharded subscriptions (ownership snapshots,
 relinquish), snapshots (inspect, delete, truncation-coverage preflight), and kiroku
-streams (read, lifecycle, truncate-before, subscription checkpoints) — with
+streams (read, lifecycle, truncate-before, live subscription state) — with
 human-readable tables by default and `--json` everywhere for scripting.
 
 The design honors keiro's library shape. Operations split into two classes. The
@@ -166,7 +166,7 @@ frozen identity bytes) do not constrain this initiative.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
-| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Not Started |
+| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Complete |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -232,7 +232,7 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
 - [x] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
 - [x] EP-2: workflow + standalone timer-triage domains complete; ADR for the operator-command contract recorded.
-- [ ] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
+- [x] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
 - [ ] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
 - [ ] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
 
@@ -263,6 +263,17 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   confirmed `drainDueTimersWith` requires application dispatch code, so the
   standalone binary ships timer triage while EP-4 conditionally mounts
   `timer drain-once` with a timer-fire hook.
+- 2026-08-08: EP-3 found that exact mutation previews required narrow public
+  inspection APIs in the owning Keiro modules. It added stale/retention candidate
+  lists, generic snapshot inspection/deletion, projection-scoped dedup
+  count/pruning, and subscription-scoped shard reads. The CLI contains no domain
+  SQL, and its `OpsEnv` remains unchanged for EP-4.
+- 2026-08-08: `subscriptionStates` in
+  `mori://shinzui/kiroku/packages/kiroku-store` is live process-local state, not
+  durable checkpoint inventory. EP-3 exposes that supported surface honestly;
+  durable checkpoint listing remains unavailable until Kiroku publishes an API.
+  EP-3 also made aggregate snapshot discriminators explicit because the
+  standalone binary cannot infer application codec identities.
 
 
 ## Decision Log
@@ -322,6 +333,15 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   a dummy callback would leave claimed timers stranded in `firing`.
   Date: 2026-08-09
 
+- Decision: Keep EP-3 previews exact by adding reusable read APIs to the owning
+  Keiro modules, while representing unsupported upstream state honestly rather
+  than bypassing library boundaries.
+  Rationale: ADR 28 applies to reads used to authorize mutations as well as to
+  the mutations themselves. Kiroku's live subscription registry can be shown as
+  live state, but cannot be relabeled as durable checkpoints or replaced with
+  private-table access.
+  Date: 2026-08-08
+
 
 ## Outcomes & Retrospective
 
@@ -331,9 +351,19 @@ schema safeguards, full workflow inspection/recovery commands, and timer stuck-r
 triage. ADR 28 fixes the command/library ownership boundary for every later domain.
 The scratch-database transcript and full gate evidence are recorded in plan 206.
 
-The next dependency-ready child is EP-3 (plan 207), which extends the frozen domain
-pattern across messaging and read-side operations. EP-4 remains responsible for
-application hooks, including the timer fire action discovered by EP-2.
+EP-3 completed on 2026-08-08. The standalone binary now mounts outbox, inbox,
+PGMQ DLQ, projection, shard, snapshot, and Kiroku stream domains alongside the
+workflow and timer commands from EP-2. Exact previews stay behind public owning
+library APIs; irreversible PGMQ purge and stream deletion have typed human-mode
+target confirmation; JSON automation remains preview plus `--force`. The
+database integration suite passes 23 examples, and the affected Keiro and
+`keiro-pgmq` suites pass 441 and 58 examples respectively. The repository-wide
+`just verify` gate passes through the full DSL conformance corpus, jitsurei,
+migrations, generated-corpus checks, and OKF validation.
+
+The next dependency-ready child is EP-4 (plan 208): extend the environment with
+application hooks, mount code-dependent operations, demonstrate embedding in
+`jitsurei`, and rewrite the operational documentation around the completed CLI.
 
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
