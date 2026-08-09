@@ -121,6 +121,10 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
 
 - native `pg-migrate` components for Kiroku and Keiro framework tables, composed
   in dependency order by `keiro-migrate`;
+- the `keiro-ops` standalone and embeddable operations console: schema
+  handshake, preview/`--force` mutations, stable JSON, and application hooks for
+  bounded workflow resume, timer drain, candidate-code replay audit, and typed
+  catalog rebuilds;
 - the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
   routers, integration, queues, read models, and durable workflows, including
   structural/opaque consumer mappings, total bindings, generated private-event
@@ -195,7 +199,12 @@ on the sample.
 ### APIs are low-level
 
 The command, projection, read-model, process-manager, and timer APIs expose the
-runtime primitives directly. Higher-level ergonomic facades are future work.
+runtime primitives directly. `keiro-ops` now provides the supported operational
+facade, but authoring ergonomics remain lower-level and higher-level facades are
+future work. Durable subscription checkpoint inventory is still waiting on the
+owning Kiroku API tracked by
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; Keiro does not
+query Kiroku's private subscription tables as a workaround.
 
 ### Migration ownership is split
 
@@ -212,8 +221,8 @@ Use Keiro v1 in production only with explicit guardrails:
 - pin dependency revisions;
 - run the full test suite in CI;
 - add application-level codec and projection idempotency tests;
-- gate deploys on a `Keiro.ReplayAudit` run against real streams — targeted for
-  a known affected set, full when the fold surface changed;
+- gate deploys on the embedded `replay-audit` command against real streams —
+  targeted for a known affected set, full when the fold surface changed;
 - document operational repair procedures;
 - treat API changes as expected until the library reaches a stronger stability
   milestone.

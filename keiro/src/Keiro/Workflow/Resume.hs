@@ -78,6 +78,7 @@ module Keiro.Workflow.Resume
 
     -- * Running (fixed-poll baseline)
     resumeWorkflowsOnce,
+    resumeWorkflowsOnceUpTo,
     runWorkflowResumeWorker,
     runWorkflowResumeWorkerWith,
 
@@ -351,7 +352,22 @@ resumeWorkflowsOnce ::
   WorkflowResumeOptions ->
   WorkflowRegistry es ->
   Eff es ResumeSummary
-resumeWorkflowsOnce opts registry = do
+resumeWorkflowsOnce = resumeWorkflowsOnceUpTo maxBound
+
+-- | Run one discover-and-reinvoke pass over at most the supplied number of
+-- candidates. This is the bounded operator-facing sibling of
+-- 'resumeWorkflowsOnce'; a non-positive limit performs the discovery query but
+-- advances no workflow. The summary's 'discovered' count is the number admitted
+-- to this pass, so a caller can safely repeat bounded passes until it reaches
+-- zero.
+resumeWorkflowsOnceUpTo ::
+  forall es.
+  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  Int ->
+  WorkflowResumeOptions ->
+  WorkflowRegistry es ->
+  Eff es ResumeSummary
+resumeWorkflowsOnceUpTo limit opts registry = do
   -- EP-44: sample the @keiro.workflow.awakeables.pending@ gauge once per pass,
   -- on the same Store the discovery query uses. The metrics handle rides on the
   -- run options (EP-44 threads telemetry through 'WorkflowRunOptions'), so it is
@@ -366,7 +382,7 @@ resumeWorkflowsOnce opts registry = do
   -- backfilled the running children that predate the instance table), so a
   -- zero-step child is already visible here.
   now <- liftIO getCurrentTime
-  pairs <- findUnfinishedWorkflowIds now
+  pairs <- take (max 0 limit) <$> findUnfinishedWorkflowIds now
   let seed = emptyResumeSummary {discovered = length pairs}
   owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
   deltas <- advanceAll owner pairs

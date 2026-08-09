@@ -250,6 +250,17 @@ and never otherwise. It does **not** use a kiroku `wf:` prefix subscription, so
 the runtime has no upstream dependency. An unfinished workflow whose name is
 absent from the registry is surfaced as `unknownName`, never silently dropped.
 
+Mount the registry in `Keiro.Ops.AppHooks` to expose the same one-shot boundary
+as an operator command in the candidate application binary:
+
+```console
+yourapp ops wf resume-once --limit 100
+```
+
+The command previews the exact admitted candidates and runs only with
+`--force`. The database-only `wf list`, `wf show`, `wf steps`, and `wf journal`
+commands remain available from the standalone `keiro-ops` executable.
+
 By default a pass advances its candidates one at a time. Raise
 `maxConcurrentAdvances` to advance several at once when step bodies are slow —
 the pass reports the same summary either way, since each candidate contributes
@@ -285,8 +296,15 @@ account. Once the ceiling is reached, the runtime appends `WorkflowFailed`, sets
 the instance status to `failed`, and excludes it from ordinary resume discovery.
 A direct `runWorkflow` then returns `Failed`.
 
-After repairing the underlying problem, an operator can return the instance to
-the runnable pool through the supported API:
+After repairing the underlying problem, an operator previews and returns the
+instance to the runnable pool with:
+
+```console
+keiro-ops wf resurrect order-fulfillment order-123
+keiro-ops wf resurrect order-fulfillment order-123 --force
+```
+
+The command wraps the supported API:
 
 ```haskell
 outcome <-
@@ -469,15 +487,20 @@ so a resumed run instruments itself. See [Operations](../user/operations.md).
 
 - Run `resumeWorkflowsOnce` on a polling loop in production (the same
   claim-process-commit-poll shape as the timer and outbox workers) so suspended
-  workflows resume after their waits resolve and after process restarts.
+  workflows resume after their waits resolve and after process restarts. Use
+  the embedded `yourapp ops wf resume-once --limit N` for a bounded manual pass.
 - Set `leaseTtl` above the longest individual step or await-arm timeout. A live
   worker renews at fresh boundaries; expiry remains the dead-worker takeover
   delay.
-- Repair a stuck awakeable with `cancelAwakeable awkId`; repair a parent stuck on
-  a never-finishing child by driving or cancelling the child.
+- Inspect or repair a stuck awakeable with `keiro-ops wf awakeable show UUID`
+  and `keiro-ops wf awakeable cancel UUID`; these wrap `lookupAwakeable` and
+  `cancelAwakeable`. Repair a parent stuck on a never-finishing child by driving
+  or cancelling the child.
 - Enable a `snapshotPolicy` for workflows with long journals.
-- Drain due sleeps in batches (`drainWorkflowSleepTimers`) rather than one timer
-  per tick when many sleeps can come due together.
+- Drain due sleeps in batches rather than one timer per tick when many sleeps
+  can come due together. The application-embedded
+  `yourapp ops timer drain-once --limit N` command invokes the mounted fire
+  action through `drainDueTimersWith`.
 - If you write your own loop rather than using `runWorkflowResumeWorker` or
   `runWorkflowGcWorkerWith`, isolate failures **per pass and per item**, and
   report partial progress honestly. Every keiro worker loop does: a transient
@@ -495,6 +518,7 @@ for the API surface.
 
 ```bash
 cabal run jitsurei:exe:jitsurei-demo -- workflow
+cabal run jitsurei:exe:jitsurei-demo -- ops --help
 ```
 
 The demo runs the workflow to its first suspension, fires the cooling-off sleep

@@ -1,9 +1,13 @@
 module Keiro.Ops.Timer
   ( Command (..),
+    DrainOptions (..),
     StuckListOptions (..),
+    TimerFire,
     commandParser,
+    commandParserWithDrain,
     isMutation,
     runCommand,
+    runCommandWithFire,
   )
 where
 
@@ -24,6 +28,7 @@ import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types (EventId (..))
 import Options.Applicative hiding (action, value)
+import Options.Applicative qualified as Optparse
 
 data StuckListOptions = StuckListOptions
   { minAge :: !(Maybe NominalDiffTime),
@@ -31,15 +36,26 @@ data StuckListOptions = StuckListOptions
   }
   deriving stock (Eq, Show)
 
+data DrainOptions = DrainOptions
+  { limit :: !Int
+  }
+  deriving stock (Eq, Show)
+
+type TimerFire = TimerRow -> Eff '[Store, Error StoreError, IOE] (Maybe EventId)
+
 data Command
   = StuckList !StuckListOptions
   | Requeue !TimerId
   | Cancel !TimerId
   | DeadLetter !TimerId !Text
+  | DrainOnce !DrainOptions
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
-commandParser =
+commandParser = commandParserWithDrain False
+
+commandParserWithDrain :: Bool -> Parser Command
+commandParserWithDrain includeDrain =
   hsubparser
     ( command
         "stuck"
@@ -68,7 +84,18 @@ commandParser =
               )
               (progDesc "Preview or abandon a scheduled or firing timer with a reason")
           )
+        <> drainCommand
     )
+  where
+    drainCommand
+      | includeDrain =
+          command
+            "drain-once"
+            ( info
+                (DrainOnce . DrainOptions <$> option positiveIntReader (long "limit" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum due timers to dispatch"))
+                (progDesc "Preview or run one bounded pass through the application timer-fire hook")
+            )
+      | otherwise = mempty
 
 stuckCommandParser :: Parser Command
 stuckCommandParser =
@@ -99,19 +126,70 @@ nonNegativeIntReader = eitherReader $ \raw ->
     [(value, "")] | value >= 0 -> Right value
     _ -> Left "expected a non-negative integer"
 
+positiveIntReader :: ReadM Int
+positiveIntReader = eitherReader $ \raw ->
+  case reads raw of
+    [(value, "")] | value > 0 -> Right value
+    _ -> Left "expected a positive integer"
+
 isMutation :: Command -> Bool
 isMutation = \case
   StuckList {} -> False
   Requeue {} -> True
   Cancel {} -> True
   DeadLetter {} -> True
+  DrainOnce {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
-runCommand env = \case
+runCommand = runCommandWithFire Nothing
+
+runCommandWithFire :: Maybe TimerFire -> OpsEnv -> Command -> IO OpsOutcome
+runCommandWithFire timerFire env = \case
   StuckList options -> runStuckList env options
   Requeue timerId -> runMutation env RequeueOperation timerId Nothing
   Cancel timerId -> runMutation env CancelOperation timerId Nothing
   DeadLetter timerId reason -> runMutation env DeadLetterOperation timerId (Just reason)
+  DrainOnce options -> runDrainOnce timerFire env options
+
+runDrainOnce :: Maybe TimerFire -> OpsEnv -> DrainOptions -> IO OpsOutcome
+runDrainOnce Nothing _ _ = pure (Failed "timer fire hook is not mounted")
+runDrainOnce (Just fire) env options = do
+  now <- getCurrentTime
+  if env.force
+    then
+      runAction
+        env
+        (drainDueTimersWith Nothing defaultTimerWorkerOptions now options.limit fire)
+        (Succeeded . drainResult options.limit)
+    else runAction env (countDueTimers now) $ \due ->
+      PreviewRequired
+        (drainPreviewResult options.limit due)
+        (forceInvocation env ["timer", "drain-once", "--limit", Text.pack (show options.limit)])
+
+drainPreviewResult :: Int -> Int -> OpsResult
+drainPreviewResult limit due =
+  OpsResult
+    { headers = ["due", "limit", "would_process"],
+      rows = [[showText due, showText limit, showText (min (toInteger due) (toInteger limit))]],
+      jsonValue =
+        object
+          [ "preview" .= True,
+            "due" .= due,
+            "limit" .= limit,
+            "would_process" .= min (toInteger due) (toInteger limit)
+          ]
+    }
+
+drainResult :: Int -> Int -> OpsResult
+drainResult limit processed =
+  OpsResult
+    { headers = ["limit", "processed"],
+      rows = [[showText limit, showText processed]],
+      jsonValue = object ["limit" .= limit, "processed" .= processed]
+    }
+
+showText :: (Show a) => a -> Text
+showText = Text.pack . show
 
 runStuckList :: OpsEnv -> StuckListOptions -> IO OpsOutcome
 runStuckList env options = do

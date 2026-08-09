@@ -113,6 +113,9 @@ effect handling, and **Streamly** for streaming reads and worker loops.
   workflows: language inspection / parse / check / scaffold / harness / diff.
 - `keiro-migrations/` — native `pg-migrate` component and CLI for the Kiroku and
   Keiro PostgreSQL schemas, plus verified legacy-Codd import evidence.
+- `keiro-ops/` — schema-checked operational CLI and embeddable command tree for
+  inspection, safe preview/`--force` repair, stable JSON, workflow/timer hooks,
+  replay audits, and typed catalog rebuilds.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.
 - `jitsurei/` — guide-backed, runnable worked examples, including one-catalog
   live/async application and a mixed clear/preserve rebuild with fencing and

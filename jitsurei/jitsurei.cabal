@@ -104,6 +104,7 @@ executable jitsurei-demo
     , hs-opentelemetry-sdk              >=1.0     && <1.1
     , jitsurei
     , keiro
+    , keiro-ops
     , kiroku-store                      >=0.3     && <0.4
     , lens                              >=5.2
     , shibuya-core                      >=0.8.0.1 && <0.9

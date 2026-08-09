@@ -6,6 +6,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
+### Added
+
+- `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
+  most the requested number of candidates. `resumeWorkflowsOnce` retains its
+  unbounded compatibility behavior and delegates to the bounded function.
+
 ### Breaking Changes
 
 - `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`

@@ -25,6 +25,7 @@ import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
 import Keiro.Connection (keiroConnectionSettings)
+import Keiro.Ops qualified as Ops
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
@@ -42,7 +43,7 @@ import Keiro.Workflow
   )
 import Keiro.Workflow.Awakeable (signalAwakeable)
 import Keiro.Workflow.Resume (WorkflowResumeOptions, defaultWorkflowResumeOptions, resumeWorkflowsOnce)
-import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker, workflowSleepFireAction)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Effect.Resource qualified as StoreResource
@@ -68,12 +69,19 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..), MessageId (..))
 import Streamly.Data.Stream qualified as Streamly
-import System.Environment (getArgs, lookupEnv)
+import System.Environment (getArgs, lookupEnv, withArgs, withProgName)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 main :: IO ()
-main = withJitsureiMetrics $ \metrics -> do
+main = do
   args <- getArgs
+  case args of
+    ("ops" : opsArgs) ->
+      withProgName "jitsurei-demo ops" (withArgs opsArgs (Ops.mainWithHooks (jitsureiOpsHooks Nothing)))
+    _ -> withJitsureiMetrics (\metrics -> runDemo metrics args)
+
+runDemo :: Maybe Telemetry.KeiroMetrics -> [String] -> IO ()
+runDemo metrics args =
   case args of
     [] -> runFulfillmentDemo metrics
     ["fulfillment"] -> runFulfillmentDemo metrics
@@ -89,7 +97,16 @@ main = withJitsureiMetrics $ \metrics -> do
       runEscalationDemo metrics
       runAgentQualDemo metrics
       runDurableWorkflowDemo metrics
-    _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|workflow|all]"
+    _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|workflow|ops|all]"
+
+jitsureiOpsHooks :: Maybe Telemetry.KeiroMetrics -> Ops.AppHooks
+jitsureiOpsHooks metrics =
+  Ops.AppHooks
+    { workflowResume = Just (jitsureiWorkflowRegistry, workflowResumeOptions metrics),
+      timerFire = Just workflowSleepFireAction,
+      replayAudit = Just (Ops.OpsAuditConfig replayAuditTargets),
+      projectionCatalog = Just orderCatalogOperations
+    }
 
 -- | Give the whole executable one SDK meter provider and one instrument set.
 -- The console exporter makes the short-lived demo self-observing; shutting the

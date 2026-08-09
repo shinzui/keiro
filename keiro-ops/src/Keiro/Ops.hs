@@ -1,20 +1,31 @@
 module Keiro.Ops
   ( main,
+    mainWithHooks,
+    AppHooks (..),
+    OpsAuditConfig (..),
+    emptyAppHooks,
+    OpsInvocation,
+    opsCommandTree,
+    runOpsInvocation,
   )
 where
 
 import Control.Exception (SomeException, displayException, fromException, try)
 import Data.Foldable (traverse_)
+import Data.Maybe (isJust)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Hasql.Connection.Settings qualified as Settings
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchema)
+import Keiro.Ops.Embed
 import Keiro.Ops.Env
 import Keiro.Ops.Inbox qualified as Inbox
 import Keiro.Ops.Outbox qualified as Outbox
 import Keiro.Ops.Pgmq qualified as Pgmq
 import Keiro.Ops.Projection qualified as Projection
+import Keiro.Ops.Rebuild qualified as Rebuild
 import Keiro.Ops.Render
+import Keiro.Ops.ReplayAudit qualified as ReplayAudit
 import Keiro.Ops.Shard qualified as Shard
 import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.Ops.Stream qualified as Stream
@@ -26,17 +37,25 @@ import System.Exit qualified as Exit
 import System.IO (stderr)
 
 main :: IO ()
-main = do
-  invocation <- customExecParser (prefs subparserInline) parserInfo
-  result <- try (runInvocation invocation)
+main = mainWithHooks emptyAppHooks
+
+mainWithHooks :: AppHooks -> IO ()
+mainWithHooks hooks = do
+  invocation <- customExecParser (prefs subparserInline) (opsCommandTree hooks)
+  exitCode <- runOpsInvocation hooks invocation
+  Exit.exitWith exitCode
+
+runOpsInvocation :: AppHooks -> OpsInvocation -> IO Exit.ExitCode
+runOpsInvocation hooks invocation = do
+  result <- try (runInvocation hooks invocation)
   case result of
     Left exception ->
       case fromException exception :: Maybe Exit.ExitCode of
-        Just exitCode -> Exit.exitWith exitCode
-        Nothing -> failOperational (Text.pack (displayException (exception :: SomeException)))
-    Right () -> pure ()
+        Just exitCode -> pure exitCode
+        Nothing -> operationalFailure (Text.pack (displayException (exception :: SomeException)))
+    Right exitCode -> pure exitCode
 
-data Invocation = Invocation
+data OpsInvocation = OpsInvocation
   { globalOptions :: !GlobalOptions,
     opsCommand :: !Command
   }
@@ -51,32 +70,34 @@ data Command
   | Shard Shard.Command
   | Snapshot Snapshot.Command
   | Stream Stream.Command
+  | ReplayAudit ReplayAudit.Command
+  | Rebuild Rebuild.Command
 
-parserInfo :: ParserInfo Invocation
-parserInfo =
+opsCommandTree :: AppHooks -> ParserInfo OpsInvocation
+opsCommandTree hooks =
   info
-    (invocationParser <**> helper)
+    (invocationParser hooks <**> helper)
     ( fullDesc
         <> progDesc "Inspect and operate a Keiro deployment"
         <> failureCode 2
     )
 
-invocationParser :: Parser Invocation
-invocationParser = Invocation <$> globalOptionsParser <*> commandParser
+invocationParser :: AppHooks -> Parser OpsInvocation
+invocationParser hooks = OpsInvocation <$> globalOptionsParser <*> commandParser hooks
 
-commandParser :: Parser Command
-commandParser =
+commandParser :: AppHooks -> Parser Command
+commandParser hooks =
   hsubparser
     ( command
         "wf"
         ( info
-            (Workflow <$> Workflow.commandParser)
+            (Workflow <$> Workflow.commandParserWithResume (isJust hooks.workflowResume))
             (progDesc "Inspect and operate durable workflows")
         )
         <> command
           "timer"
           ( info
-              (Timer <$> Timer.commandParser)
+              (Timer <$> Timer.commandParserWithDrain (isJust hooks.timerFire))
               (progDesc "Inspect and operate durable timers")
           )
         <> command
@@ -100,21 +121,38 @@ commandParser =
         <> command
           "stream"
           (info (Stream <$> Stream.commandParser) (progDesc "Inspect and operate Kiroku streams"))
+        <> replayAuditCommand
+        <> rebuildCommand
     )
+  where
+    replayAuditCommand =
+      case hooks.replayAudit of
+        Nothing -> mempty
+        Just _ ->
+          command
+            "replay-audit"
+            (info (ReplayAudit <$> ReplayAudit.commandParser) (progDesc "Audit candidate-code replay against configured targets"))
+    rebuildCommand =
+      case hooks.projectionCatalog of
+        Nothing -> mempty
+        Just _ ->
+          command
+            "rebuild"
+            (info (Rebuild <$> Rebuild.commandParser) (progDesc "Inspect and operate the mounted projection catalog"))
 
-runInvocation :: Invocation -> IO ()
-runInvocation Invocation {globalOptions, opsCommand} = do
+runInvocation :: AppHooks -> OpsInvocation -> IO Exit.ExitCode
+runInvocation hooks OpsInvocation {globalOptions, opsCommand} = do
   connectionString <- resolveConnectionString globalOptions.databaseUrl
   verified <- verifyExpectedSchema (Settings.connectionString connectionString)
   case verified of
     Left migrationError ->
-      failOperational ("schema verification failed: " <> Text.pack (show migrationError))
+      operationalFailure ("schema verification failed: " <> Text.pack (show migrationError))
     Right drifts -> do
       let renderedDrifts = map renderSchemaDrift drifts
       traverse_ (Text.IO.hPutStrLn stderr . ("warning: " <>)) renderedDrifts
       if isMutation opsCommand && not (null drifts) && not globalOptions.allowSchemaDrift
         then
-          failOperational
+          operationalFailure
             "refusing mutation because the live schema differs from this binary; inspect the warnings or pass --allow-schema-drift"
         else withStore (defaultConnectionSettings connectionString) $ \store -> do
           let env =
@@ -125,7 +163,7 @@ runInvocation Invocation {globalOptions, opsCommand} = do
                     schemaDrift = renderedDrifts,
                     allowSchemaDrift = globalOptions.allowSchemaDrift
                   }
-          runCommand env opsCommand >>= finishOutcome env
+          runCommand hooks env opsCommand >>= finishOutcome env
 
 isMutation :: Command -> Bool
 isMutation = \case
@@ -138,11 +176,13 @@ isMutation = \case
   Shard shardCommand -> Shard.isMutation shardCommand
   Snapshot snapshotCommand -> Snapshot.isMutation snapshotCommand
   Stream streamCommand -> Stream.isMutation streamCommand
+  ReplayAudit _ -> False
+  Rebuild rebuildCommand -> Rebuild.isMutation rebuildCommand
 
-runCommand :: OpsEnv -> Command -> IO OpsOutcome
-runCommand env = \case
-  Workflow workflowCommand -> Workflow.runCommand env workflowCommand
-  Timer timerCommand -> Timer.runCommand env timerCommand
+runCommand :: AppHooks -> OpsEnv -> Command -> IO OpsOutcome
+runCommand hooks env = \case
+  Workflow workflowCommand -> Workflow.runCommandWithResume hooks.workflowResume env workflowCommand
+  Timer timerCommand -> Timer.runCommandWithFire hooks.timerFire env timerCommand
   Outbox outboxCommand -> Outbox.runCommand env outboxCommand
   Inbox inboxCommand -> Inbox.runCommand env inboxCommand
   Pgmq pgmqCommand -> Pgmq.runCommand env pgmqCommand
@@ -150,17 +190,28 @@ runCommand env = \case
   Shard shardCommand -> Shard.runCommand env shardCommand
   Snapshot snapshotCommand -> Snapshot.runCommand env snapshotCommand
   Stream streamCommand -> Stream.runCommand env streamCommand
+  ReplayAudit replayAuditCommand ->
+    maybe
+      (pure (Failed "replay audit hook is not mounted"))
+      (\config -> ReplayAudit.runCommand env config replayAuditCommand)
+      hooks.replayAudit
+  Rebuild rebuildCommand ->
+    maybe
+      (pure (Failed "projection catalog hook is not mounted"))
+      (\operations -> Rebuild.runCommand env operations rebuildCommand)
+      hooks.projectionCatalog
 
-finishOutcome :: OpsEnv -> OpsOutcome -> IO ()
+finishOutcome :: OpsEnv -> OpsOutcome -> IO Exit.ExitCode
 finishOutcome env = \case
-  Succeeded result -> renderResult env result
+  Succeeded result -> renderResult env result >> pure Exit.ExitSuccess
+  SucceededWithExit result exitCode -> renderResult env result >> pure exitCode
   PreviewRequired result reinvocation -> do
     renderResult env result
     Text.IO.hPutStrLn stderr ("preview only; re-run with --force: " <> reinvocation)
-    Exit.exitWith (Exit.ExitFailure 1)
-  Failed message -> failOperational message
+    pure (Exit.ExitFailure 1)
+  Failed message -> operationalFailure message
 
-failOperational :: Text.Text -> IO a
-failOperational message = do
+operationalFailure :: Text.Text -> IO Exit.ExitCode
+operationalFailure message = do
   Text.IO.hPutStrLn stderr ("keiro-ops: " <> message)
-  Exit.exitWith (Exit.ExitFailure 1)
+  pure (Exit.ExitFailure 1)

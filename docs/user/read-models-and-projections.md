@@ -288,11 +288,11 @@ versioned JSON envelopes:
 - `keiro/catalog-rebuild-run/v1`.
 
 The adapter intentionally has no parser, text renderer, confirmation policy, or
-database credentials. A future `keiro-ops` package will mount it and own
-preview/confirmation and text/JSON presentation. That package is not present in
-this repository yet, so catalog rebuild commands are planned rather than
-available; applications can embed the adapter directly without maintaining a
-second rebuild map.
+database credentials. `keiro-ops` owns those concerns and mounts the adapter
+through `AppHooks.projectionCatalog`. In a candidate application binary,
+`rebuild list|preview|start|status|resume|abandon` renders the same reports and
+requires preview plus `--force` for mutations. Applications therefore do not
+maintain a second rebuild map.
 
 The hand-written `jitsureiProjectionCatalog` is executable adoption evidence:
 one catalog drives managed inline application, async application, registration,

@@ -2,6 +2,55 @@
 
 This page collects deployment and runtime concerns for Keiro applications.
 
+## Operating Keiro
+
+Install the `keiro-ops` package to get the standalone database operations
+console. Point it at PostgreSQL with `--database-url`,
+`KEIRO_OPS_DATABASE_URL`, `DATABASE_URL`, or the normal libpq `PG*` variables:
+
+```console
+keiro-ops --database-url "$DATABASE_URL" --help
+keiro-ops --database-url "$DATABASE_URL" outbox backlog
+keiro-ops --database-url "$DATABASE_URL" wf list --json
+```
+
+Every invocation verifies the live Keiro schema before opening the command
+environment. Read-only commands report drift as warnings. Mutations fail closed
+on drift unless the operator explicitly supplies `--allow-schema-drift`, and
+they first return an exact preview plus a `--force` reinvocation. Permanent
+stream operations also require the stream name to be typed in human mode.
+`--json` emits the same result value as the human table and is the stable
+automation surface.
+
+The standalone executable can operate only on capabilities whose complete
+contract lives in the database. Application-code-dependent commands are
+mounted from the candidate application binary with `Keiro.Ops.AppHooks` and
+`Keiro.Ops.mainWithHooks` (or by composing `opsCommandTree` and
+`runOpsInvocation` into an existing parser):
+
+```haskell
+Ops.AppHooks
+  { workflowResume = Just (applicationWorkflowRegistry, resumeOptions)
+  , timerFire = Just applicationTimerFire
+  , replayAudit = Just (Ops.OpsAuditConfig applicationAuditTargets)
+  , projectionCatalog = Just applicationCatalogOperations
+  }
+```
+
+A hook-dependent command is absent from help when its hook is absent. The
+worked mounting point is `jitsurei/app/Main.hs`; inspect it with:
+
+```console
+cabal run jitsurei:exe:jitsurei-demo -- ops --help
+```
+
+Durable Kiroku subscription checkpoint inventory is deliberately not
+implemented by querying Kiroku's private tables. Its owning-library API is
+tracked by
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; projection-lag
+and subscription-inventory CLI commands remain deferred until that public API
+ships. Use the worker metrics described below in the meantime.
+
 ## Database Requirements
 
 Keiro runs on PostgreSQL through Kiroku and Hasql.
@@ -69,6 +118,18 @@ state after restart or snapshot fallback.
 
 See [Replayability Safety](replay-safety.md) for the exact guarantee and the
 application responsibilities that remain outside the type-level boundary.
+When the candidate application mounts its audit targets, use the embedded
+command as the deployment gate:
+
+```console
+yourapp ops replay-audit --target EventTypeChanged --json
+yourapp ops replay-audit --full --json
+```
+
+Targeted mode accepts one or more affected stored event types. Full mode audits
+every configured category. Both accept `--budget`, `--parallelism`, and
+`--resume-from`; the process exits nonzero on a decode failure or seed
+divergence.
 
 ## Idempotency
 
@@ -97,31 +158,31 @@ Use `ReadModel.version` and `shapeHash` to force stale readers to fail closed.
 
 For catalog-managed read models, register one validated
 `Keiro.Projection.Catalog.ValidatedProjectionCatalog` at startup and operate a
-whole rebuild group rather than individual tables. Before mutation, render both
-`catalogInventoryReport` and `previewGroupRebuild` from
-`Keiro.Projection.Catalog.Operations`. Confirm the catalog fingerprint, group,
-qualified targets, clear versus preserve actions, sources, subscription/dedup
-resets, verification hooks, lock scope, and `destructive` flag. Use
-`previewRegisteredGroupRebuild` when the operator also needs the current durable
-lifecycle state and an explicit registered-fingerprint match result; it is
-read-only and creates no run. Inspection refuses a run whose stored catalog
-fingerprint belongs to another mounted catalog.
+whole rebuild group rather than individual tables. Mount
+`ProjectionCatalogOperations` in `AppHooks`, then use the embedded commands:
 
-Start with `startGroupRebuild`. The runtime fences the group, captures one fixed
-head, prepares every declared target atomically, replays with durable progress,
-verifies, and promotes. If replay or verification fails, the group remains
-fenced. Inspect it with `inspectGroupRebuild`, repair the application-owned
-cause, and call `resumeGroupRebuild` with the same run identity and exact replay
-contract. Use `abandonGroupRebuild` only to record explicit failure evidence and
-leave the group unavailable for deliberate recovery; abandonment does not make
-partial data live.
+```console
+yourapp ops rebuild list
+yourapp ops rebuild preview GROUP
+yourapp ops rebuild start GROUP --run-id RUN --requested-by OPERATOR --reason TEXT
+yourapp ops rebuild status RUN
+yourapp ops rebuild resume RUN
+yourapp ops rebuild abandon RUN --code CODE --detail TEXT
+```
 
-The adapter does not enforce an operator confirmation flag. An embedding command
-surface must treat start, resume, and abandon as mutations, show the preview,
-and require its established confirmation policy. The planned `keiro-ops`
-catalog commands are not available yet because that package has not been
-created; do not substitute a name-to-action rebuild map. Applications may call
-the operator-neutral adapter directly today.
+`list`, `preview`, and `status` are read-only. `start`, `resume`, and `abandon`
+return a preview unless `--force` is supplied. The preview comes directly from
+the mounted validated catalog and reports its fingerprint, qualified targets,
+clear/preserve policy, sources, subscription and dedup resets, verification
+hooks, lock scope, and destructive disposition. The runtime then fences the
+group, captures one fixed head, prepares every declared target atomically,
+replays with durable progress, verifies, and promotes. A failed run stays
+fenced; repair the application-owned cause and resume the same run. Abandonment
+records explicit failure evidence and does not expose partial data.
+
+These commands wrap `catalogInventoryReport`, `previewRegisteredGroupRebuild`,
+`startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and
+`abandonGroupRebuild`. There is no parallel name-to-action rebuild map.
 
 `ClearBeforeReplay` uses a single foreign-key-compatible multi-table truncate
 without `CASCADE`; undeclared references fail and roll the preparation back.
@@ -144,12 +205,17 @@ Keiro never truncates streams itself. Kiroku's per-stream truncation marker is
 an operator-controlled visibility boundary, so take a covering Keiro snapshot
 before moving it:
 
-1. Ensure `keiro_snapshots` contains a valid snapshot at stream version `V` for
-   the event stream's current codec version and shape hash.
-2. Set Kiroku's stream marker with `setStreamTruncateBefore` to a version no
-   greater than `V + 1`.
-3. Run a command against the stream and monitor command errors before applying
-   the same change broadly.
+1. Inspect the snapshot with `keiro-ops snapshot show --stream STREAM`.
+2. Run `keiro-ops snapshot truncation-preflight --stream STREAM --before VERSION`.
+   Workflow journals have fixed public discriminators; aggregate streams also
+   require `--state-codec-version`, `--regfile-shape-hash`, and
+   `--state-shape-hash` from the candidate application.
+3. Preview `keiro-ops stream truncate-before set STREAM VERSION` with the same
+   discriminator flags, then re-run the emitted invocation with `--force` and
+   type the stream name when prompted.
+4. Run a command against the stream and monitor command errors before applying
+   the same change broadly. Reverse the marker with
+   `keiro-ops stream truncate-before clear STREAM`, also previewed before force.
 
 If visible history begins after the hydration seed's next expected version,
 Keiro fails closed with `HydrationGapDetected expected observed`. If the marker
@@ -174,27 +240,22 @@ longer, or set it to `Nothing` when a separate recovery job owns requeueing.
 
 ### Stuck-row recovery runbook
 
-Keiro exposes a supported recovery API in `Keiro.Timer` / `Keiro.Timer.Schema` (see
-`docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md` for the authoritative
-signatures). Run this as a periodic operational job:
+Run this as a periodic operational job:
 
-1. **List stuck rows.** Call `findStuckTimers now stuckFilter` with a `StuckTimerFilter`
-   (`minAge` and/or `minAttempts`; `anyStuckTimer` matches every `Firing` row) to get the
-   timers parked in `Firing` longer than expected.
-2. **Decide per row.** A timer that should still fire: requeue it. A timer that is no
-   longer wanted (the workflow moved on or was cancelled): cancel it.
-3. **Requeue.** Call `requeueStuckTimer` to move the row back to `Scheduled` so a worker
-   re-claims it on the next poll. `fire_at` is unchanged and the call is idempotent;
-   because timer ids are deterministic and firing is idempotent, requeuing a timer that
-   actually did fire is safe.
-4. **Cancel.** Call `cancelTimer` to move the row to `Cancelled` (terminal). Use this for
-   timers whose workflow has already advanced past the deadline.
-5. **Dead-letter after the ceiling.** Call `deadLetterTimer timerId reason` to move a row
-   to the terminal `Dead` state with an explanatory `last_error`. To automate this, build
-   validated options with `mkTimerWorkerOptions TimerWorkerOptions { maxAttempts = Just n,
-   requeueStuckAfter = Just ttl }` and pass them to `runTimerWorkerWith metrics options`:
-   a claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered instead of
-   fired. Dead rows should page an operator.
+1. List candidates with `keiro-ops timer stuck list --min-age 5m` and optionally
+   `--min-attempts N`.
+2. Preview `keiro-ops timer requeue TIMER_ID`, `timer cancel TIMER_ID`, or
+   `timer dead-letter TIMER_ID --reason TEXT` according to the row's intended
+   disposition, then re-run the emitted command with `--force`.
+3. In an application-embedded console, preview and run one bounded worker pass
+   with `yourapp ops timer drain-once --limit N`; it is available only when the
+   application mounts its timer-fire action.
+
+The commands wrap `findStuckTimers`, `requeueStuckTimer`, `cancelTimer`,
+`deadLetterTimer`, and `drainDueTimersWith`. For automatic attempt ceilings,
+build validated `TimerWorkerOptions` with `maxAttempts` and
+`requeueStuckAfter`; a claimed timer beyond the ceiling is dead-lettered instead
+of fired.
 
 Monitor the `keiro.timer.stuck` gauge (rows still in `Firing` past the threshold; see
 Observability) before and after a run to confirm the job is draining the backlog rather
@@ -204,11 +265,25 @@ it with a separate query (`status = 'dead'`) if you want a dead-letter count.
 ## Durable Workflows
 
 Durable workflows (`Keiro.Workflow`) journal each named step to `wf:<name>-<id>`
-and resume by re-invocation. Three operational tasks:
+and resume by re-invocation. Use the standalone console for database-generic
+inspection and repair:
 
-- **Resume worker.** Run `resumeWorkflowsOnce <resumeOptions> <registry>` on a
-  polling loop — the same claim-process-commit-poll shape as the timer and outbox
-  workers (`runWorkflowResumeWorker` wraps the loop). Each pass discovers
+```console
+keiro-ops wf list --status failed
+keiro-ops wf show NAME ID
+keiro-ops wf steps NAME ID
+keiro-ops wf journal NAME ID
+keiro-ops wf resurrect NAME ID
+keiro-ops wf lease release NAME ID
+keiro-ops wf gc run-once --retention 30d --batch 100
+```
+
+Mutations preview before force. Three application-aware tasks remain:
+
+- **Resume worker.** The embedded
+  `yourapp ops wf resume-once --limit N` command runs one bounded pass through
+  the mounted application registry; `runWorkflowResumeWorker` remains the
+  continuous service loop. Each pass discovers
   workflows whose journal lacks a terminal marker (via the `keiro_workflow_steps`
   index, unioned with running children) and re-invokes them through the
   application's `WorkflowRegistry`, so suspended workflows resume after their waits
@@ -217,10 +292,13 @@ and resume by re-invocation. Three operational tasks:
   is surfaced as `unknownName` in the `ResumeSummary`, never silently dropped. A
   parent and its child must use **distinct** workflow ids — discovery groups by
   `workflow_id`, so a shared id lets a completed child mask an unfinished parent.
-- **Awakeable repair.** A workflow parked on an awakeable that will never be
-  signalled is repaired with `cancelAwakeable awkId`, which flips the
+- **Awakeable repair.** Inspect with `keiro-ops wf awakeable show UUID`. A
+  workflow parked on an awakeable that will never be signalled is repaired with
+  `keiro-ops wf awakeable cancel UUID`; an operator-supplied completion uses
+  `keiro-ops wf awakeable signal UUID --payload JSON`. These commands wrap
+  `cancelAwakeable` and `signalAwakeable`, which transition the
   `keiro_awakeables` row (`awakeable_id`, `owner_workflow_id`, `status`, `payload`)
-  to `cancelled`; the next resume observes the cancellation and `awaitChild`/the
+  to `cancelled` or `completed`; the next resume observes a cancellation and the
   awakeable `await` throws so the workflow author's compensation runs. Repair a
   parent stuck on a never-finishing child by driving or cancelling the child
   (`cancelChild`). The `keiro.workflow.awakeables.pending` gauge counts pending

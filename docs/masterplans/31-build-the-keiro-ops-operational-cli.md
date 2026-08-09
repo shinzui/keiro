@@ -173,7 +173,7 @@ frozen identity bytes) do not constrain this initiative.
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | In Progress |
-| 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | In Progress |
+| 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -207,11 +207,11 @@ dependency floor (keiro, keiro-pgmq, keiro-migrations, kiroku-store,
 optparse-applicative bounds copied from `keiro-migrations/keiro-migrations.cabal`
 and `keiro-dsl/keiro-dsl.cabal`).
 
-The ops environment type (working name `OpsEnv`: store handle, schema names,
-output mode, force flag) — EP-2 defines it in `Keiro.Ops.Env`; EP-3 consumes it
-unchanged; EP-4 *extends* it with the optional application hooks (registry,
-timer fire action, audit targets, and `ProjectionCatalogOperations`). EP-4 owns that extension; EP-3 must not
-pre-empt it. The rebuild hook is operator-neutral and comes from
+The ops environment type (`OpsEnv`: store handle, output mode, force and schema
+flags) remains the database execution environment defined by EP-2. EP-4 keeps
+the optional application hooks (registry, timer fire action, audit targets, and
+`ProjectionCatalogOperations`) in a separate `AppHooks` value consumed by the
+parser and dispatcher, so EP-3 handlers remain unchanged. The rebuild hook is operator-neutral and comes from
 `Keiro.Projection.Catalog.Operations`; no `Map Text (OpsEnv -> IO ExitCode)` or
 CLI-side target inventory is permitted.
 
@@ -254,8 +254,8 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-2: workflow + standalone timer-triage domains complete; ADR for the operator-command contract recorded.
 - [x] EP-3: outbox, inbox, dead-letter, pgmq, projection-dedup, shard, snapshot, and stream lifecycle/read domains complete.
 - [ ] EP-3: durable checkpoint inventory and projection-lag commands, blocked on `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`.
-- [ ] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
-- [ ] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
+- [x] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
+- [x] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
 
 
 ## Surprises & Discoveries
@@ -299,6 +299,10 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`.
   EP-3 also made aggregate snapshot discriminators explicit because the
   standalone binary cannot infer application codec identities.
+- 2026-08-09: EP-4 could proceed independently of the reopened checkpoint slice.
+  Its hooks are application-code capabilities, not Kiroku durable inventory, so
+  `AppHooks` conditionally mounts workflow resume, timer drain, replay audit, and
+  typed catalog rebuild while the standalone command set remains honest.
 
 
 ## Decision Log
@@ -367,6 +371,13 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   handle; Keiro's direct `subscriptions` query is not an acceptable CLI bridge.
   Date: 2026-08-08
 
+- Decision: Keep `AppHooks` separate from `OpsEnv` and omit unmounted commands
+  from the parser entirely.
+  Rationale: Database-only handlers retain the environment frozen by EP-2, while
+  application code is visible only at the root parser/dispatcher. Standalone
+  help therefore cannot advertise a command that would fail for lack of code.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -388,9 +399,18 @@ database integration suite passes 23 examples, and the affected Keiro and
 migrations, generated-corpus checks, and OKF validation. Durable checkpoint
 inventory and projection lag remain incomplete behind Kiroku IR-2.
 
-The next dependency-ready child is EP-4 (plan 208): extend the environment with
-application hooks, mount code-dependent operations, demonstrate embedding in
-`jitsurei`, and rewrite the operational documentation around the completed CLI.
+EP-4 completed on 2026-08-09. The same `Keiro.Ops` command tree now backs the
+standalone binary and application embedding. Optional typed hooks mount bounded
+workflow resume and timer drain passes, candidate-code replay auditing with CI
+exit codes, and catalog-derived rebuild list/preview/start/status/resume/abandon.
+Jitsurei mounts its real registry, sleep-timer action, audit targets, and catalog.
+The runbook, workflow guide/reference, roadmap, production posture, README, and
+package changelogs now describe the command surface. The expanded 27-example ops
+suite and the complete `just verify` gate pass.
+
+The initiative remains open only for EP-3's durable checkpoint-inventory and
+derived projection-lag slice, which correctly waits on Kiroku IR-2. No Keiro or
+CLI-side private-schema workaround remains.
 
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
@@ -405,3 +425,7 @@ ADR, and unblocked EP-2 with the planned public operator APIs, 2026-08-08.
 Revision note: Reopened EP-3's durable checkpoint slice, removed the unusable
 process-local subscription command and the cross-schema projection-position
 bridge, and gated both on Kiroku IR-2, 2026-08-08.
+
+Revision note: Completed EP-4, mounted the typed application hooks in Jitsurei,
+flipped the operational documentation, and left the MasterPlan open only for
+Kiroku IR-2, 2026-08-09.

@@ -39,11 +39,11 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
 
 ## Progress
 
-- [ ] Embedding surface: `AppHooks`, `opsCommandTree`, standalone binary refactored onto it.
-- [ ] Code-dependent commands: `timer drain-once`, `wf resume-once`, `replay-audit`, catalog-backed `rebuild` mount.
-- [ ] `jitsurei` embeds the console; transcript captured.
-- [ ] Docs flip: operations.md, durable-workflows guide/reference, roadmap.md, production-status.md, README.
-- [ ] `cabal test keiro-ops-test` and full repo `just verify` green.
+- [x] Embedding surface: `AppHooks`, `opsCommandTree`, standalone binary refactored onto it.
+- [x] Code-dependent commands: `timer drain-once`, `wf resume-once`, `replay-audit`, catalog-backed `rebuild` mount.
+- [x] `jitsurei` embeds the console; command help and catalog/replay fixtures exercised.
+- [x] Docs flip: operations.md, durable-workflows guide/reference, roadmap.md, production-status.md, README.
+- [x] `cabal test keiro-ops-test` and full repo `just verify` green.
 
 
 ## Surprises & Discoveries
@@ -57,6 +57,16 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
   database-only standalone command: its callback is the application's process-manager
   dispatch. This plan therefore owns a timer-fire hook and conditionally mounts
   `timer drain-once`; no-hook command trees omit it.
+- 2026-08-09: The ownership re-audit found two previously mounted EP-3 commands were
+  not valid standalone operations. Kiroku's `subscriptionStates` is process-local
+  and normally empty on a fresh CLI store, while Keiro's projection-position helper
+  reads Kiroku's private subscription table. Both commands were removed and now wait
+  for `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; none of this
+  plan's application hooks depends on that external API.
+- 2026-08-09: Keeping `AppHooks` alongside, rather than inside, `OpsEnv` leaves the
+  database execution environment unchanged for existing handlers. The parser uses
+  hook presence only to mount commands, and the dispatcher passes the matching hook
+  only to the code-dependent handler.
 
 
 ## Decision Log
@@ -77,10 +87,38 @@ demonstrates the embedding for adopters to copy, and the user roadmap moves
   policy belong with the operations package. This preserves the MasterPlan's no-invented-SQL rule.
   Date: 2026-08-07
 
+- Decision: Add `resumeWorkflowsOnceUpTo` to the owning workflow runtime and make
+  `resumeWorkflowsOnce` delegate to it with `maxBound`.
+  Rationale: The operator command promises one bounded pass; truncating only the
+  rendered summary would be dishonest, while duplicating the resume worker in the
+  CLI would violate the supported-API boundary.
+  Date: 2026-08-09
+
+- Decision: Omit hook-dependent commands from the parser when a hook is absent.
+  Rationale: A standalone binary must not advertise operations it cannot perform,
+  and conditional parsing makes the help text an accurate capability inventory.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed on 2026-08-09. `Keiro.Ops` now exposes one command tree and runner for
+both the standalone binary and application embedding. `AppHooks` conditionally
+mounts a workflow registry, timer fire action, replay-audit targets, and
+`ProjectionCatalogOperations`; no parallel command parser or rebuild inventory
+exists. Workflow resume and timer draining are bounded and previewed before force,
+replay audit preserves its CI exit code while emitting versioned JSON, and rebuild
+list/preview/start/status/resume/abandon render the operator-neutral catalog reports.
+
+`jitsurei-demo ops` mounts its real workflow registry, workflow-sleep timer action,
+audit targets, and order catalog. The runbook is now command-first and explicitly
+distinguishes standalone from candidate-binary operations. It also records the
+checkpoint-inventory boundary rather than suggesting direct Kiroku SQL.
+
+Verification passed with 27 `keiro-ops-test`, 441 `keiro-test`, 58
+`keiro-pgmq-test` (2 expected pending), 615 `keiro-dsl-test`, 22
+`jitsurei-test`, and 28 `keiro-migrations-test` examples, plus the complete
+`just verify` policy, corpus, diagrams, and OKF gates.
 
 
 ## Context and Orientation
@@ -262,16 +300,16 @@ reversible; coordinate with MasterPlan 30's plan 204 on shared files as noted.
 
 ## Interfaces and Dependencies
 
-End-state additions: `Keiro.Ops.Embed.{AppHooks, emptyAppHooks, opsCommandTree,
-OpsAuditConfig}`; `AppHooks` optionally mounts
+End-state additions: `Keiro.Ops.{AppHooks, emptyAppHooks, OpsAuditConfig,
+opsCommandTree, runOpsInvocation, mainWithHooks}`; `AppHooks` optionally mounts
 the timer fire action and
 `Keiro.Projection.Catalog.Operations.ProjectionCatalogOperations`; `jitsurei` gains an ops mount and a
 dependency on `keiro-ops`.
-This plan owns the `OpsEnv` extension point (MasterPlan 31 Integration Points);
+This plan owns the application-hook boundary while keeping `OpsEnv` unchanged;
 plans 206/207's modules are consumed unchanged. Soft dependency on plan 207 for
 the docs flip only — the embedding mechanics need nothing from it. The projection rebuild command
-has an external integration dependency on MasterPlan 32 plans 211 and 213; when those have not
-landed, omit the rebuild hook/command rather than publish a free-form substitute.
+consumes the adapter landed by MasterPlan 32 plans 211 and 213; no free-form
+substitute was published.
 
 
 Revision note: Replaced the proposed free-form rebuild map with the validated projection-catalog

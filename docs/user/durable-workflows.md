@@ -141,6 +141,7 @@ data WorkflowDef es = forall a. (ToJSON a) => WorkflowDef { runDef :: WorkflowId
 type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
 
 resumeWorkflowsOnce       :: (IOE :> es, Store :> es) => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
+resumeWorkflowsOnceUpTo   :: (IOE :> es, Store :> es) => Int -> WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
 runWorkflowResumeWorker   :: (IOE :> es, Store :> es) => WorkflowRegistry es -> Eff es ()
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 ```
@@ -161,6 +162,12 @@ advance several discovered workflows at once, so one slow step body does not
 delay the rest of the pass. Size it against the store connection pool, not the
 candidate count. With concurrency enabled, `logEvent` is called from several
 threads and must be thread-safe.
+
+The application-embedded operations console mounts the registry and options as
+an `AppHooks.workflowResume` hook. `yourapp ops wf resume-once --limit N`
+previews the candidates and, with `--force`, calls
+`resumeWorkflowsOnceUpTo`. Database-only inspection and repair remain available
+as `keiro-ops wf list|show|steps|journal|awakeable|cancel|resurrect|lease|gc`.
 
 ## Writing your own wake source
 
@@ -202,7 +209,8 @@ a thousand rows, not a thousand replays per second.
 What still costs a pass:
 
 - A workflow whose sleep is due, until a timer worker fires it. Drain backlogs
-  with `drainWorkflowSleepTimers` rather than one timer per poll tick.
+  with the application-embedded `timer drain-once --limit N` command (backed by
+  `drainDueTimersWith`) rather than one timer per poll tick.
 - A crashed workflow retrying on its backoff ladder.
 - Every re-invocation replaying its journal from the start, because
   `defaultWorkflowRunOptions` sets `snapshotPolicy = Never`. For workflows with

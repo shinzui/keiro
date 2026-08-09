@@ -20,6 +20,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 import Data.Text.IO qualified as Text.IO
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import System.Exit (ExitCode)
 
 data OpsResult = OpsResult
   { headers :: ![Text],
@@ -30,6 +31,7 @@ data OpsResult = OpsResult
 
 data OpsOutcome
   = Succeeded !OpsResult
+  | SucceededWithExit !OpsResult !ExitCode
   | PreviewRequired !OpsResult !Text
   | Failed !Text
   deriving stock (Eq, Show)

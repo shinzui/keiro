@@ -43,6 +43,7 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Pre-deploy replay audit | Available now | `Keiro.ReplayAudit` replays real streams through a candidate binary in `AuditTargeted` or `AuditFull` mode and blocks a deploy on `auditExitCode`. |
 | Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. See [Work Queues](work-queues.md). |
 | Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. |
+| Operator console | Available now | `keiro-ops` provides schema-checked inspection, preview/`--force` mutations, and stable JSON. Candidate applications mount workflow resume, timer drain, replay audit, and catalog rebuild commands through `AppHooks`. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
 | Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. A parked workflow is idle-free: discovery is exact, so idle cost does not scale with the number of suspended workflows ([what suspension costs](durable-workflows.md#what-suspension-costs)). |
@@ -82,6 +83,8 @@ Implemented today:
 - native `pg-migrate` components for Kiroku and Keiro framework tables;
 - the `jitsurei` worked-examples package and long-form guides under
   `docs/guides/`.
+- the `keiro-ops` standalone and embeddable operations console, with Jitsurei
+  demonstrating the application-owned hooks;
 
 Current adoption posture:
 
@@ -311,6 +314,7 @@ Goal: make the library easier to learn, operate, and upgrade.
 |---|---|---|
 | Worked-examples app | Available now | `jitsurei` shows commands, snapshots, read models, PMs, routers, timers, outbox, inbox, and integration events together. |
 | Long-form guides | Available now | `docs/guides/` covers the command side, event evolution, the DSL guarantee ledger, brownfield structural adoption, read models, PMs & timers, snapshots, integration events, routers, and combined examples. |
+| Operator console | Available now | `keiro-ops` covers database-generic operations; `opsCommandTree` and `AppHooks` mount application-code-dependent commands. |
 | Haddocks | Partially complete | Each public module gets reference docs and copy-pasteable examples. |
 | Stability policy | Planned | Users know what can break before a stronger public API milestone. |
 | Read-model migration guide | Planned | Application-owned query tables have clear migration ownership. |
@@ -430,7 +434,6 @@ These are intentionally outside the current v1 and v2 commitments.
 | Field-level encryption | Requires application-specific key-management choices. |
 | Multi-region operation | Requires a global-ordering story outside the current single-Postgres design. |
 | Binary or compressed snapshots | Useful for hot, large states; JSON remains operator-friendly for v1. |
-| Operator CLIs | Useful for snapshot rebuilds, projection rebuilds, outbox repair, and timer repair. |
 
 Server-side scripted projections are not on the roadmap. The design explicitly
 rejects that model because it is operationally fragile and hard to debug.

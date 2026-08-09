@@ -9,6 +9,7 @@ import Data.ByteString.Char8 qualified as ByteString
 import Data.Function qualified as Function
 import Data.Functor ((<&>))
 import Data.Int (Int64)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -24,6 +25,8 @@ import Hasql.Session qualified as HasqlSession
 import Keiro.DeadLetter
 import Keiro.Inbox qualified as Inbox
 import Keiro.Integration.Event
+import Keiro.Ops (AppHooks (..))
+import Keiro.Ops qualified as Ops
 import Keiro.Ops.Env
 import Keiro.Ops.Inbox qualified as OpsInbox
 import Keiro.Ops.Outbox qualified as OpsOutbox
@@ -31,6 +34,7 @@ import Keiro.Ops.Parse (parseDuration)
 import Keiro.Ops.Pgmq qualified as OpsPgmq
 import Keiro.Ops.Projection qualified as OpsProjection
 import Keiro.Ops.Render
+import Keiro.Ops.ReplayAudit qualified as OpsReplayAudit
 import Keiro.Ops.Shard qualified as OpsShard
 import Keiro.Ops.Snapshot qualified as OpsSnapshot
 import Keiro.Ops.Stream qualified as OpsStream
@@ -39,6 +43,8 @@ import Keiro.Ops.Workflow qualified as OpsWorkflow
 import Keiro.Outbox qualified as Outbox
 import Keiro.PGMQ
 import Keiro.Projection qualified as Projection
+import Keiro.Projection.Catalog qualified as Catalog
+import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
 import Keiro.Snapshot.Schema
 import Keiro.Subscription.Shard qualified as Shard
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore, withMigratedSuiteWith)
@@ -47,6 +53,7 @@ import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName 
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Instance qualified as Instance
+import Keiro.Workflow.Resume (WorkflowDef (..), defaultWorkflowResumeOptions)
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -55,6 +62,7 @@ import Kiroku.Store.Read (getStream, readStreamForward)
 import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types
+import Options.Applicative qualified as Optparse
 import Pgmq.Migration qualified as PgmqMigration
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
@@ -65,8 +73,47 @@ main = do
   pgmq <- either (fail . show) pure PgmqMigration.pgmqMigrations
   withMigratedSuiteWith [pgmq] $ \fixture -> hspec (spec fixture)
 
+embeddedHooks :: AppHooks
+embeddedHooks =
+  AppHooks
+    { workflowResume = Just (Map.empty, defaultWorkflowResumeOptions),
+      timerFire = Just (\_ -> pure Nothing),
+      replayAudit = Just (OpsReplayAudit.OpsAuditConfig []),
+      projectionCatalog = Just emptyCatalogOperations
+    }
+
+emptyCatalogOperations :: CatalogOperations.ProjectionCatalogOperations
+emptyCatalogOperations =
+  case Catalog.validateProjectionCatalog Catalog.emptyProjectionCatalog of
+    Catalog.Failure diagnostics -> error ("empty projection catalog was invalid: " <> show diagnostics)
+    Catalog.Success catalog -> CatalogOperations.projectionCatalogOperations catalog
+
+parseOps :: AppHooks -> [String] -> Optparse.ParserResult Ops.OpsInvocation
+parseOps hooks = Optparse.execParserPure Optparse.defaultPrefs (Ops.opsCommandTree hooks)
+
+isParseSuccess :: Optparse.ParserResult value -> Bool
+isParseSuccess Optparse.Success {} = True
+isParseSuccess _ = False
+
+isParseFailure :: Optparse.ParserResult value -> Bool
+isParseFailure Optparse.Failure {} = True
+isParseFailure _ = False
+
 spec :: Fixture -> Spec
 spec fixture = do
+  describe "embedded command tree" do
+    it "omits code-dependent commands from the standalone tree" do
+      isParseFailure (parseOps Ops.emptyAppHooks ["wf", "resume-once"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["timer", "drain-once"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["replay-audit", "--full"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "list"]) `shouldBe` True
+
+    it "mounts every code-dependent command from typed application hooks" do
+      isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["timer", "drain-once"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "list"]) `shouldBe` True
+
   describe "selectConnectionString" do
     it "prefers the explicit option, then the Keiro variable, then DATABASE_URL" do
       selectConnectionString (Just "explicit") (Just "keiro") (Just "database")
@@ -150,6 +197,22 @@ spec fixture = do
       mutationError `shouldSatisfy` Text.isInfixOf "refusing mutation" . Text.pack
 
   describe "workflow handlers" $ around (withFreshStore fixture) do
+    it "previews and runs one bounded application-registry resume pass" $ \store -> do
+      let ref = OpsWorkflow.WorkflowRef "approval" "wf-resume"
+          registry = Map.singleton (WorkflowName "approval") (WorkflowDef (\_ -> pure ("done" :: Text)))
+          hook = Just (registry, defaultWorkflowResumeOptions)
+          command = OpsWorkflow.ResumeOnce (OpsWorkflow.ResumeOptions 1)
+      seedStep store ref "received" Aeson.Null
+
+      preview <- OpsWorkflow.runCommandWithResume hook (opsEnv False store) command
+      preview `shouldSatisfy` isPreview
+      workflowStatus store ref `shouldReturn` Just Instance.WfRunning
+
+      applied <- OpsWorkflow.runCommandWithResume hook (opsEnv True store) command
+      applied `shouldSatisfy` isSucceeded
+      jsonInteger "completed" applied `shouldBe` Just 1
+      workflowStatus store ref `shouldReturn` Just Instance.WfCompleted
+
     it "lists and decodes a real journal without mutating it" $ \store -> do
       let ref = OpsWorkflow.WorkflowRef "approval" "wf-1"
       seedStep store ref "received" (object ["amount" .= (42 :: Int)])
@@ -271,6 +334,22 @@ spec fixture = do
       workflowStatus store ref `shouldReturn` Nothing
 
   describe "timer handlers" $ around (withFreshStore fixture) do
+    it "previews and dispatches one bounded due-timer pass through the mounted hook" $ \store -> do
+      now <- getCurrentTime
+      let request = timerRequest "018f5f43-8a70-7b9a-9a9b-59d391a76722" (addUTCTime (-60) now)
+          fire _ = pure (Just (EventId (testUuid "018f5f43-8a70-7b9a-9a9b-59d391a76723")))
+          command = OpsTimer.DrainOnce (OpsTimer.DrainOptions 1)
+      expectStore store (runTransaction (Timer.scheduleTimerTx request))
+
+      preview <- OpsTimer.runCommandWithFire (Just fire) (opsEnv False store) command
+      preview `shouldSatisfy` isPreview
+      timerStatus store request.timerId `shouldReturn` Just Timer.Scheduled
+
+      applied <- OpsTimer.runCommandWithFire (Just fire) (opsEnv True store) command
+      applied `shouldSatisfy` isSucceeded
+      jsonInteger "processed" applied `shouldBe` Just 1
+      timerStatus store request.timerId `shouldReturn` Just Timer.Fired
+
     it "lists, previews, requeues, and dead-letters a stuck timer" $ \store -> do
       now <- getCurrentTime
       let request = timerRequest "018f5f43-8a70-7b9a-9a9b-59d391a76720" (addUTCTime (-60) now)

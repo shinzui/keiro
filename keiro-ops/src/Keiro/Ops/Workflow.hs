@@ -5,10 +5,14 @@ module Keiro.Ops.Workflow
     InspectOptions (..),
     ListOptions (..),
     PayloadArg (..),
+    ResumeHook,
+    ResumeOptions (..),
     WorkflowRef (..),
     commandParser,
+    commandParserWithResume,
     isMutation,
     runCommand,
+    runCommandWithResume,
   )
 where
 
@@ -39,6 +43,12 @@ import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child.Schema qualified as Child
 import Keiro.Workflow.Gc qualified as Gc
 import Keiro.Workflow.Instance qualified as Instance
+import Keiro.Workflow.Resume
+  ( ResumeSummary (..),
+    WorkflowRegistry,
+    WorkflowResumeOptions,
+    resumeWorkflowsOnceUpTo,
+  )
 import Keiro.Workflow.Schema qualified as WorkflowSchema
 import Keiro.Workflow.Types
   ( WorkflowId (..),
@@ -91,6 +101,16 @@ data GcOptions = GcOptions
   }
   deriving stock (Eq, Show)
 
+data ResumeOptions = ResumeOptions
+  { limit :: !Int
+  }
+  deriving stock (Eq, Show)
+
+type ResumeHook =
+  ( WorkflowRegistry '[Store, Error StoreError, IOE],
+    WorkflowResumeOptions
+  )
+
 data AwakeableCommand
   = AwakeableShow !UUID
   | AwakeableSignal !UUID !PayloadArg
@@ -107,10 +127,14 @@ data Command
   | Resurrect !WorkflowRef
   | ReleaseLease !WorkflowRef
   | GcRunOnce !GcOptions
+  | ResumeOnce !ResumeOptions
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
-commandParser =
+commandParser = commandParserWithResume False
+
+commandParserWithResume :: Bool -> Parser Command
+commandParserWithResume includeResume =
   hsubparser
     ( command "list" (info (List <$> listOptionsParser) (progDesc "List workflow instances with stable keyset paging"))
         <> command "show" (info (Show <$> workflowRefParser) (progDesc "Show an instance, its children, and its awakeables"))
@@ -121,7 +145,18 @@ commandParser =
         <> command "resurrect" (info (Resurrect <$> workflowRefParser) (progDesc "Preview or resurrect a terminally failed workflow"))
         <> command "lease" (info leaseCommandParser (progDesc "Operate workflow instance leases"))
         <> command "gc" (info gcCommandParser (progDesc "Preview or run one workflow garbage-collection pass"))
+        <> resumeCommand
     )
+  where
+    resumeCommand
+      | includeResume =
+          command
+            "resume-once"
+            ( info
+                (ResumeOnce . ResumeOptions <$> option positiveIntReader (long "limit" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum workflow instances to advance"))
+                (progDesc "Preview or run one bounded application-registry resume pass")
+            )
+      | otherwise = mempty
 
 listOptionsParser :: Parser ListOptions
 listOptionsParser =
@@ -205,6 +240,12 @@ generationReader = eitherReader $ \raw ->
     [(value, "")] | value >= 0 -> Right value
     _ -> Left "expected a non-negative generation"
 
+positiveIntReader :: ReadM Int
+positiveIntReader = eitherReader $ \raw ->
+  case reads raw of
+    [(value, "")] | value > 0 -> Right value
+    _ -> Left "expected a positive integer"
+
 workflowStatusReader :: ReadM Instance.WorkflowStatus
 workflowStatusReader = eitherReader $ \case
   "running" -> Right Instance.WfRunning
@@ -227,9 +268,13 @@ isMutation = \case
   Resurrect {} -> True
   ReleaseLease {} -> True
   GcRunOnce {} -> True
+  ResumeOnce {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
-runCommand env = \case
+runCommand = runCommandWithResume Nothing
+
+runCommandWithResume :: Maybe ResumeHook -> OpsEnv -> Command -> IO OpsOutcome
+runCommandWithResume resumeHook env = \case
   List options -> runList env options
   Show ref -> runShow env ref
   Steps options -> runSteps env options
@@ -239,6 +284,69 @@ runCommand env = \case
   Resurrect ref -> runResurrect env ref
   ReleaseLease ref -> runReleaseLease env ref
   GcRunOnce options -> runGc env options
+  ResumeOnce options -> runResumeOnce resumeHook env options
+
+runResumeOnce :: Maybe ResumeHook -> OpsEnv -> ResumeOptions -> IO OpsOutcome
+runResumeOnce Nothing _ _ =
+  pure (Failed "workflow resume hook is not mounted")
+runResumeOnce (Just (registry, resumeOptions)) env options
+  | not env.force = do
+      now <- getCurrentTime
+      runAction env (take options.limit <$> WorkflowSchema.findUnfinishedWorkflowIds now) $ \candidates ->
+        PreviewRequired
+          (resumePreviewResult options.limit candidates)
+          (forceInvocation env ["wf", "resume-once", "--limit", Text.pack (show options.limit)])
+  | otherwise =
+      runAction
+        env
+        (resumeWorkflowsOnceUpTo options.limit resumeOptions registry)
+        (Succeeded . resumeSummaryResult)
+
+resumePreviewResult :: Int -> [(Text, Text)] -> OpsResult
+resumePreviewResult limit candidates =
+  OpsResult
+    { headers = ["name", "id"],
+      rows = [[name, workflowId] | (workflowId, name) <- candidates],
+      jsonValue =
+        object
+          [ "preview" .= True,
+            "limit" .= limit,
+            "candidates"
+              .= [ object ["workflow_name" .= name, "workflow_id" .= workflowId]
+                 | (workflowId, name) <- candidates
+                 ]
+          ]
+    }
+
+resumeSummaryResult :: ResumeSummary -> OpsResult
+resumeSummaryResult summary =
+  OpsResult
+    { headers = ["discovered", "resumed", "completed", "suspended", "unknown", "failed", "errors", "lease_skipped"],
+      rows =
+        [ map
+            (Text.pack . show)
+            [ summary.discovered,
+              summary.resumed,
+              summary.completed,
+              summary.stillSuspended,
+              summary.unknownName,
+              summary.failed,
+              summary.transientErrors,
+              summary.leaseSkipped
+            ]
+        ],
+      jsonValue =
+        object
+          [ "discovered" .= summary.discovered,
+            "resumed" .= summary.resumed,
+            "completed" .= summary.completed,
+            "still_suspended" .= summary.stillSuspended,
+            "unknown_name" .= summary.unknownName,
+            "failed" .= summary.failed,
+            "transient_errors" .= summary.transientErrors,
+            "lease_skipped" .= summary.leaseSkipped
+          ]
+    }
 
 runList :: OpsEnv -> ListOptions -> IO OpsOutcome
 runList env options =
