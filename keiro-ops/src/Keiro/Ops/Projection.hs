@@ -10,11 +10,12 @@ module Keiro.Ops.Projection
   )
 where
 
-import Data.Aeson (object, (.=))
+import Data.Aeson (Value, object, (.=))
 import Data.Int (Int64)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, parseTimeM)
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
@@ -22,17 +23,29 @@ import Keiro.Ops.Render
 import Keiro.Projection (countAsyncProjectionDedupForBefore, pruneAsyncProjectionDedupForBefore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Subscription
+  ( SubscriptionCheckpoint (..),
+    SubscriptionCheckpointInventory (..),
+    SubscriptionName (..),
+    subscriptionCheckpointInventory,
+  )
+import Kiroku.Store.Types (GlobalPosition (..))
 import Options.Applicative hiding (action, value)
+import Prelude
 
 data Command
-  = PruneDedup !Text !UTCTime
+  = Position !Text
+  | PruneDedup !Text !UTCTime
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
-    (command "prune-dedup" (info pruneParser (progDesc "Preview or prune one projection's old dedup rows")))
+    ( command "position" (info positionParser (progDesc "Show one subscription's durable member checkpoints and floor"))
+        <> command "prune-dedup" (info pruneParser (progDesc "Preview or prune one projection's old dedup rows"))
+    )
   where
+    positionParser = Position <$> textOption "subscription" "NAME" "Durable Kiroku subscription name"
     pruneParser =
       PruneDedup
         <$> textOption "projection" "NAME" "Async projection name"
@@ -50,10 +63,12 @@ utcReader = eitherReader $ \raw ->
 
 isMutation :: Command -> Bool
 isMutation = \case
+  Position {} -> False
   PruneDedup {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
+  Position subscription -> runPosition env subscription
   PruneDedup projection before
     | env.force ->
         runAction env (pruneAsyncProjectionDedupForBefore projection before) $ \affected ->
@@ -63,6 +78,77 @@ runCommand env = \case
           PreviewRequired
             (pruneResult True projection before affected)
             (forceInvocation env ["projection", "prune-dedup", "--projection", projection, "--before", utcText before])
+
+runPosition :: OpsEnv -> Text -> IO OpsOutcome
+runPosition env subscription =
+  runAction env subscriptionCheckpointInventory $ \inventory ->
+    Succeeded (positionResult subscription inventory)
+
+positionResult :: Text -> SubscriptionCheckpointInventory -> OpsResult
+positionResult requested inventory =
+  OpsResult
+    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "global_position_distance", "minimum_checkpoint_position", "maximum_global_position_distance"],
+      rows = humanRows,
+      jsonValue =
+        object
+          [ "subscription" .= requested,
+            "store_position" .= positionInt captured,
+            "members" .= map (memberJson captured) members,
+            "minimum_checkpoint_position" .= fmap positionInt minimumCheckpoint,
+            "maximum_global_position_distance" .= maximumDistance
+          ]
+    }
+  where
+    captured = storePosition inventory
+    members =
+      [ checkpoint
+      | checkpoint@(SubscriptionCheckpoint (SubscriptionName name) _member _position _updatedAt) <-
+          Vector.toList (checkpoints inventory),
+        name == requested
+      ]
+    minimumCheckpoint = minimumMay [position | SubscriptionCheckpoint _ _ position _ <- members]
+    maximumDistance = globalPositionDistance captured <$> minimumCheckpoint
+    summaryCells =
+      [ maybe "" positionText minimumCheckpoint,
+        maybe "" showText maximumDistance
+      ]
+    humanRows = case members of
+      [] -> [[requested, "", "", "", positionText captured, ""] <> summaryCells]
+      _ -> map (memberRow captured summaryCells) members
+
+memberRow :: GlobalPosition -> [Text] -> SubscriptionCheckpoint -> [Text]
+memberRow captured summaryCells (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+  [ name,
+    showText member,
+    positionText position,
+    utcText updatedAt,
+    positionText captured,
+    showText (globalPositionDistance captured position)
+  ]
+    <> summaryCells
+
+memberJson :: GlobalPosition -> SubscriptionCheckpoint -> Value
+memberJson captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+  object
+    [ "subscription" .= name,
+      "member" .= member,
+      "checkpoint_position" .= positionInt position,
+      "checkpoint_updated_at" .= updatedAt,
+      "global_position_distance" .= globalPositionDistance captured position
+    ]
+
+minimumMay :: (Ord a) => [a] -> Maybe a
+minimumMay [] = Nothing
+minimumMay values = Just (Prelude.minimum values)
+
+globalPositionDistance :: GlobalPosition -> GlobalPosition -> Int64
+globalPositionDistance (GlobalPosition captured) (GlobalPosition checkpoint) = max 0 (captured - checkpoint)
+
+positionInt :: GlobalPosition -> Int64
+positionInt (GlobalPosition value) = value
+
+positionText :: GlobalPosition -> Text
+positionText = showText . positionInt
 
 runAction :: OpsEnv -> Eff '[Store, Error StoreError, IOE] a -> (a -> OpsOutcome) -> IO OpsOutcome
 runAction env action onSuccess = do

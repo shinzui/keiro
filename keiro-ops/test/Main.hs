@@ -22,6 +22,7 @@ import Effectful.Error.Static (Error)
 import Hasql.Connection qualified as Hasql
 import Hasql.Connection.Settings qualified as HasqlSettings
 import Hasql.Session qualified as HasqlSession
+import Hasql.Transaction qualified as Tx
 import Keiro.DeadLetter
 import Keiro.Inbox qualified as Inbox
 import Keiro.Integration.Event
@@ -113,6 +114,76 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["timer", "drain-once"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "list"]) `shouldBe` True
+
+  describe "durable checkpoint inventory" do
+    it "mounts both read-only commands in the standalone tree without a lag alias" do
+      isParseSuccess (parseOps Ops.emptyAppHooks ["stream", "subscriptions"]) `shouldBe` True
+      isParseSuccess (parseOps Ops.emptyAppHooks ["projection", "position", "--subscription", "orders"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["projection", "lag", "--subscription", "orders"]) `shouldBe` True
+      OpsStream.isMutation OpsStream.Subscriptions `shouldBe` False
+      OpsProjection.isMutation (OpsProjection.Position "orders") `shouldBe` False
+
+    around (withFreshStore fixture) do
+      it "returns the captured store position with empty durable rows and null summaries" $ \store -> do
+        streamOutcome <- OpsStream.runCommand (opsEnv False store) OpsStream.Subscriptions
+        Succeeded streamResult <- pure streamOutcome
+        streamResult.rows `shouldBe` []
+        streamResult.jsonValue
+          `shouldBe` object
+            [ "store_position" .= (0 :: Int),
+              "checkpoints" .= ([] :: [Aeson.Value])
+            ]
+
+        projectionOutcome <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "missing")
+        Succeeded projectionResult <- pure projectionOutcome
+        projectionResult.rows
+          `shouldBe` [["missing", "", "", "", "0", "", "", ""]]
+        projectionResult.jsonValue
+          `shouldBe` object
+            [ "subscription" .= ("missing" :: Text),
+              "store_position" .= (0 :: Int),
+              "members" .= ([] :: [Aeson.Value]),
+              "minimum_checkpoint_position" .= (Nothing :: Maybe Int64),
+              "maximum_global_position_distance" .= (Nothing :: Maybe Int64)
+            ]
+
+      it "lists stopped-worker rows in name/member order and derives the member-aware floor" $ \store -> do
+        seedCheckpointInventory store
+
+        streamOutcome <- OpsStream.runCommand (opsEnv False store) OpsStream.Subscriptions
+        Succeeded streamResult <- pure streamOutcome
+        streamResult.rows
+          `shouldBe` [ ["billing", "0", "4", "2026-08-09T14:02:00Z", "5", "1"],
+                       ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "3"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "2"]
+                     ]
+        streamResult.jsonValue
+          `shouldBe` object
+            [ "store_position" .= (5 :: Int),
+              "checkpoints"
+                .= [ checkpointJsonFixture "billing" 0 4 "2026-08-09T14:02:00Z" 1,
+                     checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 3,
+                     checkpointJsonFixture "orders" 1 3 "2026-08-09T14:01:00Z" 2
+                   ]
+            ]
+
+        projectionOutcome <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "orders")
+        Succeeded projectionResult <- pure projectionOutcome
+        projectionResult.rows
+          `shouldBe` [ ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "3", "2", "3"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "2", "2", "3"]
+                     ]
+        projectionResult.jsonValue
+          `shouldBe` object
+            [ "subscription" .= ("orders" :: Text),
+              "store_position" .= (5 :: Int),
+              "members"
+                .= [ checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 3,
+                     checkpointJsonFixture "orders" 1 3 "2026-08-09T14:01:00Z" 2
+                   ],
+              "minimum_checkpoint_position" .= (2 :: Int),
+              "maximum_global_position_distance" .= (3 :: Int)
+            ]
 
   describe "selectConnectionString" do
     it "prefers the explicit option, then the Keiro variable, then DATABASE_URL" do
@@ -743,6 +814,31 @@ seedKirokuEvent store name rawId cause = do
         globalPosition = appended.globalPosition,
         eventId
       }
+
+seedCheckpointInventory :: KirokuStore -> IO ()
+seedCheckpointInventory store = do
+  let seeds =
+        [ ("checkpoint-inventory-1", "018f5f43-8a70-7b9a-9a9b-59d391a76821"),
+          ("checkpoint-inventory-2", "018f5f43-8a70-7b9a-9a9b-59d391a76822"),
+          ("checkpoint-inventory-3", "018f5f43-8a70-7b9a-9a9b-59d391a76823"),
+          ("checkpoint-inventory-4", "018f5f43-8a70-7b9a-9a9b-59d391a76824"),
+          ("checkpoint-inventory-5", "018f5f43-8a70-7b9a-9a9b-59d391a76825")
+        ]
+  mapM_ (\(name, eventId) -> seedKirokuEvent store name eventId Nothing) seeds
+  expectStore store $
+    runTransaction $
+      Tx.sql
+        "INSERT INTO subscriptions (subscription_name, stream_name, consumer_group_member, consumer_group_size, last_seen, updated_at) VALUES ('orders', '$all', 1, 2, 3, '2026-08-09 14:01:00+00'), ('billing', '$all', 0, 1, 4, '2026-08-09 14:02:00+00'), ('orders', '$all', 0, 2, 2, '2026-08-09 14:00:00+00')"
+
+checkpointJsonFixture :: Text -> Int -> Int -> Text -> Int -> Aeson.Value
+checkpointJsonFixture subscription member position updatedAt distance =
+  object
+    [ "subscription" .= subscription,
+      "member" .= member,
+      "checkpoint_position" .= position,
+      "checkpoint_updated_at" .= updatedAt,
+      "global_position_distance" .= distance
+    ]
 
 eventUuid :: SeededEvent -> UUID.UUID
 eventUuid seeded = case seeded.eventId of EventId value -> value

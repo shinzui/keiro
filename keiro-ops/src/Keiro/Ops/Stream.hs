@@ -19,6 +19,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
+import Data.Time (UTCTime, defaultTimeLocale, formatTime)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Data.Vector qualified as Vector
@@ -32,6 +33,12 @@ import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Lifecycle
 import Kiroku.Store.Read (getStream, lookupStreamNames, readStreamForward)
+import Kiroku.Store.Subscription
+  ( SubscriptionCheckpoint (..),
+    SubscriptionCheckpointInventory (..),
+    SubscriptionName (..),
+    subscriptionCheckpointInventory,
+  )
 import Kiroku.Store.Types
 import Options.Applicative hiding (action, info, value)
 import Options.Applicative qualified as Opt
@@ -44,6 +51,7 @@ data Command
   | HardDelete !Text
   | TruncateBefore !TruncateCommand
   | Causation !EventId
+  | Subscriptions
   deriving stock (Eq, Show)
 
 data TruncateCommand
@@ -60,6 +68,7 @@ commandParser =
         <> command "hard-delete" (Opt.info (HardDelete <$> streamArgument) (progDesc "Preview or permanently delete a stream"))
         <> command "truncate-before" (Opt.info (TruncateBefore <$> truncateParser) (progDesc "Operate the reversible stream visibility marker"))
         <> command "causation" (Opt.info (Causation <$> eventIdArgument) (progDesc "Show an event's causation ancestors and descendants"))
+        <> command "subscriptions" (Opt.info (pure Subscriptions) (progDesc "List durable subscription checkpoints"))
     )
   where
     showParser =
@@ -121,6 +130,7 @@ isMutation :: Command -> Bool
 isMutation = \case
   Show {} -> False
   Causation {} -> False
+  Subscriptions -> False
   SoftDelete {} -> True
   Undelete {} -> True
   HardDelete {} -> True
@@ -134,6 +144,52 @@ runCommand env = \case
   HardDelete name -> runHardDelete env name
   TruncateBefore truncateCommand -> runTruncate env truncateCommand
   Causation eventId -> runCausation env eventId
+  Subscriptions -> runSubscriptions env
+
+runSubscriptions :: OpsEnv -> IO OpsOutcome
+runSubscriptions env =
+  runAction env subscriptionCheckpointInventory (Succeeded . subscriptionInventoryResult)
+
+subscriptionInventoryResult :: SubscriptionCheckpointInventory -> OpsResult
+subscriptionInventoryResult inventory =
+  OpsResult
+    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "global_position_distance"],
+      rows = map (checkpointRow captured) durableCheckpoints,
+      jsonValue =
+        object
+          [ "store_position" .= positionInt captured,
+            "checkpoints" .= map (checkpointJson captured) durableCheckpoints
+          ]
+    }
+  where
+    captured = storePosition inventory
+    durableCheckpoints = Vector.toList (checkpoints inventory)
+
+checkpointRow :: GlobalPosition -> SubscriptionCheckpoint -> [Text]
+checkpointRow captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+  [ name,
+    showText member,
+    positionText position,
+    utcText updatedAt,
+    positionText captured,
+    showText (globalPositionDistance captured position)
+  ]
+
+checkpointJson :: GlobalPosition -> SubscriptionCheckpoint -> Value
+checkpointJson captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+  object
+    [ "subscription" .= name,
+      "member" .= member,
+      "checkpoint_position" .= positionInt position,
+      "checkpoint_updated_at" .= updatedAt,
+      "global_position_distance" .= globalPositionDistance captured position
+    ]
+
+globalPositionDistance :: GlobalPosition -> GlobalPosition -> Int64
+globalPositionDistance (GlobalPosition captured) (GlobalPosition checkpoint) = max 0 (captured - checkpoint)
+
+utcText :: UTCTime -> Text
+utcText = Text.pack . formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ"
 
 runShow :: OpsEnv -> Text -> StreamVersion -> Int -> IO OpsOutcome
 runShow env name from limit =

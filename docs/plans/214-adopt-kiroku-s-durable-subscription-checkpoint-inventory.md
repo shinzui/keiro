@@ -45,8 +45,10 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   preferred position-distance metric plus compatibility recording. `cabal build keiro keiro-ops`
   passes; the focused `Keiro.ReadModel` group passes 25 examples and the metric match passes 1.
   The private checkpoint-read source audit is empty. (2026-08-09)
-- [ ] Milestone 2: add durable `stream subscriptions` and member-aware `projection position`
-  commands with stable human and JSON output.
+- [x] Milestone 2: added read-only `stream subscriptions` and member-aware
+  `projection position --subscription NAME` handlers with stable human/JSON output, one public
+  inventory call per handler, empty/missing semantics, parser coverage, and durable ordered-row
+  tests. The focused ops group passes 3 examples. (2026-08-09)
 - [ ] Milestone 3: cover the library and CLI behavior, correct position-distance terminology,
   update the owning ADR and user documentation, and remove the obsolete known limitation.
 - [ ] Milestone 4: pass focused and repository-wide validation, update the parent MasterPlan,
@@ -153,6 +155,15 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   bounds or interfaces after the release preflight.
   Rationale: Hackage, the upstream release tag, the Mori-located source, and the updated parent
   MasterPlan all agree on the planned public API and 0.4-series compatibility boundary.
+  Date: 2026-08-09
+
+- Decision: Encode projection-position JSON with a top-level `members` array plus
+  `minimum_checkpoint_position` and `maximum_global_position_distance`; repeat the two summary
+  cells on each human member row, and render one blank-member human row for a missing name.
+  Rationale: The JSON shape distinguishes member facts from subscription-wide derivations and has
+  a natural empty-array/null representation. Repeating summaries keeps the ordinary human table
+  self-contained, while the missing row exposes the captured store position without inventing a
+  member or checkpoint.
   Date: 2026-08-09
 
 
@@ -353,7 +364,7 @@ Exercise the new CLI handlers against the test database through the focused suit
 description can be adjusted to the implemented group name, but keep one shared substring:
 
 ```bash
-cabal test keiro-ops-test --test-options='--match durable checkpoint inventory'
+cabal test keiro-ops-test --test-options='--match=checkpoint'
 ```
 
 The human command should produce rows shaped like:
@@ -381,9 +392,11 @@ The stable JSON shape for `stream subscriptions --json` is:
 }
 ```
 
-`projection position --subscription orders --json` uses the same member objects and adds
-`minimum_checkpoint_position: 35` and `maximum_global_position_distance: 7`. Exact timestamps and
-positions come from the fixture; the example only defines field names.
+`projection position --subscription orders --json` uses a top-level `members` array containing the
+same member objects and adds `minimum_checkpoint_position: 35` and
+`maximum_global_position_distance: 7`. It also includes the requested `subscription` and captured
+`store_position`. Exact timestamps and positions come from the fixture; the example only defines
+field names.
 
 After documentation and ADR edits, run the profile and repository gates:
 
