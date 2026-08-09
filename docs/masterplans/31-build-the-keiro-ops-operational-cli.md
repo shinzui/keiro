@@ -34,11 +34,10 @@ providing an operational command-line tool over every runtime domain — durable
 workflows (list, show, journal, resurrect, cancel, awakeable signal/cancel, GC),
 timers (stuck-row triage: list/requeue/cancel/dead-letter, one-shot drain), the
 outbox and inbox (backlog, listing, requeue, GC, dispatch dead letters), pgmq queues
-(DLQ read/redrive/purge/archive), projections and read models (dedup pruning,
-with durable subscription positions and lag held behind Kiroku's checkpoint-inventory API), sharded subscriptions (ownership snapshots,
+(DLQ read/redrive/purge/archive), projections and read models (dedup pruning and
+durable subscription positions through Kiroku's checkpoint-inventory API), sharded subscriptions (ownership snapshots,
 relinquish), snapshots (inspect, delete, truncation-coverage preflight), and kiroku
-streams (read, lifecycle, truncate-before, and durable checkpoint inventory once
-the owning API is released) — with
+streams (read, lifecycle, truncate-before, and durable checkpoint inventory) — with
 human-readable tables by default and `--json` everywhere for scripting.
 
 The design honors keiro's library shape. Operations split into two classes. The
@@ -76,8 +75,9 @@ flip (`docs/user/operations.md` procedures become commands; `docs/user/roadmap.m
 moves "Operator CLIs" from longer-term to available).
 
 Out of scope: implementing Kiroku's durable checkpoint-inventory API in this
-repository; that owning-library dependency is tracked by
-`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`. Also out of scope:
+repository. That owning-library work is complete under
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; EP-5 adopts its
+released contract without reproducing Kiroku SQL. Also out of scope:
 a TUI or web console (the CLI is the substrate one could build on
 later); hosting long-running workers in the CLI (workers belong in the application;
 the CLI offers one-shot passes like `timer drain-once` and `wf gc run-once` for
@@ -100,12 +100,13 @@ EP-4 mounts as `timer drain-once` with an application-supplied fire action.
 
 ## Decomposition Strategy
 
-Four child plans, decomposed by what each delivers independently: missing library
+Five child plans, decomposed by what each delivers independently: missing library
 primitives first (they gate everything and are pure keiro work), then the package
 core with the two domains that prove the whole design (workflows and timers exercise
 listing, mutation, safety rails, and the handshake), then breadth across the
 remaining domains (mechanical once the core exists), then the embedding surface and
-the documentation flip (which must come last to describe what shipped).
+the documentation flip, and finally adoption of the released Kiroku checkpoint
+inventory that was not available when EP-3 implemented the independent domains.
 
 EP-1 (plan 205) adds the operator APIs the audit's CLI survey found missing, to the
 `keiro` library itself: a real listing surface for workflow instances (filterable by
@@ -138,6 +139,12 @@ code-dependent commands (`timer drain-once`, `wf resume-once`, `replay-audit`, a
 projection-catalog rebuild mount when MasterPlan 32 is available),
 demonstrates embedding in `jitsurei`, and rewrites the operational docs around the
 CLI.
+
+EP-5 (plan 214) adopts `kiroku-store` 0.4.0.0, removes the private checkpoint read
+from Keiro's consistency/observation path, and mounts durable member-aware inventory
+and projection-position commands. It reports the captured-head subtraction as global
+position distance rather than claiming an exact category, filtered, or sharded event
+lag.
 
 Alternatives considered. Building the CLI inside the `keiro` package was rejected:
 the CLI depends on `keiro`, `keiro-pgmq`, `keiro-migrations`, and `kiroku-store`
@@ -172,8 +179,9 @@ frozen identity bytes) do not constrain this initiative.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
-| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | In Progress |
+| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | Complete |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Complete |
+| 5 | Adopt Kiroku's durable subscription checkpoint inventory | docs/plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md | EP-3 | Kiroku 0.4.0.0 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -192,11 +200,11 @@ should describe the full domain set; the embedding mechanics themselves need
 nothing from EP-3, so EP-3 and EP-4 can proceed in parallel if the docs milestone
 of EP-4 lands last.
 
-EP-3 has one external integration gate: durable checkpoint inventory and the
-projection lag derived from it require
-`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`. The other EP-3
-domains are complete. EP-4 may proceed because that relationship is soft and no
-code-dependent hook relies on checkpoint inventory.
+EP-3 completed the domains that were independently implementable and left the
+checkpoint slice absent rather than crossing Kiroku's schema boundary. EP-5 depends
+on that established command architecture and on the released
+`mori://shinzui/kiroku/packages/kiroku-store` 0.4.0.0 contract. EP-4 proceeded
+independently because its application hooks do not depend on checkpoint inventory.
 
 
 ## Integration Points
@@ -220,13 +228,13 @@ The command-tree module layout (`Keiro.Ops.Cli` root; one module per domain,
 `.Pgmq`, `.Projection`, `.Shard`, `.Snapshot`, `.Stream`) — EP-2 freezes the
 per-domain module convention and the render/`--json` helpers every domain uses.
 
-Kiroku durable checkpoints — EP-3 must consume the public member-aware inventory
-requested by `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2` once a
-tagged Kiroku release provides it. Until then neither `projection position` nor
-`stream subscriptions` is mounted: filtering through Keiro's direct
-`subscriptions`-table query violates ADR 28, while `subscriptionStates` is a live
-registry on the CLI's newly opened store handle and cannot represent deployed or
-stopped workers.
+Kiroku durable checkpoints — EP-5 consumes
+`Kiroku.Store.Subscription.subscriptionCheckpointInventory` from released
+`kiroku-store` 0.4.0.0. `stream subscriptions` exposes every persisted member row;
+`projection position` filters one name and reports its member floor. Both label
+store-head subtraction as global position distance. Filtering through Keiro's direct
+`subscriptions`-table query remains forbidden by ADR 28, and `subscriptionStates`
+remains a live process-local view rather than durable evidence.
 
 EP-1's new APIs in `keiro` (`listWorkflowInstances`, `cancelWorkflow`,
 `releaseInstanceLeaseForce` or equivalents) — EP-1 defines and tests them; EP-2
@@ -253,9 +261,10 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
 - [x] EP-2: workflow + standalone timer-triage domains complete; ADR for the operator-command contract recorded.
 - [x] EP-3: outbox, inbox, dead-letter, pgmq, projection-dedup, shard, snapshot, and stream lifecycle/read domains complete.
-- [ ] EP-3: durable checkpoint inventory and projection-lag commands, blocked on `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`.
+- [x] EP-3: deferred checkpoint slice transferred intact to EP-5 after the owning Kiroku release; no private-schema substitute shipped.
 - [x] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
 - [x] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
+- [ ] EP-5: adopt Kiroku 0.4.0.0 and mount durable inventory plus explicitly named global position-distance output.
 
 
 ## Surprises & Discoveries
@@ -303,6 +312,12 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   Its hooks are application-code capabilities, not Kiroku durable inventory, so
   `AppHooks` conditionally mounts workflow resume, timer drain, replay audit, and
   typed catalog rebuild while the standalone command set remains honest.
+- 2026-08-09: Kiroku completed
+  `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2` and published the
+  public one-statement inventory as `kiroku-store` 0.4.0.0. Its captured global
+  position is suitable for a named position distance, but the API deliberately
+  does not provide a category head or claim a relevant-event count. EP-5 now owns
+  adoption without reopening EP-3's already delivered domains.
 
 
 ## Decision Log
@@ -378,6 +393,15 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   help therefore cannot advertise a command that would fail for lack of code.
   Date: 2026-08-09
 
+- Decision: Add EP-5 for the released Kiroku checkpoint inventory and close EP-3
+  as the historical implementation of the independent messaging/read-side domains.
+  Rationale: Retrofitting plan 207 would blur the evidence that its process-local
+  and private-SQL substitutes were deliberately removed before Kiroku 0.4 existed.
+  A focused child plan can adopt the fixed released contract, preserve member rows,
+  and correct the global-position-distance terminology without rewriting that
+  history.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -408,9 +432,10 @@ The runbook, workflow guide/reference, roadmap, production posture, README, and
 package changelogs now describe the command surface. The expanded 27-example ops
 suite and the complete `just verify` gate pass.
 
-The initiative remains open only for EP-3's durable checkpoint-inventory and
-derived projection-lag slice, which correctly waits on Kiroku IR-2. No Keiro or
-CLI-side private-schema workaround remains.
+The initiative remains open only for EP-5's adoption of the now-released durable
+checkpoint inventory. No Keiro or CLI-side private-schema workaround remains, and
+the follow-up plan does not claim that store-wide position distance is an exact
+category, filtered, or sharded event lag.
 
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog
@@ -429,3 +454,7 @@ bridge, and gated both on Kiroku IR-2, 2026-08-08.
 Revision note: Completed EP-4, mounted the typed application hooks in Jitsurei,
 flipped the operational documentation, and left the MasterPlan open only for
 Kiroku IR-2, 2026-08-09.
+
+Revision note: Registered EP-5 after Kiroku published `kiroku-store` 0.4.0.0,
+closed EP-3's historical scope, and assigned durable member-aware inventory plus
+truthfully named global position-distance adoption to plan 214, 2026-08-09.
