@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-04T14:40:00Z
+timestamp: 2026-08-09T21:43:12Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -165,6 +165,28 @@ names remain consumer-build provenance rather than wire identity. Recursive diff
 change through those root paths so event migration, snapshot invalidation, and consumer build are
 not conflated.
 
+Consumer dependency impact has one checked authority, `Keiro.Dsl.SemanticImpact`. It derives from
+the resolved graph, groups every command-field, private-event-field, and register root by owning
+aggregate, unions each root with its transitive mapped-declaration closure, and inverts those
+closures into declaration consumers. Every public projection is deterministically ordered, and
+the root fold is exhaustive so a future `UseSite` constructor cannot compile until the impact
+model assigns it semantics. Generators, scaffold history, and impact reports consume this model;
+they do not reconstruct reachability from raw `Spec` fields.
+
+The complete service declaration inventory is deliberately separate from aggregate consumer
+closures. Declaration-owned binding, canonical-identity, fixture, branch-coverage,
+opaque-boundary, and projection-witness laws run once at service conformance scope, including for
+an intentionally unused declaration. Aggregate harnesses own only codec, wire-policy, replay,
+snapshot, and generated projection evidence tied to their checked uses. Service conformance is
+therefore not represented as an aggregate consumer, which prevents one declaration change from
+making every aggregate appear impacted.
+
+The current root vocabulary does not include mapped queue payloads, public contracts, read-model
+query schemas, or aggregate-owned projections. Snapshot impact follows register use because the
+snapshot is a cache of the register file. A future typed surface must extend the checked graph,
+semantic impact, generation, reporting, and conformance together; downstream code must not infer
+unsupported consumers from descriptive notation.
+
 Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
 explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.
 It is useful for scaffolding and shape coverage, but a hand-captured historical payload is stronger
@@ -277,6 +299,11 @@ the totality and ownership requirements above.
 - Adding an aggregate type or capability requires extending the central
   resolver and its exhaustive type-by-use-site matrix; an isolated parser,
   validator, or generator allowlist is not a complete implementation.
+- Mapped consumer locality is defined once over the resolved graph. An aggregate closure contains
+  only declarations reachable from its checked roots, while service conformance retains every
+  checked declaration independently of current use.
+- Queue, public-contract, read-model, and projection surfaces remain outside mapped impact until
+  they gain typed roots. Reporting them as consumers before then would overstate Keiro's evidence.
 - Canonical aggregate identities feed diff, replay-impact, and fold/snapshot
   fingerprints, so source aliases do not create compatibility churn while real
   type or initial changes remain visible.

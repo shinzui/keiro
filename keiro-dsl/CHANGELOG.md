@@ -6,6 +6,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
+### Added
+
+- Exposes `Keiro.Dsl.SemanticImpact`, the checked and deterministic authority for mapping current
+  command-field, private-event-field, and register roots to aggregate declaration closures and the
+  complete service declaration inventory. Future mapped root constructors must extend its
+  exhaustive `UseSite` fold before the package compiles.
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.4 && <0.5`, keeping generated conformance and

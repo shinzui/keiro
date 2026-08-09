@@ -62,6 +62,7 @@ import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planScaffold, planServiceScaffold, planServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
+import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames
@@ -2909,6 +2910,58 @@ main = hspec $ do
       wireRenameGraph <- shouldResolveTypeGraph (mapArtifactField (\field -> field {wfKey = "renamed_key"}) base)
       wireFingerprint haskellRenameGraph "ArtifactInfo" `shouldBe` wireFingerprint baseGraph "ArtifactInfo"
       wireFingerprint wireRenameGraph "ArtifactInfo" `shouldNotBe` wireFingerprint baseGraph "ArtifactInfo"
+
+  describe "semantic impact" $ do
+    it "derives local aggregate closures and a complete service inventory" $ do
+      source <- readTestText "test/fixtures/semantic-impact.keiro"
+      spec <- parseInlineSpec "test/fixtures/semantic-impact.keiro" source
+      graph <- shouldResolveTypeGraph spec
+      let impact = semanticImpact graph
+      aggregateMappedClosure impact "Alpha"
+        `shouldBe` map MappedKey ["CommandPayload", "EventPayload", "NestedPayload", "RegisterPayload", "SharedPayload"]
+      aggregateMappedClosure impact "Beta"
+        `shouldBe` [MappedKey "SharedPayload"]
+      mappedDeclarationConsumers impact (MappedKey "NestedPayload")
+        `shouldBe` [AggregateConsumer "Alpha"]
+      mappedDeclarationConsumers impact (MappedKey "SharedPayload")
+        `shouldBe` [AggregateConsumer "Alpha", AggregateConsumer "Beta"]
+      mappedDeclarationConsumers impact (MappedKey "UnusedPayload")
+        `shouldBe` []
+      Map.lookup (MappedKey "UnusedPayload") (impactDeclarationConsumers impact)
+        `shouldBe` Just Set.empty
+      serviceMappedInventory impact
+        `shouldBe` map MappedKey ["CommandPayload", "EventPayload", "NestedPayload", "RegisterPayload", "SharedPayload", "UnusedPayload"]
+    it "folds command, private-event, and register roots explicitly" $ do
+      source <- readTestText "test/fixtures/semantic-impact.keiro"
+      spec <- parseInlineSpec "test/fixtures/semantic-impact.keiro" source
+      impact <- semanticImpact <$> shouldResolveTypeGraph spec
+      map mappedRootKind (aggregateMappedRoots impact "Alpha")
+        `shouldBe` [MappedCommandFieldRoot, MappedCommandFieldRoot, MappedEventFieldRoot, MappedRegisterRoot]
+      map mappedRootKind (aggregateMappedRoots impact "Beta")
+        `shouldBe` [MappedRegisterRoot]
+    it "is independent of declaration and aggregate traversal order" $ do
+      source <- readTestText "test/fixtures/semantic-impact.keiro"
+      spec <- parseInlineSpec "test/fixtures/semantic-impact.keiro" source
+      baseline <- semanticImpact <$> shouldResolveTypeGraph spec
+      reordered <-
+        semanticImpact
+          <$> shouldResolveTypeGraph
+            spec
+              { specMapped = reverse (specMapped spec),
+                specNodes = reverse (specNodes spec)
+              }
+      reordered `shouldBe` baseline
+    it "keeps future UseSite roots behind an exhaustive compile-time fold" $ do
+      source <- readTestText "src/Keiro/Dsl/SemanticImpact.hs"
+      source `shouldSatisfy` T.isInfixOf "{-# OPTIONS_GHC -Werror=incomplete-patterns #-}"
+      map
+        (`T.isInfixOf` source)
+        [ "mappedRootFromUseSite site@(RootCommandField",
+          "mappedRootFromUseSite site@(RootEventField",
+          "mappedRootFromUseSite site@(RootRegister"
+        ]
+        `shouldBe` replicate 3 True
+      source `shouldSatisfy` (not . T.isInfixOf "mappedRootFromUseSite _")
 
   describe "string literal integrity" $ do
     it "parses an escaped emit-map value as exactly one row" $ do

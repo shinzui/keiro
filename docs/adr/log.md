@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-09
+* **Updated**: Defined checked semantic-impact authority, aggregate-local closures, service-wide declaration ownership, and the current mapped-root boundary.
 * **Update**: Record Kiroku 0.4 durable checkpoint inventory ownership, member-floor semantics, and global-position-distance naming (plan 214).
 
 ## 2026-08-08

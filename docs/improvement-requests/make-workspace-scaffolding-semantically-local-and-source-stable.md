@@ -4,7 +4,7 @@ title: Make workspace scaffolding semantically local and source-stable
 description: >-
   Keep a local DSL change from rewriting generated harnesses and behavior contracts for unrelated
   aggregates, while preserving complete workspace conformance and source-located diagnostics.
-timestamp: 2026-08-09T18:41:22Z
+timestamp: 2026-08-09T21:37:23Z
 requestId: IR-21
 status: proposed
 origin: mori://shinzui/mori
@@ -23,6 +23,21 @@ reviews:
       optional fields changed Project/ProjectArtifact payloads, but every aggregate harness gained
       the same global structural assertions and unrelated behavior contracts changed only
       absolute source-line metadata.
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-08-09T21:37:23Z
+    document_timestamp: 2026-08-09T18:41:22Z
+    scope: technical-accuracy
+    outcome: changes_requested
+    provider: openai
+    model: gpt-5
+    effort: unspecified
+    context: >-
+      Requested corrections before implementation: the checked TypeGraph has mapped roots only
+      for command fields, private-event fields, and registers; declaration-owned binding and
+      fixture laws must run once at service scope rather than be deleted from or duplicated across
+      aggregate harnesses; queue, public-contract, read-model, and projection consumers require a
+      future typed-root design.
 ---
 
 # Improvement Request: Make Workspace Scaffolding Semantically Local and Source-Stable
@@ -46,8 +61,8 @@ added three optional fields to structural payloads:
 
 The expected generated changes were local: the three structural shapes, their bindings and
 fixtures, and the Project and ProjectArtifact codecs, harnesses, and behavior contracts. Workspace
-scaffolding also rewrote outputs for aggregates that cannot command, emit, register, queue, or
-project any of those payloads.
+scaffolding also rewrote outputs for aggregates that have no command field, private-event field, or
+register capable of reaching those payloads.
 
 Two independent amplification mechanisms were visible.
 
@@ -75,17 +90,27 @@ locality guarantee.
 Make generated impact follow semantic reachability and give durable behavior requirements stable
 source anchors.
 
-### Aggregate-local structural coverage
+### Checked semantic impact and conformance ownership
 
-Compute the structural mapped-type closure reachable from each aggregate's commands, private
-events, registers, snapshots, queue payloads, and aggregate-owned projections. Emit aggregate
-harness assertions only for that closure. Shared shapes used by several aggregates may appear in
-each relevant harness; shapes reachable by none of an aggregate's surfaces must not.
+Compute the structural mapped-type closure reachable from each aggregate's command fields,
+private-event fields, and registers. Snapshot impact follows register use because snapshots cache
+the register file. Emit aggregate harness evidence only for uses in that closure. Shared shapes
+used by several aggregates may contribute use-specific codec, wire-policy, replay, snapshot, or
+projection-witness evidence to each relevant harness; shapes unreachable from an aggregate's
+checked roots must not.
 
-Keep one service-level structural inventory in the generated conformance package so every mapped
-shape and fixture is still proved at least once. Locality must reduce duplicate output, not weaken
-coverage. The checker should fail before writes if a reachable mapped shape has no fixture or
-binding evidence.
+Keep one service-level structural inventory in the generated conformance package. That boundary
+owns declaration-wide binding round trips, canonical identity, fixture labels, enum/union/optional
+branch coverage, unknown-field policy, opaque-boundary checks, and the declaration's projection
+witness laws. Each declaration-wide law executes exactly once even when several aggregates use the
+declaration or none currently does. Locality must reduce duplicate output, not weaken coverage.
+The checker must fail before writes if any mapped declaration lacks mandatory fixture or binding
+evidence.
+
+The current checked `TypeGraph` has no mapped `TypeExpr` roots for queue payloads, public
+contracts, read-model query schemas, or aggregate-owned projections. Those surfaces must remain
+explicitly unsupported by this impact model until a future language change adds typed roots and
+extends checking, generation, reporting, and conformance together.
 
 ### Stable behavior-source anchors
 
@@ -104,33 +129,37 @@ describe.
 ### Impact classification
 
 Use the same reachability and stable-anchor model in workspace diff/scaffold planning. A changed
-shape should report the aggregates and read models that consume it, plus the service-level
-conformance inventory. Unrelated aggregates must not appear as impacted merely because their
-harness currently repeats global assertions or because their source begins later in a combined
-workspace position space.
+shape should report the aggregates that consume it through current checked roots, plus the
+service-level conformance inventory. It must not manufacture queue, public-contract, read-model,
+or projection consumers from untyped notation. Unrelated aggregates must not appear as impacted
+merely because their harness currently repeats global assertions or because their source begins
+later in a combined workspace position space.
 
 ## Acceptance
 
 1. A two-aggregate workspace maps structural shape `SharedPayload`, but only Aggregate A can reach
-   it. Adding a defaulted optional field changes A's shape/codec/harness output and the
-   service-level conformance inventory; every generated Aggregate B file is byte-identical.
-2. A shared shape reachable from both aggregates still produces coverage in both relevant
-   aggregate harnesses, and deleting either aggregate's fixture/binding evidence fails check
-   before scaffold writes.
+   it through a command field, private-event field, or register. Adding a defaulted optional field
+   changes the shape, A's use-specific codec/harness output, and the service-level conformance
+   inventory; every generated Aggregate B file is byte-identical.
+2. A shared shape reachable from both aggregates still produces use-specific evidence in both
+   relevant aggregate harnesses. Its declaration-wide binding, canonical-identity, fixture-label,
+   branch-coverage, opaque-boundary, and projection-witness laws execute once at service scope;
+   removing mandatory declaration evidence fails check before scaffold writes.
 3. Adding a comment, blank line, unrelated declaration, or optional field in an earlier workspace
    member leaves every semantically unchanged later behavior contract and witness byte-identical.
 4. Behavior diagnostics still report the current file, line, and column after source movement,
    and a stale or unresolvable semantic anchor fails with a stable diagnostic rather than silently
    pointing at the old line.
-5. `keiro-dsl diff` and scaffold impact output name only aggregates/read models in the changed
-   type's semantic reachability closure, while separately naming service-conformance impact.
-6. The generated whole-service conformance package continues to prove every mapped structural
-   type exactly once or through an explicitly deduplicated shared assertion; no fixture, codec,
-   replay, snapshot, or projection evidence is lost.
+5. `keiro-dsl diff` and scaffold impact output name only aggregates in the changed type's checked
+   semantic reachability closure, while separately naming service-conformance impact and keeping
+   unsupported root kinds explicit.
+6. The generated whole-service conformance package executes every declaration-owned law exactly
+   once, while each aggregate retains every codec, wire-policy, replay, snapshot, and generated
+   projection assertion tied to its own checked uses. No fixture or use-specific evidence is lost.
 7. A regression modeled on
    `mori://shinzui/mori/plans/181-add-dependency-version-constraints-and-upstream-pointers`
    adds the three optional payload fields and proves that only Project, ProjectArtifact, the three
-   shapes, and service-level conformance change.
+   shapes, the context source map, and service-level conformance change.
 8. Repeated single-spec and workspace scaffolds are byte-stable, the complete Keiro DSL and
    generated-conformance suites pass, and release notes identify the reduced-diff behavior for
    downstream consumers.
@@ -144,12 +173,15 @@ smaller diffs.
 
 The request does not remove source locations from diagnostics, weaken aggregate or service
 conformance, or make structural coverage optional. It also does not require a general incremental
-build system: correct semantic dependency closure and stable checked-in artifacts are the target.
+build system or invent mapped roots for queue, public-contract, read-model, or projection surfaces:
+correct dependency closure over the checked language and stable checked-in artifacts are the
+target. Adding any future root kind must extend the exhaustive semantic-impact fold before the
+toolchain compiles.
 
 ## Requested Deliverables
 
-- One checked per-aggregate mapped-type reachability model shared by harness generation and impact
-  classification.
+- One checked per-aggregate mapped-type reachability model and service declaration inventory,
+  shared by harness generation and impact classification.
 - A deduplicated service-level structural conformance inventory.
 - Stable behavior requirement anchors with current-location resolution for diagnostics.
 - Workspace fixtures proving byte-local regeneration and restoring mutations proving coverage was

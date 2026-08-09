@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-09
+* **Review**: Correct IR-21 technical scope to current command, private-event, and register roots
+  and separate service-owned declaration laws from aggregate-use evidence.
 * **Addition**: IR-21 requests semantically local workspace regeneration and stable behavior
   source anchors so a mapped-shape change rewrites only reachable aggregate outputs while
   whole-service conformance and current source-located diagnostics remain complete.

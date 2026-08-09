@@ -1,0 +1,83 @@
+language keiro-dsl 4
+context semantic-impact
+
+mapped structural record NestedPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=NestedPayload
+  binding = "Example.Semantic.Bindings.nestedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.NestedPayload.v1"
+  fixtures = "Example.Semantic.Bindings.nestedPayloadCases"
+  wire object constructor=NestedPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural record CommandPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=CommandPayload
+  binding = "Example.Semantic.Bindings.commandPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.CommandPayload.v1"
+  fixtures = "Example.Semantic.Bindings.commandPayloadCases"
+  wire object constructor=CommandPayload unknown-fields=reject {
+    nested as "nested" : NestedPayload required
+  }
+}
+
+mapped structural record EventPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=EventPayload
+  binding = "Example.Semantic.Bindings.eventPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.EventPayload.v1"
+  fixtures = "Example.Semantic.Bindings.eventPayloadCases"
+  wire object constructor=EventPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural record RegisterPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=RegisterPayload
+  binding = "Example.Semantic.Bindings.registerPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.RegisterPayload.v1"
+  fixtures = "Example.Semantic.Bindings.registerPayloadCases"
+  initial = "Example.Semantic.Bindings.initialRegisterPayload"
+  wire object constructor=RegisterPayload unknown-fields=reject {
+    enabled as "enabled" : Bool required
+  }
+}
+
+mapped structural record SharedPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=SharedPayload
+  binding = "Example.Semantic.Bindings.sharedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.SharedPayload.v1"
+  fixtures = "Example.Semantic.Bindings.sharedPayloadCases"
+  initial = "Example.Semantic.Bindings.initialSharedPayload"
+  wire object constructor=SharedPayload unknown-fields=reject {
+    count as "count" : Int required
+  }
+}
+
+mapped structural enum UnusedPayload {
+  haskell package=semantic-domain module=Example.Semantic.Domain type=UnusedPayload
+  binding = "Example.Semantic.Bindings.unusedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic.UnusedPayload.v1"
+  fixtures = "Example.Semantic.Bindings.unusedPayloadCases"
+  wire string {
+    Unused as "unused"
+  }
+}
+
+aggregate Alpha
+  regs
+    current RegisterPayload = initial
+  states Ready!
+
+  command Submit { commandPayload:CommandPayload sharedPayload:SharedPayload }
+  event Submitted { eventPayload:EventPayload }
+
+aggregate Beta
+  regs
+    shared SharedPayload = initial
+  states Ready!

@@ -35,12 +35,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: revise IR-21 to distinguish declaration-owned evidence from aggregate-use
-  evidence and to state the current command/event/register root boundary honestly.
-- [ ] Milestone 2: add the checked `Keiro.Dsl.SemanticImpact` model and deterministic projections.
-- [ ] Milestone 3: prove direct, nested, shared, unused, and future-root behavior with focused tests.
-- [ ] Milestone 4: audit existing mapped-closure consumers, publish the architecture decision, and
-  pass the package and documentation gates without changing generated output.
+- [x] (2026-08-09 21:37Z) Milestone 1: revised IR-21 to distinguish declaration-owned evidence
+  from aggregate-use evidence and to state the current command/event/register root boundary
+  honestly.
+- [x] (2026-08-09 21:43Z) Milestone 2: added the checked `Keiro.Dsl.SemanticImpact` model and
+  deterministic projections.
+- [x] (2026-08-09 21:43Z) Milestone 3: proved direct, nested, shared, unused, deterministic-order,
+  and future-root behavior with four focused tests.
+- [ ] Milestone 4: audited existing mapped-closure consumers and amended ADR 0012; remaining work
+  is to pass the complete package, documentation, ADR, and corpus gates without changing generated
+  output.
 
 
 ## Surprises & Discoveries
@@ -48,7 +52,18 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- `Keiro.Dsl.Grammar` already exports an expression-path constructor named `RegisterRoot`, so the
+  initially planned root-kind spelling made an unqualified import ambiguous. The focused build
+  failed at `test/Main.hs` before any test ran. The impact API now prefixes every root-kind
+  constructor with `Mapped` to keep unqualified public imports usable.
+- The repository's current ADR recipe is `just adr-validate`, not the stale `just check-adr`
+  command copied into this plan. Whole-project improvement-request validation also reports twelve
+  pre-existing `status: implemented` values that the current profile rejects; IR-21 itself passes
+  strict profile validation in isolation, and none of the twelve diagnostics names it.
+- `scripts/check-conformance-corpus.sh` refuses any untracked file beneath
+  `keiro-dsl/test/fixtures` before scaffolding. Its first run stopped on the new
+  `semantic-impact.keiro` fixture without touching the generated corpus. The fixture must be
+  committed as a working checkpoint before the byte-clean corpus gate can run.
 
 
 ## Decision Log
@@ -71,6 +86,26 @@ Record every decision made while working on the plan.
   Rationale: Those are the only mapped `TypeExpr` roots represented by the checked graph. Snapshot
   impact follows register use; queue, public contract, read-model, and projection roots require
   future language work rather than guessed edges.
+  Date: 2026-08-09
+
+- Decision: Name the public root-kind constructors `MappedCommandFieldRoot`,
+  `MappedEventFieldRoot`, and `MappedRegisterRoot`.
+  Rationale: `Keiro.Dsl.Grammar.RegisterRoot` already identifies an expression path root. Prefixing
+  the complete new vocabulary avoids ambiguous unqualified imports and makes its mapped-type scope
+  explicit.
+  Date: 2026-08-09
+
+- Decision: EP-2 will migrate aggregate harness inventory, aggregate projection selection, and
+  `codecMappedDeclarations` to `SemanticImpact`; EP-5 will use the same model for scaffold and diff
+  impact reporting. `MappedDiff`, `Coverage`, and `ExplainBindings` retain `usePaths` because they
+  require field/arm path detail and compatibility or evidence classifications rather than only a
+  consumer closure. `MappedConsumer.consumerPlan`, validation, fingerprints, and golden synthesis
+  retain direct declaration lookup because they consume the service inventory or one resolved
+  declaration, not aggregate impact.
+  Rationale: The source audit found only `Harness.hs` and `Scaffold.hs` reconstructing aggregate or
+  globally amplified generation selection. Replacing path-sensitive compatibility logic with a
+  set closure would discard information, while wrapping ordinary checked lookups would add no
+  semantic authority.
   Date: 2026-08-09
 
 
@@ -241,9 +276,9 @@ newtype MappedConsumer = AggregateConsumer Name
   deriving stock (Eq, Ord, Show)
 
 data MappedRootKind
-  = CommandFieldRoot
-  | EventFieldRoot
-  | RegisterRoot
+  = MappedCommandFieldRoot
+  | MappedEventFieldRoot
+  | MappedRegisterRoot
   deriving stock (Eq, Ord, Show)
 
 data MappedRoot = MappedRoot

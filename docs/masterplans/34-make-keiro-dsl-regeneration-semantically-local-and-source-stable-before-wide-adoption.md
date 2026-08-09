@@ -132,7 +132,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | Not Started |
+| 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | In Progress |
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Not Started |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Not Started |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Not Started |
@@ -216,8 +216,8 @@ MasterPlan 35's complete mapped-consumer qualification.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: correct IR-21's scope and define exhaustive semantic consumer/root identities.
-- [ ] EP-1: derive deterministic per-aggregate closures and service inventory with focused tests.
+- [x] EP-1: correct IR-21's scope and define exhaustive semantic consumer/root identities.
+- [x] EP-1: derive deterministic per-aggregate closures and service inventory with focused tests.
 - [ ] EP-2: emit declaration-wide structural conformance once at the context boundary.
 - [ ] EP-2: localize aggregate harnesses without losing use-specific codec/replay evidence.
 - [ ] EP-3: retain exact transition and state spans through a source-aware parsed wrapper.

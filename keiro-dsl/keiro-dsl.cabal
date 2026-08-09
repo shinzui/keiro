@@ -88,6 +88,7 @@ library
     Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.SemanticContract
+    Keiro.Dsl.SemanticImpact
     Keiro.Dsl.ServiceHarness
     Keiro.Dsl.SidecarMigration
     Keiro.Dsl.SidecarNames
