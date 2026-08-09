@@ -53,8 +53,11 @@ Subsequent semantic no-ops and unrelated source movement are the stability contr
 Out of scope are a new DSL grammar feature, a new released language version, a lossless syntax
 tree, incremental compilation, changes to Keiki runtime semantics, event/public wire formats,
 persisted streams, fold fingerprints, snapshot discriminators, behavior-key bytes, dependency
-bounds, package publication, and fleet rewrite automation from IR-5. Wide adoption is blocked
-until EP-6 passes; this MasterPlan does not itself migrate any service.
+bounds, package publication, and fleet rewrite automation from IR-5. Mapped queue, read-model query,
+and projection consumer types are owned by the adoption-blocking follow-up
+[MasterPlan 35](35-make-mapped-types-first-class-across-queues-read-models-and-projections-before-fleet-adoption.md).
+Wide adoption is blocked until both MasterPlans pass their final gates; neither plan itself
+migrates a service.
 
 The planning estimate is 16–24 engineer-days for one experienced Keiro maintainer: EP-1 2–3,
 EP-2 4–6, EP-3 3–5, EP-4 3–4, EP-5 2–3, and EP-6 2–3. The semantic-impact and source-provenance
@@ -161,7 +164,9 @@ workspace ledgers; it must not infer a removed consumer from missing historical 
 EP-6 hard-depends on EP-2, EP-4, and EP-5. It owns the two-aggregate minimized fixture, restoring
 mutations, single/workspace byte comparisons, the Mori Plan 181 replay, corpus regeneration,
 documentation, and the adoption gate. The critical paths are EP-1 -> EP-2 -> EP-6 and EP-3 -> EP-4
--> EP-6, with EP-5 joining before qualification.
+-> EP-6, with EP-5 joining before qualification. EP-6 closes MP-34's locality gate; MP-35 remains
+the hard follow-up that extends the landed authority to mapped queue, query, and projection
+consumers before fleet adoption.
 
 
 ## Integration Points
@@ -201,8 +206,9 @@ they never imply no impact.
 **Generated corpus and adoption gate (EP-6 owns).** EP-6 alone runs the full 41-invocation corpus
 regeneration after all templates settle, preventing repeated high-churn fixture updates. It pins
 wire/fold/snapshot/behavior-key neutrality, exact evidence counts, mutation failures, and the Mori
-reproducer's allowed file set. No service rollout or release publication is part of this plan, but
-the MasterPlan cannot complete until this gate is green.
+reproducer's allowed file set. No service rollout or release publication is part of this plan. The
+MasterPlan cannot complete until this gate is green, and fleet adoption additionally requires
+MasterPlan 35's complete mapped-consumer qualification.
 
 
 ## Progress
@@ -276,6 +282,13 @@ plan.
   it should not spend the same fixture churn after every intermediate template change.
   Date: 2026-08-09
 
+- Decision: Keep typed queue, read-model query, and projection consumers in a separate hard
+  follow-up MasterPlan while requiring both gates before adoption.
+  Rationale: This plan stabilizes the existing semantic graph. The follow-up changes candidate
+  syntax, generated query APIs, and persisted queue compatibility, which need independent design
+  and evidence without weakening the shared locality prerequisite.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -285,3 +298,9 @@ distill durable project context from this MasterPlan and its child ExecPlans int
 docs/adr/. Keep task-local execution and coordination details here.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-08-09: Linked MasterPlan 35 as the separate mapped-consumer language follow-up and clarified
+  that MP-34 completion is necessary but not sufficient for fleet adoption.
