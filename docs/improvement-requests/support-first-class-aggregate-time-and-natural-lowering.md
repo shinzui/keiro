@@ -6,8 +6,9 @@ description: >-
   types, and make keiro-dsl check reject every type the selected scaffold cannot lower.
 timestamp: 2026-07-31T13:41:01Z
 requestId: IR-4
-status: proposed
+status: implemented
 origin: mori://shinzui/mori
+plan: docs/plans/157-unify-aggregate-type-capabilities-and-lower-time-and-natural.md
 reviews:
   - kind: model
     reviewer: codex
@@ -29,8 +30,11 @@ reviews:
 
 ## Status
 
-**Proposed, technically validated.** This blocks Mori MasterPlan 22 from scaffolding its Project
-and ProjectArtifact aggregates without weakening timestamps to `Text` and revision numbers to
+**Implemented.** [Plan 157](../plans/157-unify-aggregate-type-capabilities-and-lower-time-and-natural.md)
+delivered one resolved aggregate-type capability model and direct `Time`/`Natural` checking,
+lowering, codecs, snapshots, harness samples, replay, symbolic validation, and conformance against
+the published Keiki 0.5.0.0 line. Its full build, test, flake, mutation, and documentation evidence
+is complete. Mori can model timestamps and revision numbers without weakening them to `Text` or
 `Int`.
 
 

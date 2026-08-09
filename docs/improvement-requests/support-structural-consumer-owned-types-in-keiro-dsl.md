@@ -6,8 +6,9 @@ description: >-
   structural wire contracts without lossy surrogates or duplicate business models.
 timestamp: 2026-07-28T16:54:33Z
 requestId: IR-1
-status: proposed
+status: implemented
 origin: mori://shinzui/mori
+plan: docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,13 +28,20 @@ reviews:
 
 ## Status
 
-**Proposed, revised after architecture review.** Mori EP-171 requests a generic Keiro DSL
-capability. The request is owned and implemented by `shinzui/keiro`; Mori supplies a downstream
-compatibility probe after the capability exists. No external-decider or event-mirror mode is
-requested.
+**Implemented.** [MasterPlan 25](../masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md)
+and its completed child plans delivered the resolved structural/opaque type graph, total bindings,
+generated codecs, conformance harness, usage-aware diffing, binding ergonomics, and documentation.
+Keiro/keiro-core/keiro-dsl 0.4.0.1 and Keiki 0.4.0.0 supplied the first authoritative published
+line with matching upstream tags.
 
-The review found that consumer-owned values are compatible with Keiki when they are copied,
-stored, and emitted as whole values. The blocking design issue was codec ownership: a Keiro
+Mori's historical
+`mori://shinzui/mori/plans/171-extend-keiro-dsl-for-structural-mori-domain-contracts` was cancelled
+because the generic prerequisite had already shipped; its downstream adoption proof moved to
+`mori://shinzui/mori/plans/172-replace-the-project-mirror-with-functional-event-sourced-aggregates`.
+No external-decider or event-mirror mode was added.
+
+The architecture review found that consumer-owned values are compatible with Keiki when they are
+copied, stored, and emitted as whole values. The blocking design issue was codec ownership: a Keiro
 declaration cannot truthfully claim structural control while delegating the same structure to an
 arbitrary consumer `ToJSON` or `FromJSON` instance. This revision separates structurally checked
 bindings from deliberately opaque external codecs.
@@ -45,8 +53,10 @@ so that extra layer never reports confidence about a wire shape the runtime does
 [guarantee ledger](../guides/dsl-guarantees-and-hand-written-services.md) states the boundary in
 adopter-facing terms.
 
-The originating Mori EP-171 still contains the earlier passthrough-codec assumptions and must be
-aligned with this revised contract before implementation or downstream cutover work begins.
+The originating Mori EP-171 retained the earlier passthrough-codec assumptions as historical
+context, then was cancelled after verifying the released contract. Its remaining downstream
+cutover obligations were transferred to
+`mori://shinzui/mori/plans/172-replace-the-project-mirror-with-functional-event-sourced-aggregates`.
 
 
 ## Context

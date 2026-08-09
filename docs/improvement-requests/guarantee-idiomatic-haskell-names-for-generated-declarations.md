@@ -6,8 +6,9 @@ description: >-
   value names, independently of DSL, wire, registry, schema, and table spellings.
 timestamp: 2026-08-04T04:14:15Z
 requestId: IR-16
-status: proposed
+status: implemented
 origin: mori://shinzui/mori
+plan: docs/plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md
 reviews:
   - kind: model
     reviewer: codex
@@ -28,7 +29,11 @@ reviews:
 
 ## Status
 
-Proposed as a code-generation correctness and source-quality invariant.
+**Implemented.** [Plan 190](../plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md)
+delivered one checked naming plan, pre-write normalization/collision diagnostics, idiomatic
+generated declarations, explicit and recoverable scaffold-tree migration, source-only diff impact,
+rewritten conformance fixtures, and authoring/upgrade documentation. Its complete package,
+conformance, policy, ADR, and repository validation passed.
 
 ## Context
 

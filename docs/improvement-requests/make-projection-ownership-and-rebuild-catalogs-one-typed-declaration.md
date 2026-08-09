@@ -7,9 +7,9 @@ description: >-
   inventory wiring while rejecting structural drift before startup.
 timestamp: 2026-08-08T00:19:11Z
 requestId: IR-20
-status: accepted
+status: implemented
 origin: mori://shinzui/keiro
-targetPlan: mori://shinzui/keiro/masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds
+plan: docs/masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md
 reviews:
   - kind: model
     reviewer: codex
@@ -34,11 +34,17 @@ reviews:
 
 ## Status
 
-Validated and planned for implementation through
-[MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md),
-with Keiro runtime design and implementation first. `keiro-dsl` generation, evolution
-classification, example adoption, and operator integration follow only after the runtime contract
-is proven. Application schemas and migrations remain consumer-owned.
+**Implemented.** [MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md)
+and all five child plans delivered the validated runtime catalog, group fencing/preparation,
+fixed-head resumable replay, candidate Language 5 generation and evolution classification,
+operator integration, examples, and migration guidance. Application schemas and migrations remain
+consumer-owned.
+
+The follow-up
+`mori://shinzui/keiro/masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release`
+extends the catalog with a newly discovered missing-checkpoint lifecycle choice and replaces one
+private reset statement. It does not invalidate IR-20's completed typed-ownership and coordinated
+rebuild acceptance, so IR-20 remains implemented while that pre-release improvement is open.
 
 Kiroku companion request
 `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-1` asks the event store to expose its
@@ -50,9 +56,10 @@ only after a verified release exists.
 The runtime initiative supersedes the unimplemented repository-local
 [inline-rebuild plan](../plans/162-rebuild-inline-projections-deterministically-from-event-history.md)
 by carrying its fencing, fixed replay range, progress, resume, and decode-failure requirements into
-the broader catalog contract. It also replaces only the application-supplied rebuild-map portion of
-[the pending keiro-ops embedding plan](../plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md);
-that plan retains ownership of the command tree and other code-dependent operations.
+the broader catalog contract. The completed
+[keiro-ops embedding plan](../plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md)
+retains ownership of the command tree and other code-dependent operations while mounting the
+catalog-backed rebuild adapter delivered here.
 
 ## Context
 
