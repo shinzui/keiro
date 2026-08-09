@@ -15,6 +15,7 @@ import Data.Text qualified as T
 import Generated.StructuralConformance.ArtifactCatalog.Codec (decodeArtifactInfoMapped, decodeArtifactKindMapped, decodeArtifactLocationMapped, encodeArtifactCatalogEvent, encodeArtifactInfoMapped)
 import Generated.StructuralConformance.ArtifactCatalog.Domain (ArtifactCatalogCommand, ArtifactCatalogEvent (..), ArtifactCatalogRegs, ArtifactRecordedData (..), inCtorObserveArtifact)
 import Generated.StructuralConformance.ArtifactCatalog.Harness (harnessAssertions)
+import Generated.StructuralConformance.StructuralConformance (structuralConformanceAssertions)
 import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
 import Keiki.Core (HsPred, inpProj, (./=))
 import Keiki.Symbolic (symIsBot)
@@ -24,7 +25,12 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
     goldenAssertions <- loadGoldenAssertions
-    let assertions = harnessAssertions <> projectionAssertions <> decodeDiagnosticAssertions <> goldenAssertions
+    let assertions =
+            [("structural/" <> label, passed) | (label, passed) <- structuralConformanceAssertions]
+                <> harnessAssertions
+                <> projectionAssertions
+                <> decodeDiagnosticAssertions
+                <> goldenAssertions
     forM_ assertions $ \(label, ok) ->
         putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
     let failed = [label | (label, ok) <- assertions, not ok]

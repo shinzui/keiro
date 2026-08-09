@@ -21,6 +21,7 @@ other-modules:
     Generated.StructuralConformance.Structural.Shape.ArtifactKind
     Generated.StructuralConformance.Structural.Shape.ArtifactLocation
     Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+    Generated.StructuralConformance.StructuralConformance
     Generated.StructuralConformance.StructuralProjections
     StructuralConformance.ArtifactCatalog.BehaviorHoles
     StructuralConformance.ArtifactCatalog.Holes

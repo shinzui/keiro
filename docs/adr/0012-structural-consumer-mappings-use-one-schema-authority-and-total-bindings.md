@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-09T21:43:12Z
+timestamp: 2026-08-09T22:25:17Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -180,6 +180,15 @@ an intentionally unused declaration. Aggregate harnesses own only codec, wire-po
 snapshot, and generated projection evidence tied to their checked uses. Service conformance is
 therefore not represented as an aggregate consumer, which prevents one declaration change from
 making every aggregate appear impacted.
+
+Generation realizes that boundary as one replaceable context module named
+`StructuralConformance`, emitted whenever the checked service inventory is non-empty and recorded
+with context-level workspace provenance. The module exports the declaration-law assertion list;
+each aggregate harness plans consumer fixture and initial imports only from its
+`aggregateMappedClosure`. The runtime-owned service facade imports the context module once and
+prefixes its results with `structural/`. This execution wiring does not turn the service into an
+aggregate consumer and does not make module emission conditional on the optional runnable
+conformance package.
 
 The current root vocabulary does not include mapped queue payloads, public contracts, read-model
 query schemas, or aggregate-owned projections. Snapshot impact follows register use because the

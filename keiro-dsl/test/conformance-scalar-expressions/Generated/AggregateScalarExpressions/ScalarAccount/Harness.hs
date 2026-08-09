@@ -5,25 +5,19 @@ module Generated.AggregateScalarExpressions.ScalarAccount.Harness (harnessAssert
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec, encodeLimitsMapped, decodeLimitsMapped)
 import Generated.AggregateScalarExpressions.ScalarAccount.Transducer (scalarAccountTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Generated.AggregateScalarExpressions.Nominals (AccountMode (..), RequestId, parseRequestId)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Either (isLeft)
-import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiki.Shape (CanonicalTypeName (..))
-import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
-import Generated.AggregateScalarExpressions.StructuralProjections qualified as StructuralProjections
+import Keiro.Codec.Structural (FixtureCases (..))
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
-import Generated.AggregateScalarExpressions.Structural.Shape.Limits qualified as ShapeLimits
 import ScalarExpressions.Bindings qualified as Bindings
-import ScalarExpressions.Domain (Limits)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -94,34 +88,9 @@ forwardReplayAdjust =
 mappedConformanceAssertions :: [(String, Bool)]
 mappedConformanceAssertions =
   concat
-    [ limitsBindingAssertions
-    , [("fixture coverage: scalar-expressions.Limits.v1", coverageLimits)]
-    , adjustedLimitsAssertions
+    [ adjustedLimitsAssertions
     , structuralWirePolicyAssertions
-    , structuralProjectionAssertions
     ]
-
-validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
-validFixtureLabels cases =
-  all (not . T.null) labels && length labels == length (nub labels)
-  where
-    labels = map fst (NonEmpty.toList cases)
-
-limitsBindingAssertions :: [(String, Bool)]
-limitsBindingAssertions =
-  ("fixture labels: scalar-expressions.Limits.v1", validFixtureLabels cases) :
-  ("canonical identity: scalar-expressions.Limits.v1", canonicalTypeName (Proxy @Limits) == "scalar-expressions.Limits.v1") :
-  concat
-    [ [ ("binding domain round-trip: scalar-expressions.Limits.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.limitsBinding value)
-      , ("binding shape round-trip: scalar-expressions.Limits.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.limitsBinding (bindingToShape Bindings.limitsBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.limitsCases
-
-coverageLimits :: Bool
-coverageLimits = True
 
 adjustedLimitsAssertions :: [(String, Bool)]
 adjustedLimitsAssertions =
@@ -132,12 +101,6 @@ adjustedLimitsAssertions =
 structuralWirePolicyAssertions :: [(String, Bool)]
 structuralWirePolicyAssertions =
   [ ("wire policy unknown fields: scalar-expressions.Limits.v1", all (\(_, value) -> isLeft (decodeLimitsMapped (insertObjectField "__keiro_unknown" (Aeson.Bool True) (encodeLimitsMapped value)))) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
-  ]
-
-structuralProjectionAssertions :: [(String, Bool)]
-structuralProjectionAssertions =
-  [ ("projection witness agreement: scalar-expressions.Limits.v1/ceiling", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsCeilingWitness (\referenceOwner -> ShapeLimits.ceiling (bindingToShape Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
-  , ("projection witness agreement: scalar-expressions.Limits.v1/minimum", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsMinimumWitness (\referenceOwner -> ShapeLimits.minimum (bindingToShape Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
   ]
 
 insertObjectField :: T.Text -> Aeson.Value -> Aeson.Value -> Aeson.Value

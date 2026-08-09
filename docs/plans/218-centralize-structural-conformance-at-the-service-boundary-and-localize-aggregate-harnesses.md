@@ -35,13 +35,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: generate one context-level structural-conformance module from EP-1's service
+- [x] Milestone 1: generate one context-level structural-conformance module from EP-1's service
   inventory and integrate it into scaffold planning and build manifests.
-- [ ] Milestone 2: make aggregate harness imports and declaration helpers follow only the checked
+- [x] Milestone 2: make aggregate harness imports and declaration helpers follow only the checked
   aggregate closure while retaining use-specific codec/replay evidence.
-- [ ] Milestone 3: run service structural checks exactly once through the runtime-owned facade and
+- [x] Milestone 3: run service structural checks exactly once through the runtime-owned facade and
   update compiled conformance fixtures and restoring mutations.
-- [ ] Milestone 4: publish the ownership boundary in ADRs and user guidance and pass focused/full
+- [x] Milestone 4: publish the ownership boundary in ADRs and user guidance and pass focused/full
   validation without performing the final whole-corpus refresh.
 
 
@@ -50,7 +50,24 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The original EP-1 semantic-impact fixture intentionally omits complete transition surfaces, so
+  it is valid evidence for checked graph projections but cannot pass the scaffold lowering gate.
+  A dedicated, complete two-aggregate workspace fixture now exercises generated-tree locality.
+
+- The existing structural mutation suite did not need new mutations. After regeneration, its
+  binding transpose, wrong union binding, and missing union fixture fail under the new
+  `structural/` context prefix, while event omission continues to fail in the aggregate harness.
+  The script's existing trap restores the baseline after every path.
+
+- Adding the context module makes every mapped corpus target's generated-module inventory grow by
+  one before the final corpus refresh. `ConformanceBaseline` temporarily excludes only
+  `StructuralConformance.hs` from the legacy inventory comparison; Plan 222 removes that
+  transition after it performs the policy-selected corpus regeneration.
+
+- The structural fixture proves the full binding and opaque surface, while the scalar-expression
+  fixture caught a distinct generated-import requirement for structural-only declarations. Both
+  focused trees were regenerated here so the new context renderer is compiled across those two
+  representative shapes without refreshing unrelated corpus targets.
 
 
 ## Decision Log
@@ -76,6 +93,18 @@ Record every decision made while working on the plan.
   evidence exists.
   Date: 2026-08-09
 
+- Decision: Reserve `StructuralConformance` as the deterministic facade import alias and allocate
+  a suffixed alias if an aggregate has the same generated occurrence.
+  Rationale: The service-owned gate must be imported exactly once without reintroducing an
+  import-order or node-name collision.
+  Date: 2026-08-09
+
+- Decision: Normalize only the new context module out of the legacy corpus inventory assertion
+  until Plan 222 performs the single coordinated corpus refresh.
+  Rationale: This plan must compile focused generated evidence without creating the repeated
+  whole-corpus churn that the MasterPlan assigns exclusively to its final qualification plan.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -84,7 +113,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-09. `Keiro.Dsl.StructuralConformance` now renders one context-level module
+from the checked service inventory. It owns binding shape/domain laws, canonical identity,
+fixture-label and branch coverage, opaque codec fixtures, and structural projection witness
+agreement. Aggregate harnesses consume only `aggregateMappedClosure` and retain their local event
+codec/wire-policy, register replay, and expression evidence. The service facade imports and runs
+the context assertions once under `structural/`, outside the review-owned facts baseline.
+
+The two-aggregate locality fixture proves an Alpha-only optional-field edit changes the context
+module and Alpha artifacts while every Beta artifact remains byte-identical. The public CLI
+no-write regression rejects a missing fixture before creating output. The existing structural
+mutation suite still turns red for all four mutations and restores its baseline. Repeating both
+focused scaffold invocations produced an identical Git diff hash.
+
+Validation passed with `cabal build all`, the full `keiro-dsl:tests` target (623 examples, zero
+failures), the compiled structural and scalar-expression conformance targets, the restoring
+structural mutation script, generated extension/name policy checks, strict ADR validation, and
+`git diff --check`. The deliberate gap is the complete policy-selected 35-invocation generated
+corpus refresh; Plan 222 owns that one-time migration and removal of the temporary inventory
+normalization.
 
 
 ## Context and Orientation
@@ -165,8 +212,8 @@ when an A-only structural field changes.
 Milestone 4 updates ADR 0012 and ADR 0020, or creates one focused successor ADR, with the durable
 declaration-versus-use ownership rule. Update the typed-spec guide and changelog with the one-time
 regeneration and the requirement to run service structural checks. Refresh only focused fixtures
-owned by this plan; EP-6 owns the final 41-invocation corpus regeneration after every emitter has
-settled. Run generated-name, extension, warning, and full package tests.
+owned by this plan; EP-6 owns the final live policy-selected 35-invocation corpus regeneration
+after every emitter has settled. Run generated-name, extension, warning, and full package tests.
 
 
 ## Concrete Steps
@@ -202,7 +249,7 @@ cabal build all
 cabal test keiro-dsl:tests
 scripts/check-extension-policy.sh
 scripts/check-generated-name-policy.sh
-just check-adr
+just adr-validate
 git diff --check
 git status --short
 ```

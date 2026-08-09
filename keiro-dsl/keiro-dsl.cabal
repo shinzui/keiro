@@ -94,6 +94,7 @@ library
     Keiro.Dsl.SidecarNames
     Keiro.Dsl.Skeleton
     Keiro.Dsl.Source
+    Keiro.Dsl.StructuralConformance
     Keiro.Dsl.Syntax
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
@@ -305,6 +306,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     Generated.AggregateScalarExpressions.ScalarAccount.Projection
     Generated.AggregateScalarExpressions.ScalarAccount.Transducer
     Generated.AggregateScalarExpressions.Structural.Shape.Limits
+    Generated.AggregateScalarExpressions.StructuralConformance
     Generated.AggregateScalarExpressions.StructuralProjections
     ScalarExpressions.Bindings
     ScalarExpressions.Domain
@@ -445,6 +447,7 @@ test-suite keiro-dsl-conformance-structural
     Generated.StructuralConformance.Structural.Shape.ArtifactKind
     Generated.StructuralConformance.Structural.Shape.ArtifactLocation
     Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+    Generated.StructuralConformance.StructuralConformance
     Generated.StructuralConformance.StructuralProjections
     StructuralConformance.ArtifactCatalog.Holes
 

@@ -12,9 +12,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   command-field, private-event-field, and register roots to aggregate declaration closures and the
   complete service declaration inventory. Future mapped root constructors must extend its
   exhaustive `UseSite` fold before the package compiles.
+- Exposes `Keiro.Dsl.StructuralConformance` and emits one context module for declaration-wide
+  mapped binding, fixture, opaque-boundary, coverage, and projection-witness checks. The generated
+  service facade runs that list once under `structural/`; aggregate harnesses retain codec,
+  wire-policy, snapshot/register, and replay evidence only for their checked mapped closure.
 
 ### Breaking Changes
 
+- Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
+  `Harness` into the context `StructuralConformance` module, which must be added to the consuming
+  Cabal module inventory. Unrelated aggregate files are now byte-stable when a declaration outside
+  their semantic closure changes.
 - Requires `kiroku-store >=0.4 && <0.5`, keeping generated conformance and
   runtime fixtures on the same Kiroku effect surface as Keiro 0.11.
 

@@ -21,6 +21,7 @@ other-modules:
     Generated.AggregateScalarExpressions.ScalarAccount.Projection
     Generated.AggregateScalarExpressions.ScalarAccount.Transducer
     Generated.AggregateScalarExpressions.Structural.Shape.Limits
+    Generated.AggregateScalarExpressions.StructuralConformance
     Generated.AggregateScalarExpressions.StructuralProjections
     ScalarExpressions.Bindings
 

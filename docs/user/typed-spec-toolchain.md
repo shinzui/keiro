@@ -88,6 +88,13 @@ machine-owned scaffold ledger. Copy the fragment's `default-language`,
 consuming Cabal component, fill the create-once modules, and run the generated
 harness in CI.
 
+When the service declares mapped types, scaffold also emits one context
+`StructuralConformance` module. It owns declaration-wide binding, canonical
+identity, fixture-label, branch-coverage, opaque-boundary, and projection-witness
+checks. Aggregate harnesses retain only evidence tied to their checked command,
+event, and register closure, so an unrelated aggregate does not acquire consumer
+imports or generated-byte churn from another aggregate's declaration change.
+
 The generated Haskell contract is GHC2024 with `OverloadedStrings` as its one
 shared default extension. Generated modules declare specialized extensions
 locally, and only when their emitted syntax needs them. Create-once hand-owned
@@ -482,9 +489,19 @@ cabal run -v0 keiro-dsl -- check service.keiro --explain-bindings
 ```
 
 The output names every required binding, fixture, and initial symbol with its
-owner. Generated harnesses check both structural binding directions, declared
-wire branches, fixture coverage, aggregate payload round trips, and replay
-agreement. Fixtures are finite evidence, not proof for all consumer values.
+owner. The generated context `StructuralConformance` module checks both binding
+directions, canonical identities, fixture labels and branch coverage, opaque
+boundaries, and structural projection witnesses once for the complete service
+inventory, including intentionally unused declarations. Aggregate harnesses
+check only use-specific payload round trips, generated codec wire policy,
+snapshot/register behavior, and forward/replay agreement for declarations in
+their checked semantic closure. Fixtures are finite evidence, not proof for all
+consumer values.
+
+This ownership split changes generated source layout once when adopting the
+release: regenerate the service output, add `StructuralConformance` from the
+Cabal fragment, and remove declaration-law expectations from aggregate-specific
+inventories. Do not hand-move assertions between generated files.
 
 ## Aggregate expressions
 
@@ -1506,7 +1523,8 @@ changes:
 cabal test keiro-demo-project-conformance
 ```
 
-The runner executes every aggregate and read-model self-check. Process, router,
+The runner executes the service structural checks once under the `structural/`
+prefix, followed by every aggregate and read-model self-check. Process, router,
 and workflow facts are compared by qualified key with the create-once
 `KeiroConformance.Expectations` module. Keiro populates that module only on the
 first scaffold. Later scaffolds never overwrite it, including under

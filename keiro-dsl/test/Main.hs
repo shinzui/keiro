@@ -6173,38 +6173,110 @@ main = hspec $ do
         it ("rejects " <> fixture <> " and directs the author to the scaffolded module") $
           expectGenericCompileFailure fixture diagnostic
 
-  describe "structural harness" $ do
-    it "emits every structural, wire-policy, projection, and replay assertion family" $ do
-      spec <- specOf "test/fixtures/consumer-types.keiro"
-      let aggregate = onlyAggregate spec
+  describe "structural conformance ownership" $ do
+    it "emits declaration laws once at context scope and keeps aggregate-use evidence local" $ do
+      service <- checkedServiceOf "test/fixtures/consumer-types.keiro"
+      let spec = checkedSpec service
           ctx = defaultContext (specContext spec)
-          harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx spec aggregate)
+          modules = scaffoldServiceModules ctx service
+          structural = generatedTextEndingIn "StructuralConformance.hs" modules
+          harness = generatedTextEndingIn "Harness.hs" modules
       mapM_
-        (\needle -> harness `shouldSatisfy` T.isInfixOf needle)
+        (\needle -> structural `shouldSatisfy` T.isInfixOf needle)
         [ "binding domain round-trip: example.artifact.ArtifactInfo.v1/",
           "binding shape round-trip: example.artifact.ArtifactInfo.v1/",
-          "mapped codec round-trip: ArtifactObserved/artifact/",
           "fixture coverage: example.artifact.ArtifactLocation.v1",
+          "canonical identity: example.artifact.ArtifactInfo.v1",
+          "projection witness agreement: example.artifact.ArtifactInfo.v1/key",
+          "opaque codec round-trip: vendor.geometry.json@3/"
+        ]
+      mapM_
+        (\needle -> harness `shouldSatisfy` T.isInfixOf needle)
+        [ "mapped codec round-trip: ArtifactObserved/artifact/",
           "wire policy missing default: example.artifact.ArtifactInfo.v1/description",
           "wire policy explicit null: example.artifact.ArtifactInfo.v1/description",
           "wire policy unknown fields: example.artifact.ArtifactInfo.v1",
           "wire union arm: example.artifact.ArtifactLocation.v1/local_file",
-          "canonical identity: example.artifact.ArtifactInfo.v1",
-          "projection witness agreement: example.artifact.ArtifactInfo.v1/key",
           "forward/replay equality: ObserveArtifact from CatalogEmpty -- ",
           "register currentArtifact"
         ]
-    it "keeps opaque assertions at the declared codec boundary" $ do
-      spec <- specOf "test/fixtures/consumer-types.keiro"
-      let aggregate = onlyAggregate spec
-          ctx = defaultContext (specContext spec)
-          modules = scaffoldAggregate ctx spec aggregate <> harnessFor ctx spec aggregate
+      harness `shouldNotSatisfy` T.isInfixOf "binding domain round-trip:"
+      harness `shouldNotSatisfy` T.isInfixOf "fixture coverage:"
+      harness `shouldNotSatisfy` T.isInfixOf "projection witness agreement:"
+      structural `shouldNotSatisfy` T.isInfixOf "mapped codec round-trip:"
+      structural `shouldNotSatisfy` T.isInfixOf "wire policy missing default:"
+    it "keeps opaque declaration checks at service scope without inventing structural wire policy" $ do
+      service <- checkedServiceOf "test/fixtures/consumer-types.keiro"
+      let spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          structural = generatedTextEndingIn "StructuralConformance.hs" modules
           harness = generatedTextEndingIn "Harness.hs" modules
           codec = generatedTextEndingIn "Codec.hs" modules
-      harness `shouldSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
-      harness `shouldNotSatisfy` T.isInfixOf "wire policy unknown fields: vendor.geometry.json"
-      harness `shouldNotSatisfy` T.isInfixOf "fixture coverage: vendor.geometry"
+      structural `shouldSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
+      harness `shouldNotSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
+      structural `shouldNotSatisfy` T.isInfixOf "wire policy unknown fields: vendor.geometry.json"
+      structural `shouldNotSatisfy` T.isInfixOf "fixture coverage: vendor.geometry"
       codec `shouldNotSatisfy` T.isInfixOf "encodeVendorGeometryShape"
+    it "keeps an opaque-only context self-contained" $ do
+      service <- checkedServiceOf "test/fixtures/consumer-types.keiro"
+      let spec = checkedSpec service
+          opaqueOnly =
+            service
+              { checkedSpec =
+                  spec
+                    { specMapped = [declaration | declaration@MappedOpaque {} <- specMapped spec],
+                      specNodes = []
+                    }
+              }
+          structural = generatedTextEndingIn "StructuralConformance.hs" (scaffoldServiceModules (defaultContext (specContext spec)) opaqueOnly)
+      structural `shouldSatisfy` T.isInfixOf "import Keiro.Codec.Structural (FixtureCases (..))"
+      structural `shouldSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
+      structural `shouldNotSatisfy` T.isInfixOf "bindingDomainRoundTrip"
+    it "imports the context structural gate once through the service facade" $ do
+      service <- checkedServiceOf "test/fixtures/consumer-types.keiro"
+      let ctx = defaultContext (specContext (checkedSpec service))
+      case serviceHarnessModule ctx service of
+        Left duplicates -> expectationFailure ("unexpected duplicate fact keys: " <> show duplicates)
+        Right facade -> do
+          T.count "import Generated.ConsumerDemo.StructuralConformance qualified as StructuralConformance" (moduleText facade) `shouldBe` 1
+          T.count "StructuralConformance.structuralConformanceAssertions" (moduleText facade) `shouldBe` 1
+          moduleText facade `shouldSatisfy` T.isInfixOf "\"structural/\" <> fact"
+          moduleText facade `shouldNotSatisfy` T.isInfixOf "structuralConformanceAssertions] |"
+    it "keeps every Beta artifact byte-identical when an Alpha-only mapped declaration changes" $ do
+      workspace <- shouldComposeWorkspace "test/fixtures/structural-locality.keiro-workspace"
+      let changedSpec = addAlphaPayloadOptionalField (wsMergedSpec workspace)
+          changedMember member = member {wmSpec = addAlphaPayloadOptionalField (wmSpec member)}
+          changedWorkspace = workspace {wsMembers = map changedMember (wsMembers workspace), wsMergedSpec = changedSpec}
+          ctx = workspaceContext workspace
+          plan value = planWorkspaceScaffold "goldens" ctx value
+          moduleBytes owner planValue =
+            Map.fromList
+              [ (modulePath moduleValue, (moduleText moduleValue, kind moduleValue, provenance))
+              | (moduleValue, provenance) <- wpModules planValue,
+                ("/" <> owner <> "/") `T.isInfixOf` T.pack (modulePath moduleValue)
+              ]
+          moduleWith suffix planValue = generatedTextEndingIn suffix (map fst (wpModules planValue))
+      baseline <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (plan workspace)
+      changed <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (plan changedWorkspace)
+      moduleBytes "Beta" changed `shouldBe` moduleBytes "Beta" baseline
+      moduleWith "Alpha/Harness.hs" changed `shouldNotBe` moduleWith "Alpha/Harness.hs" baseline
+      moduleWith "StructuralConformance.hs" changed `shouldNotBe` moduleWith "StructuralConformance.hs" baseline
+      let alphaHarness = moduleWith "Alpha/Harness.hs" changed
+          betaHarness = moduleWith "Beta/Harness.hs" changed
+          structural = moduleWith "StructuralConformance.hs" changed
+      alphaHarness `shouldSatisfy` T.isInfixOf "mapped codec round-trip: AlphaSubmitted/item/"
+      betaHarness `shouldNotSatisfy` T.isInfixOf "AlphaPayload"
+      T.count "binding domain round-trip: example.locality.AlphaPayload.v1/" structural `shouldBe` 1
+      alphaHarness `shouldNotSatisfy` T.isInfixOf "binding domain round-trip: example.locality.AlphaPayload.v1/"
+      betaHarness `shouldNotSatisfy` T.isInfixOf "binding domain round-trip: example.locality.AlphaPayload.v1/"
+      structural `shouldSatisfy` T.isInfixOf "fixture coverage: example.locality.UnusedPayload.v1"
+    it "refuses a missing fixture before the CLI writes any scaffold output" $
+      withTempDirectory "keiro-dsl-structural-no-write" $ \out -> do
+        baselineTree <- treeSnapshot out
+        (exitCode, _, standardError) <- runKeiroDsl ["scaffold", "test/fixtures/mapped-missing-fixture.keiro", "--out", out]
+        exitCode `shouldSatisfy` (/= ExitSuccess)
+        standardError `shouldContain` "missing fixtures ingredient"
+        treeSnapshot out `shouldReturn` baselineTree
 
   describe "generated Haskell language contract" $ do
     it "limits every representative generated module to the closed local extension set" $ do
@@ -8260,7 +8332,8 @@ main = hspec $ do
               -- else names the member that produced it.
               [wrmPath row | row <- wrModules record, wrmOwner row == Nothing]
                 `shouldSatisfy` \ownerless ->
-                  length ownerless == 4
+                  length ownerless == 5
+                    && any (T.isSuffixOf "StructuralConformance.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "StructuralProjections.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "Nominals.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "Nominals/Internal.hs" . T.pack) ownerless
@@ -9178,6 +9251,29 @@ addArtifactSummaryField declaration@MappedStructural {msName = "ArtifactInfo", m
           )
     }
 addArtifactSummaryField declaration = declaration
+
+addAlphaPayloadOptionalField :: Spec -> Spec
+addAlphaPayloadOptionalField spec = spec {specMapped = map addField (specMapped spec)}
+  where
+    addField declaration@MappedStructural {msName = "AlphaPayload", msShape = ShapeRecord constructor unknownFields fields} =
+      declaration
+        { msShape =
+            ShapeRecord
+              constructor
+              unknownFields
+              ( fields
+                  <> [ WireField
+                         { wfHaskell = "note",
+                           wfKey = "note",
+                           wfType = TOptional TText,
+                           wfPresence = POptional,
+                           wfOnMissing = Just OmNull,
+                           wfLoc = Loc 0
+                         }
+                     ]
+              )
+        }
+    addField declaration = declaration
 
 expectGenericCompileFailure :: FilePath -> String -> Expectation
 expectGenericCompileFailure fixture expectedDiagnostic = do

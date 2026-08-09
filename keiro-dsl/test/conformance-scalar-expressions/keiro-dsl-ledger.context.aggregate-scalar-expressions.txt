@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions structural conformance","path":"Generated/AggregateScalarExpressions/StructuralConformance.hs"}
 module-role {"family":"Limits","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural Limits (line 7)","path":"Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs"}
 module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions mapped structural facade","path":"Generated/AggregateScalarExpressions/StructuralProjections.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions generated nominal declarations","path":"Generated/AggregateScalarExpressions/Nominals.hs"}
@@ -20,6 +21,7 @@ module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Projection.hs"}
 module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"AggregateScalarExpressions/ScalarAccount/Holes.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Harness.hs"}
+generated Generated/AggregateScalarExpressions/StructuralConformance.hs
 generated Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs
 generated Generated/AggregateScalarExpressions/StructuralProjections.hs
 generated Generated/AggregateScalarExpressions/Nominals.hs

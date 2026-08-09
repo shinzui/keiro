@@ -53,6 +53,7 @@ import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticImpact (aggregateMappedClosure, semanticImpact)
 import Keiro.Dsl.TypeGraph
 
 -- | Emit the aggregate harness after selecting the service's effective
@@ -530,7 +531,7 @@ emitHarness goldens a =
     coreImports =
       ["applyEventsEither" | not (null replayTransitions)]
         ++ ["defaultValidationOptions", "step", "validateTransducer"]
-        ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a)) || not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
+        ++ ["fieldWitnessAgrees" | not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
         ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
     upcastAssertions =
       [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
@@ -1002,34 +1003,19 @@ mappedHarnessImports :: Agg -> [Text]
 mappedHarnessImports aggregate
   | null declarations = []
   | otherwise =
-      ["import Data.Aeson qualified as Aeson" | not (null opaque) || not (null structuralWire)]
+      ["import Data.Aeson qualified as Aeson" | not (null structuralWire)]
         ++ (if null structuralWire then [] else ["import Data.Aeson.Key qualified as AesonKey", "import Data.Aeson.KeyMap qualified as AesonKeyMap"])
         ++ [renderImport "Data.Either" eitherImports | not (null eitherImports)]
-        ++ ["import Data.List (nub)", "import Data.List.NonEmpty qualified as NonEmpty"]
-        ++ [renderImport "Data.Maybe" ["isJust", "isNothing"] | any shapeUsesMaybe structural]
-        ++ ["import Data.Proxy (Proxy (..))" | not (null structural)]
-        ++ ["import Data.Text qualified as T"]
-        ++ ["import Keiki.Shape (CanonicalTypeName (..))" | not (null structural)]
-        ++ [renderImport "Keiro.Codec.Structural" structuralCodecImports]
-        ++ ["import " <> structuralProjectionModuleName (aContext aggregate) <> " qualified as StructuralProjections" | not (null (mappedProjectionSpecs aggregate))]
+        ++ ["import Data.List.NonEmpty qualified as NonEmpty"]
+        ++ ["import Data.Text qualified as T" | hasMappedConformanceAssertions aggregate]
+        ++ [renderImport "Keiro.Codec.Structural" ["FixtureCases (..)"]]
   where
     declarations = mappedHarnessDeclarationsResolved aggregate
-    structural = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
-    opaque = [declaration | ResolvedOpaque declaration <- declarations]
     structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
     eitherImports =
       ["isLeft" | wirePoliciesUseIsLeft structuralWire]
         <> ["isRight" | wirePoliciesUseIsRight structuralWire]
-    structuralCodecImports =
-      ["FixtureCases (..)"]
-        <> if null structural then [] else ["bindingDomainRoundTrip", "bindingShapeRoundTrip", "bindingToShape"]
     renderImport moduleName names = "import " <> moduleName <> " (" <> T.intercalate ", " names <> ")"
-    shapeUsesMaybe (_, shape) = case shape of
-      RRecord _ _ fields -> any (isOptional . rwfType) fields
-      RUnion _ arms -> any (maybe False isOptional . rwaPayload) arms
-      REnum {} -> False
-    isOptional ROptional {} = True
-    isOptional _ = False
 
 mappedCodecHarnessExports :: Agg -> Text
 mappedCodecHarnessExports aggregate =
@@ -1086,51 +1072,21 @@ harnessImportPlan aggregate =
         | declaration <- mappedHarnessDeclarationsResolved aggregate,
           reference <- case declaration of
             ResolvedStructural structural _ ->
-              harnessTypeReference (sdHaskell structural)
-                : map
-                  harnessQualifiedValueReference
-                  (sdBinding structural : sdFixtures structural : maybeToListHarness (sdInitial structural))
+              map
+                harnessQualifiedValueReference
+                (sdFixtures structural : maybeToListHarness (sdInitial structural))
             ResolvedOpaque opaque ->
               map
                 harnessQualifiedValueReference
                 (odFixtures opaque : maybeToListHarness (odInitial opaque))
         ]
-    shapeReferences =
-      Set.fromList
-        [ reference
-        | ResolvedStructural declaration shape <- mappedHarnessDeclarationsResolved aggregate,
-          reference <- structuralShapeHarnessReferences (aContext aggregate) declaration shape
-        ]
-    projectionReferences =
-      Set.fromList
-        [ HaskellReference shapeModule selector ValueNamespace RequireQualified
-        | projection <- mappedProjectionSpecs aggregate,
-          (shapeModule, selector) <- spSelectors projection
-        ]
-    references = consumerNominalReferences <> mappedReferences <> shapeReferences <> projectionReferences
-
-harnessTypeReference :: HaskellSource -> HaskellReference
-harnessTypeReference source =
-  HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified
+    references = consumerNominalReferences <> mappedReferences
 
 harnessQualifiedValueReference :: QualifiedValueName -> HaskellReference
 harnessQualifiedValueReference qualified =
   HaskellReference moduleName valueName ValueNamespace RequireQualified
   where
     (moduleName, valueName) = splitQualifiedHarness (unQualifiedValueName qualified)
-
-structuralShapeHarnessReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
-structuralShapeHarnessReferences context declaration =
-  foldMappedShape
-    MappedShapeAlgebra
-      { onRecord = \constructor _ fields -> constructorRef constructor : map (valueRef . rwfHaskell) fields,
-        onEnum = map (constructorRef . weCtor),
-        onUnion = \_ -> map (constructorRef . rwaCtor)
-      }
-  where
-    moduleName = structuralShapeModuleName context (sdName declaration)
-    constructorRef constructor = HaskellReference moduleName constructor ConstructorNamespace RequireQualified
-    valueRef value = HaskellReference moduleName value ValueNamespace RequireQualified
 
 renderHarnessReference :: Agg -> HaskellReference -> Text
 renderHarnessReference aggregate reference =
@@ -1149,7 +1105,6 @@ harnessReservedQualifiers =
       "Map",
       "NominalProjections",
       "NonEmpty",
-      "StructuralProjections",
       "T"
     ]
 
@@ -1157,84 +1112,55 @@ unique :: (Eq value) => [value] -> [value]
 unique = foldr (\value values -> if value `elem` values then values else value : values) []
 
 hasMappedHarness :: Agg -> Bool
-hasMappedHarness = not . null . mappedHarnessDeclarationsResolved
+hasMappedHarness = hasMappedConformanceAssertions
+
+hasMappedConformanceAssertions :: Agg -> Bool
+hasMappedConformanceAssertions aggregate =
+  not (null (mappedEventFields aggregate)) || not (null (structuralWireDeclarations aggregate))
 
 mappedHarnessDeclarationsResolved :: Agg -> [ResolvedMappedDecl]
 mappedHarnessDeclarationsResolved aggregate = case aTypeGraph aggregate of
   Nothing -> []
-  Just graph -> Map.elems (tgDeclarations graph)
+  Just graph ->
+    [ declaration
+    | key <- aggregateMappedClosure (semanticImpact graph) (aName aggregate),
+      Just declaration <- [Map.lookup key (tgDeclarations graph)]
+    ]
 
-mappedProjectionSpecs :: Agg -> [StructuralProjection]
-mappedProjectionSpecs aggregate = case aTypeGraph aggregate of
-  Nothing -> []
-  Just graph -> map (resolveProjectionModules (aContext aggregate)) (projectionSpecs graph)
+mappedEventFields :: Agg -> [(ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl)]
+mappedEventFields aggregate =
+  [ (event, fieldDslName identity, fieldType, declaration)
+  | event <- aEvents aggregate,
+    (identity, fieldType) <- rcFields event,
+    declaration <- maybeToListHarness (mappedDeclaration aggregate fieldType)
+  ]
 
-structuralShapeModuleName :: Context -> Name -> Text
-structuralShapeModuleName context name = case placement context of
-  GeneratedPrefix -> root <> "Generated." <> contextSegment <> ".Structural.Shape." <> name
-  CollocatedLeaf -> root <> contextSegment <> ".Generated.Structural.Shape." <> name
-  where
-    root = if T.null (moduleRoot context) then "" else moduleRoot context <> "."
-    contextSegment = pascalFromKebab (contextName context)
-
-structuralProjectionModuleName :: Context -> Text
-structuralProjectionModuleName context = case placement context of
-  GeneratedPrefix -> root <> "Generated." <> contextSegment <> ".StructuralProjections"
-  CollocatedLeaf -> root <> contextSegment <> ".Generated.StructuralProjections"
-  where
-    root = if T.null (moduleRoot context) then "" else moduleRoot context <> "."
-    contextSegment = pascalFromKebab (contextName context)
+structuralWireDeclarations :: Agg -> [(StructuralDecl, ResolvedMappedShape)]
+structuralWireDeclarations aggregate =
+  [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
 
 mappedHarnessDeclarations :: Agg -> [Text]
 mappedHarnessDeclarations aggregate
-  | not (hasMappedHarness aggregate) = []
+  | not (hasMappedConformanceAssertions aggregate) = []
   | otherwise =
       [ "",
         "mappedConformanceAssertions :: [(String, Bool)]",
         "mappedConformanceAssertions =",
         "  concat",
         "    [ " <> T.intercalate "\n    , " assertionLists,
-        "    ]",
-        "",
-        "validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool",
-        "validFixtureLabels cases =",
-        "  all (not . T.null) labels && length labels == length (nub labels)",
-        "  where",
-        "    labels = map fst (NonEmpty.toList cases)"
+        "    ]"
       ]
-        ++ concatMap (bindingAssertionDecl aggregate) structural
-        ++ concatMap (opaqueAssertionDecl aggregate) opaque
-        ++ concatMap (coverageDecl aggregate) structural
-        ++ concatMap (mappedEventAssertionDecl aggregate) mappedEventFields
+        ++ concatMap (mappedEventAssertionDecl aggregate) eventFields
         ++ wirePolicyAssertionDecls aggregate structuralWire
-        ++ projectionAssertionDecls aggregate structural
         ++ wirePolicyHelpers structuralWire
   where
-    declarations = mappedHarnessDeclarationsResolved aggregate
-    structural = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
-    opaque = [declaration | ResolvedOpaque declaration <- declarations]
-    structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
-    mappedEventFields =
-      [ (event, fieldDslName identity, fieldType, declaration)
-      | event <- aEvents aggregate,
-        (identity, fieldType) <- rcFields event,
-        declaration <- maybeToListHarness (mappedDeclaration aggregate fieldType)
-      ]
+    structuralWire = structuralWireDeclarations aggregate
+    eventFields = mappedEventFields aggregate
     assertionLists =
-      [lowerFirst (sdName declaration) <> "BindingAssertions" | (declaration, _) <- structural]
-        <> [lowerFirst (odName declaration) <> "OpaqueAssertions" | declaration <- opaque]
-        <> [ "[(\"fixture coverage: "
-               <> unCanonicalTypeId (sdCanonical declaration)
-               <> "\", coverage"
-               <> sdName declaration
-               <> ")]"
-           | (declaration, _) <- structural
-           ]
-        <> [ mappedEventAssertionName event fieldName <> "Assertions"
-           | (event, fieldName, _, _) <- mappedEventFields
-           ]
+      [ mappedEventAssertionName event fieldName <> "Assertions"
+      | (event, fieldName, _, _) <- eventFields
+      ]
         <> ["structuralWirePolicyAssertions" | not (null structuralWire)]
-        <> ["structuralProjectionAssertions" | not (null (mappedProjectionSpecs aggregate))]
 
 mappedDeclaration :: Agg -> ResolvedAggregateType -> Maybe ResolvedMappedDecl
 mappedDeclaration aggregate resolvedType = do
@@ -1243,92 +1169,6 @@ mappedDeclaration aggregate resolvedType = do
     _ -> Nothing
   graph <- aTypeGraph aggregate
   Map.lookup key (tgDeclarations graph)
-
-bindingAssertionDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
-bindingAssertionDecl aggregate (declaration, _shape) =
-  [ "",
-    valueName <> " :: [(String, Bool)]",
-    valueName <> " =",
-    "  (\"fixture labels: " <> canonical <> "\", validFixtureLabels cases) :",
-    "  (\"canonical identity: " <> canonical <> "\", canonicalTypeName (Proxy @" <> consumerType <> ") == " <> tshow canonical <> ") :",
-    "  concat",
-    "    [ [ (\"binding domain round-trip: " <> canonical <> "/\" <> T.unpack label, bindingDomainRoundTrip " <> binding <> " value)",
-    "      , (\"binding shape round-trip: " <> canonical <> "/\" <> T.unpack label, bindingShapeRoundTrip " <> binding <> " (bindingToShape " <> binding <> " value))",
-    "      ]",
-    "    | (label, value) <- NonEmpty.toList cases",
-    "    ]",
-    "  where",
-    "    cases = fixtureCases " <> fixtures
-  ]
-  where
-    valueName = lowerFirst (sdName declaration) <> "BindingAssertions"
-    canonical = unCanonicalTypeId (sdCanonical declaration)
-    consumerType = renderHarnessReference aggregate (harnessTypeReference (sdHaskell declaration))
-    binding = renderHarnessReference aggregate (harnessQualifiedValueReference (sdBinding declaration))
-    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
-
-opaqueAssertionDecl :: Agg -> OpaqueDecl -> [Text]
-opaqueAssertionDecl aggregate declaration =
-  [ "",
-    valueName <> " :: [(String, Bool)]",
-    valueName <> " =",
-    "  (\"opaque boundary fixtures: " <> label <> "\", validFixtureLabels cases) :",
-    "  [ (\"opaque codec round-trip: " <> label <> "/\" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)",
-    "  | (caseLabel, value) <- NonEmpty.toList cases",
-    "  ]",
-    "  where",
-    "    cases = fixtureCases " <> fixtures
-  ]
-  where
-    valueName = lowerFirst (odName declaration) <> "OpaqueAssertions"
-    label = unCodecIdentity (odCodecIdentity declaration) <> "@" <> unCodecVersion (odCodecVersion declaration)
-    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (odFixtures declaration))
-
-coverageDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
-coverageDecl aggregate (declaration, shape) =
-  [ "",
-    "coverage" <> sdName declaration <> " :: Bool",
-    "coverage" <> sdName declaration <> " = " <> coverageExpression aggregate declaration shape
-  ]
-
-coverageExpression :: Agg -> StructuralDecl -> ResolvedMappedShape -> Text
-coverageExpression aggregate declaration shape = case obligations of
-  [] -> "True"
-  _ -> T.intercalate " && " obligations <> "\n  where\n    shapes = map (bindingToShape " <> binding <> " . snd) (NonEmpty.toList (fixtureCases " <> fixtures <> "))"
-  where
-    shapeModule = structuralShapeModuleName (aContext aggregate) (sdName declaration)
-    binding = renderHarnessReference aggregate (harnessQualifiedValueReference (sdBinding declaration))
-    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
-    obligations = case shape of
-      RRecord _ _ fields -> concatMap (recordFieldObligation aggregate shapeModule) fields
-      REnum entries ->
-        [ "any (\\case " <> renderHarnessReference aggregate (HaskellReference shapeModule (weCtor entry) ConstructorNamespace RequireQualified) <> " -> True; _ -> False) shapes"
-        | entry <- entries
-        ]
-      RUnion _ arms -> concatMap (unionArmObligations aggregate shapeModule) arms
-
-recordFieldObligation :: Agg -> Text -> ResolvedWireField -> [Text]
-recordFieldObligation aggregate shapeModule field = case rwfType field of
-  ROptional _ ->
-    [ "any (isNothing . " <> selector <> ") shapes",
-      "any (isJust . " <> selector <> ") shapes"
-    ]
-  _ -> []
-  where
-    selector = renderHarnessReference aggregate (HaskellReference shapeModule (rwfHaskell field) ValueNamespace RequireQualified)
-
-unionArmObligations :: Agg -> Text -> ResolvedWireArm -> [Text]
-unionArmObligations aggregate shapeModule arm =
-  ["any (\\case " <> patternText <> " -> True; _ -> False) shapes"] <> optionalPayload
-  where
-    constructor = renderHarnessReference aggregate (HaskellReference shapeModule (rwaCtor arm) ConstructorNamespace RequireQualified)
-    patternText = constructor <> maybe "" (const "{}") (rwaPayload arm)
-    optionalPayload = case rwaPayload arm of
-      Just (ROptional _) ->
-        [ "any (\\case " <> constructor <> " Nothing -> True; _ -> False) shapes",
-          "any (\\case " <> constructor <> " (Just _) -> True; _ -> False) shapes"
-        ]
-      _ -> []
 
 mappedEventAssertionDecl :: Agg -> (ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl) -> [Text]
 mappedEventAssertionDecl aggregate (event, fieldName, _fieldType, declaration) =
@@ -1560,45 +1400,6 @@ ctorExprWithOverride aggregate constructor target replacement =
         [ " " <> if fieldDslName identity == target then replacement else sampleValue aggregate (fieldDslName identity) fieldType
         | (identity, fieldType) <- rcFields constructor
         ]
-
-projectionAssertionDecls :: Agg -> [(StructuralDecl, ResolvedMappedShape)] -> [Text]
-projectionAssertionDecls aggregate structural
-  | null specs = []
-  | otherwise =
-      [ "",
-        "structuralProjectionAssertions :: [(String, Bool)]",
-        "structuralProjectionAssertions =",
-        "  [ " <> T.intercalate "\n  , " (map assertion specs),
-        "  ]"
-      ]
-  where
-    specs = mappedProjectionSpecs aggregate
-    assertion spec =
-      "(\"projection witness agreement: "
-        <> unCanonicalTypeId (spCanonical spec)
-        <> spPointer spec
-        <> "\", all (\\(_, owner) -> fieldWitnessAgrees StructuralProjections."
-        <> spWitness spec
-        <> " (\\referenceOwner -> "
-        <> projectionGetter aggregate "referenceOwner" spec
-        <> ") owner) (NonEmpty.toList (fixtureCases "
-        <> ownerFixtures spec
-        <> ")))"
-    ownerFixtures spec = case find (\(declaration, _) -> sdCanonical declaration == spCanonical spec) structural of
-      Just (declaration, _) -> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
-      Nothing -> "error \"projection owner fixtures missing\""
-
-projectionGetter :: Agg -> Text -> StructuralProjection -> Text
-projectionGetter aggregate owner spec =
-  foldl
-    ( \value (shapeModule, selector) ->
-        renderHarnessReference aggregate (HaskellReference shapeModule selector ValueNamespace RequireQualified)
-          <> " ("
-          <> value
-          <> ")"
-    )
-    ("bindingToShape " <> renderHarnessReference aggregate (harnessQualifiedValueReference (spBinding spec)) <> " " <> owner)
-    (spSelectors spec)
 
 maybeToListHarness :: Maybe value -> [value]
 maybeToListHarness = maybe [] pure

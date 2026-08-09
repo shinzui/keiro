@@ -5,26 +5,16 @@ module Generated.StructuralConformance.ArtifactCatalog.Harness (harnessAssertion
 import Generated.StructuralConformance.ArtifactCatalog.Domain
 import Generated.StructuralConformance.ArtifactCatalog.Codec (encodeArtifactCatalogEvent, parseArtifactCatalogEvent, artifactCatalogCodec, encodeArtifactInfoMapped, decodeArtifactInfoMapped, encodeArtifactKindMapped, decodeArtifactKindMapped, encodeArtifactLocationMapped, decodeArtifactLocationMapped, encodeArtifactMetadataMapped, decodeArtifactMetadataMapped)
 import Generated.StructuralConformance.ArtifactCatalog.Transducer (artifactCatalogTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Either (isLeft, isRight)
-import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Maybe (isJust, isNothing)
-import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiki.Shape (CanonicalTypeName (..))
-import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
-import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
+import Keiro.Codec.Structural (FixtureCases (..))
 import Conformance.Structural.Bindings qualified as Bindings
-import Conformance.Structural.Domain (ArtifactInfo, ArtifactKind, ArtifactLocation, ArtifactMetadata)
-import Generated.StructuralConformance.Structural.Shape.ArtifactInfo qualified as ShapeArtifactInfo
-import Generated.StructuralConformance.Structural.Shape.ArtifactKind qualified as ShapeArtifactKind
-import Generated.StructuralConformance.Structural.Shape.ArtifactLocation qualified as ShapeArtifactLocation
-import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata qualified as ShapeArtifactMetadata
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -79,107 +69,10 @@ forwardReplayObserveArtifact =
 mappedConformanceAssertions :: [(String, Bool)]
 mappedConformanceAssertions =
   concat
-    [ artifactInfoBindingAssertions
-    , artifactKindBindingAssertions
-    , artifactLocationBindingAssertions
-    , artifactMetadataBindingAssertions
-    , vendorGeometryOpaqueAssertions
-    , [("fixture coverage: conformance.structural.ArtifactInfo.v1", coverageArtifactInfo)]
-    , [("fixture coverage: conformance.structural.ArtifactKind.v1", coverageArtifactKind)]
-    , [("fixture coverage: conformance.structural.ArtifactLocation.v1", coverageArtifactLocation)]
-    , [("fixture coverage: conformance.structural.ArtifactMetadata.v1", coverageArtifactMetadata)]
-    , artifactRecordedArtifactAssertions
+    [ artifactRecordedArtifactAssertions
     , artifactRecordedGeometryAssertions
     , structuralWirePolicyAssertions
-    , structuralProjectionAssertions
     ]
-
-validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
-validFixtureLabels cases =
-  all (not . T.null) labels && length labels == length (nub labels)
-  where
-    labels = map fst (NonEmpty.toList cases)
-
-artifactInfoBindingAssertions :: [(String, Bool)]
-artifactInfoBindingAssertions =
-  ("fixture labels: conformance.structural.ArtifactInfo.v1", validFixtureLabels cases) :
-  ("canonical identity: conformance.structural.ArtifactInfo.v1", canonicalTypeName (Proxy @ArtifactInfo) == "conformance.structural.ArtifactInfo.v1") :
-  concat
-    [ [ ("binding domain round-trip: conformance.structural.ArtifactInfo.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.artifactInfoBinding value)
-      , ("binding shape round-trip: conformance.structural.ArtifactInfo.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.artifactInfoBinding (bindingToShape Bindings.artifactInfoBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.artifactInfoCases
-
-artifactKindBindingAssertions :: [(String, Bool)]
-artifactKindBindingAssertions =
-  ("fixture labels: conformance.structural.ArtifactKind.v1", validFixtureLabels cases) :
-  ("canonical identity: conformance.structural.ArtifactKind.v1", canonicalTypeName (Proxy @ArtifactKind) == "conformance.structural.ArtifactKind.v1") :
-  concat
-    [ [ ("binding domain round-trip: conformance.structural.ArtifactKind.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.artifactKindBinding value)
-      , ("binding shape round-trip: conformance.structural.ArtifactKind.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.artifactKindBinding (bindingToShape Bindings.artifactKindBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.artifactKindCases
-
-artifactLocationBindingAssertions :: [(String, Bool)]
-artifactLocationBindingAssertions =
-  ("fixture labels: conformance.structural.ArtifactLocation.v1", validFixtureLabels cases) :
-  ("canonical identity: conformance.structural.ArtifactLocation.v1", canonicalTypeName (Proxy @ArtifactLocation) == "conformance.structural.ArtifactLocation.v1") :
-  concat
-    [ [ ("binding domain round-trip: conformance.structural.ArtifactLocation.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.artifactLocationBinding value)
-      , ("binding shape round-trip: conformance.structural.ArtifactLocation.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.artifactLocationBinding (bindingToShape Bindings.artifactLocationBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.artifactLocationCases
-
-artifactMetadataBindingAssertions :: [(String, Bool)]
-artifactMetadataBindingAssertions =
-  ("fixture labels: conformance.structural.ArtifactMetadata.v1", validFixtureLabels cases) :
-  ("canonical identity: conformance.structural.ArtifactMetadata.v1", canonicalTypeName (Proxy @ArtifactMetadata) == "conformance.structural.ArtifactMetadata.v1") :
-  concat
-    [ [ ("binding domain round-trip: conformance.structural.ArtifactMetadata.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.artifactMetadataBinding value)
-      , ("binding shape round-trip: conformance.structural.ArtifactMetadata.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.artifactMetadataBinding (bindingToShape Bindings.artifactMetadataBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.artifactMetadataCases
-
-vendorGeometryOpaqueAssertions :: [(String, Bool)]
-vendorGeometryOpaqueAssertions =
-  ("opaque boundary fixtures: vendor.geometry.json@3", validFixtureLabels cases) :
-  [ ("opaque codec round-trip: vendor.geometry.json@3/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
-  | (caseLabel, value) <- NonEmpty.toList cases
-  ]
-  where
-    cases = fixtureCases Bindings.geometryCases
-
-coverageArtifactInfo :: Bool
-coverageArtifactInfo = any (isNothing . ShapeArtifactInfo.artifactHash) shapes && any (isJust . ShapeArtifactInfo.artifactHash) shapes
-  where
-    shapes = map (bindingToShape Bindings.artifactInfoBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases))
-
-coverageArtifactKind :: Bool
-coverageArtifactKind = any (\case ShapeArtifactKind.Guide -> True; _ -> False) shapes && any (\case ShapeArtifactKind.Reference -> True; _ -> False) shapes
-  where
-    shapes = map (bindingToShape Bindings.artifactKindBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactKindCases))
-
-coverageArtifactLocation :: Bool
-coverageArtifactLocation = any (\case ShapeArtifactLocation.LocalFile{} -> True; _ -> False) shapes && any (\case ShapeArtifactLocation.LocalDir{} -> True; _ -> False) shapes && any (\case ShapeArtifactLocation.RepoPath{} -> True; _ -> False) shapes && any (\case ShapeArtifactLocation.LocUrl{} -> True; _ -> False) shapes && any (\case ShapeArtifactLocation.Canonical -> True; _ -> False) shapes
-  where
-    shapes = map (bindingToShape Bindings.artifactLocationBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactLocationCases))
-
-coverageArtifactMetadata :: Bool
-coverageArtifactMetadata = any (isNothing . ShapeArtifactMetadata.note) shapes && any (isJust . ShapeArtifactMetadata.note) shapes
-  where
-    shapes = map (bindingToShape Bindings.artifactMetadataBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactMetadataCases))
 
 artifactRecordedArtifactAssertions :: [(String, Bool)]
 artifactRecordedArtifactAssertions =
@@ -214,12 +107,6 @@ structuralWirePolicyAssertions =
   , ("wire union arm: conformance.structural.ArtifactLocation.v1/canonical", any (\(_, value) -> objectField "tag" (encodeArtifactLocationMapped value) == Just (Aeson.String "canonical") && decodeArtifactLocationMapped (encodeArtifactLocationMapped value) == Right value) (NonEmpty.toList (fixtureCases Bindings.artifactLocationCases)))
   , ("wire policy unknown fields: conformance.structural.ArtifactLocation.v1", all (\(_, value) -> isLeft (decodeArtifactLocationMapped (insertObjectField "__keiro_unknown" (Aeson.Bool True) (encodeArtifactLocationMapped value)))) (NonEmpty.toList (fixtureCases Bindings.artifactLocationCases)))
   , ("wire policy unknown fields: conformance.structural.ArtifactMetadata.v1", all (\(_, value) -> isRight (decodeArtifactMetadataMapped (insertObjectField "__keiro_unknown" (Aeson.Bool True) (encodeArtifactMetadataMapped value)))) (NonEmpty.toList (fixtureCases Bindings.artifactMetadataCases)))
-  ]
-
-structuralProjectionAssertions :: [(String, Bool)]
-structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> ShapeArtifactInfo.artifactKey (bindingToShape Bindings.artifactInfoBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
-  , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> ShapeArtifactInfo.displayName (bindingToShape Bindings.artifactInfoBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
   ]
 
 deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value

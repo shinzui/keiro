@@ -106,6 +106,7 @@ import Keiro.Dsl.ScaffoldRun
 import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
+import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
@@ -216,11 +217,16 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenR
 -- member file.
 workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> WorkspaceSpec -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
 workspaceModules goldens runtimePackage ctx workspace = do
+  structuralConformance <- case structuralConformanceModule ctx service of
+    Left failures -> error ("checked workspace structural conformance planning failed: " <> show failures)
+    Right Nothing -> Right []
+    Right (Just moduleValue) -> Right [(stamp moduleValue, ContextLevel)]
   facade <- case runtimePackage of
     Nothing -> Right []
     Just _ -> fmap (\moduleValue -> [(stamp moduleValue, ContextLevel)]) (serviceHarnessModule ctx service)
   pure $
-    [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
+    structuralConformance
+      <> [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
       <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
       <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalog ctx merged]
       <> concat

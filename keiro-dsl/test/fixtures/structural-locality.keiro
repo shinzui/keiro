@@ -1,0 +1,51 @@
+language keiro-dsl 4
+context structural-locality
+
+mapped structural record AlphaPayload {
+  haskell package=locality-domain module=Example.Locality.Domain type=AlphaPayload
+  binding = "Example.Locality.Bindings.alphaPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.locality.AlphaPayload.v1"
+  fixtures = "Example.Locality.Bindings.alphaPayloadCases"
+  wire object constructor=AlphaPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural record BetaPayload {
+  haskell package=locality-domain module=Example.Locality.Domain type=BetaPayload
+  binding = "Example.Locality.Bindings.betaPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.locality.BetaPayload.v1"
+  fixtures = "Example.Locality.Bindings.betaPayloadCases"
+  wire object constructor=BetaPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural enum UnusedPayload {
+  haskell package=locality-domain module=Example.Locality.Domain type=UnusedPayload
+  binding = "Example.Locality.Bindings.unusedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.locality.UnusedPayload.v1"
+  fixtures = "Example.Locality.Bindings.unusedPayloadCases"
+  wire string {
+    Unused as "unused"
+  }
+}
+
+aggregate Alpha
+  regs
+    marker Bool = False
+  states Ready Done!
+  command SubmitAlpha { item:AlphaPayload accepted:Bool }
+  event AlphaSubmitted = fields(SubmitAlpha)
+  Ready -- SubmitAlpha --> guard accepted ; write marker := true ; emit AlphaSubmitted ; goto Done
+
+aggregate Beta
+  regs
+    marker Bool = False
+  states Ready Done!
+  command SubmitBeta { item:BetaPayload accepted:Bool }
+  event BetaSubmitted = fields(SubmitBeta)
+  Ready -- SubmitBeta --> guard accepted ; write marker := true ; emit BetaSubmitted ; goto Done

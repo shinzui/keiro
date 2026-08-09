@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service conformance packages import one runtime-owned facade
 description: A configured Keiro service generates at most one local conformance package whose runner imports one generated facade from an explicitly named runtime package while create-once expectations remain application-owned.
-timestamp: 2026-08-05T22:40:00Z
+timestamp: 2026-08-09T22:25:17Z
 docId: ADR-20
 status: Accepted
 date: 2026-08-03
@@ -72,6 +72,15 @@ with the create-once expectation module, which Keiro creates on first adoption
 and never overwrites. This makes a changed fact fail until an application owner
 reviews and accepts it instead of generating both sides of a tautological test.
 
+Mapped declaration laws are another self-checking source, but their owner is the
+service rather than any aggregate. Whenever the checked mapped inventory is
+non-empty, scaffolding emits one context `StructuralConformance` module whether
+or not a runnable package is enabled. The facade reserves one deterministic
+alias for that module, imports it exactly once, and prefixes its results with
+`structural/`. Aggregate harness imports and checks remain limited to their
+checked mapped closure. Declaration-law results are executable checks, never
+entries in the create-once facts baseline.
+
 The existing `keiro-dsl-manifest.*.txt` remains the authoritative runtime build
 inventory and compatibility artifact. A runnable conformance package removes
 the need to translate that manifest into a hand-written runner; it does not
@@ -106,6 +115,8 @@ distinct history slots.
   visible in generated package provenance rather than silently rediscovered.
 - Process, router, and workflow expectation changes are reviewable application
   decisions because the generator never replaces their accepted baseline.
+- A mapped declaration change updates one context conformance module and only
+  the aggregate harnesses whose checked use closure reaches that declaration.
 - The text build manifest remains necessary when generated runtime modules or
   their dependencies change.
 

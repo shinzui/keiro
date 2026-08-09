@@ -17,6 +17,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValues, workflowHarnessFactValues)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
 import Keiro.Dsl.Validate (nodeIdentity)
 
 -- | A fully qualified process, router, or workflow fact key that would occur
@@ -73,14 +74,18 @@ renderServiceHarness ctx service =
     ]
       <> importLines
       <> [""]
-      <> renderChecks checkSources
+      <> renderChecks hasStructural checkSources
       <> [""]
       <> renderFacts factSources
   where
-    aliased = aliasNodes (serviceHarnessNodes service)
+    hasStructural = hasStructuralConformance service
+    aliased = aliasNodes hasStructural (serviceHarnessNodes service)
     importLines
-      | null aliased = []
-      | otherwise = "" : map (renderImport ctx) aliased
+      | null imports = []
+      | otherwise = "" : imports
+    imports =
+      ["import " <> structuralConformanceModuleName ctx <> " qualified as StructuralConformance" | hasStructural]
+        <> map (renderImport ctx) aliased
     checkSources = [(node, alias) | (node, alias) <- aliased, producesChecks node]
     factSources = [(node, alias) | (node, alias) <- aliased, producesFacts node]
 
@@ -88,9 +93,10 @@ renderImport :: Context -> (Node, Text) -> Text
 renderImport ctx (node, alias) =
   "import " <> harnessModuleName ctx node <> " qualified as " <> alias
 
-aliasNodes :: [Node] -> [(Node, Text)]
-aliasNodes nodes = snd (mapAccumL assign Map.empty nodes)
+aliasNodes :: Bool -> [Node] -> [(Node, Text)]
+aliasNodes reservesStructural nodes = snd (mapAccumL assign initialCounts nodes)
   where
+    initialCounts = Map.fromList [("StructuralConformance", 1 :: Int) | reservesStructural]
     assign counts node =
       let base = aliasForNode node
           occurrence = Map.findWithDefault 0 base counts + 1
@@ -111,18 +117,23 @@ harnessModuleName ctx = \case
   NWorkflow workflow -> genPrefixFor ctx (wfId workflow) <> ".WorkflowFacts"
   node -> error ("service harness requested a module for unsupported node " <> show (nodeIdentity node))
 
-renderChecks :: [(Node, Text)] -> [Text]
-renderChecks [] =
+renderChecks :: Bool -> [(Node, Text)] -> [Text]
+renderChecks False [] =
   [ "runServiceConformanceChecks :: IO [(String, Bool)]",
     "runServiceConformanceChecks = pure []"
   ]
-renderChecks sources =
+renderChecks hasStructural sources =
   [ "runServiceConformanceChecks :: IO [(String, Bool)]",
     "runServiceConformanceChecks =",
     "  pure ("
   ]
-    <> renderConcatenation (map checkExpression sources)
+    <> renderConcatenation (structuralExpressions <> map checkExpression sources)
     <> ["  )"]
+  where
+    structuralExpressions =
+      [ "[(\"structural/\" <> fact, passed) | (fact, passed) <- StructuralConformance.structuralConformanceAssertions]"
+      | hasStructural
+      ]
 
 checkExpression :: (Node, Text) -> Text
 checkExpression (node, alias) = case node of

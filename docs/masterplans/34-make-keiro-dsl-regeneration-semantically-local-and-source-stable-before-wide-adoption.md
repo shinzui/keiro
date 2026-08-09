@@ -133,7 +133,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | Complete |
-| 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Not Started |
+| 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Complete |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Not Started |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Not Started |
 | 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Not Started |
@@ -220,8 +220,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1: correct IR-21's scope and define exhaustive semantic consumer/root identities.
 - [x] EP-1: derive deterministic per-aggregate closures and service inventory with focused tests.
-- [ ] EP-2: emit declaration-wide structural conformance once at the context boundary.
-- [ ] EP-2: localize aggregate harnesses without losing use-specific codec/replay evidence.
+- [x] EP-2: emit declaration-wide structural conformance once at the context boundary.
+- [x] EP-2: localize aggregate harnesses without losing use-specific codec/replay evidence.
+- [x] EP-2: route the structural gate once through the service facade and pass focused locality,
+  compiled-fixture, and restoring-mutation evidence.
 - [ ] EP-3: retain exact transition and state spans through a source-aware parsed wrapper.
 - [ ] EP-3: compose workspace source indices without contaminating the merged semantic graph.
 - [ ] EP-4: generate and preflight one behavior-key source map for single and workspace inputs.
@@ -256,6 +258,10 @@ interactions between child plans. Provide concise evidence.
 - The live conformance-corpus policy currently selects 35 scaffold invocations rather than the 41
   estimated during planning. EP-1 passed all 35 with a byte-clean worktree. EP-6 must treat the
   policy inventory and its suite-coverage check as authoritative instead of hard-coding 41.
+- EP-2's new context module necessarily adds one generated file to every mapped corpus target.
+  Focused structural and scalar-expression fixtures compile the new renderer now; the legacy
+  corpus inventory comparison temporarily ignores only that module until EP-6 performs the one
+  coordinated 35-invocation refresh.
 
 
 ## Decision Log
@@ -306,7 +312,16 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-2 completed on 2026-08-09. Declaration-wide mapped-type laws now have one generated context
+owner, aggregate harnesses follow the checked semantic closure from EP-1, and the runtime-owned
+service facade executes the structural gate exactly once. A two-aggregate fixture demonstrates
+that an Aggregate A-only mapped edit leaves every Aggregate B generated artifact byte-identical,
+and the existing mutation suite preserves all declaration and use-site evidence after relocation.
+
+The final corpus migration remains intentionally open for EP-6, along with the source-provenance,
+behavior-source-map, and reporting work in EP-3 through EP-5. The focused implementation passed
+the full 623-example DSL suite, representative compiled conformance targets, restoring mutations,
+generated-source policy checks, ADR validation, and repeat-scaffold idempotence.
 
 
 ## Revision Notes

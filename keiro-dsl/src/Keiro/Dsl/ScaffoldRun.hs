@@ -93,6 +93,7 @@ import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiv
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
+import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
@@ -201,7 +202,8 @@ scaffoldServiceModules = scaffoldServiceModulesWithGoldens []
 
 scaffoldServiceModulesWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> [ScaffoldModule]
 scaffoldServiceModulesWithGoldens goldens ctx service =
-  scaffoldStructuralForService ctx service
+  structuralConformanceModules ctx service
+    <> scaffoldStructuralForService ctx service
     <> scaffoldReplayAudit ctx spec
     <> scaffoldProjectionCatalog ctx spec
     <> concat
@@ -227,6 +229,12 @@ scaffoldServiceModulesWithGoldens goldens ctx service =
       ]
   where
     spec = checkedSpec service
+
+structuralConformanceModules :: Context -> CheckedService -> [ScaffoldModule]
+structuralConformanceModules ctx service = case structuralConformanceModule ctx service of
+  Left failures -> error ("checked structural conformance planning failed: " <> show failures)
+  Right Nothing -> []
+  Right (Just moduleValue) -> [moduleValue]
 
 resolveCatalogReadModel :: Spec -> ReadModelNode -> ReadModelNode
 resolveCatalogReadModel spec readModel =

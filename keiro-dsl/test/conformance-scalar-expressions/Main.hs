@@ -17,6 +17,7 @@ import Generated.AggregateScalarExpressions.ScalarAccount.Domain
 import Generated.AggregateScalarExpressions.ScalarAccount.EventStream (scalarAccountEventStreamDef)
 import Generated.AggregateScalarExpressions.ScalarAccount.Harness (harnessAssertions)
 import Generated.AggregateScalarExpressions.ScalarAccount.Transducer
+import Generated.AggregateScalarExpressions.StructuralConformance (structuralConformanceAssertions)
 import Generated.AggregateScalarExpressions.StructuralProjections qualified as StructuralProjections
 import Keiki.Core qualified as K
 import Keiki.Generics (RegFieldsOf)
@@ -38,7 +39,8 @@ main = do
   conservativeIdProof <- conservativeGeneratedIdProjection
   let behaviorReport = Behavior.behaviorCoverageReport behaviorWitnesses
   let checks =
-        harnessAssertions
+        [("structural/" <> label, passed) | (label, passed) <- structuralConformanceAssertions]
+          <> harnessAssertions
           <> [ ("finite scalar oracle agrees with generated execution", finiteOracleAgreement)
              , ("Natural 2 - 5 is total monus zero", naturalMonusExample)
              , ("Integer/Natural oracle, concrete terms, and symbolic formulas agree", arithmeticAgreement)
