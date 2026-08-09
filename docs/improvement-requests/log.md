@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-09
+* **Addition**: IR-21 requests semantically local workspace regeneration and stable behavior
+  source anchors so a mapped-shape change rewrites only reachable aggregate outputs while
+  whole-service conformance and current source-located diagnostics remain complete.
+
 ## 2026-08-08
 * **Acceptance and planning**: IR-20 requests one typed runtime catalog for projection ownership,
 physical read-model targets, registration, and rebuild adapters, with structural
