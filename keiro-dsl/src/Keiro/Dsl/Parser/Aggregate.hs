@@ -24,7 +24,7 @@ data BodyItem
   | BIWire WireSpec
   | BIProjection ProjectionSpec
   | BISnapshot SnapshotSpec
-  | BITransition Transition [Located SurfaceElement]
+  | BITransition (Located Transition) [Located SurfaceElement]
 
 pAggregate :: FrontendContext -> P (Aggregate, [Located SurfaceElement])
 pAggregate context = do
@@ -32,9 +32,18 @@ pAggregate context = do
   keyword "aggregate"
   name <- ident
   regs <- pRegsBlock context
-  states <- pStatesLine
+  locatedStates <- pStatesLine
   positionedItems <- many ((,) <$> getOffset <*> pBodyItem context)
   let items = map snd positionedItems
+      transitions = [transition | BITransition transition _ <- items]
+      stateElements =
+        [ mapLocated (SurfaceAggregateState name . stName) locatedState
+        | locatedState <- locatedStates
+        ]
+      transitionElements =
+        [ mapLocated (const (SurfaceAggregateTransition name ordinal)) transition
+        | (ordinal, transition) <- zip [0 ..] transitions
+        ]
       wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
       projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
       snapshotOffsets = [offset | (offset, BISnapshot _) <- positionedItems]
@@ -54,16 +63,16 @@ pAggregate context = do
     ( Aggregate
         { aggName = name,
           aggRegs = regs,
-          aggStates = states,
+          aggStates = map locatedValue locatedStates,
           aggCommands = [c | BICommand c _ <- items],
           aggEvents = [e | BIEvent e _ <- items],
-          aggTransitions = [t | BITransition t _ <- items],
+          aggTransitions = map locatedValue transitions,
           aggWire = listToMaybe [w | BIWire w <- items],
           aggProjection = listToMaybe [p | BIProjection p <- items],
           aggSnapshot = listToMaybe [s | BISnapshot s <- items],
           aggLoc = loc
         },
-      concatMap bodyElements items
+      stateElements <> transitionElements <> concatMap bodyElements items
     )
   where
     listToMaybe xs = case xs of (x : _) -> Just x; [] -> Nothing
@@ -89,10 +98,10 @@ pRegDecl context = do
   initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
   pure RegDecl {regName = name, regType = ty, regInitial = initial, regLoc = loc}
 
-pStatesLine :: P [StateDecl]
+pStatesLine :: P [Located StateDecl]
 pStatesLine = do
   keyword "states"
-  many pStateDecl
+  many (withOwnedSpan pStateDecl)
   where
     -- A state decl is an identifier with an optional terminal @!@. The
     -- @notFollowedBy@ lookahead stops the list before a transition whose source
@@ -119,7 +128,10 @@ pBodyItem context =
       BIWire <$> pWire,
       BIProjection <$> pProjection,
       BISnapshot <$> pSnapshot,
-      uncurry BITransition <$> pTransition context
+      do
+        located <- withOwnedSpan (pTransition context)
+        let (_, elements) = locatedValue located
+        pure (BITransition (mapLocated fst located) elements)
     ]
 
 pSnapshot :: P SnapshotSpec

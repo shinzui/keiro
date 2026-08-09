@@ -96,6 +96,56 @@ frontendSurfaceSpec = do
           } -> bodySpan `shouldBe` contextSpan
         other -> expectationFailure ("unexpected empty surface shape: " <> show other)
 
+    it "owns exact terminal-state and complete generated, replay-only, Hole, and adjacent transition syntax" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context semantic-source-index",
+                "aggregate Journey",
+                "  regs",
+                "    count Natural = 0",
+                "  states Empty Active Closed!",
+                "  command Start { amount:Natural }",
+                "  event Started = fields(Start)",
+                "  Empty -- Start -->",
+                "    guard cmd.amount > 0",
+                "    write count := cmd.amount",
+                "    emit Started",
+                "    goto Active",
+                "  replay-only Empty -- Start -->",
+                "    implementation hole",
+                "    goto Active",
+                "  Active -- Start --> implementation hole; goto Closed",
+                "  Closed -- Start --> implementation hole; goto Closed # trailing"
+              ]
+      surface <- parseSurfaceRight "semantic-source-index.keiro" source
+      let SurfaceSource {spec = Located {value = SurfaceSpec {elements}}} = surface
+          stateSpans =
+            [ (aggregateName, stateName, spanText source stateSpan)
+            | Located {span = stateSpan, value = SurfaceAggregateState aggregateName stateName} <- elements
+            ]
+          transitionSpans =
+            [ (aggregateName, ordinal, spanText source transitionSpan)
+            | Located {span = transitionSpan, value = SurfaceAggregateTransition aggregateName ordinal} <- elements
+            ]
+      stateSpans
+        `shouldBe` [ ("Journey", "Empty", "Empty"),
+                     ("Journey", "Active", "Active"),
+                     ("Journey", "Closed", "Closed!")
+                   ]
+      transitionSpans
+        `shouldBe` [ ( "Journey",
+                       0,
+                       "Empty -- Start -->\n    guard cmd.amount > 0\n    write count := cmd.amount\n    emit Started\n    goto Active"
+                     ),
+                     ( "Journey",
+                       1,
+                       "replay-only Empty -- Start -->\n    implementation hole\n    goto Active"
+                     ),
+                     ("Journey", 2, "Active -- Start --> implementation hole; goto Closed"),
+                     ("Journey", 3, "Closed -- Start --> implementation hole; goto Closed")
+                   ]
+
   describe "surface lowering" $ do
     it "preserves top-level source order before grouping the semantic graph" $ do
       let source = T.unlines ["context ordering", "id FirstId prefix=first", "enum Mode { On=on Off=off }", "id SecondId prefix=second"]

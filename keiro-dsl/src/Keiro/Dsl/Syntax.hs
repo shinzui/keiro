@@ -21,6 +21,7 @@ import Keiro.Dsl.Grammar
     Expr,
     IdDecl,
     MappedDecl,
+    Name,
     Node,
     NominalScalarDecl,
     Placement,
@@ -66,4 +67,6 @@ data SurfaceTopItem
 data SurfaceElement
   = SurfaceField !Text
   | SurfaceExpression !Expr
+  | SurfaceAggregateState !Name !Name
+  | SurfaceAggregateTransition !Name !Int
   deriving stock (Eq, Show, Generic)

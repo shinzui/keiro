@@ -35,7 +35,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: extend aggregate surface syntax to capture exact state and transition spans.
+- [x] (2026-08-09T23:18:29Z) Milestone 1: extend aggregate surface syntax to capture exact state
+  and transition spans.
 - [ ] Milestone 2: build a checked, file-qualified `SemanticSourceIndex` beside `ParsedSource` while
   preserving compatibility parser and `Spec` behavior.
 - [ ] Milestone 3: compose exact member indices beside `WorkspaceSpec` without relocating points or
@@ -49,7 +50,10 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- `withOwnedSpan` already trims trailing trivia around a whole parser production, so wrapping the
+  complete transition parser captured live, replay-only, generated, and Hole-owned forms without
+  changing clause parsing. The focused span test passed with all four adjacent transitions and a
+  trailing comment excluded from the final span.
 
 
 ## Decision Log
