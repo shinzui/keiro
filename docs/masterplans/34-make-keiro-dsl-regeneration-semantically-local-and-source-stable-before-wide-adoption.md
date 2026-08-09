@@ -132,7 +132,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | In Progress |
+| 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | Complete |
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Not Started |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Not Started |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Not Started |
@@ -203,8 +203,10 @@ append-only `keiro-dsl/diff-report/1` JSON expose semantic consumers separately 
 service-conformance and source-map impact. Missing legacy snapshots render “baseline unavailable”;
 they never imply no impact.
 
-**Generated corpus and adoption gate (EP-6 owns).** EP-6 alone runs the full 41-invocation corpus
-regeneration after all templates settle, preventing repeated high-churn fixture updates. It pins
+**Generated corpus and adoption gate (EP-6 owns).** EP-6 alone runs the complete policy-selected
+corpus regeneration after all templates settle, preventing repeated high-churn fixture updates.
+The policy selected 35 invocations at EP-1's checkpoint and validates its own suite coverage, so
+the live inventory rather than a hard-coded count is authoritative. EP-6 pins
 wire/fold/snapshot/behavior-key neutrality, exact evidence counts, mutation failures, and the Mori
 reproducer's allowed file set. No service rollout or release publication is part of this plan. The
 MasterPlan cannot complete until this gate is green, and fleet adoption additionally requires
@@ -247,6 +249,13 @@ interactions between child plans. Provide concise evidence.
 - The Mori Plan 181 regeneration changed 1,869 generated Haskell lines across 22 files. Unrelated
   behavior keys were stable; their contracts moved only because of line metadata, while unrelated
   harnesses repeated the same three optional-field coverage assertions.
+- EP-1's first compile probe found that `Keiro.Dsl.Grammar` already exports `RegisterRoot` for
+  expression paths. The semantic-impact root-kind constructors are therefore
+  `MappedCommandFieldRoot`, `MappedEventFieldRoot`, and `MappedRegisterRoot`; EP-2 and EP-5 must use
+  those public names.
+- The live conformance-corpus policy currently selects 35 scaffold invocations rather than the 41
+  estimated during planning. EP-1 passed all 35 with a byte-clean worktree. EP-6 must treat the
+  policy inventory and its suite-coverage check as authoritative instead of hard-coding 41.
 
 
 ## Decision Log
