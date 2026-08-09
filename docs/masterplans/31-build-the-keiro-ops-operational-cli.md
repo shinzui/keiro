@@ -34,10 +34,11 @@ providing an operational command-line tool over every runtime domain — durable
 workflows (list, show, journal, resurrect, cancel, awakeable signal/cancel, GC),
 timers (stuck-row triage: list/requeue/cancel/dead-letter, one-shot drain), the
 outbox and inbox (backlog, listing, requeue, GC, dispatch dead letters), pgmq queues
-(DLQ read/redrive/purge/archive), projections and read models (subscription
-positions, lag, dedup pruning), sharded subscriptions (ownership snapshots,
+(DLQ read/redrive/purge/archive), projections and read models (dedup pruning,
+with durable subscription positions and lag held behind Kiroku's checkpoint-inventory API), sharded subscriptions (ownership snapshots,
 relinquish), snapshots (inspect, delete, truncation-coverage preflight), and kiroku
-streams (read, lifecycle, truncate-before, live subscription state) — with
+streams (read, lifecycle, truncate-before, and durable checkpoint inventory once
+the owning API is released) — with
 human-readable tables by default and `--json` everywhere for scripting.
 
 The design honors keiro's library shape. Operations split into two classes. The
@@ -74,7 +75,10 @@ when the binary and database migration generations diverge), and the documentati
 flip (`docs/user/operations.md` procedures become commands; `docs/user/roadmap.md`
 moves "Operator CLIs" from longer-term to available).
 
-Out of scope: a TUI or web console (the CLI is the substrate one could build on
+Out of scope: implementing Kiroku's durable checkpoint-inventory API in this
+repository; that owning-library dependency is tracked by
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`. Also out of scope:
+a TUI or web console (the CLI is the substrate one could build on
 later); hosting long-running workers in the CLI (workers belong in the application;
 the CLI offers one-shot passes like `timer drain-once` and `wf gc run-once` for
 cron-driven operation); merging with the `keiro-dsl` CLI (dev-time spec toolchain,
@@ -122,9 +126,11 @@ database-only timer triage end to end. It records the constitutional rules as a
 new ADR.
 
 EP-3 (plan 207) adds the remaining database-only domains — outbox, inbox, dispatch
-dead letters, pgmq DLQs, projection positions, shards, snapshots, and kiroku
+dead letters, pgmq DLQs, projection dedup retention, shards, snapshots, and kiroku
 streams — each a thin wrapper over the owning library's exported functions,
-following the patterns EP-2 froze.
+following the patterns EP-2 froze. Its durable checkpoint inventory and derived
+projection-lag commands remain open until
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2` ships a public API.
 
 EP-4 (plan 208) makes the tree embeddable (`Keiro.Ops.commandTree` taking an
 application environment with optional registry/timer-fire/audit hooks), ships the
@@ -166,8 +172,8 @@ frozen identity bytes) do not constrain this initiative.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
 | 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
-| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Complete |
-| 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Not Started |
+| 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | Kiroku IR-2 | In Progress |
+| 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -185,6 +191,12 @@ environment type) and soft-depends on EP-3 only because the documentation flip
 should describe the full domain set; the embedding mechanics themselves need
 nothing from EP-3, so EP-3 and EP-4 can proceed in parallel if the docs milestone
 of EP-4 lands last.
+
+EP-3 has one external integration gate: durable checkpoint inventory and the
+projection lag derived from it require
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`. The other EP-3
+domains are complete. EP-4 may proceed because that relationship is soft and no
+code-dependent hook relies on checkpoint inventory.
 
 
 ## Integration Points
@@ -207,6 +219,14 @@ The command-tree module layout (`Keiro.Ops.Cli` root; one module per domain,
 `Keiro.Ops.Workflow`, `Keiro.Ops.Timer`, then EP-3's `Keiro.Ops.Outbox`, `.Inbox`,
 `.Pgmq`, `.Projection`, `.Shard`, `.Snapshot`, `.Stream`) — EP-2 freezes the
 per-domain module convention and the render/`--json` helpers every domain uses.
+
+Kiroku durable checkpoints — EP-3 must consume the public member-aware inventory
+requested by `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2` once a
+tagged Kiroku release provides it. Until then neither `projection position` nor
+`stream subscriptions` is mounted: filtering through Keiro's direct
+`subscriptions`-table query violates ADR 28, while `subscriptionStates` is a live
+registry on the CLI's newly opened store handle and cannot represent deployed or
+stopped workers.
 
 EP-1's new APIs in `keiro` (`listWorkflowInstances`, `cancelWorkflow`,
 `releaseInstanceLeaseForce` or equivalents) — EP-1 defines and tests them; EP-2
@@ -232,7 +252,8 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
 - [x] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
 - [x] EP-2: workflow + standalone timer-triage domains complete; ADR for the operator-command contract recorded.
-- [x] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
+- [x] EP-3: outbox, inbox, dead-letter, pgmq, projection-dedup, shard, snapshot, and stream lifecycle/read domains complete.
+- [ ] EP-3: durable checkpoint inventory and projection-lag commands, blocked on `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`.
 - [ ] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
 - [ ] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
 
@@ -270,8 +291,12 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   SQL, and its `OpsEnv` remains unchanged for EP-4.
 - 2026-08-08: `subscriptionStates` in
   `mori://shinzui/kiroku/packages/kiroku-store` is live process-local state, not
-  durable checkpoint inventory. EP-3 exposes that supported surface honestly;
-  durable checkpoint listing remains unavailable until Kiroku publishes an API.
+  durable checkpoint inventory. A later audit also found that the standalone
+  binary opens a fresh `KirokuStore`, so its process-local registry normally has
+  no application workers and is not a useful substitute. EP-3 removed that
+  command and the indirect `Keiro.ReadModel.readSubscriptionPosition` CLI path;
+  both durable commands now wait on
+  `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`.
   EP-3 also made aggregate snapshot discriminators explicit because the
   standalone binary cannot infer application codec identities.
 
@@ -334,12 +359,12 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
   Date: 2026-08-09
 
 - Decision: Keep EP-3 previews exact by adding reusable read APIs to the owning
-  Keiro modules, while representing unsupported upstream state honestly rather
-  than bypassing library boundaries.
+  Keiro modules, while deferring durable Kiroku checkpoint reporting until its
+  owning library publishes the required API.
   Rationale: ADR 28 applies to reads used to authorize mutations as well as to
-  the mutations themselves. Kiroku's live subscription registry can be shown as
-  live state, but cannot be relabeled as durable checkpoints or replaced with
-  private-table access.
+  the mutations themselves. `subscriptionStates` cannot be relabeled as durable
+  checkpoints and is normally empty on the standalone binary's fresh store
+  handle; Keiro's direct `subscriptions` query is not an acceptable CLI bridge.
   Date: 2026-08-08
 
 
@@ -351,15 +376,17 @@ schema safeguards, full workflow inspection/recovery commands, and timer stuck-r
 triage. ADR 28 fixes the command/library ownership boundary for every later domain.
 The scratch-database transcript and full gate evidence are recorded in plan 206.
 
-EP-3 completed on 2026-08-08. The standalone binary now mounts outbox, inbox,
-PGMQ DLQ, projection, shard, snapshot, and Kiroku stream domains alongside the
-workflow and timer commands from EP-2. Exact previews stay behind public owning
+EP-3's independent domains landed on 2026-08-08. The standalone binary now mounts
+outbox, inbox, PGMQ DLQ, projection dedup, shard, snapshot, and Kiroku stream
+read/lifecycle domains alongside the workflow and timer commands from EP-2.
+Exact previews stay behind public owning
 library APIs; irreversible PGMQ purge and stream deletion have typed human-mode
 target confirmation; JSON automation remains preview plus `--force`. The
 database integration suite passes 23 examples, and the affected Keiro and
 `keiro-pgmq` suites pass 441 and 58 examples respectively. The repository-wide
 `just verify` gate passes through the full DSL conformance corpus, jitsurei,
-migrations, generated-corpus checks, and OKF validation.
+migrations, generated-corpus checks, and OKF validation. Durable checkpoint
+inventory and projection lag remain incomplete behind Kiroku IR-2.
 
 The next dependency-ready child is EP-4 (plan 208): extend the environment with
 application hooks, mount code-dependent operations, demonstrate embedding in
@@ -374,3 +401,7 @@ Revision note: Reconciled EP-4 with the landed `ProjectionCatalogOperations` API
 
 Revision note: Completed EP-1, recorded its lifecycle-arbitration discovery and
 ADR, and unblocked EP-2 with the planned public operator APIs, 2026-08-08.
+
+Revision note: Reopened EP-3's durable checkpoint slice, removed the unusable
+process-local subscription command and the cross-schema projection-position
+bridge, and gated both on Kiroku IR-2, 2026-08-08.

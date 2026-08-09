@@ -39,7 +39,6 @@ import Keiro.Ops.Workflow qualified as OpsWorkflow
 import Keiro.Outbox qualified as Outbox
 import Keiro.PGMQ
 import Keiro.Projection qualified as Projection
-import Keiro.ReadModel (readSubscriptionPosition)
 import Keiro.Snapshot.Schema
 import Keiro.Subscription.Shard qualified as Shard
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore, withMigratedSuiteWith)
@@ -53,8 +52,7 @@ import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (getStream, readStreamForward)
-import Kiroku.Store.Subscription (defaultSubscriptionConfig, wait, withSubscription)
-import Kiroku.Store.Subscription.Types (SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..))
+import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types
 import Pgmq.Migration qualified as PgmqMigration
@@ -442,20 +440,8 @@ spec fixture = do
       dlqAfterPurge `shouldBe` 0
 
   describe "projection handlers" $ around (withFreshStore fixture) do
-    it "reports lag, reaches zero after checkpointing, and prunes only the named dedup rows" $ \store -> do
-      appended <- seedKirokuEvent store "projection-source" "018f5f43-8a70-7b9a-9a9b-59d391a76810" Nothing
-
-      lagging <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "ops-projection" Nothing)
-      jsonInteger "lag" lagging `shouldBe` Just 1
-
-      let config = defaultSubscriptionConfig (SubscriptionName "ops-projection") AllStreams (\_ -> pure Stop)
-      withSubscription store config $ \handle -> wait handle >>= either (fail . show) pure
-      checkpoint <- expectStore store (readSubscriptionPosition "ops-projection")
-      checkpoint `shouldBe` Just appended.globalPosition
-
-      caughtUp <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "ops-projection" Nothing)
-      jsonInteger "lag" caughtUp `shouldBe` Just 0
-
+    it "prunes only the named dedup rows" $ \store -> do
+      _ <- seedKirokuEvent store "projection-source" "018f5f43-8a70-7b9a-9a9b-59d391a76810" Nothing
       events <- expectStore store (readStreamForward (StreamName "projection-source") (StreamVersion 0) 1)
       let recorded = Vector.head events
           projection =

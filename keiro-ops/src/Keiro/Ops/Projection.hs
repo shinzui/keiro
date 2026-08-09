@@ -1,4 +1,4 @@
--- | Operational adapters for projection positions and dedup retention.
+-- | Operational adapters for projection dedup retention.
 --
 -- Commands call the public Keiro read-model and projection APIs in accordance
 -- with ADR 28.
@@ -20,28 +20,19 @@ import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 import Keiro.Ops.Render
 import Keiro.Projection (countAsyncProjectionDedupForBefore, pruneAsyncProjectionDedupForBefore)
-import Keiro.ReadModel (categoryHeadPosition, readSubscriptionPosition, storeHeadPosition)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (GlobalPosition (..))
 import Options.Applicative hiding (action, value)
 
 data Command
-  = Position !Text !(Maybe Text)
-  | PruneDedup !Text !UTCTime
+  = PruneDedup !Text !UTCTime
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
-    ( command "position" (info positionParser (progDesc "Show checkpoint, head, and lag for a subscription"))
-        <> command "prune-dedup" (info pruneParser (progDesc "Preview or prune one projection's old dedup rows"))
-    )
+    (command "prune-dedup" (info pruneParser (progDesc "Preview or prune one projection's old dedup rows")))
   where
-    positionParser =
-      Position
-        <$> textOption "subscription" "NAME" "Kiroku subscription name"
-        <*> optional (textOption "category" "CATEGORY" "Use this category head instead of the whole store")
     pruneParser =
       PruneDedup
         <$> textOption "projection" "NAME" "Async projection name"
@@ -59,18 +50,10 @@ utcReader = eitherReader $ \raw ->
 
 isMutation :: Command -> Bool
 isMutation = \case
-  Position {} -> False
   PruneDedup {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
-  Position subscription category ->
-    runAction env action (Succeeded . positionResult subscription category)
-    where
-      action = do
-        checkpoint <- readSubscriptionPosition subscription
-        headPosition <- maybe storeHeadPosition categoryHeadPosition category
-        pure (checkpoint, headPosition)
   PruneDedup projection before
     | env.force ->
         runAction env (pruneAsyncProjectionDedupForBefore projection before) $ \affected ->
@@ -86,25 +69,6 @@ runAction env action onSuccess = do
   result <- runStoreIO env.store action
   pure $ either (Failed . Text.pack . show) onSuccess result
 
-positionResult :: Text -> Maybe Text -> (Maybe GlobalPosition, GlobalPosition) -> OpsResult
-positionResult subscription category (checkpoint, headPosition) =
-  OpsResult
-    { headers = ["subscription", "scope", "checkpoint", "head", "lag"],
-      rows = [[subscription, maybe "$all" id category, maybe "none" (showText . positionInt) checkpoint, showText headValue, showText lag]],
-      jsonValue =
-        object
-          [ "subscription" .= subscription,
-            "category" .= category,
-            "checkpoint" .= fmap positionInt checkpoint,
-            "head" .= positionInt headPosition,
-            "lag" .= lag
-          ]
-    }
-  where
-    headValue = positionInt headPosition
-    current = maybe 0 positionInt checkpoint
-    lag = max 0 (headValue - current)
-
 pruneResult :: Bool -> Text -> UTCTime -> Int64 -> OpsResult
 pruneResult preview projection before affected =
   OpsResult
@@ -112,9 +76,6 @@ pruneResult preview projection before affected =
       rows = [[projection, utcText before, showText affected]],
       jsonValue = object ["preview" .= preview, "projection" .= projection, "before" .= before, "affected" .= affected]
     }
-
-positionInt :: GlobalPosition -> Int64
-positionInt (GlobalPosition value) = value
 
 utcText :: UTCTime -> Text
 utcText = Text.pack . formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ"

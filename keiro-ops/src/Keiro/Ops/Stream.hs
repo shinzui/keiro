@@ -13,7 +13,7 @@ where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
-import Data.Int (Int32, Int64)
+import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -32,8 +32,6 @@ import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Lifecycle
 import Kiroku.Store.Read (getStream, lookupStreamNames, readStreamForward)
-import Kiroku.Store.Subscription (SubscriptionStateView (..), subscriptionStates)
-import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Types
 import Options.Applicative hiding (action, info, value)
 import Options.Applicative qualified as Opt
@@ -45,7 +43,6 @@ data Command
   | Undelete !Text
   | HardDelete !Text
   | TruncateBefore !TruncateCommand
-  | Subscriptions
   | Causation !EventId
   deriving stock (Eq, Show)
 
@@ -62,7 +59,6 @@ commandParser =
         <> command "undelete" (Opt.info (Undelete <$> streamArgument) (progDesc "Preview or restore a soft-deleted stream"))
         <> command "hard-delete" (Opt.info (HardDelete <$> streamArgument) (progDesc "Preview or permanently delete a stream"))
         <> command "truncate-before" (Opt.info (TruncateBefore <$> truncateParser) (progDesc "Operate the reversible stream visibility marker"))
-        <> command "subscriptions" (Opt.info (pure Subscriptions) (progDesc "Show live process-local Kiroku subscription states"))
         <> command "causation" (Opt.info (Causation <$> eventIdArgument) (progDesc "Show an event's causation ancestors and descendants"))
     )
   where
@@ -124,7 +120,6 @@ nonNegativeInt64Reader = eitherReader $ \raw ->
 isMutation :: Command -> Bool
 isMutation = \case
   Show {} -> False
-  Subscriptions -> False
   Causation {} -> False
   SoftDelete {} -> True
   Undelete {} -> True
@@ -138,7 +133,6 @@ runCommand env = \case
   Undelete name -> runLifecycle env "undelete" name (undeleteStream (StreamName name))
   HardDelete name -> runHardDelete env name
   TruncateBefore truncateCommand -> runTruncate env truncateCommand
-  Subscriptions -> Succeeded . subscriptionsResult <$> subscriptionStates env.store
   Causation eventId -> runCausation env eventId
 
 runShow :: OpsEnv -> Text -> StreamVersion -> Int -> IO OpsOutcome
@@ -367,18 +361,6 @@ preflightJson (Just (Right evidence)) =
       "version_covered" .= evidence.versionCovered,
       "discriminators_match" .= evidence.discriminatorsMatch
     ]
-
-subscriptionsResult :: Map (SubscriptionName, Int32) SubscriptionStateView -> OpsResult
-subscriptionsResult states =
-  OpsResult
-    { headers = ["subscription", "member", "phase", "cursor", "scope"],
-      rows = map row entries,
-      jsonValue = Aeson.toJSON (map json entries)
-    }
-  where
-    entries = Map.toList states
-    row ((SubscriptionName name, member), view) = [name, showText member, view.statePhase, positionText view.cursor, "process_local"]
-    json ((SubscriptionName name, member), view) = object ["subscription" .= name, "member" .= member, "phase" .= view.statePhase, "cursor" .= positionInt view.cursor, "scope" .= ("process_local" :: Text)]
 
 causationResult :: EventId -> [RecordedEvent] -> [RecordedEvent] -> Map StreamId StreamName -> OpsResult
 causationResult seed ancestors descendants names =

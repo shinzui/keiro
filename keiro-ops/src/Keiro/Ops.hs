@@ -90,7 +90,7 @@ commandParser =
           (info (Pgmq <$> Pgmq.commandParser) (progDesc "Inspect and operate Keiro PGMQ queues"))
         <> command
           "projection"
-          (info (Projection <$> Projection.commandParser) (progDesc "Inspect projection positions and dedup state"))
+          (info (Projection <$> Projection.commandParser) (progDesc "Inspect and operate projection dedup state"))
         <> command
           "shard"
           (info (Shard <$> Shard.commandParser) (progDesc "Inspect and operate sharded-subscription ownership"))
