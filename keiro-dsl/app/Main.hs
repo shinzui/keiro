@@ -22,7 +22,7 @@ import Keiro.Dsl.FoldFingerprint (renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Loc (..), Placement (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (LanguageVersion, ParsedSource (..), SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, languageVersion, languageVersionText, lookupLanguageDefinition, sourceFormText, supportedLanguageVersions)
-import Keiro.Dsl.Parser (parseSource, renderParseFailure)
+import Keiro.Dsl.Parser (parseSourceDocument, renderParseFailure)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
@@ -30,7 +30,7 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (checkServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.SourceIndex (emptySemanticSourceIndex)
+import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), emptySemanticSourceIndex)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
@@ -497,18 +497,18 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
   | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
   input <- TIO.readFile fp
-  case parseSource fp input of
+  case parseSourceDocument fp input of
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right parsedSource -> TIO.putStrLn (renderSource parsedSource)
+    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> TIO.putStrLn (renderSource parsedSource)
 run (Check fp options) = do
   input <- TIO.readFile fp
-  case parseSource fp input of
+  case parseSourceDocument fp input of
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right parsedSource -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
       validateCheckDenyCodes options
       let service = checkedSource parsedSource
           spec = checkedSpec service
@@ -541,11 +541,11 @@ run (Check fp options) = do
           when (not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
 run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
-  case parseSource fp input of
+  case parseSourceDocument fp input of
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right parsedSource -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
@@ -581,16 +581,16 @@ run (New kind) =
     Right skel -> TIO.putStr skel
 run (Inspect fp InspectionJson) = do
   input <- TIO.readFile fp
-  case parseSource fp input of
+  case parseSourceDocument fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right parsedSource ->
+    Right ParsedSourceDocument {documentParsedSource = parsedSource} ->
       TLIO.putStrLn
         (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource) (checkedSource parsedSource)))
 run (BehaviorObligations fp format) = do
   input <- TIO.readFile fp
-  case parseSource fp input of
+  case parseSourceDocument fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right parsedSource -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
           diagnostics = validateService service
@@ -615,28 +615,31 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
         Left err -> hPutStrLn stderr ("git show " <> ref <> ":" <> relPath <> " failed:\n" <> err) >> exitFailure
         Right oldText -> do
           newText <- TIO.readFile fp
-          case (,) <$> parseSource (ref <> ":" <> relPath) (T.pack oldText) <*> parseSource fp newText of
+          case (,) <$> parseSourceDocument (ref <> ":" <> relPath) (T.pack oldText) <*> parseSourceDocument fp newText of
             Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-            Right (oldSource, newSource) -> do
-              let oldService = checkedSource oldSource
-                  newService = checkedSource newSource
-                  oldSpec = checkedSpec oldService
-                  newSpec = checkedSpec newService
-              emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage newSource)) newService
-              case (,) <$> diffSources oldSource newSource <*> replayImpactServices oldService newService of
-                Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
-                Right (changes, impact) -> do
-                  written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
-                  mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-                  let effectiveGate = gateWith gatedSurfaces
-                  mapM_ (TIO.putStrLn . renderFinding) changes
-                  when explain $
-                    mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
-                  TIO.putStrLn (renderReplayImpact impact)
-                  mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                  mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
-                  coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                  if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
+            Right
+              ( ParsedSourceDocument {documentParsedSource = oldSource},
+                ParsedSourceDocument {documentParsedSource = newSource}
+                ) -> do
+                let oldService = checkedSource oldSource
+                    newService = checkedSource newSource
+                    oldSpec = checkedSpec oldService
+                    newSpec = checkedSpec newService
+                emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage newSource)) newService
+                case (,) <$> diffSources oldSource newSource <*> replayImpactServices oldService newService of
+                  Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
+                  Right (changes, impact) -> do
+                    written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
+                    mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
+                    let effectiveGate = gateWith gatedSurfaces
+                    mapM_ (TIO.putStrLn . renderFinding) changes
+                    when explain $
+                      mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
+                    TIO.putStrLn (renderReplayImpact impact)
+                    mapM_ (`Aeson.encodeFile` impact) replayImpactOut
+                    mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                    coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
+                    if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
 -- | @parse@ on a workspace manifest: read it, parse it, and print it back in
 -- canonical form (clauses in order, members codepoint-sorted).

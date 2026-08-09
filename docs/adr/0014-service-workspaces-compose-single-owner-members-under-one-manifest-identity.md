@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service workspaces compose single-owner members under one manifest identity
 description: A keiro service may span several .keiro files, composed as one graph through a versioned manifest whose service name is the durable identity and whose members each own their declarations outright.
-timestamp: 2026-08-01T19:21:22Z
+timestamp: 2026-08-09T23:36:47Z
 docId: ADR-14
 status: Accepted
 date: 2026-07-29
@@ -131,6 +131,15 @@ relocated into a disjoint line range, so any diagnostic resolves back to one
 `(member file, original line)`. Workspace refusals reuse the shared
 append-only diagnostic-code registry rather than a parallel enum, and carry a
 non-empty list of locations so one refusal can cite every file involved.
+
+Exact semantic provenance is composed beside that compatibility line map, not
+through it. Every `WorkspaceMember` carries a `SemanticSourceIndex` whose paths
+are normalized to manifest-relative member paths, and `WorkspaceSpec` carries
+their checked union. File, line, and column points stay member-local and are
+never relocated into the synthetic merged range. Adding source lines to member
+A may shift member B's compatibility `wmLineBase`, but it cannot change B's
+exact index entries. A path mismatch or duplicate subject refuses composition
+as `WorkspaceSourceIndexInvalid` before scaffold planning or writes.
 
 The registry boundary is drawn at composition. Refusals that a *composed graph*
 produces get codes; refusals raised while *reading the manifest itself* — a

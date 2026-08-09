@@ -180,14 +180,9 @@ frontendFailureFromLowering failure@LoweringFailure {code, span, message} =
 
 -- | Lower semantic data and retain a checked exact source index beside it.
 lowerSurfaceDocument :: SurfaceSource -> Either LoweringFailure ParsedSourceDocument
-lowerSurfaceDocument surfaceSource@SurfaceSource {language, spec = locatedSpec} = do
-  validateSurfaceSource surfaceSource
-  let parsedSource =
-        ParsedSource
-          { parsedSourceLanguage = language,
-            parsedSpec = lowerSpec locatedSpec
-          }
-      fallbackSpan = case locatedSpec of Located {span = sourceSpan} -> sourceSpan
+lowerSurfaceDocument surfaceSource@SurfaceSource {spec = locatedSpec} = do
+  parsedSource <- lowerSurfaceSource surfaceSource
+  let fallbackSpan = case locatedSpec of Located {span = sourceSpan} -> sourceSpan
   sourceIndex <-
     either
       (Left . sourceIndexLoweringFailure fallbackSpan)
@@ -203,11 +198,17 @@ lowerSurfaceDocument surfaceSource@SurfaceSource {language, spec = locatedSpec} 
         documentSourceIndex = sourceIndex
       }
 
--- | Compatibility projection that drops only the checked source index.
+-- | Compatibility lowering for syntax-valid semantic graphs, including graphs
+-- whose duplicate names make an exact semantic index ambiguous. Production
+-- source-aware paths use 'lowerSurfaceDocument'.
 lowerSurfaceSource :: SurfaceSource -> Either LoweringFailure ParsedSource
-lowerSurfaceSource = fmap parsed . lowerSurfaceDocument
-  where
-    parsed ParsedSourceDocument {documentParsedSource} = documentParsedSource
+lowerSurfaceSource surfaceSource@SurfaceSource {language, spec = locatedSpec} = do
+  validateSurfaceSource surfaceSource
+  pure
+    ParsedSource
+      { parsedSourceLanguage = language,
+        parsedSpec = lowerSpec locatedSpec
+      }
 
 surfaceSourceEntries :: SurfaceSource -> [(SourceSubject, SourceSpan)]
 surfaceSourceEntries SurfaceSource {spec = Located {value = SurfaceSpec {elements}}} =

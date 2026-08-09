@@ -41,6 +41,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), Bind
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError (..))
 import Keiro.Dsl.FoldFingerprint qualified as CheckedFold
+import Keiro.Dsl.Frontend (LoweringFailure (..), LoweringFailureCode (..), lowerSurfaceDocument, parseSurfaceSource)
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
 import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
@@ -4209,17 +4210,34 @@ main = hspec $ do
       mapM_ (\expected -> dangling `shouldContain` [expected]) [StatusMapDanglingKey, StatusMapNotTotal]
       duplicate <- errorCodesOf "test/fixtures/statusmap-dup-key.keiro"
       duplicate `shouldContain` [StatusMapDuplicateKey]
-    it "rejects duplicate spec and aggregate names" $ do
-      codes <- errorCodesOf "test/fixtures/duplicate-names.keiro"
+    it "rejects duplicate aggregate source subjects before semantic duplicate-name validation" $ do
+      source <- readTestText "test/fixtures/duplicate-names.keiro"
+      surface <- case parseSurfaceSource "test/fixtures/duplicate-names.keiro" source of
+        Left frontendFailure -> expectationFailure (show frontendFailure) >> fail "unreachable"
+        Right value -> pure value
+      case lowerSurfaceDocument surface of
+        Left LoweringFailure {code = SemanticSourceIndexInvalid DuplicateSourceSubject} -> pure ()
+        other -> expectationFailure ("expected duplicate source-subject lowering refusal, got " <> show other)
+
+      let withoutDuplicateAggregate = T.unlines (reverse (drop 3 (reverse (T.lines source))))
+      parsed <- case parseSource "test/fixtures/duplicate-names.keiro" withoutDuplicateAggregate of
+        Left parseFailure -> expectationFailure (show parseFailure) >> fail "unreachable"
+        Right value -> pure value
+      let spec = parsedSpec parsed
+          codes = [code diagnostic | diagnostic <- validateSpec spec, severity diagnostic == Error]
       mapM_
         (\expected -> codes `shouldContain` [expected])
-        [ DuplicateNodeName,
-          DuplicateEnumCtor,
+        [ DuplicateEnumCtor,
           DuplicateEnumWire,
           DuplicateIdPrefix,
           DuplicateCommandName,
           DuplicateEventName
         ]
+      case [node | node@NAggregate {} <- specNodes spec] of
+        aggregateNode : _ ->
+          [code diagnostic | diagnostic <- validateSpec spec {specNodes = specNodes spec <> [aggregateNode]}, severity diagnostic == Error]
+            `shouldContain` [DuplicateNodeName]
+        [] -> expectationFailure "duplicate-name fixture lost its aggregate"
     it "rejects aggregate-local references that do not resolve" $ do
       codes <- errorCodesOf "test/fixtures/aggregate-bad-refs.keiro"
       mapM_ (\expected -> codes `shouldContain` [expected]) [RegisterInitialOutOfScope, UndeclaredCommand, WriteTargetNotRegister]

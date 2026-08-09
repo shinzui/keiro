@@ -134,7 +134,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 |---|-------|------|-----------|-----------|--------|
 | 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | Complete |
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Complete |
-| 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | In Progress |
+| 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Complete |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Not Started |
 | 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Not Started |
 | 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | Not Started |
@@ -224,8 +224,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2: localize aggregate harnesses without losing use-specific codec/replay evidence.
 - [x] EP-2: route the structural gate once through the service facade and pass focused locality,
   compiled-fixture, and restoring-mutation evidence.
-- [ ] EP-3: retain exact transition and state spans through a source-aware parsed wrapper.
-- [ ] EP-3: compose workspace source indices without contaminating the merged semantic graph.
+- [x] EP-3: retain exact transition and state spans through a source-aware parsed wrapper.
+- [x] EP-3: compose workspace source indices without contaminating the merged semantic graph.
 - [ ] EP-4: generate and preflight one behavior-key source map for single and workspace inputs.
 - [ ] EP-4: remove volatile positions from aggregate behavior contracts and diagnostics.
 - [ ] EP-5: persist semantic-impact snapshots and render scaffold/diff consumers honestly.
@@ -262,6 +262,11 @@ interactions between child plans. Provide concise evidence.
   Focused structural and scalar-expression fixtures compile the new renderer now; the legacy
   corpus inventory comparison temporarily ignores only that module until EP-6 performs the one
   coordinated 35-invocation refresh.
+- EP-3's exact and compatibility source paths cannot be identical at the final index-construction
+  step: the parse/pretty property intentionally admits syntax-valid duplicate aggregate names so
+  semantic validation can report them later. Production CLI and workspace paths require an
+  unambiguous exact index before checking or writes; compatibility parsing shares surface lowering
+  but may discard exact provenance rather than narrowing the released parser domain.
 
 
 ## Decision Log
@@ -322,6 +327,16 @@ The final corpus migration remains intentionally open for EP-6, along with the s
 behavior-source-map, and reporting work in EP-3 through EP-5. The focused implementation passed
 the full 623-example DSL suite, representative compiled conformance targets, restoring mutations,
 generated-source policy checks, ADR validation, and repeat-scaffold idempotence.
+
+EP-3 completed on 2026-08-09. Exact state and transition spans now survive parsing in a checked
+`SemanticSourceIndex` beside the normalized `Spec`, and workspace composition unions member-local,
+file-qualified indices without rebasing their points. Production single-file and workspace paths
+require the exact document before semantic checking or scaffold planning; compatibility parsing
+retains its prior domain and labels reconstructed locations as line-only. The implementation
+passed the full 626-example DSL suite, focused exact-location and workspace independence tests,
+build and strict ADR gates. Its corpus probe produced only EP-2's intentionally deferred
+`StructuralConformance` refresh, so EP-3 accepted no generated fixture changes and EP-6 remains the
+owner of the one coordinated corpus migration.
 
 
 ## Revision Notes

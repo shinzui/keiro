@@ -16,9 +16,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   mapped binding, fixture, opaque-boundary, coverage, and projection-witness checks. The generated
   service facade runs that list once under `structural/`; aggregate harnesses retain codec,
   wire-policy, snapshot/register, and replay evidence only for their checked mapped closure.
+- Exposes `Keiro.Dsl.SourceIndex`. `parseSourceDocument` and `lowerSurfaceDocument` return exact,
+  checked aggregate state and transition spans beside the unchanged semantic `ParsedSource`;
+  compatibility parser entry points retain syntax-valid duplicate-name graphs while reusing the
+  same surface/lowering seam. Workspace members retain normalized member-local indices and
+  `WorkspaceSpec` retains their checked, unrelocated union.
 
 ### Breaking Changes
 
+- `WorkspaceMember` gains `wmSourceIndex`, `WorkspaceSpec` gains `wsSourceIndex`, and
+  `composeWorkspace` now accepts `ParsedSourceDocument` inputs. `DiagnosticCode` gains
+  `WorkspaceSourceIndexInvalid`; exhaustive matches and direct record construction must be
+  extended. Bare-`Spec` adapters remain available but expose only `CompatibilityLineOnly`
+  positions rather than fabricated exact columns.
 - Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
   `Harness` into the context `StructuralConformance` module, which must be added to the consuming
   Cabal module inventory. Unrelated aggregate files are now byte-stable when a declaration outside

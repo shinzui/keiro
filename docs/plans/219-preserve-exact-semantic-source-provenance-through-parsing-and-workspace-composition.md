@@ -42,8 +42,8 @@ This section must always reflect the actual current state of the work.
   behavior.
 - [x] (2026-08-09T23:35:41Z) Milestone 3: compose exact member indices beside `WorkspaceSpec`
   without relocating points or changing merged semantic validation.
-- [ ] Milestone 4: audit every CLI/workspace source path, update ADRs and API tests, and prove no
-  generated, fold, diff, or replay drift.
+- [x] (2026-08-09T23:56:53Z) Milestone 4: audit every CLI/workspace source path, update ADRs and
+  API tests, and prove no generated, fold, diff, or replay drift attributable to the exact index.
 
 
 ## Surprises & Discoveries
@@ -59,6 +59,11 @@ implementation. Provide concise evidence.
   line before member A increments member B's `wmLineBase` by one, while B's exact transition
   remains `b.keiro:7:3`. A one-member exact document produces the same entry; the bare
   `ParsedSource` compatibility adapter reports `CompatibilityLineOnly`.
+- The first full-suite run found that the parse/pretty property deliberately generates
+  syntax-valid graphs with duplicate aggregate names. Requiring an exact index in the released
+  `parseSource` facade rejected those graphs before the existing semantic validator. The checked
+  document route still refuses `DuplicateSourceSubject`, while compatibility parsing now reuses
+  the same surface and semantic lowering without requiring an unambiguous index.
 
 
 ## Decision Log
@@ -88,6 +93,19 @@ Record every decision made while working on the plan.
   a compatibility caller may discard the index but may not reconstruct or bypass it.
   Date: 2026-08-09
 
+- Decision: Supersede the projection detail above for compatibility entry points: they share the
+  surface parse and semantic lowering seam but do not require a checked exact index; production
+  CLI and workspace paths do.
+  Rationale: Syntax-valid duplicate-name graphs must remain parseable so released parse/pretty and
+  downstream semantic diagnostics do not narrow. Exact-index ambiguity still fails at the first
+  production boundary with enough provenance, before validation-dependent planning or writes.
+- The corpus checker regenerated the two EP-2 mapped fixtures with their already-planned
+  `StructuralConformance` modules, then refused a second pass because those paths were dirty. The
+  source-index work changes no emitter input or output; the generated delta is the known EP-2
+  migration that this MasterPlan assigns to EP-6's single coordinated corpus refresh. The eight
+  checker-created fixture changes were removed and are not part of this plan.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -96,7 +114,24 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-09. Aggregate states and every transition ownership form now retain exact,
+half-open source spans through surface parsing. `ParsedSourceDocument` carries a checked,
+file-qualified `SemanticSourceIndex` beside the unchanged semantic `ParsedSource`; production CLI
+and workspace loaders require that exact document, while compatibility parsing preserves its
+released ability to return syntax-valid duplicate-name graphs for later semantic diagnostics.
+
+Workspace composition repaths and unions member indices without relocating their line or column
+points. The existing merged `Loc`, `LineMap`, `Spec`, validation, fold, diff, replay, and pretty
+contracts remain independent. A regression proves that inserting a line into member A changes
+member B's artificial compatibility base but leaves B's exact transition at `b.keiro:7:3`.
+
+Validation passed `cabal build keiro-dsl`, the full 626-example DSL suite, focused source-span and
+workspace provenance checks, the parse/pretty QuickCheck property, strict ADR validation, and
+`git diff --check`. The corpus checker exposed only the known EP-2 structural-conformance refresh
+reserved for EP-6; no generated fixture delta was accepted here. ADR 0014 now distinguishes exact
+member provenance from merged compatibility locations, and ADR 0016 records the checked wrapper
+and the production-versus-compatibility parsing boundary. EP-4 can now join stable behavior keys
+to exact semantic subjects without rescanning source text or contaminating semantic identity.
 
 
 ## Context and Orientation

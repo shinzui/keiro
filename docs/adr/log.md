@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-09
+* **Update**: Compose normalized member-local source indices without relocating points; retain LineMap only for compatibility diagnostics (plan 219).
+* **Update**: Keep exact aggregate state and transition provenance in a checked source index beside ParsedSource and project compatibility APIs from the same parse (plan 219).
 * **Update**: Run mapped declaration laws once through the runtime-owned facade without adding them to review-owned facts (plan 218).
 * **Update**: Record one context StructuralConformance owner, aggregate closure-local harness evidence, and single facade execution (plan 218).
 * **Updated**: Defined checked semantic-impact authority, aggregate-local closures, service-wide declaration ownership, and the current mapped-root boundary.

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-02T04:49:52Z
+timestamp: 2026-08-09T23:36:47Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -129,13 +129,23 @@ one-based line and column points. The end point immediately follows the last own
 trailing whitespace and comments are not part of the span. The surface tree preserves source order
 but deliberately does not preserve trivia.
 
-`lowerSurfaceSource` checks span ownership and source order, groups surface items into the existing
-`Spec` fields, and projects each top-level span's starting line into its compatibility `Loc`.
-`parseSource`, `parseSpec`, and `parseSpecText` route through this seam while retaining their
-released signatures and rendered failures. `Spec` equality, workspace composition, semantic
-validation, canonical rendering, generated output, fingerprints, diffs, and replay analysis remain
-location- and surface-independent. Advanced callers may inspect the surface representation without
-depending on Megaparsec types.
+`lowerSurfaceDocument` checks span ownership and source order, groups surface items into the
+existing `Spec` fields, and builds a separate `SemanticSourceIndex` for aggregate states and
+source-ordered transitions. The checked index requires exactly one file-qualified span for every
+semantic subject and refuses missing, duplicate, unexpected, or differently attributed anchors in
+the lowering phase. `ParsedSourceDocument` stores that index beside the unchanged `ParsedSource`;
+neither `Spec` nor `CheckedService` gains source fields.
+
+`lowerSurfaceSource`, `parseSource`, `parseSpec`, and `parseSpecText` retain their compatibility
+contract for every syntax-valid semantic graph, including a graph with duplicate semantic names
+that validation will reject. They reuse the same surface parse and semantic lowering seam but do
+not require an unambiguous exact index. This distinction preserves parse/pretty compatibility while
+production CLI and workspace member loading use the checked document route and therefore refuse an
+ambiguous index before checking or writes. A compatibility adapter constructed from a bare `Spec`
+may derive line-only entries, but labels them `CompatibilityLineOnly`; it never fabricates an exact
+column. `Spec` equality, semantic validation, canonical rendering, generated output, fingerprints,
+diffs, and replay analysis remain location- and surface-independent. Advanced callers may inspect
+the surface representation or exact index without depending on Megaparsec types.
 
 Advanced frontend failures are structured before they cross the parser facade. Each failure names
 source-selection, body-parsing, or lowering phase; carries a stable frontend or source-language
@@ -145,8 +155,9 @@ entry points project this data back to their existing `ParseFailure` and byte-pi
 semantic validator diagnostics remain a downstream, line-compatible contract.
 
 **Workspace provenance is per member; the effective semantic contract is per service.** Each
-`WorkspaceMember` retains its own `SourceLanguage`; `wsMergedSpec` remains the composed semantic
-graph, and `wsLanguageContract` records the one effective service contract. Composition compares
+`WorkspaceMember` retains its own `SourceLanguage` and exact source index; `wsMergedSpec` remains
+the composed semantic graph, `wsSourceIndex` is the checked union of member-local indices, and
+`wsLanguageContract` records the one effective service contract. Composition compares
 effective versions before merging. Legacy-unversioned and declared version 1 may compose because
 both select version 1. Different effective versions are refused before graph merge, with member
 paths and source locations, so a service cannot accidentally combine two language contracts.
