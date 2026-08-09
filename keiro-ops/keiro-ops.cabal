@@ -108,7 +108,7 @@ test-suite keiro-ops-test
     , keiro-test-support
     , kiroku-store          >=0.3       && <0.4
     , optparse-applicative  >=0.18      && <0.20
-    , pgmq-migration        >=0.4       && <0.5
+    , pgmq-migration        >=0.5       && <0.6
     , process               >=1.6       && <1.7
     , text                  >=2.1       && <2.2
     , time                  >=1.12      && <1.15

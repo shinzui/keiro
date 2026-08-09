@@ -80,7 +80,7 @@ library
     , kiroku-store          >=0.3     && <0.4
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
-    , pgmq-effectful        >=0.4     && <0.5
+    , pgmq-effectful        >=0.5     && <0.6
     , shibuya-core          >=0.8.0.1 && <0.9
     , text                  >=2.1
     , time                  >=1.12
@@ -149,11 +149,11 @@ test-suite jitsurei-test
     , kiroku-store          >=0.3     && <0.4
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
-    , pgmq-core             >=0.4     && <0.5
-    , pgmq-effectful        >=0.4     && <0.5
-    , pgmq-migration        >=0.4     && <0.5
+    , pgmq-core             >=0.5     && <0.6
+    , pgmq-effectful        >=0.5     && <0.6
+    , pgmq-migration        >=0.5     && <0.6
     , shibuya-core          >=0.8.0.1 && <0.9
-    , shibuya-pgmq-adapter  >=0.12    && <0.13
+    , shibuya-pgmq-adapter  >=0.13    && <0.14
     , text                  >=2.1
     , time                  >=1.12
     , uuid                  >=1.3
