@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
+  **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
+  `kiroku-store >=0.4 && <0.5`. Kiroku 0.4 adds the durable subscription
+  checkpoint inventory operation to the exported `Store` effect; exhaustive
+  third-party interpreters must handle its new constructor.
 - **keiro-dsl**: candidate language 5 extends the exported semantic graph with
   projection target, rebuild group, and projection owner nodes and adds catalog
   bindings to `ReadModelNode`. `DiagnosticCode` gains the corresponding
@@ -17,6 +22,17 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro**: replace the private subscription-checkpoint read and inferred
+  global head with Kiroku 0.4's public one-statement durable inventory. Add the
+  preferred `recordProjectionGlobalPositionDistance` API and
+  `keiro.projection.global_position_distance` gauge; the historical lag API and
+  gauge remain a deprecated 0.11 compatibility alias with the same
+  position-unit value.
+- **keiro-ops**: add read-only `stream subscriptions` and
+  `projection position --subscription NAME` commands. They preserve durable
+  consumer-group member rows, report the captured store cursor, and label the
+  derived subtraction `global_position_distance` rather than claiming an event
+  count.
 - **keiro**: add `Keiro.Projection.Catalog`, a pure typed projection inventory
   that separates query models, physical targets, atomic rebuild groups, and
   ordered projection owners. Validation accumulates stable multi-site

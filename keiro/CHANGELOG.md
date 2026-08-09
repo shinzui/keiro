@@ -8,12 +8,26 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `subscriptionPositionFromInventory` derives a subscription's durable floor
+  across all matching consumer-group members. `readSubscriptionPosition` and
+  `storeHeadPosition` now consume Kiroku's public one-statement checkpoint
+  inventory instead of querying the owned table or inferring the head from a
+  visible event.
+- `recordProjectionGlobalPositionDistance` records the preferred
+  `keiro.projection.global_position_distance` gauge and the deprecated
+  compatibility `keiro.projection.lag` gauge from the same inventory snapshot.
+  Both use `{position}` and neither claims to count relevant events.
 - `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
 ### Breaking Changes
 
+- Requires `kiroku-store >=0.4 && <0.5`. `KeiroMetrics` gains the
+  `projectionGlobalPositionDistance` gauge field; code constructing that record
+  directly must initialize it. Kiroku 0.4 also adds an operation to its exported
+  `Store` effect, so exhaustive custom interpreters must add the corresponding
+  arm.
 - `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
   constructor. The journal-append transaction now declines an ordinary
   `StepRecorded` append into a workflow generation that already carries a

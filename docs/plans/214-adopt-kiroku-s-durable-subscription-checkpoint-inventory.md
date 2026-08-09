@@ -49,8 +49,11 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   `projection position --subscription NAME` handlers with stable human/JSON output, one public
   inventory call per handler, empty/missing semantics, parser coverage, and durable ordered-row
   tests. The focused ops group passes 3 examples. (2026-08-09)
-- [ ] Milestone 3: cover the library and CLI behavior, correct position-distance terminology,
-  update the owning ADR and user documentation, and remove the obsolete known limitation.
+- [x] Milestone 3: covered empty, durable, ordered, multi-member, member-zero, floor, captured-head,
+  and dual-gauge behavior; documented the commands and position-distance semantics; updated the
+  package-set and affected package changelogs; amended ADR 28 and the telemetry audit; and removed
+  the obsolete Kiroku limitation. Focused suites pass 25 and 3 examples; ADR and research strict
+  validation report 28 and 17 valid concepts. (2026-08-09)
 - [ ] Milestone 4: pass focused and repository-wide validation, update the parent MasterPlan,
   perform ADR distillation, and record the final outcomes.
 
@@ -68,6 +71,11 @@ audit showing that the removed private checkpoint `SELECT` did not reappear else
   it, producing `unexpected argument 'lag'`. A one-word Hspec match is stable: the plan now uses
   `--test-options='--match=distance'`, which ran the intended metric example successfully.
   Evidence: 1 example, 0 failures on 2026-08-09.
+- `okf log add docs/adr ADR-28 ...` and the analogous RES-16 command warned that the concept was not
+  found because these bundles store one document per file at the root rather than in concept
+  directories. The command still updated the correct root `log.md` files, and strict
+  `--log-enforce` validation passed for both bundles. Evidence: `OK: 28 concepts` for ADRs and
+  `OK: 17 concepts` for research on 2026-08-09.
 - Kiroku's public `SubscriptionCheckpointInventory` captures the global store position and all
   persisted rows in one statement snapshot. Rows are already sorted by subscription name and
   numeric member, and a missing subscription produces no row rather than a synthetic position

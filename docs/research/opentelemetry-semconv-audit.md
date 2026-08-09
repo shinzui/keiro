@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: "2026-07-23T19:34:06Z"
+timestamp: "2026-08-09T16:55:05Z"
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
@@ -505,7 +505,7 @@ runtime and resume worker. The names, units, kinds, and description strings
 below match `newKeiroMetrics` character-for-character; EP-35/EP-36/EP-37/EP-44
 reference them verbatim.
 
-The instrument **kind** policy: backlog and lag are synchronous gauges recorded
+The instrument **kind** policy: backlog and position-distance values are synchronous gauges recorded
 by each worker on every poll pass using the count/age it already computes with
 its `Store` effect (an observable gauge's callback would need its own database
 access, which the library does not own — see the MasterPlan Decision Log); tally
@@ -595,10 +595,19 @@ generated module
 
 ### Projection
 
-- **`keiro.projection.lag`** — unit `{event}`, **Gauge** (`Int64`). Recorded by
-  the async projection drain each pass (`recordProjectionLag`) with the number
-  of events between the log head and the projection's checkpoint. Description:
-  "Events between the log head and a projection's checkpoint." Semconv
+- **`keiro.projection.global_position_distance`** — unit `{position}`, **Gauge**
+  (`Int64`). Recorded by the async projection drain each pass
+  (`recordProjectionGlobalPositionDistance`) from one Kiroku durable inventory:
+  the captured global store cursor minus the slowest matching member checkpoint,
+  clamped at zero. The value is a cursor distance, not a relevant-event count;
+  filtered, category, hard-deleted, and sharded histories can skip positions.
+  Description: "Global position distance between the captured store position and
+  a projection's slowest durable member checkpoint." Semconv alignment: none.
+- **`keiro.projection.lag`** — unit `{position}`, **Gauge** (`Int64`). Deprecated
+  0.11 compatibility instrument recorded from the same snapshot and with the same
+  value as `keiro.projection.global_position_distance`. Description: "Deprecated
+  compatibility gauge for the global position distance between the captured store
+  position and a projection's slowest durable member checkpoint." Semconv
   alignment: none.
 - **`keiro.projection.wait.timeouts`** — unit `{timeout}`, **Counter** (`Int64`).
   Recorded on the position-wait path when a read gives up before the projection
@@ -685,7 +694,8 @@ options.
 | keiro.timer.fire.lag             | ms         | Histogram | timer worker, on fire                     | $metric_messaging_process_duration 3404 (precedent) |
 | keiro.timer.attempts             | {attempt}  | Histogram | timer worker, on fire                     | none                                                |
 | keiro.timer.stuck                | {timer}    | Gauge     | timer worker, per poll pass (after EP-34) | none                                                |
-| keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
+| keiro.projection.global_position_distance | {position} | Gauge | async projection drain, per pass      | none                                                |
+| keiro.projection.lag             | {position} | Gauge     | async projection drain, compatibility     | none                                                |
 | keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
 | keiro.projection.rebuild.starts  | {run}      | Counter   | catalog runner, after durable start       | none                                                |
 | keiro.projection.rebuild.resumes | {run}      | Counter   | catalog runner, after accepted resume     | none                                                |

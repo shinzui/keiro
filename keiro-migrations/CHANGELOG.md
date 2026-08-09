@@ -6,6 +6,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+### Breaking Changes
+
+- Requires `kiroku-store >=0.4 && <0.5`. The independent
+  `kiroku-store-migrations ^>=0.3.0.0` dependency is unchanged because the
+  durable checkpoint inventory adds no Kiroku schema migration.
+
 ### Added
 
 - Migration `0021-keiro-workflows-exact-discovery.sql`. Widens

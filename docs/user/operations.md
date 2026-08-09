@@ -44,12 +44,63 @@ worked mounting point is `jitsurei/app/Main.hs`; inspect it with:
 cabal run jitsurei:exe:jitsurei-demo -- ops --help
 ```
 
-Durable Kiroku subscription checkpoint inventory is deliberately not
-implemented by querying Kiroku's private tables. Its owning-library API is
-tracked by
-`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; projection-lag
-and subscription-inventory CLI commands remain deferred until that public API
-ships. Use the worker metrics described below in the meantime.
+### Durable subscription positions
+
+Kiroku completed
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2` in
+`kiroku-store` 0.4.0.0. The standalone console now reads that public durable
+inventory; it does not query Kiroku's private tables. List every persisted
+subscription/member checkpoint, including rows whose worker is no longer
+running, in human or JSON form:
+
+```console
+keiro-ops stream subscriptions
+keiro-ops stream subscriptions --json
+```
+
+Human output repeats the store position captured by the same Kiroku statement:
+
+```text
+subscription  member  checkpoint_position  checkpoint_updated_at       store_position  global_position_distance
+orders        0       35                   2026-08-09T14:00:00Z         42              7
+orders        1       40                   2026-08-09T14:01:00Z         42              2
+```
+
+The JSON automation surface is stable:
+
+```json
+{
+  "store_position": 42,
+  "checkpoints": [
+    {
+      "subscription": "orders",
+      "member": 0,
+      "checkpoint_position": 35,
+      "checkpoint_updated_at": "2026-08-09T14:00:00Z",
+      "global_position_distance": 7
+    }
+  ]
+}
+```
+
+Inspect one subscription's members and slowest-member floor with:
+
+```console
+keiro-ops projection position --subscription orders
+keiro-ops projection position --subscription orders --json
+```
+
+Projection JSON uses `members` for the matching rows and adds
+`minimum_checkpoint_position` plus `maximum_global_position_distance`. A
+missing subscription returns an empty `members` array and `null` summaries; it
+does not manufacture member zero or checkpoint zero.
+
+`global_position_distance` is the non-negative subtraction of a durable
+checkpoint from the captured global store cursor. It is not an event count:
+filtered, category, hard-deleted, and sharded histories may skip global
+positions. A true relevant-event lag needs a compatible source frontier and a
+definition supplied by the owning library, so there is deliberately no
+`projection lag` command.
 
 ## Database Requirements
 
@@ -321,7 +372,7 @@ At minimum, track:
 - command success/failure by `CommandError`;
 - retry exhaustion;
 - hydration latency and stream length;
-- projection lag by subscription `last_seen`;
+- durable subscription checkpoints and their explicitly named global position distance;
 - async projection duplicate counts;
 - read-model wait timeouts;
 - process-manager duplicate handling;
@@ -390,8 +441,14 @@ Timer worker (`Keiro.Timer`):
 
 Async projection path (`Keiro.Projection` / `Keiro.ReadModel`):
 
-- `keiro.projection.lag` — Gauge, `{event}` — events between the stream head and a
-  subscription's checkpoint, recorded each drain pass. Alert when lag climbs steadily.
+- `keiro.projection.global_position_distance` — Gauge, `{position}` — the
+  non-negative global cursor distance between the captured store position and
+  the subscription's slowest durable member checkpoint, recorded each drain
+  pass. Investigate a steadily growing distance, but do not interpret it as a
+  count of relevant events.
+- `keiro.projection.lag` — Gauge, `{position}` — deprecated compatibility alias
+  recorded with the same value for the 0.11 release series. Migrate dashboards
+  to `keiro.projection.global_position_distance`.
 - `keiro.projection.wait.timeouts` — Counter, `{timeout}` — position-wait calls that timed
   out before the projection caught up. A rising rate means read-after-write waits are not
   being satisfied in time.

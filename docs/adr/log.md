@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-09
+* **Update**: Record Kiroku 0.4 durable checkpoint inventory ownership, member-floor semantics, and global-position-distance naming (plan 214).
+
 ## 2026-08-08
 * **Add**: Define the supported-library, schema-ownership, force-preview, schema-handshake, and embedding boundaries for operator commands (plan 206).
 * **Update**: Amend terminal arbitration so distinct completion, cancellation, failure, and rotation markers share one generation lifecycle lock (plan 205).

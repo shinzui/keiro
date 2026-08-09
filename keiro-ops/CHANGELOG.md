@@ -16,10 +16,12 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 - `AppHooks`, `opsCommandTree`, `runOpsInvocation`, and `mainWithHooks` for
   mounting application-owned workflow resume, timer dispatch, candidate-code
   replay audit, and validated projection-catalog rebuild commands.
+- Read-only `stream subscriptions` and
+  `projection position --subscription NAME` commands backed by the public
+  Kiroku 0.4 durable checkpoint inventory. Both preserve member rows and report
+  `global_position_distance`; neither queries Kiroku's private schema or claims
+  a relevant-event lag.
 
-### Known Limitations
+### Breaking Changes
 
-- Durable subscription checkpoint inventory and projection-position reporting
-  wait for the owning Kiroku API tracked by
-  `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`. This package
-  does not inspect Kiroku's private schema.
+- Requires `kiroku-store >=0.4 && <0.5` for the released durable inventory API.

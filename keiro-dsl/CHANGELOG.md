@@ -4,6 +4,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
+## Unreleased
+
+### Breaking Changes
+
+- Requires `kiroku-store >=0.4 && <0.5`, keeping generated conformance and
+  runtime fixtures on the same Kiroku effect surface as Keiro 0.11.
+
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

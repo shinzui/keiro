@@ -226,6 +226,8 @@ Types and functions:
 - `applyAsyncProjectionFromCatalog`
 - `applyAsyncProjectionUnfenced`
 - `pruneAsyncProjectionDedupBefore`
+- `recordProjectionGlobalPositionDistance`
+- `recordProjectionLag` (deprecated compatibility alias)
 
 Use the catalog-derived entry points for managed projections: both consult the
 same rebuild-group fence inside the append or dedup/write transaction and
@@ -327,12 +329,19 @@ Types and functions:
 - `runQuery`
 - `runQueryWith`
 - `waitFor`
+- `subscriptionPositionFromInventory`
 - `readSubscriptionPosition`
 - `storeHeadPosition`
 - `categoryHeadPosition`
 - re-exports from `Keiro.ReadModel.Schema`.
 
 Use it to define typed query wrappers and consistency behavior.
+
+`subscriptionPositionFromInventory` and `readSubscriptionPosition` take the
+minimum durable checkpoint across every member with the exact subscription
+name. `storeHeadPosition` uses the store cursor captured by Kiroku's public
+one-statement inventory, rather than inferring the head from the newest visible
+event.
 
 ## `Keiro.ReadModel.Schema`
 
@@ -617,6 +626,23 @@ propagation, semantic-convention attribute-name constants, `KeiroMetrics`,
 Process-manager and router workers can record `keiro.dispatch.failed`,
 `keiro.dispatch.duplicates`, and `keiro.dispatch.poison` through
 `WorkerOptions.metrics`.
+
+The preferred projection gauge is
+`keiro.projection.global_position_distance` with unit `{position}`. The
+historical `keiro.projection.lag` gauge remains a deprecated 0.11 compatibility
+instrument and receives the same value. Neither value counts relevant events.
+
+## `Keiro.Ops` (package `keiro-ops`)
+
+Embeddable and standalone operational command tree. The database-only surface
+includes `stream subscriptions`, which returns the captured Kiroku store
+position plus every durable checkpoint in subscription/member order, and
+`projection position --subscription NAME`, which returns matching `members`
+plus `minimum_checkpoint_position` and
+`maximum_global_position_distance`. Missing subscriptions have an empty member
+array and null summaries. Both commands are read-only, use
+`subscriptionCheckpointInventory`, and are available without an `AppHooks`
+capability.
 
 ## `Keiro.ReplayAudit`
 
