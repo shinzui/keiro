@@ -30,6 +30,7 @@ module Keiro.PGMQ.Dlq
     purgeDlq,
     archiveDlq,
     archiveDlqEntry,
+    archiveDlqEntryById,
   )
 where
 
@@ -45,7 +46,7 @@ import "effectful-core" Effectful (Eff, IOE, (:>))
 import "pgmq-effectful" Pgmq.Effectful
   ( Message (..),
     MessageBody (..),
-    MessageId,
+    MessageId (..),
     MessageQuery (..),
     Pgmq,
     ReadMessage (..),
@@ -239,3 +240,8 @@ archiveDlqEntry job msgId =
       { queueName = job.jobQueue.dlqName,
         messageId = msgId
       }
+
+-- | Numeric-id convenience wrapper for operator surfaces that should not need
+-- a direct dependency on the lower-level @pgmq-effectful@ package.
+archiveDlqEntryById :: (Pgmq :> es, IOE :> es) => Job p -> Int64 -> Eff es Bool
+archiveDlqEntryById job = archiveDlqEntry job . MessageId

@@ -40,6 +40,8 @@ module Keiro.Outbox
     markOutboxSent,
     lookupOutbox,
     listOutbox,
+    listStuckOutbox,
+    listSentOutboxGcCandidates,
     countOutboxBacklog,
     garbageCollectSent,
 

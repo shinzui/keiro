@@ -27,6 +27,7 @@ module Keiro.Inbox
     -- * Storage primitives
     lookupInbox,
     listInbox,
+    listCompletedInboxGcCandidates,
     garbageCollectCompleted,
     countInboxBacklog,
     markFailedTx,

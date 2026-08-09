@@ -31,6 +31,8 @@ module Keiro.Projection
     applyAsyncProjectionFromCatalog,
     applyAsyncProjectionUnfenced,
     pruneAsyncProjectionDedupBefore,
+    countAsyncProjectionDedupForBefore,
+    pruneAsyncProjectionDedupForBefore,
     recordProjectionLag,
   )
 where
@@ -285,6 +287,29 @@ pruneAsyncProjectionDedupBefore cutoff =
   runTransaction
     $ Tx.statement cutoff pruneProjectionDedupBeforeStmt
 
+-- | Count one projection's dedup rows older than a timestamp. This is the
+-- read-only operator preview for 'pruneAsyncProjectionDedupForBefore'.
+countAsyncProjectionDedupForBefore ::
+  (Store :> es) =>
+  Text ->
+  UTCTime ->
+  Eff es Int64
+countAsyncProjectionDedupForBefore projectionName cutoff =
+  runTransaction
+    $ Tx.statement (projectionName, cutoff) countProjectionDedupForBeforeStmt
+
+-- | Age out one named projection's dedup rows older than the supplied
+-- timestamp. Scoping the mutation keeps unrelated projection redelivery
+-- windows independent.
+pruneAsyncProjectionDedupForBefore ::
+  (Store :> es) =>
+  Text ->
+  UTCTime ->
+  Eff es Int64
+pruneAsyncProjectionDedupForBefore projectionName cutoff =
+  runTransaction
+    $ Tx.statement (projectionName, cutoff) pruneProjectionDedupForBeforeStmt
+
 -- | Record 'keiro.projection.lag' for one async projection: how many events its
 -- subscription is behind the global log head, computed as the store head global
 -- position minus the subscription's checkpoint position (clamped at 0). A no-op
@@ -344,6 +369,35 @@ pruneProjectionDedupBeforeStmt =
     WHERE applied_at < $1
     """
     (E.param (E.nonNullable E.timestamptz))
+    D.rowsAffected
+
+countProjectionDedupForBeforeStmt :: Statement (Text, UTCTime) Int64
+countProjectionDedupForBeforeStmt =
+  preparable
+    """
+    SELECT count(*)::bigint
+    FROM keiro.keiro_projection_dedup
+    WHERE projection_name = $1
+      AND applied_at < $2
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
+    )
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
+pruneProjectionDedupForBeforeStmt :: Statement (Text, UTCTime) Int64
+pruneProjectionDedupForBeforeStmt =
+  preparable
+    """
+    DELETE FROM keiro.keiro_projection_dedup
+    WHERE projection_name = $1
+      AND applied_at < $2
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
+    )
     D.rowsAffected
 
 eventIdToUuid :: EventId -> UUID

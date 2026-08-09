@@ -43,6 +43,8 @@ module Keiro.Subscription.Shard
     renewOwnedBuckets,
     relinquish,
     ownershipSnapshot,
+    ownershipSnapshotFor,
+    shardCountSnapshot,
 
     -- * Fair-share helper
     fairShareTarget,
@@ -174,3 +176,18 @@ ownershipSnapshot ::
   (Store :> es) => ShardLease -> Eff es [(Int, Maybe WorkerId, Maybe UTCTime)]
 ownershipSnapshot lease =
   runTransaction (listShardOwnership (subscriptionName lease))
+
+-- | Read ownership for a subscription without constructing a worker lease.
+-- Intended for operator and observability surfaces.
+ownershipSnapshotFor ::
+  (Store :> es) =>
+  SubscriptionName ->
+  Eff es [(Int, Maybe WorkerId, Maybe UTCTime)]
+ownershipSnapshotFor name = runTransaction (listShardOwnership name)
+
+-- | Read the configured shard-count groups for a subscription.
+shardCountSnapshot ::
+  (Store :> es) =>
+  SubscriptionName ->
+  Eff es [(Int, Int)]
+shardCountSnapshot name = runTransaction (listShardCounts name)

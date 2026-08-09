@@ -10,7 +10,14 @@ import Data.Text.IO qualified as Text.IO
 import Hasql.Connection.Settings qualified as Settings
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchema)
 import Keiro.Ops.Env
+import Keiro.Ops.Inbox qualified as Inbox
+import Keiro.Ops.Outbox qualified as Outbox
+import Keiro.Ops.Pgmq qualified as Pgmq
+import Keiro.Ops.Projection qualified as Projection
 import Keiro.Ops.Render
+import Keiro.Ops.Shard qualified as Shard
+import Keiro.Ops.Snapshot qualified as Snapshot
+import Keiro.Ops.Stream qualified as Stream
 import Keiro.Ops.Timer qualified as Timer
 import Keiro.Ops.Workflow qualified as Workflow
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
@@ -37,6 +44,13 @@ data Invocation = Invocation
 data Command
   = Workflow Workflow.Command
   | Timer Timer.Command
+  | Outbox Outbox.Command
+  | Inbox Inbox.Command
+  | Pgmq Pgmq.Command
+  | Projection Projection.Command
+  | Shard Shard.Command
+  | Snapshot Snapshot.Command
+  | Stream Stream.Command
 
 parserInfo :: ParserInfo Invocation
 parserInfo =
@@ -65,6 +79,27 @@ commandParser =
               (Timer <$> Timer.commandParser)
               (progDesc "Inspect and operate durable timers")
           )
+        <> command
+          "outbox"
+          (info (Outbox <$> Outbox.commandParser) (progDesc "Inspect and operate the transactional outbox"))
+        <> command
+          "inbox"
+          (info (Inbox <$> Inbox.commandParser) (progDesc "Inspect and operate the integration-event inbox"))
+        <> command
+          "pgmq"
+          (info (Pgmq <$> Pgmq.commandParser) (progDesc "Inspect and operate Keiro PGMQ queues"))
+        <> command
+          "projection"
+          (info (Projection <$> Projection.commandParser) (progDesc "Inspect projection positions and dedup state"))
+        <> command
+          "shard"
+          (info (Shard <$> Shard.commandParser) (progDesc "Inspect and operate sharded-subscription ownership"))
+        <> command
+          "snapshot"
+          (info (Snapshot <$> Snapshot.commandParser) (progDesc "Inspect and operate advisory snapshots"))
+        <> command
+          "stream"
+          (info (Stream <$> Stream.commandParser) (progDesc "Inspect and operate Kiroku streams"))
     )
 
 runInvocation :: Invocation -> IO ()
@@ -96,11 +131,25 @@ isMutation :: Command -> Bool
 isMutation = \case
   Workflow workflowCommand -> Workflow.isMutation workflowCommand
   Timer timerCommand -> Timer.isMutation timerCommand
+  Outbox outboxCommand -> Outbox.isMutation outboxCommand
+  Inbox inboxCommand -> Inbox.isMutation inboxCommand
+  Pgmq pgmqCommand -> Pgmq.isMutation pgmqCommand
+  Projection projectionCommand -> Projection.isMutation projectionCommand
+  Shard shardCommand -> Shard.isMutation shardCommand
+  Snapshot snapshotCommand -> Snapshot.isMutation snapshotCommand
+  Stream streamCommand -> Stream.isMutation streamCommand
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
   Workflow workflowCommand -> Workflow.runCommand env workflowCommand
   Timer timerCommand -> Timer.runCommand env timerCommand
+  Outbox outboxCommand -> Outbox.runCommand env outboxCommand
+  Inbox inboxCommand -> Inbox.runCommand env inboxCommand
+  Pgmq pgmqCommand -> Pgmq.runCommand env pgmqCommand
+  Projection projectionCommand -> Projection.runCommand env projectionCommand
+  Shard shardCommand -> Shard.runCommand env shardCommand
+  Snapshot snapshotCommand -> Snapshot.runCommand env snapshotCommand
+  Stream streamCommand -> Stream.runCommand env streamCommand
 
 finishOutcome :: OpsEnv -> OpsOutcome -> IO ()
 finishOutcome env = \case

@@ -12,6 +12,7 @@ module Keiro.Inbox.Schema
     recordFailedAttemptTx,
     lookupInbox,
     listInbox,
+    listCompletedInboxGcCandidates,
     garbageCollectCompleted,
     countInboxBacklog,
   )
@@ -114,6 +115,17 @@ listInbox :: (Store :> es) => Text -> Eff es [InboxRow]
 listInbox src =
   runTransaction $
     Tx.statement src listBySourceStmt
+
+-- | List completed rows a retention pass would delete, oldest first.
+-- This is a read-only operator preview for 'garbageCollectCompleted'.
+listCompletedInboxGcCandidates ::
+  (Store :> es) =>
+  NominalDiffTime ->
+  UTCTime ->
+  Eff es [InboxRow]
+listCompletedInboxGcCandidates keepFor now =
+  runTransaction $
+    Tx.statement (addUTCTime (negate keepFor) now) listCompletedGcCandidatesStmt
 
 -- | Count inbox rows in a non-terminal state (backlog gauge source).
 --
@@ -431,6 +443,13 @@ listBySourceStmt =
   preparable
     (selectAllSql <> " WHERE source = $1 ORDER BY received_at, dedupe_key")
     (E.param (E.nonNullable E.text))
+    (D.rowList inboxRowDecoder)
+
+listCompletedGcCandidatesStmt :: Statement UTCTime [InboxRow]
+listCompletedGcCandidatesStmt =
+  preparable
+    (selectAllSql <> " WHERE status = 'completed' AND completed_at < $1 ORDER BY completed_at, source, dedupe_key")
+    (E.param (E.nonNullable E.timestamptz))
     (D.rowList inboxRowDecoder)
 
 countInboxBacklogStmt :: Statement () Int

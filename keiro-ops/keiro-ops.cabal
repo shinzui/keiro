@@ -43,8 +43,15 @@ library
   exposed-modules:
     Keiro.Ops
     Keiro.Ops.Env
+    Keiro.Ops.Inbox
+    Keiro.Ops.Outbox
     Keiro.Ops.Parse
+    Keiro.Ops.Pgmq
+    Keiro.Ops.Projection
     Keiro.Ops.Render
+    Keiro.Ops.Shard
+    Keiro.Ops.Snapshot
+    Keiro.Ops.Stream
     Keiro.Ops.Timer
     Keiro.Ops.Workflow
 
@@ -58,6 +65,7 @@ library
     , hasql                 >=1.10      && <1.11
     , keiro                 ^>=0.11.0.0
     , keiro-migrations      ^>=0.11.0.0
+    , keiro-pgmq            ^>=0.11.0.0
     , kiroku-store          >=0.3       && <0.4
     , optparse-applicative  >=0.18      && <0.20
     , text                  >=2.1       && <2.2
@@ -92,8 +100,10 @@ test-suite keiro-ops-test
     , hspec               >=2.11
     , keiro               ^>=0.11.0.0
     , keiro-ops
+    , keiro-pgmq          ^>=0.11.0.0
     , keiro-test-support
     , kiroku-store        >=0.3       && <0.4
+    , pgmq-migration      >=0.4       && <0.5
     , process             >=1.6       && <1.7
     , text                >=2.1       && <2.2
     , time                >=1.12      && <1.15

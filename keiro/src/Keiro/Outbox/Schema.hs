@@ -15,6 +15,8 @@ module Keiro.Outbox.Schema
     markOutboxSkippedTx,
     lookupOutbox,
     listOutbox,
+    listStuckOutbox,
+    listSentOutboxGcCandidates,
     countOutboxBacklog,
     garbageCollectSent,
   )
@@ -71,6 +73,28 @@ listOutbox :: (Store :> es) => Text -> Eff es [OutboxRow]
 listOutbox source =
   runTransaction $
     Tx.statement source listOutboxStmt
+
+-- | List rows a stale-publisher recovery pass would consider, oldest first.
+-- This is a read-only operator preview for 'requeueStuckOutbox'.
+listStuckOutbox ::
+  (Store :> es) =>
+  NominalDiffTime ->
+  UTCTime ->
+  Eff es [OutboxRow]
+listStuckOutbox olderThan now =
+  runTransaction $
+    Tx.statement (addUTCTime (negate olderThan) now) listStuckOutboxStmt
+
+-- | List sent rows a retention pass would delete, oldest first.
+-- This is a read-only operator preview for 'garbageCollectSent'.
+listSentOutboxGcCandidates ::
+  (Store :> es) =>
+  NominalDiffTime ->
+  UTCTime ->
+  Eff es [OutboxRow]
+listSentOutboxGcCandidates keepFor now =
+  runTransaction $
+    Tx.statement (addUTCTime (negate keepFor) now) listSentOutboxGcCandidatesStmt
 
 -- | Count outbox rows awaiting publish (backlog gauge source).
 --
@@ -661,6 +685,20 @@ listOutboxStmt =
   preparable
     (selectAllSql <> " WHERE source = $1 ORDER BY created_at, outbox_id")
     (E.param (E.nonNullable E.text))
+    (D.rowList outboxRowDecoder)
+
+listStuckOutboxStmt :: Statement UTCTime [OutboxRow]
+listStuckOutboxStmt =
+  preparable
+    (selectAllSql <> " WHERE status = 'publishing' AND updated_at < $1 ORDER BY updated_at, outbox_id")
+    (E.param (E.nonNullable E.timestamptz))
+    (D.rowList outboxRowDecoder)
+
+listSentOutboxGcCandidatesStmt :: Statement UTCTime [OutboxRow]
+listSentOutboxGcCandidatesStmt =
+  preparable
+    (selectAllSql <> " WHERE status = 'sent' AND published_at < $1 ORDER BY published_at, outbox_id")
+    (E.param (E.nonNullable E.timestamptz))
     (D.rowList outboxRowDecoder)
 
 selectAllSql :: Text

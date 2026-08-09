@@ -5,6 +5,10 @@ import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString.Char8 qualified as ByteString
+import Data.Function qualified as Function
+import Data.Functor ((<&>))
+import Data.Int (Int64)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -17,27 +21,54 @@ import Effectful.Error.Static (Error)
 import Hasql.Connection qualified as Hasql
 import Hasql.Connection.Settings qualified as HasqlSettings
 import Hasql.Session qualified as HasqlSession
+import Keiro.DeadLetter
+import Keiro.Inbox qualified as Inbox
+import Keiro.Integration.Event
 import Keiro.Ops.Env
+import Keiro.Ops.Inbox qualified as OpsInbox
+import Keiro.Ops.Outbox qualified as OpsOutbox
 import Keiro.Ops.Parse (parseDuration)
+import Keiro.Ops.Pgmq qualified as OpsPgmq
+import Keiro.Ops.Projection qualified as OpsProjection
 import Keiro.Ops.Render
+import Keiro.Ops.Shard qualified as OpsShard
+import Keiro.Ops.Snapshot qualified as OpsSnapshot
+import Keiro.Ops.Stream qualified as OpsStream
 import Keiro.Ops.Timer qualified as OpsTimer
 import Keiro.Ops.Workflow qualified as OpsWorkflow
-import Keiro.Test.Postgres (withFreshDatabase, withFreshStore, withMigratedSuite)
+import Keiro.Outbox qualified as Outbox
+import Keiro.PGMQ
+import Keiro.Projection qualified as Projection
+import Keiro.ReadModel (readSubscriptionPosition)
+import Keiro.Snapshot.Schema
+import Keiro.Subscription.Shard qualified as Shard
+import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore, withMigratedSuiteWith)
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Instance qualified as Instance
-import Kiroku.Store.Connection (KirokuStore)
+import Kiroku.Store.Append (appendToStream)
+import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Read (getStream, readStreamForward)
+import Kiroku.Store.Subscription (defaultSubscriptionConfig, wait, withSubscription)
+import Kiroku.Store.Subscription.Types (SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..))
 import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types
+import Pgmq.Migration qualified as PgmqMigration
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import Test.Hspec
 
 main :: IO ()
-main = withMigratedSuite $ \fixture -> hspec do
+main = do
+  pgmq <- either (fail . show) pure PgmqMigration.pgmqMigrations
+  withMigratedSuiteWith [pgmq] $ \fixture -> hspec (spec fixture)
+
+spec :: Fixture -> Spec
+spec fixture = do
   describe "selectConnectionString" do
     it "prefers the explicit option, then the Keiro variable, then DATABASE_URL" do
       selectConnectionString (Just "explicit") (Just "keiro") (Just "database")
@@ -210,7 +241,7 @@ main = withMigratedSuite $ \fixture -> hspec do
 
     it "previews and signals an awakeable through the supported library path" $ \store -> do
       let ref = OpsWorkflow.WorkflowRef "approval" "wf-3"
-          awakeableId = maybe (error "test UUID") id (UUID.fromString "018f5f43-8a70-7b9a-9a9b-59d391a76710")
+          awakeableId = maybe (error "test UUID") Function.id (UUID.fromString "018f5f43-8a70-7b9a-9a9b-59d391a76710")
       seedStep store ref "awkid:approval" (Aeson.toJSON (AwakeableId awakeableId))
       expectStore store $ runTransaction (Awakeable.registerAwakeableTx awakeableId "approval" "wf-3")
 
@@ -300,6 +331,358 @@ main = withMigratedSuite $ \fixture -> hspec do
       cancelled `shouldSatisfy` isSucceeded
       timerStatus store timerId `shouldReturn` Just Timer.Cancelled
 
+  describe "outbox handlers" $ around (withFreshStore fixture) do
+    it "lists backlog and previews stale recovery without mutation" $ \store -> do
+      now <- getCurrentTime
+      let outboxId = testOutboxId "018f5f43-8a70-7b9a-9a9b-59d391a76801"
+          event = sampleIntegrationEvent now "outbox-message"
+      expectStore store (runTransaction (Outbox.enqueueOutboxTx (Outbox.OutboxMessage outboxId event)))
+
+      backlog <- OpsOutbox.runCommand (opsEnv False store) OpsOutbox.Backlog
+      resultCount backlog `shouldBe` Just 1
+
+      claimNow <- getCurrentTime
+      _ <- expectStore store (Outbox.claimOutboxBatch Outbox.BestEffort 1 claimNow)
+      preview <- OpsOutbox.runCommand (opsEnv False store) (OpsOutbox.RequeueStuck 0 10)
+      preview `shouldSatisfy` isPreview
+      outboxStatus store outboxId `shouldReturn` Just Outbox.OutboxPublishing
+
+      applied <- OpsOutbox.runCommand (opsEnv True store) (OpsOutbox.RequeueStuck 0 10)
+      applied `shouldSatisfy` isSucceeded
+      outboxStatus store outboxId `shouldReturn` Just Outbox.OutboxFailed
+
+    it "surfaces dispatch dead letters through the supported API" $ \store -> do
+      let sourceEvent = EventId (testUuid "018f5f43-8a70-7b9a-9a9b-59d391a76802")
+      expectStore store $
+        recordDispatchDeadLetter
+          DispatchDeadLetter
+            { dispatcherKind = DispatcherProcessManager,
+              dispatcherName = "ops-pm",
+              correlationId = "order-1",
+              sourceEventId = sourceEvent,
+              sourceGlobalPosition = GlobalPosition 1,
+              emitIndex = 0,
+              targetStreamName = StreamName "order-1",
+              errorClass = "rejected",
+              errorDetail = "operator fixture",
+              attemptCount = 1
+            }
+      listed <- OpsOutbox.runCommand (opsEnv False store) (OpsOutbox.DispatchDeadLetters "ops-pm" 10)
+      resultArrayLength listed `shouldBe` Just 1
+
+  describe "inbox handlers" $ around (withFreshStore fixture) do
+    it "previews poison marking and GC without bypassing inbox APIs" $ \store -> do
+      now <- getCurrentTime
+      let poison = sampleIntegrationEvent now "poison-message"
+          completed = sampleIntegrationEvent now "completed-message"
+      seedInbox store poison
+      seedInbox store completed
+
+      preview <- OpsInbox.runCommand (opsEnv False store) (OpsInbox.MarkFailed poison.source poison.messageId "poison")
+      preview `shouldSatisfy` isPreview
+      inboxStatus store poison.source poison.messageId `shouldReturn` Just Inbox.InboxCompleted
+
+      marked <- OpsInbox.runCommand (opsEnv True store) (OpsInbox.MarkFailed poison.source poison.messageId "poison")
+      marked `shouldSatisfy` isSucceeded
+      inboxStatus store poison.source poison.messageId `shouldReturn` Just Inbox.InboxFailed
+
+      gcPreview <- OpsInbox.runCommand (opsEnv False store) (OpsInbox.Gc 0)
+      gcPreview `shouldSatisfy` isPreview
+      inboxStatus store completed.source completed.messageId `shouldReturn` Just Inbox.InboxCompleted
+
+      gcApplied <- OpsInbox.runCommand (opsEnv True store) (OpsInbox.Gc 0)
+      gcApplied `shouldSatisfy` isSucceeded
+      inboxStatus store completed.source completed.messageId `shouldReturn` Nothing
+
+  describe "pgmq handlers" $ around (withFreshStore fixture) do
+    it "previews and redrives a DLQ entry, which is then consumable" $ \store -> do
+      let queue = "keiro_ops_test.redrive"
+          job = rawValueJob queue
+          runPgmqUnit action = do
+            result <- runJobEff (JobRuntime store.pool Nothing) action
+            either (fail . show) pure result
+          depths = do
+            result <- runJobEff (JobRuntime store.pool Nothing) $ do
+              mainMetrics <- jobQueueMetrics job
+              dlqMetrics <- jobDlqMetrics job
+              pure (mainMetrics.queueLength, dlqMetrics.queueLength)
+            either (fail . show) pure result
+      runPgmqUnit $ do
+        ensureJobQueue job
+        _ <- enqueue job (object ["kind" .= ("poison" :: Text)])
+        _ <- runJobOnce 1 job (\_ -> pure (Dead "bad"))
+        pure ()
+
+      preview <- OpsPgmq.runCommand (opsEnv False store) (OpsPgmq.Dlq (OpsPgmq.Redrive queue 10))
+      preview `shouldSatisfy` isPreview
+      (mainBefore, dlqBefore) <- depths
+      (mainBefore, dlqBefore) `shouldBe` (0, 1)
+
+      applied <- OpsPgmq.runCommand (opsEnv True store) (OpsPgmq.Dlq (OpsPgmq.Redrive queue 10))
+      applied `shouldSatisfy` isSucceeded
+      (mainAfter, dlqAfter) <- depths
+      (mainAfter, dlqAfter) `shouldBe` (1, 0)
+
+      runPgmqUnit (runJobOnce 1 job (\_ -> pure Done))
+      (mainFinal, _) <- depths
+      mainFinal `shouldBe` 0
+
+      runPgmqUnit $ do
+        _ <- enqueue job (object ["kind" .= ("purge-me" :: Text)])
+        _ <- runJobOnce 1 job (\_ -> pure (Dead "still bad"))
+        pure ()
+      purgePreview <- OpsPgmq.runCommand (opsEnv False store) (OpsPgmq.Dlq (OpsPgmq.Purge queue))
+      purgePreview `shouldSatisfy` isPreview
+      (_, dlqBeforePurge) <- depths
+      dlqBeforePurge `shouldBe` 1
+
+      purged <- OpsPgmq.runCommand (opsEnv True store) (OpsPgmq.Dlq (OpsPgmq.Purge queue))
+      purged `shouldSatisfy` isSucceeded
+      (_, dlqAfterPurge) <- depths
+      dlqAfterPurge `shouldBe` 0
+
+  describe "projection handlers" $ around (withFreshStore fixture) do
+    it "reports lag, reaches zero after checkpointing, and prunes only the named dedup rows" $ \store -> do
+      appended <- seedKirokuEvent store "projection-source" "018f5f43-8a70-7b9a-9a9b-59d391a76810" Nothing
+
+      lagging <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "ops-projection" Nothing)
+      jsonInteger "lag" lagging `shouldBe` Just 1
+
+      let config = defaultSubscriptionConfig (SubscriptionName "ops-projection") AllStreams (\_ -> pure Stop)
+      withSubscription store config $ \handle -> wait handle >>= either (fail . show) pure
+      checkpoint <- expectStore store (readSubscriptionPosition "ops-projection")
+      checkpoint `shouldBe` Just appended.globalPosition
+
+      caughtUp <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "ops-projection" Nothing)
+      jsonInteger "lag" caughtUp `shouldBe` Just 0
+
+      events <- expectStore store (readStreamForward (StreamName "projection-source") (StreamVersion 0) 1)
+      let recorded = Vector.head events
+          projection =
+            Projection.AsyncProjection
+              { name = "ops-dedup",
+                readModelName = "ops-read-model",
+                subscriptionName = "ops-projection",
+                applyRecorded = \_ -> pure (),
+                idempotencyKey = (.eventId)
+              }
+      _ <- expectStore store (runTransaction (Projection.applyAsyncProjectionUnfenced projection recorded))
+      future <- addUTCTime 60 <$> getCurrentTime
+      prunePreview <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.PruneDedup "ops-dedup" future)
+      prunePreview `shouldSatisfy` isPreview
+      jsonIntegerFromPreview "affected" prunePreview `shouldBe` Just 1
+      pruned <- OpsProjection.runCommand (opsEnv True store) (OpsProjection.PruneDedup "ops-dedup" future)
+      jsonInteger "affected" pruned `shouldBe` Just 1
+
+  describe "shard handlers" $ around (withFreshStore fixture) do
+    it "previews exact buckets and relinquishes them for another worker" $ \store -> do
+      let subscription = SubscriptionName "ops-shards"
+          worker = Shard.WorkerId (testUuid "018f5f43-8a70-7b9a-9a9b-59d391a76803")
+          lease = Shard.ShardLease subscription worker 2 300
+      expectStore store (Shard.ensureShards lease)
+      _ <- expectStore store (Shard.acquireOwnedBuckets lease 1)
+      _ <- expectStore store (Shard.acquireOwnedBuckets lease 1)
+
+      status <- OpsShard.runCommand (opsEnv False store) (OpsShard.Status "ops-shards")
+      resultArrayLengthFromObject "ownership" status `shouldBe` Just 2
+
+      preview <- OpsShard.runCommand (opsEnv False store) (OpsShard.Relinquish "ops-shards" worker)
+      preview `shouldSatisfy` isPreview
+      ownersBefore <- expectStore store (Shard.ownershipSnapshotFor subscription)
+      length [() | (_, Just owner, _) <- ownersBefore, owner == worker] `shouldBe` 2
+
+      released <- OpsShard.runCommand (opsEnv True store) (OpsShard.Relinquish "ops-shards" worker)
+      released `shouldSatisfy` isSucceeded
+      ownersAfter <- expectStore store (Shard.ownershipSnapshotFor subscription)
+      ownersAfter `shouldSatisfy` all (\(_, owner, _) -> owner == Nothing)
+
+  describe "snapshot handlers" $ around (withFreshStore fixture) do
+    it "refuses uncovered truncation, passes matching coverage, and deletes advisories" $ \store -> do
+      appended <- seedKirokuEvent store "snapshot-ops" "018f5f43-8a70-7b9a-9a9b-59d391a76811" Nothing
+      let expected = OpsSnapshot.ExpectedDiscriminators 7 "regs-v7" "fold-v7"
+      expectStore store $
+        writeSnapshotRow
+          SnapshotWrite
+            { streamId = appended.streamId,
+              streamVersion = appended.streamVersion,
+              state = object ["count" .= (1 :: Int)],
+              stateCodecVersion = expected.stateCodecVersion,
+              regfileShapeHash = expected.regfileShapeHash,
+              stateShapeHash = expected.stateShapeHash
+            }
+
+      missing <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.TruncationPreflight "no-snapshot" (StreamVersion 2) (Just expected))
+      jsonBool "passed" missing `shouldBe` Just False
+
+      covered <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.TruncationPreflight "snapshot-ops" (StreamVersion 2) (Just expected))
+      jsonBool "passed" covered `shouldBe` Just True
+
+      preview <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.Delete "snapshot-ops")
+      preview `shouldSatisfy` isPreview
+      beforeDelete <- expectStore store (lookupSnapshotRow appended.streamId)
+      beforeDelete `shouldSatisfy` isJust
+
+      deleted <- OpsSnapshot.runCommand (opsEnv True store) (OpsSnapshot.Delete "snapshot-ops")
+      deleted `shouldSatisfy` isSucceeded
+      expectStore store (lookupSnapshotRow appended.streamId) `shouldReturn` Nothing
+
+  describe "stream handlers" $ around (withFreshStore fixture) do
+    it "reads causation and applies reversible lifecycle operations" $ \store -> do
+      first <- seedKirokuEvent store "stream-ops" "018f5f43-8a70-7b9a-9a9b-59d391a76812" Nothing
+      second <- seedKirokuEvent store "stream-ops" "018f5f43-8a70-7b9a-9a9b-59d391a76813" (Just (eventUuid first))
+
+      shown <- OpsStream.runCommand (opsEnv False store) (OpsStream.Show "stream-ops" (StreamVersion 0) 10)
+      resultArrayLengthFromObject "events" shown `shouldBe` Just 2
+
+      causes <- OpsStream.runCommand (opsEnv False store) (OpsStream.Causation (EventId (eventUuid second)))
+      resultArrayLength causes `shouldBe` Just 2
+
+      softPreview <- OpsStream.runCommand (opsEnv False store) (OpsStream.SoftDelete "stream-ops")
+      softPreview `shouldSatisfy` isPreview
+      streamDeleted store "stream-ops" `shouldReturn` Just False
+
+      softDeleted <- OpsStream.runCommand (opsEnv True store) (OpsStream.SoftDelete "stream-ops")
+      softDeleted `shouldSatisfy` isSucceeded
+      streamDeleted store "stream-ops" `shouldReturn` Just True
+
+      restored <- OpsStream.runCommand (opsEnv True store) (OpsStream.Undelete "stream-ops")
+      restored `shouldSatisfy` isSucceeded
+      streamDeleted store "stream-ops" `shouldReturn` Just False
+
+    it "previews and applies truncate markers and permanent deletion" $ \store -> do
+      _ <- seedKirokuEvent store "stream-destructive" "018f5f43-8a70-7b9a-9a9b-59d391a76814" Nothing
+      _ <- seedKirokuEvent store "stream-destructive" "018f5f43-8a70-7b9a-9a9b-59d391a76815" Nothing
+
+      truncatePreview <-
+        OpsStream.runCommand
+          (opsEnv False store)
+          (OpsStream.TruncateBefore (OpsStream.SetTruncateBefore "stream-destructive" (StreamVersion 2) Nothing True))
+      truncatePreview `shouldSatisfy` isPreview
+      streamTruncateBefore store "stream-destructive" `shouldReturn` Just (StreamVersion 0)
+
+      truncated <-
+        OpsStream.runCommand
+          (opsEnv True store)
+          (OpsStream.TruncateBefore (OpsStream.SetTruncateBefore "stream-destructive" (StreamVersion 2) Nothing True))
+      truncated `shouldSatisfy` isSucceeded
+      streamTruncateBefore store "stream-destructive" `shouldReturn` Just (StreamVersion 2)
+
+      clearPreview <- OpsStream.runCommand (opsEnv False store) (OpsStream.TruncateBefore (OpsStream.ClearTruncateBefore "stream-destructive"))
+      clearPreview `shouldSatisfy` isPreview
+      streamTruncateBefore store "stream-destructive" `shouldReturn` Just (StreamVersion 2)
+
+      cleared <- OpsStream.runCommand (opsEnv True store) (OpsStream.TruncateBefore (OpsStream.ClearTruncateBefore "stream-destructive"))
+      cleared `shouldSatisfy` isSucceeded
+      streamTruncateBefore store "stream-destructive" `shouldReturn` Just (StreamVersion 0)
+
+      deletePreview <- OpsStream.runCommand (opsEnv False store) (OpsStream.HardDelete "stream-destructive")
+      deletePreview `shouldSatisfy` isPreview
+      beforeDelete <- expectStore store (getStream (StreamName "stream-destructive"))
+      beforeDelete `shouldSatisfy` isJust
+
+      deleted <- OpsStream.runCommand (opsEnv True store) (OpsStream.HardDelete "stream-destructive")
+      deleted `shouldSatisfy` isSucceeded
+      expectStore store (getStream (StreamName "stream-destructive")) `shouldReturn` Nothing
+
+data SeededEvent = SeededEvent
+  { streamId :: !StreamId,
+    streamVersion :: !StreamVersion,
+    globalPosition :: !GlobalPosition,
+    eventId :: !EventId
+  }
+
+sampleIntegrationEvent :: UTCTime -> Text -> IntegrationEvent
+sampleIntegrationEvent now messageId =
+  IntegrationEvent
+    { messageId,
+      source = "ops-source",
+      destination = "ops-destination",
+      key = Just "entity-1",
+      eventType = "ops.event",
+      schemaVersion = 1,
+      contentType = ApplicationJson,
+      schemaReference = Nothing,
+      sourceEventId = Nothing,
+      sourceGlobalPosition = Nothing,
+      payloadBytes = ByteString.pack "{\"ok\":true}",
+      occurredAt = now,
+      causationId = Nothing,
+      correlationId = Nothing,
+      traceContext = Nothing,
+      attributes = Nothing
+    }
+
+seedInbox :: KirokuStore -> IntegrationEvent -> IO ()
+seedInbox store event = do
+  result <-
+    expectStore store $
+      Inbox.runInboxTransaction
+        Nothing
+        Inbox.PreferIntegrationMessageId
+        event
+        Nothing
+        (\_ -> pure ())
+  result `shouldBe` Right (Inbox.InboxProcessed ())
+
+outboxStatus :: KirokuStore -> Outbox.OutboxId -> IO (Maybe Outbox.OutboxStatus)
+outboxStatus store outboxId =
+  expectStore store (Outbox.lookupOutbox outboxId) <&> fmap (.status)
+
+inboxStatus :: KirokuStore -> Text -> Text -> IO (Maybe Inbox.InboxStatus)
+inboxStatus store source messageId =
+  expectStore store (Inbox.lookupInbox source messageId) <&> fmap (.status)
+
+testOutboxId :: String -> Outbox.OutboxId
+testOutboxId = Outbox.OutboxId . testUuid
+
+testUuid :: String -> UUID.UUID
+testUuid raw = maybe (error "test UUID") Function.id (UUID.fromString raw)
+
+rawValueJob :: Text -> Job Aeson.Value
+rawValueJob name =
+  Job
+    { jobName = name,
+      jobQueue = queueRef name,
+      jobCodec = aesonJobCodec,
+      jobPolicy = defaultRetryPolicy
+    }
+
+seedKirokuEvent :: KirokuStore -> Text -> String -> Maybe UUID.UUID -> IO SeededEvent
+seedKirokuEvent store name rawId cause = do
+  let eventId = EventId (testUuid rawId)
+  appended <-
+    expectStore store $
+      appendToStream
+        (StreamName name)
+        AnyVersion
+        [ EventData
+            { eventId = Just eventId,
+              eventType = EventType "ops.event",
+              payload = object ["stream" .= name],
+              metadata = Nothing,
+              causationId = cause,
+              correlationId = Nothing
+            }
+        ]
+  pure
+    SeededEvent
+      { streamId = appended.streamId,
+        streamVersion = appended.streamVersion,
+        globalPosition = appended.globalPosition,
+        eventId
+      }
+
+eventUuid :: SeededEvent -> UUID.UUID
+eventUuid seeded = case seeded.eventId of EventId value -> value
+
+streamDeleted :: KirokuStore -> Text -> IO (Maybe Bool)
+streamDeleted store name =
+  expectStore store (getStream (StreamName name)) <&> fmap (isJust . (.deletedAt))
+
+streamTruncateBefore :: KirokuStore -> Text -> IO (Maybe StreamVersion)
+streamTruncateBefore store name =
+  expectStore store (getStream (StreamName name)) <&> fmap (.truncateBefore)
+
 opsEnv :: Bool -> KirokuStore -> OpsEnv
 opsEnv force store =
   OpsEnv
@@ -345,7 +728,7 @@ timerStatus store timerId = do
 timerRequest :: String -> UTCTime -> Timer.TimerRequest
 timerRequest rawId fireAt =
   Timer.TimerRequest
-    { timerId = Timer.TimerId (maybe (error "test timer UUID") id (UUID.fromString rawId)),
+    { timerId = Timer.TimerId (maybe (error "test timer UUID") Function.id (UUID.fromString rawId)),
       processManagerName = "billing",
       correlationId = "invoice-1",
       fireAt,
@@ -363,6 +746,39 @@ resultArrayLengthFrom key = \case
     case KeyMap.lookup key value of
       Just (Aeson.Array values) -> Just (Vector.length values)
       _ -> Nothing
+  _ -> Nothing
+
+resultArrayLengthFromObject :: Key -> OpsOutcome -> Maybe Int
+resultArrayLengthFromObject key = \case
+  Succeeded OpsResult {jsonValue = Aeson.Object value} ->
+    case KeyMap.lookup key value of
+      Just (Aeson.Array values) -> Just (Vector.length values)
+      _ -> Nothing
+  _ -> Nothing
+
+resultCount :: OpsOutcome -> Maybe Int
+resultCount = fmap fromIntegral . jsonInteger "count"
+
+jsonInteger :: Key -> OpsOutcome -> Maybe Int64
+jsonInteger key = \case
+  Succeeded OpsResult {jsonValue = Aeson.Object value} -> numberAt key value
+  _ -> Nothing
+
+jsonIntegerFromPreview :: Key -> OpsOutcome -> Maybe Int64
+jsonIntegerFromPreview key = \case
+  PreviewRequired OpsResult {jsonValue = Aeson.Object value} _ -> numberAt key value
+  _ -> Nothing
+
+numberAt :: Key -> KeyMap.KeyMap Aeson.Value -> Maybe Int64
+numberAt key value = do
+  Aeson.Number number <- KeyMap.lookup key value
+  pure (floor number)
+
+jsonBool :: Key -> OpsOutcome -> Maybe Bool
+jsonBool key = \case
+  Succeeded OpsResult {jsonValue = Aeson.Object value} -> do
+    Aeson.Bool result <- KeyMap.lookup key value
+    pure result
   _ -> Nothing
 
 firstWorkflowId :: OpsOutcome -> Maybe Text

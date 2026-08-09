@@ -25,6 +25,8 @@ module Keiro.Snapshot.Schema
 
     -- * Storage
     lookupSnapshot,
+    lookupSnapshotRow,
+    deleteSnapshotRow,
     writeSnapshotRow,
   )
 where
@@ -85,6 +87,30 @@ lookupSnapshot streamId version shapeHash stateShapeHash =
       (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash, stateShapeHash)
       lookupSnapshotStmt
 
+-- | Fetch the advisory snapshot row for a stream without applying codec
+-- compatibility filtering. This is the operator-inspection surface; runtime
+-- hydration must continue to use 'lookupSnapshot'.
+lookupSnapshotRow ::
+  (Store :> es) =>
+  StreamId ->
+  Eff es (Maybe SnapshotRow)
+lookupSnapshotRow streamId =
+  runTransaction
+    $ Tx.statement
+      (streamIdToInt streamId)
+      lookupSnapshotRowStmt
+
+-- | Delete a stream's advisory snapshot. Returns 'True' when a row existed.
+-- Event history is untouched, so the next hydration falls back to full replay.
+deleteSnapshotRow ::
+  (Store :> es) =>
+  StreamId ->
+  Eff es Bool
+deleteSnapshotRow streamId =
+  (> 0)
+    <$> runTransaction
+      (Tx.statement (streamIdToInt streamId) deleteSnapshotRowStmt)
+
 -- | Upsert a snapshot row for its stream. For the same discriminator tuple,
 -- the write only takes effect when its 'streamVersion' is at least the stored
 -- one. Any incompatible discriminator replaces the row even at a lower version
@@ -118,6 +144,28 @@ lookupSnapshotStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.rowMaybe snapshotRowDecoder)
+
+lookupSnapshotRowStmt :: Statement Int64 (Maybe SnapshotRow)
+lookupSnapshotRowStmt =
+  preparable
+    """
+    SELECT stream_id, stream_version, state, state_codec_version, regfile_shape_hash, state_shape_hash, created_at, updated_at
+    FROM keiro.keiro_snapshots
+    WHERE stream_id = $1
+    LIMIT 1
+    """
+    (E.param (E.nonNullable E.int8))
+    (D.rowMaybe snapshotRowDecoder)
+
+deleteSnapshotRowStmt :: Statement Int64 Int64
+deleteSnapshotRowStmt =
+  preparable
+    """
+    DELETE FROM keiro.keiro_snapshots
+    WHERE stream_id = $1
+    """
+    (E.param (E.nonNullable E.int8))
+    D.rowsAffected
 
 writeSnapshotStmt :: Statement (Int64, Int64, Value, Int64, Text, Text) ()
 writeSnapshotStmt =
