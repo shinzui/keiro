@@ -85,6 +85,23 @@ main = withMigratedSuite $ \fixture -> hspec do
       Aeson.eitherDecodeStrict' (Text.Encoding.encodeUtf8 (Text.pack listOutput))
         `shouldBe` Right (Aeson.Array mempty)
 
+      (previewExit, _, previewError) <-
+        readProcessWithExitCode
+          executable
+          [ "--database-url",
+            Text.unpack connectionString,
+            "wf",
+            "gc",
+            "run-once",
+            "--retention",
+            "0s",
+            "--json"
+          ]
+          ""
+      previewExit `shouldBe` ExitFailure 1
+      previewError `shouldSatisfy` Text.isInfixOf "preview only" . Text.pack
+      previewError `shouldSatisfy` not . Text.isInfixOf "keiro-ops: ExitFailure" . Text.pack
+
       executeSql connectionString "ALTER TABLE keiro.keiro_timers ADD COLUMN ops_test_drift text"
       (mutationExit, _, mutationError) <-
         readProcessWithExitCode

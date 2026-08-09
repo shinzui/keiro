@@ -165,7 +165,7 @@ frozen identity bytes) do not constrain this initiative.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add workflow listing, top-level cancellation, and lease-release operator APIs | docs/plans/205-add-workflow-listing-top-level-cancellation-and-lease-release-operator-apis.md | None | None | Complete |
-| 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | In Progress |
+| 2 | Create the keiro-ops package with the workflow and timer command domains | docs/plans/206-create-the-keiro-ops-package-with-the-workflow-and-timer-command-domains.md | EP-1 | None | Complete |
 | 3 | Add the messaging and read-side command domains to keiro-ops | docs/plans/207-add-the-messaging-and-read-side-command-domains-to-keiro-ops.md | EP-2 | None | Not Started |
 | 4 | Make keiro-ops embeddable and document the operational surface | docs/plans/208-make-keiro-ops-embeddable-and-document-the-operational-surface.md | EP-2 | EP-3 | Not Started |
 
@@ -231,7 +231,7 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 - [x] EP-1: `listWorkflowInstances` with status/name filters and keyset paging, tested.
 - [x] EP-1: `cancelWorkflow` and operator lease release, tested against the terminal/race contracts.
 - [x] EP-2: `keiro-ops` package scaffolding, `OpsEnv`, output layer, `--force` rail, schema handshake.
-- [ ] EP-2: workflow + timer domains complete; ADR for the operator-command contract recorded.
+- [x] EP-2: workflow + standalone timer-triage domains complete; ADR for the operator-command contract recorded.
 - [ ] EP-3: outbox, inbox, dead-letter, pgmq, projection, shard, snapshot, stream domains complete.
 - [ ] EP-4: embeddable command tree with registry-dependent commands; jitsurei embeds it.
 - [ ] EP-4: operations docs rewritten around the CLI; roadmap flips "Operator CLIs" to available.
@@ -325,7 +325,15 @@ is claimed by that plan) and reconciles the pinned migration-count tests.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-2 completed on 2026-08-09. The repository now contains a tested `keiro-ops`
+package with the standalone command root, table/JSON rendering, connection and
+schema safeguards, full workflow inspection/recovery commands, and timer stuck-row
+triage. ADR 28 fixes the command/library ownership boundary for every later domain.
+The scratch-database transcript and full gate evidence are recorded in plan 206.
+
+The next dependency-ready child is EP-3 (plan 207), which extends the frozen domain
+pattern across messaging and read-side operations. EP-4 remains responsible for
+application hooks, including the timer fire action discovered by EP-2.
 
 
 Revision note: Coordinated EP-4's rebuild mount with MasterPlan 32's typed catalog

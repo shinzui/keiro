@@ -43,7 +43,7 @@ and no command touches another library's tables directly.
 - [x] (2026-08-09T00:13:31Z) Workflow domain complete (list/show/journal/awakeables/children/cancel/resurrect/lease-release/gc-once).
 - [x] (2026-08-09T00:13:31Z) Standalone timer domain complete (stuck list/requeue/cancel/dead-letter); `drain-once` reassigned to plan 208 with its required application fire hook.
 - [x] (2026-08-08T23:51:29Z) ADR for the operator-command contract recorded; `just adr-validate` green.
-- [ ] `cabal test keiro-ops-test` green; full repo suite unaffected.
+- [x] (2026-08-09T00:36:29Z) `cabal test keiro-ops-test` green (14 examples); `cabal test keiro-test` green (441 examples); full `just verify` green.
 
 
 ## Surprises & Discoveries
@@ -58,6 +58,12 @@ and no command touches another library's tables directly.
   produce the event id or dispatch behavior that completes an arbitrary process
   manager timer. Claiming with a dummy callback would strand every timer in
   `firing`, so `timer drain-once` moves to plan 208's hook-dependent command set.
+
+- 2026-08-09: The first scratch transcript showed that `ExitFailure 1` from a
+  deliberate preview was caught by the root exception renderer and printed a
+  redundant diagnostic. The root now passes `ExitCode` through unchanged, and
+  the executable test asserts that preview output contains only the intended
+  preview instruction.
 
 
 ## Decision Log
@@ -106,7 +112,31 @@ and no command touches another library's tables directly.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+ExecPlan 206 delivered the new `keiro-ops` library and executable, shared
+environment/parsing/rendering conventions, schema-drift handshake, and the complete
+standalone workflow and timer-triage surfaces. Human tables and JSON are projections
+of the same `OpsResult`; mutations preview exact supported-library rows and exit 1
+until `--force` is supplied. ADR 28 records the library-ownership, safety, and
+standalone-versus-embedded boundary.
+
+Automated evidence: `keiro-ops-test` passes 14 examples, including a spawned binary
+that emits parseable JSON, preserves deliberate preview exit behavior, and refuses a
+forced mutation after live-schema drift. `keiro-test` passes 441 examples, and the
+repository-wide `just verify` gate passes with `keiro-ops-test` wired into it.
+
+Scratch `jitsurei` transcript (2026-08-09): `wf list` rendered suspended
+`order-fulfillment` instances in both table and JSON modes; `wf journal` rendered the
+three recorded reserve/sleep/awakeable steps in both modes; `wf cancel` previewed
+`would_cancel` at exit 1, `--force --json` returned `cancel_recorded`, and a cancelled
+filter showed the terminal row. A specifically seeded scratch timer appeared in
+`timer stuck list --min-age 5m` in both modes; `timer requeue` previewed
+`would_requeue` at exit 1, `--force --json` transitioned it to `scheduled`, and the
+same stuck query returned no rows. The synthetic timer row was then deleted.
+
+The main plan correction was timer draining: the landed Keiro backend requires an
+application fire action, so plan 208 now owns `timer drain-once` as a conditional
+embedded command. This preserves a truthful standalone surface instead of claiming
+timers that an external binary cannot dispatch.
 
 
 ## Context and Orientation

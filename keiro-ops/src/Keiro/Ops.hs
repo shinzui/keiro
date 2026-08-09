@@ -3,7 +3,7 @@ module Keiro.Ops
   )
 where
 
-import Control.Exception (SomeException, displayException, try)
+import Control.Exception (SomeException, displayException, fromException, try)
 import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
@@ -23,7 +23,10 @@ main = do
   invocation <- customExecParser (prefs subparserInline) parserInfo
   result <- try (runInvocation invocation)
   case result of
-    Left exception -> failOperational (Text.pack (displayException (exception :: SomeException)))
+    Left exception ->
+      case fromException exception :: Maybe Exit.ExitCode of
+        Just exitCode -> Exit.exitWith exitCode
+        Nothing -> failOperational (Text.pack (displayException (exception :: SomeException)))
     Right () -> pure ()
 
 data Invocation = Invocation
