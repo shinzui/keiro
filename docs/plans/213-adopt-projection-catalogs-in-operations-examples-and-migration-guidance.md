@@ -43,11 +43,10 @@ This section must always reflect the actual current state of the work.
       normalized clear/preserve brownfield rebuild fixture.
 - [x] Adopt the generated language-5 catalog after plan 212, or document the hand-written/generated
       delta if that soft dependency is still in progress.
-- [ ] Replace plan 208's manual rebuild map with the catalog adapter, exercise text/JSON preview and
-      `--force`, and reconcile both MasterPlans. Blocked at the command mount only: `keiro-ops`
-      and `AppHooks` do not exist; plan 208 and MasterPlan 31 now name the landed adapter.
-- [x] Publish migration, API, runbook, example, and changelog documentation; pass the available
-      example and full repository verification, and record the pending operator gate.
+- [x] Replace plan 208's manual rebuild map with the catalog adapter, exercise text/JSON preview and
+      `--force`, and reconcile both MasterPlans.
+- [x] Publish migration, API, runbook, example, and changelog documentation; pass the example and
+      full repository verification, and close the operator integration gate.
 
 
 ## Surprises & Discoveries
@@ -64,6 +63,10 @@ implementation. Provide concise evidence.
 - 2026-08-08: A preserved brownfield row can make replay technically complete but promotion
   operationally unsafe. An application verifier now blocks that row, and the example proves the
   failed group continues to fence appends until repair and exact-run resume succeed.
+- 2026-08-09: Plan 208 created `AppHooks` and mounted the exact
+  `ProjectionCatalogOperations` value already exported by Jitsurei. The embedded
+  command has no caller-provided target/source/handler list; its inventory and
+  JSON values come from the adapter this plan landed.
 
 
 ## Decision Log
@@ -125,16 +128,14 @@ repair, exact-run resume, brownfield preservation, derived-target reconstruction
 of a live-only side effect.
 
 The generated conformance context proves the matching candidate-language-5 dimensions through one
-generated facade. Canonical API, migration, runbook, and guide documentation now distinguish the
-available adapter from the planned CLI. The remaining gap is external and explicit: MasterPlan 31
-has not created `keiro-ops`, so this plan cannot truthfully mark command rendering, `--force`, or
-embedding complete.
+generated facade. Canonical API, migration, runbook, and guide documentation distinguish the
+operator-neutral adapter from presentation. Plan 208 has now closed the former external gap:
+`jitsurei-demo ops rebuild` mounts `orderCatalogOperations`, and `keiro-ops` owns
+text/JSON rendering, preview, and `--force` without accepting a second fleet list.
 
-Verification on 2026-08-08 passed with 436 `keiro-test` examples, 22 `jitsurei-test` examples,
-615 `keiro-dsl-test` examples, the generated projection-catalog conformance executable, the
-offline changed-document link check (141 links checked, 0 errors), and the complete `just verify`
-gate. The unavailable `keiro-ops-test` gate remains coupled to the pending command-package
-milestone above rather than being represented as a passing test.
+Verification on 2026-08-09 passed with 441 `keiro-test`, 27 `keiro-ops-test`,
+22 `jitsurei-test`, and 615 `keiro-dsl-test` examples, the generated
+projection-catalog conformance executable, and the complete `just verify` gate.
 
 
 ## Context and Orientation
