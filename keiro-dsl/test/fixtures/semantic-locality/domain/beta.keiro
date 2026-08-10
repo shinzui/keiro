@@ -1,0 +1,10 @@
+language keiro-dsl 4
+context semantic-locality
+
+aggregate Beta
+  regs
+    accepted Bool = False
+  states Ready Done!
+  command SubmitBeta { shared:SharedPayload accepted:Bool }
+  event BetaSubmitted = fields(SubmitBeta)
+  Ready -- SubmitBeta --> guard cmd.accepted ; write accepted := true ; emit BetaSubmitted ; goto Done

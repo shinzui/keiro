@@ -60,7 +60,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -6527,6 +6527,145 @@ main = hspec $ do
         standardError `shouldContain` "missing fixtures ingredient"
         treeSnapshot out `shouldReturn` baselineTree
 
+  describe "semantic locality qualification" $ do
+    it "pins the exact A-only generated delta and semantic report" $
+      withSemanticLocalityFixture "keiro-dsl-locality-a-only" id 0 $ \_ out workspace -> do
+        baselinePlan <- shouldPlanWorkspaceSpec workspace
+        let changedWorkspace = mapWorkspaceSpec addAlphaPayloadOptionalField workspace
+        changedPlan <- shouldPlanWorkspaceSpec changedWorkspace
+        let baselineModules = map fst (wpModules baselinePlan)
+            changedModules = map fst (wpModules changedPlan)
+            delta = generatedTreeDelta baselineModules changedModules
+            expectedPaths =
+              Set.fromList
+                [ "Generated/SemanticLocality/Alpha/Codec.hs",
+                  "Generated/SemanticLocality/Alpha/Harness.hs",
+                  "Generated/SemanticLocality/Structural/Shape/AlphaPayload.hs",
+                  "Generated/SemanticLocality/StructuralConformance.hs"
+                ]
+            allowedRoles =
+              Set.fromList
+                [ moduleRole generatedModule
+                | generatedModule <- changedModules,
+                  modulePath generatedModule `Set.member` expectedPaths
+                ]
+            impact = CheckedDiff.mappedSemanticImpact (wsMergedSpec workspace) (wsMergedSpec changedWorkspace)
+            renderedImpact = T.unlines (renderSemanticImpact impact)
+            encodedReport = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReportWithSemanticImpact defaultGate (diffSpecs (wsMergedSpec workspace) (wsMergedSpec changedWorkspace)) impact)))
+        changedPaths delta `shouldBe` expectedPaths
+        addedPaths delta `shouldBe` Set.empty
+        removedPaths delta `shouldBe` Set.empty
+        assertAllowedGeneratedDelta allowedRoles baselineModules changedModules delta
+        map impactDeclaration impact `shouldBe` [MappedKey "AlphaPayload"]
+        map impactPreviousConsumers impact `shouldBe` [Set.singleton (AggregateConsumer "Alpha")]
+        map impactCurrentConsumers impact `shouldBe` [Set.singleton (AggregateConsumer "Alpha")]
+        renderedImpact `shouldSatisfy` T.isInfixOf "previous aggregate consumers: Alpha"
+        renderedImpact `shouldSatisfy` T.isInfixOf "service-conformance: impacted"
+        renderedImpact `shouldSatisfy` (not . T.isInfixOf "Beta")
+        encodedReport `shouldSatisfy` T.isInfixOf "\"semanticImpact\""
+        encodedReport `shouldSatisfy` T.isInfixOf "\"currentConsumers\":[\"Alpha\"]"
+        encodedReport `shouldSatisfy` (not . T.isInfixOf "Beta")
+
+        _ <- executePlannedWorkspaceScaffold out workspace
+        report <- executePlannedWorkspaceScaffold out changedWorkspace
+        semanticReportDeclarations (wsrSemanticImpact report) `shouldBe` [MappedKey "AlphaPayload"]
+        map artifactPath (wsrGeneratedArtifactImpact report) `shouldBe` Set.toAscList expectedPaths
+        map artifactCategory (wsrGeneratedArtifactImpact report)
+          `shouldSatisfy` \categories ->
+            AggregateGeneratedArtifact `elem` categories
+              && ServiceStructuralConformanceArtifact `elem` categories
+        map artifactCategory (wsrGeneratedArtifactImpact report)
+          `shouldNotContain` [BehaviorSourceMapArtifact]
+        ledger <- TIO.readFile (wsrRecordPath report)
+        case parseWorkspaceRecord ledger of
+          Just record -> wrSemanticImpact record `shouldSatisfy` (/= Nothing)
+          Nothing -> expectationFailure "semantic-locality workspace ledger did not parse"
+
+    it "keeps the A-only delta constant with ten unrelated aggregates" $ do
+      let deltaFor count =
+            withSemanticLocalityFixture ("keiro-dsl-locality-scale-" <> show count) id count $ \_ _ workspace -> do
+              baseline <- shouldPlanWorkspaceSpec workspace
+              changed <- shouldPlanWorkspaceSpec (mapWorkspaceSpec addAlphaPayloadOptionalField workspace)
+              pure (generatedTreeDelta (map fst (wpModules baseline)) (map fst (wpModules changed)))
+      twoAggregateDelta <- deltaFor 0
+      twelveAggregateDelta <- deltaFor 10
+      twelveAggregateDelta `shouldBe` twoAggregateDelta
+
+    it "keeps nested and fixture-symbol changes local while shared and unused laws remain service-owned" $
+      withSemanticLocalityFixture "keiro-dsl-locality-closure" id 0 $ \_ _ workspace -> do
+        baseline <- shouldPlanWorkspaceSpec workspace
+        nested <- shouldPlanWorkspaceSpec (mapWorkspaceSpec addNestedPayloadOptionalField workspace)
+        fixtureChanged <- shouldPlanWorkspaceSpec (mapWorkspaceSpec changeAlphaPayloadFixtureSymbol workspace)
+        let baselineModules = map fst (wpModules baseline)
+            nestedModules = map fst (wpModules nested)
+            fixtureModules = map fst (wpModules fixtureChanged)
+            nestedDelta = generatedTreeDelta baselineModules nestedModules
+            fixtureDelta = generatedTreeDelta baselineModules fixtureModules
+            betaPaths = Set.fromList [modulePath value | value <- baselineModules, "/Beta/" `T.isInfixOf` T.pack (modulePath value)]
+            structural = generatedTextEndingIn "StructuralConformance.hs" baselineModules
+            alphaHarness = generatedTextEndingIn "Alpha/Harness.hs" baselineModules
+            betaHarness = generatedTextEndingIn "Beta/Harness.hs" baselineModules
+            snapshot = semanticImpactSnapshotForSpec (wsMergedSpec workspace)
+        changedPaths nestedDelta `shouldSatisfy` Set.null . Set.intersection betaPaths
+        changedPaths fixtureDelta `shouldSatisfy` Set.null . Set.intersection betaPaths
+        map impactDeclaration (CheckedDiff.mappedSemanticImpact (wsMergedSpec workspace) (addNestedPayloadOptionalField (wsMergedSpec workspace)))
+          `shouldBe` [MappedKey "NestedPayload"]
+        mappedDeclarationConsumers (semanticImpactForSpec (wsMergedSpec workspace)) (MappedKey "SharedPayload")
+          `shouldBe` [AggregateConsumer "Alpha", AggregateConsumer "Beta"]
+        mappedDeclarationConsumers (semanticImpactForSpec (wsMergedSpec workspace)) (MappedKey "UnusedPayload")
+          `shouldBe` []
+        snapshotServiceInventory snapshot `shouldSatisfy` Set.member (MappedKey "UnusedPayload")
+        T.count "fixture coverage: example.semantic-locality.SharedPayload.v1" structural `shouldBe` 1
+        T.count "fixture coverage: example.semantic-locality.UnusedPayload.v1" structural `shouldBe` 1
+        alphaHarness `shouldSatisfy` T.isInfixOf "SharedPayload"
+        betaHarness `shouldSatisfy` T.isInfixOf "SharedPayload"
+        alphaHarness `shouldNotSatisfy` T.isInfixOf "fixture coverage:"
+        betaHarness `shouldNotSatisfy` T.isInfixOf "fixture coverage:"
+
+    it "isolates comments, blank lines, and an unrelated rule to BehaviorSourceMap" $ do
+      let mutations =
+            [ ("comment", ("# source-only movement\n" <>)),
+              ("blank-line", ("\n" <>)),
+              ( "unrelated-rule",
+                T.replace
+                  "aggregate Alpha\n"
+                  "rule unusedIsUnused : UnusedPayload -> Bool\n  ex Unused => true\n\naggregate Alpha\n"
+              )
+            ]
+      forM_ mutations $ \(variantName, mutateSource) ->
+        withSemanticLocalityFixture ("keiro-dsl-locality-source-" <> variantName) id 0 $ \root out workspace -> do
+          _ <- executePlannedWorkspaceScaffold out workspace
+          treeBefore <- treeSnapshot out
+          let memberPath = root </> "domain/alpha.keiro"
+          original <- TIO.readFile memberPath
+          TIO.writeFile memberPath (mutateSource original)
+          moved <- loadTempWorkspace root
+          report <- executePlannedWorkspaceScaffold out moved
+          let overwritten = [modulePath value | (value, _, Overwritten) <- wsrDispositions report]
+              sourceMapPath path = T.isSuffixOf "/BehaviorSourceMap.hs" (T.pack path)
+          overwritten `shouldSatisfy` \case
+            [path] -> sourceMapPath path
+            _ -> False
+          semanticReportDeclarations (wsrSemanticImpact report) `shouldBe` []
+          map artifactCategory (wsrGeneratedArtifactImpact report) `shouldBe` [BehaviorSourceMapArtifact]
+          treeAfter <- treeSnapshot out
+          let treeDelta = generatedTreeDeltaFromSnapshot treeBefore treeAfter
+              ledgerPath path = T.isPrefixOf "keiro-dsl-ledger.workspace." (T.pack path)
+          changedPaths treeDelta `shouldSatisfy` \paths ->
+            Set.size paths == 2
+              && any sourceMapPath paths
+              && any ledgerPath paths
+          filter (\(path, _) -> not (sourceMapPath path || ledgerPath path)) treeAfter
+            `shouldBe` filter (\(path, _) -> not (sourceMapPath path || ledgerPath path)) treeBefore
+
+    it "keeps complete scaffold bytes deterministic under member reordering" $
+      withSemanticLocalityFixture "keiro-dsl-locality-order-a" id 0 $ \_ outA workspaceA ->
+        withSemanticLocalityFixture "keiro-dsl-locality-order-b" reverse 0 $ \_ outB workspaceB -> do
+          _ <- executePlannedWorkspaceScaffold outA workspaceA
+          _ <- executePlannedWorkspaceScaffold outB workspaceB
+          expected <- treeSnapshot outA
+          treeSnapshot outB `shouldReturn` expected
+
   describe "generated Haskell language contract" $ do
     it "limits every representative generated module to the closed local extension set" $ do
       let allowed =
@@ -8574,12 +8713,25 @@ main = hspec $ do
               service = checkedSource parsedSource
               spec = checkedSpec service
               ctx = defaultContext (specContext spec)
-              normalizeSingleSource moduleValue
-                | "BehaviorSourceMap.hs" `isSuffixOfPath` moduleValue =
-                    moduleValue {moduleText = T.replace (T.pack path) (T.pack (takeFileName path)) (moduleText moduleValue)}
-                | otherwise = moduleValue
-          fmap (map fst . wpModules) (planWorkspaceScaffold "goldens" ctx workspace)
-            `shouldBe` fmap (map normalizeSingleSource) (planIndexedServiceScaffold sourceIndex ctx service)
+              isSourceMap moduleValue = "BehaviorSourceMap.hs" `isSuffixOfPath` moduleValue
+          case (planWorkspaceScaffold "goldens" ctx workspace, planIndexedServiceScaffold sourceIndex ctx service) of
+            (Left workspaceRefusals, Left singleSourceRefusals) ->
+              workspaceRefusals `shouldBe` singleSourceRefusals
+            (Right workspacePlan, Right singleSourceModules) -> do
+              let workspaceModules = map fst (wpModules workspacePlan)
+                  workspaceStable = filter (not . isSourceMap) workspaceModules
+                  singleSourceStable = filter (not . isSourceMap) singleSourceModules
+                  workspaceSourceMaps = filter isSourceMap workspaceModules
+                  singleSourceMaps = filter isSourceMap singleSourceModules
+              workspaceStable `shouldBe` singleSourceStable
+              case (workspaceSourceMaps, singleSourceMaps) of
+                ([workspaceSourceMap], [singleSourceMap]) -> do
+                  modulePath workspaceSourceMap `shouldBe` modulePath singleSourceMap
+                  moduleText workspaceSourceMap
+                    `shouldBe` T.replace (T.pack path) (T.pack (takeFileName path)) (moduleText singleSourceMap)
+                found -> expectationFailure ("expected one source map per planning path, got " <> show (map modulePath (fst found), map modulePath (snd found)))
+            (Left _, Right _) -> expectationFailure "workspace planning refused while single-source planning succeeded"
+            (Right _, Left _) -> expectationFailure "workspace planning succeeded while single-source planning refused"
         -- The equality is not vacuous: at least one fixture plans, and
         -- its per-node modules are attributed to the single member.
         (workspace, document) <- exactOneMemberWorkspaceOf "test/fixtures/reservation.keiro"
@@ -9067,6 +9219,62 @@ comparisonProvenance =
 syntheticGenerated :: FilePath -> T.Text -> ScaffoldModule
 syntheticGenerated path contents =
   ScaffoldModule {modulePath = path, moduleText = contents, kind = Generated, origin = "test"}
+
+data GeneratedTreeDelta = GeneratedTreeDelta
+  { changedPaths :: !(Set.Set FilePath),
+    addedPaths :: !(Set.Set FilePath),
+    removedPaths :: !(Set.Set FilePath),
+    changedLineCounts :: !(Map.Map FilePath Int)
+  }
+  deriving stock (Eq, Show)
+
+generatedTreeDelta :: [ScaffoldModule] -> [ScaffoldModule] -> GeneratedTreeDelta
+generatedTreeDelta previous current =
+  GeneratedTreeDelta
+    { changedPaths = changed,
+      addedPaths = added,
+      removedPaths = removed,
+      changedLineCounts = Map.fromSet lineCount impacted
+    }
+  where
+    previousByPath = generatedByPath previous
+    currentByPath = generatedByPath current
+    previousPaths = Map.keysSet previousByPath
+    currentPaths = Map.keysSet currentByPath
+    added = currentPaths Set.\\ previousPaths
+    removed = previousPaths Set.\\ currentPaths
+    shared = previousPaths `Set.intersection` currentPaths
+    changed = Set.filter (\path -> Map.lookup path previousByPath /= Map.lookup path currentByPath) shared
+    impacted = changed <> added <> removed
+    lineCount path = case (Map.lookup path previousByPath, Map.lookup path currentByPath) of
+      (Just old, Just new) -> differingLineCount (moduleText old) (moduleText new)
+      (Just old, Nothing) -> length (T.lines (moduleText old))
+      (Nothing, Just new) -> length (T.lines (moduleText new))
+      (Nothing, Nothing) -> 0
+    generatedByPath modules = Map.fromList [(modulePath value, value) | value <- modules, kind value == Generated]
+
+generatedTreeDeltaFromSnapshot :: [(FilePath, T.Text)] -> [(FilePath, T.Text)] -> GeneratedTreeDelta
+generatedTreeDeltaFromSnapshot previous current =
+  generatedTreeDelta
+    [syntheticGenerated path contents | (path, contents) <- previous]
+    [syntheticGenerated path contents | (path, contents) <- current]
+
+differingLineCount :: T.Text -> T.Text -> Int
+differingLineCount previous current =
+  unequalShared + abs (length previousLines - length currentLines)
+  where
+    previousLines = T.lines previous
+    currentLines = T.lines current
+    unequalShared = length [() | (old, new) <- zip previousLines currentLines, old /= new]
+
+assertAllowedGeneratedDelta :: Set.Set ModuleRole -> [ScaffoldModule] -> [ScaffoldModule] -> GeneratedTreeDelta -> Expectation
+assertAllowedGeneratedDelta allowed previous current delta = do
+  removedPaths delta `shouldBe` Set.empty
+  actualRoles `shouldSatisfy` (`Set.isSubsetOf` allowed)
+  where
+    modulesByPath = Map.fromList [(modulePath value, value) | value <- previous <> current, kind value == Generated]
+    impacted = changedPaths delta <> addedPaths delta <> removedPaths delta
+    actualRoles = Set.fromList [moduleRole value | path <- Set.toList impacted, Just value <- [Map.lookup path modulesByPath]]
 
 generatedTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
 generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == Generated, suffix `T.isSuffixOf` T.pack (modulePath m)] of
@@ -9638,27 +9846,48 @@ addArtifactSummaryField declaration@MappedStructural {msName = "ArtifactInfo", m
 addArtifactSummaryField declaration = declaration
 
 addAlphaPayloadOptionalField :: Spec -> Spec
-addAlphaPayloadOptionalField spec = spec {specMapped = map addField (specMapped spec)}
+addAlphaPayloadOptionalField = addMappedOptionalTextField "AlphaPayload" "note"
+
+addNestedPayloadOptionalField :: Spec -> Spec
+addNestedPayloadOptionalField = addMappedOptionalTextField "NestedPayload" "detail"
+
+addMappedOptionalTextField :: Name -> Name -> Spec -> Spec
+addMappedOptionalTextField target fieldName spec = spec {specMapped = map addField (specMapped spec)}
   where
-    addField declaration@MappedStructural {msName = "AlphaPayload", msShape = ShapeRecord constructor unknownFields fields} =
-      declaration
-        { msShape =
-            ShapeRecord
-              constructor
-              unknownFields
-              ( fields
-                  <> [ WireField
-                         { wfHaskell = "note",
-                           wfKey = "note",
-                           wfType = TOptional TText,
-                           wfPresence = POptional,
-                           wfOnMissing = Just OmNull,
-                           wfLoc = Loc 0
-                         }
-                     ]
-              )
-        }
+    addField declaration@MappedStructural {msName = declarationName, msShape = ShapeRecord constructor unknownFields fields}
+      | declarationName == target =
+          declaration
+            { msShape =
+                ShapeRecord
+                  constructor
+                  unknownFields
+                  ( fields
+                      <> [ WireField
+                             { wfHaskell = fieldName,
+                               wfKey = fieldName,
+                               wfType = TOptional TText,
+                               wfPresence = POptional,
+                               wfOnMissing = Just OmNull,
+                               wfLoc = Loc 0
+                             }
+                         ]
+                  )
+            }
     addField declaration = declaration
+
+changeAlphaPayloadFixtureSymbol :: Spec -> Spec
+changeAlphaPayloadFixtureSymbol spec = spec {specMapped = map changeFixture (specMapped spec)}
+  where
+    changeFixture declaration@MappedStructural {msName = "AlphaPayload"} =
+      declaration {msFixtures = Just "Example.SemanticLocality.Bindings.alphaPayloadV2Cases"}
+    changeFixture declaration = declaration
+
+mapWorkspaceSpec :: (Spec -> Spec) -> WorkspaceSpec -> WorkspaceSpec
+mapWorkspaceSpec transform workspace =
+  workspace
+    { wsMembers = [member {wmSpec = transform (wmSpec member)} | member <- wsMembers workspace],
+      wsMergedSpec = transform (wsMergedSpec workspace)
+    }
 
 expectGenericCompileFailure :: FilePath -> String -> Expectation
 expectGenericCompileFailure fixture expectedDiagnostic = do
@@ -9828,9 +10057,12 @@ sampleWorkspaceRecord workspace =
     }
 
 semanticImpactSnapshotForSpec :: Spec -> SemanticImpactSnapshot
-semanticImpactSnapshotForSpec spec = case resolveTypeGraph spec of
+semanticImpactSnapshotForSpec = semanticImpactSnapshot . semanticImpactForSpec
+
+semanticImpactForSpec :: Spec -> SemanticImpact
+semanticImpactForSpec spec = case resolveTypeGraph spec of
   Left failures -> error ("test fixture type graph did not resolve: " <> show failures)
-  Right graph -> semanticImpactSnapshot (semanticImpact graph)
+  Right graph -> semanticImpact graph
 
 -- | The canonical workspace with a case-variant copy of one member's aggregate
 -- grafted onto another member. Composition refuses this shape (EP-153 catches it
@@ -9908,6 +10140,47 @@ withWorkspaceFixture template orderMembers act =
       )
     workspace <- loadTempWorkspace root
     act root out workspace
+
+withSemanticLocalityFixture ::
+  String ->
+  ([FilePath] -> [FilePath]) ->
+  Int ->
+  (FilePath -> FilePath -> WorkspaceSpec -> IO a) ->
+  IO a
+withSemanticLocalityFixture template orderMembers unrelatedCount act =
+  withTempDirectory template $ \base -> do
+    let root = base </> "workspace"
+        out = base </> "out"
+        members = ["domain/alpha.keiro", "domain/beta.keiro"]
+    forM_ members $ \relative -> do
+      source <- readTestText ("test/fixtures/semantic-locality" </> relative)
+      let withUnrelated
+            | relative == "domain/beta.keiro" = source <> unrelatedAggregatesSource unrelatedCount
+            | otherwise = source
+      writeFileWithParents (root </> relative) withUnrelated
+    TIO.writeFile
+      (root </> "service.keiro-workspace")
+      (T.unlines ("service semantic-locality" : ["spec " <> T.pack relative | relative <- orderMembers members]))
+    workspace <- loadTempWorkspace root
+    act root out workspace
+
+unrelatedAggregatesSource :: Int -> T.Text
+unrelatedAggregatesSource count =
+  T.unlines
+    ( concat
+        [ [ "",
+            "aggregate Unrelated" <> suffix,
+            "  regs",
+            "    marker Bool = False",
+            "  states Ready Done!",
+            "  command SubmitUnrelated" <> suffix <> " { accepted:Bool }",
+            "  event Unrelated" <> suffix <> "Submitted = fields(SubmitUnrelated" <> suffix <> ")",
+            "  Ready -- SubmitUnrelated" <> suffix <> " --> guard cmd.accepted ; write marker := true ; emit Unrelated" <> suffix <> "Submitted ; goto Done"
+          ]
+        | index <- [1 .. count],
+          let suffix = T.pack (show index)
+        ]
+    )
 
 -- | Materialize an inline workspace — a manifest plus literal member sources —
 -- in a fresh temporary directory, and hand the callback its root, a sibling output

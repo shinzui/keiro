@@ -1178,7 +1178,9 @@ generatedArtifactImpact dispositions =
     categoryFor role
       | roleFamily role == "StructuralConformance" = ServiceStructuralConformanceArtifact
       | roleFamily role == "BehaviorSourceMap" = BehaviorSourceMapArtifact
-      | roleOwnerKind role == "aggregate" = AggregateGeneratedArtifact
+      | roleOwnerKind role == "aggregate"
+          || ": aggregate " `T.isInfixOf` roleOwnerName role =
+          AggregateGeneratedArtifact
       | otherwise = OtherGeneratedArtifact
 
 newBindingObligations :: [BindingHole] -> [BindingHole] -> [BindingHole]

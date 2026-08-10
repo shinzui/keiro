@@ -1,0 +1,54 @@
+language keiro-dsl 4
+context semantic-locality
+
+mapped structural record NestedPayload {
+  haskell package=semantic-locality-domain module=Example.SemanticLocality.Domain type=NestedPayload
+  binding = "Example.SemanticLocality.Bindings.nestedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic-locality.NestedPayload.v1"
+  fixtures = "Example.SemanticLocality.Bindings.nestedPayloadCases"
+  wire object constructor=NestedPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural record AlphaPayload {
+  haskell package=semantic-locality-domain module=Example.SemanticLocality.Domain type=AlphaPayload
+  binding = "Example.SemanticLocality.Bindings.alphaPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic-locality.AlphaPayload.v1"
+  fixtures = "Example.SemanticLocality.Bindings.alphaPayloadCases"
+  wire object constructor=AlphaPayload unknown-fields=reject {
+    nested as "nested" : NestedPayload required
+  }
+}
+
+mapped structural record SharedPayload {
+  haskell package=semantic-locality-domain module=Example.SemanticLocality.Domain type=SharedPayload
+  binding = "Example.SemanticLocality.Bindings.sharedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic-locality.SharedPayload.v1"
+  fixtures = "Example.SemanticLocality.Bindings.sharedPayloadCases"
+  wire object constructor=SharedPayload unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural enum UnusedPayload {
+  haskell package=semantic-locality-domain module=Example.SemanticLocality.Domain type=UnusedPayload
+  binding = "Example.SemanticLocality.Bindings.unusedPayloadBinding"
+  binding-version = "1"
+  canonical-type = "example.semantic-locality.UnusedPayload.v1"
+  fixtures = "Example.SemanticLocality.Bindings.unusedPayloadCases"
+  wire string {
+    Unused as "unused"
+  }
+}
+
+aggregate Alpha
+  regs
+    accepted Bool = False
+  states Ready Done!
+  command SubmitAlpha { item:AlphaPayload shared:SharedPayload accepted:Bool }
+  event AlphaSubmitted = fields(SubmitAlpha)
+  Ready -- SubmitAlpha --> guard cmd.accepted ; write accepted := true ; emit AlphaSubmitted ; goto Done

@@ -37,8 +37,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: build minimized single/workspace locality fixtures with exact generated-tree
-  baselines and constant-churn assertions as unrelated aggregate count grows.
+- [x] (2026-08-10T02:52:37Z) Milestone 1: built minimized single/workspace locality fixtures
+  with exact generated-tree baselines, a four-file A-only allowlist, explicit source-map/ledger
+  provenance exceptions, and constant churn as the workspace grows from two to twelve aggregates.
 - [ ] Milestone 2: add restoring correctness mutations for service structural evidence,
   aggregate-use evidence, and behavior-source anchor coherence.
 - [ ] Milestone 3: replay the Mori Plan 181 three-field scenario read-only and pin the allowed
@@ -60,6 +61,15 @@ implementation. Provide concise evidence.
   path and inspect repository state for orientation, but pin the replay to the before/after
   revisions recorded by Plan 181; never treat a moving working tree as the acceptance baseline or
   write qualification output into Mori.
+- The generated-artifact report initially classified aggregate modules in multi-member workspaces
+  as generic artifacts because member provenance prefixes the human-readable origin before
+  `ModuleRole` is derived. The production classifier now recognizes the preserved `: aggregate `
+  owner marker; the focused A-only report contains aggregate-local and service-conformance
+  categories while retaining the exact role identity used for migration.
+- Source-only movement changes exactly the context `BehaviorSourceMap` generated module plus the
+  workspace ledger that records source-bearing role provenance. Every other emitted file remains
+  byte-identical, and the scaffold disposition/report identifies only the source-map artifact as
+  generated impact.
 
 
 ## Decision Log
