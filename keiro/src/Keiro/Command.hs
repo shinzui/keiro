@@ -51,6 +51,11 @@
 module Keiro.Command
   ( -- * Results and errors
     CommandResult (..),
+    DomainDecision (..),
+    DomainCommandOutcome (..),
+    SilentCommandContext (..),
+    SilentDomainDecision (..),
+    DomainCommandHandler (..),
     CommandError (..),
     HydrationReplayReason (..),
     commandErrorClass,
@@ -61,6 +66,8 @@ module Keiro.Command
 
     -- * Running commands
     runCommand,
+    runDomainCommand,
+    forgetDomainDecision,
     runCommandWithSql,
     runCommandWithSqlEvents,
     SqlTransactionDecision (..),
@@ -81,6 +88,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.Functor (($>))
 import Data.Int (Int32)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Concurrent (runConcurrent)
@@ -92,6 +100,7 @@ import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetadata)
+import Keiro.Command.Domain (SilentCommandContext (..), SilentDomainDecision (..))
 import Keiro.EventStream (EventStream, StateCodec, Terminality (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
@@ -171,6 +180,40 @@ data CommandResult target = CommandResult
     eventsAppended :: !Int
   }
   deriving stock (Generic, Eq, Show)
+
+-- | The application-level decision made by one selected live edge.
+-- Infrastructure failures and commands for which no edge was selected remain
+-- 'CommandError's outside this value.
+data DomainDecision co rejection noOp
+  = -- | The exact non-empty event batch that was encoded and appended.
+    DomainAccepted !(NonEmpty co)
+  | -- | An explicitly selected silent edge classified as a rejection.
+    DomainRejected !rejection
+  | -- | An explicitly selected silent edge classified as a successful no-op.
+    DomainNoOp !noOp
+  deriving stock (Generic, Eq, Show)
+
+-- | A typed domain decision paired with the ordinary persistence metadata.
+data DomainCommandOutcome target co rejection noOp = DomainCommandOutcome
+  { decision :: !(DomainDecision co rejection noOp),
+    result :: !(CommandResult target)
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | A validated stream plus pure application policy for selected silent edges.
+-- The classifier does not select an edge and is invoked only after Keiki has
+-- selected exactly one live edge whose output word is empty.
+data DomainCommandHandler phi rs s ci co rejection noOp = DomainCommandHandler
+  { eventStream :: !(ValidatedEventStream phi rs s ci co),
+    classifySilent :: !(SilentCommandContext rs s ci -> SilentDomainDecision rejection noOp)
+  }
+  deriving stock (Generic)
+
+-- | Erase the typed domain decision while retaining historical command
+-- persistence metadata. This is a collapse of successful matched decisions;
+-- unmatched commands remain an outer 'Left' and never reach this adapter.
+forgetDomainDecision :: DomainCommandOutcome target co rejection noOp -> CommandResult target
+forgetDomainDecision DomainCommandOutcome {result} = result
 
 -- | Why a command did not complete.
 data CommandError
@@ -315,6 +358,11 @@ data Hydrated rs s = Hydrated
 data CommandPlan target rs s co
   = CommandNoOp !(CommandResult target)
   | CommandAppend !(Hydrated rs s) ![co] ![EventData]
+  deriving stock (Generic)
+
+data DomainCommandPlan target rs s co rejection noOp
+  = DomainCommandSilent !(SilentDomainDecision rejection noOp) !(CommandResult target)
+  | DomainCommandAppend !(Hydrated rs s) !(NonEmpty co) ![EventData]
   deriving stock (Generic)
 
 hydrate ::
@@ -705,6 +753,72 @@ runCommand options validatedEventStream targetStream command =
         Left (_, storeError) ->
           retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
 
+-- | Hydrate, select and evaluate one live edge, then return the exact typed
+-- domain decision from the successful final optimistic-concurrency attempt.
+-- Eventful decisions append the same non-empty batch carried by
+-- 'DomainAccepted'. Selected silent edges are classified purely and perform no
+-- append. No matching edge and every infrastructure failure remain
+-- 'CommandError's.
+runDomainCommand ::
+  forall phi rs s ci co rejection noOp es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp))
+runDomainCommand options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command =
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream' targetStream) Nothing $ \mSpan -> do
+    (outcome, attemptNo) <- attempt mSpan 1 Nothing
+    recordCommandOutcome mSpan ((^. #eventsAppended) . forgetDomainDecision) attemptNo outcome
+    pure outcome
+  where
+    eventStream' = unvalidated validatedEventStream
+
+    attempt mSpan attemptNo lastConflict = do
+      hydrated <- hydrate options eventStream' targetStream
+      either (\err -> pure (Left err, attemptNo)) (runPlan mSpan attemptNo lastConflict) hydrated
+
+    runPlan mSpan attemptNo lastConflict current =
+      case conflictFixpoint lastConflict (current ^. #streamVersion) of
+        Just err -> pure (Left err, attemptNo)
+        Nothing ->
+          case prepareDomainCommandPlan options handler eventStream' targetStream current command of
+            Left err -> pure (Left err, attemptNo)
+            Right (DomainCommandSilent silentDecision result) ->
+              pure
+                ( Right
+                    DomainCommandOutcome
+                      { decision = domainDecisionFromSilent silentDecision,
+                        result
+                      },
+                  attemptNo
+                )
+            Right (DomainCommandAppend current' events encoded) ->
+              appendOnce mSpan attemptNo current' events encoded
+
+    appendOnce mSpan attemptNo current events encoded = do
+      liftIO (options ^. #beforeAppend)
+      appended <-
+        tryError @StoreError
+          $ appendToStream
+            ((eventStream' ^. #resolveStreamName) targetStream)
+            (expectedVersion (current ^. #streamVersion))
+            encoded
+      case appended of
+        Right appendResult -> do
+          verifyAndSnapshot options mSpan eventStream' current (NonEmpty.toList events) appendResult
+          pure
+            ( Right
+                DomainCommandOutcome
+                  { decision = DomainAccepted events,
+                    result = appendedResult targetStream appendResult (Prelude.length encoded)
+                  },
+              attemptNo
+            )
+        Left (_, storeError) ->
+          retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
+
 -- | Like 'runCommand', but run @afterAppend@ inside the /same/ transaction
 -- as the append, so a read-model write commits atomically with the events.
 -- The callback's result is returned as @Just@ on append (and 'Nothing' for a
@@ -865,6 +979,54 @@ prepareCommandPlan options eventStream targetStream current command =
         . assignEventIds (options ^. #eventIds)
         <$> encodeEvents (eventStream ^. #eventCodec) (options ^. #metadata) events
 
+prepareDomainCommandPlan ::
+  (BoolAlg phi (RegFile rs, ci)) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  Hydrated rs s ->
+  ci ->
+  Either CommandError (DomainCommandPlan (EventStream phi rs s ci co) rs s co rejection noOp)
+prepareDomainCommandPlan options DomainCommandHandler {classifySilent} eventStream targetStream current command =
+  case Keiki.stepDetailedEither (eventStream ^. #transducer) (current ^. #state, current ^. #registers) command of
+    Left failure -> Left (commandStepFailure failure)
+    Right success ->
+      case Keiki.stepSuccessOutputs success of
+        [] ->
+          Right
+            ( DomainCommandSilent
+                ( classifySilent
+                    SilentCommandContext
+                      { state = current ^. #state,
+                        registers = current ^. #registers,
+                        command,
+                        selectedEdge = Keiki.stepSuccessEdge success
+                      }
+                )
+                (noOpResult targetStream current)
+            )
+        event : events ->
+          let batch = event :| events
+           in DomainCommandAppend current batch
+                . assignEventIds (options ^. #eventIds)
+                <$> encodeEvents (eventStream ^. #eventCodec) (options ^. #metadata) (NonEmpty.toList batch)
+
+domainDecisionFromSilent :: SilentDomainDecision rejection noOp -> DomainDecision co rejection noOp
+domainDecisionFromSilent = \case
+  SilentRejected reason -> DomainRejected reason
+  SilentNoOp explanation -> DomainNoOp explanation
+
+commandStepFailure :: Keiki.StepFailure s -> CommandError
+commandStepFailure = \case
+  Keiki.NoOutgoingEdges {} -> CommandRejected
+  Keiki.NoMatchingEdge {} -> CommandRejected
+  Keiki.AmbiguousEdges _ matches ->
+    CommandAmbiguous
+      [ Keiki.edgeIndex (Keiki.matchedEdge matched)
+      | matched <- matches
+      ]
+
 -- | Render the stream that the command targets as plain 'Text', for use
 -- as a span name.
 resolvedStreamName ::
@@ -932,7 +1094,7 @@ verifyAndSnapshot options mSpan eventStream current events appendResult
     Nothing <- eventStream ^. #stateCodec =
       pure ()
   | otherwise =
-      case Keiki.applyEventsEither (eventStream ^. #transducer) (state current, registers current) events of
+      case Keiki.applyEventsEither (eventStream ^. #transducer) (current ^. #state, current ^. #registers) events of
         Left failure -> do
           recordSnapshotApplyDivergence (options ^. #metrics) 1
           for_ mSpan $ \sp ->
@@ -1021,16 +1183,8 @@ evaluateCommand ::
   ci ->
   Either CommandError [co]
 evaluateCommand eventStream current command =
-  case Keiki.stepEither (eventStream ^. #transducer) (state current, registers current) command of
-    Left Keiki.NoOutgoingEdges {} -> Left CommandRejected
-    Left Keiki.NoMatchingEdge {} -> Left CommandRejected
-    Left (Keiki.AmbiguousEdges _ matches) ->
-      Left
-        ( CommandAmbiguous
-            [ Keiki.edgeIndex (Keiki.matchedEdge matched)
-            | matched <- matches
-            ]
-        )
+  case Keiki.stepEither (eventStream ^. #transducer) (current ^. #state, current ^. #registers) command of
+    Left failure -> Left (commandStepFailure failure)
     Right (_, _, events) -> Right events
 
 encodeEvents :: Codec co -> Maybe Value -> [co] -> Either CommandError [EventData]

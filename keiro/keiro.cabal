@@ -90,6 +90,7 @@ library
     Keiro.Workflow.Types
 
   other-modules:
+    Keiro.Command.Domain
     Keiro.DeterministicId
     Keiro.Projection.Types
     Keiro.ReadModel.Rebuild.Group

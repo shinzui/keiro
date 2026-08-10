@@ -59,7 +59,7 @@ import Kiroku.Store.Lifecycle qualified as Lifecycle
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
-import Test.Tasty.Bench (Benchmark, bench, bgroup, defaultMain, nfIO)
+import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude
 
@@ -132,6 +132,17 @@ benchmarks store metrics =
           [ commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne,
             commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge,
             commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp
+          ],
+        bgroup
+          "domain"
+          [ bcompareWithin 0 1.25 legacyAcceptedOnePattern $
+              domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne,
+            bcompareWithin 0 1.25 legacyAcceptedLargePattern $
+              domainCommandScenarioBench store "accepted-large" domainAcceptedLargeHandler domainAcceptedLargeTarget EmitLarge,
+            bcompareWithin 0 1.25 legacyNoOpPattern $
+              domainCommandScenarioBench store "rejected" domainRejectedHandler domainRejectedTarget SelectNoOp,
+            bcompareWithin 0 1.25 legacyNoOpPattern $
+              domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp
           ]
       ]
   ]
@@ -361,6 +372,18 @@ legacyAcceptedLargeTarget = stream "bench-command-legacy-accepted-large"
 legacyNoOpTarget :: Stream BenchEventStream
 legacyNoOpTarget = stream "bench-command-legacy-no-op"
 
+domainAcceptedOneTarget :: Stream BenchEventStream
+domainAcceptedOneTarget = stream "bench-command-domain-accepted-1"
+
+domainAcceptedLargeTarget :: Stream BenchEventStream
+domainAcceptedLargeTarget = stream "bench-command-domain-accepted-large"
+
+domainRejectedTarget :: Stream BenchEventStream
+domainRejectedTarget = stream "bench-command-domain-rejected"
+
+domainNoOpTarget :: Stream BenchEventStream
+domainNoOpTarget = stream "bench-command-domain-no-op"
+
 legacyAcceptedOneStream :: ValidatedBenchEventStream
 legacyAcceptedOneStream = mkEventStreamOrThrow "bench-command-legacy-accepted-1" (benchEventStream oneTransducer)
 
@@ -369,6 +392,43 @@ legacyAcceptedLargeStream = mkEventStreamOrThrow "bench-command-legacy-accepted-
 
 legacyNoOpStream :: ValidatedBenchEventStream
 legacyNoOpStream = mkEventStreamOrThrow "bench-command-legacy-no-op" (benchEventStream noOpTransducer)
+
+domainAcceptedOneHandler :: DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text
+domainAcceptedOneHandler =
+  DomainCommandHandler
+    { eventStream = legacyAcceptedOneStream,
+      classifySilent = \_ -> error "domainAcceptedOneHandler: eventful edge classified as silent"
+    }
+
+domainAcceptedLargeHandler :: DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text
+domainAcceptedLargeHandler =
+  DomainCommandHandler
+    { eventStream = legacyAcceptedLargeStream,
+      classifySilent = \_ -> error "domainAcceptedLargeHandler: eventful edge classified as silent"
+    }
+
+domainRejectedHandler :: DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text
+domainRejectedHandler =
+  DomainCommandHandler
+    { eventStream = legacyNoOpStream,
+      classifySilent = \_ -> SilentRejected "benchmark rejection"
+    }
+
+domainNoOpHandler :: DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text
+domainNoOpHandler =
+  DomainCommandHandler
+    { eventStream = legacyNoOpStream,
+      classifySilent = \_ -> SilentNoOp "benchmark no-op"
+    }
+
+legacyAcceptedOnePattern :: String
+legacyAcceptedOnePattern = "$NF == \"accepted-1\" && $(NF-1) == \"legacy\" && $(NF-2) == \"command\""
+
+legacyAcceptedLargePattern :: String
+legacyAcceptedLargePattern = "$NF == \"accepted-large\" && $(NF-1) == \"legacy\" && $(NF-2) == \"command\""
+
+legacyNoOpPattern :: String
+legacyNoOpPattern = "$NF == \"no-op\" && $(NF-1) == \"legacy\" && $(NF-2) == \"command\""
 
 benchEventStream :: SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent -> BenchEventStream
 benchEventStream transducer =
@@ -473,6 +533,15 @@ commandScenarioBench store benchmarkName validatedStream target command =
     case result of
       Right _ -> pure ()
       Left err -> liftIO (fail ("unexpected command benchmark result: " <> show err))
+
+domainCommandScenarioBench :: Store.KirokuStore -> String -> DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text -> Stream BenchEventStream -> BenchCommand -> Benchmark
+domainCommandScenarioBench store benchmarkName handler target command =
+  bench benchmarkName $ nfIO $ runStoreChecked store do
+    void (Lifecycle.hardDeleteStream (streamName target))
+    result <- runDomainCommand defaultRunCommandOptions handler target command
+    case result of
+      Right DomainCommandOutcome {} -> pure ()
+      Left err -> liftIO (fail ("unexpected typed command benchmark result: " <> show err))
 
 runStoreChecked :: Store.KirokuStore -> Eff [Store, Error Store.StoreError, IOE] a -> IO a
 runStoreChecked store action = do

@@ -1089,6 +1089,78 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       stderr `shouldSatisfy` ("ValidatedEventStream" `isInfixOf`)
 
   describe "Keiro.Command" $ around (withFreshStore fixture) $ do
+    describe "typed domain command outcomes" $ do
+      it "returns the exact ordered accepted batch and compatibility result" $ \storeHandle -> do
+        let target = stream "domain-command-accepted" :: Stream CounterEventStream
+        commandResult <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand defaultRunCommandOptions multiCounterDomainHandler target (Add 4)
+        case commandResult of
+          Right (Right outcome@DomainCommandOutcome {decision = DomainAccepted events, result}) -> do
+            events `shouldBe` (CounterAdded 4 :| [CounterAudited 4])
+            result ^. #streamVersion `shouldBe` StreamVersion 2
+            result ^. #eventsAppended `shouldBe` 2
+            forgetDomainDecision outcome `shouldBe` result
+          other -> expectationFailure ("expected typed accepted command, got " <> show other)
+        Right recorded <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "domain-command-accepted") (StreamVersion 0) 10
+        traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+          `shouldBe` Right [CounterAdded 4, CounterAudited 4]
+
+      it "attributes sibling silent edges and returns typed rejection and no-op" $ \storeHandle -> do
+        let rejectionTarget = stream "domain-command-rejected" :: Stream SilentChoiceEventStream
+            noOpTarget = stream "domain-command-no-op" :: Stream SilentChoiceEventStream
+        rejectionResult <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand defaultRunCommandOptions silentChoiceDomainHandler rejectionTarget RejectSilently
+        case rejectionResult of
+          Right (Right outcome@DomainCommandOutcome {decision = DomainRejected reason, result}) -> do
+            reason `shouldBe` "edge-0: rejected"
+            result ^. #eventsAppended `shouldBe` 0
+            result ^. #streamVersion `shouldBe` StreamVersion 0
+            result ^. #globalPosition `shouldBe` Nothing
+            forgetDomainDecision outcome `shouldBe` result
+          other -> expectationFailure ("expected typed domain rejection, got " <> show other)
+        noOpResult <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand defaultRunCommandOptions silentChoiceDomainHandler noOpTarget NoOpSilently
+        case noOpResult of
+          Right (Right outcome@DomainCommandOutcome {decision = DomainNoOp explanation, result}) -> do
+            explanation `shouldBe` "edge-1: already complete"
+            result ^. #eventsAppended `shouldBe` 0
+            result ^. #streamVersion `shouldBe` StreamVersion 0
+            result ^. #globalPosition `shouldBe` Nothing
+            forgetDomainDecision outcome `shouldBe` result
+          other -> expectationFailure ("expected typed domain no-op, got " <> show other)
+        Right rejectedEvents <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "domain-command-rejected") (StreamVersion 0) 10
+        Right noOpEvents <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "domain-command-no-op") (StreamVersion 0) 10
+        rejectedEvents `shouldBe` Vector.empty
+        noOpEvents `shouldBe` Vector.empty
+
+      it "keeps unmatched and ambiguous selection failures as CommandError" $ \storeHandle -> do
+        let unmatchedTarget = stream "domain-command-unmatched" :: Stream SilentChoiceEventStream
+            ambiguousTarget = stream "domain-command-ambiguous" :: Stream CounterEventStream
+        unmatched <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand defaultRunCommandOptions silentChoiceDomainHandler unmatchedTarget UnmatchedSilently
+        ambiguous <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand defaultRunCommandOptions ambiguousCounterDomainHandler ambiguousTarget (Add 1)
+        unmatched `shouldBe` Right (Left CommandRejected)
+        ambiguous `shouldBe` Right (Left (CommandAmbiguous [0, 1]))
+
+      it "retains validated rejection of state-changing silent edges" $ \_ -> do
+        case mkEventStream "domain-state-changing-epsilon" stateChangingEpsilonEventStreamDef of
+          Left warnings ->
+            map eswReason warnings
+              `shouldSatisfy` any (Text.isInfixOf "state-changing-epsilon")
+          Right _ -> expectationFailure "expected validation to reject a state-changing silent edge"
+
     it "creates a stream and appends the first command event" $ \storeHandle -> do
       let target = stream "counter-command-create" :: Stream CounterEventStream
       result <-
@@ -12384,6 +12456,16 @@ type SkipEventStream = EventStream (HsPred '[] SkipCommand) '[] CounterState Ski
 
 type ValidatedSkipEventStream = ValidatedEventStream (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
 
+data SilentChoiceCommand
+  = RejectSilently
+  | NoOpSilently
+  | UnmatchedSilently
+  deriving stock (Generic, Eq, Show)
+
+type SilentChoiceEventStream = EventStream (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
+
+type ValidatedSilentChoiceEventStream = ValidatedEventStream (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
+
 skipEventStream :: ValidatedSkipEventStream
 skipEventStream = mkEventStreamOrThrow "skip-command" skipEventStreamDef
 
@@ -12397,6 +12479,85 @@ skipEventStreamDef =
       resolveStreamName = Stream.streamName,
       snapshotPolicy = Never,
       stateCodec = Nothing
+    }
+
+silentChoiceEventStream :: ValidatedSilentChoiceEventStream
+silentChoiceEventStream = mkEventStreamOrThrow "silent-choice-command" silentChoiceEventStreamDef
+
+silentChoiceEventStreamDef :: SilentChoiceEventStream
+silentChoiceEventStreamDef =
+  EventStream
+    { transducer = silentChoiceTransducer,
+      initialState = Counting,
+      initialRegisters = RNil,
+      eventCodec = counterCodec,
+      resolveStreamName = Stream.streamName,
+      snapshotPolicy = Never,
+      stateCodec = Nothing
+    }
+
+silentChoiceTransducer :: SymTransducer (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
+silentChoiceTransducer =
+  SymTransducer
+    { edgesOut = \case
+        Counting ->
+          [ Edge
+              { guard = matchInCtor rejectSilentlyCtor,
+                update = UKeep,
+                output = [],
+                target = Counting,
+                mode = Keiki.Live
+              },
+            Edge
+              { guard = matchInCtor noOpSilentlyCtor,
+                update = UKeep,
+                output = [],
+                target = Counting,
+                mode = Keiki.Live
+              }
+          ],
+      initial = Counting,
+      initialRegs = RNil,
+      isFinal = \_ -> False
+    }
+
+rejectSilentlyCtor :: InCtor SilentChoiceCommand '[]
+rejectSilentlyCtor =
+  Keiki.unavailableInCtor
+    "RejectSilently"
+    (\case RejectSilently -> Just RNil; _ -> Nothing)
+    (\RNil -> RejectSilently)
+
+noOpSilentlyCtor :: InCtor SilentChoiceCommand '[]
+noOpSilentlyCtor =
+  Keiki.unavailableInCtor
+    "NoOpSilently"
+    (\case NoOpSilently -> Just RNil; _ -> Nothing)
+    (\RNil -> NoOpSilently)
+
+multiCounterDomainHandler :: DomainCommandHandler (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent Text Text
+multiCounterDomainHandler =
+  DomainCommandHandler
+    { eventStream = multiCounterEventStream,
+      classifySilent = \_ -> error "multiCounterDomainHandler: eventful edge classified as silent"
+    }
+
+ambiguousCounterDomainHandler :: DomainCommandHandler (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent Text Text
+ambiguousCounterDomainHandler =
+  DomainCommandHandler
+    { eventStream = ambiguousCounterEventStream,
+      classifySilent = \_ -> error "ambiguousCounterDomainHandler: no edge should be selected"
+    }
+
+silentChoiceDomainHandler :: DomainCommandHandler (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent Text Text
+silentChoiceDomainHandler =
+  DomainCommandHandler
+    { eventStream = silentChoiceEventStream,
+      classifySilent = \SilentCommandContext {command = selectedCommand, selectedEdge} ->
+        case (selectedCommand, Keiki.edgeIndex selectedEdge) of
+          (RejectSilently, 0) -> SilentRejected "edge-0: rejected"
+          (NoOpSilently, 1) -> SilentNoOp "edge-1: already complete"
+          other -> error ("silentChoiceDomainHandler: unexpected selected edge " <> show other)
     }
 
 skipTransducer :: SymTransducer (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent

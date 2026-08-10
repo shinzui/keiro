@@ -57,7 +57,15 @@ the decision from the successful final evaluation.
   suite with 2,468,024 bytes maximum residency. The scratch evidence is
   `keiro/bench-command-before.csv` and remains uncommitted for the final
   same-machine comparison.
-- [ ] Milestone 1: add typed outcome values, a single-evaluation pure boundary, and direct runners.
+- [x] (2026-08-10T18:06:30Z) Milestone 1 functional work: added typed outcome
+  values, the single-evaluation pure classifier boundary, the direct runner,
+  compatibility adapter, focused tests, after-only benchmarks, and in-suite
+  1.25 ratio gates. `cabal build keiro keiro:bench:keiro-bench` and the four
+  focused examples pass.
+- [ ] Milestone 1 performance acceptance: rerun the in-suite ratio gates and
+  large-result heap evidence when the machine is quiet. The user reported that
+  the computer is currently under heavy load, so do not change, regenerate, or
+  commit a performance baseline from the current session.
 - [ ] Milestone 2: integrate SQL callbacks, projections, retry semantics, and bounded telemetry.
 - [ ] Milestone 3: expose typed outcomes through routers and process managers without retaining worker payloads across fan-out.
 - [ ] Milestone 4: document the API, record the architectural decision, and complete repository validation.
@@ -85,6 +93,14 @@ the decision from the successful final evaluation.
   Evidence: the combined run still completed `accepted-large` at 32.4 ms and
   `no-op` at 1.11 ms, and `cabal bench keiro-bench
   --benchmark-options="-p accepted-1 --time-mode wall +RTS -s -RTS"` exited 0.
+
+- Discovery: Finished-code ratio samples taken later in the session were not
+  usable because the user confirmed the computer was under heavy load. The
+  instability was visible as an accepted-small standard deviation almost as
+  large as its mean and repeated 100-second convergence stalls, while a focused
+  no-op comparison measured identical 128 μs means and a 1.00x ratio.
+  Evidence: the benchmark code retains hard `bcompareWithin 0 1.25` gates, but
+  no committed baseline was created or changed from these noisy samples.
 
 
 ## Decision Log
@@ -157,6 +173,16 @@ the decision from the successful final evaluation.
   transitive library dependency. This repeats the repository's existing bound
   without adding or upgrading an external package, and keeps the benchmark
   aggregate independent of test-only fixtures.
+  Date: 2026-08-10
+
+- Decision: Keep the unprefixed `SilentCommandContext` record labels `state`,
+  `registers`, `command`, and `selectedEdge`, and define that record in the
+  internal `Keiro.Command.Domain` module with `NoFieldSelectors`.
+  Rationale: The user prefers unprefixed record fields. Suppressing selector
+  functions only for this new record avoids making the established
+  `Hydrated.state` and `Hydrated.registers` selector calls ambiguous, while
+  record construction, pattern matching, overloaded labels, and record-dot
+  access remain available for the new context.
   Date: 2026-08-10
 
 
@@ -450,7 +476,9 @@ Start each implementation milestone with the narrow build and tests:
 
 ```bash
 cabal build keiro
-cabal test keiro-test --test-show-details=direct --test-options='--match=typed domain command outcomes'
+cabal test keiro-test --test-show-details=direct \
+  --test-option=--match \
+  --test-option='typed domain command outcomes'
 ```
 
 The focused transcript must end in successful examples for direct commands, SQL/projection
@@ -750,3 +778,9 @@ fast-path and single-batch allocation rules, strict-context lifetime requirement
 large-batch and coordinator fan-out heap evidence, a committed regression baseline, and
 bounded worker accumulation after the performance review identified retained memory as the
 primary risk.
+
+Revision note (2026-08-10): Recorded Milestones 0 and 1 implementation evidence,
+corrected the focused Hspec invocation to preserve its space-containing match as one
+argument, kept unprefixed silent-context record labels without adding colliding selector
+functions, and deferred all baseline generation or changes until the user's machine is no
+longer under heavy load.
