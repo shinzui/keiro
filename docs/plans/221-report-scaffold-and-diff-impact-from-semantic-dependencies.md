@@ -40,8 +40,9 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 2: add old/new semantic consumer summaries to single/workspace diff text and the
   append-only JSON report without changing compatibility verdicts. Completed 2026-08-10T01:43:00Z;
   the focused A-only test, `cabal build keiro-dsl`, and `bash keiro-dsl/test/diff-test.sh` pass.
-- [ ] Milestone 3: add semantic and generated-artifact impact sections to single/workspace scaffold
-  reports, including honest legacy-baseline behavior.
+- [x] Milestone 3: add semantic and generated-artifact impact sections to single/workspace scaffold
+  reports, including honest legacy-baseline behavior. Completed 2026-08-10T02:00:37Z; focused
+  semantic-impact, structural-record, source-movement, and all 31 workspace-scaffold examples pass.
 - [ ] Milestone 4: prove mapped locality, source-only neutrality, ledger compatibility, and report
   determinism; update ADRs/docs and pass focused/full tests.
 
@@ -58,6 +59,11 @@ implementation. Provide concise evidence.
 - The workspace diff shell assertion still expected the pre-EP-3 approximate declaration line 3,
   while the exact checked source index correctly reports the enum at line 4. The regression now
   pins the exact line and additionally requires semantic impact in both text and JSON.
+- `MappingDrift` contains consumer binding/provenance identity but not mapped wire shape. A snapshot
+  containing only consumer sets cannot tell a later scaffold that a declaration's schema changed
+  while its consumers stayed the same. The durable snapshot therefore also carries a canonical
+  declaration identity built from source-independent resolved metadata, wire fingerprint, and
+  generated Haskell-facing names. Exact source movement leaves it byte-identical.
 
 
 ## Decision Log
@@ -91,6 +97,14 @@ Record every decision made while working on the plan.
   CLI output.
   Rationale: The CLI must append `semanticImpact` to schema 1, while library callers that explicitly
   selected the old constructor should not receive an unrequested output-byte change.
+  Date: 2026-08-10
+
+- Decision: Extend each semantic-impact snapshot declaration row with a source-independent
+  declaration identity and let current-ledger scaffold reports detect changed keys from identity
+  deltas as well as legacy `MappingDrift` rows.
+  Rationale: Consumer reachability alone cannot establish that a same-consumer shape changed;
+  generated-file writes are evidence, not semantic authority. The resolved identity restores
+  diff/scaffold equivalence without putting source locations into history.
   Date: 2026-08-10
 
 
@@ -300,3 +314,6 @@ and ledger behavior as its adoption evidence.
   evidence, and the durable absent-baseline encoding decision so the plan remains restartable.
 - 2026-08-10: Recorded Milestone 2's single/workspace diff summaries, append-only JSON projection,
   exact-location shell evidence, and compatibility-preserving public constructor decision.
+- 2026-08-10: Recorded Milestone 3's typed scaffold impact sections, byte-aware standalone writes,
+  legacy-baseline behavior, and the declaration-identity correction required for same-consumer
+  shape changes.

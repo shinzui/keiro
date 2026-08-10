@@ -26,6 +26,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   failure positions through that map; contracts and newly created witness comments no longer
   embed volatile source lines. `behavior-obligations` appends exact `file`, `column`, and `quality`
   location fields without changing schema `keiro-dsl/behavior-obligations/1`.
+- `SemanticImpactSnapshot`, `MappedImpactDelta`, and `SemanticImpactReport` provide one canonical
+  checked-consumer projection for diff and scaffold explanations. Current single/workspace ledgers
+  persist an additive `semantic-impact` row, and current diff CLI JSON appends `semanticImpact` to
+  `keiro-dsl/diff-report/1`; legacy ledgers retain an explicitly unavailable old baseline.
 
 ### Breaking Changes
 
@@ -39,6 +43,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   cases. Exhaustive library consumers must extend their matches. Scaffold and check planning now
   require a complete exact source index and refuse missing, inexact, duplicate, or colliding
   behavior anchors before writes.
+- `ScaffoldRecord` and `WorkspaceRecord` gain optional semantic-impact snapshots;
+  `ScaffoldReport` and `WorkspaceScaffoldReport` gain typed semantic and generated-artifact impact
+  fields. Exhaustive direct record construction must initialize the new fields. Standalone
+  scaffolding now reports an existing byte-identical generated module as `Unchanged`, matching the
+  workspace path instead of rewriting it.
 - Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
   `Harness` into the context `StructuralConformance` module, which must be added to the consuming
   Cabal module inventory. Unrelated aggregate files are now byte-stable when a declaration outside

@@ -29,13 +29,15 @@ where
 
 import Control.Monad (unless)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
-import Data.List (sort)
+import Data.List (sort, sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Text (Text)
+import Data.Text qualified as T
 import GHC.Generics (Generic)
-import Keiro.Dsl.Grammar (Name)
+import Keiro.Dsl.Grammar (HaskellSource (..), Name, WireEnum (..))
 import Keiro.Dsl.TypeGraph
 
 -- | A checked consumer of mapped declarations. The current checked graph has
@@ -74,17 +76,20 @@ data SemanticImpact = SemanticImpact
   { impactRoots :: ![MappedRoot],
     impactAggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
     impactDeclarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
-    impactServiceDeclarations :: !(Set MappedKey)
+    impactServiceDeclarations :: !(Set MappedKey),
+    impactDeclarationIdentities :: !(Map MappedKey Text)
   }
   deriving stock (Eq, Show, Generic)
 
--- | Durable, source-independent evidence for the mapped consumer graph. The
--- map contains every service declaration, including declarations with no
--- aggregate consumer. The explicit service inventory makes the declaration
--- ownership boundary visible and leaves room for future non-aggregate roots.
+-- | Durable, source-independent evidence for the mapped consumer graph and
+-- declaration identities. The map contains every service declaration,
+-- including declarations with no aggregate consumer. The explicit service
+-- inventory makes the declaration ownership boundary visible and leaves room
+-- for future non-aggregate roots.
 data SemanticImpactSnapshot = SemanticImpactSnapshot
   { snapshotMappedConsumers :: !(Map MappedKey (Set MappedConsumer)),
-    snapshotServiceInventory :: !(Set MappedKey)
+    snapshotServiceInventory :: !(Set MappedKey),
+    snapshotDeclarationIdentities :: !(Map MappedKey Text)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -118,7 +123,8 @@ instance ToJSON SemanticImpactSnapshot where
       [ "declarations"
           .= [ object
                  [ "declaration" .= unMappedKey declaration,
-                   "consumers" .= map consumerName (Set.toAscList declarationConsumers)
+                   "consumers" .= map consumerName (Set.toAscList declarationConsumers),
+                   "identity" .= Map.findWithDefault "" declaration (snapshotDeclarationIdentities snapshot)
                  ]
              | (declaration, declarationConsumers) <- Map.toAscList (snapshotMappedConsumers snapshot)
              ],
@@ -129,25 +135,29 @@ instance FromJSON SemanticImpactSnapshot where
   parseJSON = withObject "SemanticImpactSnapshot" $ \fields -> do
     declarations <- fields .: "declarations" >>= traverse parseDeclaration
     inventoryNames <- fields .: "serviceInventory"
-    let declarationNames = map fst declarations
+    let declarationNames = [declaration | (declaration, _, _) <- declarations]
         inventoryKeys = map MappedKey inventoryNames
-        declarationMap = Map.fromList declarations
+        declarationMap = Map.fromList [(declaration, declarationConsumers) | (declaration, declarationConsumers, _) <- declarations]
+        declarationIdentities = Map.fromList [(declaration, identity) | (declaration, _, identity) <- declarations]
         inventory = Set.fromList inventoryKeys
     unless (distinct declarationNames) (fail "duplicate semantic-impact declaration")
     unless (distinct inventoryKeys) (fail "duplicate semantic-impact service inventory declaration")
     unless (Map.keysSet declarationMap == inventory) (fail "semantic-impact declarations and service inventory differ")
+    unless (Map.keysSet declarationIdentities == inventory) (fail "semantic-impact declaration identities and service inventory differ")
     pure
       SemanticImpactSnapshot
         { snapshotMappedConsumers = declarationMap,
-          snapshotServiceInventory = inventory
+          snapshotServiceInventory = inventory,
+          snapshotDeclarationIdentities = declarationIdentities
         }
     where
       parseDeclaration = withObject "SemanticImpactDeclaration" $ \row -> do
         declarationName <- row .: "declaration"
         consumerNames <- row .: "consumers"
+        identity <- row .: "identity"
         let aggregateConsumers = map AggregateConsumer consumerNames
         unless (distinct aggregateConsumers) (fail "duplicate semantic-impact aggregate consumer")
-        pure (MappedKey declarationName, Set.fromList aggregateConsumers)
+        pure (MappedKey declarationName, Set.fromList aggregateConsumers, identity)
       distinct values = length values == Set.size (Set.fromList values)
 
 instance ToJSON MappedImpactDelta where
@@ -188,7 +198,8 @@ semanticImpact graph =
     { impactRoots = roots,
       impactAggregateDeclarations = aggregateDeclarations,
       impactDeclarationConsumers = declarationConsumers,
-      impactServiceDeclarations = serviceDeclarations
+      impactServiceDeclarations = serviceDeclarations,
+      impactDeclarationIdentities = Map.mapWithKey (declarationIdentity graph) (tgDeclarations graph)
     }
   where
     roots = sort (map mappedRootFromUseSite (tgUseSites graph))
@@ -216,19 +227,19 @@ semanticImpactSnapshot :: SemanticImpact -> SemanticImpactSnapshot
 semanticImpactSnapshot impact =
   SemanticImpactSnapshot
     { snapshotMappedConsumers = impactDeclarationConsumers impact,
-      snapshotServiceInventory = impactServiceDeclarations impact
+      snapshotServiceInventory = impactServiceDeclarations impact,
+      snapshotDeclarationIdentities = impactDeclarationIdentities impact
     }
 
--- | Compare only consumer and service-inventory membership. A declaration's
--- schema may change while these sets remain equal; differ/scaffold callers use
--- 'mappedImpactForDeclarations' with their authoritative changed-key set for
--- that case.
+-- | Compare consumer membership, service-inventory membership, and canonical
+-- source-independent declaration identities.
 diffSemanticImpact :: SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedImpactDelta]
 diffSemanticImpact previous current =
   [ delta
   | delta <- mappedImpactForDeclarations allDeclarations previous current,
     impactPreviousConsumers delta /= impactCurrentConsumers delta
       || serviceMember previous (impactDeclaration delta) /= serviceMember current (impactDeclaration delta)
+      || declarationIdentityAt previous (impactDeclaration delta) /= declarationIdentityAt current (impactDeclaration delta)
   ]
   where
     allDeclarations = Set.toAscList (snapshotServiceInventory previous <> snapshotServiceInventory current)
@@ -265,6 +276,45 @@ snapshotConsumers snapshot declaration = Map.findWithDefault Set.empty declarati
 
 serviceMember :: SemanticImpactSnapshot -> MappedKey -> Bool
 serviceMember snapshot declaration = declaration `Set.member` snapshotServiceInventory snapshot
+
+declarationIdentityAt :: SemanticImpactSnapshot -> MappedKey -> Maybe Text
+declarationIdentityAt snapshot declaration = Map.lookup declaration (snapshotDeclarationIdentities snapshot)
+
+-- | Canonical identity for mapped declaration facts that 'MappedDiff' treats
+-- as changes. Source locations and declaration order are deliberately absent.
+declarationIdentity :: TypeGraph -> MappedKey -> ResolvedMappedDecl -> Text
+declarationIdentity graph key declaration =
+  T.intercalate "\x1f" $ case declaration of
+    ResolvedStructural structural shape -> structuralParts structural shape
+    ResolvedOpaque opaque -> opaqueParts opaque
+  where
+    structuralParts structural shape =
+      [ "structural",
+        sourceIdentity (sdHaskell structural),
+        unQualifiedValueName (sdBinding structural),
+        unBindingVersion (sdBindingVersion structural),
+        unCanonicalTypeId (sdCanonical structural),
+        unQualifiedValueName (sdFixtures structural),
+        maybe "" unQualifiedValueName (sdInitial structural),
+        wireFingerprint graph (unMappedKey key),
+        structuralPresentation shape
+      ]
+    opaqueParts opaque =
+      [ "opaque",
+        sourceIdentity (odHaskell opaque),
+        unCodecIdentity (odCodecIdentity opaque),
+        unCodecVersion (odCodecVersion opaque),
+        unQualifiedValueName (odFixtures opaque),
+        maybe "" unQualifiedValueName (odInitial opaque),
+        wireFingerprint graph (unMappedKey key)
+      ]
+    sourceIdentity source = T.intercalate ":" [hsPackage source, hsModule source, hsType source]
+    structuralPresentation (RRecord constructor _ fields) =
+      "record:" <> constructor <> ":" <> T.intercalate "," [rwfHaskell field <> "=" <> rwfKey field | field <- sortOn rwfKey fields]
+    structuralPresentation (REnum entries) =
+      "enum:" <> T.intercalate "," [weCtor entry <> "=" <> weTag entry | entry <- sortOn weTag entries]
+    structuralPresentation (RUnion _ arms) =
+      "union:" <> T.intercalate "," [rwaTag arm | arm <- sortOn rwaTag arms]
 
 consumerName :: MappedConsumer -> Name
 consumerName (AggregateConsumer aggregate) = aggregate

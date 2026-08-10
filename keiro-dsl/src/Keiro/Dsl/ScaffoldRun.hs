@@ -3,6 +3,8 @@
 module Keiro.Dsl.ScaffoldRun
   ( Refusal (..),
     WriteDisposition (..),
+    GeneratedArtifactCategory (..),
+    GeneratedArtifactImpact (..),
     StaleGeneratedEvidence (..),
     StaleModule (..),
     MappingDrift (..),
@@ -29,6 +31,11 @@ module Keiro.Dsl.ScaffoldRun
     executeScaffoldWithLanguage,
     renderRefusals,
     renderScaffoldReport,
+    checkedSemanticImpactSnapshot,
+    semanticImpactForMappingDrift,
+    generatedArtifactImpact,
+    renderSemanticImpactReport,
+    renderGeneratedArtifactImpact,
 
     -- * Shared with whole-workspace scaffolding ("Keiro.Dsl.WorkspaceScaffold")
 
@@ -97,7 +104,16 @@ import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
-import Keiro.Dsl.SemanticImpact (semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.SemanticImpact
+  ( MappedConsumer (..),
+    MappedImpactDelta (..),
+    SemanticImpactReport (..),
+    SemanticImpactSnapshot (..),
+    diffSemanticImpact,
+    semanticImpact,
+    semanticImpactReport,
+    semanticImpactSnapshot,
+  )
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
@@ -149,11 +165,25 @@ data Refusal
     SidecarMovesAlreadyApplied ![SidecarMove]
   deriving stock (Eq, Show)
 
--- | What one module write did. 'Unchanged' is produced only by the workspace
--- write path, which compares bytes before overwriting a Generated module so that
--- an idempotent re-run is observable in the report; the single-spec 'writeModule'
--- never produces it.
+-- | What one module write did. 'Unchanged' means an existing Generated module
+-- already had identical bytes, or is reported by the workspace write path under
+-- the same rule.
 data WriteDisposition = Overwritten | Created | Skipped | Unchanged
+  deriving stock (Eq, Show)
+
+data GeneratedArtifactCategory
+  = AggregateGeneratedArtifact
+  | ServiceStructuralConformanceArtifact
+  | BehaviorSourceMapArtifact
+  | OtherGeneratedArtifact
+  deriving stock (Eq, Ord, Show)
+
+data GeneratedArtifactImpact = GeneratedArtifactImpact
+  { artifactCategory :: !GeneratedArtifactCategory,
+    artifactRole :: !ModuleRole,
+    artifactPath :: !FilePath,
+    artifactDisposition :: !WriteDisposition
+  }
   deriving stock (Eq, Show)
 
 data StaleGeneratedEvidence
@@ -194,6 +224,8 @@ data ScaffoldReport = ScaffoldReport
     reportConsumerPlan :: !ConsumerPlan,
     reportConstraintPlan :: ![Text],
     reportMappingDrift :: ![MappingDrift],
+    reportSemanticImpact :: !SemanticImpactReport,
+    reportGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift),
     reportNewHoles :: ![BindingHole],
     reportAddedBehavior :: ![BehaviorRecordRow],
@@ -869,6 +901,8 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                           stale <- maybe (pure []) (existingStale out modules) previousRecord
                           let currentConsumerPlan = consumerPlan spec
                               drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                              currentSemanticImpact = checkedSemanticImpactSnapshot spec
+                              semanticReport = semanticImpactForMappingDrift (previousRecord >>= recSemanticImpact) currentSemanticImpact drift
                               languageDrift = do
                                 previous <- previousRecord
                                 if recSourceLanguage previous == sourceLanguage
@@ -882,7 +916,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                           dispositions <- mapM (writeModule out) modules
                           let manifestPath = out </> contextCabalFragmentFileName (specContext spec)
                           TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
-                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior))
+                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior currentSemanticImpact))
                           packageReport <- traverse executePreparedConformancePackage preparedPackage
                           pure $
                             Right
@@ -899,6 +933,8 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportConsumerPlan = currentConsumerPlan,
                                   reportConstraintPlan = constraintPlan spec currentConsumerPlan,
                                   reportMappingDrift = drift,
+                                  reportSemanticImpact = semanticReport,
+                                  reportGeneratedArtifactImpact = generatedArtifactImpact dispositions,
                                   reportSourceLanguageDrift = languageDrift,
                                   reportNewHoles = newHoles,
                                   reportAddedBehavior = addedBehavior,
@@ -1110,6 +1146,41 @@ mappingDrift current previous =
     oldByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- previous]
     newByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- current]
 
+checkedSemanticImpactSnapshot :: Spec -> SemanticImpactSnapshot
+checkedSemanticImpactSnapshot spec = case resolveTypeGraph spec of
+  Left failures -> error ("validated scaffold type graph did not resolve: " <> show failures)
+  Right graph -> semanticImpactSnapshot (semanticImpact graph)
+
+semanticImpactForMappingDrift :: Maybe SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappingDrift] -> SemanticImpactReport
+semanticImpactForMappingDrift previous current drifts =
+  semanticImpactReport previous current changedDeclarations
+  where
+    driftDeclarations = [MappedKey (driftSpecName drift) | drift <- drifts]
+    snapshotDeclarations = maybe [] (map impactDeclaration . (`diffSemanticImpact` current)) previous
+    changedDeclarations = driftDeclarations <> snapshotDeclarations
+
+generatedArtifactImpact :: [(ScaffoldModule, WriteDisposition)] -> [GeneratedArtifactImpact]
+generatedArtifactImpact dispositions =
+  sortOn
+    artifactPath
+    [ GeneratedArtifactImpact
+        { artifactCategory = categoryFor role,
+          artifactRole = role,
+          artifactPath = modulePath scaffoldModule,
+          artifactDisposition = disposition
+        }
+    | (scaffoldModule, disposition) <- dispositions,
+      kind scaffoldModule == Generated,
+      disposition `elem` [Overwritten, Created],
+      let role = moduleRole scaffoldModule
+    ]
+  where
+    categoryFor role
+      | roleFamily role == "StructuralConformance" = ServiceStructuralConformanceArtifact
+      | roleFamily role == "BehaviorSourceMap" = BehaviorSourceMapArtifact
+      | roleOwnerKind role == "aggregate" = AggregateGeneratedArtifact
+      | otherwise = OtherGeneratedArtifact
+
 newBindingObligations :: [BindingHole] -> [BindingHole] -> [BindingHole]
 newBindingObligations current previous =
   [ obligation
@@ -1160,8 +1231,8 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
                   else ExactGeneratedBannerMissing
           pure [StaleModule fileKind path evidence]
 
-currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> [BehaviorRecordRow] -> ScaffoldRecord
-currentRecord specPath sourceLanguage ctx service modules currentBehavior =
+currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> [BehaviorRecordRow] -> SemanticImpactSnapshot -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx service modules currentBehavior currentSemanticImpact =
   ScaffoldRecord
     { recSpecPath = T.pack specPath,
       recModuleRoot = moduleRoot ctx,
@@ -1177,10 +1248,7 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior,
       recProjectionCatalogFacts = projectionCatalogFacts spec,
-      recSemanticImpact =
-        case resolveTypeGraph spec of
-          Left failures -> error ("validated scaffold type graph did not resolve: " <> show failures)
-          Right graph -> Just (semanticImpactSnapshot (semanticImpact graph))
+      recSemanticImpact = Just currentSemanticImpact
     }
   where
     spec = checkedSpec service
@@ -1204,8 +1272,14 @@ writeModule out m = do
   createDirectoryIfMissing True (takeDirectory path)
   case kind m of
     Generated -> do
-      TIO.writeFile path (moduleText m)
-      pure (m, Overwritten)
+      exists <- doesFileExist path
+      if exists
+        then do
+          existing <- TIO.readFile path
+          if existing == moduleText m
+            then pure (m, Unchanged)
+            else TIO.writeFile path (moduleText m) >> pure (m, Overwritten)
+        else TIO.writeFile path (moduleText m) >> pure (m, Overwritten)
     HoleStub -> do
       exists <- doesFileExist path
       if exists
@@ -1318,6 +1392,57 @@ renderRefusals = concatMap render
         <> "  backup: "
         <> T.pack (moveBackupPath move)
 
+renderSemanticImpactReport :: SemanticImpactReport -> [Text]
+renderSemanticImpactReport report = case semanticReportDeclarations report of
+  [] -> []
+  declarations ->
+    ["semantic impact:"]
+      <> case semanticReportPrevious report of
+        Nothing ->
+          ["  baseline: unavailable (legacy ledger)"]
+            <> concatMap renderCurrent declarations
+        Just _ -> concatMap renderDelta (semanticReportDeltas report)
+  where
+    renderCurrent declaration =
+      [ "  " <> unMappedKey declaration,
+        "    current aggregate consumers: " <> renderConsumers (Map.findWithDefault Set.empty declaration (snapshotMappedConsumers (semanticReportCurrent report))),
+        "    service-conformance: impacted"
+      ]
+    renderDelta delta =
+      [ "  " <> unMappedKey (impactDeclaration delta),
+        "    previous aggregate consumers: " <> renderConsumers (impactPreviousConsumers delta),
+        "    current aggregate consumers:  " <> renderConsumers (impactCurrentConsumers delta),
+        "    service-conformance: " <> if impactServiceConformance delta then "impacted" else "unchanged"
+      ]
+    renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
+      [] -> "(none)"
+      names -> T.intercalate ", " names
+    consumerName (AggregateConsumer aggregate) = aggregate
+
+renderGeneratedArtifactImpact :: SemanticImpactReport -> [GeneratedArtifactImpact] -> [Text]
+renderGeneratedArtifactImpact _ [] = []
+renderGeneratedArtifactImpact semanticReport impacts =
+  "generated-artifact impact:" : map renderArtifact impacts
+  where
+    renderArtifact impact =
+      "  "
+        <> categoryLabel (artifactCategory impact)
+        <> " "
+        <> T.pack (artifactPath impact)
+        <> " ("
+        <> dispositionLabel (artifactDisposition impact)
+        <> ")"
+    categoryLabel AggregateGeneratedArtifact
+      | null (semanticReportDeltas semanticReport) = "aggregate (generator or non-mapped drift; no mapped semantic impact)"
+      | otherwise = "aggregate"
+    categoryLabel ServiceStructuralConformanceArtifact = "service-conformance"
+    categoryLabel BehaviorSourceMapArtifact = "behavior-source-map"
+    categoryLabel OtherGeneratedArtifact = "generated"
+    dispositionLabel Overwritten = "overwritten"
+    dispositionLabel Created = "created"
+    dispositionLabel Skipped = "skipped"
+    dispositionLabel Unchanged = "unchanged"
+
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
   [ "scaffold: " <> T.pack (reportSpecPath report) <> " -> " <> T.pack (reportOutDir report) <> " (module-root=" <> rootLabel <> ", layout=" <> layoutLabel <> ")"
@@ -1334,6 +1459,8 @@ renderScaffoldReport report =
     <> constraintSection
     <> newHolesSection
     <> mappingDriftSection
+    <> renderSemanticImpactReport (reportSemanticImpact report)
+    <> renderGeneratedArtifactImpact (reportSemanticImpact report) (reportGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection
     <> behaviorDriftSection
     <> obsoleteOutputSection

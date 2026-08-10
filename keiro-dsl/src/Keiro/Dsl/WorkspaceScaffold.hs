@@ -82,7 +82,8 @@ import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (projectionCatalogFacts)
 import Keiro.Dsl.ScaffoldRun
-  ( MappingDrift (..),
+  ( GeneratedArtifactImpact,
+    MappingDrift (..),
     PreparedSourceMove,
     Refusal (..),
     StaleGeneratedEvidence (..),
@@ -90,7 +91,9 @@ import Keiro.Dsl.ScaffoldRun
     WriteDisposition (..),
     applyPreparedSourceMoves,
     behaviorDrift,
+    checkedSemanticImpactSnapshot,
     constraintPlan,
+    generatedArtifactImpact,
     inertNodesOf,
     mappingDrift,
     missingGeneratedBanners,
@@ -99,17 +102,19 @@ import Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     preflightSourceMoves,
     preparedSourceMove,
+    renderGeneratedArtifactImpact,
     renderInertNodeSection,
     renderMappingIdentity,
+    renderSemanticImpactReport,
+    semanticImpactForMappingDrift,
     staleAgainst,
     withSidecarMovesApplied,
   )
 import Keiro.Dsl.SemanticContract (CheckedService (..))
-import Keiro.Dsl.SemanticImpact (semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.SemanticImpact (SemanticImpactReport, SemanticImpactSnapshot)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
-import Keiro.Dsl.TypeGraph (resolveTypeGraph)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
@@ -405,6 +410,8 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrConsumerPlan :: !ConsumerPlan,
     wsrConstraintPlan :: ![Text],
     wsrMappingDrift :: ![MappingDrift],
+    wsrSemanticImpact :: !SemanticImpactReport,
+    wsrGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift],
     wsrNewHoles :: ![BindingHole],
     wsrAddedBehavior :: ![BehaviorRecordRow],
@@ -512,6 +519,8 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
         Nothing -> adoptionReport out (wsContext workspace) service modules
       let currentPlan = consumerPlan merged
           drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
+          currentSemanticImpact = checkedSemanticImpactSnapshot merged
+          semanticReport = semanticImpactForMappingDrift (previous >>= wrSemanticImpact) currentSemanticImpact drift
           languageDrift = workspaceSourceLanguageDrift workspace previous
           currentObligations = either (const []) id (bindingHolesForService (wpCheckedService plan))
           newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
@@ -526,7 +535,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
       let adopted = case migration of
             Just report -> adoptedRows report
             Nothing -> maybe [] wrAdopted previous
-      TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted))
+      TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted currentSemanticImpact))
       packageReport <- case packagePreflight of
         Right prepared -> traverse executePreparedConformancePackage prepared
         Left _ -> pure Nothing
@@ -556,6 +565,8 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrConsumerPlan = currentPlan,
               wsrConstraintPlan = constraintPlan merged currentPlan,
               wsrMappingDrift = drift,
+              wsrSemanticImpact = semanticReport,
+              wsrGeneratedArtifactImpact = generatedArtifactImpact [(scaffoldModule, disposition) | (scaffoldModule, _, disposition) <- dispositions],
               wsrSourceLanguageDrift = languageDrift,
               wsrNewHoles = newHoles,
               wsrAddedBehavior = addedBehavior,
@@ -588,8 +599,8 @@ readWorkspaceRecord path = do
 -- | The record this run writes: the plan's modules with their owners, the
 -- canonical member list, the merged graph's mappings and obligations, and any
 -- files adopted from pre-workspace scaffold output.
-currentWorkspaceRecord :: WorkspacePlan -> [AdoptedRow] -> WorkspaceRecord
-currentWorkspaceRecord plan adopted =
+currentWorkspaceRecord :: WorkspacePlan -> [AdoptedRow] -> SemanticImpactSnapshot -> WorkspaceRecord
+currentWorkspaceRecord plan adopted currentSemanticImpact =
   WorkspaceRecord
     { wrService = wsService workspace,
       wrManifest = T.pack (takeFileName (wsManifestPath workspace)),
@@ -619,10 +630,7 @@ currentWorkspaceRecord plan adopted =
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrProjectionCatalogFacts = projectionCatalogFacts merged,
       wrAdopted = adopted,
-      wrSemanticImpact =
-        case resolveTypeGraph merged of
-          Left failures -> error ("validated workspace type graph did not resolve: " <> show failures)
-          Right graph -> Just (semanticImpactSnapshot (semanticImpact graph))
+      wrSemanticImpact = Just currentSemanticImpact
     }
   where
     workspace = wpWorkspace plan
@@ -733,6 +741,8 @@ renderWorkspaceScaffoldReport report =
     <> constraintSection
     <> newHolesSection
     <> mappingDriftSection
+    <> renderSemanticImpactReport (wsrSemanticImpact report)
+    <> renderGeneratedArtifactImpact (wsrSemanticImpact report) (wsrGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection
     <> behaviorDriftSection
     <> obsoleteOutputSection

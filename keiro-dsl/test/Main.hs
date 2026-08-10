@@ -62,7 +62,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), R
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.ServiceHarness
@@ -6293,6 +6293,42 @@ main = hspec $ do
         recordText <- TIO.readFile (reportRecordPath report)
         parseRecord (recordText <> "mapping {not-json}\n") `shouldBe` Nothing
         parseRecord (recordText <> "future-row retained\n") `shouldBe` parseRecord recordText
+    it "reports current and legacy semantic impact without globalizing aggregate artifacts" $
+      withTempDirectory "keiro-dsl-semantic-impact-report" $ \root -> do
+        old <- specOf "test/fixtures/structural-locality.keiro"
+        let new = addAlphaPayloadOptionalField old
+            legacyNew = mapMappedStructural "AlphaPayload" changeMappedCanonical old
+            ctx = defaultContext (specContext old)
+            currentOut = root </> "current"
+            legacyOut = root </> "legacy"
+            assertAlphaOnly report = do
+              semanticReportDeltas (reportSemanticImpact report)
+                `shouldBe` [MappedImpactDelta (MappedKey "AlphaPayload") (Set.singleton (AggregateConsumer "Alpha")) (Set.singleton (AggregateConsumer "Alpha")) True]
+              let semanticLines = renderSemanticImpactReport (reportSemanticImpact report)
+              semanticLines `shouldSatisfy` any (T.isInfixOf "current aggregate consumers:  Alpha")
+              semanticLines `shouldSatisfy` all (not . T.isInfixOf "Beta")
+              map artifactCategory (reportGeneratedArtifactImpact report)
+                `shouldContain` [ServiceStructuralConformanceArtifact]
+              map artifactPath (reportGeneratedArtifactImpact report)
+                `shouldSatisfy` all (not . T.isInfixOf "/Beta/" . T.pack)
+        _ <- executePlannedScaffold currentOut "semantic-impact.keiro" ctx old
+        current <- executePlannedScaffold currentOut "semantic-impact.keiro" ctx new
+        assertAlphaOnly current
+
+        firstLegacy <- executePlannedScaffold legacyOut "semantic-impact.keiro" ctx old
+        legacyText <- TIO.readFile (reportRecordPath firstLegacy)
+        TIO.writeFile
+          (reportRecordPath firstLegacy)
+          (T.unlines (filter (not . T.isPrefixOf "semantic-impact ") (T.lines legacyText)))
+        legacy <- executePlannedScaffold legacyOut "semantic-impact.keiro" ctx legacyNew
+        let legacyLines = renderSemanticImpactReport (reportSemanticImpact legacy)
+        legacyLines `shouldSatisfy` any (T.isInfixOf "baseline: unavailable (legacy ledger)")
+        legacyLines `shouldSatisfy` any (T.isInfixOf "current aggregate consumers: Alpha")
+        legacyLines `shouldSatisfy` all (not . T.isInfixOf "Beta")
+        currentLedger <- TIO.readFile (reportRecordPath legacy)
+        (parseRecord currentLedger >>= recSemanticImpact) `shouldSatisfy` maybe False (const True)
+        third <- executePlannedScaffold legacyOut "semantic-impact.keiro" ctx legacyNew
+        semanticReportDeclarations (reportSemanticImpact third) `shouldBe` []
 
   describe "structural import plan" $ do
     it "reports the successful dependency plan in the scaffold report" $
@@ -8666,6 +8702,9 @@ main = hspec $ do
           overwrittenPaths `shouldSatisfy` \case
             [path] -> T.isSuffixOf "/BehaviorSourceMap.hs" (T.pack path)
             _ -> False
+          semanticReportDeclarations (wsrSemanticImpact second) `shouldBe` []
+          map artifactCategory (wsrGeneratedArtifactImpact second)
+            `shouldBe` [BehaviorSourceMapArtifact]
           treeAfter <- treeSnapshot out
           let isPositionBearingSidecar (path, _) =
                 T.isSuffixOf "/BehaviorSourceMap.hs" (T.pack path)
