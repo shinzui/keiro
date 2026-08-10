@@ -115,6 +115,24 @@ then swap in one transaction and drop the old version after drain. Registration 
 carries `version` and `shapeHash`; the ask is promoting that to the first-class rebuild protocol
 rather than the current documented offline, in-place one.
 
+This one asks to revisit a stated stance rather than to fill a gap, and is filed as the weakest
+of the four for that reason. `keiro-runtime-patterns/runtime-patterns/keiro/projection-catalogs.md`
+says plainly: "Keiro never creates, migrates, or swaps application-owned tables; an online cutover
+remains application-owned." That boundary is coherent — targets are application-owned, their DDL
+is application-owned, and a framework that swapped them would be reaching across the ownership
+line the catalog exists to draw.
+
+So the request is deliberately conditional. If the boundary stands, say so and close this
+capability, and the remaining ask becomes documentation: state in the read-model standard that an
+online cutover is application-owned *and* what an application must do to achieve one against a
+catalog-managed group, since today a reader is told the rebuild is offline without being told
+that an alternative is theirs to build. If instead the framework is willing to own a versioned
+target lifecycle — which registration identity's existing `version` and `shapeHash` suggest was
+anticipated — this is where it belongs, because every application solving it separately will
+solve it differently and most will solve it wrong.
+
+Capabilities 1 and 2 do not depend on this one and should not be blocked behind deciding it.
+
 This is what turns the fence from a correctness fix into a non-event. With capability 1 alone, a
 rebuild takes every external consumer of that group out of service for its duration — correct,
 and for the requesting service a deliberate, scheduled maintenance window, but a real cost that
