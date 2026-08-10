@@ -33,6 +33,7 @@ import Keiro.Dsl.CanonicalEncoding (foldFingerprint128)
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
 import Keiro.Dsl.ConformancePackage
+import Keiro.Dsl.ConsumerTypePlan
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
@@ -152,6 +153,121 @@ main = hspec $ do
   frontendCompatibilitySpec
   frontendSurfaceSpec
   frontendProfilesSpec
+
+  describe "mapped consumer surface" $ do
+    it "parses and canonically round-trips candidate queue and query expressions as atomic forms" $ do
+      source <- mappedConsumerSurfaceSource
+      parsed <- case parseSource "<mapped-consumer>" source of
+        Left failure -> expectationFailure (show failure) >> fail "unreachable"
+        Right value -> pure value
+      parseSource "<mapped-consumer-roundtrip>" (renderSource parsed) `shouldBe` Right parsed
+      let spec = parsedSpec parsed
+      case [field | NWorkqueue workqueue <- specNodes spec, field <- wqPayload workqueue] of
+        [field] -> do
+          wqfType field `shouldBe` TypedQueueExpression (TList (TOptional (TRef "ArtifactInfo")))
+          unLoc (wqfLoc field) `shouldSatisfy` (> 0)
+        fields -> expectationFailure ("unexpected mapped queue fields: " <> show fields)
+      case [types | NReadModel readModel <- specNodes spec, Just types <- [queryTypes readModel]] of
+        [ReadModelQueryTypes {input, result}] -> do
+          input `shouldBe` TRef "ArtifactInfo"
+          result `shouldBe` TOptional (TRef "ArtifactLocation")
+        queryPairs -> expectationFailure ("unexpected mapped query pairs: " <> show queryPairs)
+      let missingInput = T.replace "  query input = ArtifactInfo\n" "" source
+          missingResult = T.replace "  query result = Optional ArtifactLocation\n" "" source
+      parseSource "<mapped-consumer-missing-input>" missingInput `shouldSatisfy` isLeft
+      parseSource "<mapped-consumer-missing-result>" missingResult `shouldSatisfy` isLeft
+
+    it "resolves nested queue and query roots and plans one deterministic consumer-facing Haskell type" $ do
+      source <- mappedConsumerSurfaceSource
+      spec <- parseInlineSpec "<mapped-consumer-graph>" source
+      graph <- shouldResolveTypeGraph spec
+      map renderUsePath (usePaths graph "ArtifactLocation")
+        `shouldContain` [ "workqueue ArtifactJobs payload .jobData : ArtifactInfo [] optional .location : ArtifactLocation",
+                          "readmodel ArtifactLookup query input : ArtifactInfo .location : ArtifactLocation",
+                          "readmodel ArtifactLookup query result : ArtifactLocation optional"
+                        ]
+      planConsumerType graph (RList (ROptional (RRef (MappedKey "ArtifactInfo"))))
+        `shouldBe` Right
+          ConsumerTypePlan
+            { haskellType = HaskellTypeOccurrence "[Maybe ArtifactInfo]",
+              imports =
+                [ ImportRequirement "artifact-domain" "Example.Artifact.Domain" "ArtifactInfo",
+                  ImportRequirement "base" "Data.Maybe" "Maybe"
+                ],
+              dependencies = Set.fromList [MappedKey "ArtifactInfo", MappedKey "ArtifactKind", MappedKey "ArtifactLocation"]
+            }
+      unresolved <-
+        parseInlineSpec
+          "<mapped-consumer-unresolved>"
+          (T.replace "List (Optional ArtifactInfo)" "List (Optional MissingPayload)" source)
+      case resolveTypeGraph unresolved of
+        Left errors ->
+          NE.toList errors
+            `shouldSatisfy` any
+              ( \case
+                  TGUnresolvedConsumerRef owner missing loc ->
+                    owner == "workqueue 'ArtifactJobs' payload field 'jobData'"
+                      && missing == "MissingPayload"
+                      && unLoc loc > 0
+                  _ -> False
+              )
+        Right _ -> expectationFailure "unresolved mapped queue reference unexpectedly resolved"
+
+    it "derives projection consumers only from aggregate event authority and exposes heterogeneous boundaries" $ do
+      source <- mappedConsumerSurfaceSource
+      base <- parseInlineSpec "<mapped-consumer-projections>" source
+      let projection = ProjectionSpec "artifact_view" (Just Eventual) "key" Nothing noLoc
+          withInlineProjection node = case node of
+            NAggregate aggregate -> NAggregate aggregate {aggProjection = Just projection}
+            other -> other
+          owner name sourceKind =
+            NProjectionOwner
+              ProjectionOwnerNode
+                { poName = name,
+                  poSources = [sourceKind],
+                  poFeed = RmInline,
+                  poGroup = "artifact_group",
+                  poTargets = ["artifact_view"],
+                  poOrder = 1,
+                  poSubscription = Nothing,
+                  poDedup = Nothing,
+                  poReplay = ProjectionReplayExplicit,
+                  poLoc = noLoc
+                }
+          spec =
+            base
+              { specNodes =
+                  map withInlineProjection (specNodes base)
+                    <> [ owner "artifactProjection" (CatalogAggregate "Catalog"),
+                         owner "categoryProjection" (CatalogCategory "artifact"),
+                         owner "allProjection" CatalogAll
+                       ]
+              }
+      impact <- semanticImpact <$> shouldResolveTypeGraph spec
+      Set.fromList (mappedDeclarationConsumers impact (MappedKey "ArtifactLocation"))
+        `shouldBe` Set.fromList
+          [ AggregateConsumer "Catalog",
+            WorkqueueConsumer "ArtifactJobs",
+            ReadModelConsumer "ArtifactLookup",
+            DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Catalog" "artifact_view"),
+            DerivedProjectionConsumer (CatalogProjectionConsumer "artifactProjection" "Catalog")
+          ]
+      Set.fromList (impactUnsupportedProjectionSources impact)
+        `shouldBe` Set.fromList
+          [ UnsupportedCatalogCategory "categoryProjection" "artifact",
+            UnsupportedCatalogAll "allProjection"
+          ]
+      let snapshot = semanticImpactSnapshot impact
+      Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
+
+    it "fails closed with stable pending-lowering diagnostics before any scaffold path" $ do
+      source <- mappedConsumerSurfaceSource
+      parsed <- case parseSource "<mapped-consumer-pending>" source of
+        Left failure -> expectationFailure (show failure) >> fail "unreachable"
+        Right value -> pure value
+      let codes = map code (validateService (checkedSource parsed))
+      [MappedQueueLoweringPending, MappedReadModelLoweringPending]
+        `shouldSatisfy` all (`elem` codes)
 
   describe "language support" $ do
     it "serializes support from the registered version and decodes older records" $ do
@@ -3054,9 +3170,12 @@ main = hspec $ do
         (`T.isInfixOf` source)
         [ "mappedRootFromUseSite site@(RootCommandField",
           "mappedRootFromUseSite site@(RootEventField",
-          "mappedRootFromUseSite site@(RootRegister"
+          "mappedRootFromUseSite site@(RootRegister",
+          "mappedRootFromUseSite site@(RootWorkqueueField",
+          "mappedRootFromUseSite site@(RootReadModelQueryInput",
+          "mappedRootFromUseSite site@(RootReadModelQueryResult"
         ]
-        `shouldBe` replicate 3 True
+        `shouldBe` replicate 6 True
       source `shouldSatisfy` (not . T.isInfixOf "mappedRootFromUseSite _")
     it "round-trips canonical snapshots and reports only checked consumer membership changes" $ do
       spec <- specOf "test/fixtures/semantic-impact.keiro"
@@ -4058,7 +4177,7 @@ main = hspec $ do
       let huge = "18446744073709551618s"
           unknownPayload =
             mapWorkqueue
-              (\queue -> queue {wqPayload = [if wqfName field == "hospitalId" then field {wqfType = "numeric"} else field | field <- wqPayload queue]})
+              (\queue -> queue {wqPayload = [if wqfName field == "hospitalId" then field {wqfType = LegacyQueueScalar (QueueOther "numeric")} else field | field <- wqPayload queue]})
               queueSpec
           queueDelay = mapWorkqueue (\queue -> queue {wqDelay = huge}) queueSpec
           queueRetry = mapWorkqueue (\queue -> queue {wqDisposition = updateFirst (\row -> row {wqdAction = IRetry huge}) (wqDisposition queue)}) queueSpec
@@ -10581,6 +10700,43 @@ leftContains needle = \case
   Left err -> needle `T.isInfixOf` err
   Right _ -> False
 
+mappedConsumerSurfaceSource :: IO T.Text
+mappedConsumerSurfaceSource = do
+  base <- readTestText "test/fixtures/consumer-types.keiro"
+  pure $
+    T.replace "language keiro-dsl 4" "language keiro-dsl 5" base
+      <> T.unlines
+        [ "",
+          "workqueue ArtifactJobs {",
+          "  queue logical = \"artifact-jobs\"",
+          "  derive physical = \"artifact-jobs\"",
+          "    dlq = \"artifact-jobs_dlq\"",
+          "    table = \"q_artifact-jobs\"",
+          "  payload ArtifactJob {",
+          "    jobData -> \"payload\" : List (Optional ArtifactInfo)",
+          "  }",
+          "  retry maxRetries = 3 delay = 1s dlq = on",
+          "  disposition {",
+          "    storeFailure -> retry 1s",
+          "    commandRejected -> ackOk",
+          "    decodeFailure -> deadLetter",
+          "    onCodecReject -> deadLetter",
+          "  }",
+          "}",
+          "",
+          "readmodel ArtifactLookup {",
+          "  table = \"artifact_lookup\"",
+          "  schema = \"public\"",
+          "  columns {}",
+          "  query input = ArtifactInfo",
+          "  query result = Optional ArtifactLocation",
+          "  version = 1",
+          "  shape = \"fixture\"",
+          "  consistency = Eventual",
+          "  feed = subscription",
+          "}"
+        ]
+
 parseInlineSpec :: FilePath -> T.Text -> IO Spec
 parseInlineSpec sourceName src = case parseSpec sourceName src of
   Left err -> expectationFailure (T.unpack err) >> error "unreachable"
@@ -11674,7 +11830,7 @@ genPublisher =
     <*> pure noLoc
 
 genWqField :: Gen WqField
-genWqField = WqField <$> genName <*> genAdversarialText <*> genName
+genWqField = WqField <$> genName <*> genAdversarialText <*> (LegacyQueueScalar . QueueOther <$> genName) <*> pure noLoc
 
 genWqDispRow :: Gen WqDispRow
 genWqDispRow = WqDispRow <$> genName <*> genInboxAction <*> pure noLoc
@@ -11713,6 +11869,7 @@ genReadModel =
     <*> genMaybe genAdversarialText
     <*> pure Nothing
     <*> pure []
+    <*> pure Nothing
     <*> pure noLoc
 
 genPgmqDispatch :: Gen PgmqDispatchNode

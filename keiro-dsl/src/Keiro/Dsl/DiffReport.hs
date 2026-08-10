@@ -39,7 +39,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Diff
-import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta (..))
+import Keiro.Dsl.SemanticImpact (MappedImpactDelta (..), mappedConsumerIdentity)
 import Keiro.Dsl.TypeGraph (MappedKey (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -156,7 +156,7 @@ renderSemanticImpact impact = "semantic impact:" : concatMap renderDelta impact
     renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
       [] -> "(none)"
       names -> T.intercalate ", " names
-    consumerName (AggregateConsumer aggregate) = aggregate
+    consumerName = mappedConsumerIdentity
 
 findingValue :: Set CompatibilitySurface -> Change -> Value
 findingValue gate change = object (findingPairs gate change)

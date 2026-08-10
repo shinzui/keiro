@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-10T00:52:02Z
+timestamp: 2026-08-10T04:36:00Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -73,7 +73,7 @@ support status, or publication status.
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
 Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
 `keiro-dsl/syntax-profile/2`, version 4 selects `keiro-dsl/syntax-profile/3`, and candidate 5
-selects `keiro-dsl/syntax-profile/4` for projection catalogs.
+selects `keiro-dsl/syntax-profile/4` for projection catalogs and mapped consumer surfaces.
 Versions 1 and 2 select
 `keiro-dsl/runtime-semantics/1`, while version 3 selects
 `keiro-dsl/runtime-semantics/2` and version 4 selects
@@ -112,6 +112,16 @@ bytes. Because aggregate fold behavior is unchanged, runtime semantics 3 reuses
 the predecessor's aggregate fingerprint segment; service-aware scaffold,
 manifest, durable ID-domain, and diff consumers still observe the new contract
 capability through `CheckedService`.
+
+**Candidate version 5 owns the mapped consumer source boundary.** A typed workqueue row spells
+`field -> "wire" : TypeExpr`; the colon is the owned feature token, while the released lower-case
+`text`, `int`, and `bool` rows keep their prior meaning. A typed read model spells one ordered,
+atomic pair, `query input = TypeExpr` followed by `query result = TypeExpr`; a partial pair never
+enters the semantic graph. Versions 1 through 4 reject the colon or first `query` token with the
+language-feature diagnostic. Candidate 5 reuses its existing syntax-profile identifier and runtime
+profile: mapped consumer compilation changes neither aggregate fold behavior nor the runtime
+fingerprint segment. Until queue and query generation are complete, candidate use is accepted by
+the parser but refused by stable semantic lowering-pending diagnostics.
 
 **Primary conformance may cover the active candidate and released predecessors concurrently.** An
 active authoring candidate gets focused positive, negative, generation, and compiled/runtime
@@ -210,6 +220,8 @@ fleet planning remain in
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
+- Candidate-5 queue and query type clauses are atomic, located feature surfaces. Registering them
+  does not widen languages 1–4 or permit scaffolding before their full lowerers land.
 - A higher language version does not inherit a predecessor's feature set or runtime semantics by
   ordering. Intentional reuse is visible as the same profile identifier in two registry entries.
 - Version 4 demonstrates that a successor runtime profile may preserve the

@@ -892,6 +892,9 @@ mappedUseChange finding path =
       RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
       RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
       RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
+      RootWorkqueueField workqueue _ _ -> (workqueue, "mapped-workqueue", ContextConsumerBuild)
+      RootReadModelQueryInput readModel _ -> (readModel, "mapped-query-input", ContextConsumerBuild)
+      RootReadModelQueryResult readModel _ -> (readModel, "mapped-query-result", ContextConsumerBuild)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
 
 mappedContextHint :: MappedFinding -> ContextKind -> Label
@@ -2021,8 +2024,10 @@ workqueuePairDiff oldQueue newQueue =
     fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
     pairedFieldDiff (oldField, newField)
       | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
-      | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> wqfType oldField <> " -> " <> wqfType newField)]
+      | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> renderQueuePayloadType (wqfType oldField) <> " -> " <> renderQueuePayloadType (wqfType newField))]
       | otherwise = []
+    renderQueuePayloadType (LegacyQueueScalar scalar) = queueScalarName scalar
+    renderQueuePayloadType (TypedQueueExpression expression) = typeExprCanonicalName expression
     -- Every payload field is required, so adding one always breaks jobs already
     -- queued under the old shape; there is no optional variant to strengthen.
     addedFieldDiff field = [payloadBreaking field "new required field; queued jobs do not contain it"]

@@ -8,6 +8,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Candidate language 5 registers mapped workqueue fields
+  (`field -> "wire" : TypeExpr`) and atomic read-model query input/result
+  clauses. Both resolve recursively into located `TypeGraph` roots, while
+  languages 1–4 reject the owned colon or `query` token. Until their complete
+  generators land, `MappedQueueLoweringPending` and
+  `MappedReadModelLoweringPending` keep `check` and scaffold fail-closed.
+- Exposes `Keiro.Dsl.ConsumerTypePlan`, the codec-agnostic authority for
+  rendering a resolved mapped expression's consumer Haskell occurrence,
+  deterministic imports, and transitive mapped dependencies. Projection
+  semantic impact now derives event-only consumers for aggregate sources and
+  records category/all sources as unsupported heterogeneous boundaries.
 - Exposes `Keiro.Dsl.SemanticImpact`, the checked and deterministic authority for mapping current
   command-field, private-event-field, and register roots to aggregate declaration closures and the
   complete service declaration inventory. Future mapped root constructors must extend its
@@ -33,6 +44,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- The public DSL AST changes `WqField.wqfType` from `Name` to
+  `QueuePayloadType`, adds `wqfLoc`, and adds optional `queryTypes` to
+  `ReadModelNode`. `UseSite`, `MappedRootKind`, `MappedConsumer`,
+  `TypeGraphError`, `DiagnosticCode`, and `TypeGraph` gain mapped
+  queue/read-model/projection cases or fields; exhaustive consumers and direct
+  record construction must be updated. Existing language-1–4 source and
+  generated meaning is unchanged.
 - `WorkspaceMember` gains `wmSourceIndex`, `WorkspaceSpec` gains `wsSourceIndex`, and
   `composeWorkspace` now accepts `ParsedSourceDocument` inputs. `DiagnosticCode` gains
   `WorkspaceSourceIndexInvalid`; exhaustive matches and direct record construction must be

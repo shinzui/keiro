@@ -132,7 +132,7 @@ pTopItem context laterPreambleCode =
              plain (SurfaceNode . NIntake <$> pIntake),
              plain (SurfaceNode . NEmit <$> pEmit),
              plain (SurfaceNode . NPublisher <$> pPublisher),
-             plain (SurfaceNode . NWorkqueue <$> pWorkqueue),
+             plain (SurfaceNode . NWorkqueue <$> pWorkqueue context),
              plain (SurfaceNode . NPgmqDispatch <$> pPgmqDispatch),
              plain (SurfaceNode . NReadModel <$> pReadModel context),
              plain (SurfaceNode . NProjectionTarget <$> pProjectionTarget context),

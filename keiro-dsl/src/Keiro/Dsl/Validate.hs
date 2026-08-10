@@ -475,6 +475,10 @@ data DiagnosticCode
     TimerDecodeStatusUnknown
   | TimerDeadLetterTextInvalid
   | PgmqFanoutFunctionInvalid
+  | -- MasterPlan 35 / EP-1: candidate typed surfaces remain fail-closed until
+    -- their complete lowering plans land.
+    MappedQueueLoweringPending
+  | MappedReadModelLoweringPending
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -976,6 +980,10 @@ typeGraphDiagnostic spec = \case
   TGUnresolvedRef owner missing loc ->
     [ mkErr (locLine loc) MappedUnresolvedName $
         "mapped declaration '" <> owner <> "' references unresolved mapped type '" <> missing <> "'"
+    ]
+  TGUnresolvedConsumerRef owner missing loc ->
+    [ mkErr (locLine loc) MappedUnresolvedName $
+        owner <> " references unresolved mapped type '" <> missing <> "'"
     ]
   TGRecursive names ->
     [ mkErr (mappedLine spec (headOr "<mapped>" names)) MappedRecursiveType $
@@ -2353,9 +2361,14 @@ validateProjectionOwner languageContract spec owner
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding ++ loweringPending
   where
     readModelLine = locLine (rmLoc readModel)
+    loweringPending =
+      [ mkErr readModelLine MappedReadModelLoweringPending $
+          "readmodel '" <> rmName readModel <> "' uses candidate mapped query types whose generated query lowering is pending"
+      | queryTypes readModel /= Nothing
+      ]
     expectedShape = deriveShapeHash readModel
     shapeFixture =
       [ mkErr readModelLine RmShapeHashDrift $
@@ -2478,7 +2491,7 @@ validateReadModel languageContract spec readModel =
 -- derivation; the disposition inversions (storeFailure transient => must retry;
 -- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 validateWorkqueue :: EffectiveLanguageContract -> WorkqueueNode -> [Diagnostic]
-validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, provisionRules]
+validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, loweringPending, windows, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -2546,8 +2559,8 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
             ]
           field : _ ->
             [ mkErr wl WqGroupKeyUnresolved $
-                "workqueue '" <> wqName w <> "': group key via raw requires a text payload field, but '" <> gkField groupKey <> "' has type '" <> wqfType field <> "'"
-            | gkVia groupKey == "raw" && wqfType field /= "text"
+                "workqueue '" <> wqName w <> "': group key via raw requires a text payload field, but '" <> gkField groupKey <> "' has type '" <> queuePayloadTypeText (wqfType field) <> "'"
+            | gkVia groupKey == "raw" && wqfType field /= LegacyQueueScalar QueueText
             ]
               ++ [ mkErr wl WqGroupKeyUnresolved $
                      "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
@@ -2555,11 +2568,19 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
                  ]
     payloadTypes =
       [ mkErr wl WqPayloadTypeUnknown $
-          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' has unknown type '" <> wqfType field <> "'; expected text, int, or bool"
+          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' has unknown type '" <> queueScalarName scalar <> "'; expected text, int, or bool"
       | enforcesSpecSurfaceClosures languageContract,
         field <- wqPayload w,
-        wqfType field `Set.notMember` Set.fromList ["text", "int", "bool"]
+        LegacyQueueScalar scalar@(QueueOther _) <- [wqfType field]
       ]
+    loweringPending =
+      [ mkErr (locLine (wqfLoc field)) MappedQueueLoweringPending $
+          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' uses a candidate mapped type whose generated queue lowering is pending"
+      | field <- wqPayload w,
+        TypedQueueExpression _ <- [wqfType field]
+      ]
+    queuePayloadTypeText (LegacyQueueScalar scalar) = queueScalarName scalar
+    queuePayloadTypeText (TypedQueueExpression _) = "mapped expression"
     windows =
       windowRangeRule languageContract wl ("workqueue '" <> wqName w <> "' delay") (wqDelay w)
         ++ concat

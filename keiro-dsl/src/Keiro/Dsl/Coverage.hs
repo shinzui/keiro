@@ -301,6 +301,9 @@ persistedSites = filter isPersisted . tgUseSites
     isPersisted RootEventField {} = True
     isPersisted RootRegister {} = True
     isPersisted RootCommandField {} = False
+    isPersisted RootWorkqueueField {} = False
+    isPersisted RootReadModelQueryInput {} = False
+    isPersisted RootReadModelQueryResult {} = False
 
 coverageRoot :: TypeGraph -> UseSite -> CoverageRoot
 coverageRoot graph site =
@@ -505,16 +508,25 @@ useSiteKey :: UseSite -> MappedKey
 useSiteKey (RootCommandField _ _ _ key) = key
 useSiteKey (RootEventField _ _ _ key) = key
 useSiteKey (RootRegister _ _ key) = key
+useSiteKey (RootWorkqueueField _ _ key) = key
+useSiteKey (RootReadModelQueryInput _ key) = key
+useSiteKey (RootReadModelQueryResult _ key) = key
 
 useSiteSurface :: UseSite -> CoverageSurface
 useSiteSurface RootEventField {} = PrivateEventPayload
 useSiteSurface RootRegister {} = SnapshotRegister
 useSiteSurface RootCommandField {} = error "command fields are not persisted coverage roots"
+useSiteSurface RootWorkqueueField {} = error "workqueue coverage integration is pending"
+useSiteSurface RootReadModelQueryInput {} = error "read-model query inputs are not persisted coverage roots"
+useSiteSurface RootReadModelQueryResult {} = error "read-model query results are not persisted coverage roots"
 
 isEventSite :: UseSite -> Bool
 isEventSite RootEventField {} = True
 isEventSite RootRegister {} = False
 isEventSite RootCommandField {} = False
+isEventSite RootWorkqueueField {} = False
+isEventSite RootReadModelQueryInput {} = False
+isEventSite RootReadModelQueryResult {} = False
 
 rootText :: UseSite -> Text
 rootText site = renderUsePath (UsePath site [])

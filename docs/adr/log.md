@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Update**: Assign mapped queue and atomic read-model query syntax to candidate language 5 without widening released predecessors or aggregate runtime semantics (plan 223).
+* **Update**: Register candidate-language mapped queue/query roots, one codec-agnostic consumer type plan, and event-authority-derived projection consumers (plan 223).
 * **Update**: Amend ADR 0020 with the checked mapped-root boundary and release qualification requirements for semantically local service conformance (plan 222).
 * **Update**: Define the additive semantic-impact ledger row, absent-versus-empty baseline semantics, and strict known-row validation (plan 221).
 * **Update**: Record source-independent semantic-impact snapshots, honest legacy baselines, separate generated-artifact roles, and byte-aware standalone idempotence (plan 221).

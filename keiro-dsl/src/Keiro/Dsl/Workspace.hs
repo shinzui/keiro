@@ -1501,6 +1501,8 @@ instance HasLocs PublisherNode
 
 instance HasLocs ReadModelNode
 
+instance HasLocs ReadModelQueryTypes
+
 instance HasLocs RegDecl
 
 instance HasLocs RegInitial
@@ -1566,6 +1568,10 @@ instance HasLocs WorkqueueNode
 instance HasLocs WqDispRow
 
 instance HasLocs WqField
+
+instance HasLocs QueuePayloadType
+
+instance HasLocs QueueScalar
 
 instance HasLocs WqGroupKey
 

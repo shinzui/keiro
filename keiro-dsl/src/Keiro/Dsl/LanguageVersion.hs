@@ -272,7 +272,10 @@ profileV4 :: SyntaxProfile
 profileV4 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/4"
-    (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+    ( Set.insert
+        MappedConsumerSurfaceSyntax
+        (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+    )
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -342,6 +345,7 @@ data LanguageFeature
   | ExplicitTransitionImplementationSyntax
   | FieldAliasSyntax
   | ProjectionCatalogSyntax
+  | MappedConsumerSurfaceSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

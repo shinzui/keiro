@@ -27,6 +27,8 @@ module Keiro.Dsl.TypeGraph
     ResolvedMappedShape (..),
     ResolvedMappedDecl (..),
     TypeGraphError (..),
+    DerivedMappedConsumer (..),
+    UnsupportedProjectionSource (..),
     TypeGraph (..),
     UseSite (..),
     PathSeg (..),
@@ -49,11 +51,12 @@ import Data.Bits (xor)
 import Data.Char (ord)
 import Data.Either (partitionEithers)
 import Data.Graph (SCC (..), stronglyConnComp)
-import Data.List (sortOn)
+import Data.List (sort, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -243,6 +246,7 @@ data TypeGraphError
   = TGDeclError !Name !MappedDeclError
   | TGAmbiguousName !Name ![Text]
   | TGUnresolvedRef !Name !Name !Loc
+  | TGUnresolvedConsumerRef !Text !Name !Loc
   | TGRecursive ![Name]
   deriving stock (Eq, Show, Generic)
 
@@ -250,6 +254,9 @@ data UseSite
   = RootCommandField !Name !Name !Name !MappedKey
   | RootEventField !Name !Name !Name !MappedKey
   | RootRegister !Name !Name !MappedKey
+  | RootWorkqueueField !Name !Name !MappedKey
+  | RootReadModelQueryInput !Name !MappedKey
+  | RootReadModelQueryResult !Name !MappedKey
   deriving stock (Eq, Ord, Show, Generic)
 
 data PathSeg
@@ -267,10 +274,28 @@ data UsePath = UsePath
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | A projection consumer whose mapped dependencies are inherited from one
+-- authoritative aggregate event union rather than spelled a second time.
+data DerivedMappedConsumer
+  = AggregateInlineProjectionConsumer !Name !Name
+  | CatalogProjectionConsumer !Name !Name
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | A catalog boundary that deliberately has no single generated event type.
+-- Keeping it in the checked graph makes the unsupported boundary visible
+-- without fabricating a mapped declaration consumer.
+data UnsupportedProjectionSource
+  = UnsupportedCatalogCategory !Name !Text
+  | UnsupportedCatalogAll !Name
+  deriving stock (Eq, Ord, Show, Generic)
+
 data TypeGraph = TypeGraph
   { tgDeclarations :: !(Map MappedKey ResolvedMappedDecl),
     tgReachability :: !(Map MappedKey (Set MappedKey)),
-    tgUseSites :: ![UseSite]
+    tgUseSites :: ![UseSite],
+    tgRootSegments :: !(Map UseSite [PathSeg]),
+    tgDerivedMappedConsumers :: ![DerivedMappedConsumer],
+    tgUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -284,12 +309,39 @@ resolveTypeGraph spec = do
   let declarations = Map.fromList resolvedPairs
   rejectMany (cycleErrors declarations)
   let reachability = Map.mapWithKey (reachableFrom declarations) declarations
+      (rootErrors, rootSites) = partitionEithers (collectUseSites keyByName spec)
+  rejectMany rootErrors
   pure
     TypeGraph
       { tgDeclarations = declarations,
         tgReachability = reachability,
-        tgUseSites = collectUseSites keyByName spec
+        tgUseSites = map fst (catMaybes rootSites),
+        tgRootSegments = Map.fromList (catMaybes rootSites),
+        tgDerivedMappedConsumers = sort (derivedMappedConsumers spec),
+        tgUnsupportedProjectionSources = sort (unsupportedProjectionSources spec)
       }
+
+derivedMappedConsumers :: Spec -> [DerivedMappedConsumer]
+derivedMappedConsumers spec =
+  [ AggregateInlineProjectionConsumer (aggName aggregate) (projTable projection)
+  | NAggregate aggregate <- specNodes spec,
+    Just projection <- [aggProjection aggregate]
+  ]
+    <> [ CatalogProjectionConsumer (poName owner) aggregate
+       | NProjectionOwner owner <- specNodes spec,
+         CatalogAggregate aggregate <- poSources owner
+       ]
+
+unsupportedProjectionSources :: Spec -> [UnsupportedProjectionSource]
+unsupportedProjectionSources spec =
+  [ boundary
+  | NProjectionOwner owner <- specNodes spec,
+    source <- poSources owner,
+    boundary <- case source of
+      CatalogAggregate _ -> []
+      CatalogCategory category -> [UnsupportedCatalogCategory (poName owner) category]
+      CatalogAll -> [UnsupportedCatalogAll (poName owner)]
+  ]
 
 collectChecked :: [MappedDecl] -> Either (NonEmpty TypeGraphError) [CheckedMappedDecl]
 collectChecked declarations =
@@ -428,24 +480,77 @@ reachableFrom declarations origin declaration = go Set.empty (Set.toList (direct
           let next = maybe [] (Set.toList . directRefs) (Map.lookup key declarations)
            in go (Set.insert key visited) (next ++ rest)
 
-collectUseSites :: Map Name MappedKey -> Spec -> [UseSite]
-collectUseSites keyByName spec = concatMap aggregateSites [aggregate | NAggregate aggregate <- specNodes spec]
+collectUseSites :: Map Name MappedKey -> Spec -> [Either TypeGraphError (Maybe (UseSite, [PathSeg]))]
+collectUseSites keyByName spec =
+  map (Right . Just) (concatMap aggregateSites aggregates)
+    <> concatMap workqueueSites workqueues
+    <> concatMap readModelSites readModels
   where
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    workqueues = [workqueue | NWorkqueue workqueue <- specNodes spec]
+    readModels = [readModel | NReadModel readModel <- specNodes spec]
     aggregateSites aggregate =
-      [ RootCommandField (aggName aggregate) (cmdName command) (aggregateFieldName field) key
+      [ (RootCommandField (aggName aggregate) (cmdName command) (aggregateFieldName field) key, [])
       | command <- aggCommands aggregate,
         field <- cmdFields command,
         key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
       ]
-        ++ [ RootEventField (aggName aggregate) (evName event) (aggregateFieldName field) key
+        ++ [ (RootEventField (aggName aggregate) (evName event) (aggregateFieldName field) key, [])
            | event <- aggEvents aggregate,
              field <- eventFields aggregate event,
              key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
            ]
-        ++ [ RootRegister (aggName aggregate) (regName register) key
+        ++ [ (RootRegister (aggName aggregate) (regName register) key, [])
            | register <- aggRegs aggregate,
              key <- maybeToList (typeRefName (regType register) >>= (`Map.lookup` keyByName))
            ]
+
+    workqueueSites workqueue =
+      [ consumerSite
+          ("workqueue '" <> wqName workqueue <> "' payload field '" <> wqfName field <> "'")
+          (wqfLoc field)
+          (RootWorkqueueField (wqName workqueue) (wqfName field))
+          expression
+      | field <- wqPayload workqueue,
+        TypedQueueExpression expression <- [wqfType field]
+      ]
+
+    readModelSites readModel = case queryTypes readModel of
+      Nothing -> []
+      Just ReadModelQueryTypes {input, result, inputLoc, resultLoc} ->
+        [ consumerSite
+            ("readmodel '" <> rmName readModel <> "' query input")
+            inputLoc
+            (RootReadModelQueryInput (rmName readModel))
+            input,
+          consumerSite
+            ("readmodel '" <> rmName readModel <> "' query result")
+            resultLoc
+            (RootReadModelQueryResult (rmName readModel))
+            result
+        ]
+
+    consumerSite owner loc constructor expression =
+      case resolveExpr keyByName owner loc expression of
+        Left (TGUnresolvedRef _ missing _) -> Left (TGUnresolvedConsumerRef owner missing loc)
+        Left other -> Left other
+        Right resolved -> case rootReference resolved of
+          Nothing -> Right Nothing
+          Just (key, segments) -> Right (Just (constructor key, segments))
+
+    rootReference = \case
+      RText -> Nothing
+      RInt -> Nothing
+      RInteger -> Nothing
+      RBool -> Nothing
+      RNatural -> Nothing
+      RTime -> Nothing
+      RJson -> Nothing
+      ROptional value -> prepend SegOptional (rootReference value)
+      RList value -> prepend SegElem (rootReference value)
+      RMap value -> prepend SegMapValue (rootReference value)
+      RRef key -> Just (key, [])
+    prepend segment = fmap (\(key, segments) -> (key, segment : segments))
 
     eventFields aggregate event = case evBody event of
       EventFields fields -> fields
@@ -467,8 +572,10 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclaratio
   where
     target = MappedKey targetName
     sitePaths site
-      | siteKey site == target = [[]]
-      | otherwise = pathsFromDecl Set.empty (siteKey site)
+      | siteKey site == target = [rootSegments site]
+      | otherwise = map (rootSegments site <>) (pathsFromDecl Set.empty (siteKey site))
+
+    rootSegments site = Map.findWithDefault [] site (tgRootSegments graph)
 
     pathsFromDecl visited current
       | current `Set.member` visited = []
@@ -517,6 +624,9 @@ siteKey :: UseSite -> MappedKey
 siteKey (RootCommandField _ _ _ key) = key
 siteKey (RootEventField _ _ _ key) = key
 siteKey (RootRegister _ _ key) = key
+siteKey (RootWorkqueueField _ _ key) = key
+siteKey (RootReadModelQueryInput _ key) = key
+siteKey (RootReadModelQueryResult _ key) = key
 
 renderUsePath :: UsePath -> Text
 renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderSegment segments)
@@ -527,6 +637,12 @@ renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderS
       aggregate <> " event " <> event <> " ." <> field <> " : " <> unMappedKey key
     renderRoot (RootRegister aggregate register key) =
       aggregate <> " register " <> register <> " : " <> unMappedKey key
+    renderRoot (RootWorkqueueField workqueue field key) =
+      "workqueue " <> workqueue <> " payload ." <> field <> " : " <> unMappedKey key
+    renderRoot (RootReadModelQueryInput readModel key) =
+      "readmodel " <> readModel <> " query input : " <> unMappedKey key
+    renderRoot (RootReadModelQueryResult readModel key) =
+      "readmodel " <> readModel <> " query result : " <> unMappedKey key
 
     renderSegment (SegField haskellName wireName)
       | haskellName == wireName = " ." <> haskellName

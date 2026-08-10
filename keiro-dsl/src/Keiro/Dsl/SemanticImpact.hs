@@ -8,7 +8,9 @@
 -- and transitive declaration edges come from a resolved 'TypeGraph', so callers
 -- must not reconstruct this relation from a raw specification.
 module Keiro.Dsl.SemanticImpact
-  ( MappedConsumer (..),
+  ( DerivedMappedConsumer (..),
+    UnsupportedProjectionSource (..),
+    MappedConsumer (..),
     MappedRootKind (..),
     MappedRoot (..),
     SemanticImpact (..),
@@ -20,6 +22,7 @@ module Keiro.Dsl.SemanticImpact
     diffSemanticImpact,
     mappedImpactForDeclarations,
     semanticImpactReport,
+    mappedConsumerIdentity,
     aggregateMappedRoots,
     aggregateMappedClosure,
     mappedDeclarationConsumers,
@@ -40,20 +43,27 @@ import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar (HaskellSource (..), Name, WireEnum (..))
 import Keiro.Dsl.TypeGraph
 
--- | A checked consumer of mapped declarations. The current checked graph has
--- aggregate consumers only; service-wide conformance is represented separately
--- by 'impactServiceDeclarations' so it never makes an aggregate closure global.
-newtype MappedConsumer = AggregateConsumer Name
+-- | A checked generated consumer of mapped declarations. Projection consumers
+-- are derived from an aggregate event authority rather than owning another
+-- source type expression.
+data MappedConsumer
+  = AggregateConsumer !Name
+  | WorkqueueConsumer !Name
+  | ReadModelConsumer !Name
+  | DerivedProjectionConsumer !DerivedMappedConsumer
   deriving stock (Eq, Ord, Show, Generic)
 
--- | The complete mapped root vocabulary represented by 'UseSite'. Snapshot
--- impact follows 'RegisterRoot' because snapshots cache aggregate registers.
--- Queues, public contracts, read models, and projections do not yet carry
--- mapped 'TypeExpr' roots and are intentionally absent.
+-- | The complete candidate mapped root vocabulary. Snapshot impact follows
+-- 'MappedRegisterRoot' because snapshots cache aggregate registers; the other
+-- kinds are distinct consumer-build or persisted-queue surfaces.
 data MappedRootKind
   = MappedCommandFieldRoot
   | MappedEventFieldRoot
   | MappedRegisterRoot
+  | MappedWorkqueueFieldRoot
+  | MappedReadModelQueryInputRoot
+  | MappedReadModelQueryResultRoot
+  | MappedProjectionEventRoot
   deriving stock (Eq, Ord, Show, Generic)
 
 -- | One checked aggregate root before transitive declaration expansion.
@@ -77,7 +87,8 @@ data SemanticImpact = SemanticImpact
     impactAggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
     impactDeclarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
     impactServiceDeclarations :: !(Set MappedKey),
-    impactDeclarationIdentities :: !(Map MappedKey Text)
+    impactDeclarationIdentities :: !(Map MappedKey Text),
+    impactUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -123,7 +134,7 @@ instance ToJSON SemanticImpactSnapshot where
       [ "declarations"
           .= [ object
                  [ "declaration" .= unMappedKey declaration,
-                   "consumers" .= map consumerName (Set.toAscList declarationConsumers),
+                   "consumers" .= map mappedConsumerIdentity (Set.toAscList declarationConsumers),
                    "identity" .= Map.findWithDefault "" declaration (snapshotDeclarationIdentities snapshot)
                  ]
              | (declaration, declarationConsumers) <- Map.toAscList (snapshotMappedConsumers snapshot)
@@ -155,18 +166,18 @@ instance FromJSON SemanticImpactSnapshot where
         declarationName <- row .: "declaration"
         consumerNames <- row .: "consumers"
         identity <- row .: "identity"
-        let aggregateConsumers = map AggregateConsumer consumerNames
-        unless (distinct aggregateConsumers) (fail "duplicate semantic-impact aggregate consumer")
+        consumers <- traverse parseConsumerName consumerNames
+        unless (distinct consumers) (fail "duplicate semantic-impact consumer")
         unless (not (T.null identity)) (fail "empty semantic-impact declaration identity")
-        pure (MappedKey declarationName, Set.fromList aggregateConsumers, identity)
+        pure (MappedKey declarationName, Set.fromList consumers, identity)
       distinct values = length values == Set.size (Set.fromList values)
 
 instance ToJSON MappedImpactDelta where
   toJSON delta =
     object
       [ "declaration" .= unMappedKey (impactDeclaration delta),
-        "previousConsumers" .= map consumerName (Set.toAscList (impactPreviousConsumers delta)),
-        "currentConsumers" .= map consumerName (Set.toAscList (impactCurrentConsumers delta)),
+        "previousConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactPreviousConsumers delta)),
+        "currentConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactCurrentConsumers delta)),
         "serviceConformance" .= impactServiceConformance delta
       ]
 
@@ -176,8 +187,8 @@ instance FromJSON MappedImpactDelta where
     previousNames <- fields .: "previousConsumers"
     currentNames <- fields .: "currentConsumers"
     serviceConformance <- fields .: "serviceConformance"
-    let previous = map AggregateConsumer previousNames
-        current = map AggregateConsumer currentNames
+    previous <- traverse parseConsumerName previousNames
+    current <- traverse parseConsumerName currentNames
     unless (distinct previous) (fail "duplicate previous semantic-impact consumer")
     unless (distinct current) (fail "duplicate current semantic-impact consumer")
     pure
@@ -200,10 +211,22 @@ semanticImpact graph =
       impactAggregateDeclarations = aggregateDeclarations,
       impactDeclarationConsumers = declarationConsumers,
       impactServiceDeclarations = serviceDeclarations,
-      impactDeclarationIdentities = Map.mapWithKey (declarationIdentity graph) (tgDeclarations graph)
+      impactDeclarationIdentities = Map.mapWithKey (declarationIdentity graph) (tgDeclarations graph),
+      impactUnsupportedProjectionSources = tgUnsupportedProjectionSources graph
     }
   where
-    roots = sort (map mappedRootFromUseSite (tgUseSites graph))
+    directRoots = map mappedRootFromUseSite (tgUseSites graph)
+    roots = sort (directRoots <> concatMap derivedRoots (tgDerivedMappedConsumers graph))
+    derivedRoots consumer =
+      [ MappedRoot
+          { mappedRootConsumer = DerivedProjectionConsumer consumer,
+            mappedRootKind = MappedProjectionEventRoot,
+            mappedRootUseSite = site,
+            mappedRootDeclaration = declaration
+          }
+      | site@(RootEventField aggregate _ _ declaration) <- tgUseSites graph,
+        aggregate == derivedAuthority consumer
+      ]
     aggregateDeclarations =
       Map.fromListWith
         Set.union
@@ -317,8 +340,29 @@ declarationIdentity graph key declaration =
     structuralPresentation (RUnion _ arms) =
       "union:" <> T.intercalate "," [rwaTag arm | arm <- sortOn rwaTag arms]
 
-consumerName :: MappedConsumer -> Name
-consumerName (AggregateConsumer aggregate) = aggregate
+mappedConsumerIdentity :: MappedConsumer -> Name
+mappedConsumerIdentity (AggregateConsumer aggregate) = aggregate
+mappedConsumerIdentity (WorkqueueConsumer workqueue) = "workqueue:" <> workqueue
+mappedConsumerIdentity (ReadModelConsumer readModel) = "read-model:" <> readModel
+mappedConsumerIdentity (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection)) =
+  "aggregate-projection:" <> aggregate <> ":" <> projection
+mappedConsumerIdentity (DerivedProjectionConsumer (CatalogProjectionConsumer owner aggregate)) =
+  "catalog-projection:" <> owner <> ":" <> aggregate
+
+parseConsumerName :: (MonadFail m) => Text -> m MappedConsumer
+parseConsumerName raw = case T.splitOn ":" raw of
+  ["workqueue", workqueue] -> pure (WorkqueueConsumer workqueue)
+  ["read-model", readModel] -> pure (ReadModelConsumer readModel)
+  ["aggregate-projection", aggregate, projection] ->
+    pure (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection))
+  ["catalog-projection", owner, aggregate] ->
+    pure (DerivedProjectionConsumer (CatalogProjectionConsumer owner aggregate))
+  [_] -> pure (AggregateConsumer raw)
+  _ -> fail "invalid semantic-impact consumer identity"
+
+derivedAuthority :: DerivedMappedConsumer -> Name
+derivedAuthority (AggregateInlineProjectionConsumer aggregate _) = aggregate
+derivedAuthority (CatalogProjectionConsumer _ aggregate) = aggregate
 
 -- | Return the checked roots owned by one aggregate in stable order.
 aggregateMappedRoots :: SemanticImpact -> Name -> [MappedRoot]
@@ -369,6 +413,27 @@ mappedRootFromUseSite site@(RootRegister aggregate _ declaration) =
   MappedRoot
     { mappedRootConsumer = AggregateConsumer aggregate,
       mappedRootKind = MappedRegisterRoot,
+      mappedRootUseSite = site,
+      mappedRootDeclaration = declaration
+    }
+mappedRootFromUseSite site@(RootWorkqueueField workqueue _ declaration) =
+  MappedRoot
+    { mappedRootConsumer = WorkqueueConsumer workqueue,
+      mappedRootKind = MappedWorkqueueFieldRoot,
+      mappedRootUseSite = site,
+      mappedRootDeclaration = declaration
+    }
+mappedRootFromUseSite site@(RootReadModelQueryInput readModel declaration) =
+  MappedRoot
+    { mappedRootConsumer = ReadModelConsumer readModel,
+      mappedRootKind = MappedReadModelQueryInputRoot,
+      mappedRootUseSite = site,
+      mappedRootDeclaration = declaration
+    }
+mappedRootFromUseSite site@(RootReadModelQueryResult readModel declaration) =
+  MappedRoot
+    { mappedRootConsumer = ReadModelConsumer readModel,
+      mappedRootKind = MappedReadModelQueryResultRoot,
       mappedRootUseSite = site,
       mappedRootDeclaration = declaration
     }

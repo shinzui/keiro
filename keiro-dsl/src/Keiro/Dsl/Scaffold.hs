@@ -3398,7 +3398,7 @@ emitWorkqueueGen genPrefix w =
          ]
       ++ groupKeyLines
       ++ [ "data " <> payloadTy <> " = " <> payloadTy,
-           "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> hsType (wqfType f) | f <- wqPayload w],
+           "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> payloadFieldType f | f <- wqPayload w],
            "  }",
            "  deriving stock (Eq, Show)",
            "",
@@ -3419,6 +3419,9 @@ emitWorkqueueGen genPrefix w =
          ]
   where
     payloadTy = wqPayloadName w
+    payloadFieldType field = case wqfType field of
+      LegacyQueueScalar scalar -> hsType (queueScalarName scalar)
+      TypedQueueExpression _ -> error "keiro-dsl internal invariant: mapped queue lowering is pending"
     groupKeyExport = case wqGroupKey w of
       Nothing -> ""
       Just groupKey

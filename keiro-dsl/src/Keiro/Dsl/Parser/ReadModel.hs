@@ -6,8 +6,9 @@ where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (ProjectionCatalogSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax, ProjectionCatalogSyntax))
 import Keiro.Dsl.Parser.Core
+import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
 import Text.Megaparsec
 
 pReadModel :: FrontendContext -> P ReadModelNode
@@ -32,6 +33,7 @@ pReadModel context = do
         pure (table, schema)
   _ <- symbol "columns"
   columns <- braces (many pColumn)
+  queryTypes <- optionalLanguageFeature context MappedConsumerSurfaceSyntax "query" pQueryTypes
   _ <- symbol "version" *> symbol "="
   version <- boundedDecimal
   _ <- symbol "shape" *> symbol "="
@@ -61,6 +63,7 @@ pReadModel context = do
         rmSubscription = subscription,
         rmGroup = group,
         rmObservedTargets = observedTargets,
+        queryTypes,
         rmLoc = loc
       }
   where
@@ -76,3 +79,13 @@ pReadModel context = do
           RmCategory <$> (keyword "category" *> stringLit)
         ]
     pFeed = choice [RmInline <$ keyword "inline", RmSubscription <$ keyword "subscription"]
+    pQueryTypes = do
+      inputLoc <- getLoc
+      keyword "query"
+      _ <- symbol "input" *> symbol "="
+      input <- pMappedTypeExpr context
+      resultLoc <- getLoc
+      keyword "query"
+      _ <- symbol "result" *> symbol "="
+      result <- pMappedTypeExpr context
+      pure ReadModelQueryTypes {input, result, inputLoc, resultLoc}

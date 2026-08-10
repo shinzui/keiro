@@ -62,6 +62,7 @@ library
     Keiro.Dsl.CheckReport
     Keiro.Dsl.CodecCompare
     Keiro.Dsl.ConformancePackage
+    Keiro.Dsl.ConsumerTypePlan
     Keiro.Dsl.Coverage
     Keiro.Dsl.Diff
     Keiro.Dsl.DiffReport

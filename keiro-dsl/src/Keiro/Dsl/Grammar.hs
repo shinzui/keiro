@@ -111,6 +111,9 @@ module Keiro.Dsl.Grammar
     PublisherNode (..),
 
     -- * The pgmq workqueue/dispatch nodes (EP-5)
+    QueueScalar (..),
+    queueScalarName,
+    QueuePayloadType (..),
     WqField (..),
     WqDispRow (..),
     WqOrdering (..),
@@ -123,6 +126,7 @@ module Keiro.Dsl.Grammar
     RmColumn (..),
     RmFeed (..),
     RmScope (..),
+    ReadModelQueryTypes (..),
     ReadModelNode (..),
 
     -- * Projection catalog nodes (language 5)
@@ -980,11 +984,34 @@ data PublisherNode = PublisherNode
 
 -- EP-5: the pgmq @workqueue@ + @dispatch@ nodes.
 
+-- | The legacy lower-case workqueue scalar vocabulary. These constructors
+-- retain the released generated JSON meaning of @text@, @int@, and @bool@.
+data QueueScalar
+  = QueueText
+  | QueueInt
+  | QueueBool
+  | QueueOther !Name
+  deriving stock (Eq, Show, Generic)
+
+queueScalarName :: QueueScalar -> Name
+queueScalarName QueueText = "text"
+queueScalarName QueueInt = "int"
+queueScalarName QueueBool = "bool"
+queueScalarName (QueueOther name) = name
+
+-- | A workqueue field either retains its released scalar spelling or owns a
+-- complete candidate-language mapped type expression.
+data QueuePayloadType
+  = LegacyQueueScalar !QueueScalar
+  | TypedQueueExpression !TypeExpr
+  deriving stock (Eq, Show, Generic)
+
 -- | One @field -> \"wire_name\" type required@ row of a workqueue payload.
 data WqField = WqField
   { wqfName :: !Name,
     wqfWire :: !Text,
-    wqfType :: !Name
+    wqfType :: !QueuePayloadType,
+    wqfLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1073,6 +1100,16 @@ data RmFeed = RmInline | RmSubscription
 data RmScope = RmEntireLog | RmCategory !Text
   deriving stock (Eq, Show, Generic)
 
+-- | The two type parameters of the generated @ReadModel q r@ API. The pair is
+-- atomic because accepting only one side could not be lowered completely.
+data ReadModelQueryTypes = ReadModelQueryTypes
+  { input :: !TypeExpr,
+    result :: !TypeExpr,
+    inputLoc :: !Loc,
+    resultLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
 -- | A registered, versioned SQL read model. Columns define its shape identity;
 -- the runtime table remains owned by codd migrations rather than the DSL.
 data ReadModelNode = ReadModelNode
@@ -1088,6 +1125,7 @@ data ReadModelNode = ReadModelNode
     rmSubscription :: !(Maybe Text),
     rmGroup :: !(Maybe Name),
     rmObservedTargets :: ![Name],
+    queryTypes :: !(Maybe ReadModelQueryTypes),
     rmLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)

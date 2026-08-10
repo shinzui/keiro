@@ -5,12 +5,15 @@ module Keiro.Dsl.Parser.Queue
   )
 where
 
+import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax))
 import Keiro.Dsl.Parser.Core
+import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
 import Text.Megaparsec
 
-pWorkqueue :: P WorkqueueNode
-pWorkqueue = do
+pWorkqueue :: FrontendContext -> P WorkqueueNode
+pWorkqueue context = do
   loc <- getLoc
   keyword "workqueue"
   nm <- ident
@@ -89,15 +92,28 @@ pWorkqueue = do
             pure (WqPartitioned interval retention)
         ]
     pWqField = do
+      loc <- getLoc
       n <- ident
       _ <- symbol "->"
       w <- stringLit
-      ty <- ident
+      ty <- pTypedPayload <|> pLegacyPayload
       -- Every payload field is required: generated decoders use `o .:` for all
       -- of them. The keyword stays accepted so existing sources still parse, but
       -- it selects nothing, so it is not retained. See ExecPlan 199.
       _ <- optional (keyword "required")
-      pure WqField {wqfName = n, wqfWire = w, wqfType = ty}
+      pure WqField {wqfName = n, wqfWire = w, wqfType = ty, wqfLoc = loc}
+    pTypedPayload = do
+      marker <- withOwnedSpan (symbol ":")
+      requireLanguageFeatureAt context MappedConsumerSurfaceSyntax (spanOf marker)
+      TypedQueueExpression <$> pMappedTypeExpr context
+    pLegacyPayload =
+      LegacyQueueScalar
+        <$> choice
+          [ QueueText <$ keyword "text",
+            QueueInt <$ keyword "int",
+            QueueBool <$ keyword "bool",
+            QueueOther <$> ident
+          ]
     pWqDispRow = do
       loc <- getLoc
       o <- ident

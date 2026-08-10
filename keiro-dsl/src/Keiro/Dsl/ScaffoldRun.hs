@@ -105,11 +105,11 @@ import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
-  ( MappedConsumer (..),
-    MappedImpactDelta (..),
+  ( MappedImpactDelta (..),
     SemanticImpactReport (..),
     SemanticImpactSnapshot (..),
     diffSemanticImpact,
+    mappedConsumerIdentity,
     semanticImpact,
     semanticImpactReport,
     semanticImpactSnapshot,
@@ -1419,7 +1419,7 @@ renderSemanticImpactReport report = case semanticReportDeclarations report of
     renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
       [] -> "(none)"
       names -> T.intercalate ", " names
-    consumerName (AggregateConsumer aggregate) = aggregate
+    consumerName = mappedConsumerIdentity
 
 renderGeneratedArtifactImpact :: SemanticImpactReport -> [GeneratedArtifactImpact] -> [Text]
 renderGeneratedArtifactImpact _ [] = []

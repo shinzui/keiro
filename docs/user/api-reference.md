@@ -703,8 +703,17 @@ arithmetic evidence, and stable expression diagnostics; consumers should use
 that resolver rather than reconstructing capability rules from the raw grammar
 AST.
 
+`Keiro.Dsl.ConsumerTypePlan` is the codec-agnostic lowering authority for a
+checked mapped `ResolvedTypeExpr`. It returns the consumer-facing Haskell type
+occurrence, deterministic import requirements, and transitive mapped
+dependencies. Queue and read-model generators compose their own JSON or SQL
+policy around this plan rather than reconstructing type rendering.
+
 Candidate language 5 adds projection-target, rebuild-group, projection-owner,
-and query-binding nodes. `Keiro.Dsl.Scaffold` lowers the checked service into
+query-binding nodes, typed workqueue fields, and atomic read-model query
+input/result clauses. The queue/query syntax is currently registered and
+resolved but fails `check` with an explicit lowering-pending diagnostic until
+its generators land. `Keiro.Dsl.Scaffold` lowers the checked catalog into
 one `Generated.<Context>.ProjectionCatalog` facade backed by
 `Keiro.Projection.Catalog` and `Keiro.ReadModel.Rebuild`. The facade exports the
 validated catalog, deterministic inventory and registration views, typed

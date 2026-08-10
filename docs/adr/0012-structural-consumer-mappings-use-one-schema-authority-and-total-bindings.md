@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
-description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-09T22:25:17Z
+description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
+timestamp: 2026-08-10T04:36:00Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -190,11 +190,26 @@ prefixes its results with `structural/`. This execution wiring does not turn the
 aggregate consumer and does not make module emission conditional on the optional runnable
 conformance package.
 
-The current root vocabulary does not include mapped queue payloads, public contracts, read-model
-query schemas, or aggregate-owned projections. Snapshot impact follows register use because the
-snapshot is a cache of the register file. A future typed surface must extend the checked graph,
-semantic impact, generation, reporting, and conformance together; downstream code must not infer
-unsupported consumers from descriptive notation.
+Candidate language 5 extends the checked root vocabulary with typed workqueue fields and complete
+read-model query input/result pairs. Each root resolves the entire recursive `TypeExpr`, records
+its source location and outer container path, and reaches mapped declarations through the same
+graph as aggregate roots. One pure `ConsumerTypePlan` renders the consumer-facing Haskell type,
+deterministic imports, and transitive mapped dependency closure. It contains no JSON, SQL, or
+runtime-codec policy: the queue and read-model lowerers must compose their own surface authority
+around this common type plan.
+
+Projection typing is derived rather than redeclared. An aggregate inline projection and a catalog
+owner whose source is `aggregate A` consume only A's private-event mapped roots; command-only and
+register-only roots do not enter the projection relation. Catalog `category` and `all` sources
+remain heterogeneous decoder boundaries and are recorded as unsupported typed sources without a
+fabricated mapped path. Public contracts remain outside this private mapped-consumer vocabulary.
+
+The new queue/query spellings are registered only in the unpublished language-5 candidate. Until
+their complete generation plans land, validation emits stable lowering-pending errors, so a clean
+`check` still implies total scaffold lowering. Snapshot impact continues to follow register use
+because the snapshot is a cache of the register file. Queue wire, query API, projection rebuild,
+reporting, and conformance policies must consume these checked roots in their owning follow-up
+changes; downstream code must not infer unsupported consumers from descriptive notation.
 
 Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
 explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.
@@ -311,8 +326,12 @@ the totality and ownership requirements above.
 - Mapped consumer locality is defined once over the resolved graph. An aggregate closure contains
   only declarations reachable from its checked roots, while service conformance retains every
   checked declaration independently of current use.
-- Queue, public-contract, read-model, and projection surfaces remain outside mapped impact until
-  they gain typed roots. Reporting them as consumers before then would overstate Keiro's evidence.
+- Candidate-language typed queue and read-model expressions are explicit checked roots, while
+  aggregate-sourced projections are derived event consumers. Public contracts and heterogeneous
+  category/all projection sources remain outside mapped impact rather than overstating Keiro's
+  evidence.
+- A queue or query expression cannot pass `check` until its surface-specific lowering is total;
+  registering syntax and roots does not authorize partial generation.
 - Canonical aggregate identities feed diff, replay-impact, and fold/snapshot
   fingerprints, so source aliases do not create compatibility churn while real
   type or initial changes remain visible.

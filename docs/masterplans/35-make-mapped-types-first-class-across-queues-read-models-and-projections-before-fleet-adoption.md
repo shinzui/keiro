@@ -99,7 +99,7 @@ for mapped queue payloads, query types, or projection source typing.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Register the mapped consumer-surface contract in candidate language 5 | [Plan 223](../plans/223-register-the-mapped-consumer-surface-contract-in-candidate-language-5.md) | None | None | Not Started |
+| 1 | Register the mapped consumer-surface contract in candidate language 5 | [Plan 223](../plans/223-register-the-mapped-consumer-surface-contract-in-candidate-language-5.md) | None | None | Complete |
 | 2 | Generate mapped workqueue payloads with honest persisted-wire compatibility | [Plan 224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md) | EP-1 | None | Not Started |
 | 3 | Make read-model query inputs and results checked mapped types | [Plan 225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md) | EP-1 | None | Not Started |
 | 4 | Derive projection mapped consumers from authoritative event sources | [Plan 226](../plans/226-derive-projection-mapped-consumers-from-authoritative-event-sources.md) | EP-1 | None | Not Started |
@@ -181,8 +181,8 @@ surface passes exact byte locality, restoring mutations, and full repository ver
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: register candidate-language syntax and one exhaustive external-consumer root algebra.
-- [ ] EP-1: freeze explicit queue/query positions and derived projection ownership with ADR/tests.
+- [x] EP-1: register candidate-language syntax and one exhaustive external-consumer root algebra.
+- [x] EP-1: freeze explicit queue/query positions and derived projection ownership with ADR/tests.
 - [ ] EP-2: parse, validate, and generate mapped workqueue payload expressions and codecs.
 - [ ] EP-2: classify queue wire evolution and prove structural/opaque payload conformance.
 - [ ] EP-3: generate checked read-model query input/result types without placeholder aliases.
@@ -200,17 +200,23 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-- `WqField.wqfType` is currently an unlocated `Name` restricted to lower-case `text`, `int`, or
-  `bool`; queue mapping is a real persisted-codec feature, not an existing root waiting to be
+- At EP-1 start, `WqField.wqfType` was an unlocated `Name` restricted to lower-case `text`, `int`,
+  or `bool`; queue mapping was a real persisted-codec feature, not an existing root waiting to be
   enumerated.
-- `ReadModel q r` is already typed at runtime, but generated `ReadModelHoles` declares both types
-  as `()` because the DSL does not carry query type expressions. SQL columns are a separate closed
+- `ReadModel q r` was already typed at runtime, but generated `ReadModelHoles` declared both types
+  as `()` because the DSL carried no query type expressions. SQL columns are a separate closed
   storage vocabulary and must stay separate.
 - Projection catalogs already retain typed aggregate sources. Aggregate sources can inherit mapped
   event dependencies exactly, while category/all sources intentionally cross a total hand-owned
   decoder and cannot honestly name one mapped event type.
 - Candidate language 5 is registered but unpublished. ADR 0016 explicitly permits correcting its
   syntax profile in place while languages 1–4 remain immutable.
+- EP-1 showed that the old queue parser was syntactically wider than strict language-4 semantics:
+  preserving unknown legacy identifiers explicitly was necessary to keep predecessor parse/pretty
+  behavior unchanged while adding the candidate colon form.
+- Nested consumer roots need outer container segments in addition to their first mapped key.
+  Keeping those segments beside `UseSite` preserves stable root identities and complete rendered
+  paths without fabricating intermediate declarations.
 
 
 ## Decision Log
@@ -266,4 +272,6 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. Candidate syntax ownership, located queue/query roots, the common consumer type
+plan, derived projection relations, and fail-closed downstream gates are now landed and documented.
+The existing generated corpus remained unchanged, so EP-2, EP-3, and EP-4 are dependency-ready.

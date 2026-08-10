@@ -354,7 +354,12 @@ docWorkqueue w =
         [indent 2 ("provision partitioned(interval=" <> dquoted interval <> ", retention=" <> dquoted retention <> ")")]
     -- Always rendered: every payload field is required, and stating it keeps
     -- the canonical form self-describing.
-    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> pretty (wqfType f) <> " required"
+    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> docQueuePayloadType (wqfType f) <> " required"
+    docQueuePayloadType (LegacyQueueScalar QueueText) = "text"
+    docQueuePayloadType (LegacyQueueScalar QueueInt) = "int"
+    docQueuePayloadType (LegacyQueueScalar QueueBool) = "bool"
+    docQueuePayloadType (LegacyQueueScalar (QueueOther name)) = pretty name
+    docQueuePayloadType (TypedQueueExpression expression) = ":" <+> docTypeExpr expression
     dispRow r = pretty (wqdOutcome r) <+> "->" <+> act (wqdAction r)
     act IAckOk = "ackOk"
     act (IRetry win) = "retry" <+> pretty win
@@ -387,8 +392,9 @@ docReadModel readModel =
          )
       ++ [indent 2 "columns {"]
       ++ map (indent 4 . docColumn) (rmColumns readModel)
-      ++ [ indent 2 "}",
-           indent 2 ("version =" <+> pretty (rmVersion readModel)),
+      ++ [indent 2 "}"]
+      ++ maybe [] docQueryTypes (queryTypes readModel)
+      ++ [ indent 2 ("version =" <+> pretty (rmVersion readModel)),
            indent 2 ("shape =" <+> dquoted (rmShape readModel)),
            indent 2 ("consistency =" <+> docConsistency (rmConsistency readModel))
          ]
@@ -407,6 +413,10 @@ docReadModel readModel =
     docScope (RmCategory categoryName) = "category" <+> dquoted categoryName
     docFeed RmInline = "inline"
     docFeed RmSubscription = "subscription"
+    docQueryTypes ReadModelQueryTypes {input, result} =
+      [ indent 2 ("query input =" <+> docTypeExpr input),
+        indent 2 ("query result =" <+> docTypeExpr result)
+      ]
 
 docProjectionTarget :: ProjectionTargetNode -> Doc ann
 docProjectionTarget target =

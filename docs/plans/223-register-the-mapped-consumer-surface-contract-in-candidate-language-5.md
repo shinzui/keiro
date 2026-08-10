@@ -37,14 +37,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: register the mapped-consumer syntax capability only in unpublished language 5
-  and freeze predecessor rejection/registry behavior.
-- [ ] Milestone 2: add source/AST forms for typed queue fields and complete read-model query
-  contracts with canonical pretty-print round trips.
-- [ ] Milestone 3: resolve explicit mapped roots and projection-source relations into one
-  exhaustive surface vocabulary with stable diagnostics.
-- [ ] Milestone 4: add safe temporary lowering refusals, publish the contract in ADR/docs, and
-  pass frontend/check tests without changing existing generated corpora.
+- [x] Milestone 1: register the mapped-consumer syntax capability only in unpublished language 5
+  and freeze predecessor rejection/registry behavior. (2026-08-10T04:43:41Z)
+- [x] Milestone 2: add source/AST forms for typed queue fields and complete read-model query
+  contracts with canonical pretty-print round trips. (2026-08-10T04:43:41Z)
+- [x] Milestone 3: resolve explicit mapped roots and projection-source relations into one
+  exhaustive surface vocabulary with stable diagnostics. (2026-08-10T04:43:41Z)
+- [x] Milestone 4: add safe temporary lowering refusals, publish the contract in ADR/docs, and
+  pass frontend/check tests without changing existing generated corpora. (2026-08-10T04:43:41Z)
 
 
 ## Surprises & Discoveries
@@ -52,7 +52,15 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The released queue parser accepted an arbitrary identifier into the AST even though strict
+  language-4 validation closed the supported vocabulary to `text`, `int`, and `bool`. Preserving a
+  `QueueOther Name` constructor keeps old parse/pretty behavior exact while allowing the new
+  candidate colon form to be structurally distinct.
+- A `UseSite` names the first mapped declaration but cannot itself retain outer containers such as
+  `List (Optional T)`. `TypeGraph.tgRootSegments` records those segments beside the stable root key,
+  and `usePaths` prepends them before declaration-internal paths.
+- The plan named a nonexistent `just check-adr` recipe. The repository recipe is
+  `just adr-validate`; its underlying strict OKF command passed with 28 concepts.
 
 
 ## Decision Log
@@ -95,6 +103,20 @@ Record every decision made while working on the plan.
   selectors would create unrelated source/API churn.
   Date: 2026-08-09
 
+- Decision: Preserve unknown legacy queue scalar identifiers explicitly instead of narrowing the
+  parser while adding the candidate form.
+  Rationale: Languages before strict surface closure accepted those identifiers syntactically.
+  `QueueOther` retains their AST and canonical rendering, while language-4 validation continues to
+  reject them exactly as before.
+  Date: 2026-08-10
+
+- Decision: Keep existing untagged aggregate consumer identities and tag only new consumer
+  families in semantic-impact JSON.
+  Rationale: Existing scaffold/workspace ledgers must remain byte-compatible. Prefixes for
+  workqueues, read models, and the two projection forms are unambiguous without rewriting any
+  aggregate snapshot row.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -103,7 +125,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Candidate language 5 now owns the queue colon and atomic read-model query-pair syntax. The parser,
+AST, pretty-printer, resolved graph, nested path expansion, common `ConsumerTypePlan`, and
+event-authority-derived projection relations are implemented. Category/all projection sources are
+visible unsupported boundaries rather than fabricated consumers. Queue and query use remains
+fail-closed through the two planned pending-lowering diagnostics.
+
+Languages 1 through 4 retain their feature sets and legacy queue/read-model behavior. The full DSL
+suite passed, the 35-invocation corpus check reported every generated artifact unchanged, strict
+OKF validation passed, and `git diff --check` is clean. ADR 0012 and ADR 0016 now carry the durable
+authority and language-version decisions. Plans 224–226 may consume this foundation without
+inventing parallel type rendering or projection ownership.
 
 
 ## Context and Orientation
@@ -225,7 +257,7 @@ Before closure, run:
 cabal build keiro-dsl
 cabal test keiro-dsl:keiro-dsl-test
 cabal run -v0 keiro-dsl-corpus-regen -- check
-just check-adr
+just adr-validate
 git diff --check
 git status --short
 ```
@@ -314,3 +346,9 @@ SQL-column mapping. New focused records use semantic fields such as `input`, `re
 and `dependencies`. Existing prefixed selectors are not renamed. Keep these records in focused
 modules and use typed patterns or record-dot access where duplicate labels would make a selector
 function ambiguous; selector spelling must not enter any serialized or generated identity.
+
+
+## Revision Notes
+
+- 2026-08-10: Recorded the landed AST/root refinements, corrected the ADR validation recipe, and
+  closed all milestones with full-suite, corpus, and strict-OKF evidence.

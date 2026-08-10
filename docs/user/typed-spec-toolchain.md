@@ -515,12 +515,13 @@ are generated layout and evidence changes, not wire, fold, snapshot, or
 behavior-key changes.
 
 After that baseline, a mapped declaration change rewrites use-specific output
-only for aggregates that reach it through a command field, private-event field,
-or register, plus the service structural module. Queue payloads, public
-contracts, read-model query schemas, and aggregate-owned projections are not
-typed mapped roots in the current checked graph and are not inferred as
-consumers. A future language feature that adds one of those roots must extend
-checking, semantic impact, generation, reporting, and conformance together.
+only for consumers that reach it through checked roots, plus the service
+structural module. Released languages expose aggregate command, private-event,
+and register roots. Candidate language 5 additionally parses typed queue fields
+and read-model query pairs and derives aggregate-sourced projection consumers.
+Those candidate queue/query forms remain fail-closed with a lowering-pending
+error until their complete generators land. Public contracts and heterogeneous
+category/all projection sources are not inferred as private mapped consumers.
 
 Source-only movement is separate. Moving an unchanged behavior requirement
 rewrites its context `BehaviorSourceMap` and source-bearing ledger provenance,
@@ -1202,6 +1203,19 @@ the same reason, *adding* a payload row is a breaking change however it is
 spelled — a job already queued under the old shape does not contain it. Queue
 payload evolution is a persisted wire change and must go through `diff`.
 
+Candidate language 5 additionally reserves a colon form for a complete mapped
+type expression:
+
+```text
+jobData -> "job_data" : List (Optional ArtifactInfo)
+```
+
+The colon is the language-5 feature boundary; languages 1 through 4 reject it
+at that token and retain their released scalar interpretation. The expression
+already resolves through the checked mapped graph, but `check` currently emits
+`MappedQueueLoweringPending`. Do not adopt this positive form until the mapped
+queue codec, compatibility, and conformance work removes that gate.
+
 Ordering is `unordered` (the default), `fifo-throughput`, or
 `fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
 `via raw` requires a `text` field. An opaque derivation uses:
@@ -1302,6 +1316,22 @@ schema-qualified table facts and create-once apply/query functions. Use the
 generated table constant in SQL rather than depending on PostgreSQL
 `search_path`.
 
+Candidate language 5 may declare the two type parameters of `ReadModel q r` as
+one ordered pair after `columns`:
+
+```text
+query input = AccountLookup
+query result = Optional AccountSummary
+```
+
+Both clauses are required together and resolve complete mapped type
+expressions. Languages 1 through 4 reject the first `query` token; an omitted
+second clause is a parse error rather than a partial semantic contract. The
+candidate form currently fails `check` with
+`MappedReadModelLoweringPending` until generated query aliases and imports are
+implemented. SQL columns, row codecs, DDL, migrations, and query bodies remain
+application-owned.
+
 ### Candidate Language 5 projection catalogs
 
 Language 5 is the current unreleased authoring candidate. It adds a closed
@@ -1378,6 +1408,13 @@ typed inline views, registration/inventory functions, and group-scoped rebuild
 starters. `<Context>.ProjectionCatalog.ProjectionCatalogHoles` is create-once
 and owns live apply, replay apply, heterogeneous decoder, and idempotency
 bodies. Regeneration never overwrites reviewed hole code.
+
+A source of `aggregate Name` derives its mapped consumer dependencies from
+that aggregate's private-event roots; inline aggregate projections use the
+same event authority. Neither relation inherits command-only or register-only
+mapped roots. `category` and `all` remain heterogeneous hand-decoded sources,
+so the checked graph reports their unsupported typed boundary without
+inventing a mapped consumer path.
 
 Catalog declarations do not create tables, migrations, indexes, row codecs, or
 SQL. They also cannot prove which tables an unrestricted Hasql transaction
@@ -1931,7 +1968,7 @@ uses `git show`.
 
 The tool separates three failure classes:
 
-1. A parse failure means the source does not match Language 4 grammar.
+1. A parse failure means the source does not match its selected language grammar.
 2. An `error[Code]` means the graph parses but cannot safely or faithfully
    lower. `check` exits non-zero, and scaffold writes nothing.
 3. A `warning[Code]` calls out a risky but explicit policy, incomplete
@@ -1959,12 +1996,14 @@ semantic vocabulary.
 A source without a `language keiro-dsl N` preamble selects compatibility-only
 language 1. Declared languages 1 through 3 are compatibility-only, language 4
 remains the published stable contract, and candidate language 5 is the current
-development authoring default. Earlier languages do not gain language 5's catalog syntax.
+development authoring default. Earlier languages do not gain language 5's catalog or mapped
+consumer syntax.
 `check` and `scaffold`
 print one `language contract:` notice for those sources (workspace notices
 summarize member provenance); `diff` prints it for the working-tree side only.
 Use `--min-language 5` only after a service intentionally adopts the candidate
-catalog contract; existing language-4 CI may keep `--min-language 4` without
+catalog contract; mapped queue/query spellings remain lowering-gated until their generators land.
+Existing language-4 CI may keep `--min-language 4` without
 triggering a mechanical rewrite.
 
 The warning policy follows the evidence boundary. Three warnings depend on

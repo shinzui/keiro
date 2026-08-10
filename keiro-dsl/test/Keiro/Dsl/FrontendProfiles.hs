@@ -65,7 +65,11 @@ frontendProfilesSpec = do
               not wasSupported
                 || runtimeProfileHasCapability (definitionRuntimeSemanticsProfile successor) capability
       forM_ allFeatures $ \feature -> do
-        let minimumVersion = case feature of ProjectionCatalogSyntax -> version 5; FieldAliasSyntax -> version 4; _ -> version 2
+        let minimumVersion = case feature of
+              ProjectionCatalogSyntax -> version 5
+              MappedConsumerSurfaceSyntax -> version 5
+              FieldAliasSyntax -> version 4
+              _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
         forM_ [1, 2, 3, 4, 5] $ \versionNumber ->
           languageSupportsFeature (version versionNumber) feature
@@ -172,7 +176,9 @@ featureCases =
     FeatureCase TypedAggregateExpressionSyntax "cmd." (featureBody TypedAggregateExpressionSyntax),
     FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
     FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax),
-    FeatureCase ProjectionCatalogSyntax "target" (featureBody ProjectionCatalogSyntax)
+    FeatureCase ProjectionCatalogSyntax "target" (featureBody ProjectionCatalogSyntax),
+    FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
+    FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -217,9 +223,49 @@ featureBody = \case
         "  reset = preserve",
         "}"
       ]
+  MappedConsumerSurfaceSyntax -> mappedQueueFeatureBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax]
+
+mappedQueueFeatureBody :: Text
+mappedQueueFeatureBody =
+  T.unlines
+    [ "context profile",
+      "workqueue jobs {",
+      "  queue logical = \"profile-jobs\"",
+      "  derive physical = \"profile-jobs\"",
+      "    dlq = \"profile-jobs_dlq\"",
+      "    table = \"q_profile-jobs\"",
+      "  payload JobPayload {",
+      "    jobData -> \"payload\" : JobPayload",
+      "  }",
+      "  retry maxRetries = 3 delay = 1s dlq = on",
+      "  disposition {",
+      "    storeFailure -> retry 1s",
+      "    commandRejected -> ackOk",
+      "    decodeFailure -> deadLetter",
+      "    onCodecReject -> deadLetter",
+      "  }",
+      "}"
+    ]
+
+mappedQueryFeatureBody :: Text
+mappedQueryFeatureBody =
+  T.unlines
+    [ "context profile",
+      "readmodel profiles {",
+      "  table = \"profiles\"",
+      "  schema = \"public\"",
+      "  columns {}",
+      "  query input = ProfileLookup",
+      "  query result = Optional ProfileSummary",
+      "  version = 1",
+      "  shape = \"fixture\"",
+      "  consistency = Eventual",
+      "  feed = subscription",
+      "}"
+    ]
 
 allRuntimeCapabilities :: [RuntimeCapability]
 allRuntimeCapabilities = [minBound .. maxBound]
