@@ -20,12 +20,14 @@ import Keiro.Dsl.Workspace
 import Test.Tasty.Bench (Benchmark, bench, bgroup, defaultMain, whnf, whnfIO)
 
 data SourceFixture = SourceFixture
-  { fixtureConstructCount :: !Int,
+  { fixtureAggregateCount :: !Int,
+    fixtureConstructCount :: !Int,
     fixtureSource :: !Text
   }
 
 data WorkspaceFixture = WorkspaceFixture
   { fixtureMemberCount :: !Int,
+    fixtureAggregateCount :: !Int,
     fixtureTotalConstructCount :: !Int,
     fixtureManifestPath :: !FilePath,
     fixtureContents :: !(Map FilePath Text)
@@ -33,8 +35,11 @@ data WorkspaceFixture = WorkspaceFixture
 
 main :: IO ()
 main = do
-  let sourceFixtures = map sourceFixture sourceSizes
-      workspaceFixtures = map (uncurry workspaceFixture) workspaceShapes
+  let sourceFixtures = map (uncurry sourceFixture) sourceShapes
+      workspaceFixtures =
+        [ workspaceFixture memberCount aggregateCount transitionsPerAggregate
+        | (memberCount, aggregateCount, transitionsPerAggregate) <- workspaceShapes
+        ]
   -- Build and force immutable inputs directly before registering benchmarks.
   -- tasty-bench's env accessor is deliberately unnecessary here and would
   -- reintroduce a lazy resource thunk around these already prepared values.
@@ -42,11 +47,11 @@ main = do
   preflightFixtures sourceFixtures workspaceFixtures
   defaultMain (benchmarks sourceFixtures workspaceFixtures)
 
-sourceSizes :: [Int]
-sourceSizes = [32, 64, 128, 256]
+sourceShapes :: [(Int, Int)]
+sourceShapes = [(8, 4), (8, 8), (8, 16), (8, 32)]
 
-workspaceShapes :: [(Int, Int)]
-workspaceShapes = [(1, 32), (2, 32), (4, 32), (8, 32)]
+workspaceShapes :: [(Int, Int, Int)]
+workspaceShapes = [(1, 8, 16), (2, 8, 16), (4, 8, 16), (8, 8, 16)]
 
 forceFixtures :: [SourceFixture] -> [WorkspaceFixture] -> IO ()
 forceFixtures sourceFixtures workspaceFixtures = do
@@ -57,9 +62,9 @@ forceFixtures sourceFixtures workspaceFixtures = do
 
 preflightFixtures :: [SourceFixture] -> [WorkspaceFixture] -> IO ()
 preflightFixtures sourceFixtures workspaceFixtures = do
-  forM_ sourceFixtures $ \SourceFixture {fixtureConstructCount, fixtureSource} -> do
-    _ <- evaluate (parseSurfaceOrFail (sourcePath fixtureConstructCount) fixtureSource)
-    _ <- evaluate (parseCompatibilityOrFail (sourcePath fixtureConstructCount) fixtureSource)
+  forM_ sourceFixtures $ \fixture@SourceFixture {fixtureSource} -> do
+    _ <- evaluate (parseSurfaceOrFail (sourcePath fixture) fixtureSource)
+    _ <- evaluate (parseCompatibilityOrFail (sourcePath fixture) fixtureSource)
     pure ()
   forM_ workspaceFixtures loadWorkspaceOrFail
 
@@ -75,100 +80,124 @@ benchmarks sourceFixtures workspaceFixtures =
   ]
 
 surfaceBenchmark :: SourceFixture -> Benchmark
-surfaceBenchmark SourceFixture {fixtureConstructCount, fixtureSource} =
-  bench (sourceLabel fixtureConstructCount fixtureSource) $
-    whnf (parseSurfaceSource (sourcePath fixtureConstructCount)) fixtureSource
+surfaceBenchmark fixture@SourceFixture {fixtureSource} =
+  bench (sourceLabel fixture) $
+    whnf (parseSurfaceSource (sourcePath fixture)) fixtureSource
 
 compatibilityBenchmark :: SourceFixture -> Benchmark
-compatibilityBenchmark SourceFixture {fixtureConstructCount, fixtureSource} =
-  bench (sourceLabel fixtureConstructCount fixtureSource) $
-    whnf (parseSource (sourcePath fixtureConstructCount)) fixtureSource
+compatibilityBenchmark fixture@SourceFixture {fixtureSource} =
+  bench (sourceLabel fixture) $
+    whnf (parseSource (sourcePath fixture)) fixtureSource
 
 workspaceBenchmark :: WorkspaceFixture -> Benchmark
-workspaceBenchmark fixture@WorkspaceFixture {fixtureMemberCount, fixtureTotalConstructCount, fixtureContents} =
+workspaceBenchmark fixture@WorkspaceFixture {fixtureMemberCount, fixtureAggregateCount, fixtureTotalConstructCount, fixtureContents} =
   bench
     ( "members-"
         <> show fixtureMemberCount
         <> "-aggregates-"
+        <> show fixtureAggregateCount
+        <> "-transitions-"
         <> show fixtureTotalConstructCount
         <> "-chars-"
         <> show (sum (map T.length (Map.elems fixtureContents)))
     )
     (whnfIO (loadWorkspaceOrFail fixture))
 
-sourceFixture :: Int -> SourceFixture
-sourceFixture fixtureConstructCount =
+sourceFixture :: Int -> Int -> SourceFixture
+sourceFixture fixtureAggregateCount fixtureTransitionsPerAggregate =
   SourceFixture
-    { fixtureConstructCount,
-      fixtureSource = nestedSpecification "parser-bench" 0 fixtureConstructCount
+    { fixtureAggregateCount,
+      fixtureConstructCount = fixtureAggregateCount * fixtureTransitionsPerAggregate,
+      fixtureSource = nestedSpecification "parser-bench" 0 fixtureAggregateCount fixtureTransitionsPerAggregate
     }
 
-sourceLabel :: Int -> Text -> String
-sourceLabel constructCount source =
-  "nested-aggregates-"
-    <> show constructCount
+sourceLabel :: SourceFixture -> String
+sourceLabel SourceFixture {fixtureAggregateCount, fixtureConstructCount, fixtureSource} =
+  "aggregates-"
+    <> show fixtureAggregateCount
+    <> "-transitions-"
+    <> show fixtureConstructCount
     <> "-chars-"
-    <> show (T.length source)
+    <> show (T.length fixtureSource)
 
-sourcePath :: Int -> FilePath
-sourcePath constructCount = "parser-bench-" <> show constructCount <> ".keiro"
+sourcePath :: SourceFixture -> FilePath
+sourcePath SourceFixture {fixtureConstructCount} = "parser-bench-" <> show fixtureConstructCount <> ".keiro"
 
-nestedSpecification :: Text -> Int -> Int -> Text
-nestedSpecification contextName firstConstruct constructCount =
+nestedSpecification :: Text -> Int -> Int -> Int -> Text
+nestedSpecification contextName firstAggregate aggregateCount transitionsPerAggregate =
   T.unlines
     [ "language keiro-dsl 4",
       "context " <> contextName
     ]
-    <> T.concat [aggregateDefinition index | index <- [firstConstruct .. firstConstruct + constructCount - 1]]
+    <> T.concat
+      [ aggregateDefinition index transitionsPerAggregate
+      | index <- [firstAggregate .. firstAggregate + aggregateCount - 1]
+      ]
 
-aggregateDefinition :: Int -> Text
-aggregateDefinition index =
+aggregateDefinition :: Int -> Int -> Text
+aggregateDefinition index transitionCount =
   T.unlines
-    [ "",
-      "aggregate " <> aggregateName,
-      "  regs",
-      "    count Natural = 0",
-      "    limit Natural = 100",
-      "    label Text = \"ready # literal\"",
-      "  states Empty Active Closed!",
-      "  command Advance { amount:Natural delta:Natural note:Text }",
-      "  event Advanced = fields(Advance)",
-      "  Empty -- Advance -->",
-      "    guard cmd.amount + cmd.delta > reg.count && reg.limit >= cmd.amount",
-      "    write count := reg.count + cmd.amount",
-      "    write limit := reg.limit + cmd.delta",
-      "    write label := cmd.note",
-      "    emit Advanced",
-      "    goto Active"
-    ]
+    ( [ "",
+        "aggregate " <> aggregateName,
+        "  regs",
+        "    count Natural = 0",
+        "    limit Natural = 100",
+        "    label Text = \"ready # literal\"",
+        "  states " <> T.unwords [stateName stateIndex <> terminalMarker stateIndex | stateIndex <- [0 .. transitionCount]]
+      ]
+        <> concatMap commandAndEvent transitionIndexes
+        <> concatMap transition transitionIndexes
+    )
   where
     aggregateName = "BenchAggregate" <> paddedDecimal index
+    transitionIndexes = [0 .. transitionCount - 1]
+    stateName stateIndex = "State" <> paddedDecimal stateIndex
+    terminalMarker stateIndex
+      | stateIndex == transitionCount = "!"
+      | otherwise = ""
+    commandName transitionIndex = "Advance" <> paddedDecimal transitionIndex
+    eventName transitionIndex = "Advanced" <> paddedDecimal transitionIndex
+    commandAndEvent transitionIndex =
+      [ "  command " <> commandName transitionIndex <> " { amount:Natural delta:Natural note:Text }",
+        "  event " <> eventName transitionIndex <> " = fields(" <> commandName transitionIndex <> ")"
+      ]
+    transition transitionIndex =
+      [ "  " <> stateName transitionIndex <> " -- " <> commandName transitionIndex <> " -->",
+        "    guard cmd.amount + cmd.delta > reg.count && reg.limit >= cmd.amount",
+        "    write count := reg.count + cmd.amount",
+        "    write limit := reg.limit + cmd.delta",
+        "    write label := cmd.note",
+        "    emit " <> eventName transitionIndex,
+        "    goto " <> stateName (transitionIndex + 1)
+      ]
 
 paddedDecimal :: Int -> Text
 paddedDecimal number =
   let rendered = T.pack (show number)
    in T.replicate (6 - T.length rendered) "0" <> rendered
 
-workspaceFixture :: Int -> Int -> WorkspaceFixture
-workspaceFixture memberCount totalConstructCount
-  | totalConstructCount `mod` memberCount /= 0 =
-      error "workspace fixture construct count must divide evenly across members"
+workspaceFixture :: Int -> Int -> Int -> WorkspaceFixture
+workspaceFixture memberCount aggregateCount transitionsPerAggregate
+  | aggregateCount `mod` memberCount /= 0 =
+      error "workspace fixture aggregate count must divide evenly across members"
   | otherwise =
       WorkspaceFixture
         { fixtureMemberCount = memberCount,
-          fixtureTotalConstructCount = totalConstructCount,
+          fixtureAggregateCount = aggregateCount,
+          fixtureTotalConstructCount = aggregateCount * transitionsPerAggregate,
           fixtureManifestPath = manifestPath,
           fixtureContents = Map.insert manifestPath manifest members
         }
   where
     manifestPath = "service.keiro-workspace"
-    constructsPerMember = totalConstructCount `div` memberCount
+    aggregatesPerMember = aggregateCount `div` memberCount
     memberRows =
       [ ( memberPath memberIndex,
-          workspaceSpecification
+          nestedSpecification
             "parser-bench-workspace"
-            (memberIndex * constructsPerMember)
-            constructsPerMember
+            (memberIndex * aggregatesPerMember)
+            aggregatesPerMember
+            transitionsPerAggregate
         )
       | memberIndex <- [0 .. memberCount - 1]
       ]
@@ -181,60 +210,6 @@ workspaceFixture memberCount totalConstructCount
 
 memberPath :: Int -> FilePath
 memberPath memberIndex = "member-" <> T.unpack (paddedDecimal memberIndex) <> ".keiro"
-
-workspaceSpecification :: Text -> Int -> Int -> Text
-workspaceSpecification contextName firstConstruct constructCount =
-  T.unlines
-    [ "language keiro-dsl 4",
-      "context " <> contextName
-    ]
-    <> T.concat [wideAggregateDefinition index | index <- [firstConstruct .. firstConstruct + constructCount - 1]]
-
-wideAggregateDefinition :: Int -> Text
-wideAggregateDefinition index =
-  T.unlines
-    ( [ "",
-        "aggregate " <> aggregateName,
-        "  regs"
-      ]
-        <> ["    value" <> paddedDecimal fieldIndex <> " Natural = 0" | fieldIndex <- fieldIndexes]
-        <> [ "    label Text = \"ready # literal\"",
-             "  states Empty Active Closed!",
-             "  command Advance {"
-           ]
-        <> ["    field" <> paddedDecimal fieldIndex <> ":Natural" | fieldIndex <- fieldIndexes]
-        <> [ "    note:Text",
-             "  }",
-             "  event Advanced = fields(Advance)",
-             "  Empty -- Advance -->",
-             "    guard " <> guardExpression
-           ]
-        <> [ "    write value"
-               <> paddedDecimal fieldIndex
-               <> " := reg.value"
-               <> paddedDecimal fieldIndex
-               <> " + cmd.field"
-               <> paddedDecimal fieldIndex
-           | fieldIndex <- fieldIndexes
-           ]
-        <> [ "    write label := cmd.note",
-             "    emit Advanced",
-             "    goto Active"
-           ]
-    )
-  where
-    aggregateName = "WorkspaceAggregate" <> paddedDecimal index
-    fieldIndexes = [0 .. 15]
-    guardExpression =
-      T.intercalate
-        " && "
-        [ "cmd.field"
-            <> paddedDecimal fieldIndex
-            <> " + reg.value"
-            <> paddedDecimal fieldIndex
-            <> " > 0"
-        | fieldIndex <- fieldIndexes
-        ]
 
 parseSurfaceOrFail :: FilePath -> Text -> SurfaceSource
 parseSurfaceOrFail path source =
