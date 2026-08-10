@@ -51,14 +51,34 @@ import Keiro.Outbox
     publishClaimedOutbox,
   )
 import Keiro.Prelude
+import Keiro.ProcessManager
+  ( DomainProcessManager (..),
+    PMCommand (..),
+    ProcessManagerAction (..),
+    runDomainProcessManagerWorker,
+  )
 import Keiro.Telemetry qualified as Telemetry
-import Keiro.Test.Postgres (withFreshStore, withMigratedSuite)
+import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Lifecycle qualified as Lifecycle
+import Kiroku.Store.Types
+  ( EventId (..),
+    GlobalPosition (..),
+    RecordedEvent (..),
+    StreamId (..),
+    StreamName (..),
+    StreamVersion (..),
+  )
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
+import Shibuya.Adapter (Adapter (..))
+import Shibuya.Core.AckHandle (AckHandle (..))
+import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Types (Envelope (..))
+import Streamly.Data.Stream qualified as Streamly
 import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude
@@ -101,17 +121,17 @@ data InboxScenario = InboxScenario
 main :: IO ()
 main =
   withMigratedSuite \fixture ->
-    withFreshStore fixture \store -> do
+    withFreshResourceStore fixture \(store, runner) -> do
       (provider, _env) <-
         createMeterProvider
           emptyMaterializedResources
           defaultSdkMeterProviderOptions
       meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
       metrics <- Telemetry.newKeiroMetrics meter
-      defaultMain (benchmarks store metrics)
+      defaultMain (benchmarks store runner metrics)
 
-benchmarks :: Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark]
-benchmarks store metrics =
+benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> [Benchmark]
+benchmarks store runner metrics =
   [ bgroup
       "outbox"
       [ scenarioBench store hotKey,
@@ -142,7 +162,17 @@ benchmarks store metrics =
             bcompareWithin 0 1.25 legacyNoOpPattern $
               domainCommandScenarioBench store "rejected" domainRejectedHandler domainRejectedTarget SelectNoOp,
             bcompareWithin 0 1.25 legacyNoOpPattern $
-              domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp
+              domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp,
+            bgroup
+              "router-fanout"
+              [ domainRouterFanoutBench runner fanout
+              | fanout <- coordinatorFanouts
+              ],
+            bgroup
+              "process-manager-fanout"
+              [ domainProcessManagerFanoutBench runner fanout
+              | fanout <- coordinatorFanouts
+              ]
           ]
       ]
   ]
@@ -542,6 +572,164 @@ domainCommandScenarioBench store benchmarkName handler target command =
     case result of
       Right DomainCommandOutcome {} -> pure ()
       Left err -> liftIO (fail ("unexpected typed command benchmark result: " <> show err))
+
+-- * Domain coordinator worker benchmark fixtures ---------------------------
+
+data FanoutInput = FanoutInput !Text !Int
+
+coordinatorFanouts :: [Int]
+coordinatorFanouts = [10, 100, 1000]
+
+domainRouterFanoutBench :: StoreRunner -> Int -> Benchmark
+domainRouterFanoutBench runner fanout =
+  bench (show fanout) $ nfIO $ do
+    let correlationId = "router-" <> Text.pack (show fanout)
+        input = FanoutInput correlationId fanout
+    runResourceStoreChecked runner do
+      resetFanoutTargets "router" correlationId fanout
+      runDomainRouterWorker
+        defaultRunCommandOptions
+        fanoutDomainRouter
+        (fanoutAdapter input)
+        (\message -> Just (fanoutSourceEvent, message))
+
+domainProcessManagerFanoutBench :: StoreRunner -> Int -> Benchmark
+domainProcessManagerFanoutBench runner fanout =
+  bench (show fanout) $ nfIO $ do
+    let correlationId = "process-manager-" <> Text.pack (show fanout)
+        input = FanoutInput correlationId fanout
+    runResourceStoreChecked runner do
+      resetFanoutTargets "process-manager" correlationId fanout
+      void (Lifecycle.hardDeleteStream (StreamName ("bench-command-domain-process-manager:" <> correlationId)))
+      runDomainProcessManagerWorker
+        defaultRunCommandOptions
+        fanoutDomainProcessManager
+        (fanoutAdapter input)
+        (\message -> Just (fanoutSourceEvent, message))
+
+fanoutDomainRouter ::
+  DomainRouter
+    FanoutInput
+    (HsPred '[] BenchCommand)
+    '[]
+    BenchState
+    BenchCommand
+    BenchEvent
+    Text
+    Text
+    es
+fanoutDomainRouter =
+  DomainRouter
+    { name = "bench-domain-router",
+      key = \(FanoutInput correlationId _) -> correlationId,
+      resolve = \(FanoutInput correlationId fanout) -> pure (fanoutCommands "router" correlationId fanout),
+      targetHandler = domainAcceptedOneHandler,
+      targetProjections = const []
+    }
+
+fanoutDomainProcessManager ::
+  DomainProcessManager
+    FanoutInput
+    (HsPred '[] BenchCommand)
+    '[]
+    BenchState
+    BenchCommand
+    BenchEvent
+    (HsPred '[] BenchCommand)
+    '[]
+    BenchState
+    BenchCommand
+    BenchEvent
+    Text
+    Text
+fanoutDomainProcessManager =
+  DomainProcessManager
+    { name = "bench-domain-process-manager",
+      correlate = \(FanoutInput correlationId _) -> correlationId,
+      eventStream = legacyNoOpStream,
+      streamFor = \correlationId -> stream ("bench-command-domain-process-manager:" <> correlationId),
+      targetHandler = domainAcceptedOneHandler,
+      targetProjections = const [],
+      handle = \(FanoutInput correlationId fanout) ->
+        ProcessManagerAction
+          { command = SelectNoOp,
+            commands = fanoutCommands "process-manager" correlationId fanout,
+            timers = []
+          }
+    }
+
+fanoutCommands :: Text -> Text -> Int -> [PMCommand BenchCommand]
+fanoutCommands coordinator correlationId fanout =
+  [ PMCommand
+      { target = stream (fanoutTargetName coordinator correlationId targetIndex),
+        command = EmitOne
+      }
+  | targetIndex <- [0 .. fanout - 1]
+  ]
+
+fanoutTargetName :: Text -> Text -> Int -> Text
+fanoutTargetName coordinator correlationId targetIndex =
+  "bench-command-domain-"
+    <> coordinator
+    <> ":"
+    <> correlationId
+    <> ":"
+    <> Text.pack (show targetIndex)
+
+resetFanoutTargets :: (Store :> es) => Text -> Text -> Int -> Eff es ()
+resetFanoutTargets coordinator correlationId fanout =
+  traverse_
+    (\targetIndex -> void (Lifecycle.hardDeleteStream (StreamName (fanoutTargetName coordinator correlationId targetIndex))))
+    [0 .. fanout - 1]
+
+fanoutSourceEvent :: RecordedEvent
+fanoutSourceEvent =
+  RecordedEvent
+    { eventId = EventId (UUID.fromWords64 0x018f0f1800007000 0x8000000000000abc),
+      eventType = EventType "BenchFanoutSource",
+      streamVersion = StreamVersion 1,
+      globalPosition = GlobalPosition 1,
+      originalStreamId = StreamId 1,
+      originalVersion = StreamVersion 1,
+      payload = toJSON ("fanout" :: Text),
+      metadata = Nothing,
+      causationId = Nothing,
+      correlationId = Nothing,
+      createdAt = fixedOccurredAt
+    }
+
+fanoutAdapter :: FanoutInput -> Adapter es FanoutInput
+fanoutAdapter input =
+  Adapter
+    { adapterName = "bench-domain-coordinator",
+      source =
+        Streamly.fromList
+          [ Ingested
+              { envelope =
+                  Envelope
+                    { messageId = "bench-domain-fanout",
+                      cursor = Nothing,
+                      partition = Nothing,
+                      enqueuedAt = Nothing,
+                      traceContext = Nothing,
+                      headers = Nothing,
+                      attempt = Nothing,
+                      attributes = mempty,
+                      payload = input
+                    },
+                ack = AckHandle (\_ -> pure ()),
+                lease = Nothing
+              }
+          ],
+      shutdown = pure ()
+    }
+
+runResourceStoreChecked :: StoreRunner -> Eff '[Store, Error Store.StoreError, KirokuStoreResource, IOE] a -> IO a
+runResourceStoreChecked (StoreRunner runner) action = do
+  result <- runner action
+  case result of
+    Left err -> fail (show err)
+    Right value -> pure value
 
 runStoreChecked :: Store.KirokuStore -> Eff [Store, Error Store.StoreError, IOE] a -> IO a
 runStoreChecked store action = do

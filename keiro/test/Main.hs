@@ -1402,6 +1402,154 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                               (Just "no_op", IntNumber 1)
                             ]
 
+      it "keeps all five process-manager target outcomes distinguishable" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+              input =
+                DomainDispatchInput
+                  "five-outcomes"
+                  [ CoordinatorAccept 3,
+                    CoordinatorReject "private rejection",
+                    CoordinatorNoOp "private no-op",
+                    CoordinatorUnmatched
+                  ]
+          first <-
+            runner $
+              runDomainProcessManagerOnce
+                defaultRunCommandOptions
+                domainProcessManager
+                sourceEvent
+                input
+          case first of
+            Right (Right result) -> do
+              result ^. #managerResult `shouldSatisfy` \case
+                PMStateAppended {} -> True
+                _ -> False
+              case result ^. #commandResults of
+                [ DomainPMCommandHandled DomainCommandOutcome {decision = DomainAccepted events},
+                  DomainPMCommandHandled DomainCommandOutcome {decision = DomainRejected reason},
+                  DomainPMCommandHandled DomainCommandOutcome {decision = DomainNoOp explanation},
+                  DomainPMCommandFailed _ CommandRejected
+                  ] -> do
+                    events `shouldBe` (CounterAdded 3 :| [])
+                    reason `shouldBe` "private rejection"
+                    explanation `shouldBe` "private no-op"
+                other -> expectationFailure ("expected four fresh domain PM outcomes, got " <> show other)
+            other -> expectationFailure ("expected domain process-manager success, got " <> show other)
+          second <-
+            runner $
+              runDomainProcessManagerOnce
+                defaultRunCommandOptions
+                domainProcessManager
+                sourceEvent
+                input
+          case second of
+            Right (Right result) -> do
+              result ^. #managerResult `shouldSatisfy` \case
+                PMStateDuplicate {} -> True
+                _ -> False
+              result ^. #commandResults `shouldSatisfy` \case
+                [ DomainPMCommandDuplicate {},
+                  DomainPMCommandHandled DomainCommandOutcome {decision = DomainRejected "private rejection"},
+                  DomainPMCommandHandled DomainCommandOutcome {decision = DomainNoOp "private no-op"},
+                  DomainPMCommandFailed _ CommandRejected
+                  ] -> True
+                _ -> False
+            other -> expectationFailure ("expected domain process-manager redelivery, got " <> show other)
+
+      it "keeps all five router target outcomes distinguishable" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          let sourceEvent = recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)
+              input =
+                DomainDispatchInput
+                  "five-outcomes"
+                  [ CoordinatorAccept 4,
+                    CoordinatorReject "router rejection",
+                    CoordinatorNoOp "router no-op",
+                    CoordinatorUnmatched
+                  ]
+          Right (DomainRouterResult first) <-
+            runner $
+              runDomainRouterOnce
+                defaultRunCommandOptions
+                domainRouter
+                sourceEvent
+                input
+          case first of
+            [ DomainPMCommandHandled DomainCommandOutcome {decision = DomainAccepted events},
+              DomainPMCommandHandled DomainCommandOutcome {decision = DomainRejected reason},
+              DomainPMCommandHandled DomainCommandOutcome {decision = DomainNoOp explanation},
+              DomainPMCommandFailed _ CommandRejected
+              ] -> do
+                events `shouldBe` (CounterAdded 4 :| [])
+                reason `shouldBe` "router rejection"
+                explanation `shouldBe` "router no-op"
+            other -> expectationFailure ("expected four fresh domain router outcomes, got " <> show other)
+          Right (DomainRouterResult second) <-
+            runner $
+              runDomainRouterOnce
+                defaultRunCommandOptions
+                domainRouter
+                sourceEvent
+                input
+          second `shouldSatisfy` \case
+            [ DomainPMCommandDuplicate {},
+              DomainPMCommandHandled DomainCommandOutcome {decision = DomainRejected "router rejection"},
+              DomainPMCommandHandled DomainCommandOutcome {decision = DomainNoOp "router no-op"},
+              DomainPMCommandFailed _ CommandRejected
+              ] -> True
+            _ -> False
+
+      it "acks domain rejection and no-op in coordinator workers without leaking payloads" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          (exporter, metricsRef) <- inMemoryMetricExporter
+          (provider, _env) <-
+            createMeterProvider
+              emptyMaterializedResources
+              defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+          meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+          keiroMetrics <- Telemetry.newKeiroMetrics meter
+          processManagerDecisions <- newIORef []
+          routerDecisions <- newIORef []
+          let rejectionPayload = "pm-private-rejection-payload"
+              noOpPayload = "router-private-no-op-payload"
+              processManagerSource = recordedFromEventId (EventId sampleUuid3) (CounterAdded 1)
+              routerSource = recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)
+              processManagerInput = DomainDispatchInput "worker-pm" [CoordinatorReject rejectionPayload, CoordinatorNoOp "pm no-op"]
+              routerInput = DomainDispatchInput "worker-router" [CoordinatorReject "router rejection", CoordinatorNoOp noOpPayload]
+              processManagerAdapter = inMemoryAdapter processManagerDecisions [(processManagerSource, processManagerInput)]
+              routerAdapter = inMemoryAdapter routerDecisions [(routerSource, routerInput)]
+              workerOptions = defaultWorkerOptions & #metrics ?~ keiroMetrics
+              commandOptions = defaultRunCommandOptions & #metrics ?~ keiroMetrics
+          Right () <-
+            runner $
+              runDomainProcessManagerWorkerWith
+                workerOptions
+                commandOptions
+                domainProcessManager
+                processManagerAdapter
+                Just
+          Right () <-
+            runner $
+              runDomainRouterWorkerWith
+                workerOptions
+                commandOptions
+                domainRouter
+                routerAdapter
+                Just
+          readIORef processManagerDecisions `shouldReturn` [AckOk]
+          readIORef routerDecisions `shouldReturn` [AckOk]
+          Right processManagerDeadLetters <- runner (listDispatchDeadLetters "domain-pm")
+          Right routerDeadLetters <- runner (listDispatchDeadLetters "domain-router")
+          processManagerDeadLetters `shouldBe` []
+          routerDeadLetters `shouldBe` []
+          _ <- forceFlushMeterProvider provider Nothing
+          exported <- readIORef metricsRef
+          lookup "keiro.dispatch.failed" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 0)
+          let rendered = Text.pack (show exported)
+          Text.isInfixOf rejectionPayload rendered `shouldBe` False
+          Text.isInfixOf noOpPayload rendered `shouldBe` False
+
     it "creates a stream and appends the first command event" $ \storeHandle -> do
       let target = stream "counter-command-create" :: Stream CounterEventStream
       result <-
@@ -12703,9 +12851,23 @@ data SilentChoiceCommand
   | UnmatchedSilently
   deriving stock (Generic, Eq, Show)
 
+data CoordinatorCommand
+  = CoordinatorAccept !Int
+  | CoordinatorReject !Text
+  | CoordinatorNoOp !Text
+  | CoordinatorUnmatched
+  deriving stock (Generic, Eq, Show)
+
+data DomainDispatchInput = DomainDispatchInput !Text ![CoordinatorCommand]
+  deriving stock (Generic, Eq, Show)
+
 type SilentChoiceEventStream = EventStream (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
 
 type ValidatedSilentChoiceEventStream = ValidatedEventStream (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
+
+type CoordinatorEventStream = EventStream (HsPred '[] CoordinatorCommand) '[] CounterState CoordinatorCommand CounterEvent
+
+type ValidatedCoordinatorEventStream = ValidatedEventStream (HsPred '[] CoordinatorCommand) '[] CounterState CoordinatorCommand CounterEvent
 
 type RetryDecisionEventStream = EventStream (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
 
@@ -12780,6 +12942,73 @@ retryDecisionEventStreamDef =
       stateCodec = Nothing
     }
 
+coordinatorEventStream :: ValidatedCoordinatorEventStream
+coordinatorEventStream = mkEventStreamOrThrow "coordinator-domain" coordinatorEventStreamDef
+
+coordinatorEventStreamDef :: CoordinatorEventStream
+coordinatorEventStreamDef =
+  EventStream
+    { transducer =
+        SymTransducer
+          { edgesOut = \case
+              Counting ->
+                [ Edge
+                    { guard = matchInCtor coordinatorAcceptCtor,
+                      update = UKeep,
+                      output = [pack coordinatorAcceptCtor counterAddedCtor (inpCtor coordinatorAcceptCtor #amount *: oNil)],
+                      target = Counting,
+                      mode = Keiki.Live
+                    },
+                  Edge
+                    { guard = matchInCtor coordinatorRejectCtor,
+                      update = UKeep,
+                      output = [],
+                      target = Counting,
+                      mode = Keiki.Live
+                    },
+                  Edge
+                    { guard = matchInCtor coordinatorNoOpCtor,
+                      update = UKeep,
+                      output = [],
+                      target = Counting,
+                      mode = Keiki.Live
+                    }
+                ],
+            initial = Counting,
+            initialRegs = RNil,
+            isFinal = const False
+          },
+      initialState = Counting,
+      initialRegisters = RNil,
+      eventCodec = counterCodec,
+      resolveStreamName = Stream.streamName,
+      snapshotPolicy = Never,
+      stateCodec = Nothing
+    }
+
+type CoordinatorMessageFields = '[ '("message", Text)]
+
+coordinatorAcceptCtor :: InCtor CoordinatorCommand AddFields
+coordinatorAcceptCtor =
+  Keiki.unavailableInCtor
+    "CoordinatorAccept"
+    (\case CoordinatorAccept amount -> Just (RCons Proxy amount RNil); _ -> Nothing)
+    (\case RCons _ amount RNil -> CoordinatorAccept amount)
+
+coordinatorRejectCtor :: InCtor CoordinatorCommand CoordinatorMessageFields
+coordinatorRejectCtor =
+  Keiki.unavailableInCtor
+    "CoordinatorReject"
+    (\case CoordinatorReject message -> Just (RCons Proxy message RNil); _ -> Nothing)
+    (\case RCons _ message RNil -> CoordinatorReject message)
+
+coordinatorNoOpCtor :: InCtor CoordinatorCommand CoordinatorMessageFields
+coordinatorNoOpCtor =
+  Keiki.unavailableInCtor
+    "CoordinatorNoOp"
+    (\case CoordinatorNoOp message -> Just (RCons Proxy message RNil); _ -> Nothing)
+    (\case RCons _ message RNil -> CoordinatorNoOp message)
+
 silentChoiceTransducer :: SymTransducer (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
 silentChoiceTransducer =
   SymTransducer
@@ -12852,6 +13081,17 @@ retryDecisionDomainHandler =
         case (state, Keiki.edgeIndex selectedEdge) of
           (Drained, 0) -> SilentNoOp "already drained"
           other -> error ("retryDecisionDomainHandler: unexpected selected edge " <> show other)
+    }
+
+coordinatorDomainHandler :: DomainCommandHandler (HsPred '[] CoordinatorCommand) '[] CounterState CoordinatorCommand CounterEvent Text Text
+coordinatorDomainHandler =
+  DomainCommandHandler
+    { eventStream = coordinatorEventStream,
+      classifySilent = \SilentCommandContext {command, selectedEdge} ->
+        case (command, Keiki.edgeIndex selectedEdge) of
+          (CoordinatorReject reason, 1) -> SilentRejected reason
+          (CoordinatorNoOp explanation, 2) -> SilentNoOp explanation
+          other -> error ("coordinatorDomainHandler: unexpected selected edge " <> show other)
     }
 
 skipTransducer :: SymTransducer (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
@@ -13107,6 +13347,67 @@ twinDivertEventStream =
           divertConfirmEdge divertRemovedRegionGuard Keiki.ReplayOnly
         ]
     )
+
+domainProcessManager ::
+  DomainProcessManager
+    DomainDispatchInput
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CoordinatorCommand)
+    '[]
+    CounterState
+    CoordinatorCommand
+    CounterEvent
+    Text
+    Text
+domainProcessManager =
+  DomainProcessManager
+    { name = "domain-pm",
+      correlate = \(DomainDispatchInput correlationId _) -> correlationId,
+      eventStream = counterEventStream,
+      streamFor = \correlationId -> stream ("domain-pm:" <> correlationId),
+      targetHandler = coordinatorDomainHandler,
+      targetProjections = const [],
+      handle = \(DomainDispatchInput correlationId targetCommands) ->
+        ProcessManagerAction
+          { command = Add 1,
+            commands =
+              Prelude.zipWith
+                (\targetIndex targetCommand -> PMCommand {target = stream ("domain-pm-target:" <> correlationId <> ":" <> Text.pack (show targetIndex)), command = targetCommand})
+                [0 :: Int ..]
+                targetCommands,
+            timers = []
+          }
+    }
+
+domainRouter ::
+  DomainRouter
+    DomainDispatchInput
+    (HsPred '[] CoordinatorCommand)
+    '[]
+    CounterState
+    CoordinatorCommand
+    CounterEvent
+    Text
+    Text
+    es
+domainRouter =
+  DomainRouter
+    { name = "domain-router",
+      key = \(DomainDispatchInput correlationId _) -> correlationId,
+      resolve = \(DomainDispatchInput correlationId targetCommands) ->
+        pure
+          ( Prelude.zipWith
+              (\targetIndex targetCommand -> PMCommand {target = stream ("domain-router-target:" <> correlationId <> ":" <> Text.pack (show targetIndex)), command = targetCommand})
+              [0 :: Int ..]
+              targetCommands
+          ),
+      targetHandler = coordinatorDomainHandler,
+      targetProjections = const []
+    }
 
 counterProcessManager ::
   ProcessManager

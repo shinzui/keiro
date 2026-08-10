@@ -213,6 +213,8 @@ benchmark keiro-bench
     , keiro-core            ^>=0.11.0.0
     , keiro-test-support
     , kiroku-store          >=0.4       && <0.5
+    , shibuya-core          >=0.8.0.1   && <0.9
+    , streamly-core         >=0.3       && <0.4
     , tasty-bench           >=0.4
     , text                  >=2.1       && <2.2
     , time                  >=1.12      && <1.15

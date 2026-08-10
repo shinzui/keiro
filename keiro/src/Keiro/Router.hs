@@ -30,6 +30,8 @@ module Keiro.Router
   ( -- * Definition
     Router (..),
     RouterResult (..),
+    DomainRouter (..),
+    DomainRouterResult (..),
 
     -- * Idempotency
     deterministicRouterCommandId,
@@ -38,6 +40,9 @@ module Keiro.Router
     runRouterOnce,
     runRouterWorkerWith,
     runRouterWorker,
+    runDomainRouterOnce,
+    runDomainRouterWorkerWith,
+    runDomainRouterWorker,
   )
 where
 
@@ -54,25 +59,29 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
-import Keiro.Command (CommandError (..), RunCommandOptions)
+import Keiro.Command (CommandError (..), DomainCommandHandler, RunCommandOptions)
 import Keiro.DeadLetter (DispatcherKind (..))
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.ProcessManager
   ( DispatchFailure (..),
+    DomainDispatchSummary (..),
+    DomainPMCommandResult (..),
     PMCommand (..),
     PMCommandResult (..),
     PoisonPolicy (..),
     WorkerOptions (..),
     ackForCommandError,
+    ackForDomainSummary,
     confirmBenignDuplicate,
     decideForFailures,
     defaultWorkerOptions,
     deterministicCommandId,
     eventAlreadyIn,
+    summarizeDomainCommandResult,
   )
-import Keiro.Projection (InlineProjection, runCommandWithProjections)
+import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Kiroku.Store.Effect (Store)
@@ -86,7 +95,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Attempt (..), Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (filter, fromIntegral, length, snd, zip, (+))
+import Prelude (filter, fromIntegral, length, reverse, seq, snd, zip, (+))
 
 -- | A stateless, content-based router (in the Enterprise Integration Patterns
 -- sense): for each incoming event it resolves a data-dependent set of target
@@ -130,6 +139,16 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   }
   deriving stock (Generic)
 
+-- | Stateless router whose target aggregate returns typed domain decisions.
+data DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es = DomainRouter
+  { name :: !Text,
+    key :: !(input -> Text),
+    resolve :: !(input -> Eff es [PMCommand targetCi]),
+    targetHandler :: !(DomainCommandHandler targetPhi targetRs targetState targetCi targetCo rejection noOp),
+    targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
+  }
+  deriving stock (Generic)
+
 -- | The outcome of a single 'runRouterOnce' invocation: one
 -- 'PMCommandResult' per resolved target, in resolution order.
 --
@@ -138,6 +157,14 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
 -- 'PMCommandFailed' element rather than an outer 'Either'.
 newtype RouterResult target = RouterResult
   { commandResults :: [PMCommandResult target]
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Detailed result of one domain router invocation. Accepted handled entries
+-- retain their event batches. Worker entry points use a strict payload-free
+-- summary instead of constructing this list.
+newtype DomainRouterResult target co rejection noOp = DomainRouterResult
+  { commandResults :: [DomainPMCommandResult target co rejection noOp]
   }
   deriving stock (Generic, Eq, Show)
 
@@ -279,6 +306,234 @@ runRouterOnce options router sourceEvent input = do
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
+
+-- | Detailed domain-aware router invocation. Typed rejection/no-op is handled,
+-- accepted carries the exact event batch, and deterministic accepted
+-- redelivery is a distinct duplicate because the original batch cannot be
+-- reconstructed from its event id.
+runDomainRouterOnce ::
+  forall input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  RecordedEvent ->
+  input ->
+  Eff es (DomainRouterResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp)
+runDomainRouterOnce options router sourceEvent input = do
+  annotated <- resolveDomainRouterCommands router input
+  results <-
+    traverse
+      (dispatchDomainRouterCommand options router ((router ^. #key) input) (sourceEvent ^. #eventId))
+      annotated
+  pure (DomainRouterResult results)
+
+resolveDomainRouterCommands ::
+  forall input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  input ->
+  Eff es [(Int, Int, StreamName, PMCommand targetCi)]
+resolveDomainRouterCommands router input = do
+  commands <- (router ^. #resolve) input
+  let named =
+        [ (streamNameOf command, command)
+        | command <- commands
+        ]
+  pure (snd (mapAccumL occurrenceStep Map.empty (zip [0 ..] named)))
+  where
+    occurrenceStep seen (legacyIndex, (targetStreamName, command)) =
+      let occurrence = Map.findWithDefault 0 targetStreamName seen
+       in ( Map.insert targetStreamName (occurrence + 1) seen,
+            (legacyIndex, occurrence, targetStreamName, command)
+          )
+
+    streamNameOf command =
+      let targetEventStream = (router ^. #targetHandler) ^. #eventStream
+       in ((unvalidated targetEventStream) ^. #resolveStreamName)
+            (retarget (command ^. #target))
+
+    retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
+    retarget = coerce
+
+dispatchDomainRouterCommand ::
+  forall input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  Text ->
+  EventId ->
+  (Int, Int, StreamName, PMCommand targetCi) ->
+  Eff es (DomainPMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp)
+dispatchDomainRouterCommand options router correlationId sourceEventId (legacyIndex, occurrence, targetStreamName, command) = do
+  let commandId =
+        deterministicRouterCommandId
+          (router ^. #name)
+          correlationId
+          sourceEventId
+          targetStreamName
+          occurrence
+      legacyCommandId =
+        deterministicCommandId
+          (router ^. #name)
+          correlationId
+          sourceEventId
+          legacyIndex
+      targetOptions = options & #eventIds .~ [commandId]
+      handler = router ^. #targetHandler
+      targetStream = retarget (command ^. #target)
+  commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
+  legacyAlreadyProcessed <-
+    if commandAlreadyProcessed
+      then pure False
+      else eventAlreadyIn options targetStreamName legacyCommandId
+  if commandAlreadyProcessed
+    then pure (DomainPMCommandDuplicate commandId)
+    else
+      if legacyAlreadyProcessed
+        then pure (DomainPMCommandDuplicate legacyCommandId)
+        else do
+          outcome <-
+            runDomainCommandWithProjections
+              targetOptions
+              handler
+              targetStream
+              (command ^. #command)
+              ((router ^. #targetProjections) (command ^. #target))
+          case outcome of
+            Right result -> pure (DomainPMCommandHandled result)
+            Left err -> do
+              benign <- confirmBenignDuplicate targetStreamName commandId err
+              pure
+                ( if benign
+                    then DomainPMCommandDuplicate commandId
+                    else DomainPMCommandFailed targetStreamName err
+                )
+  where
+    retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
+    retarget = coerce
+
+foldDomainRouterSummary ::
+  forall input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  Text ->
+  EventId ->
+  [(Int, Int, StreamName, PMCommand targetCi)] ->
+  Eff es DomainDispatchSummary
+foldDomainRouterSummary options router correlationId sourceEventId = go (DomainDispatchSummary 0 [])
+  where
+    go summary = \case
+      [] -> pure summary {failures = reverse (summary ^. #failures)}
+      annotated@(emitIndex, _, _, _) : rest -> do
+        result <- dispatchDomainRouterCommand options router correlationId sourceEventId annotated
+        let next = summarizeDomainCommandResult emitIndex result summary
+        next `seq` go next rest
+
+-- | Domain-aware router worker with default policy. Handled payloads are
+-- released target-by-target through a strict summary fold.
+runDomainRouterWorker ::
+  forall msg input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDomainRouterWorker = runDomainRouterWorkerWith defaultWorkerOptions
+
+-- | Configurable domain-aware router worker. Selected rejection/no-op maps to
+-- normal handling and bypasses rejection policy; only 'CommandError' failures
+-- are summarized for acknowledgement policy.
+runDomainRouterWorkerWith ::
+  forall msg input targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  WorkerOptions es msg ->
+  RunCommandOptions ->
+  DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDomainRouterWorkerWith workerOptions options router Adapter {source = adapterSource} decodeMessage =
+  Streamly.fold Fold.drain
+    $ Streamly.mapM handleIngested adapterSource
+  where
+    handleIngested :: Ingested es msg -> Eff es AckDecision
+    handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
+      decision <- case decodeMessage message of
+        Nothing -> decideForPoison "domain router worker could not decode message" env
+        Just (recorded, input) -> do
+          let correlationId = (router ^. #key) input
+              attemptCount = envelopeAttemptCount env
+          outcome <- tryError @StoreError $ do
+            annotated <- resolveDomainRouterCommands router input
+            foldDomainRouterSummary options router correlationId (recorded ^. #eventId) annotated
+          case outcome of
+            Left (_, storeError) -> do
+              recordDispatchFailed (workerOptions ^. #metrics) 1
+              pure (ackForCommandError (workerOptions ^. #transientRetryDelay) (StoreFailed storeError))
+            Right summary ->
+              ackForDomainSummary
+                workerOptions
+                DispatcherRouter
+                (router ^. #name)
+                correlationId
+                recorded
+                attemptCount
+                0
+                summary
+      finalizeAck decision
+      pure decision
+
+    decideForPoison reason env = do
+      recordDispatchPoison (workerOptions ^. #metrics) 1
+      case workerOptions ^. #poisonPolicy of
+        PoisonHalt -> pure (AckHalt (HaltFatal reason))
+        PoisonSkip callback -> do
+          callback env
+          pure AckOk
+        PoisonDeadLetter callback -> do
+          callback env
+          pure (AckDeadLetter (InvalidPayload reason))
+
+    envelopeAttemptCount env =
+      case env ^. #attempt of
+        Nothing -> 1
+        Just (Attempt attempt) -> fromIntegral attempt + 1
 
 -- | Run a 'Router' as a live subscription over a Shibuya 'Adapter'.
 --

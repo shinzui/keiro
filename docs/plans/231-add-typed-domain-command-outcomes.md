@@ -72,7 +72,19 @@ the decision from the successful final evaluation.
   The focused suite proves exact accepted callback pairs, atomic projection
   writes, accepted catalog rollback, zero silent-decision callbacks/projections,
   and final-decision freshness after conflict; all 10 focused examples pass.
-- [ ] Milestone 3: expose typed outcomes through routers and process managers without retaining worker payloads across fan-out.
+- [x] (2026-08-10T18:48:07Z) Milestone 3 functional work: added additive
+  domain-aware router and process-manager configurations, detailed one-shot
+  results, and worker entry points. Focused tests distinguish handled accepted,
+  handled rejection, handled no-op, accepted duplicate, and genuine failure;
+  prove rejection/no-op acknowledge normally under the default halt policy;
+  and verify payload text is absent from exported metrics. Workers dispatch
+  through strict payload-free summaries rather than detailed result lists. The
+  10, 100, and 1000 target router/process-manager benchmark fixtures compile;
+  all 13 focused examples pass.
+- [ ] Milestone 3 performance acceptance: collect worker time, allocation, and
+  maximum-residency evidence at fan-out 10, 100, and 1000 when the machine is
+  quiet. No benchmark was executed and no CSV was created or changed under the
+  current host load.
 - [ ] Milestone 4: document the API, record the architectural decision, and complete repository validation.
 - [ ] Follow-up: execute [the DSL plan](232-add-typed-domain-outcomes-to-the-dsl.md) after this runtime contract is stable.
 
@@ -114,6 +126,12 @@ the decision from the successful final evaluation.
   Evidence: `DomainSqlCommandRolledBack` carries only the fence result, while
   the focused catalog test proves the event stream and target table remain
   unchanged.
+
+- Discovery: The dispatch metrics recorder emits an explicit zero-valued
+  `keiro.dispatch.failed` point for a successful worker message rather than
+  omitting the point.
+  Evidence: the domain worker test asserts `IntNumber 0` and separately proves
+  that neither rejection nor no-op payload text appears in exported metrics.
 
 
 ## Decision Log
@@ -213,6 +231,22 @@ the decision from the successful final evaluation.
   Rationale: Keeping the metric recorder typed prevents arbitrary application
   reason text from entering the decision dimension while spans and metrics
   share the exact stable spellings.
+  Date: 2026-08-10
+
+- Decision: Keep the process manager's own state transition on the established
+  command runner while applying `DomainCommandHandler` only to its dispatched
+  target aggregate.
+  Rationale: The requested typed result belongs to target-command policy; the
+  existing manager-state and timer transaction boundary remains compatible and
+  still aborts the whole reaction through the outer `CommandError`.
+  Date: 2026-08-10
+
+- Decision: Summarize domain coordinator worker results immediately into only
+  duplicate count and failure identity, while leaving the detailed one-shot
+  APIs free to return every handled payload.
+  Rationale: Callers explicitly asking for details own proportional memory, but
+  acknowledgement policy needs no accepted, rejection, or no-op payload and
+  must release each handled result before the next target.
   Date: 2026-08-10
 
 
@@ -819,3 +853,9 @@ Revision note (2026-08-10): Recorded Milestone 2's typed SQL, projection,
 catalog-fence, retry-finality, and closed telemetry interfaces and their focused
 database-backed evidence. Functional validation used one build job under host
 load; no benchmark result or baseline was created or changed.
+
+Revision note (2026-08-10): Recorded Milestone 3's additive domain router and
+process-manager interfaces, five-way coordinator behavior, strict worker
+summaries, payload-free acknowledgement telemetry, and compile-only fan-out
+fixtures. Kept heap/performance acceptance pending a quiet host and left every
+benchmark baseline untouched.

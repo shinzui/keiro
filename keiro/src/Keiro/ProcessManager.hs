@@ -99,13 +99,17 @@
 module Keiro.ProcessManager
   ( -- * Definition
     ProcessManager (..),
+    DomainProcessManager (..),
     ProcessManagerAction (..),
     PMCommand (..),
 
     -- * Results
     ProcessManagerResult (..),
     PMCommandResult (..),
+    DomainPMCommandResult (..),
     PMStateResult (..),
+    DomainProcessManagerResult (..),
+    DomainDispatchSummary (..),
 
     -- * Running
     PoisonPolicy (..),
@@ -118,9 +122,14 @@ module Keiro.ProcessManager
     isRejectionClass,
     decideForFailures,
     ackForCommandError,
+    ackForDomainSummary,
+    summarizeDomainCommandResult,
     runProcessManagerOnce,
     runProcessManagerWorkerWith,
     runProcessManagerWorker,
+    runDomainProcessManagerOnce,
+    runDomainProcessManagerWorkerWith,
+    runDomainProcessManagerWorker,
 
     -- * Idempotency primitives
     deterministicCommandId,
@@ -137,13 +146,21 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
-import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, commandErrorClass, runCommandWithSql)
+import Keiro.Command
+  ( CommandError (..),
+    CommandResult,
+    DomainCommandHandler,
+    DomainCommandOutcome,
+    RunCommandOptions,
+    commandErrorClass,
+    runCommandWithSql,
+  )
 import Keiro.DeadLetter (DispatchDeadLetter (..), DispatcherKind (..), recordDispatchDeadLetter)
 import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
-import Keiro.Projection (InlineProjection, runCommandWithProjections)
+import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Keiro.Timer (TimerRequest, scheduleTimerTx)
@@ -161,7 +178,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Attempt (..), Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (any, filter, fromIntegral, length, not, uncurry, zip, (&&), (+))
+import Prelude (any, filter, fromIntegral, length, not, reverse, seq, uncurry, zip, (&&), (+))
 
 -- | A process manager wiring together a manager state machine and the target
 -- aggregate it drives.
@@ -187,6 +204,20 @@ data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi
     targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo),
     -- | Inline projections for the target aggregate, run in the same transaction
     --     as each dispatched command's append. Return @[]@ for append-only dispatch.
+    targetProjections :: !(Stream targetCi -> [InlineProjection targetCo]),
+    handle :: !(input -> ProcessManagerAction ci targetCi)
+  }
+  deriving stock (Generic)
+
+-- | Process-manager configuration whose target aggregate returns typed domain
+-- decisions. The manager's own state stream retains the legacy command result;
+-- only dispatched target commands use 'DomainCommandHandler'.
+data DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp = DomainProcessManager
+  { name :: !Text,
+    correlate :: !(input -> Text),
+    eventStream :: !(ValidatedEventStream phi rs s ci co),
+    streamFor :: !(Text -> Stream (EventStream phi rs s ci co)),
+    targetHandler :: !(DomainCommandHandler targetPhi targetRs targetState targetCi targetCo rejection noOp),
     targetProjections :: !(Stream targetCi -> [InlineProjection targetCo]),
     handle :: !(input -> ProcessManagerAction ci targetCi)
   }
@@ -223,6 +254,16 @@ data PMCommandResult target
     PMCommandFailed !StoreTypes.StreamName !CommandError
   deriving stock (Generic, Eq, Show)
 
+-- | Outcome of one domain-aware target dispatch. A duplicate proves only that
+-- the deterministic accepted event id already exists; it cannot reconstruct
+-- the original in-memory event batch. Selected rejection/no-op decisions are
+-- 'DomainPMCommandHandled' values and are never failures.
+data DomainPMCommandResult target co rejection noOp
+  = DomainPMCommandHandled !(DomainCommandOutcome target co rejection noOp)
+  | DomainPMCommandDuplicate !EventId
+  | DomainPMCommandFailed !StoreTypes.StreamName !CommandError
+  deriving stock (Generic, Eq, Show)
+
 -- | Outcome of the manager's own state append. Unlike 'PMCommandResult' there
 -- is no failure case — a manager-state append that genuinely errors aborts the
 -- whole reaction via an outer @Left@ 'CommandError'.
@@ -238,6 +279,24 @@ data ProcessManagerResult managerTarget commandTarget = ProcessManagerResult
   { managerResult :: !(PMStateResult managerTarget),
     commandResults :: ![PMCommandResult commandTarget],
     timersScheduled :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Detailed domain-aware process-manager result. Its command result list owns
+-- every returned accepted event batch; callers interested only in worker
+-- acknowledgement should use the worker APIs, which retain only a strict
+-- payload-free summary.
+data DomainProcessManagerResult managerTarget commandTarget co rejection noOp = DomainProcessManagerResult
+  { managerResult :: !(PMStateResult managerTarget),
+    commandResults :: ![DomainPMCommandResult commandTarget co rejection noOp],
+    timersScheduled :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Strict payload-free accumulator used by domain coordinator workers.
+data DomainDispatchSummary = DomainDispatchSummary
+  { duplicates :: !Int64,
+    failures :: ![DispatchFailure]
   }
   deriving stock (Generic, Eq, Show)
 
@@ -527,6 +586,317 @@ runProcessManagerOnce options manager sourceEvent input = do
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
 
+-- | Detailed domain-aware process-manager runner. Accepted target commands
+-- retain their exact event batches; selected rejection/no-op commands are
+-- handled results; deterministic accepted redelivery is a separate duplicate
+-- result because the original typed batch is not reconstructible from its id.
+runDomainProcessManagerOnce ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  RecordedEvent ->
+  input ->
+  Eff
+    es
+    ( Either
+        CommandError
+        ( DomainProcessManagerResult
+            (EventStream phi rs s ci co)
+            (EventStream targetPhi targetRs targetState targetCi targetCo)
+            targetCo
+            rejection
+            noOp
+        )
+    )
+runDomainProcessManagerOnce options manager sourceEvent input = do
+  advanced <- advanceDomainProcessManager options manager sourceEvent input
+  case advanced of
+    Left err -> pure (Left err)
+    Right (correlationId, managerResult, action) -> do
+      commandResults <-
+        dispatchDomainProcessManagerCommands
+          options
+          manager
+          correlationId
+          (sourceEvent ^. #eventId)
+          (action ^. #commands)
+      pure
+        ( Right
+            DomainProcessManagerResult
+              { managerResult,
+                commandResults,
+                timersScheduled = length (action ^. #timers)
+              }
+        )
+
+advanceDomainProcessManager ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    Eq co
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  RecordedEvent ->
+  input ->
+  Eff es (Either CommandError (Text, PMStateResult (EventStream phi rs s ci co), ProcessManagerAction ci targetCi))
+advanceDomainProcessManager options manager sourceEvent input = do
+  let correlationId = (manager ^. #correlate) input
+      action = (manager ^. #handle) input
+      managerStream = (manager ^. #streamFor) correlationId
+      managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+      managerOptions = options & #eventIds .~ [managerEventId]
+      managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
+      finish managerResult = pure (Right (correlationId, managerResult, action))
+  managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
+  if managerAlreadyProcessed
+    then finish (PMStateDuplicate managerEventId)
+    else do
+      managerOutcome <-
+        runCommandWithSql
+          managerOptions
+          (manager ^. #eventStream)
+          managerStream
+          (action ^. #command)
+          (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
+      case managerOutcome of
+        Left err -> do
+          benign <- confirmBenignDuplicate managerStreamName managerEventId err
+          if benign
+            then finish (PMStateDuplicate managerEventId)
+            else pure (Left err)
+        Right (managerResult, scheduledInAppend) -> do
+          case scheduledInAppend of
+            Nothing -> runTransaction (traverse_ scheduleTimerTx (action ^. #timers))
+            Just () -> pure ()
+          finish (PMStateAppended managerResult)
+
+dispatchDomainProcessManagerCommands ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Text ->
+  EventId ->
+  [PMCommand targetCi] ->
+  Eff es [DomainPMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp]
+dispatchDomainProcessManagerCommands options manager correlationId sourceEventId commands =
+  traverse
+    (uncurry (dispatchDomainProcessManagerCommand options manager correlationId sourceEventId))
+    (zip [0 ..] commands)
+
+dispatchDomainProcessManagerSummary ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Text ->
+  EventId ->
+  [PMCommand targetCi] ->
+  Eff es DomainDispatchSummary
+dispatchDomainProcessManagerSummary options manager correlationId sourceEventId =
+  go (DomainDispatchSummary 0 []) . zip [0 ..]
+  where
+    go summary = \case
+      [] -> pure summary {failures = reverse (summary ^. #failures)}
+      (emitIndex, command) : rest -> do
+        result <- dispatchDomainProcessManagerCommand options manager correlationId sourceEventId emitIndex command
+        let next = summarizeDomainCommandResult emitIndex result summary
+        next `seq` go next rest
+
+dispatchDomainProcessManagerCommand ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Text ->
+  EventId ->
+  Int ->
+  PMCommand targetCi ->
+  Eff es (DomainPMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp)
+dispatchDomainProcessManagerCommand options manager correlationId sourceEventId emitIndex command = do
+  let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
+      targetOptions = options & #eventIds .~ [commandId]
+      handler = manager ^. #targetHandler
+      targetEventStream = handler ^. #eventStream
+      targetStream = retarget (command ^. #target)
+      targetStreamName = ((unvalidated targetEventStream) ^. #resolveStreamName) targetStream
+  commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
+  if commandAlreadyProcessed
+    then pure (DomainPMCommandDuplicate commandId)
+    else do
+      outcome <-
+        runDomainCommandWithProjections
+          targetOptions
+          handler
+          targetStream
+          (command ^. #command)
+          ((manager ^. #targetProjections) (command ^. #target))
+      case outcome of
+        Right result -> pure (DomainPMCommandHandled result)
+        Left err -> do
+          benign <- confirmBenignDuplicate targetStreamName commandId err
+          pure
+            ( if benign
+                then DomainPMCommandDuplicate commandId
+                else DomainPMCommandFailed targetStreamName err
+            )
+  where
+    retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
+    retarget = coerce
+
+summarizeDomainCommandResult ::
+  Int ->
+  DomainPMCommandResult target co rejection noOp ->
+  DomainDispatchSummary ->
+  DomainDispatchSummary
+summarizeDomainCommandResult emitIndex result summary =
+  case result of
+    DomainPMCommandHandled _ -> summary
+    DomainPMCommandDuplicate _ ->
+      summary {duplicates = summary ^. #duplicates + 1}
+    DomainPMCommandFailed targetStreamName commandError ->
+      summary
+        { failures =
+            DispatchFailure
+              { emitIndex,
+                targetStreamName,
+                commandError
+              }
+              : summary ^. #failures
+        }
+
+-- | Domain-aware process-manager worker with default policy. It dispatches
+-- through a strict summary fold and does not retain handled domain payloads.
+runDomainProcessManagerWorker ::
+  forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDomainProcessManagerWorker =
+  runDomainProcessManagerWorkerWith defaultWorkerOptions
+
+-- | Configurable domain-aware process-manager worker. Typed rejection/no-op is
+-- handled and acknowledges normally; only 'CommandError' reaches failure
+-- policy. Accepted payloads are released after each target is summarized.
+runDomainProcessManagerWorkerWith ::
+  forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  WorkerOptions es msg ->
+  RunCommandOptions ->
+  DomainProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDomainProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource} decodeMessage =
+  Streamly.fold Fold.drain
+    $ Streamly.mapM handleIngested adapterSource
+  where
+    handleIngested :: Ingested es msg -> Eff es AckDecision
+    handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
+      decision <- case decodeMessage message of
+        Nothing -> decideForPoison workerOptions "domain process-manager worker could not decode message" env
+        Just (recorded, input) -> do
+          let correlationId = (manager ^. #correlate) input
+              managerStream = (manager ^. #streamFor) correlationId
+              managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
+              attemptCount = envelopeAttemptCount env
+          outcome <- tryError @StoreError $ do
+            advanced <- advanceDomainProcessManager options manager recorded input
+            case advanced of
+              Left err -> pure (Left err)
+              Right (_, managerResult, action) -> do
+                summary <-
+                  dispatchDomainProcessManagerSummary
+                    options
+                    manager
+                    correlationId
+                    (recorded ^. #eventId)
+                    (action ^. #commands)
+                pure (Right (managerResult, summary))
+          case outcome of
+            Left (_, storeError) -> do
+              recordDispatchFailed (workerOptions ^. #metrics) 1
+              pure (ackForThrownStoreError (workerOptions ^. #transientRetryDelay) storeError)
+            Right (Left err) -> do
+              recordDispatchFailed (workerOptions ^. #metrics) 1
+              decideForFailures
+                workerOptions
+                DispatcherProcessManager
+                (manager ^. #name)
+                correlationId
+                recorded
+                attemptCount
+                [DispatchFailure (-1) managerStreamName err]
+            Right (Right (managerResult, summary)) ->
+              ackForDomainSummary
+                workerOptions
+                DispatcherProcessManager
+                (manager ^. #name)
+                correlationId
+                recorded
+                attemptCount
+                (stateDuplicateCount managerResult)
+                summary
+      finalizeAck decision
+      pure decision
+
 -- | Run a process manager as a live subscription draining a Shibuya adapter with
 -- 'defaultWorkerOptions'.
 --
@@ -650,6 +1020,32 @@ ackForResults workerOptions managerName correlationId sourceEvent attemptCount m
     sourceEvent
     attemptCount
     failures
+
+-- | Convert a strict payload-free domain dispatch summary into worker metrics
+-- and one acknowledgement decision.
+ackForDomainSummary ::
+  (IOE :> es, Store :> es) =>
+  WorkerOptions es msg ->
+  DispatcherKind ->
+  Text ->
+  Text ->
+  RecordedEvent ->
+  Int ->
+  Int64 ->
+  DomainDispatchSummary ->
+  Eff es AckDecision
+ackForDomainSummary workerOptions dispatcherKind dispatcherName correlationId sourceEvent attemptCount extraDuplicates summary = do
+  let dispatchFailures = summary ^. #failures
+  recordDispatchDuplicate (workerOptions ^. #metrics) (extraDuplicates + summary ^. #duplicates)
+  recordDispatchFailed (workerOptions ^. #metrics) (fromIntegral (length dispatchFailures))
+  decideForFailures
+    workerOptions
+    dispatcherKind
+    dispatcherName
+    correlationId
+    sourceEvent
+    attemptCount
+    dispatchFailures
 
 stateDuplicateCount :: PMStateResult target -> Int64
 stateDuplicateCount = \case
