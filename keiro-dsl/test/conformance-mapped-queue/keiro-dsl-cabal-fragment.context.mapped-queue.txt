@@ -1,0 +1,33 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-workqueue.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    Conformance.MappedQueue.Bindings
+    Generated.MappedQueue.MappedJobs.Queue
+    Generated.MappedQueue.MappedJobs.QueueCodec
+    Generated.MappedQueue.MappedJobs.QueuePolicy
+    Generated.MappedQueue.Structural.Shape.JobMetadata
+    Generated.MappedQueue.Structural.Shape.JobPayload
+    Generated.MappedQueue.StructuralConformance
+    Generated.MappedQueue.StructuralProjections
+
+build-depends:
+    , aeson
+    , base
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.MappedQueue.Bindings
+    Conformance.MappedQueue.Domain

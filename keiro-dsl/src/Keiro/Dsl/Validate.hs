@@ -2491,7 +2491,7 @@ validateReadModel languageContract spec readModel =
 -- derivation; the disposition inversions (storeFailure transient => must retry;
 -- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 validateWorkqueue :: EffectiveLanguageContract -> WorkqueueNode -> [Diagnostic]
-validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, loweringPending, windows, provisionRules]
+validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -2560,7 +2560,7 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
           field : _ ->
             [ mkErr wl WqGroupKeyUnresolved $
                 "workqueue '" <> wqName w <> "': group key via raw requires a text payload field, but '" <> gkField groupKey <> "' has type '" <> queuePayloadTypeText (wqfType field) <> "'"
-            | gkVia groupKey == "raw" && wqfType field /= LegacyQueueScalar QueueText
+            | gkVia groupKey == "raw" && not (isDirectText (wqfType field))
             ]
               ++ [ mkErr wl WqGroupKeyUnresolved $
                      "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
@@ -2573,12 +2573,9 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
         field <- wqPayload w,
         LegacyQueueScalar scalar@(QueueOther _) <- [wqfType field]
       ]
-    loweringPending =
-      [ mkErr (locLine (wqfLoc field)) MappedQueueLoweringPending $
-          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' uses a candidate mapped type whose generated queue lowering is pending"
-      | field <- wqPayload w,
-        TypedQueueExpression _ <- [wqfType field]
-      ]
+    isDirectText (LegacyQueueScalar QueueText) = True
+    isDirectText (TypedQueueExpression TText) = True
+    isDirectText _ = False
     queuePayloadTypeText (LegacyQueueScalar scalar) = queueScalarName scalar
     queuePayloadTypeText (TypedQueueExpression _) = "mapped expression"
     windows =

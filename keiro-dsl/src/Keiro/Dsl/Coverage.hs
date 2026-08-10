@@ -3,8 +3,8 @@
 -- | Reporting-only structural coverage over the checked mapped-type graph.
 --
 -- The report intentionally has no aggregate percentage. Private persisted event
--- payloads and mapped register cache boundaries have different authorities, and
--- queue/public-contract payloads are not represented by this graph at all.
+-- payloads, mapped register cache boundaries, and queued-job history have
+-- different authorities. Public contracts remain separately owned.
 module Keiro.Dsl.Coverage
   ( CoverageSurface (..),
     CoverageMode (..),
@@ -46,7 +46,7 @@ import Keiro.Dsl.Validate (DiagnosticCode (..), Severity (..))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeDirectory)
 
-data CoverageSurface = PrivateEventPayload | SnapshotRegister
+data CoverageSurface = PrivateEventPayload | SnapshotRegister | WorkqueuePayload
   deriving stock (Eq, Ord, Show)
 
 data CoverageMode = StructuralCoverage | OpaqueCoverage
@@ -83,7 +83,8 @@ data OpaqueBoundary = OpaqueBoundary
   deriving stock (Eq, Ord, Show)
 
 data JsonBoundary = JsonBoundary
-  { jsonRoot :: !Text,
+  { jsonSurface :: !CoverageSurface,
+    jsonRoot :: !Text,
     jsonPath :: !Text
   }
   deriving stock (Eq, Ord, Show)
@@ -118,7 +119,8 @@ data CoverageCounts = CoverageCounts
 
 data CoverageSummary = CoverageSummary
   { privateEventPayloads :: !CoverageCounts,
-    snapshotRegisters :: !CoverageCounts
+    snapshotRegisters :: !CoverageCounts,
+    workqueuePayloads :: !CoverageCounts
   }
   deriving stock (Eq, Show)
 
@@ -140,6 +142,7 @@ data CoveragePrevious = CoveragePrevious
 data CoverageDelta = CoverageDelta
   { privateEventRootDelta :: !Int,
     snapshotRegisterRootDelta :: !Int,
+    workqueuePayloadRootDelta :: !Int,
     opaqueBoundaryDelta :: !Int,
     addedOpaqueBoundaries :: ![OpaqueBoundary],
     removedOpaqueBoundaries :: ![OpaqueBoundary]
@@ -167,7 +170,7 @@ coverageReport specPath spec = do
   let roots = sortOn rootPath (map (coverageRoot graph) (persistedSites graph))
       structural = structuralBoundaryInventory graph
       opaque = opaqueBoundaryInventory graph
-      json = jsonBoundaryInventory graph
+      json = sortOn jsonPath (jsonBoundaryInventory graph <> queueExplicitJsonBoundaries spec)
       snapshots = snapshotBoundaryInventory spec graph
       summary = summarize roots json
       findings = opaqueSurfaceFindings opaque
@@ -200,6 +203,7 @@ coverageDiffReport specPath reference oldSpec newSpec = do
         CoverageDelta
           { privateEventRootDelta = totalRoots (privateEventPayloads newSummary) - totalRoots (privateEventPayloads oldSummary),
             snapshotRegisterRootDelta = totalRoots (snapshotRegisters newSummary) - totalRoots (snapshotRegisters oldSummary),
+            workqueuePayloadRootDelta = totalRoots (workqueuePayloads newSummary) - totalRoots (workqueuePayloads oldSummary),
             opaqueBoundaryDelta = length added - length removed,
             addedOpaqueBoundaries = added,
             removedOpaqueBoundaries = removed
@@ -253,7 +257,7 @@ renderCoverageSummary report =
     [ "structural/opaque boundaries (reporting only):",
       "  private-event-payloads: " <> renderCounts (privateEventPayloads summary),
       "  snapshot-registers: " <> renderCounts (snapshotRegisters summary) <> "; encoding=consumer-json-cache; invalidation=tracked",
-      "  queue-payloads: unsupported",
+      "  queue-payloads: " <> renderCounts (workqueuePayloads summary) <> "; encoding=queue-envelope-v1; migration=drain-or-transitional-codec",
       "  public-contracts: not-applicable (separately owned grammar)"
     ]
   where
@@ -301,14 +305,14 @@ persistedSites = filter isPersisted . tgUseSites
     isPersisted RootEventField {} = True
     isPersisted RootRegister {} = True
     isPersisted RootCommandField {} = False
-    isPersisted RootWorkqueueField {} = False
+    isPersisted RootWorkqueueField {} = True
     isPersisted RootReadModelQueryInput {} = False
     isPersisted RootReadModelQueryResult {} = False
 
 coverageRoot :: TypeGraph -> UseSite -> CoverageRoot
 coverageRoot graph site =
   let key = useSiteKey site
-      path = renderUsePath (UsePath site [])
+      path = renderUsePath (UsePath site (useSiteSegments graph site))
       fingerprint = wireFingerprint graph (unMappedKey key)
    in case Map.lookup key (tgDeclarations graph) of
         Just (ResolvedStructural declaration _) ->
@@ -348,7 +352,7 @@ structuralBoundaryInventory graph =
         }
     | ResolvedStructural declaration _ <- Map.elems (tgDeclarations graph),
       path <- usePaths graph (sdName declaration),
-      isEventSite (upRoot path)
+      isWireSite (upRoot path)
     ]
 
 opaqueBoundaryInventory :: TypeGraph -> [OpaqueBoundary]
@@ -364,21 +368,55 @@ opaqueBoundaryInventory graph =
         }
     | ResolvedOpaque declaration <- Map.elems (tgDeclarations graph),
       path <- usePaths graph (odName declaration),
-      isEventSite (upRoot path)
+      isWireSite (upRoot path)
     ]
 
 jsonBoundaryInventory :: TypeGraph -> [JsonBoundary]
 jsonBoundaryInventory graph =
   sortOn
     jsonPath
-    [ JsonBoundary
-        { jsonRoot = rootText site,
+    [ boundary site completeSegments
+    | site <- persistedSites graph,
+      isWireSite site,
+      segments <- jsonPathsFromDecl graph Set.empty (useSiteKey site),
+      let completeSegments = useSiteSegments graph site <> segments
+    ]
+  where
+    boundary site segments =
+      JsonBoundary
+        { jsonSurface = useSiteSurface site,
+          jsonRoot = rootText site,
           jsonPath = renderUsePath (UsePath site segments)
         }
-    | site <- persistedSites graph,
-      isEventSite site,
-      segments <- jsonPathsFromDecl graph Set.empty (useSiteKey site)
-    ]
+
+queueExplicitJsonBoundaries :: Spec -> [JsonBoundary]
+queueExplicitJsonBoundaries spec =
+  [ JsonBoundary
+      { jsonSurface = WorkqueuePayload,
+        jsonRoot = root,
+        jsonPath = root <> renderSegments segments
+      }
+  | NWorkqueue workqueue <- specNodes spec,
+    field <- wqPayload workqueue,
+    TypedQueueExpression expression <- [wqfType field],
+    segments <- explicitJsonPaths expression,
+    let root = "workqueue " <> wqName workqueue <> " payload ." <> wqfName field
+  ]
+  where
+    explicitJsonPaths TJson = [[]]
+    explicitJsonPaths (TOptional value) = map (SegOptional :) (explicitJsonPaths value)
+    explicitJsonPaths (TList value) = map (SegElem :) (explicitJsonPaths value)
+    explicitJsonPaths (TMap value) = map (SegMapValue :) (explicitJsonPaths value)
+    explicitJsonPaths _ = []
+    renderSegments = T.concat . map renderSegment
+    renderSegment SegOptional = " optional"
+    renderSegment SegElem = " []"
+    renderSegment SegMapValue = " {}"
+    renderSegment (SegField name key)
+      | name == key = " ." <> name
+      | otherwise = " ." <> name <> " as " <> T.pack (show key)
+    renderSegment (SegArm _ tag) = " arm " <> T.pack (show tag)
+    renderSegment (SegDecl name) = " : " <> name
 
 snapshotBoundaryInventory :: Spec -> TypeGraph -> [SnapshotBoundary]
 snapshotBoundaryInventory spec graph =
@@ -455,14 +493,13 @@ summarize :: [CoverageRoot] -> [JsonBoundary] -> CoverageSummary
 summarize roots json =
   CoverageSummary
     { privateEventPayloads = countsFor PrivateEventPayload,
-      snapshotRegisters = countsFor SnapshotRegister
+      snapshotRegisters = countsFor SnapshotRegister,
+      workqueuePayloads = countsFor WorkqueuePayload
     }
   where
     countsFor surface =
       let matching = filter ((== surface) . rootSurface) roots
-          jsonCount = case surface of
-            PrivateEventPayload -> length json
-            SnapshotRegister -> 0
+          jsonCount = length (filter ((== surface) . jsonSurface) json)
        in CoverageCounts
             { totalRoots = length matching,
               structuralRoots = length (filter ((== StructuralCoverage) . rootMode) matching),
@@ -476,7 +513,7 @@ opaqueSurfaceFindings boundaries =
       { findingSeverity = Warning,
         findingCode = CoverageOpaqueSurface,
         findingRoots = [root],
-        findingMessage = "persisted private-event root contains opaque mapped boundaries"
+        findingMessage = "persisted mapped root contains opaque mapped boundaries"
       }
   | root <- Set.toAscList (Set.fromList (map opaqueRoot boundaries))
   ]
@@ -493,11 +530,6 @@ gateFinding message boundaries =
 unsupportedInventory :: [UnsupportedSurface]
 unsupportedInventory =
   [ UnsupportedSurface
-      { unsupportedSurface = "queue-payloads",
-        unsupportedSupport = "unsupported",
-        unsupportedReason = "queue payloads are not roots in the mapped-type graph"
-      },
-    UnsupportedSurface
       { unsupportedSurface = "public-contracts",
         unsupportedSupport = "not-applicable",
         unsupportedReason = "public contracts have a separately owned grammar and compatibility surface"
@@ -516,17 +548,17 @@ useSiteSurface :: UseSite -> CoverageSurface
 useSiteSurface RootEventField {} = PrivateEventPayload
 useSiteSurface RootRegister {} = SnapshotRegister
 useSiteSurface RootCommandField {} = error "command fields are not persisted coverage roots"
-useSiteSurface RootWorkqueueField {} = error "workqueue coverage integration is pending"
+useSiteSurface RootWorkqueueField {} = WorkqueuePayload
 useSiteSurface RootReadModelQueryInput {} = error "read-model query inputs are not persisted coverage roots"
 useSiteSurface RootReadModelQueryResult {} = error "read-model query results are not persisted coverage roots"
 
-isEventSite :: UseSite -> Bool
-isEventSite RootEventField {} = True
-isEventSite RootRegister {} = False
-isEventSite RootCommandField {} = False
-isEventSite RootWorkqueueField {} = False
-isEventSite RootReadModelQueryInput {} = False
-isEventSite RootReadModelQueryResult {} = False
+isWireSite :: UseSite -> Bool
+isWireSite RootEventField {} = True
+isWireSite RootWorkqueueField {} = True
+isWireSite RootRegister {} = False
+isWireSite RootCommandField {} = False
+isWireSite RootReadModelQueryInput {} = False
+isWireSite RootReadModelQueryResult {} = False
 
 rootText :: UseSite -> Text
 rootText site = renderUsePath (UsePath site [])
@@ -542,6 +574,7 @@ declarationMode =
 instance ToJSON CoverageSurface where
   toJSON PrivateEventPayload = toJSON ("private-event-payload" :: Text)
   toJSON SnapshotRegister = toJSON ("snapshot-register" :: Text)
+  toJSON WorkqueuePayload = toJSON ("workqueue-payload" :: Text)
 
 instance ToJSON CoverageMode where
   toJSON StructuralCoverage = toJSON ("structural" :: Text)
@@ -581,7 +614,7 @@ instance ToJSON OpaqueBoundary where
       ]
 
 instance ToJSON JsonBoundary where
-  toJSON boundary = object ["root" .= jsonRoot boundary, "path" .= jsonPath boundary]
+  toJSON boundary = object ["surface" .= jsonSurface boundary, "root" .= jsonRoot boundary, "path" .= jsonPath boundary]
 
 instance ToJSON SnapshotBoundary where
   toJSON boundary =
@@ -618,7 +651,8 @@ instance ToJSON CoverageSummary where
   toJSON summary =
     object
       [ "privateEventPayloads" .= privateEventPayloads summary,
-        "snapshotRegisters" .= snapshotRegisters summary
+        "snapshotRegisters" .= snapshotRegisters summary,
+        "workqueuePayloads" .= workqueuePayloads summary
       ]
 
 instance ToJSON CoverageFinding where
@@ -649,6 +683,7 @@ instance ToJSON CoverageDelta where
     object
       [ "privateEventRootDelta" .= privateEventRootDelta delta,
         "snapshotRegisterRootDelta" .= snapshotRegisterRootDelta delta,
+        "workqueuePayloadRootDelta" .= workqueuePayloadRootDelta delta,
         "opaqueBoundaryDelta" .= opaqueBoundaryDelta delta,
         "addedOpaqueBoundaries" .= addedOpaqueBoundaries delta,
         "removedOpaqueBoundaries" .= removedOpaqueBoundaries delta

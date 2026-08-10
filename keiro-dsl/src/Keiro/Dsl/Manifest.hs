@@ -17,7 +17,8 @@
 --   * intake/emit/publisher (full integration path)
 --                         => effectful-core, hasql-transaction, keiro, kiroku-store
 --                                                          (…-intake-full)
---   * workqueue           => aeson, keiro-core, keiro-pgmq, text
+--   * workqueue           => aeson, keiro-core, keiro-pgmq, text, plus containers/time
+--                            when candidate payload expressions use Map/Time
 --                                                          (…-queue, …-queue-runtime)
 --   * dispatch            => aeson, effectful-core, keiro-pgmq, text
 --                                                          (…-dispatch-full)
@@ -134,7 +135,7 @@ depsForNode service spec n = case n of
   NIntake {} -> integration
   NEmit {} -> integration
   NPublisher {} -> integration
-  NWorkqueue {} -> ["aeson", "keiro-core", "keiro-pgmq", "text"]
+  NWorkqueue workqueue -> ["aeson", "keiro-core", "keiro-pgmq", "text"] <> workqueueDependencies workqueue
   NPgmqDispatch {} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
   NReadModel {} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
   NProjectionTarget {} -> ["keiro", "kiroku-store", "text"]
@@ -151,6 +152,24 @@ depsForNode service spec n = case n of
           field <- ceFields event,
           CTypeId prefix <- [cfType field]
         ]
+
+workqueueDependencies :: WorkqueueNode -> [Text]
+workqueueDependencies workqueue =
+  ["containers" | any (typeExprUses isMap) expressions]
+    <> ["time" | any (typeExprUses isTime) expressions]
+  where
+    expressions = [expression | field <- wqPayload workqueue, TypedQueueExpression expression <- [wqfType field]]
+    isMap (TMap _) = True
+    isMap _ = False
+    isTime TTime = True
+    isTime _ = False
+    typeExprUses predicate expression =
+      predicate expression
+        || case expression of
+          TOptional value -> typeExprUses predicate value
+          TList value -> typeExprUses predicate value
+          TMap value -> typeExprUses predicate value
+          _ -> False
 
 aggregateDependencies :: Spec -> Aggregate -> [Text]
 aggregateDependencies spec aggregate =

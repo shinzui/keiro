@@ -60,6 +60,8 @@ data Remedy
   | RemedyDrainLegacyInvalidContractMessages
   | RemedyRescaffoldContractConsumers
   | RemedyRunContractConformance
+  | RemedyDrainWorkqueue
+  | RemedyTransitionalQueueCodec
   deriving stock (Eq, Show)
 
 data DiffReport = DiffReport
@@ -181,6 +183,7 @@ findingPairs gate change =
     "detail" .= ckDetail kind,
     "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor (ckContext kind) (ckCode kind)))
   ]
+    <> ["mappedPersistedSurface" .= mappedPersistedImpactValue impact | Just impact <- [ckMappedPersistedImpact kind]]
   where
     kind = changeKind change
 
@@ -193,6 +196,18 @@ useSiteValue (path, site) =
     ( ["path" .= path]
         <> maybe [] (\owned -> ["file" .= osFile owned, "line" .= osLine owned]) site
     )
+
+mappedPersistedImpactValue :: MappedPersistedImpact -> Value
+mappedPersistedImpactValue impact =
+  object
+    [ "surface" .= persistedSurfaceName (mappedPersistedSurface impact),
+      "verdict" .= verdictName (mappedPersistedVerdict impact)
+    ]
+
+persistedSurfaceName :: MappedPersistedSurface -> Text
+persistedSurfaceName PrivateEventHistory = "private-event-history"
+persistedSurfaceName SnapshotCache = "snapshot-cache"
+persistedSurfaceName (WorkqueueHistory name) = "workqueue-history:" <> name
 
 workspaceMetaValue :: WorkspaceMeta -> Value
 workspaceMetaValue meta =
@@ -247,7 +262,7 @@ remediationFor context code
   | code `elem` contractCodes =
       RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerLast]
   | code `elem` queueCodes =
-      RemedyDeploymentOrder RolloutWorkersFirst :| [RemedyRunConformance]
+      RemedyDeploymentOrder RolloutWorkersFirst :| [RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRunConformance]
   | code `elem` identityCodes =
       RemedyDoNotDeploy "revert the re-keying change or perform an explicit operational identity migration" :| []
   | code == EnumCtorAdded = case Set.toAscList (cvRollout vector) of
@@ -267,17 +282,23 @@ remediationFor context code
       | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump
       | otherwise = RemedyRunConformance
     mappedWireRemedy
+      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
       | cvPrivateHistoryRead vector == VBreaking =
           RemedyVersionBump :| [RemedyUpcaster, RemedyDeploymentOrder RolloutStopTheWorld]
       | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
       | otherwise = RemedyRecompileConsumers :| [RemedyRunConformance]
     mappedAdditionRemedy
       | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
       | Just rollout <- firstRollout = RemedyDeploymentOrder rollout :| [RemedyRunConformance]
       | otherwise = RemedyRunConformance :| []
     mappedConformanceRemedy
       | cvSnapshotHydration vector == VAdvisory = RemedyRunConformance :| [RemedyStateCodecBump]
+      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
       | otherwise = RemedyRunConformance :| []
+    queueMappedRemedy =
+      RemedyDeploymentOrder RolloutWorkersFirst
+        :| [RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRecompileConsumers, RemedyRunConformance]
     mappedSnapshotConformanceRemedy
       | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
       | otherwise = RemedyRunConformance :| []
@@ -359,13 +380,14 @@ renderRemedy remedy = case remedy of
   RemedyDrainLegacyInvalidContractMessages -> "drain or remediate legacy-invalid in-flight messages"
   RemedyRescaffoldContractConsumers -> "re-scaffold and recompile every affected consumer against the generated interface"
   RemedyRunContractConformance -> "run contract conformance"
+  RemedyDrainWorkqueue -> "drain incompatible queued jobs before deployment"
+  RemedyTransitionalQueueCodec -> "supply an application-owned transitional queue codec when draining is impossible"
 
 renderFinding :: Change -> Text
 renderFinding change =
   headline
-    <> if vectorIsUniform (ckVector kind)
-      then ""
-      else "\n" <> renderVectorLine (ckVector kind)
+    <> vectorDetail
+    <> persistedDetail
   where
     kind = changeKind change
     headline =
@@ -379,6 +401,16 @@ renderFinding change =
         <> ": "
         <> ckDetail kind
         <> codeSuffix change kind
+    vectorDetail
+      | vectorIsUniform (ckVector kind) = ""
+      | otherwise = "\n" <> renderVectorLine (ckVector kind)
+    persistedDetail = case ckMappedPersistedImpact kind of
+      Nothing -> ""
+      Just impact ->
+        "\n    mapped-persisted-surface: "
+          <> persistedSurfaceName (mappedPersistedSurface impact)
+          <> "="
+          <> verdictName (mappedPersistedVerdict impact)
 
 renderVectorLine :: CompatibilityVector -> Text
 renderVectorLine vector =

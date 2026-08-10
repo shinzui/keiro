@@ -8,10 +8,10 @@ diff variants to see the exact guardrails.
 ## Published stable baseline and candidate lane
 
 Language 4 remains the published stable contract; unreleased Language 5 is the development
-authoring candidate. The machine-checked baseline contains 244 fixture sources: 230 declared
-Language-4 sources, one focused Language-5 source, and 13 named historical/source-selection
-exceptions. It also accounts for all 35 compiled conformance components: 30 `stable-primary`
-suites, one `candidate-primary` suite, three focused compatibility proofs, and one
+authoring candidate. The machine-checked baseline contains 245 fixture sources: 230 declared
+Language-4 sources, two focused Language-5 sources, and 13 named historical/source-selection
+exceptions. It also accounts for all 36 compiled conformance components: 30 `stable-primary`
+suites, two `candidate-primary` suites, three focused compatibility proofs, and one
 version-independent codec comparison.
 
 Stable suites exercise syntax profile 2 and runtime semantics 3, including current TypeID-v7
@@ -51,7 +51,7 @@ General source/workspace upgrade automation remains deferred to
 This curated inventory covers the primary feature, negative, and evolution surfaces. Every
 ordinary source below declares Language 4; names such as `reservation-v2.keiro` describe event
 schema evolution or historical fixture naming, not the source-language version. The complete
-machine-checked fixture set contains 244 `.keiro` files as of 2026-08-08.
+machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
@@ -95,6 +95,7 @@ machine-checked fixture set contains 244 `.keiro` files as of 2026-08-08.
 | `test/fixtures/intake-pf-retry.keiro` | negative previously-failed-as-retry inversion |
 | `test/fixtures/intake-topic-mismatch.keiro` | negative intake event/topic affinity |
 | `test/fixtures/intake.keiro` | valid contract and inbox intake vertical |
+| `test/fixtures/mapped-workqueue.keiro` | candidate mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
 | `test/fixtures/operation-ghost-aggregate.keiro` | negative command operation aggregate reference |
 | `test/fixtures/operation-signal-value.keiro` | negative signal/await value-type mismatch |
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
@@ -182,8 +183,8 @@ machine-checked fixture set contains 244 `.keiro` files as of 2026-08-08.
 
 ## Primary compiled suites
 
-These 31 components compile the released Language-4 corpus plus the focused
-candidate Language-5 catalog lane and form the primary product baseline.
+These 32 components compile the released Language-4 corpus plus the focused
+candidate Language-5 catalog and mapped-workqueue lanes and form the primary product baseline.
 
 | Component | Proves |
 | --- | --- |
@@ -193,6 +194,7 @@ candidate Language-5 catalog lane and form the primary product baseline.
 | `test/conformance-scalar-expressions/` (`keiro-dsl-conformance-aggregate-scalar-expressions`) | generated stable scalar terms agree across concrete, symbolic, replay, and snapshot surfaces |
 | `test/conformance-nominal-scalars/` (`keiro-dsl-conformance-nominal-scalars`) | consumer nominal binding laws, ID/enum exact equality, wire rejection, snapshots, and forward/replay parity |
 | `test/conformance-structural/` (`keiro-dsl-conformance-structural`) | structural binding laws, branch coverage, generated codec bytes, projection witnesses, and mapped-register replay |
+| `test/conformance-mapped-queue/` (`keiro-dsl-conformance-mapped-queue`) | candidate mapped queue payloads reuse total structural bindings, recurse through optional/opaque fields, preserve required-key/null semantics, and round-trip the schema-version-1 envelope |
 | `test/conformance-replay/` (`keiro-dsl-conformance-replay`) | generated replay audit targets and seeded/full replay divergence gates compile and execute |
 | `test/conformance-workspace-nominals/` (`keiro-dsl-conformance-workspace-nominals`) | two workspace aggregate domains import one generated ID/enum authority, exchange those exact types, and round-trip both event codecs |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |

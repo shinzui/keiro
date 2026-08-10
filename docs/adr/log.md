@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Update**: Classify mapped queue evolution as WorkqueueHistory with workers-first drain or application-owned transitional-codec remediation, never event upcasters (plan 224).
+* **Update**: Report typed workqueue structural, opaque, and Json boundaries as a separate persisted coverage surface (plan 224).
+* **Update**: Share one resolved mapped codec lowering across aggregate events and candidate typed workqueues while preserving required queue keys and legacy scalar bytes (plan 224).
 * **Update**: Assign mapped queue and atomic read-model query syntax to candidate language 5 without widening released predecessors or aggregate runtime semantics (plan 223).
 * **Update**: Register candidate-language mapped queue/query roots, one codec-agnostic consumer type plan, and event-authority-derived projection consumers (plan 223).
 * **Update**: Amend ADR 0020 with the checked mapped-root boundary and release qualification requirements for semantically local service conformance (plan 222).

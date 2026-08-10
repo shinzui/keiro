@@ -25,11 +25,13 @@ grammar cannot express the real invariant. Treating opacity as a soundness
 failure would reward authors for making a dishonest structural claim merely to
 pass a gate.
 
-The graph also does not represent every persisted surface. It has mapped roots
-for aggregate command/event fields and registers. Private events are durable
+The graph does not represent every persisted surface. It has mapped roots
+for aggregate command/event fields, registers, and candidate typed workqueue
+payloads. Private events are durable
 history owned by the generated codec, but mapped registers are serialized into
-snapshots by consumer `ToJSON`/`FromJSON` instances. Queue payloads and public
-contracts have separately owned grammars and compatibility rules. Combining
+snapshots by consumer `ToJSON`/`FromJSON` instances. Queued jobs are separately
+persisted under the queue envelope rather than the aggregate event codec.
+Public contracts have separately owned grammar and compatibility rules. Combining
 these into one percentage would imply evidence Keiro does not possess.
 
 Brownfield adoption adds a second concern: a structural declaration may be
@@ -50,8 +52,9 @@ The stable JSON report has separate inventories for:
 - mapped aggregate registers, labelled
   `snapshotEncoding = consumer-json-cache` with their wire fingerprint,
   invalidation status, and whether snapshots are currently enabled; and
-- queue/public-contract surfaces, labelled unsupported/not-applicable without
-  a ratio.
+- typed workqueue payload roots, with separate structural, opaque, and explicit
+  `Json` boundaries under the schema-version-1 queue-envelope authority; and
+- public-contract surfaces, labelled not-applicable without a ratio.
 
 There is no global coverage percentage. `check --coverage-report FILE` emits
 the current inventory. `diff --coverage-report FILE` also emits the compared
@@ -59,7 +62,7 @@ reference's summary, added/removed named opaque boundaries, and signed deltas.
 These options are explicit; an ordinary `check` or `diff` retains its prior
 behavior.
 
-Named opaque private-event roots produce the advisory
+Named opaque persisted event or workqueue roots produce the advisory
 `CoverageOpaqueSurface`. A newly added boundary produces the advisory
 `CoverageOpaqueBoundaryAdded`. Neither raises severity on its own. Operators may
 choose the explicit policies `check --fail-on-opaque` or
@@ -97,8 +100,9 @@ runner is never a runtime fallback and can never upgrade an opaque declaration.
 - Snapshot reporting remains explicit about consumer JSON and cache
   invalidation; event-codec coverage is never relabelled snapshot-codec
   coverage.
-- Queue payloads and public contracts remain visible as unsupported surfaces
-  instead of disappearing from a denominator.
+- Queue payloads remain a separately named persisted coverage surface; public
+  contracts remain visible as not applicable instead of disappearing from a
+  denominator.
 - Finite historical comparison must be combined with generated conformance,
   explicit versions/upcasters for differences, and the real-log replay audit.
 

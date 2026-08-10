@@ -74,10 +74,12 @@ library
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
+    Keiro.Dsl.HaskellImport
     Keiro.Dsl.HaskellSourceMove
     Keiro.Dsl.IdDomain
     Keiro.Dsl.LanguageVersion
     Keiro.Dsl.Manifest
+    Keiro.Dsl.MappedCodecPlan
     Keiro.Dsl.MappedConsumer
     Keiro.Dsl.MappedDiff
     Keiro.Dsl.NominalType
@@ -112,7 +114,6 @@ library
     Keiro.Dsl.FieldIdentity
     Keiro.Dsl.Frontend.Internal
     Keiro.Dsl.GeneratedHaskellLanguage
-    Keiro.Dsl.HaskellImport
     Keiro.Dsl.HaskellName
     Keiro.Dsl.Parser.Aggregate
     Keiro.Dsl.Parser.Coordination
@@ -472,6 +473,34 @@ test-suite keiro-dsl-conformance-structural
     , keiro
     , text        >=2.1  && <2.2
     , time        >=1.12 && <1.15
+
+-- Plan 224: candidate language-5 mapped workqueue payloads share structural
+-- codec authority while preserving the queue schema-version-1 envelope.
+test-suite keiro-dsl-conformance-mapped-queue
+  import:         warnings, generated-output
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-mapped-queue
+  main-is:        Main.hs
+  other-modules:
+    Conformance.MappedQueue.Bindings
+    Conformance.MappedQueue.Domain
+    Generated.MappedQueue.MappedJobs.Queue
+    Generated.MappedQueue.MappedJobs.QueueCodec
+    Generated.MappedQueue.MappedJobs.QueuePolicy
+    Generated.MappedQueue.Structural.Shape.JobMetadata
+    Generated.MappedQueue.Structural.Shape.JobPayload
+    Generated.MappedQueue.StructuralConformance
+    Generated.MappedQueue.StructuralProjections
+
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , keiki       >=0.9  && <0.10
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , text        >=2.1  && <2.2
 
 -- Plan 184: colliding consumer type occurrences, local-name conflicts, and
 -- repeated binding/shape references compile with deterministic short aliases.

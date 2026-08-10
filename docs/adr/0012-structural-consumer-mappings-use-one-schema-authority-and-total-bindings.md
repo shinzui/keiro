@@ -198,18 +198,32 @@ deterministic imports, and transitive mapped dependency closure. It contains no 
 runtime-codec policy: the queue and read-model lowerers must compose their own surface authority
 around this common type plan.
 
+Typed workqueue lowering composes that type plan with one shared resolved `MappedCodecPlan`, the
+same recursive primitive/`Json`/optional/list/map/structural/opaque algebra now used by aggregate
+event generation. At a consumer root, a structural reference crosses its declared total binding;
+inside a generated structural shape, nested structural references call the nested shape codec
+directly. Opaque references use only their declared consumer JSON boundary. This is a lowering
+description, not another runtime codec or schema authority.
+
+Every generated queue object field remains required independently of its value type. A field of
+`Optional T` must be present and may contain JSON null; omission is a decode failure. Queue module
+imports and inline structural codecs are planned from only the field expression's transitive
+mapped closure, while service structural conformance still covers the complete declaration
+inventory. Legacy scalar queues retain their released generation path and bytes.
+
 Projection typing is derived rather than redeclared. An aggregate inline projection and a catalog
 owner whose source is `aggregate A` consume only A's private-event mapped roots; command-only and
 register-only roots do not enter the projection relation. Catalog `category` and `all` sources
 remain heterogeneous decoder boundaries and are recorded as unsupported typed sources without a
 fabricated mapped path. Public contracts remain outside this private mapped-consumer vocabulary.
 
-The new queue/query spellings are registered only in the unpublished language-5 candidate. Until
-their complete generation plans land, validation emits stable lowering-pending errors, so a clean
-`check` still implies total scaffold lowering. Snapshot impact continues to follow register use
-because the snapshot is a cache of the register file. Queue wire, query API, projection rebuild,
-reporting, and conformance policies must consume these checked roots in their owning follow-up
-changes; downstream code must not infer unsupported consumers from descriptive notation.
+The new queue/query spellings are registered only in the unpublished language-5 candidate. Queue
+generation is complete and no longer emits its lowering-pending diagnostic; read-model query
+lowering remains gated until its complete generation plan lands, so a clean `check` still implies
+total scaffold lowering. Snapshot impact continues to follow register use because the snapshot is
+a cache of the register file. Query API and projection rebuild policies must consume these checked
+roots in their owning follow-up changes; downstream code must not infer unsupported consumers from
+descriptive notation.
 
 Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
 explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.

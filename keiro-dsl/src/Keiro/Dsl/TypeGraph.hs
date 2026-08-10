@@ -34,6 +34,8 @@ module Keiro.Dsl.TypeGraph
     PathSeg (..),
     UsePath (..),
     resolveTypeGraph,
+    resolveTypeExpression,
+    useSiteSegments,
     usePaths,
     renderUsePath,
     TypeExprAlgebra (..),
@@ -425,6 +427,14 @@ resolveExpr names owner loc (TMap value) = RMap <$> resolveExpr names owner loc 
 resolveExpr names owner loc (TRef name) =
   maybe (Left (TGUnresolvedRef owner name loc)) (Right . RRef) (Map.lookup name names)
 
+-- | Resolve a consumer-surface type expression against an already checked
+-- graph. Emitters use this entry point instead of reconstructing declaration
+-- lookup rules independently.
+resolveTypeExpression :: TypeGraph -> Text -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
+resolveTypeExpression graph owner loc = resolveExpr keyByName owner loc
+  where
+    keyByName = Map.fromList [(unMappedKey key, key) | key <- Map.keys (tgDeclarations graph)]
+
 cycleErrors :: Map MappedKey ResolvedMappedDecl -> [TypeGraphError]
 cycleErrors declarations =
   [ TGRecursive (map unMappedKey keys)
@@ -575,7 +585,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclaratio
       | siteKey site == target = [rootSegments site]
       | otherwise = map (rootSegments site <>) (pathsFromDecl Set.empty (siteKey site))
 
-    rootSegments site = Map.findWithDefault [] site (tgRootSegments graph)
+    rootSegments = useSiteSegments graph
 
     pathsFromDecl visited current
       | current `Set.member` visited = []
@@ -627,6 +637,11 @@ siteKey (RootRegister _ _ key) = key
 siteKey (RootWorkqueueField _ _ key) = key
 siteKey (RootReadModelQueryInput _ key) = key
 siteKey (RootReadModelQueryResult _ key) = key
+
+-- | Container path segments attached to a consumer root before its first
+-- mapped declaration reference.
+useSiteSegments :: TypeGraph -> UseSite -> [PathSeg]
+useSiteSegments graph site = Map.findWithDefault [] site (tgRootSegments graph)
 
 renderUsePath :: UsePath -> Text
 renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderSegment segments)

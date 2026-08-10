@@ -19,6 +19,8 @@ module Keiro.Dsl.Diff
     SurfaceVerdict (..),
     RolloutConstraint (..),
     CompatibilityVector (..),
+    MappedPersistedSurface (..),
+    MappedPersistedImpact (..),
     ChangeContext,
     privateEventContext,
     privateEventAdditionContext,
@@ -133,6 +135,20 @@ data CompatibilityVector = CompatibilityVector
   }
   deriving stock (Eq, Show)
 
+-- | Persisted mapped payloads that must not be conflated merely because the
+-- compatibility vector predates first-class queue history.
+data MappedPersistedSurface
+  = PrivateEventHistory
+  | SnapshotCache
+  | WorkqueueHistory !Name
+  deriving stock (Eq, Ord, Show)
+
+data MappedPersistedImpact = MappedPersistedImpact
+  { mappedPersistedSurface :: !MappedPersistedSurface,
+    mappedPersistedVerdict :: !SurfaceVerdict
+  }
+  deriving stock (Eq, Show)
+
 data ContextKind
   = ContextGeneral
   | ContextPrivateEvent
@@ -161,6 +177,7 @@ data ChangeKind = ChangeKind
     ckCode :: !DiagnosticCode,
     ckContext :: !ChangeContext,
     ckVector :: !CompatibilityVector,
+    ckMappedPersistedImpact :: !(Maybe MappedPersistedImpact),
     ckPaths :: ![Text],
     ckDetail :: !Text
   }
@@ -245,13 +262,13 @@ publicBreakingVector =
 queueBreakingVector :: CompatibilityVector
 queueBreakingVector =
   CompatibilityVector
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
     VBreaking
-    VBreaking
-    VNotApplicable
-    VNotApplicable
-    VAdvisory
-    VNotApplicable
-    (Set.singleton RolloutWorkersFirst)
+    (Set.fromList [RolloutWorkersFirst, RolloutDrainRequired])
 
 advisoryVector :: CompatibilitySurface -> Set RolloutConstraint -> CompatibilityVector
 advisoryVector surface rollout =
@@ -447,6 +464,7 @@ mappedFieldAdditionVector context = case contextKind context of
       oldBinaryVerdict = if rejectsUnknown then VBreaking else VCompatible
       rollout = if rejectsUnknown then Set.singleton RolloutProducerLast else Set.empty
   ContextSnapshot -> mappedSnapshotVector
+  ContextQueue -> queueBreakingVector
   ContextConsumerBuild -> mappedBuildVector
   _ -> compatibleVector
 
@@ -458,6 +476,7 @@ mappedDirectionalAdditionVector context = case contextKind context of
         cvRollout = Set.singleton RolloutProducerLast
       }
   ContextSnapshot -> mappedSnapshotVector
+  ContextQueue -> queueBreakingVector
   ContextConsumerBuild -> mappedBuildVector
   _ -> compatibleVector
 
@@ -473,6 +492,7 @@ mappedWireBreakingVector context = case contextKind context of
       VNotApplicable
       (Set.singleton RolloutStopTheWorld)
   ContextSnapshot -> mappedSnapshotVector
+  ContextQueue -> queueBreakingVector
   ContextConsumerBuild -> mappedBuildVector
   _ -> mappedBuildVector
 
@@ -511,6 +531,7 @@ mappedBindingVector context = case contextKind context of
       Set.empty
   ContextSnapshot ->
     mappedSnapshotVector {cvConsumerBuild = VAdvisory}
+  ContextQueue -> queueBreakingVector
   _ -> mappedBuildVector
 
 mappedSnapshotBuildVector :: ChangeContext -> CompatibilityVector
@@ -892,7 +913,7 @@ mappedUseChange finding path =
       RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
       RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
       RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
-      RootWorkqueueField workqueue _ _ -> (workqueue, "mapped-workqueue", ContextConsumerBuild)
+      RootWorkqueueField workqueue _ _ -> (workqueue, "mapped-workqueue", ContextQueue)
       RootReadModelQueryInput readModel _ -> (readModel, "mapped-query-input", ContextConsumerBuild)
       RootReadModelQueryResult readModel _ -> (readModel, "mapped-query-result", ContextConsumerBuild)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
@@ -900,6 +921,7 @@ mappedUseChange finding path =
 mappedContextHint :: MappedFinding -> ContextKind -> Label
 mappedContextHint finding kind = case kind of
   ContextSnapshot -> LabelAdvisory
+  ContextQueue -> LabelBreaking
   ContextConsumerBuild -> LabelAdvisory
   ContextPrivateEvent
     | mfCode finding == MappedFieldAddedWithDefault -> case mfOldUnknownFields finding of
@@ -912,9 +934,14 @@ mappedContextHint finding kind = case kind of
 
 mappedChange :: ChangeContext -> Name -> Text -> Text -> MappedFinding -> Change
 mappedChange context node facet subject finding =
-  mkChange label context node facet subject (mfCode finding) (mfDetail finding)
+  mkChange label context node facet subject (mfCode finding) detail
   where
     label = deriveLabel defaultGate (classifyCompatibility context (mfCode finding))
+    detail = case contextKind context of
+      ContextQueue ->
+        mfDetail finding
+          <> "; queued jobs remain schema-version-1 history; drain the queue or supply an application-owned transitional codec before deployment"
+      _ -> mfDetail finding
 
 declarationSubject :: MappedFinding -> Text
 declarationSubject finding =
@@ -2572,6 +2599,9 @@ mkChange label context n facet subj code detail =
         ckCode = code,
         ckContext = context,
         ckVector = classifyCompatibility context code,
+        ckMappedPersistedImpact = case contextKind context of
+          ContextQueue -> Just (MappedPersistedImpact (WorkqueueHistory (changeContextRoot context)) VBreaking)
+          _ -> Nothing,
         ckPaths = changeContextPaths context,
         ckDetail = detail
       }

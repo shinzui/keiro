@@ -37,13 +37,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: factor one reusable resolved mapped-codec lowering plan from aggregate event
+- [x] Milestone 1: factor one reusable resolved mapped-codec lowering plan from aggregate event
   generation and prove it preserves existing event bytes.
-- [ ] Milestone 2: generate queue payload Haskell types/imports and recursive structural/opaque
+- [x] Milestone 2: generate queue payload Haskell types/imports and recursive structural/opaque
   field codecs from candidate typed expressions.
-- [ ] Milestone 3: classify mapped queue evolution and coverage separately from events, snapshots,
+- [x] Milestone 3: classify mapped queue evolution and coverage separately from events, snapshots,
   and consumer-only query types.
-- [ ] Milestone 4: compile queue roundtrip/history fixtures, add restoring mutations and docs, and
+- [x] Milestone 4: compile queue roundtrip/history fixtures, add restoring mutations and docs, and
   remove the queue pending-lowering diagnostic with full validation green.
 
 
@@ -52,7 +52,19 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Existing aggregate codec output treats redundant parentheses as a corpus-visible contract even
+  though they do not change JSON bytes. The first shared renderer pass added parentheses around
+  direct mapped calls; corpus regeneration identified four drifted aggregate codecs. The consumer
+  boundary now retains the released source spelling while structural-shape recursion retains its
+  existing parenthesized form.
+
+- Strict queue record fields need parentheses around application types. Rendering `!Maybe T`
+  produced a GHC precedence error; the emitter now renders `!(Maybe T)` while leaving atomic and
+  list types unchanged.
+
+- A newly compiled conformance suite is not part of corpus regeneration until its scaffold ledger
+  is tracked. The corpus driver rejected `keiro-dsl-conformance-mapped-queue` as having no
+  regeneration entry until the candidate fixture was scaffolded and its ledger added.
 
 
 ## Decision Log
@@ -87,6 +99,14 @@ Record every decision made while working on the plan.
   Inferring a conversion would add an undeclared projection/binding authority.
   Date: 2026-08-09
 
+- Decision: Represent queued-job history as `WorkqueueHistory <queue>` metadata alongside the
+  compatibility vector, with event-history and snapshot verdicts not applicable and consumer-build
+  breaking.
+  Rationale: The pre-existing vector has no queue-history axis. Reusing private-event history would
+  lie about the persisted owner; explicit append-only metadata preserves that distinction while
+  keeping the report schema compatible.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -95,7 +115,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Candidate language 5 now generates mapped workqueue payload records and recursive codecs from the
+same resolved mapping authority as aggregate events. Structural declarations use their generated
+shapes and total bindings, opaque declarations retain consumer JSON authority, and nested
+`Optional`, `List`, `Map`, primitive, and `Json` expressions lower without globalizing unrelated
+declarations. Legacy scalar queue modules and aggregate codec modules remain byte-identical.
+
+Queue evolution now names `WorkqueueHistory <queue>` explicitly, keeps private-event history and
+snapshot hydration out of the verdict, and prescribes workers-first deployment plus drain or a
+transitional codec under the unchanged schema-v1 envelope. Coverage inventories workqueue
+structural, opaque, and explicit-`Json` roots separately from events and snapshots. The queue
+pending-lowering diagnostic is gone while the read-model diagnostic remains for Plan 225.
+
+The focused candidate suite pins exact payload/envelope bytes, required-versus-null semantics,
+nested rejection policy, domain and opaque round trips, physical queue identity, and service
+structural laws. Restoring mutations independently catch a transposed total binding and missing
+queue encoder/decoder branches. `cabal build all`, `cabal test keiro-dsl:tests`, the diff shell,
+36-entry corpus regeneration/inventory checks, ADR validation, and formatting/diff hygiene pass.
+The ordinary clean-tree corpus check is intentionally rerun immediately after this child commit,
+because it rejects newly added staged corpus paths by policy.
 
 
 ## Context and Orientation
@@ -209,7 +247,7 @@ cabal build all
 cabal test keiro-dsl:tests
 cabal run -v0 keiro-dsl-corpus-regen -- check
 scripts/check-conformance-corpus.sh
-just check-adr
+just adr-validate
 git diff --check
 git status --short
 ```

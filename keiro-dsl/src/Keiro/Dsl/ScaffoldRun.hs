@@ -261,7 +261,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
           NContract contract -> scaffoldContractForService ctx service contract
           NIntake intake -> scaffoldIntake ctx intake
           NPublisher publisher -> scaffoldPublisher ctx publisher
-          NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
+          NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
           NReadModel readModel ->
             let resolved = resolveCatalogReadModel spec readModel
              in scaffoldReadModel ctx resolved <> harnessReadModel ctx resolved

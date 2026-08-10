@@ -100,7 +100,7 @@ for mapped queue payloads, query types, or projection source typing.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Register the mapped consumer-surface contract in candidate language 5 | [Plan 223](../plans/223-register-the-mapped-consumer-surface-contract-in-candidate-language-5.md) | None | None | Complete |
-| 2 | Generate mapped workqueue payloads with honest persisted-wire compatibility | [Plan 224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md) | EP-1 | None | Not Started |
+| 2 | Generate mapped workqueue payloads with honest persisted-wire compatibility | [Plan 224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md) | EP-1 | None | Complete |
 | 3 | Make read-model query inputs and results checked mapped types | [Plan 225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md) | EP-1 | None | Not Started |
 | 4 | Derive projection mapped consumers from authoritative event sources | [Plan 226](../plans/226-derive-projection-mapped-consumers-from-authoritative-event-sources.md) | EP-1 | None | Not Started |
 | 5 | Extend semantic impact conformance and evolution reporting to every mapped surface | [Plan 227](../plans/227-extend-semantic-impact-conformance-and-evolution-reporting-to-every-mapped-surface.md) | EP-2, EP-3, EP-4 | None | Not Started |
@@ -183,8 +183,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1: register candidate-language syntax and one exhaustive external-consumer root algebra.
 - [x] EP-1: freeze explicit queue/query positions and derived projection ownership with ADR/tests.
-- [ ] EP-2: parse, validate, and generate mapped workqueue payload expressions and codecs.
-- [ ] EP-2: classify queue wire evolution and prove structural/opaque payload conformance.
+- [x] EP-2: parse, validate, and generate mapped workqueue payload expressions and codecs.
+- [x] EP-2: classify queue wire evolution and prove structural/opaque payload conformance.
 - [ ] EP-3: generate checked read-model query input/result types without placeholder aliases.
 - [ ] EP-3: prove query API evolution, workspace composition, and SQL ownership boundaries.
 - [ ] EP-4: derive aggregate-inline and catalog projection consumers from event-source authority.
@@ -275,3 +275,10 @@ docs/adr/. Keep task-local execution and coordination details here.
 EP-1 is complete. Candidate syntax ownership, located queue/query roots, the common consumer type
 plan, derived projection relations, and fail-closed downstream gates are now landed and documented.
 The existing generated corpus remained unchanged, so EP-2, EP-3, and EP-4 are dependency-ready.
+
+EP-2 is complete. Candidate mapped workqueues share the aggregate mapped-codec lowering authority,
+compile against closure-local consumer imports, preserve required-field and schema-v1 envelope
+semantics, and report queued-job history separately from events and snapshots. A focused candidate
+suite and restoring mutations cover structural, opaque, nested, and explicit-`Json` boundaries;
+the released scalar queue and aggregate codec corpus remains byte-stable. EP-3 and EP-4 remain
+independently dependency-ready.

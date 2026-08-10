@@ -1,0 +1,34 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/mapped-workqueue.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-queue structural conformance","path":"Generated/MappedQueue/StructuralConformance.hs"}
+module-role {"family":"JobMetadata","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural JobMetadata (line 4)","path":"Generated/MappedQueue/Structural/Shape/JobMetadata.hs"}
+module-role {"family":"JobPayload","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural JobPayload (line 22)","path":"Generated/MappedQueue/Structural/Shape/JobPayload.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context mapped-queue mapped structural facade","path":"Generated/MappedQueue/StructuralProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedQueue.Bindings","path":"Conformance/MappedQueue/Bindings.hs"}
+module-role {"family":"Queue","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue mapped_jobs (line 36)","path":"Generated/MappedQueue/MappedJobs/Queue.hs"}
+module-role {"family":"QueuePolicy","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue mapped_jobs (line 36)","path":"Generated/MappedQueue/MappedJobs/QueuePolicy.hs"}
+module-role {"family":"QueueCodec","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue mapped_jobs (line 36)","path":"Generated/MappedQueue/MappedJobs/QueueCodec.hs"}
+generated Generated/MappedQueue/StructuralConformance.hs
+generated Generated/MappedQueue/Structural/Shape/JobMetadata.hs
+generated Generated/MappedQueue/Structural/Shape/JobPayload.hs
+generated Generated/MappedQueue/StructuralProjections.hs
+hole Conformance/MappedQueue/Bindings.hs
+generated Generated/MappedQueue/MappedJobs/Queue.hs
+generated Generated/MappedQueue/MappedJobs/QueuePolicy.hs
+generated Generated/MappedQueue/MappedJobs/QueueCodec.hs
+mapping {"bindingSymbol":"Conformance.MappedQueue.Bindings.jobMetadataBinding","bindingVersion":"1","canonicalType":"conformance.mapped-queue.JobMetadata.v1","mode":"structural","module":"Conformance.MappedQueue.Domain","package":"keiro-dsl","schema":1,"specName":"JobMetadata","type":"JobMetadata"}
+mapping {"bindingSymbol":"Conformance.MappedQueue.Bindings.jobPayloadBinding","bindingVersion":"1","canonicalType":"conformance.mapped-queue.JobPayload.v1","mode":"structural","module":"Conformance.MappedQueue.Domain","package":"keiro-dsl","schema":1,"specName":"JobPayload","type":"JobPayload"}
+mapping {"codecIdentity":"vendor.geometry.json","codecVersion":"3","mode":"opaque","module":"Conformance.MappedQueue.Domain","package":"keiro-dsl","schema":1,"specName":"VendorGeometry","type":"Geometry"}
+binding {"kind":"binding","mappedName":"JobMetadata","module":"Conformance.MappedQueue.Bindings","path":"note","schema":1,"signature":"jobMetadataBinding.note :: Maybe (Text)","symbol":"jobMetadataBinding"}
+binding {"kind":"fixtures","mappedName":"JobMetadata","module":"Conformance.MappedQueue.Bindings","path":null,"schema":1,"signature":"jobMetadataCases :: FixtureCases Conformance.MappedQueue.Domain.JobMetadata","symbol":"jobMetadataCases"}
+binding {"kind":"binding","mappedName":"JobPayload","module":"Conformance.MappedQueue.Bindings","path":"geometry","schema":1,"signature":"jobPayloadBinding.geometry :: VendorGeometry","symbol":"jobPayloadBinding"}
+binding {"kind":"binding","mappedName":"JobPayload","module":"Conformance.MappedQueue.Bindings","path":"jobId","schema":1,"signature":"jobPayloadBinding.jobId :: Text","symbol":"jobPayloadBinding"}
+binding {"kind":"binding","mappedName":"JobPayload","module":"Conformance.MappedQueue.Bindings","path":"label","schema":1,"signature":"jobPayloadBinding.label :: Text","symbol":"jobPayloadBinding"}
+binding {"kind":"binding","mappedName":"JobPayload","module":"Conformance.MappedQueue.Bindings","path":"metadata","schema":1,"signature":"jobPayloadBinding.metadata :: Maybe (JobMetadata)","symbol":"jobPayloadBinding"}
+binding {"kind":"fixtures","mappedName":"JobPayload","module":"Conformance.MappedQueue.Bindings","path":null,"schema":1,"signature":"jobPayloadCases :: FixtureCases Conformance.MappedQueue.Domain.JobPayload","symbol":"jobPayloadCases"}
+semantic-impact {"declarations":[{"consumers":["workqueue:mapped_jobs"],"declaration":"JobMetadata","identity":"structural\u001fkeiro-dsl:Conformance.MappedQueue.Domain:JobMetadata\u001fConformance.MappedQueue.Bindings.jobMetadataBinding\u001f1\u001fconformance.mapped-queue.JobMetadata.v1\u001fConformance.MappedQueue.Bindings.jobMetadataCases\u001f\u001ff10533b35dd555c7\u001frecord:JobMetadata:note=note"},{"consumers":["workqueue:mapped_jobs"],"declaration":"JobPayload","identity":"structural\u001fkeiro-dsl:Conformance.MappedQueue.Domain:JobPayload\u001fConformance.MappedQueue.Bindings.jobPayloadBinding\u001f1\u001fconformance.mapped-queue.JobPayload.v1\u001fConformance.MappedQueue.Bindings.jobPayloadCases\u001f\u001f505e56c69372c292\u001frecord:JobPayload:geometry=geometry,jobId=job_id,label=label,metadata=metadata"},{"consumers":["workqueue:mapped_jobs"],"declaration":"VendorGeometry","identity":"opaque\u001fkeiro-dsl:Conformance.MappedQueue.Domain:Geometry\u001fvendor.geometry.json\u001f3\u001fConformance.MappedQueue.Bindings.geometryCases\u001f\u001f0555463e4335c898"}],"serviceInventory":["JobMetadata","JobPayload","VendorGeometry"]}

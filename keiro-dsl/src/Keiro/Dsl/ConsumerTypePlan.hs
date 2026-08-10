@@ -9,6 +9,8 @@ module Keiro.Dsl.ConsumerTypePlan
     ConsumerTypePlan (..),
     ConsumerTypePlanError (..),
     planConsumerType,
+    consumerTypeReferences,
+    renderConsumerType,
   )
 where
 
@@ -17,6 +19,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Keiro.Dsl.Grammar (HaskellSource (..))
+import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.TypeGraph
 
 newtype HaskellTypeOccurrence = HaskellTypeOccurrence
@@ -43,6 +46,7 @@ data ConsumerTypePlan = ConsumerTypePlan
 
 data ConsumerTypePlanError
   = ConsumerTypePlanUnknownDeclaration !MappedKey
+  | ConsumerTypePlanImportError !HaskellImportError
   deriving stock (Eq, Show)
 
 planConsumerType :: TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError ConsumerTypePlan
@@ -128,3 +132,52 @@ data RenderedType = RenderedType
 mappedSource :: ResolvedMappedDecl -> HaskellSource
 mappedSource (ResolvedStructural declaration _) = sdHaskell declaration
 mappedSource (ResolvedOpaque declaration) = odHaskell declaration
+
+consumerTypeReferences :: ConsumerTypePlan -> Set HaskellReference
+consumerTypeReferences planned =
+  Set.fromList
+    [ HaskellReference moduleName occurrence TypeNamespace PreferUnqualified
+    | ImportRequirement {package, moduleName, occurrence} <- imports planned,
+      package `Set.notMember` standardPackages
+    ]
+  where
+    standardPackages = Set.fromList ["base", "aeson", "containers", "text", "time"]
+
+-- | Render a planned type through the target module's complete deterministic
+-- import plan. This is the collision-safe counterpart to 'haskellType', whose
+-- unqualified text remains useful for diagnostics and dependency reports.
+renderConsumerType :: HaskellImportPlan -> TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError HaskellTypeOccurrence
+renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . rendered) . render
+  where
+    render = \case
+      RText -> pure (plainAtom "Text")
+      RInt -> pure (plainAtom "Int")
+      RInteger -> pure (plainAtom "Integer")
+      RBool -> pure (plainAtom "Bool")
+      RNatural -> pure (plainAtom "Natural")
+      RTime -> pure (plainAtom "UTCTime")
+      RJson -> pure (plainAtom "Value")
+      ROptional value -> application "Maybe" <$> render value
+      RList value -> listType <$> render value
+      RMap value -> do
+        renderedValue <- render value
+        pure
+          renderedValue
+            { rendered = "Map Text " <> argument renderedValue,
+              precedence = ApplicationType
+            }
+      RRef key -> case Map.lookup key (tgDeclarations graph) of
+        Nothing -> Left (ConsumerTypePlanUnknownDeclaration key)
+        Just declaration ->
+          let source = mappedSource declaration
+           in atom (hsType source) (reference (hsModule source) (hsType source))
+
+    atom _ ref = plainAtom <$> plannedReference ref
+    plainAtom value = RenderedType value AtomicType Set.empty Set.empty
+    application constructor value = value {rendered = constructor <> " " <> argument value, precedence = ApplicationType}
+    listType value = value {rendered = "[" <> rendered value <> "]", precedence = AtomicType}
+    argument value = case precedence value of
+      AtomicType -> rendered value
+      ApplicationType -> "(" <> rendered value <> ")"
+    reference moduleName occurrence = HaskellReference moduleName occurrence TypeNamespace PreferUnqualified
+    plannedReference = either (Left . ConsumerTypePlanImportError) Right . renderPlannedReference importPlan

@@ -1,0 +1,56 @@
+language keiro-dsl 5
+context mapped-queue
+
+mapped structural record JobMetadata {
+  haskell package=keiro-dsl module=Conformance.MappedQueue.Domain type=JobMetadata
+  binding = "Conformance.MappedQueue.Bindings.jobMetadataBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-queue.JobMetadata.v1"
+  fixtures = "Conformance.MappedQueue.Bindings.jobMetadataCases"
+  wire object constructor=JobMetadata unknown-fields=ignore {
+    note as "note" : Optional Text required
+  }
+}
+
+mapped opaque VendorGeometry {
+  haskell package=keiro-dsl module=Conformance.MappedQueue.Domain type=Geometry
+  codec = "vendor.geometry.json"
+  version = "3"
+  fixtures = "Conformance.MappedQueue.Bindings.geometryCases"
+}
+
+mapped structural record JobPayload {
+  haskell package=keiro-dsl module=Conformance.MappedQueue.Domain type=JobPayload
+  binding = "Conformance.MappedQueue.Bindings.jobPayloadBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-queue.JobPayload.v1"
+  fixtures = "Conformance.MappedQueue.Bindings.jobPayloadCases"
+  wire object constructor=JobPayload unknown-fields=reject {
+    jobId    as "job_id"    : Text                 required
+    label    as "label"     : Text                 required
+    metadata as "metadata"  : Optional JobMetadata required
+    geometry as "geometry"  : VendorGeometry       required
+  }
+}
+
+workqueue mapped_jobs {
+  queue logical = "mapped.jobs"
+  derive physical = "mapped_jobs"
+         dlq = "mapped_jobs_dlq"
+         table = "pgmq.q_mapped_jobs"
+
+  payload MappedJob {
+    job       -> "job"       : JobPayload
+    maybeJob  -> "maybe_job" : Optional JobPayload
+    trace     -> "trace"     : Json
+  }
+
+  retry maxRetries = 3 delay = 1s dlq = on
+
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

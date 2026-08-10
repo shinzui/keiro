@@ -35,7 +35,7 @@ import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
 import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ConsumerTypePlan
 import Keiro.Dsl.Coverage qualified as Coverage
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), MappedPersistedImpact (..), MappedPersistedSurface (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, diffReportWithSemanticImpact, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding, renderSemanticImpact)
 import Keiro.Dsl.EventOutput
@@ -50,10 +50,12 @@ import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForService, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
+import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
@@ -61,7 +63,7 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -213,6 +215,26 @@ main = hspec $ do
               )
         Right _ -> expectationFailure "unresolved mapped queue reference unexpectedly resolved"
 
+    it "plans one recursive mapped codec algebra for consumer and structural boundaries" $ do
+      source <- mappedConsumerSurfaceSource
+      spec <- parseInlineSpec "<mapped-codec-plan>" source
+      graph <- shouldResolveTypeGraph spec
+      let expression = RList (ROptional (RRef (MappedKey "ArtifactInfo")))
+      case planMappedCodec graph expression of
+        Left failure -> expectationFailure (show failure)
+        Right planned -> do
+          authority planned `shouldBe` Set.singleton (StructuralAuthority (MappedKey "ArtifactInfo"))
+          renderMappedEncode graph ConsumerValueBoundary planned "payload.jobs"
+            `shouldBe` "toJSON (map (\\item -> maybe Null (\\item -> encodeArtifactInfoMapped item) (item)) (payload.jobs))"
+          renderMappedParse graph ConsumerValueBoundary planned
+            `shouldBe` "\\value -> (parseJSON value :: Parser [Value]) >>= traverse (\\value -> case value of Null -> pure Nothing; other -> Just <$> parseArtifactInfoMapped other)"
+          let references = consumerTypeReferences (consumerType planned)
+          case planHaskellImports (ImportEnvironment "Generated.Test.Queue" (Set.singleton "Payload") Set.empty) references of
+            Left failure -> expectationFailure (show failure)
+            Right importPlan ->
+              renderConsumerType importPlan graph expression
+                `shouldBe` Right (HaskellTypeOccurrence "[Maybe ArtifactInfo]")
+
     it "derives projection consumers only from aggregate event authority and exposes heterogeneous boundaries" $ do
       source <- mappedConsumerSurfaceSource
       base <- parseInlineSpec "<mapped-consumer-projections>" source
@@ -260,14 +282,23 @@ main = hspec $ do
       let snapshot = semanticImpactSnapshot impact
       Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
 
-    it "fails closed with stable pending-lowering diagnostics before any scaffold path" $ do
+    it "lowers mapped queues while retaining the read-model pending diagnostic" $ do
       source <- mappedConsumerSurfaceSource
       parsed <- case parseSource "<mapped-consumer-pending>" source of
         Left failure -> expectationFailure (show failure) >> fail "unreachable"
         Right value -> pure value
       let codes = map code (validateService (checkedSource parsed))
-      [MappedQueueLoweringPending, MappedReadModelLoweringPending]
-        `shouldSatisfy` all (`elem` codes)
+      codes `shouldContain` [MappedReadModelLoweringPending]
+      codes `shouldNotContain` [MappedQueueLoweringPending]
+      case [workqueue | NWorkqueue workqueue <- specNodes (parsedSpec parsed)] of
+        [workqueue] -> do
+          let modules = scaffoldWorkqueueForService (defaultContext (specContext (parsedSpec parsed))) (checkedSource parsed) workqueue
+              queue = generatedTextEndingIn "Queue.hs" modules
+          queue `shouldSatisfy` T.isInfixOf "jobData :: ![Maybe ArtifactInfo]"
+          queue `shouldSatisfy` T.isInfixOf "encodeArtifactInfoMapped"
+          queue `shouldSatisfy` T.isInfixOf "explicitParseField (\\value -> (parseJSON value :: Parser [Value])"
+          queue `shouldNotSatisfy` T.isInfixOf "Vendor.Geometry"
+        workqueues -> expectationFailure ("unexpected workqueues: " <> show workqueues)
 
   describe "language support" $ do
     it "serializes support from the registered version and decodes older records" $ do
@@ -1133,6 +1164,7 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
+            "mapped-workqueue.keiro",
             "nominal-v1.keiro",
             "projection-catalog.keiro"
           ]
@@ -2790,6 +2822,29 @@ main = hspec $ do
           forM_ ["spec", "roots", "opaqueBoundaries", "snapshotBoundaries", "unsupportedSurfaces"] $
             \key -> KeyMap.member key values `shouldBe` True
         value -> expectationFailure ("coverage report was not an object: " <> show value)
+    it "reports queue structural and Json boundaries as a separate persisted surface" $ do
+      source <- mappedConsumerSurfaceSource
+      spec <- parseInlineSpec "<mapped-queue-coverage>" source
+      report <- shouldResolveCoverage "mapped-queue.keiro" spec
+      Coverage.workqueuePayloads (Coverage.coverageSummary report)
+        `shouldBe` Coverage.CoverageCounts 1 1 0 1
+      map Coverage.rootPath [root | root <- Coverage.coverageRoots report, Coverage.rootSurface root == Coverage.WorkqueuePayload]
+        `shouldBe` ["workqueue ArtifactJobs payload .jobData : ArtifactInfo [] optional"]
+      map Coverage.jsonPath [boundary | boundary <- Coverage.coverageJsonBoundaries report, Coverage.jsonSurface boundary == Coverage.WorkqueuePayload]
+        `shouldContain` ["workqueue ArtifactJobs payload .jobData : ArtifactInfo [] optional .extra"]
+      map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces report)
+        `shouldNotContain` ["queue-payloads"]
+    it "reports a built-in-only queue Json expression without fabricating a mapped declaration" $ do
+      source <- mappedConsumerSurfaceSource
+      spec <-
+        parseInlineSpec
+          "<explicit-queue-json-coverage>"
+          (T.replace "jobData -> \"payload\" : List (Optional ArtifactInfo)" "jobData -> \"payload\" : Optional Json" source)
+      report <- shouldResolveCoverage "explicit-queue-json.keiro" spec
+      Coverage.workqueuePayloads (Coverage.coverageSummary report)
+        `shouldBe` Coverage.CoverageCounts 0 0 0 1
+      map Coverage.jsonPath [boundary | boundary <- Coverage.coverageJsonBoundaries report, Coverage.jsonSurface boundary == Coverage.WorkqueuePayload]
+        `shouldBe` ["workqueue ArtifactJobs payload .jobData optional"]
     it "reports explicit Json leaves by their complete persisted path" $ do
       spec <- withMetadataJson <$> specOf "test/fixtures/structural-conformance.keiro"
       report <- shouldResolveCoverage "structural-conformance-json.keiro" spec
@@ -5647,6 +5702,28 @@ main = hspec $ do
       [change | change <- armAdded, isBreaking change] `shouldBe` []
       [kind | Advisory kind <- armAdded, ckCode kind == MappedArmAdded, ckFacet kind == "mapped-event"]
         `shouldSatisfy` any ((== VBreaking) . verdictFor OldBinaryReadNewEvents . ckVector)
+    it "classifies mapped queue history without borrowing event or snapshot surfaces" $ do
+      source <- mappedConsumerSurfaceSource
+      base <- parseInlineSpec "<mapped-queue-diff-old>" source
+      let candidate = mapArtifactNamedField "key" (\field -> field {wfKey = "artifact_key_v2"}) base
+          queueFindings =
+            [ kind
+            | change <- diffSpecs base candidate,
+              let kind = kindOfChange change,
+              ckFacet kind == "mapped-workqueue"
+            ]
+      queueFindings `shouldSatisfy` (not . null)
+      forM_ queueFindings $ \kind -> do
+        verdictFor PrivateHistoryRead (ckVector kind) `shouldBe` VNotApplicable
+        verdictFor OldBinaryReadNewEvents (ckVector kind) `shouldBe` VNotApplicable
+        verdictFor SnapshotHydration (ckVector kind) `shouldBe` VNotApplicable
+        verdictFor ConsumerBuild (ckVector kind) `shouldBe` VBreaking
+        cvRollout (ckVector kind) `shouldBe` Set.fromList [RolloutWorkersFirst, RolloutDrainRequired]
+        ckMappedPersistedImpact kind
+          `shouldBe` Just (MappedPersistedImpact (WorkqueueHistory "ArtifactJobs") VBreaking)
+        ckDetail kind `shouldSatisfy` T.isInfixOf "schema-version-1 history"
+        remediationFor (ckContext kind) (ckCode kind)
+          `shouldSatisfy` all (`elem` [RemedyDeploymentOrder RolloutWorkersFirst, RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRecompileConsumers, RemedyRunConformance])
     it "propagates a nested mapped leaf to complete command, event, and register paths" $ do
       changes <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
       let subjects =
