@@ -1,6 +1,20 @@
 language keiro-dsl 5
 context catalog-demo
 
+mapped opaque OrderPayload {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=OrderPayload
+  codec = "catalog-demo.order-payload.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.orderPayloadCases"
+}
+
+mapped opaque SharedReference {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=SharedReference
+  codec = "catalog-demo.shared-reference.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.sharedReferenceCases"
+}
+
 target order_summary {
   schema = "sales"
   table = "order_summary"
@@ -20,9 +34,20 @@ target order_totals {
   depends-on = [ order_summary ]
 }
 
+target shipment_summary {
+  schema = "sales"
+  table = "shipment_summary"
+  reset = preserve
+}
+
 rebuild-group reporting {
   targets = [ order_summary order_totals audit_log ]
   order = [ order_summary order_totals audit_log ]
+}
+
+rebuild-group shipping {
+  targets = [ shipment_summary ]
+  order = [ shipment_summary ]
 }
 
 projection-owner order_summary_writer {
@@ -32,6 +57,40 @@ projection-owner order_summary_writer {
   targets = [ order_summary order_totals ]
   order = 10
   replay = explicit
+}
+
+projection-owner shipment_writer {
+  source = aggregate Shipments
+  feed = inline
+  group = shipping
+  targets = [ shipment_summary ]
+  order = 10
+  replay = live-only "carrier events cannot be replayed"
+}
+
+readmodel order_inline {
+  columns {
+    order_id text required
+  }
+  version = 1
+  shape = "fnv1a:784e511a19f74c58"
+  consistency = Eventual
+  feed = inline
+  group = reporting
+  targets = [ order_summary ]
+}
+
+readmodel shipmentLookup {
+  columns {
+    shipment_id text required
+  }
+  version = 1
+  shape = "fnv1a:d0c39c966ea2f0b4"
+  consistency = Eventual
+  feed = subscription
+  subscription = "catalog-demo-shipment-lookup"
+  group = shipping
+  targets = [ shipment_summary ]
 }
 
 readmodel catalogAudit {
@@ -62,9 +121,24 @@ aggregate Orders
     total Natural = 0
   states Empty Recorded!
 
-  command RecordOrder { amount:Natural }
+  command RecordOrder { amount:Natural orderPayload:OrderPayload sharedReference:SharedReference }
   event OrderRecorded = fields(RecordOrder)
 
   Empty -- RecordOrder --> write total := amount ; emit OrderRecorded ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+  projection order_inline key=total
+    status-map { OrderRecorded=>recorded }
+
+aggregate Shipments
+  regs
+    accepted Bool = False
+  states Empty Recorded!
+
+  command RecordShipment { sharedReference:SharedReference accepted:Bool }
+  event ShipmentRecorded = fields(RecordShipment)
+
+  Empty -- RecordShipment --> write accepted := cmd.accepted ; emit ShipmentRecorded ; goto Recorded
 
   wire kind=ctorName fields=camelCase schemaVersion=1

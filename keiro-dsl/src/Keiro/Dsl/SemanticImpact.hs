@@ -84,6 +84,7 @@ data MappedRoot = MappedRoot
 -- declaration ownership for conformance; it is not another aggregate consumer.
 data SemanticImpact = SemanticImpact
   { impactRoots :: ![MappedRoot],
+    impactUsePaths :: !(Map MappedKey [UsePath]),
     impactAggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
     impactDeclarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
     impactServiceDeclarations :: !(Set MappedKey),
@@ -208,6 +209,7 @@ semanticImpact :: TypeGraph -> SemanticImpact
 semanticImpact graph =
   SemanticImpact
     { impactRoots = roots,
+      impactUsePaths = Map.fromSet (sort . usePaths graph . unMappedKey) serviceDeclarations,
       impactAggregateDeclarations = aggregateDeclarations,
       impactDeclarationConsumers = declarationConsumers,
       impactServiceDeclarations = serviceDeclarations,

@@ -5,26 +5,53 @@ layout: prefixed
 source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
 naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo structural conformance","path":"Generated/CatalogDemo/StructuralConformance.hs"}
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo behavior source map","path":"Generated/CatalogDemo/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo replay-audit assembly","path":"Generated/CatalogDemo/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"Generated/CatalogDemo/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs"}
-module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelTable.hs"}
-module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModel.hs"}
-module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"CatalogDemo/CatalogAudit/ReadModelHoles.hs"}
-module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 37)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs"}
-module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Domain.hs"}
-module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Codec.hs"}
-module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Transducer.hs"}
-module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/BehaviorContract.hs"}
-module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Orders (line 60)","path":"CatalogDemo/Orders/BehaviorHoles.hs"}
-module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/EventStream.hs"}
-module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Projection.hs"}
-module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Harness.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 71)","path":"Generated/CatalogDemo/OrderInline/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 71)","path":"Generated/CatalogDemo/OrderInline/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 71)","path":"CatalogDemo/OrderInline/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 71)","path":"Generated/CatalogDemo/OrderInline/ReadModelHarness.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel shipmentLookup (line 83)","path":"Generated/CatalogDemo/ShipmentLookup/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel shipmentLookup (line 83)","path":"Generated/CatalogDemo/ShipmentLookup/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel shipmentLookup (line 83)","path":"CatalogDemo/ShipmentLookup/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel shipmentLookup (line 83)","path":"Generated/CatalogDemo/ShipmentLookup/ReadModelHarness.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 96)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelTable.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 96)","path":"Generated/CatalogDemo/CatalogAudit/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 96)","path":"CatalogDemo/CatalogAudit/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel catalogAudit (line 96)","path":"Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Orders (line 119)","path":"CatalogDemo/Orders/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"CatalogDemo/Orders/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 119)","path":"Generated/CatalogDemo/Orders/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Shipments (line 134)","path":"CatalogDemo/Shipments/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Shipments (line 134)","path":"Generated/CatalogDemo/Shipments/Harness.hs"}
+generated Generated/CatalogDemo/StructuralConformance.hs
 generated Generated/CatalogDemo/BehaviorSourceMap.hs
 generated Generated/CatalogDemo/ReplayAudit.hs
 generated Generated/CatalogDemo/ProjectionCatalog.hs
 hole CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/CatalogDemo/OrderInline/ReadModelTable.hs
+generated Generated/CatalogDemo/OrderInline/ReadModel.hs
+hole CatalogDemo/OrderInline/ReadModelHoles.hs
+generated Generated/CatalogDemo/OrderInline/ReadModelHarness.hs
+generated Generated/CatalogDemo/ShipmentLookup/ReadModelTable.hs
+generated Generated/CatalogDemo/ShipmentLookup/ReadModel.hs
+hole CatalogDemo/ShipmentLookup/ReadModelHoles.hs
+generated Generated/CatalogDemo/ShipmentLookup/ReadModelHarness.hs
 generated Generated/CatalogDemo/CatalogAudit/ReadModelTable.hs
 generated Generated/CatalogDemo/CatalogAudit/ReadModel.hs
 hole CatalogDemo/CatalogAudit/ReadModelHoles.hs
@@ -36,14 +63,32 @@ generated Generated/CatalogDemo/Orders/BehaviorContract.hs
 hole CatalogDemo/Orders/BehaviorHoles.hs
 generated Generated/CatalogDemo/Orders/EventStream.hs
 generated Generated/CatalogDemo/Orders/Projection.hs
+hole CatalogDemo/Orders/Holes.hs
 generated Generated/CatalogDemo/Orders/Harness.hs
-behavior {"aggregate":"Orders","command":"RecordOrder","evidence":"generated-authoritative","key":"behavior-v1-3c2d2fb10ac96bf0","kind":"live-transition","outputs":[{"command":"RecordOrder","ownership":"generated-command-identity"}],"source":"Empty"}
+generated Generated/CatalogDemo/Shipments/Domain.hs
+generated Generated/CatalogDemo/Shipments/Codec.hs
+generated Generated/CatalogDemo/Shipments/Transducer.hs
+generated Generated/CatalogDemo/Shipments/BehaviorContract.hs
+hole CatalogDemo/Shipments/BehaviorHoles.hs
+generated Generated/CatalogDemo/Shipments/EventStream.hs
+generated Generated/CatalogDemo/Shipments/Projection.hs
+generated Generated/CatalogDemo/Shipments/Harness.hs
+mapping {"codecIdentity":"catalog-demo.order-payload.json","codecVersion":"1","mode":"opaque","module":"CatalogDemo.MappedDomain","package":"keiro-dsl","schema":1,"specName":"OrderPayload","type":"OrderPayload"}
+mapping {"codecIdentity":"catalog-demo.shared-reference.json","codecVersion":"1","mode":"opaque","module":"CatalogDemo.MappedDomain","package":"keiro-dsl","schema":1,"specName":"SharedReference","type":"SharedReference"}
+behavior {"aggregate":"Orders","command":"RecordOrder","evidence":"generated-authoritative","key":"behavior-v1-8861ebe94ff5f68a","kind":"live-transition","outputs":[{"command":"RecordOrder","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Shipments","command":"RecordShipment","evidence":"generated-authoritative","key":"behavior-v1-89eeb23ded471fe8","kind":"required-rejection","outputs":[],"source":"Recorded"}
+behavior {"aggregate":"Shipments","command":"RecordShipment","evidence":"generated-authoritative","key":"behavior-v1-b0a7e39ecba10454","kind":"live-transition","outputs":[{"command":"RecordShipment","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"Orders","command":"RecordOrder","evidence":"generated-authoritative","key":"behavior-v1-badd7ebab3a3a844","kind":"required-rejection","outputs":[],"source":"Recorded"}
-projection-catalog-fact group|reporting|order_summary,order_totals,audit_log|order_summary,order_totals,audit_log|23
-projection-catalog-fact owner|audit_writer|category:audit|subscription|reporting|audit_log|20|catalog-demo-audit|catalog-demo-audit-v1|explicit|49
-projection-catalog-fact owner|order_summary_writer|aggregate:Orders|inline|reporting|order_summary,order_totals|10|||explicit|28
-projection-catalog-fact query|catalogAudit|reporting|audit_log|37
-projection-catalog-fact target|audit_log|sales|audit_log|preserve||10
-projection-catalog-fact target|order_summary|sales|order_summary|clear||4
-projection-catalog-fact target|order_totals|sales|order_totals|clear|order_summary|16
-semantic-impact {"declarations":[],"serviceInventory":[]}
+projection-catalog-fact group|reporting|order_summary,order_totals,audit_log|order_summary,order_totals,audit_log|43
+projection-catalog-fact group|shipping|shipment_summary|shipment_summary|48
+projection-catalog-fact owner|audit_writer|category:audit|subscription|reporting|audit_log|20|catalog-demo-audit|catalog-demo-audit-v1|explicit|108
+projection-catalog-fact owner|order_summary_writer|aggregate:Orders|inline|reporting|order_summary,order_totals|10|||explicit|53
+projection-catalog-fact owner|shipment_writer|aggregate:Shipments|inline|shipping|shipment_summary|10|||live-only:carrier events cannot be replayed|62
+projection-catalog-fact query|catalogAudit|reporting|audit_log|96
+projection-catalog-fact query|order_inline|reporting|order_summary|71
+projection-catalog-fact query|shipmentLookup|shipping|shipment_summary|83
+projection-catalog-fact target|audit_log|sales|audit_log|preserve||24
+projection-catalog-fact target|order_summary|sales|order_summary|clear||18
+projection-catalog-fact target|order_totals|sales|order_totals|clear|order_summary|30
+projection-catalog-fact target|shipment_summary|sales|shipment_summary|preserve||37
+semantic-impact {"declarations":[{"consumers":["Orders","aggregate-projection:Orders:order_inline","catalog-projection:order_summary_writer:Orders"],"declaration":"OrderPayload","identity":"opaque\u001fkeiro-dsl:CatalogDemo.MappedDomain:OrderPayload\u001fcatalog-demo.order-payload.json\u001f1\u001fCatalogDemo.MappedBindings.orderPayloadCases\u001f\u001fbed2029c6b55dd22"},{"consumers":["Orders","Shipments","aggregate-projection:Orders:order_inline","catalog-projection:order_summary_writer:Orders","catalog-projection:shipment_writer:Shipments"],"declaration":"SharedReference","identity":"opaque\u001fkeiro-dsl:CatalogDemo.MappedDomain:SharedReference\u001fcatalog-demo.shared-reference.json\u001f1\u001fCatalogDemo.MappedBindings.sharedReferenceCases\u001f\u001f3627f2c435f2e056"}],"serviceInventory":["OrderPayload","SharedReference"]}

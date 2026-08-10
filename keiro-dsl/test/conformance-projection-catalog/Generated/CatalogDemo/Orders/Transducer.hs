@@ -31,6 +31,8 @@ ordersTransducer =
         B.slot @"total" =: d.amount
         B.emit wireOrderRecorded (OrderRecordedTermFields
           { amount = d.amount
+          , orderPayload = d.orderPayload
+          , sharedReference = d.sharedReference
           })
         B.goto OrdersRecorded
  where
@@ -39,7 +41,7 @@ ordersTransducer =
     _ -> False
 
 ordersFoldFingerprint :: Text
-ordersFoldFingerprint = "c31db5065ce089405ed980a0e26ac7c2"
+ordersFoldFingerprint = "616ed4835565e6612d7a6df783a0a8c8"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

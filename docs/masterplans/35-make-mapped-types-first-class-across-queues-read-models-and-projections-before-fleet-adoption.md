@@ -102,7 +102,7 @@ for mapped queue payloads, query types, or projection source typing.
 | 1 | Register the mapped consumer-surface contract in candidate language 5 | [Plan 223](../plans/223-register-the-mapped-consumer-surface-contract-in-candidate-language-5.md) | None | None | Complete |
 | 2 | Generate mapped workqueue payloads with honest persisted-wire compatibility | [Plan 224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md) | EP-1 | None | Complete |
 | 3 | Make read-model query inputs and results checked mapped types | [Plan 225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md) | EP-1 | None | Complete |
-| 4 | Derive projection mapped consumers from authoritative event sources | [Plan 226](../plans/226-derive-projection-mapped-consumers-from-authoritative-event-sources.md) | EP-1 | None | Not Started |
+| 4 | Derive projection mapped consumers from authoritative event sources | [Plan 226](../plans/226-derive-projection-mapped-consumers-from-authoritative-event-sources.md) | EP-1 | None | Complete |
 | 5 | Extend semantic impact conformance and evolution reporting to every mapped surface | [Plan 227](../plans/227-extend-semantic-impact-conformance-and-evolution-reporting-to-every-mapped-surface.md) | EP-2, EP-3, EP-4 | None | Not Started |
 | 6 | Qualify the complete mapped consumer surface before fleet adoption | [Plan 228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) | EP-5 | None | Not Started |
 
@@ -187,8 +187,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2: classify queue wire evolution and prove structural/opaque payload conformance.
 - [x] EP-3: generate checked read-model query input/result types without placeholder aliases.
 - [x] EP-3: prove query API evolution, workspace composition, and SQL ownership boundaries.
-- [ ] EP-4: derive aggregate-inline and catalog projection consumers from event-source authority.
-- [ ] EP-4: prove category/all sources remain honestly heterogeneous and projection impact is local.
+- [x] EP-4: derive aggregate-inline and catalog projection consumers from event-source authority.
+- [x] EP-4: prove category/all sources remain honestly heterogeneous and projection impact is local.
 - [ ] EP-5: integrate every root into semantic impact, coverage, reports, ledgers, and conformance.
 - [ ] EP-5: mutation-test independent queue, query, projection, event, and snapshot classifications.
 - [ ] EP-6: pass cross-surface exact-tree, compatibility, and restoring-mutation qualification.
@@ -223,6 +223,12 @@ interactions between child plans. Provide concise evidence.
 - Query-contract adoption needs an explicit ledger baseline marker. An absent row in an older
   ledger cannot distinguish a genuine legacy `()` hole from lost current history, so both
   standalone and workspace reports now say that the baseline is unavailable instead of guessing.
+- A live-only aggregate catalog owner exposed an unconditional generated codec import under
+  `-Werror`. Aggregate domains are required for every typed owner, but codec imports are required
+  only for replayable owners.
+- Aggregate catalog sources historically used a literal codec fingerprint. Retaining that exact
+  byte for aggregates without mapped event roots avoided unrelated corpus churn while a sorted
+  event-path/wire digest made mapped event authority source-aware.
 
 
 ## Decision Log
@@ -270,6 +276,13 @@ plan.
   presentation only; it never enters DSL identity, wire keys, fingerprints, or serialized schemas.
   Date: 2026-08-09
 
+- Decision: Make mapped aggregate-source fingerprints conditional and event-root-only.
+  Rationale: Replayable projections must invalidate when their authoritative mapped event wire
+  changes, while command, register, queue, and query mappings are not projection inputs and must
+  not perturb catalog identity. Preserving the historical literal when no mapped event root exists
+  also protects unrelated candidate output.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -296,3 +309,12 @@ are never rewritten. Query API changes are consumer-build breaking but leave SQL
 identity, persisted history, snapshots, and replay neutral. A compiled domain query plus four
 restoring mutations proves direct, nested, shared, unused, and stale-alias behavior. EP-4 remains
 dependency-ready.
+
+EP-4 is complete. `ProjectionMappedImpact` now derives inline and catalog aggregate consumers from
+complete private-event paths and keeps groups, targets, observing query models, replay policy, and
+unsupported heterogeneous sources in a separate operational relation. Mapped event wire changes
+retain their event-history findings, add exact projection build findings, update generated
+aggregate-source fingerprints, and invalidate only replayable catalog owners. The expanded A/B
+catalog fixture compiles and executes both aggregate codecs, inline/catalog handlers, query models,
+structural conformance, and the runtime catalog; restoring mutations cover event authority, source,
+replay policy, observation, and category decoding. EP-5 is now dependency-ready.

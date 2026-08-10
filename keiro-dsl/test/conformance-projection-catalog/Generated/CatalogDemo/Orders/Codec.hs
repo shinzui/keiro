@@ -7,13 +7,15 @@ module Generated.CatalogDemo.Orders.Codec (
 ) where
 
 import Generated.CatalogDemo.Orders.Domain
-import Data.Aeson (Value, object, withObject, (.:), (.=))
+import Data.Aeson (Value, object, toJSON, withObject, (.:), (.=))
 import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..), EventType (..))
+
+import CatalogDemo.MappedDomain ()
 
 
 
@@ -40,6 +42,8 @@ encodeOrdersEvent = \case
     object
       [ "kind" .= ("OrderRecorded" :: Text)
       , "amount" .= payload.amount
+      , "orderPayload" .= toJSON payload.orderPayload
+      , "sharedReference" .= toJSON payload.sharedReference
       ]
 
 parseOrdersEvent :: EventType -> Value -> Either Text OrdersEvent
@@ -51,6 +55,8 @@ parseOrdersEvent (EventType tag) = mapLeftText . parseEither (withObject "Orders
           OrderRecorded
             <$> ( OrderRecordedData
                     <$> o .: "amount"
+                    <*> o .: "orderPayload"
+                    <*> o .: "sharedReference"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes ordersEventTypes)
 

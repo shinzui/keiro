@@ -36,8 +36,10 @@ import Keiro.Dsl.FieldIdentity (ResolvedFieldIdentity (..), resolveAggregateFiel
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.SemanticContract (CheckedService (..))
-import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
+import Keiro.Dsl.SemanticImpact (semanticImpact)
+import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
 data AggregateImpact = AggregateImpact
@@ -117,10 +119,10 @@ catalogReplayImpactServices oldService newService
     changedOwnerNames = changedKeys oldOwners newOwners
     changedOwners = mapMaybe (`Map.lookup` oldOwners) (Set.toList changedOwnerNames) <> mapMaybe (`Map.lookup` newOwners) (Set.toList changedOwnerNames)
     changedGroups = mapMaybe (`Map.lookup` oldGroups) (Set.toList changedGroupNames) <> mapMaybe (`Map.lookup` newGroups) (Set.toList changedGroupNames)
-    groups = changedGroupNames <> Set.fromList (map poGroup changedOwners) <> groupsContainingChangedTargets
-    targets = changedTargetNames <> Set.fromList (concatMap poTargets changedOwners <> concatMap rgTargets changedGroups)
-    sources = Set.fromList (map renderSource (concatMap poSources changedOwners))
-    adapters = changedOwnerNames
+    groups = changedGroupNames <> Set.fromList (map poGroup changedOwners) <> groupsContainingChangedTargets <> inheritedGroups
+    targets = changedTargetNames <> Set.fromList (concatMap poTargets changedOwners <> concatMap rgTargets changedGroups) <> inheritedTargets
+    sources = Set.fromList (map renderSource (concatMap poSources changedOwners)) <> inheritedSources
+    adapters = changedOwnerNames <> inheritedAdapters
     groupsContainingChangedTargets =
       Set.fromList
         [ rgName groupNode
@@ -136,6 +138,44 @@ catalogReplayImpactServices oldService newService
     renderSource CatalogAll = "all"
     renderSource (CatalogCategory categoryName) = "category:" <> categoryName
     renderSource (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
+
+    -- A mapped wire change below an aggregate event changes the generated
+    -- aggregate-source fingerprint even when the catalog declarations are
+    -- byte-identical. Only explicitly replayable aggregate owners invalidate
+    -- catalog replay state; live-only owners remain operationally visible in
+    -- projection reporting but are excluded from this replay audit.
+    (inheritedGroups, inheritedTargets, inheritedSources, inheritedAdapters) =
+      foldMap mappedSourceImpact changedMappedCatalogConsumers
+    changedMappedCatalogConsumers =
+      [ (derived, oldOperation, newOperation)
+      | derived@CatalogProjectionConsumer {} <- Set.toAscList (Map.keysSet oldMappedOperations <> Map.keysSet newMappedOperations),
+        let oldOperation = Map.lookup derived oldMappedOperations,
+        let newOperation = Map.lookup derived newMappedOperations,
+        operationFingerprint oldOperation /= operationFingerprint newOperation,
+        maybe False operationReplayable oldOperation || maybe False operationReplayable newOperation
+      ]
+    oldMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor oldService)
+    newMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor newService)
+    projectionImpactFor service = case resolveTypeGraph (checkedSpec service) of
+      Left _ -> Nothing
+      Right graph -> Just (ProjectionImpact.projectionMappedImpact service (semanticImpact graph))
+    operationFingerprint = fmap (\(ProjectionImpact.ProjectionOperationalImpact _ _ _ _ _ fingerprint) -> fingerprint)
+    operationReplayable (ProjectionImpact.ProjectionOperationalImpact _ _ _ _ canReplay _) = canReplay
+    mappedSourceImpact
+      ( CatalogProjectionConsumer owner aggregate,
+        oldOperation,
+        newOperation
+        ) =
+        ( groupsFor oldOperation <> groupsFor newOperation,
+          targetsFor oldOperation <> targetsFor newOperation,
+          Set.singleton ("aggregate:" <> aggregate),
+          Set.singleton owner
+        )
+    mappedSourceImpact (AggregateInlineProjectionConsumer {}, _, _) = mempty
+    groupsFor = maybe Set.empty (maybe Set.empty Set.singleton . operationGroup)
+    targetsFor = maybe Set.empty operationTargets
+    operationGroup (ProjectionImpact.ProjectionOperationalImpact _ groupName _ _ _ _) = groupName
+    operationTargets (ProjectionImpact.ProjectionOperationalImpact _ _ targetNames _ _ _) = targetNames
 
 -- | Compute replay impact for every aggregate that existed under the old
 -- effective semantic contract.

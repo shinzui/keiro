@@ -78,6 +78,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, lang
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappedImpactForService, renderProjectionMappedImpact)
 import Keiro.Dsl.ReadModelQueryContract
   ( QueryContractDrift (..),
     QueryContractIdentity (..),
@@ -423,6 +424,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrQueryContractDrift :: ![QueryContractDrift],
     wsrQueryContractMigrations :: ![QueryContractMigration],
     wsrSemanticImpact :: !SemanticImpactReport,
+    wsrProjectionMappedImpact :: !(Maybe ProjectionMappedImpact),
     wsrGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift],
     wsrNewHoles :: ![BindingHole],
@@ -592,6 +594,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrQueryContractDrift = queryDrift,
               wsrQueryContractMigrations = queryMigrations,
               wsrSemanticImpact = semanticReport,
+              wsrProjectionMappedImpact = projectionMappedImpactForService (wpCheckedService plan),
               wsrGeneratedArtifactImpact = generatedArtifactImpact [(scaffoldModule, disposition) | (scaffoldModule, _, disposition) <- dispositions],
               wsrSourceLanguageDrift = languageDrift,
               wsrNewHoles = newHoles,
@@ -772,6 +775,7 @@ renderWorkspaceScaffoldReport report =
     <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (wsrSemanticImpact report)
+    <> maybe [] renderProjectionMappedImpact (wsrProjectionMappedImpact report)
     <> renderGeneratedArtifactImpact (wsrSemanticImpact report) (wsrGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection
     <> behaviorDriftSection

@@ -711,9 +711,12 @@ policy around this plan rather than reconstructing type rendering.
 
 Candidate language 5 adds projection-target, rebuild-group, projection-owner,
 query-binding nodes, typed workqueue fields, and atomic read-model query
-input/result clauses. The queue/query syntax is currently registered and
-resolved but fails `check` with an explicit lowering-pending diagnostic until
-its generators land. `Keiro.Dsl.Scaffold` lowers the checked catalog into
+input/result clauses. Queue payload modules and read-model query-contract
+modules lower those mapped expressions through `ConsumerTypePlan` and the
+shared codec planner. `Keiro.Dsl.ProjectionMappedImpact` derives typed inline
+and aggregate-catalog consumers only from authoritative private-event roots and
+keeps groups, targets, observing read models, and heterogeneous sources in a
+separate operational relation. `Keiro.Dsl.Scaffold` lowers the checked catalog into
 one `Generated.<Context>.ProjectionCatalog` facade backed by
 `Keiro.Projection.Catalog` and `Keiro.ReadModel.Rebuild`. The facade exports the
 validated catalog, deterministic inventory and registration views, typed

@@ -102,6 +102,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion,
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappedImpactForService, renderProjectionMappedImpact)
 import Keiro.Dsl.ReadModelQueryContract
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
@@ -231,6 +232,7 @@ data ScaffoldReport = ScaffoldReport
     reportQueryContractDrift :: ![QueryContractDrift],
     reportQueryContractMigrations :: ![QueryContractMigration],
     reportSemanticImpact :: !SemanticImpactReport,
+    reportProjectionMappedImpact :: !(Maybe ProjectionMappedImpact),
     reportGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift),
     reportNewHoles :: ![BindingHole],
@@ -961,6 +963,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportQueryContractDrift = queryDrift,
                                   reportQueryContractMigrations = queryMigrations,
                                   reportSemanticImpact = semanticReport,
+                                  reportProjectionMappedImpact = projectionMappedImpactForService service,
                                   reportGeneratedArtifactImpact = generatedArtifactImpact dispositions,
                                   reportSourceLanguageDrift = languageDrift,
                                   reportNewHoles = newHoles,
@@ -1531,6 +1534,7 @@ renderScaffoldReport report =
     <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (reportSemanticImpact report)
+    <> maybe [] renderProjectionMappedImpact (reportProjectionMappedImpact report)
     <> renderGeneratedArtifactImpact (reportSemanticImpact report) (reportGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection
     <> behaviorDriftSection

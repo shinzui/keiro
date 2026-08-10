@@ -9,6 +9,7 @@
 module Generated.CatalogDemo.ReplayAudit (auditTargets) where
 
 import Generated.CatalogDemo.Orders.EventStream qualified as Orders
+import Generated.CatalogDemo.Shipments.EventStream qualified as Shipments
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
 import Keiro.Stream qualified as Stream
 
@@ -19,5 +20,11 @@ auditTargets =
         { eventStream = Orders.ordersEventStream
         , category = Stream.categoryText Orders.ordersCategory
         , mkStream = streamInCategory (Stream.categoryText Orders.ordersCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = Shipments.shipmentsEventStream
+        , category = Stream.categoryText Shipments.shipmentsCategory
+        , mkStream = streamInCategory (Stream.categoryText Shipments.shipmentsCategory)
         }
   ]

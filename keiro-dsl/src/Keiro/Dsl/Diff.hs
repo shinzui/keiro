@@ -58,7 +58,7 @@ where
 
 import Data.Char (toUpper)
 import Data.Foldable (traverse_)
-import Data.List (find, (\\))
+import Data.List (find, sort, (\\))
 import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -84,10 +84,11 @@ import Keiro.Dsl.PrettyPrint
     renderTransition,
     renderTypeExpr,
   )
+import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
-import Keiro.Dsl.SemanticImpact (MappedImpactDelta, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
-import Keiro.Dsl.TypeGraph (MappedKey (..), UsePath (..), UseSite (..), resolveTypeGraph)
+import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 -- | A classified spec change.
@@ -866,7 +867,80 @@ sharedDeclarationDiff :: DiffEnv -> [Change]
 sharedDeclarationDiff env = enumDiff env ++ idDiff env ++ nominalScalarDiff env ++ mappedDeclarationDiff env
 
 mappedDeclarationDiff :: DiffEnv -> [Change]
-mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld env) (deNew env))
+mappedDeclarationDiff env =
+  concatMap
+    (\finding -> mappedFindingChanges finding <> mappedProjectionFindingChanges env finding)
+    (diffMapped (deOld env) (deNew env))
+
+-- | A mapped event finding retains its existing private-history change and
+-- gains one build/review finding per real inline/catalog aggregate consumer.
+-- Category/all owners never appear because they have no single mapped event
+-- authority. Operational targets and observers are evidence, not SQL claims.
+mappedProjectionFindingChanges :: DiffEnv -> MappedFinding -> [Change]
+mappedProjectionFindingChanges env finding = case (projectionImpactFor (deOld env), projectionImpactFor (deNew env)) of
+  (Nothing, Nothing) -> []
+  (oldImpact, newImpact) ->
+    let derivedConsumers =
+          maybe Set.empty (`ProjectionImpact.projectionConsumersFor` declarationKey) oldImpact
+            <> maybe Set.empty (`ProjectionImpact.projectionConsumersFor` declarationKey) newImpact
+     in [ appendChangeDetail (operationDetail oldOperation newOperation) $
+            mappedChange
+              (consumerBuildContext root inheritedPaths)
+              root
+              "mapped-projection"
+              subject
+              finding
+        | derived <- Set.toAscList derivedConsumers,
+          let oldOperation = oldImpact >>= operationFor declarationKey derived,
+          let newOperation = newImpact >>= operationFor declarationKey derived,
+          let inheritedPaths =
+                Set.toAscList . Set.fromList $
+                  projectionPaths declarationKey derived oldImpact
+                    <> projectionPaths declarationKey derived newImpact,
+          let root = projectionConsumerRoot derived,
+          let subject = mappedConsumerIdentity (DerivedProjectionConsumer derived) <> " inherits " <> unMappedKey declarationKey
+        ]
+  where
+    declarationKey = MappedKey (mfDeclaration finding)
+    projectionImpactFor spec = case resolveTypeGraph spec of
+      Left _ -> Nothing
+      Right graph -> Just (ProjectionImpact.projectionMappedImpact (legacyCheckedService spec) (semanticImpact graph))
+    operationFor key derived impact =
+      find
+        (\(ProjectionImpact.ProjectionOperationalImpact candidate _ _ _ _ _) -> candidate == derived)
+        (ProjectionImpact.projectionOperationsFor impact key)
+    projectionPaths key derived = maybe [] $ \impact ->
+      sort . Set.toList . Set.fromList $
+        [ renderUsePath inheritedPath
+        | ProjectionImpact.ProjectionMappedRoot candidate declaration inheritedPath <- ProjectionImpact.roots impact,
+          candidate == derived,
+          declaration == key
+        ]
+    operationDetail oldOperation newOperation =
+      "; derived projection impact: "
+        <> renderOperation "previous" oldOperation
+        <> "; "
+        <> renderOperation "current" newOperation
+    renderOperation label Nothing = label <> "=(absent)"
+    renderOperation label (Just (ProjectionImpact.ProjectionOperationalImpact _ groupName targetNames observerNames canReplay fingerprint)) =
+      label
+        <> "=(group="
+        <> maybe "(inline)" id groupName
+        <> ", targets=["
+        <> T.intercalate "," (Set.toAscList targetNames)
+        <> "], read-models=["
+        <> T.intercalate "," (Set.toAscList observerNames)
+        <> "], replayable="
+        <> (if canReplay then "yes" else "no")
+        <> ", source-fingerprint="
+        <> fingerprint
+        <> ")"
+    appendChangeDetail suffix = \case
+      Additive kind -> Additive kind {ckDetail = ckDetail kind <> suffix}
+      Advisory kind -> Advisory kind {ckDetail = ckDetail kind <> suffix}
+      Breaking kind -> Breaking kind {ckDetail = ckDetail kind <> suffix}
+    projectionConsumerRoot (AggregateInlineProjectionConsumer aggregate _) = aggregate
+    projectionConsumerRoot (CatalogProjectionConsumer owner _) = owner
 
 -- | Explain only declarations for which the authoritative mapped differ emits
 -- a finding. The compatibility findings remain unchanged; this projection adds

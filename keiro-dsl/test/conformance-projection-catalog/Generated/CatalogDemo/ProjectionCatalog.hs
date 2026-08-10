@@ -8,22 +8,29 @@ module Generated.CatalogDemo.ProjectionCatalog
   , projectionCatalogAsyncRegistrations
   , registerProjectionCatalog
   , orderSummaryWriterProjectionSet
+  , shipmentWriterProjectionSet
   , auditWriterProjectionSet
   , orderSummaryWriterInlineProjections
+  , shipmentWriterInlineProjections
   , reportingRebuildGroupId
   , startReportingRebuild
+  , shippingRebuildGroupId
+  , startShippingRebuild
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Effectful (Eff, IOE, (:>))
 import Generated.CatalogDemo.Orders.Codec qualified as OrdersCodec
 import Generated.CatalogDemo.Orders.Domain qualified as OrdersDomain
+import Generated.CatalogDemo.Shipments.Domain qualified as ShipmentsDomain
 import Keiro.Projection (AsyncProjection (..), InlineProjection (..))
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types qualified as Kiroku
 import CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles qualified as Holes
+import Generated.CatalogDemo.OrderInline.ReadModel qualified as RMOrderInline
+import Generated.CatalogDemo.ShipmentLookup.ReadModel qualified as RMShipmentLookup
 import Generated.CatalogDemo.CatalogAudit.ReadModel qualified as RMCatalogAudit
 
 must :: Show error => Either error value -> value
@@ -46,6 +53,23 @@ orderSummaryWriterProjectionSet =
 orderSummaryWriterInlineProjections :: [InlineProjection OrdersDomain.OrdersEvent]
 orderSummaryWriterInlineProjections = Catalog.typedInlineProjections validatedProjectionCatalog orderSummaryWriterProjectionSet
 
+shipmentWriterProjectionSet :: Catalog.ProjectionSet ShipmentsDomain.ShipmentsEvent
+shipmentWriterProjectionSet =
+  Catalog.ProjectionSet
+    (must (Catalog.mkSourceId "aggregate:Shipments"))
+    (Catalog.ProjectionDefinition
+      (must (Catalog.mkProjectionId "shipment_writer"))
+      (must (Catalog.mkRebuildGroupId "shipping"))
+      ((must (Catalog.mkTargetId "shipment_summary")) :| [])
+      (Catalog.LiveOnly (Catalog.LiveOnlyReason "carrier events cannot be replayed"))
+      (Catalog.InlineHandler (InlineProjection "shipment_writer" Holes.applyShipmentWriterLive) (must (Catalog.mkClaimSite "projection-owner shipment_writer inline-handler")) :| [])
+      (must (Catalog.mkClaimSite "projection-owner shipment_writer"))
+      :| [])
+    (must (Catalog.mkClaimSite "projection-owner shipment_writer source"))
+
+shipmentWriterInlineProjections :: [InlineProjection ShipmentsDomain.ShipmentsEvent]
+shipmentWriterInlineProjections = Catalog.typedInlineProjections validatedProjectionCatalog shipmentWriterProjectionSet
+
 auditWriterProjectionSet :: Catalog.ProjectionSet Holes.AuditWriterEvent
 auditWriterProjectionSet =
   Catalog.ProjectionSet
@@ -63,13 +87,13 @@ auditWriterProjectionSet =
 projectionCatalog :: Catalog.ProjectionCatalog
 projectionCatalog =
   Catalog.ProjectionCatalog
-    [Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:Orders")) (Catalog.CategorySource (Kiroku.CategoryName "orders")) "aggregate:Orders/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:Orders")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "category:audit")) (Catalog.CategorySource (Kiroku.CategoryName "audit")) "category:audit/application-decoder/v1" (must (Catalog.mkClaimSite "source category:audit"))]
-    [Catalog.TargetDeclaration (must (Catalog.mkTargetId "order_summary")) (Catalog.QualifiedTable "sales" "order_summary") Catalog.ClearBeforeReplay [] (must (Catalog.mkClaimSite "target order_summary")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "audit_log")) (Catalog.QualifiedTable "sales" "audit_log") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target audit_log")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "order_totals")) (Catalog.QualifiedTable "sales" "order_totals") Catalog.ClearBeforeReplay [(must (Catalog.mkTargetId "order_summary"))] (must (Catalog.mkClaimSite "target order_totals"))]
-    [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary")), (must (Catalog.mkTargetId "order_totals")), (must (Catalog.mkTargetId "audit_log"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting"))]
+    [Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:Orders")) (Catalog.CategorySource (Kiroku.CategoryName "orders")) "aggregate:Orders/generated-codec/v1/mapped-132056a8f2ee095d" (must (Catalog.mkClaimSite "source aggregate:Orders")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:Shipments")) (Catalog.CategorySource (Kiroku.CategoryName "shipments")) "aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5" (must (Catalog.mkClaimSite "source aggregate:Shipments")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "category:audit")) (Catalog.CategorySource (Kiroku.CategoryName "audit")) "category:audit/application-decoder/v1" (must (Catalog.mkClaimSite "source category:audit"))]
+    [Catalog.TargetDeclaration (must (Catalog.mkTargetId "order_summary")) (Catalog.QualifiedTable "sales" "order_summary") Catalog.ClearBeforeReplay [] (must (Catalog.mkClaimSite "target order_summary")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "audit_log")) (Catalog.QualifiedTable "sales" "audit_log") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target audit_log")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "order_totals")) (Catalog.QualifiedTable "sales" "order_totals") Catalog.ClearBeforeReplay [(must (Catalog.mkTargetId "order_summary"))] (must (Catalog.mkClaimSite "target order_totals")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "shipment_summary")) (Catalog.QualifiedTable "sales" "shipment_summary") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target shipment_summary"))]
+    [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary")), (must (Catalog.mkTargetId "order_totals")), (must (Catalog.mkTargetId "audit_log"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting")), Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "shipping")) [(must (Catalog.mkTargetId "shipment_summary"))] [] (must (Catalog.mkClaimSite "rebuild-group shipping"))]
     [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "catalog-demo-audit")) "catalog-demo-audit" (must (Catalog.mkSourceId "category:audit")) (must (Catalog.mkClaimSite "projection-owner audit_writer subscription"))]
     [Catalog.DedupKeyDeclaration (must (Catalog.mkDedupKeyId "catalog-demo-audit-v1")) "catalog-demo-audit-v1" (must (Catalog.mkClaimSite "projection-owner audit_writer dedup"))]
-    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "catalogAudit")) RMCatalogAudit.catalogAuditReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "audit_log"))] (must (Catalog.mkClaimSite "readmodel catalogAudit")))]
-    [Catalog.SomeProjectionSet orderSummaryWriterProjectionSet, Catalog.SomeProjectionSet auditWriterProjectionSet]
+    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "order_inline")) RMOrderInline.orderInlineReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary"))] (must (Catalog.mkClaimSite "readmodel order_inline"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "shipmentLookup")) RMShipmentLookup.shipmentLookupReadModel (must (Catalog.mkRebuildGroupId "shipping")) [(must (Catalog.mkTargetId "shipment_summary"))] (must (Catalog.mkClaimSite "readmodel shipmentLookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "catalogAudit")) RMCatalogAudit.catalogAuditReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "audit_log"))] (must (Catalog.mkClaimSite "readmodel catalogAudit")))]
+    [Catalog.SomeProjectionSet orderSummaryWriterProjectionSet, Catalog.SomeProjectionSet shipmentWriterProjectionSet, Catalog.SomeProjectionSet auditWriterProjectionSet]
 
 validatedProjectionCatalog :: Catalog.ValidatedProjectionCatalog
 validatedProjectionCatalog = case Catalog.validateProjectionCatalog projectionCatalog of
@@ -93,3 +117,9 @@ reportingRebuildGroupId = (must (Catalog.mkRebuildGroupId "reporting"))
 
 startReportingRebuild :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)
 startReportingRebuild = Rebuild.startCatalogRebuild validatedProjectionCatalog reportingRebuildGroupId
+
+shippingRebuildGroupId :: Catalog.RebuildGroupId
+shippingRebuildGroupId = (must (Catalog.mkRebuildGroupId "shipping"))
+
+startShippingRebuild :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)
+startShippingRebuild = Rebuild.startCatalogRebuild validatedProjectionCatalog shippingRebuildGroupId

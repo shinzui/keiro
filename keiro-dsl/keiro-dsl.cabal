@@ -85,6 +85,7 @@ library
     Keiro.Dsl.NominalType
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
+    Keiro.Dsl.ProjectionMappedImpact
     Keiro.Dsl.ReadModelQueryContract
     Keiro.Dsl.ReadModelShape
     Keiro.Dsl.ReplayImpact
@@ -962,12 +963,21 @@ test-suite keiro-dsl-conformance-projection-catalog
   main-is:        Main.hs
   other-modules:
     CatalogDemo.CatalogAudit.ReadModelHoles
+    CatalogDemo.MappedBindings
+    CatalogDemo.MappedDomain
+    CatalogDemo.OrderInline.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
+    CatalogDemo.Orders.Holes
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
+    CatalogDemo.ShipmentLookup.ReadModelHoles
+    CatalogDemo.Shipments.BehaviorHoles
     Generated.CatalogDemo.BehaviorSourceMap
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.OrderInline.ReadModel
+    Generated.CatalogDemo.OrderInline.ReadModelHarness
+    Generated.CatalogDemo.OrderInline.ReadModelTable
     Generated.CatalogDemo.Orders.BehaviorContract
     Generated.CatalogDemo.Orders.Codec
     Generated.CatalogDemo.Orders.Domain
@@ -977,6 +987,17 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.Orders.Transducer
     Generated.CatalogDemo.ProjectionCatalog
     Generated.CatalogDemo.ReplayAudit
+    Generated.CatalogDemo.ShipmentLookup.ReadModel
+    Generated.CatalogDemo.ShipmentLookup.ReadModelHarness
+    Generated.CatalogDemo.ShipmentLookup.ReadModelTable
+    Generated.CatalogDemo.Shipments.BehaviorContract
+    Generated.CatalogDemo.Shipments.Codec
+    Generated.CatalogDemo.Shipments.Domain
+    Generated.CatalogDemo.Shipments.EventStream
+    Generated.CatalogDemo.Shipments.Harness
+    Generated.CatalogDemo.Shipments.Projection
+    Generated.CatalogDemo.Shipments.Transducer
+    Generated.CatalogDemo.StructuralConformance
 
   build-depends:
     , aeson              >=2.2  && <2.3
@@ -986,6 +1007,7 @@ test-suite keiro-dsl-conformance-projection-catalog
     , hasql-transaction
     , keiki              >=0.9  && <0.10
     , keiro
+    , keiro-dsl
     , kiroku-store
     , text               >=2.1  && <2.2
 

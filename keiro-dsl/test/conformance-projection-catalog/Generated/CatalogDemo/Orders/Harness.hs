@@ -7,6 +7,10 @@ import Generated.CatalogDemo.Orders.Codec (encodeOrdersEvent, parseOrdersEvent, 
 import Generated.CatalogDemo.Orders.Transducer (ordersTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Text qualified as T
+import Keiro.Codec.Structural (FixtureCases (..))
+import CatalogDemo.MappedBindings qualified as MappedBindings
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -18,17 +22,18 @@ harnessAssertions =
   , ("golden round-trip: OrderRecorded", roundTrips sampleEventOrderRecorded)
   , ("accepts RecordOrder from OrdersEmpty", acceptRecordOrder)
   ]
+  ++ mappedConformanceAssertions
   ++ forwardReplayRecordOrder
 
 roundTrips :: OrdersEvent -> Bool
 roundTrips e = parseOrdersEvent (eventType ordersCodec e) (encodeOrdersEvent e) == Right e
 
 sampleEventOrderRecorded :: OrdersEvent
-sampleEventOrderRecorded = OrderRecorded (OrderRecordedData 0)
+sampleEventOrderRecorded = OrderRecorded (OrderRecordedData 0 (snd (NonEmpty.head (fixtureCases MappedBindings.orderPayloadCases))) (snd (NonEmpty.head (fixtureCases MappedBindings.sharedReferenceCases))))
 
 acceptRecordOrder :: Bool
 acceptRecordOrder =
-  case step ordersTransducer (OrdersEmpty, initialOrdersRegs) (RecordOrder (RecordOrderData 0)) of
+  case step ordersTransducer (OrdersEmpty, initialOrdersRegs) (RecordOrder (RecordOrderData 0 (snd (NonEmpty.head (fixtureCases MappedBindings.orderPayloadCases))) (snd (NonEmpty.head (fixtureCases MappedBindings.sharedReferenceCases))))) of
     Just (v, _, _) -> v == OrdersRecorded
     Nothing -> False
 
@@ -36,7 +41,7 @@ acceptRecordOrder =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayRecordOrder :: [(String, Bool)]
 forwardReplayRecordOrder =
-  case step ordersTransducer (OrdersEmpty, initialOrdersRegs) (RecordOrder (RecordOrderData 0)) of
+  case step ordersTransducer (OrdersEmpty, initialOrdersRegs) (RecordOrder (RecordOrderData 0 (snd (NonEmpty.head (fixtureCases MappedBindings.orderPayloadCases))) (snd (NonEmpty.head (fixtureCases MappedBindings.sharedReferenceCases))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseOrdersEvent (eventType ordersCodec event) (encodeOrdersEvent event)) emitted of
@@ -50,3 +55,22 @@ forwardReplayRecordOrder =
               ]
   where
     prefix = "forward/replay equality: RecordOrder from OrdersEmpty -- "
+
+mappedConformanceAssertions :: [(String, Bool)]
+mappedConformanceAssertions =
+  concat
+    [ orderRecordedOrderPayloadAssertions
+    , orderRecordedSharedReferenceAssertions
+    ]
+
+orderRecordedOrderPayloadAssertions :: [(String, Bool)]
+orderRecordedOrderPayloadAssertions =
+  [ ("mapped codec round-trip: OrderRecorded/orderPayload/" <> T.unpack label, roundTrips (OrderRecorded (OrderRecordedData 0 mappedValue (snd (NonEmpty.head (fixtureCases MappedBindings.sharedReferenceCases))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases MappedBindings.orderPayloadCases)
+  ]
+
+orderRecordedSharedReferenceAssertions :: [(String, Bool)]
+orderRecordedSharedReferenceAssertions =
+  [ ("mapped codec round-trip: OrderRecorded/sharedReference/" <> T.unpack label, roundTrips (OrderRecorded (OrderRecordedData 0 (snd (NonEmpty.head (fixtureCases MappedBindings.orderPayloadCases))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases MappedBindings.sharedReferenceCases)
+  ]

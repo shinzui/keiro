@@ -145,6 +145,21 @@ event codec. A category source receives a total replay decoder hole that must
 classify every recorded event as irrelevant, decoded, or failed. Keep network
 calls and other external side effects out of replay apply functions.
 
+Mapped dependencies are inherited, not repeated. An inline projection on
+`Orders` and every catalog owner with `source = aggregate Orders` consume the
+complete transitive mapped closure of `Orders` private-event fields. Mapped
+types used only by commands, registers, workqueues, or read-model query aliases
+are excluded. Scaffold and diff output keep the typed handler relation separate
+from the operational group/target/query-model relation because Keiro does not
+inspect application SQL.
+
+Changing an inherited mapped event wire identity changes the generated
+aggregate-source fingerprint. Replayable owners invalidate the corresponding
+catalog replay contract and rebuild group; live-only and inline handlers are
+reported for recompilation/review without being described as replayable.
+Category and all-history owners remain visible as unsupported heterogeneous
+typed boundaries and never receive an invented mapped declaration.
+
 See [Typed Specifications](typed-spec-toolchain.md#candidate-language-5-projection-catalogs)
 for the complete syntax and validation rules.
 

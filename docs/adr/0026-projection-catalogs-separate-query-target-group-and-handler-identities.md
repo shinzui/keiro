@@ -67,6 +67,25 @@ event: irrelevant, relevant and decoded, or a structured decode failure. The
 authoritative event codec constructs the ordinary adapter path rather than
 being copied into the catalog.
 
+An aggregate projection's mapped Haskell dependencies are derived from that
+aggregate's private-event roots and their complete transitive mapped closure.
+The same rule applies to inline aggregate projections and catalog owners whose
+source is `aggregate Name`. Command, register, queue, and query roots do not
+become projection dependencies merely because they share an aggregate or
+service. The checked relation retains the complete event use path and names the
+typed handler separately from its rebuild group, written targets, and observing
+query models. Those latter relations are operational evidence; unrestricted SQL
+does not justify claiming that a mapped field owns a table column or query type.
+
+Generated aggregate-source fingerprints retain their historical value when an
+aggregate has no mapped event root. Otherwise they include the complete mapped
+event-root paths and transitive wire fingerprints. A mapped event wire change
+therefore invalidates replayable catalog source contracts and their active
+rebuild groups. Inline and live-only handlers still require compilation and
+review but acquire no false replay claim. Category and all-history sources stay
+explicit heterogeneous decoder boundaries and are never assigned a fabricated
+mapped key.
+
 The same validated catalog produces two views. A typed `ProjectionSet event`
 keeps the event type for ordinary inline application. An existential fleet view
 supports heterogeneous validation, inventory, registration, replay planning,
@@ -170,6 +189,10 @@ dedup rows are not completion evidence.
   without event payloads.
 - Generated DSL values and operational commands consume the runtime catalog;
   neither defines a second inventory.
+- Scaffold and diff reports name inherited mapped event paths, typed inline and
+  catalog consumers, groups, targets, observing read models, replay policy, and
+  aggregate-source fingerprints as distinct facts. A query-only, command-only,
+  or register-only mapping change leaves catalog source fingerprints unchanged.
 - Online shadow-table cutover, dynamic plugin discovery, automatic
   application-table creation, replay of external side effects, and static proof
   of arbitrary SQL writes remain outside this decision.

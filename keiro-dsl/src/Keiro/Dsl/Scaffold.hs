@@ -128,6 +128,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned), languageVe
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
+import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint)
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
@@ -4064,6 +4065,13 @@ emitProjectionCatalog ctx spec =
     inlineOwners = [owner | owner <- owners, poFeed owner == RmInline]
     sources = nub (concatMap poSources owners)
     aggregateSources = nub [aggregateName | CatalogAggregate aggregateName <- sources]
+    replayableAggregateSources =
+      nub
+        [ aggregateName
+        | owner <- owners,
+          poReplay owner == ProjectionReplayExplicit,
+          CatalogAggregate aggregateName <- poSources owner
+        ]
     asyncOwners = [owner | owner <- owners, poFeed owner == RmSubscription]
     projectionImports = case (null asyncOwners, null inlineOwners) of
       (False, False) -> ["import Keiro.Projection (AsyncProjection (..), InlineProjection (..))"]
@@ -4075,9 +4083,10 @@ emitProjectionCatalog ctx spec =
     readModelAlias readModel = "RM" <> pascal (rmName readModel)
     readModelImport readModel = "import " <> genPrefixFor ctx (pascal (rmName readModel)) <> ".ReadModel qualified as " <> readModelAlias readModel
     aggregateImports aggregateName =
-      [ "import " <> genPrefixFor ctx aggregateName <> ".Codec qualified as " <> aggregateCodecAlias aggregateName,
-        "import " <> genPrefixFor ctx aggregateName <> ".Domain qualified as " <> aggregateDomainAlias aggregateName
+      [ "import " <> genPrefixFor ctx aggregateName <> ".Codec qualified as " <> aggregateCodecAlias aggregateName
+      | aggregateName `elem` replayableAggregateSources
       ]
+        <> ["import " <> genPrefixFor ctx aggregateName <> ".Domain qualified as " <> aggregateDomainAlias aggregateName]
     aggregateCodecAlias aggregateName = pascal aggregateName <> "Codec"
     aggregateDomainAlias aggregateName = pascal aggregateName <> "Domain"
     sourceExpr source =
@@ -4094,7 +4103,7 @@ emitProjectionCatalog ctx spec =
     sourceScope (CatalogAggregate aggregateName) = "(Catalog.CategorySource (Kiroku.CategoryName " <> tshow (lowerFirst aggregateName) <> "))"
     sourceFingerprint CatalogAll = "all-streams/generated-codec/v1"
     sourceFingerprint (CatalogCategory categoryName) = "category:" <> categoryName <> "/application-decoder/v1"
-    sourceFingerprint (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName <> "/generated-codec/v1"
+    sourceFingerprint (CatalogAggregate aggregateName) = projectionAggregateSourceFingerprint spec aggregateName
     targetExpr target =
       "Catalog.TargetDeclaration "
         <> smart "mkTargetId" (ptName target)

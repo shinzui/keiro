@@ -1422,9 +1422,24 @@ bodies. Regeneration never overwrites reviewed hole code.
 A source of `aggregate Name` derives its mapped consumer dependencies from
 that aggregate's private-event roots; inline aggregate projections use the
 same event authority. Neither relation inherits command-only or register-only
-mapped roots. `category` and `all` remain heterogeneous hand-decoded sources,
-so the checked graph reports their unsupported typed boundary without
-inventing a mapped consumer path.
+mapped roots, nor queue/query roots declared elsewhere in the service. The
+derived relation retains complete transitive paths such as
+`Orders event OrderRecorded .payload : OrderPayload .reference : SharedReference`.
+Scaffold output reports each typed inline/catalog consumer separately from its
+operational group, targets, observing read models, replay policy, and source
+fingerprint. Targets and query models are review/rebuild evidence, not a claim
+that Keiro inferred SQL column dependencies.
+
+A mapped private-event wire change updates the generated aggregate-source
+fingerprint. The ordinary event compatibility finding remains authoritative for
+stored payloads; projection findings additionally identify handlers that must
+recompile and be reviewed. Replayable catalog owners invalidate their running
+rebuild fingerprint and name their affected group. Inline and live-only owners
+have build/review impact but no replay impact. Command-only, register-only, and
+query-only mapped changes leave the aggregate-source fingerprint byte-stable.
+`category` and `all` remain heterogeneous hand-decoded sources, so the checked
+graph reports their unsupported typed boundary without inventing a mapped
+consumer path.
 
 Catalog declarations do not create tables, migrations, indexes, row codecs, or
 SQL. They also cannot prove which tables an unrestricted Hasql transaction

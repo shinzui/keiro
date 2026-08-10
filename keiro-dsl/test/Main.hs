@@ -60,11 +60,12 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consum
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
+import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -236,34 +237,66 @@ main = hspec $ do
               renderConsumerType importPlan graph expression
                 `shouldBe` Right (HaskellTypeOccurrence "[Maybe ArtifactInfo]")
 
-    it "derives projection consumers only from aggregate event authority and exposes heterogeneous boundaries" $ do
+    it "derives mapped projection impact from aggregate event authority and exposes heterogeneous boundaries" $ do
       source <- mappedConsumerSurfaceSource
       base <- parseInlineSpec "<mapped-consumer-projections>" source
       let projection = ProjectionSpec "artifact_view" (Just Eventual) "key" Nothing noLoc
           withInlineProjection node = case node of
             NAggregate aggregate -> NAggregate aggregate {aggProjection = Just projection}
+            NReadModel readModel@ReadModelNode {rmName = "ArtifactLookup"} ->
+              NReadModel
+                readModel
+                  { rmGroup = Just "artifact_group",
+                    rmObservedTargets = ["artifact_target"]
+                  }
             other -> other
-          owner name sourceKind =
+          owner name sourceKind feed groupName targetNames replayPolicy =
             NProjectionOwner
               ProjectionOwnerNode
                 { poName = name,
                   poSources = [sourceKind],
-                  poFeed = RmInline,
-                  poGroup = "artifact_group",
-                  poTargets = ["artifact_view"],
+                  poFeed = feed,
+                  poGroup = groupName,
+                  poTargets = targetNames,
                   poOrder = 1,
-                  poSubscription = Nothing,
-                  poDedup = Nothing,
-                  poReplay = ProjectionReplayExplicit,
+                  poSubscription = if feed == RmSubscription then Just (name <> "-subscription") else Nothing,
+                  poDedup = if feed == RmSubscription then Just (name <> "-dedup") else Nothing,
+                  poReplay = replayPolicy,
                   poLoc = noLoc
+                }
+          target name = NProjectionTarget (ProjectionTargetNode name "public" name TargetClear [] noLoc)
+          groupNode name targetName = NRebuildGroup (RebuildGroupNode name [targetName] [targetName] noLoc)
+          disjointReadModel =
+            NReadModel
+              ReadModelNode
+                { rmName = "DisjointLookup",
+                  rmTable = "disjoint_lookup",
+                  rmSchema = "public",
+                  rmColumns = [],
+                  rmVersion = 1,
+                  rmShape = "fixture",
+                  rmConsistency = Eventual,
+                  rmScope = Nothing,
+                  rmFeed = RmSubscription,
+                  rmSubscription = Just "disjoint-lookup",
+                  rmGroup = Just "disjoint_group",
+                  rmObservedTargets = ["disjoint_target"],
+                  queryTypes = Nothing,
+                  rmLoc = noLoc
                 }
           spec =
             base
               { specNodes =
                   map withInlineProjection (specNodes base)
-                    <> [ owner "artifactProjection" (CatalogAggregate "Catalog"),
-                         owner "categoryProjection" (CatalogCategory "artifact"),
-                         owner "allProjection" CatalogAll
+                    <> [ target "artifact_target",
+                         target "disjoint_target",
+                         groupNode "artifact_group" "artifact_target",
+                         groupNode "disjoint_group" "disjoint_target",
+                         owner "artifactProjection" (CatalogAggregate "Catalog") RmSubscription "artifact_group" ["artifact_target"] ProjectionReplayExplicit,
+                         owner "liveProjection" (CatalogAggregate "Catalog") RmInline "disjoint_group" ["disjoint_target"] (ProjectionLiveOnly "live only"),
+                         owner "categoryProjection" (CatalogCategory "artifact") RmSubscription "artifact_group" ["artifact_target"] ProjectionReplayExplicit,
+                         owner "allProjection" CatalogAll RmInline "disjoint_group" ["disjoint_target"] (ProjectionLiveOnly "heterogeneous"),
+                         disjointReadModel
                        ]
               }
       impact <- semanticImpact <$> shouldResolveTypeGraph spec
@@ -273,13 +306,107 @@ main = hspec $ do
             WorkqueueConsumer "ArtifactJobs",
             ReadModelConsumer "ArtifactLookup",
             DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Catalog" "artifact_view"),
-            DerivedProjectionConsumer (CatalogProjectionConsumer "artifactProjection" "Catalog")
+            DerivedProjectionConsumer (CatalogProjectionConsumer "artifactProjection" "Catalog"),
+            DerivedProjectionConsumer (CatalogProjectionConsumer "liveProjection" "Catalog")
           ]
       Set.fromList (impactUnsupportedProjectionSources impact)
         `shouldBe` Set.fromList
           [ UnsupportedCatalogCategory "categoryProjection" "artifact",
             UnsupportedCatalogAll "allProjection"
           ]
+      let projected = ProjectionImpact.projectionMappedImpact (stableCheckedService spec) impact
+          locationConsumers = ProjectionImpact.projectionConsumersFor projected (MappedKey "ArtifactLocation")
+      locationConsumers
+        `shouldBe` Set.fromList
+          [ AggregateInlineProjectionConsumer "Catalog" "artifact_view",
+            CatalogProjectionConsumer "artifactProjection" "Catalog",
+            CatalogProjectionConsumer "liveProjection" "Catalog"
+          ]
+      ( [ renderUsePath inheritedPath
+        | ProjectionImpact.ProjectionMappedRoot derived declarationKey inheritedPath <- ProjectionImpact.roots projected,
+          derived == CatalogProjectionConsumer "artifactProjection" "Catalog",
+          declarationKey == MappedKey "ArtifactLocation"
+        ]
+        )
+        `shouldBe` ["Catalog event ArtifactObserved .artifact : ArtifactInfo .location : ArtifactLocation"]
+      ProjectionImpact.projectionOperationsFor projected (MappedKey "ArtifactLocation")
+        `shouldBe` [ ProjectionImpact.ProjectionOperationalImpact
+                       (AggregateInlineProjectionConsumer "Catalog" "artifact_view")
+                       Nothing
+                       (Set.singleton "artifact_view")
+                       Set.empty
+                       False
+                       (ProjectionImpact.projectionAggregateSourceFingerprint spec "Catalog"),
+                     ProjectionImpact.ProjectionOperationalImpact
+                       (CatalogProjectionConsumer "artifactProjection" "Catalog")
+                       (Just "artifact_group")
+                       (Set.singleton "artifact_target")
+                       (Set.singleton "ArtifactLookup")
+                       True
+                       (ProjectionImpact.projectionAggregateSourceFingerprint spec "Catalog"),
+                     ProjectionImpact.ProjectionOperationalImpact
+                       (CatalogProjectionConsumer "liveProjection" "Catalog")
+                       (Just "disjoint_group")
+                       (Set.singleton "disjoint_target")
+                       (Set.singleton "DisjointLookup")
+                       False
+                       (ProjectionImpact.projectionAggregateSourceFingerprint spec "Catalog")
+                   ]
+      ProjectionImpact.unsupported projected
+        `shouldBe` [ ProjectionImpact.UnsupportedProjectionImpact
+                       (UnsupportedCatalogCategory "categoryProjection" "artifact")
+                       "artifact_group"
+                       (Set.singleton "artifact_target")
+                       (Set.singleton "ArtifactLookup")
+                       True,
+                     ProjectionImpact.UnsupportedProjectionImpact
+                       (UnsupportedCatalogAll "allProjection")
+                       "disjoint_group"
+                       (Set.singleton "disjoint_target")
+                       (Set.singleton "DisjointLookup")
+                       False
+                   ]
+      let baseFingerprint = ProjectionImpact.projectionAggregateSourceFingerprint spec "Catalog"
+          wireChanged = mapMappedDeclaration "ArtifactLocation" changeProjectionMappedWire spec
+          commandOnly = projectionEventWithoutGeometry spec
+          commandOnlyChanged = mapMappedDeclaration "VendorGeometry" changeProjectionMappedWire commandOnly
+      ProjectionImpact.projectionAggregateSourceFingerprint wireChanged "Catalog" `shouldNotBe` baseFingerprint
+      ProjectionImpact.projectionAggregateSourceFingerprint commandOnlyChanged "Catalog"
+        `shouldBe` ProjectionImpact.projectionAggregateSourceFingerprint commandOnly "Catalog"
+      let generatedCatalog candidate =
+            generatedTextEndingIn "ProjectionCatalog.hs" (scaffoldProjectionCatalog (defaultContext (specContext candidate)) candidate)
+          baseCatalog = generatedCatalog spec
+      baseCatalog `shouldSatisfy` T.isInfixOf (T.pack (show baseFingerprint))
+      generatedCatalog wireChanged `shouldNotBe` baseCatalog
+      generatedCatalog commandOnlyChanged `shouldBe` generatedCatalog commandOnly
+      let projectionChanges =
+            [ kindOfChange change
+            | change <- diffSpecs spec wireChanged,
+              ckFacet (kindOfChange change) == "mapped-projection"
+            ]
+      map ckNode projectionChanges `shouldBe` ["Catalog", "artifactProjection", "liveProjection"]
+      map ckSubject projectionChanges
+        `shouldBe` [ "aggregate-projection:Catalog:artifact_view inherits ArtifactLocation",
+                     "catalog-projection:artifactProjection:Catalog inherits ArtifactLocation",
+                     "catalog-projection:liveProjection:Catalog inherits ArtifactLocation"
+                   ]
+      map ckPaths projectionChanges
+        `shouldBe` replicate 3 ["Catalog event ArtifactObserved .artifact : ArtifactInfo .location : ArtifactLocation"]
+      projectionChanges `shouldSatisfy` all ((== VAdvisory) . cvConsumerBuild . ckVector)
+      map ckDetail projectionChanges
+        `shouldSatisfy` any (T.isInfixOf "group=artifact_group, targets=[artifact_target], read-models=[ArtifactLookup], replayable=yes")
+      [kindOfChange change | change <- diffSpecs commandOnly commandOnlyChanged, ckFacet (kindOfChange change) == "mapped-projection"]
+        `shouldBe` []
+      case ReplayImpact.catalogReplayImpactServices (stableCheckedService spec) (stableCheckedService wireChanged) of
+        CatalogReplayAffected groups targets sources adapters invalidates -> do
+          groups `shouldBe` Set.singleton "artifact_group"
+          targets `shouldBe` Set.singleton "artifact_target"
+          sources `shouldBe` Set.singleton "aggregate:Catalog"
+          adapters `shouldBe` Set.singleton "artifactProjection"
+          invalidates `shouldBe` True
+        CatalogReplayNeutral -> expectationFailure "mapped event wire change was catalog replay-neutral"
+      ReplayImpact.catalogReplayImpactServices (stableCheckedService commandOnly) (stableCheckedService commandOnlyChanged)
+        `shouldBe` CatalogReplayNeutral
       let snapshot = semanticImpactSnapshot impact
       Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
 
@@ -1415,9 +1542,71 @@ main = hspec $ do
           targets = [target | NProjectionTarget target <- specNodes spec]
           groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
           owners = [owner | NProjectionOwner owner <- specNodes spec]
-      map ptName targets `shouldBe` ["order_summary", "audit_log", "order_totals"]
-      map rgName groups `shouldBe` ["reporting"]
-      map poName owners `shouldBe` ["order_summary_writer", "audit_writer"]
+      map ptName targets `shouldBe` ["order_summary", "audit_log", "order_totals", "shipment_summary"]
+      map rgName groups `shouldBe` ["reporting", "shipping"]
+      map poName owners `shouldBe` ["order_summary_writer", "shipment_writer", "audit_writer"]
+
+    it "derives and restores mapped projection impact for the compiled A/B catalog fixture" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      service <- checkedServiceFromText "projection-catalog.keiro" source
+      baseImpact <- case ProjectionImpact.projectionMappedImpactForService service of
+        Nothing -> expectationFailure "projection fixture type graph did not resolve" >> fail "unreachable"
+        Just value -> pure value
+      ProjectionImpact.projectionConsumersFor baseImpact (MappedKey "OrderPayload")
+        `shouldBe` Set.fromList
+          [ AggregateInlineProjectionConsumer "Orders" "order_inline",
+            CatalogProjectionConsumer "order_summary_writer" "Orders"
+          ]
+      ProjectionImpact.projectionConsumersFor baseImpact (MappedKey "SharedReference")
+        `shouldBe` Set.fromList
+          [ AggregateInlineProjectionConsumer "Orders" "order_inline",
+            CatalogProjectionConsumer "order_summary_writer" "Orders",
+            CatalogProjectionConsumer "shipment_writer" "Shipments"
+          ]
+      ProjectionImpact.unsupported baseImpact
+        `shouldBe` [ ProjectionImpact.UnsupportedProjectionImpact
+                       (UnsupportedCatalogCategory "audit_writer" "audit")
+                       "reporting"
+                       (Set.singleton "audit_log")
+                       (Set.singleton "catalogAudit")
+                       True
+                   ]
+      let rendered = ProjectionImpact.renderProjectionMappedImpact baseImpact
+      rendered `shouldContain` ["      inherited event roots: Orders event OrderRecorded .orderPayload : OrderPayload"]
+      rendered
+        `shouldContain` ["      operation: group=shipping; targets=shipment_summary; read-models=shipmentLookup; replayable=no; source-fingerprint=aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5"]
+      rendered `shouldContain` ["    catalog-category:audit_writer:audit"]
+
+      eventChanged <- checkedServiceFromText "projection-catalog-event-changed.keiro" (T.replace "version = \"1\"" "version = \"2\"" source)
+      sourceChanged <- checkedServiceFromText "projection-catalog-source-changed.keiro" (T.replace "source = aggregate Orders" "source = aggregate Shipments" source)
+      replayChanged <- checkedServiceFromText "projection-catalog-replay-changed.keiro" (T.replace "replay = live-only \"carrier events cannot be replayed\"" "replay = explicit" source)
+      observationChanged <- checkedServiceFromText "projection-catalog-observation-changed.keiro" (T.replace "targets = [ order_summary ]" "targets = [ audit_log ]" source)
+      categoryChanged <- checkedServiceFromText "projection-catalog-category-changed.keiro" (T.replace "source = category \"audit\"" "source = category \"archive-audit\"" source)
+      let requireImpact caseLabel candidate = case ProjectionImpact.projectionMappedImpactForService candidate of
+            Nothing -> expectationFailure (caseLabel <> " type graph did not resolve") >> fail "unreachable"
+            Just value -> pure value
+          findOperation derived impact =
+            Map.lookup derived (ProjectionImpact.operations impact)
+          operationReplay (ProjectionImpact.ProjectionOperationalImpact _ _ _ _ canReplay _) = canReplay
+          operationObservers (ProjectionImpact.ProjectionOperationalImpact _ _ _ observers _ _) = observers
+          operationFingerprint (ProjectionImpact.ProjectionOperationalImpact _ _ _ _ _ fingerprint) = fingerprint
+      eventImpact <- requireImpact "event mutation" eventChanged
+      sourceImpact <- requireImpact "source mutation" sourceChanged
+      replayImpact <- requireImpact "replay mutation" replayChanged
+      observationImpact <- requireImpact "observation mutation" observationChanged
+      categoryImpact <- requireImpact "category mutation" categoryChanged
+      operationFingerprint <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") eventImpact
+        `shouldNotBe` operationFingerprint <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") baseImpact
+      ProjectionImpact.projectionConsumersFor sourceImpact (MappedKey "OrderPayload")
+        `shouldBe` Set.singleton (AggregateInlineProjectionConsumer "Orders" "order_inline")
+      operationReplay <$> findOperation (CatalogProjectionConsumer "shipment_writer" "Shipments") replayImpact
+        `shouldBe` Just True
+      operationObservers <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") observationImpact
+        `shouldBe` Just Set.empty
+      map ProjectionImpact.source (ProjectionImpact.unsupported categoryImpact)
+        `shouldBe` [UnsupportedCatalogCategory "audit_writer" "archive-audit"]
+      restored <- checkedServiceFromText "projection-catalog-restored.keiro" source >>= requireImpact "restored fixture"
+      restored `shouldBe` baseImpact
 
     it "feature-gates catalog declarations before validation in languages 1-4" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -1496,8 +1685,14 @@ main = hspec $ do
         case second of
           Left _ -> fail "unreachable"
           Right report ->
-            reportDispositions report
-              `shouldSatisfy` any (\(moduleValue, disposition) -> holeSuffix `isSuffixOfPath` moduleValue && disposition == Skipped)
+            do
+              reportDispositions report
+                `shouldSatisfy` any (\(moduleValue, disposition) -> holeSuffix `isSuffixOfPath` moduleValue && disposition == Skipped)
+              renderScaffoldReport report
+                `shouldContain` ["      inherited event roots: Orders event OrderRecorded .orderPayload : OrderPayload"]
+              renderScaffoldReport report
+                `shouldContain` ["      operation: group=shipping; targets=shipment_summary; read-models=shipmentLookup; replayable=no; source-fingerprint=aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5"]
+              renderScaffoldReport report `shouldContain` ["    catalog-category:audit_writer:audit"]
 
     it "classifies every catalog evolution dimension and reports machine-readable replay impact" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -1531,7 +1726,7 @@ main = hspec $ do
               ("feed", CatalogFeedIdentityChanged, T.replace "feed = subscription" "feed = inline"),
               ("subscription", CatalogFeedIdentityChanged, T.replace "subscription = \"catalog-demo-audit\"" "subscription = \"catalog-demo-audit-v2\""),
               ("dedup", CatalogFeedIdentityChanged, T.replace "dedup = \"catalog-demo-audit-v1\"" "dedup = \"catalog-demo-audit-v2\""),
-              ("replay-policy", CatalogReplayPolicyChanged, T.replace "replay = explicit\n}\n\nreadmodel" "replay = live-only \"external effect\"\n}\n\nreadmodel"),
+              ("replay-policy", CatalogReplayPolicyChanged, T.replace "replay = live-only \"carrier events cannot be replayed\"" "replay = explicit"),
               ("query-binding", CatalogQueryBindingChanged, T.replace "targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
             ]
       changedServices <-
@@ -11040,6 +11235,46 @@ mappedConsumerSurfaceSource = do
           "  feed = subscription",
           "}"
         ]
+
+changeProjectionMappedWire :: MappedDecl -> MappedDecl
+changeProjectionMappedWire declaration@MappedOpaque {moCodecVersion = version} =
+  declaration {moCodecVersion = fmap (<> "-changed") version}
+changeProjectionMappedWire declaration@MappedStructural {msShape = ShapeUnion encoding arms} =
+  declaration
+    { msShape =
+        ShapeUnion
+          encoding
+          ( case arms of
+              [] -> []
+              arm : remaining -> arm {waTag = waTag arm <> "-changed"} : remaining
+          )
+    }
+changeProjectionMappedWire declaration = declaration
+
+projectionEventWithoutGeometry :: Spec -> Spec
+projectionEventWithoutGeometry candidate =
+  candidate {specNodes = map stripGeometry (specNodes candidate)}
+  where
+    stripGeometry (NAggregate aggregate) =
+      let artifactFields =
+            [ field
+            | command <- aggCommands aggregate,
+              cmdName command == "ObserveArtifact",
+              field <- cmdFields command,
+              aggregateFieldName field == "artifact"
+            ]
+       in NAggregate
+            aggregate
+              { aggRegs = filter ((/= "currentGeometry") . regName) (aggRegs aggregate),
+                aggEvents = map (explicitArtifactEvent artifactFields) (aggEvents aggregate),
+                aggTransitions = map stripGeometryWrite (aggTransitions aggregate)
+              }
+    stripGeometry node = node
+    explicitArtifactEvent artifactFields event@Event {evBody = EventFromCommand commandName}
+      | commandName == "ObserveArtifact" =
+          event {evBody = EventFields artifactFields}
+    explicitArtifactEvent _ event = event
+    stripGeometryWrite transition = transition {tWrites = filter ((/= "currentGeometry") . fst) (tWrites transition)}
 
 parseInlineSpec :: FilePath -> T.Text -> IO Spec
 parseInlineSpec sourceName src = case parseSpec sourceName src of

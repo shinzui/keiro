@@ -535,6 +535,16 @@ select the offline rebuild. Runtime resume independently compares the complete
 persisted catalog/replay fingerprint before invoking a handler, so an old run
 cannot silently continue under new code.
 
+A mapped wire change under a private event also fans out to every inline
+projection and `source = aggregate` catalog owner that inherits that event.
+The event finding continues to classify historical decode compatibility. The
+additional `mapped-projection` findings name the exact inherited event path and
+the handler's group, targets, observing read models, replay policy, and source
+fingerprint. Only replayable catalog owners enter catalog replay impact;
+live-only and inline consumers remain build/review obligations. A mapped change
+reachable only from a command, register, workqueue, or query contract does not
+change a catalog source fingerprint.
+
 Generated and hand-owned changes have different review paths. Re-scaffolding
 may replace `Generated.<Context>.ProjectionCatalog`, but it never overwrites
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles`. Review changes to live

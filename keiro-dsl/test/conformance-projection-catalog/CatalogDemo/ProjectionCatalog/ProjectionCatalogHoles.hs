@@ -1,6 +1,7 @@
 module CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
   ( applyOrderSummaryWriterLive
   , applyOrderSummaryWriterReplay
+  , applyShipmentWriterLive
   , AuditWriterEvent
   , applyAuditWriterLive
   , auditWriterIdempotencyKey
@@ -10,6 +11,7 @@ module CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
 
 import Hasql.Transaction qualified as Tx
 import Generated.CatalogDemo.Orders.Domain (OrdersEvent)
+import Generated.CatalogDemo.Shipments.Domain (ShipmentsEvent)
 import Keiro.Projection.Catalog qualified as Catalog
 import Kiroku.Store.Types (EventId, RecordedEvent (..))
 
@@ -18,6 +20,9 @@ applyOrderSummaryWriterLive _event _recorded = pure ()
 
 applyOrderSummaryWriterReplay :: OrdersEvent -> RecordedEvent -> Tx.Transaction ()
 applyOrderSummaryWriterReplay _event _recorded = pure ()
+
+applyShipmentWriterLive :: ShipmentsEvent -> RecordedEvent -> Tx.Transaction ()
+applyShipmentWriterLive _event _recorded = pure ()
 
 data AuditWriterEvent = AuditWriterEvent
 

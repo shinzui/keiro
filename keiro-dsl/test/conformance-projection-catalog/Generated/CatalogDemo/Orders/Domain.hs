@@ -7,6 +7,7 @@ import Data.Proxy (Proxy (..))
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Numeric.Natural (Natural)
+import CatalogDemo.MappedDomain (OrderPayload, SharedReference)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data OrdersVertex = OrdersEmpty | OrdersRecorded
@@ -14,6 +15,8 @@ data OrdersVertex = OrdersEmpty | OrdersRecorded
 
 data RecordOrderData = RecordOrderData
   { amount :: !Natural
+  , orderPayload :: !OrderPayload
+  , sharedReference :: !SharedReference
   }
   deriving stock (Generic, Eq, Show)
 
@@ -22,6 +25,8 @@ data OrdersCommand = RecordOrder !RecordOrderData
 
 data OrderRecordedData = OrderRecordedData
   { amount :: !Natural
+  , orderPayload :: !OrderPayload
+  , sharedReference :: !SharedReference
   }
   deriving stock (Generic, Eq, Show)
 

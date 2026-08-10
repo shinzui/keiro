@@ -38,13 +38,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: define one deterministic projection-source dependency projection over the
+- [x] Milestone 1: define one deterministic projection-source dependency projection over the
   checked service and MP-34 semantic impact.
-- [ ] Milestone 2: connect aggregate inline and catalog aggregate owners to exact mapped event
+- [x] Milestone 2: connect aggregate inline and catalog aggregate owners to exact mapped event
   paths, handlers, groups, targets, and query-model observers.
-- [ ] Milestone 3: integrate derived projection dependencies with generated catalog codec/fingerprint
+- [x] Milestone 3: integrate derived projection dependencies with generated catalog codec/fingerprint
   assembly and source-aware evolution findings.
-- [ ] Milestone 4: prove local projection impact and unsupported heterogeneous boundaries with
+- [x] Milestone 4: prove local projection impact and unsupported heterogeneous boundaries with
   compiled fixtures, restoring mutations, ADR/docs, and full validation.
 
 
@@ -53,7 +53,16 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The historical aggregate catalog source fingerprint was a literal
+  `aggregate:<Name>/generated-codec/v1`. Preserving that exact text for aggregates without mapped
+  event roots kept all unrelated candidate fixtures byte-stable while allowing mapped-event
+  authorities to append a deterministic path/wire digest.
+- Expanding the compiled catalog fixture with a live-only aggregate source exposed an unused
+  generated codec import under `-Werror`. Codec imports are required only for replayable aggregate
+  owners; live-only owners need the generated event domain but no replay codec.
+- The existing projection-catalog conformance fixture already compiled aggregate, catalog,
+  query-model, and handler seams. Extending it to two aggregates provided stronger integrated
+  evidence than introducing a parallel synthetic component.
 
 
 ## Decision Log
@@ -89,6 +98,20 @@ Record every decision made while working on the plan.
   replay adapter must not carry a copied codec identity that can drift.
   Date: 2026-08-09
 
+- Decision: Preserve the released aggregate-source fingerprint byte when no mapped private-event
+  root exists, and append a digest of sorted complete event paths plus transitive wire identities
+  otherwise.
+  Rationale: Existing catalogs remain source-stable while mapped event evolution becomes visible
+  to generated runtime assembly without admitting command, register, queue, or query roots.
+  Date: 2026-08-10
+
+- Decision: Emit projection mapped impact as a distinct scaffold section on standalone and
+  workspace runs, even when no mapping drift occurred in that invocation.
+  Rationale: The checked typed/operational relation is current service inventory, while mapping
+  drift is historical evidence. Hiding the relation behind a drift gate would make first-run and
+  steady-state review incomplete.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -97,7 +120,20 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The implementation now derives projection consumers from complete private-event paths through one
+`ProjectionMappedImpact` projection. It separates typed inline/catalog consumers from groups,
+targets, observing read models, replay policy, source fingerprints, and explicit unsupported
+category/all boundaries. Generated aggregate catalog sources incorporate mapped event wire
+authority; diff preserves the original event finding and adds exact projection build findings;
+catalog replay impact includes only affected replayable owners.
+
+The expanded committed fixture contains an Orders-only payload, a shared Orders/Shipments payload,
+one inline projection, replayable and live-only aggregate owners in disjoint groups, observing
+query models, and a category decoder. Its aggregate codecs, inline/catalog handlers, query models,
+structural conformance, and catalog runtime all compile and execute. The 653-example DSL suite,
+every compiled `keiro-dsl` test component, `cabal build all`, the shell diff harness, Nix
+formatting, ADR validation, and diff hygiene pass. The plan's documented `just check-adr` spelling
+was stale; the repository's current equivalent is `just adr-validate`.
 
 
 ## Context and Orientation
