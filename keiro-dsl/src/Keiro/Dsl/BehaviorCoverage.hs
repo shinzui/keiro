@@ -11,6 +11,8 @@ module Keiro.Dsl.BehaviorCoverage
     EvidenceLevel (..),
     GuardCoverage (..),
     OutputEvidence (..),
+    RequirementOrigin (..),
+    BehaviorExactLocation (..),
     BehaviorRequirement (..),
     BehaviorRecordRow (..),
     BehaviorDerivationError (..),
@@ -38,6 +40,7 @@ import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
+import Keiro.Dsl.SourceIndex (TransitionOrdinal (..))
 
 newtype BehaviorKey = BehaviorKey {unBehaviorKey :: Text}
   deriving stock (Eq, Ord, Show)
@@ -66,8 +69,26 @@ data OutputEvidence
   | HandOwnedOutput !OutputObligationKey
   deriving stock (Eq, Ord, Show)
 
+-- | The semantic source subject that owns an obligation. Unlike 'Loc', this
+-- identity does not change when source text moves and can therefore be joined
+-- to an independently checked exact source index.
+data RequirementOrigin
+  = TransitionRequirementOrigin !Name !TransitionOrdinal
+  | RejectionRequirementOrigin !Name !Name
+  deriving stock (Eq, Ord, Show)
+
+-- | Current exact presentation data attached only by a source-aware reporting
+-- path. It never contributes to 'requirementCanonical' or 'BehaviorKey'.
+data BehaviorExactLocation = BehaviorExactLocation
+  { exactSourceFile :: !FilePath,
+    exactSourceLine :: !Int,
+    exactSourceColumn :: !Int
+  }
+  deriving stock (Eq, Ord, Show)
+
 data BehaviorRequirement = BehaviorRequirement
   { requirementKey :: !BehaviorKey,
+    requirementOrigin :: !RequirementOrigin,
     requirementKind :: !ObligationKind,
     requirementEvidence :: !EvidenceLevel,
     requirementGuardCoverage :: !GuardCoverage,
@@ -80,6 +101,7 @@ data BehaviorRequirement = BehaviorRequirement
     requirementEvents :: ![Name],
     requirementOutputs :: ![OutputEvidence],
     requirementLocation :: !Loc,
+    requirementExactLocation :: !(Maybe BehaviorExactLocation),
     requirementOwner :: !(Maybe FilePath),
     requirementCanonical :: !Text
   }
@@ -199,7 +221,14 @@ instance ToJSON BehaviorRequirement where
         "mode" .= fmap transitionModeText (requirementMode requirement),
         "events" .= requirementEvents requirement,
         "outputs" .= requirementOutputs requirement,
-        "location" .= object (["line" .= unLoc (requirementLocation requirement)] <> ["member" .= owner | Just owner <- [requirementOwner requirement]])
+        "location"
+          .= object
+            ( ["line" .= maybe (unLoc (requirementLocation requirement)) exactSourceLine (requirementExactLocation requirement)]
+                <> ["member" .= owner | Just owner <- [requirementOwner requirement]]
+                <> ["file" .= exactSourceFile exact | Just exact <- [requirementExactLocation requirement]]
+                <> ["column" .= exactSourceColumn exact | Just exact <- [requirementExactLocation requirement]]
+                <> ["quality" .= maybe ("line-only" :: Text) (const "exact") (requirementExactLocation requirement)]
+            )
       ]
 
 instance ToJSON BehaviorObligationsReport where
@@ -224,33 +253,34 @@ deriveBehaviorRequirements spec = case fmap concat (traverse (deriveAggregateBeh
 deriveAggregateBehaviorRequirements :: Spec -> Aggregate -> Either BehaviorDerivationError [BehaviorRequirement]
 deriveAggregateBehaviorRequirements spec aggregate = do
   let reachable = liveReachableStates aggregate
+      indexedTransitions = zip (map TransitionOrdinal [0 ..]) (aggTransitions aggregate)
       liveTransitions =
-        [ transition
-        | transition <- aggTransitions aggregate,
+        [ (ordinal, transition)
+        | (ordinal, transition) <- indexedTransitions,
           tMode transition == TmLive,
           tSource transition `Set.member` reachable
         ]
-      replayTransitions = [transition | transition <- aggTransitions aggregate, tMode transition == TmReplayOnly]
+      replayTransitions = [(ordinal, transition) | (ordinal, transition) <- indexedTransitions, tMode transition == TmReplayOnly]
       commands = map cmdName (aggCommands aggregate)
       cells = [(state, command) | state <- Set.toAscList reachable, command <- commands]
       cellTransitions state command =
-        [ transition
-        | transition <- liveTransitions,
+        [ (ordinal, transition)
+        | (ordinal, transition) <- liveTransitions,
           tSource transition == state,
           tCommand transition == command
         ]
       transitionRows =
-        [ transitionRequirement spec aggregate (cellGuardCoverage siblings) transition
+        [ transitionRequirement spec aggregate (cellGuardCoverage (map snd siblings)) ordinal transition
         | (state, command) <- cells,
           let siblings = cellTransitions state command,
-          transition <- siblings
+          (ordinal, transition) <- siblings
         ]
       rejectionRows =
         [ pure (rejectionRequirement spec aggregate state command)
         | (state, command) <- cells,
           null (cellTransitions state command)
         ]
-      replayRows = [transitionRequirement spec aggregate (replayGuardCoverage transition) transition | transition <- replayTransitions]
+      replayRows = [transitionRequirement spec aggregate (replayGuardCoverage transition) ordinal transition | (ordinal, transition) <- replayTransitions]
   sequence (transitionRows <> rejectionRows <> replayRows)
 
 behaviorRecordRows :: [BehaviorRequirement] -> [BehaviorRecordRow]
@@ -276,8 +306,8 @@ behaviorObligationsReport :: FilePath -> Spec -> Either [BehaviorDerivationError
 behaviorObligationsReport subject spec =
   BehaviorObligationsReport subject Nothing <$> deriveBehaviorRequirements spec
 
-transitionRequirement :: Spec -> Aggregate -> GuardCoverage -> Transition -> Either BehaviorDerivationError BehaviorRequirement
-transitionRequirement spec aggregate guardCoverage transition = do
+transitionRequirement :: Spec -> Aggregate -> GuardCoverage -> TransitionOrdinal -> Transition -> Either BehaviorDerivationError BehaviorRequirement
+transitionRequirement spec aggregate guardCoverage ordinal transition = do
   if null (tEmits transition) && (tSource transition /= tGoto transition || not (null (tWrites transition)))
     then Left (EventlessStateChange (aggName aggregate) (tSource transition) (tCommand transition))
     else pure ()
@@ -291,6 +321,7 @@ transitionRequirement spec aggregate guardCoverage transition = do
   pure
     BehaviorRequirement
       { requirementKey = canonicalKey canonical,
+        requirementOrigin = TransitionRequirementOrigin (aggName aggregate) ordinal,
         requirementKind = kind,
         requirementEvidence = transitionEvidence transition,
         requirementGuardCoverage = guardCoverage,
@@ -303,6 +334,7 @@ transitionRequirement spec aggregate guardCoverage transition = do
         requirementEvents = tEmits transition,
         requirementOutputs = outputs,
         requirementLocation = tLoc transition,
+        requirementExactLocation = Nothing,
         requirementOwner = Nothing,
         requirementCanonical = canonical
       }
@@ -311,6 +343,7 @@ rejectionRequirement :: Spec -> Aggregate -> Name -> Name -> BehaviorRequirement
 rejectionRequirement spec aggregate state command =
   BehaviorRequirement
     { requirementKey = canonicalKey canonical,
+      requirementOrigin = RejectionRequirementOrigin (aggName aggregate) state,
       requirementKind = RequiredRejection,
       requirementEvidence = aggregateEvidence aggregate,
       requirementGuardCoverage = GuardNotApplicable,
@@ -323,6 +356,7 @@ rejectionRequirement spec aggregate state command =
       requirementEvents = [],
       requirementOutputs = [],
       requirementLocation = maybe (aggLoc aggregate) stLoc (find ((== state) . stName) (aggStates aggregate)),
+      requirementExactLocation = Nothing,
       requirementOwner = Nothing,
       requirementCanonical = canonical
     }
@@ -471,6 +505,19 @@ renderBehaviorObligationsText report =
         <> ", guard="
         <> guardCoverageText (requirementGuardCoverage requirement)
         <> "]"
+        <> maybe (renderLineOnly requirement) renderExact (requirementExactLocation requirement)
+    renderExact exact =
+      " "
+        <> T.pack (exactSourceFile exact)
+        <> ":"
+        <> tshow (exactSourceLine exact)
+        <> ":"
+        <> tshow (exactSourceColumn exact)
+        <> " [location-quality=exact]"
+    renderLineOnly requirement =
+      " line "
+        <> tshow (unLoc (requirementLocation requirement))
+        <> " [location-quality=line-only]"
 
 encodeBehaviorObligationsJson :: BehaviorObligationsReport -> Text
 encodeBehaviorObligationsJson = Text.decodeUtf8 . BL.toStrict . Aeson.encode

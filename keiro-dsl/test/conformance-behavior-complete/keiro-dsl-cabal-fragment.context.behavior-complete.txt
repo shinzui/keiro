@@ -10,6 +10,7 @@ default-extensions:
 other-modules:
     BehaviorComplete.Bindings
     BehaviorComplete.Journey.BehaviorHoles
+    Generated.BehaviorComplete.BehaviorSourceMap
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain
@@ -21,6 +22,7 @@ other-modules:
     Generated.BehaviorComplete.Nominals.Internal
     Generated.BehaviorComplete.ReplayAudit
     Generated.BehaviorComplete.Structural.Shape.StartPayload
+    Generated.BehaviorComplete.StructuralConformance
     Generated.BehaviorComplete.StructuralProjections
 
 build-depends:

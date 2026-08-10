@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-08-05T14:23:30Z
+timestamp: 2026-08-10T00:52:02Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -122,13 +122,18 @@ explicit stricter gate.
 
 Generated behavior evidence is human-attributable without changing its stable
 identity. Every hash-sorted requirement and newly created pending witness row
-annotates the source-state × command cell, obligation kind, and spec line while
-retaining the exact `BehaviorKey` bytes. A failed witness carries the same
-subject plus its stable failure code; comparisons report both actual and
-expected values in text, and the append-only `keiro/behavior-conformance/1`
-JSON object carries the subject in a `subject` field. Presentation must never
-substitute for evidence: the generated contract still executes the same finite
-witness against the runtime transducer and codec.
+annotates the source-state × command cell and obligation kind while retaining
+the exact `BehaviorKey` bytes; it does not copy a source position into durable
+aggregate or create-once bytes. One generated context `BehaviorSourceMap`
+resolves each key to the current exact file, line, and column after a complete
+checked join to semantic transition/state anchors. A failed witness carries the
+same subject, resolved position, and stable failure code; comparisons report
+both actual and expected values in text, and the append-only
+`keiro/behavior-conformance/1` JSON object carries the subject in a `subject`
+field. Missing, inexact, duplicate, or colliding anchors refuse before scaffold
+writes. Presentation must never substitute for evidence: the generated
+contract still executes the same finite witness against the runtime transducer
+and codec.
 
 One checked source-wide transition layout supplies every generated transition
 identity. Each entry retains its one-based declaration index for stable helper
@@ -171,6 +176,9 @@ that behavior has been translated automatically.
 - Complete finite witness accounting closes initial-state-only conformance
   gaps without claiming universal proof over command values, histories, or
   register valuations.
+- Source movement changes the context behavior source map, not behavior keys,
+  aggregate contracts, fresh witness comments, folds, or runtime behavior;
+  failure rendering still reports the exact current file, line, and column.
 
 
 ## Alternatives considered

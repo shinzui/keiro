@@ -1657,23 +1657,27 @@ cabal run -v0 keiro-dsl -- behavior-obligations service.keiro --format=text
 
 The report includes live transitions reachable from the initial state,
 reachable state/command rejection cells, replay-only transitions, stable keys,
-and evidence ownership. Scaffolding emits a generated `BehaviorContract` and a
-create-once `BehaviorHoles` module. Fill live, rejection, and replay witnesses
-with real histories, commands, expected events, or expected rejections.
+exact current file/line/column positions, and evidence ownership. Scaffolding
+emits one context `BehaviorSourceMap`, a generated `BehaviorContract` per
+aggregate, and a create-once `BehaviorHoles` module. Fill live, rejection, and
+replay witnesses with real histories, commands, expected events, or expected
+rejections.
 
-New pending rows identify the source cell beside the stable key, so the
-create-once file remains readable after it becomes application-owned:
+New pending rows identify the semantic source cell beside the stable key, but
+do not copy a position that would become stale after the file becomes
+application-owned:
 
 ```haskell
 Pending (BehaviorKey "behavior-v1-2f3ebf37a55781db")
-  -- JourneyActive x Decide: live transition (spec line 44)
+  -- JourneyActive x Decide: live transition
 ```
 
-The generated contract uses the same subject in failures and includes the
-runtime and witness values when they differ:
+The generated contract resolves the key through the current context source map
+when a failure renders. Moving unchanged source rewrites that one map rather
+than every aggregate contract or witness file:
 
 ```text
-FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (spec line 44) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData {amount = 5})] expected=[DecisionRecorded (DecisionRecordedData {amount = 6})]
+FAIL behavior-v1-2f3ebf37a55781db JourneyActive x Decide: live transition (service.keiro:44:3) [event-value-mismatch] runtime event values differ from the exact witness expectation; actual=[DecisionRecorded (DecisionRecordedData {amount = 5})] expected=[DecisionRecorded (DecisionRecordedData {amount = 6})]
 ```
 
 JSON output remains schema `keiro/behavior-conformance/1`; each failure now
@@ -1795,6 +1799,9 @@ cabal run -v0 keiro-dsl -- behavior-obligations service.keiro --format=json
 ```
 
 Use text while authoring and the stable JSON schema for CI or other tooling.
+Both forms resolve every behavior key through the checked source index; JSON
+keeps schema `keiro-dsl/behavior-obligations/1` and appends `file`, `column`,
+and `quality: "exact"` to each location.
 
 ### `scaffold`
 

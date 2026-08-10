@@ -443,6 +443,9 @@ data DiagnosticCode
     GeneratedPathCollision
   | GeneratedImportCycle
   | BehaviorDerivationInvalid
+  | BehaviorSourceAnchorMissing
+  | BehaviorSourceAnchorInexact
+  | BehaviorSourceAnchorCollision
   | ConformanceFactKeyCollision
   | GeneratedPlanningInvariantViolation
   | -- ExecPlan 197: accepted but currently inert spec surfaces are reported

@@ -16,6 +16,10 @@ module Keiro.Dsl.ScaffoldRun
     planServiceScaffoldWithGoldens,
     planServiceScaffoldWithRuntimePackage,
     planServiceScaffoldWithRuntimePackageAndGoldens,
+    planIndexedServiceScaffold,
+    planIndexedServiceScaffoldWithGoldens,
+    planIndexedServiceScaffoldWithRuntimePackage,
+    planIndexedServiceScaffoldWithRuntimePackageAndGoldens,
     planScaffold,
     planScaffoldWithGoldens,
     executeServiceScaffold,
@@ -33,6 +37,7 @@ module Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     planningRefusalDiagnostics,
     checkServiceDiagnostics,
+    checkIndexedServiceDiagnostics,
     inertNodesOf,
     renderInertNodeSection,
     withSidecarMovesApplied,
@@ -63,6 +68,8 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
+import Keiro.Dsl.BehaviorSourceMap (BehaviorSourceFailure)
+import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.ConformancePackage
   ( ConformancePackageFailure,
     ConformancePackageReport,
@@ -93,6 +100,8 @@ import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiv
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
+import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
+import Keiro.Dsl.SourceIndex (SemanticSourceIndex, compatibilitySemanticSourceIndex)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
@@ -115,6 +124,7 @@ data Refusal
   | MissingGeneratedBanner ![FilePath]
   | ImportCycle ![Text]
   | BehaviorRefusal ![BehaviorDerivationError]
+  | BehaviorSourceRefusal ![BehaviorSourceFailure]
   | -- | Persisted fold identity could not be resolved canonically.
     FoldSurfaceRefusal !FoldSurfaceError
   | -- | Source provenance and semantic planning selected different contracts.
@@ -201,8 +211,12 @@ scaffoldServiceModules :: Context -> CheckedService -> [ScaffoldModule]
 scaffoldServiceModules = scaffoldServiceModulesWithGoldens []
 
 scaffoldServiceModulesWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> [ScaffoldModule]
-scaffoldServiceModulesWithGoldens goldens ctx service =
+scaffoldServiceModulesWithGoldens goldens = scaffoldServiceModulesWithBehaviorSource goldens []
+
+scaffoldServiceModulesWithBehaviorSource :: [GoldenPayload] -> [BehaviorSource.BehaviorSourceEntry] -> Context -> CheckedService -> [ScaffoldModule]
+scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
   structuralConformanceModules ctx service
+    <> maybe [] pure (behaviorSourceMapModule ctx sourceEntries)
     <> scaffoldStructuralForService ctx service
     <> scaffoldReplayAudit ctx spec
     <> scaffoldProjectionCatalog ctx spec
@@ -267,20 +281,53 @@ planServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> Context -> 
 planServiceScaffoldWithRuntimePackage = planServiceScaffoldWithRuntimePackageAndGoldens []
 
 planServiceScaffoldWithRuntimePackageAndGoldens :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage ctx service =
-  planningGatePipeline ctx service modulePlan (Right ())
+planServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage ctx service = do
+  sourceIndex <-
+    either
+      (\failure -> Left [LoweringRefusal ["semantic-only source-index construction failed: " <> T.pack (show failure)]])
+      Right
+      (compatibilitySemanticSourceIndex "<semantic-only>" (checkedSpec service))
+  planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage sourceIndex ctx service
+
+planIndexedServiceScaffold :: SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planIndexedServiceScaffold = planIndexedServiceScaffoldWithRuntimePackage Nothing
+
+planIndexedServiceScaffoldWithGoldens :: [GoldenPayload] -> SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planIndexedServiceScaffoldWithGoldens goldens = planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens Nothing
+
+planIndexedServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planIndexedServiceScaffoldWithRuntimePackage = planIndexedServiceScaffoldWithRuntimePackageAndGoldens []
+
+planIndexedServiceScaffoldWithRuntimePackageAndGoldens :: [GoldenPayload] -> Maybe RuntimePackageName -> SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
+planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage sourceIndex ctx service = do
+  -- Preserve the established refusal precedence. Structural/path/import and
+  -- behavior-derivation defects are decidable without exact provenance and
+  -- must not be hidden by a later source-anchor join failure.
+  _ <- planningGatePipeline ctx service baseModulePlan (Right ())
+  planningGatePipeline ctx service completeModulePlan (Right ())
   where
     facadeModules = case runtimePackage of
       Nothing -> Right []
       Just _ -> fmap pure (serviceHarnessModule ctx service)
-    modulePlan =
-      case facadeModules of
-        Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
-        Right facades ->
+    baseModulePlan = case facadeModules of
+      Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+      Right facades ->
+        Right $
+          stampGeneratedModules
+            (checkedLanguageContract service)
+            (scaffoldServiceModulesWithGoldens goldens ctx service <> facades)
+    completeModulePlan =
+      case (behaviorSourcePlan, facadeModules) of
+        (Left refusals, _) -> Left refusals
+        (_, Left duplicates) -> Left [DuplicateConformanceFactKeys duplicates]
+        (Right sourceEntries, Right facades) ->
           Right $
             stampGeneratedModules
               (checkedLanguageContract service)
-              (scaffoldServiceModulesWithGoldens goldens ctx service <> facades)
+              (scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service <> facades)
+    behaviorSourcePlan = do
+      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirements (checkedSpec service))
+      either (Left . pure . BehaviorSourceRefusal) Right (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
 
 -- | The one pure scaffold-planning gate sequence. Both scaffold planners and
 -- both check paths consume this function, so the first reported refusal cannot
@@ -306,11 +353,6 @@ planningGatePipeline ctx service modulePlan packagePlan =
   where
     spec = checkedSpec service
 
--- | Validate a checked service, then run the shared planning gates unless an
--- error makes module generation unsound. 'GeneratedOccurrenceCollision' is the
--- deliberate exception: the workspace path already plans through it so the
--- stronger whole-path collision can cite every claimant. Existing diagnostics
--- retain their order and planning diagnostics follow them.
 -- | The nodes a spec declares that contribute no generated module.
 --
 -- They are still parsed, validated, and diff-classified; naming them in the
@@ -339,12 +381,32 @@ renderInertNodeSection = \case
         <> " (validated and diff-classified; no generated modules)"
     ]
 
+-- | Validate a checked service, then run the shared planning gates unless an
+-- error makes module generation unsound. 'GeneratedOccurrenceCollision' is the
+-- deliberate exception: the workspace path already plans through it so the
+-- stronger whole-path collision can cite every claimant. Existing diagnostics
+-- retain their order and planning diagnostics follow them.
 checkServiceDiagnostics :: Maybe RuntimePackageName -> Context -> CheckedService -> [Diagnostic]
-checkServiceDiagnostics runtimePackage ctx service
+checkServiceDiagnostics runtimePackage ctx service =
+  case compatibilitySemanticSourceIndex "<semantic-only>" (checkedSpec service) of
+    Left failure ->
+      validationDiagnostics
+        <> [ planningDiagnostic 1 GeneratedPlanningInvariantViolation ("semantic-only source-index construction failed: " <> T.pack (show failure))
+           | not (any blocksPlanning validationDiagnostics)
+           ]
+    Right sourceIndex -> checkIndexedServiceDiagnostics runtimePackage sourceIndex ctx service
+  where
+    validationDiagnostics = validateService service
+    blocksPlanning diagnostic = severity diagnostic == Error && code diagnostic /= GeneratedOccurrenceCollision
+    planningDiagnostic diagnosticLine diagnosticCode diagnosticMessage =
+      Diagnostic {line = diagnosticLine, severity = Error, code = diagnosticCode, relatedLocations = [], message = diagnosticMessage}
+
+checkIndexedServiceDiagnostics :: Maybe RuntimePackageName -> SemanticSourceIndex -> Context -> CheckedService -> [Diagnostic]
+checkIndexedServiceDiagnostics runtimePackage sourceIndex ctx service
   | any blocksPlanning validationDiagnostics = validationDiagnostics
   | otherwise =
       validationDiagnostics
-        <> case planServiceScaffoldWithRuntimePackage runtimePackage ctx service of
+        <> case planIndexedServiceScaffoldWithRuntimePackage runtimePackage sourceIndex ctx service of
           Right _ -> []
           Left refusals -> planningRefusalDiagnostics refusals
   where
@@ -370,6 +432,22 @@ planningRefusalDiagnostics = concatMap diagnosticsFor
       [ planningError (behaviorErrorLine behaviorError) BehaviorDerivationInvalid $
           "behavior obligations cannot be derived soundly: " <> T.pack (show behaviorError)
       | behaviorError <- errors
+      ]
+    diagnosticsFor (BehaviorSourceRefusal failures) =
+      [ planningError (behaviorSourceFailureLine failure) (behaviorSourceDiagnosticCode failure) $
+          "behavior source map cannot be planned for "
+            <> Behavior.unBehaviorKey (BehaviorSource.failureKey failure)
+            <> " ("
+            <> BehaviorSource.failureAggregate failure
+            <> ":"
+            <> BehaviorSource.failureState failure
+            <> " -- "
+            <> BehaviorSource.failureCommand failure
+            <> ", subject="
+            <> T.pack (show (BehaviorSource.failureSourceSubject failure))
+            <> "): "
+            <> BehaviorSource.failureMessage failure
+      | failure <- failures
       ]
     diagnosticsFor (DuplicateConformanceFactKeys duplicates) =
       [ planningError 1 ConformanceFactKeyCollision $
@@ -407,6 +485,14 @@ planningRefusalDiagnostics = concatMap diagnosticsFor
 
     behaviorErrorLine (Behavior.DuplicateBehaviorIdentity _ locations) = maximum (1 : map unLoc locations)
     behaviorErrorLine _ = 1
+
+    behaviorSourceFailureLine failure = case BehaviorSource.failureSpan failure of
+      Just SourceSpan {start = SourcePoint {line = sourceLine}} -> sourceLine
+      Nothing -> 1
+    behaviorSourceDiagnosticCode failure = case BehaviorSource.failureCode failure of
+      BehaviorSource.BehaviorSourceAnchorMissing -> BehaviorSourceAnchorMissing
+      BehaviorSource.BehaviorSourceAnchorInexact -> BehaviorSourceAnchorInexact
+      BehaviorSource.BehaviorSourceAnchorCollision -> BehaviorSourceAnchorCollision
 
     planningError diagnosticLine diagnosticCode diagnosticMessage =
       Diagnostic
@@ -1160,6 +1246,16 @@ renderRefusals = concatMap render
     render (BehaviorRefusal errors) =
       ["error: behavior obligations cannot be derived soundly -- refusing to scaffold; nothing was written"]
         <> ["  " <> T.pack (show behaviorError) | behaviorError <- errors]
+    render (BehaviorSourceRefusal failures) =
+      ["error: behavior source map cannot be planned -- refusing to scaffold; nothing was written"]
+        <> [ "  "
+               <> T.pack (show (BehaviorSource.failureCode failure))
+               <> " "
+               <> Behavior.unBehaviorKey (BehaviorSource.failureKey failure)
+               <> ": "
+               <> BehaviorSource.failureMessage failure
+           | failure <- failures
+           ]
     render (GeneratedNameInvariantViolation violations) =
       ["error: generated Haskell name invariant violated -- refusing to scaffold; nothing was written"]
         <> map ("  " <>) violations

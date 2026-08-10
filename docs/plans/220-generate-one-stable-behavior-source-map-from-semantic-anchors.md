@@ -35,13 +35,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: give each derived behavior requirement a non-positional source subject and join
+- [x] Milestone 1: give each derived behavior requirement a non-positional source subject and join
   all requirements to EP-3's exact source index with stable pre-write diagnostics.
-- [ ] Milestone 2: emit one deterministic context `BehaviorSourceMap` for single-file and workspace
+- [x] Milestone 2: emit one deterministic context `BehaviorSourceMap` for single-file and workspace
   services and include it in scaffold ownership/build history.
-- [ ] Milestone 3: remove volatile lines from generated behavior contracts and initial witness
+- [x] Milestone 3: remove volatile lines from generated behavior contracts and initial witness
   comments while resolving runtime diagnostics through the map.
-- [ ] Milestone 4: prove source movement changes only the map, update behavior reports/ADRs/docs,
+- [x] Milestone 4: prove source movement changes only the map, update behavior reports/ADRs/docs,
   and pass focused mutation and conformance gates.
 
 
@@ -50,7 +50,20 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The first full-suite run produced 43 failures because many unit tests deliberately construct a
+  bare semantic `Spec`. The product refusal was correct: those values have only
+  `CompatibilityLineOnly` provenance. Test-only helpers now promote their synthetic spans through
+  `exactSemanticSourceIndex`; the dedicated compatibility test still proves production never
+  fabricates exact columns.
+- Exact source-map planning initially hid older path/fold refusal categories behind an inexact or
+  missing anchor. Running the established semantic module-plan gate before the exact-source
+  completion gate preserves the public refusal precedence while still producing no writes.
+- Workspace source movement changes exact source-map bytes and the existing workspace ledger's
+  compatibility role-origin lines. Generated module dispositions contain only the context source
+  map; semantic-impact/history interpretation remains EP-5's scope.
+- The repository has no `check-adr` recipe despite the plan's concrete-step example. The
+  authoritative strict command is `okf validate docs/adr --strict --profile
+  docs/adr/profile.dhall --profile-enforce --log-enforce`; it passed all 28 concepts.
 
 
 ## Decision Log
@@ -75,6 +88,18 @@ Record every decision made while working on the plan.
   earlier source layout.
   Date: 2026-08-09
 
+- Decision: Keep the semantic-only planner adapters as explicit inexact-anchor refusals and create
+  exact synthetic indices only inside unit-test helpers.
+  Rationale: Treating a line-only `Loc` as column 1 would make generated diagnostics look exact and
+  would let library callers bypass the checked source-aware parse boundary.
+  Date: 2026-08-09
+
+- Decision: Evaluate established semantic/path/import gates before completing the behavior-source
+  map join.
+  Rationale: Exact provenance is required for a successful plan, but it must not mask an earlier
+  stable refusal that is already decidable from the semantic graph.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -83,7 +108,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-10. Derived requirements now retain stable transition/state origins and join
+through `SemanticSourceIndex` to exact file, line, and column before a successful scaffold plan can
+exist. Missing, compatibility-only, duplicate, and colliding anchors produce stable refusals with
+the behavior key and semantic subject. The compatibility bare-`Spec` APIs refuse behavior-bearing
+generation rather than inventing an exact column.
+
+Single-file and workspace scaffolds emit at most one context `BehaviorSourceMap`; services without
+behavior obligations omit it. Contracts and newly created witness comments no longer contain
+source positions, and runtime failure subjects resolve the frozen behavior key through the map.
+Behavior text and JSON reports expose the current exact location and label line-only compatibility
+output explicitly. Focused byte-tree tests prove that comment/declaration movement and aggregate
+ownership movement rewrite only the context source-map module among generated modules. Workspace
+ledger compatibility locations still move and are deliberately left for EP-5's history model.
+
+Qualification passed `cabal build all`, the complete 631-example DSL suite, the compiled
+behavior-complete fixture (19 required, 19 filled, 17 verified, 2 explicitly unverified), the
+restoring behavior mutation script, extension and generated-name policies, strict ADR validation,
+and diff hygiene. Only the behavior-complete fixture was regenerated; EP-6 still owns the single
+coordinated full-corpus refresh.
 
 
 ## Context and Orientation

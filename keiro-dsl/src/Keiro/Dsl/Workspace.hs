@@ -105,7 +105,7 @@ import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), Source
 import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSourceDocument, renderParseFailure)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
-import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex
@@ -1133,7 +1133,7 @@ composeWorkspace manifestPath manifest supplied
       -- An invalid merged spec is 'checkWorkspace''s report to make, and the
       -- planner is only designed to see specs that passed validation.
       | any blocksCollisionPlanning (validateService (checkedWorkspace composed)) = []
-      | otherwise = case planServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) plannerContext (checkedWorkspace composed) of
+      | otherwise = case planIndexedServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) (wsSourceIndex composed) plannerContext (checkedWorkspace composed) of
           Right _ -> []
           Left plannerRefusals -> concatMap planningRefusal plannerRefusals
     planningRefusal refusal = case crossMemberCollision refusal of

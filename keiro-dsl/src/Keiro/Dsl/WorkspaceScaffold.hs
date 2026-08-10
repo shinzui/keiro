@@ -57,6 +57,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.ConformancePackage
   ( ConformancePackagePlan,
     ConformancePackageReport,
@@ -176,28 +177,35 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens ::
   WorkspaceSpec ->
   Either [Refusal] WorkspacePlan
 planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenRoot ctx workspace =
-  case planningGatePipeline ctx service modulePlan packageGate of
-    Left refusals -> Left refusals
-    Right _ -> case taggedModules of
-      Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
-      Right tagged -> case packagePlan of
-        Left failures -> Left (map ConformancePackageRefusal failures)
-        Right plannedPackage ->
-          Right
-            WorkspacePlan
-              { wpWorkspace = workspace,
-                wpCheckedService = service,
-                wpContext = ctx,
-                wpRuntimePackage = runtimePackage,
-                wpConformancePackage = plannedPackage,
-                wpGoldenRoot = goldenRoot,
-                wpModules = tagged
-              }
+  do
+    _ <- planningGatePipeline ctx service baseModulePlan packageGate
+    _ <- planningGatePipeline ctx service completeModulePlan packageGate
+    tagged <- taggedModules
+    plannedPackage <- either (Left . map ConformancePackageRefusal) Right packagePlan
+    Right
+      WorkspacePlan
+        { wpWorkspace = workspace,
+          wpCheckedService = service,
+          wpContext = ctx,
+          wpRuntimePackage = runtimePackage,
+          wpConformancePackage = plannedPackage,
+          wpGoldenRoot = goldenRoot,
+          wpModules = tagged
+        }
   where
     service = checkedWorkspace workspace
-    taggedModules = workspaceModules goldens runtimePackage ctx workspace
-    modulePlan = case taggedModules of
-      Left duplicates -> Left [DuplicateConformanceFactKeys duplicates]
+    sourceEntries = do
+      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirements (checkedSpec service))
+      either (Left . pure . BehaviorSourceRefusal) Right (BehaviorSource.planBehaviorSourceMap requirements (wsSourceIndex workspace))
+    taggedModules = do
+      entries <- sourceEntries
+      either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage entries ctx workspace)
+    baseTaggedModules = either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage [] ctx workspace)
+    baseModulePlan = case baseTaggedModules of
+      Left refusals -> Left refusals
+      Right tagged -> Right (map fst tagged)
+    completeModulePlan = case taggedModules of
+      Left refusals -> Left refusals
       Right tagged -> Right (map fst tagged)
     packagePlan =
       traverse
@@ -215,8 +223,8 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenR
 -- ('scaffoldStructuralOwners') and nodes carry their own identity
 -- ('nodeIdentity'), both of which the workspace's ownership index resolves to a
 -- member file.
-workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> WorkspaceSpec -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
-workspaceModules goldens runtimePackage ctx workspace = do
+workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> [BehaviorSource.BehaviorSourceEntry] -> Context -> WorkspaceSpec -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
+workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
   structuralConformance <- case structuralConformanceModule ctx service of
     Left failures -> error ("checked workspace structural conformance planning failed: " <> show failures)
     Right Nothing -> Right []
@@ -226,6 +234,7 @@ workspaceModules goldens runtimePackage ctx workspace = do
     Just _ -> fmap (\moduleValue -> [(stamp moduleValue, ContextLevel)]) (serviceHarnessModule ctx service)
   pure $
     structuralConformance
+      <> [attributedStamped ContextLevel moduleValue | moduleValue <- maybe [] pure (behaviorSourceMapModule ctx sourceEntries)]
       <> [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
       <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
       <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalog ctx merged]

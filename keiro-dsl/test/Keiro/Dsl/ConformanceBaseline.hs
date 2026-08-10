@@ -11,12 +11,13 @@ import Data.Text.IO qualified as TIO
 import Keiro.Dsl.FrontendCompatibility (SourceExpectation (..), observeSource, readRepoText)
 import Keiro.Dsl.Grammar (Spec (..))
 import Keiro.Dsl.LanguageVersion (currentAuthoringLanguageVersion, currentStableLanguageVersion, languageVersionNumber)
-import Keiro.Dsl.Parser (parseSource)
+import Keiro.Dsl.Parser (parseSource, parseSourceDocument)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..))
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext)
-import Keiro.Dsl.ScaffoldRun (planServiceScaffoldWithRuntimePackage, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource)
 import Keiro.Dsl.Skeleton (skeletonFor)
+import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex)
 import Keiro.Dsl.Workspace (WorkspaceSpec (..), fileContentSource, loadWorkspace)
 import Keiro.Dsl.WorkspaceScaffold (WorkspacePlan (..), planWorkspaceScaffold)
 import Numeric.Natural (Natural)
@@ -157,7 +158,9 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
               -- corpus-wide regeneration in plan 222 will remove this narrow
               -- inventory normalization after every mapped suite has adopted
               -- its new context module.
-              deferredContextModule path = "/StructuralConformance.hs" `isSuffixOf` path
+              deferredContextModule path =
+                "/StructuralConformance.hs" `isSuffixOf` path
+                  || "/BehaviorSourceMap.hs" `isSuffixOf` path
               comparedExpectedPaths = filter (not . deferredContextModule) expectedPaths
               comparedActualPaths = filter (not . deferredContextModule) actualPaths
           unless (comparedActualPaths == comparedExpectedPaths) $
@@ -186,8 +189,8 @@ expectedStableGeneratedPaths suite = case suiteGeneration suite of
   "source-with-conformance-facade" -> do
     source <- requiredSuiteSource suite
     sourceText <- readRepoText source
-    service <- parseCheckedSource source sourceText
-    modules <- case planServiceScaffoldWithRuntimePackage (Just (RuntimePackageName "conformance-runtime")) (defaultContext (specContext (checkedSpec service))) service of
+    (service, sourceIndex) <- parseCheckedDocument source sourceText
+    modules <- case planIndexedServiceScaffoldWithRuntimePackage (Just (RuntimePackageName "conformance-runtime")) sourceIndex (defaultContext (specContext (checkedSpec service))) service of
       Left refusals -> expectationFailure (show refusals) >> fail "stable configured source scaffold refusal"
       Right value -> pure value
     pure (generatedPaths modules)
@@ -214,13 +217,22 @@ expectedStableGeneratedPaths suite = case suiteGeneration suite of
 generatedPathsForSource :: FilePath -> IO [FilePath]
 generatedPathsForSource path = do
   source <- readRepoText path
-  service <- parseCheckedSource path source
-  pure (generatedPaths (scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service))
+  (service, sourceIndex) <- parseCheckedDocument path source
+  modules <- case planIndexedServiceScaffold sourceIndex (defaultContext (specContext (checkedSpec service))) service of
+    Left refusals -> expectationFailure (show refusals) >> fail "stable source scaffold refusal"
+    Right value -> pure value
+  pure (generatedPaths modules)
 
 parseCheckedSource :: FilePath -> Text -> IO CheckedService
 parseCheckedSource path source = case parseSource path source of
   Left problem -> expectationFailure (show problem) >> fail "invalid stable source"
   Right parsed -> pure (checkedSource parsed)
+
+parseCheckedDocument :: FilePath -> Text -> IO (CheckedService, SemanticSourceIndex)
+parseCheckedDocument path source = case parseSourceDocument path source of
+  Left problem -> expectationFailure (show problem) >> fail "invalid stable source document"
+  Right ParsedSourceDocument {documentParsedSource = parsed, documentSourceIndex = sourceIndex} ->
+    pure (checkedSource parsed, sourceIndex)
 
 generatedPaths :: [ScaffoldModule] -> [FilePath]
 generatedPaths = sort . map modulePath . filter ((== Generated) . kind)

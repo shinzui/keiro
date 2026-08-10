@@ -21,6 +21,7 @@ module Generated.BehaviorComplete.Journey.BehaviorContract
 import Generated.BehaviorComplete.Journey.Codec (encodeJourneyEvent, parseJourneyEvent, journeyCodec)
 import Generated.BehaviorComplete.Journey.Domain
 import Generated.BehaviorComplete.Journey.Transducer (journeyTransducer)
+import Generated.BehaviorComplete.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef JourneyVertex))
   , requirementTarget :: !(Maybe JourneyVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- JourneyEmpty x LegacyStart: replay-only transition (spec line 62)
+  [ -- JourneyEmpty x LegacyStart: replay-only transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-0128e858fee6f2b3"
       , requirementKind = ReplayTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyEmpty 2))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = ["LegacyStarted"]
-      , requirementLine = 62
       }
-  , -- JourneyEmpty x Start: replay-only transition (spec line 50)
+  , -- JourneyEmpty x Start: replay-only transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-08a2bda57424a16e"
       , requirementKind = ReplayTransition
@@ -150,9 +149,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyEmpty 1))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = ["Started"]
-      , requirementLine = 50
       }
-  , -- JourneyClosed x Ping: required rejection (spec line 21)
+  , -- JourneyClosed x Ping: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-2e1fd6b9580e1a3d"
       , requirementKind = RequiredRejection
@@ -163,9 +161,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyActive x Decide: live transition (spec line 44)
+  , -- JourneyActive x Decide: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-2f3ebf37a55781db"
       , requirementKind = LiveTransition
@@ -176,9 +173,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyActive 0))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = ["DecisionRecorded"]
-      , requirementLine = 44
       }
-  , -- JourneyActive x Start: required rejection (spec line 21)
+  , -- JourneyActive x Start: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-43b8fc7fa48595dd"
       , requirementKind = RequiredRejection
@@ -189,9 +185,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyActive x Retire: live transition (spec line 70)
+  , -- JourneyActive x Retire: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-68e75665b789892c"
       , requirementKind = LiveTransition
@@ -202,9 +197,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyActive 3))
       , requirementTarget = Just JourneyClosed
       , requirementEventKinds = ["Retired", "RetirementAudited"]
-      , requirementLine = 70
       }
-  , -- JourneyActive x LegacyStart: required rejection (spec line 21)
+  , -- JourneyActive x LegacyStart: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-76005937ded24bec"
       , requirementKind = RequiredRejection
@@ -215,9 +209,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyClosed x Decide: required rejection (spec line 21)
+  , -- JourneyClosed x Decide: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-7ea811586a738ee5"
       , requirementKind = RequiredRejection
@@ -228,9 +221,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyEmpty x Ping: required rejection (spec line 21)
+  , -- JourneyEmpty x Ping: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-83b0a46823e1a788"
       , requirementKind = RequiredRejection
@@ -241,9 +233,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyEmpty x LegacyStart: required rejection (spec line 21)
+  , -- JourneyEmpty x LegacyStart: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-8f79f2e40d8b3bd5"
       , requirementKind = RequiredRejection
@@ -254,9 +245,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyEmpty x Retire: required rejection (spec line 21)
+  , -- JourneyEmpty x Retire: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-926739ffb27d20e7"
       , requirementKind = RequiredRejection
@@ -267,9 +257,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyClosed x LegacyStart: required rejection (spec line 21)
+  , -- JourneyClosed x LegacyStart: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-9c61af3593764622"
       , requirementKind = RequiredRejection
@@ -280,9 +269,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyEmpty x Decide: required rejection (spec line 21)
+  , -- JourneyEmpty x Decide: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-ba7053f86d15e1b0"
       , requirementKind = RequiredRejection
@@ -293,9 +281,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyClosed x Start: required rejection (spec line 21)
+  , -- JourneyClosed x Start: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-be8b08a049ab4d8b"
       , requirementKind = RequiredRejection
@@ -306,9 +293,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
-  , -- JourneyEmpty x Start: live transition (spec line 38)
+  , -- JourneyEmpty x Start: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-d2fc3eca5c449e84"
       , requirementKind = LiveTransition
@@ -319,9 +305,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyEmpty 0))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = ["Started"]
-      , requirementLine = 38
       }
-  , -- JourneyActive x Decide: live transition (spec line 56)
+  , -- JourneyActive x Decide: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-db1a553baa3eda84"
       , requirementKind = LiveTransition
@@ -332,9 +317,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyActive 1))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = ["DecisionRecorded"]
-      , requirementLine = 56
       }
-  , -- JourneyActive x Ping: live transition (spec line 67)
+  , -- JourneyActive x Ping: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-ea258e9c47d66aac"
       , requirementKind = LiveTransition
@@ -345,9 +329,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyActive 2))
       , requirementTarget = Just JourneyActive
       , requirementEventKinds = []
-      , requirementLine = 67
       }
-  , -- JourneyActive x Retire: replay-only transition (spec line 77)
+  , -- JourneyActive x Retire: replay-only transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-f0fbe3a3ba0b40e8"
       , requirementKind = ReplayTransition
@@ -358,9 +341,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef JourneyActive 4))
       , requirementTarget = Just JourneyClosed
       , requirementEventKinds = ["Retired", "RetirementAudited"]
-      , requirementLine = 77
       }
-  , -- JourneyClosed x Retire: required rejection (spec line 21)
+  , -- JourneyClosed x Retire: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-f9cae2bf4c0d0562"
       , requirementKind = RequiredRejection
@@ -371,7 +353,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 21
       }
   ]
 
@@ -554,7 +535,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

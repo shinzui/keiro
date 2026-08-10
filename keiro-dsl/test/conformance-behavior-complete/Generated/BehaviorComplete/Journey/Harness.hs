@@ -5,26 +5,19 @@ module Generated.BehaviorComplete.Journey.Harness (harnessAssertions) where
 import Generated.BehaviorComplete.Journey.Domain
 import Generated.BehaviorComplete.Journey.Codec (encodeJourneyEvent, parseJourneyEvent, journeyCodec, encodeStartPayloadMapped, decodeStartPayloadMapped)
 import Generated.BehaviorComplete.Journey.Transducer (journeyTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
 import Generated.BehaviorComplete.Nominals (RequestId, parseRequestId)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Either (isLeft, isRight)
-import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Maybe (isJust, isNothing)
-import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiki.Shape (CanonicalTypeName (..))
-import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
-import Generated.BehaviorComplete.StructuralProjections qualified as StructuralProjections
+import Keiro.Codec.Structural (FixtureCases (..))
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)
 import BehaviorComplete.Bindings qualified as Bindings
-import BehaviorComplete.Domain (StartPayload)
-import Generated.BehaviorComplete.Structural.Shape.StartPayload qualified as ShapeStartPayload
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -98,36 +91,9 @@ forwardReplayStart =
 mappedConformanceAssertions :: [(String, Bool)]
 mappedConformanceAssertions =
   concat
-    [ startPayloadBindingAssertions
-    , [("fixture coverage: behavior-complete.StartPayload.v1", coverageStartPayload)]
-    , startedDetailsAssertions
+    [ startedDetailsAssertions
     , structuralWirePolicyAssertions
-    , structuralProjectionAssertions
     ]
-
-validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
-validFixtureLabels cases =
-  all (not . T.null) labels && length labels == length (nub labels)
-  where
-    labels = map fst (NonEmpty.toList cases)
-
-startPayloadBindingAssertions :: [(String, Bool)]
-startPayloadBindingAssertions =
-  ("fixture labels: behavior-complete.StartPayload.v1", validFixtureLabels cases) :
-  ("canonical identity: behavior-complete.StartPayload.v1", canonicalTypeName (Proxy @StartPayload) == "behavior-complete.StartPayload.v1") :
-  concat
-    [ [ ("binding domain round-trip: behavior-complete.StartPayload.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.startPayloadBinding value)
-      , ("binding shape round-trip: behavior-complete.StartPayload.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.startPayloadBinding (bindingToShape Bindings.startPayloadBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.startPayloadCases
-
-coverageStartPayload :: Bool
-coverageStartPayload = any (isNothing . ShapeStartPayload.note) shapes && any (isJust . ShapeStartPayload.note) shapes
-  where
-    shapes = map (bindingToShape Bindings.startPayloadBinding . snd) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases))
 
 startedDetailsAssertions :: [(String, Bool)]
 startedDetailsAssertions =
@@ -140,11 +106,6 @@ structuralWirePolicyAssertions =
   [ ("wire policy missing default: behavior-complete.StartPayload.v1/optional_note", case decodeStartPayloadMapped (deleteObjectField "optional_note" (encodeStartPayloadMapped (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases))))) of Left _ -> False; Right decoded -> objectField "optional_note" (encodeStartPayloadMapped decoded) == Just (Aeson.Null))
   , ("wire policy explicit null: behavior-complete.StartPayload.v1/optional_note", isRight (decodeStartPayloadMapped (insertObjectField "optional_note" Aeson.Null (encodeStartPayloadMapped (snd (NonEmpty.head (fixtureCases Bindings.startPayloadCases)))))))
   , ("wire policy unknown fields: behavior-complete.StartPayload.v1", all (\(_, value) -> isLeft (decodeStartPayloadMapped (insertObjectField "__keiro_unknown" (Aeson.Bool True) (encodeStartPayloadMapped value)))) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
-  ]
-
-structuralProjectionAssertions :: [(String, Bool)]
-structuralProjectionAssertions =
-  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> ShapeStartPayload.label (bindingToShape Bindings.startPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
   ]
 
 deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value

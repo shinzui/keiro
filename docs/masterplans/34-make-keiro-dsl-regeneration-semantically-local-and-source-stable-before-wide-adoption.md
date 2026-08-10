@@ -135,7 +135,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 | 1 | Define one checked semantic-impact model for Keiro DSL consumers | [Plan 217](../plans/217-define-one-checked-semantic-impact-model-for-keiro-dsl-consumers.md) | None | None | Complete |
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Complete |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Complete |
-| 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Not Started |
+| 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Complete |
 | 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Not Started |
 | 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | Not Started |
 
@@ -226,8 +226,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   compiled-fixture, and restoring-mutation evidence.
 - [x] EP-3: retain exact transition and state spans through a source-aware parsed wrapper.
 - [x] EP-3: compose workspace source indices without contaminating the merged semantic graph.
-- [ ] EP-4: generate and preflight one behavior-key source map for single and workspace inputs.
-- [ ] EP-4: remove volatile positions from aggregate behavior contracts and diagnostics.
+- [x] EP-4: generate and preflight one behavior-key source map for single and workspace inputs.
+- [x] EP-4: remove volatile positions from aggregate behavior contracts and diagnostics.
 - [ ] EP-5: persist semantic-impact snapshots and render scaffold/diff consumers honestly.
 - [ ] EP-5: prove source-only movement never becomes aggregate semantic impact.
 - [ ] EP-6: pass minimized locality, evidence mutation, and single/workspace stability fixtures.
@@ -258,6 +258,10 @@ interactions between child plans. Provide concise evidence.
 - The live conformance-corpus policy currently selects 35 scaffold invocations rather than the 41
   estimated during planning. EP-1 passed all 35 with a byte-clean worktree. EP-6 must treat the
   policy inventory and its suite-coverage check as authoritative instead of hard-coding 41.
+- EP-4's full-suite migration exposed the intended compatibility boundary: tests and library
+  callers that hold only a bare `Spec` have line-only provenance and cannot generate exact
+  behavior diagnostics. Production CLI/workspace routes already retain the exact index; tests now
+  construct exact synthetic indices explicitly instead of weakening that boundary.
 - EP-2's new context module necessarily adds one generated file to every mapped corpus target.
   Focused structural and scalar-expression fixtures compile the new renderer now; the legacy
   corpus inventory comparison temporarily ignores only that module until EP-6 performs the one
@@ -337,6 +341,17 @@ passed the full 626-example DSL suite, focused exact-location and workspace inde
 build and strict ADR gates. Its corpus probe produced only EP-2's intentionally deferred
 `StructuralConformance` refresh, so EP-3 accepted no generated fixture changes and EP-6 remains the
 owner of the one coordinated corpus migration.
+
+EP-4 completed on 2026-08-10. Stable transition/state origins now join every behavior requirement
+to EP-3's exact index before generation, and one context `BehaviorSourceMap` owns all current file,
+line, and column data. Aggregate contracts and fresh witness comments are position-free, while
+runtime and CLI diagnostics resolve the unchanged behavior key through the checked map. Focused
+single/workspace byte comparisons show source and ownership movement changing only that generated
+context module; missing, inexact, duplicate, and colliding anchors refuse before writes. The
+implementation passed the full 631-example DSL suite, the 19-obligation compiled fixture, restoring
+behavior mutations, generated-source policies, build, strict ADR, and diff-hygiene gates. EP-5 is
+now unblocked to classify source-map impact separately in reports and scaffold history, while EP-6
+continues to own the deferred full-corpus refresh.
 
 
 ## Revision Notes

@@ -29,6 +29,7 @@ module Keiro.Dsl.Scaffold
     contextGeneratedPrefix,
     holePrefixFor,
     generatedNominalModule,
+    behaviorSourceMapModule,
     NominalUseSite (..),
     NominalGenerationOwner (..),
     planNominalGeneration,
@@ -96,7 +97,7 @@ module Keiro.Dsl.Scaffold
 where
 
 import Data.Char (isAlpha, isAlphaNum, isDigit, isUpper)
-import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
+import Data.List (find, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -108,6 +109,7 @@ import Data.Version (showVersion)
 import Keiro.Dsl.AggregateGenerationPlan
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
+import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (..))
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
@@ -124,6 +126,7 @@ import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
 import Paths_keiro_dsl qualified as Package
@@ -236,6 +239,66 @@ holePrefixFor ctx node = rootPrefix ctx <> ctxPascalOf ctx <> "." <> node
 -- | The one context-level Haskell owner for generated IDs and enums.
 generatedNominalModule :: Context -> Text
 generatedNominalModule ctx = contextGeneratedPrefix ctx <> ".Nominals"
+
+-- | Emit the one context-owned table that contains every current behavior
+-- source position. Services without behavior requirements emit no table and,
+-- consequently, no aggregate behavior contract imports one.
+behaviorSourceMapModule :: Context -> [BehaviorSource.BehaviorSourceEntry] -> Maybe ScaffoldModule
+behaviorSourceMapModule _ [] = Nothing
+behaviorSourceMapModule ctx entries =
+  Just
+    ScaffoldModule
+      { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+        moduleText =
+          nl
+            ( renderGeneratedLanguagePragmas []
+                <> [ generatedBanner,
+                     "module " <> moduleName,
+                     "  ( BehaviorSourceLocation (..)",
+                     "  , behaviorSourceLocation",
+                     "  , renderBehaviorSourceLocation",
+                     "  ) where",
+                     "",
+                     "import Data.Text (Text)",
+                     "import Data.Text qualified as T",
+                     "",
+                     "data BehaviorSourceLocation = BehaviorSourceLocation",
+                     "  { sourceFile :: !FilePath",
+                     "  , sourceLine :: !Int",
+                     "  , sourceColumn :: !Int",
+                     "  }",
+                     "  deriving stock (Eq, Ord, Show)",
+                     "",
+                     "behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation",
+                     "behaviorSourceLocation key = case key of"
+                   ]
+                <> [ "  "
+                       <> tshow (Behavior.unBehaviorKey (BehaviorSource.behaviorSourceKey entry))
+                       <> " -> Just (BehaviorSourceLocation "
+                       <> tshow (T.pack (BehaviorSource.behaviorSourceFile entry))
+                       <> " "
+                       <> tshow' (BehaviorSource.behaviorSourceLine entry)
+                       <> " "
+                       <> tshow' (BehaviorSource.behaviorSourceColumn entry)
+                       <> ")"
+                   | entry <- sortOn BehaviorSource.behaviorSourceKey entries
+                   ]
+                <> [ "  _ -> Nothing",
+                     "",
+                     "renderBehaviorSourceLocation :: Text -> Text",
+                     "renderBehaviorSourceLocation key = case behaviorSourceLocation key of",
+                     "  Just location -> T.pack (sourceFile location) <> \":\" <> tshow (sourceLine location) <> \":\" <> tshow (sourceColumn location)",
+                     "  Nothing -> \"<internal invariant: missing behavior source for \" <> key <> \">\"",
+                     "",
+                     "tshow :: Show value => value -> Text",
+                     "tshow = T.pack . show"
+                   ]
+            ),
+        kind = Generated,
+        origin = "context " <> contextName ctx <> " behavior source map"
+      }
+  where
+    moduleName = contextGeneratedPrefix ctx <> ".BehaviorSourceMap"
 
 -- | The root namespace prefix, dot-terminated, or @""@ when no root is set.
 rootPrefix :: Context -> Text
@@ -2385,6 +2448,7 @@ emitBehaviorContract aggregate =
            "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
            "import " <> aGenPrefix aggregate <> ".Domain",
            "import " <> aGenPrefix aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
+           "import " <> contextGeneratedPrefix (aContext aggregate) <> ".BehaviorSourceMap qualified as BehaviorSourceMap",
            "import Data.Aeson (ToJSON (..), object, (.=))",
            "import Data.List (sortOn)",
            "import Data.List.NonEmpty (NonEmpty)",
@@ -2417,7 +2481,6 @@ emitBehaviorContract aggregate =
            "  , requirementExpectedEdge :: !(Maybe (K.EdgeRef " <> aVertexType aggregate <> "))",
            "  , requirementTarget :: !(Maybe " <> aVertexType aggregate <> ")",
            "  , requirementEventKinds :: ![Text]",
-           "  , requirementLine :: !Int",
            "  }",
            "  deriving stock (Eq, Show)",
            "",
@@ -2666,7 +2729,7 @@ emitBehaviorContract aggregate =
            "  Left",
            "    ( BehaviorFailure",
            "        (requirementKey requirement)",
-           "        (tshow (requirementSource requirement) <> \" x \" <> requirementCommandName requirement <> \": \" <> kindPhrase <> \" (spec line \" <> tshow (requirementLine requirement) <> \")\")",
+           "        (tshow (requirementSource requirement) <> \" x \" <> requirementCommandName requirement <> \": \" <> kindPhrase <> \" (\" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> \")\")",
            "        code",
            "        detail",
            "    )",
@@ -2734,7 +2797,6 @@ renderBehaviorRequirementList aggregate =
         "      , requirementExpectedEdge = " <> edgeExpr aggregate requirement,
         "      , requirementTarget = " <> maybe "Nothing" (\target -> "Just " <> vertexCtor aggregate target) (Behavior.requirementTarget requirement),
         "      , requirementEventKinds = " <> renderBehaviorTextList (Behavior.requirementEvents requirement),
-        "      , requirementLine = " <> tshow' (unLoc (Behavior.requirementLocation requirement)),
         "      }"
       ]
 
@@ -2749,9 +2811,6 @@ behaviorRequirementLabel aggregate requirement =
            Behavior.RequiredRejection -> "required rejection"
            Behavior.ReplayTransition -> "replay-only transition"
        )
-    <> " (spec line "
-    <> tshow' (unLoc (Behavior.requirementLocation requirement))
-    <> ")"
 
 edgeExpr :: Agg -> Behavior.BehaviorRequirement -> Text
 edgeExpr aggregate requirement = case Behavior.requirementKind requirement of
@@ -2766,17 +2825,24 @@ edgeExpr aggregate requirement = case Behavior.requirementKind requirement of
         <> "))"
 
 behaviorEdgeIndex :: Agg -> Behavior.BehaviorRequirement -> Maybe Int
-behaviorEdgeIndex aggregate requirement =
-  findIndex
-    matches
-    [ transition
-    | transition <- aTransitions aggregate,
-      tSource transition == Behavior.requirementSource requirement
-    ]
-  where
-    matches transition =
-      unLoc (tLoc transition) == unLoc (Behavior.requirementLocation requirement)
-        && tCommand transition == Behavior.requirementCommand requirement
+behaviorEdgeIndex aggregate requirement = case Behavior.requirementOrigin requirement of
+  Behavior.RejectionRequirementOrigin {} -> Nothing
+  Behavior.TransitionRequirementOrigin originAggregate (SourceIndex.TransitionOrdinal ordinal) -> do
+    transition <- case drop ordinal (aTransitions aggregate) of
+      candidate : _ -> Just candidate
+      [] -> Nothing
+    if originAggregate == aName aggregate
+      && tSource transition == Behavior.requirementSource requirement
+      && tCommand transition == Behavior.requirementCommand requirement
+      then
+        Just
+          ( length
+              [ ()
+              | candidate <- take ordinal (aTransitions aggregate),
+                tSource candidate == tSource transition
+              ]
+          )
+      else Nothing
 
 behaviorRequirementsFor :: Agg -> [Behavior.BehaviorRequirement]
 behaviorRequirementsFor aggregate =

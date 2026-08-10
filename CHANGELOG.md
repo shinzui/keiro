@@ -22,6 +22,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro-dsl**: generate one context `BehaviorSourceMap` that resolves frozen behavior keys to
+  exact current file, line, and column. Aggregate behavior contracts and fresh create-once witness
+  comments no longer embed volatile lines; source movement changes the map while failures and
+  `behavior-obligations` still report the current exact position.
+
 - **keiro**: replace the private subscription-checkpoint read and inferred
   global head with Kiroku 0.4's public one-statement durable inventory. Add the
   preferred `recordProjectionGlobalPositionDistance` API and

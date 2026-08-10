@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-09T23:36:47Z
+timestamp: 2026-08-10T00:52:02Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -146,6 +146,16 @@ may derive line-only entries, but labels them `CompatibilityLineOnly`; it never 
 column. `Spec` equality, semantic validation, canonical rendering, generated output, fingerprints,
 diffs, and replay analysis remain location- and surface-independent. Advanced callers may inspect
 the surface representation or exact index without depending on Megaparsec types.
+
+Source-aware semantic consumers join through stable subjects rather than copying positions into
+the graph. Behavior requirements identify either an aggregate transition ordinal or an aggregate
+state; planning must join the complete requirement inventory to `SemanticSourceIndex` and refuse
+missing, inexact, duplicate, or colliding anchors before writes. One generated context
+`BehaviorSourceMap` then maps the frozen behavior-key text to the current exact file, line, and
+column. Aggregate contracts and create-once witnesses retain only semantic identity, so source
+movement changes positional presentation without changing `Spec`, behavior keys, contracts,
+folds, or runtime behavior. Bare-`Spec` scaffold planning cannot use its compatibility line-only
+index as exact provenance and fails explicitly instead of inventing columns.
 
 Advanced frontend failures are structured before they cross the parser facade. Each failure names
 source-selection, body-parsing, or lowering phase; carries a stable frontend or source-language

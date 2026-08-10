@@ -57,6 +57,7 @@ library
   exposed-modules:
     Keiro.Dsl.AggregateType
     Keiro.Dsl.BehaviorCoverage
+    Keiro.Dsl.BehaviorSourceMap
     Keiro.Dsl.CanonicalEncoding
     Keiro.Dsl.CheckReport
     Keiro.Dsl.CodecCompare
@@ -332,6 +333,7 @@ test-suite keiro-dsl-conformance-behavior-complete
     BehaviorComplete.Domain
     BehaviorComplete.Journey.BehaviorHoles
     BehaviorComplete.Journey.Holes
+    Generated.BehaviorComplete.BehaviorSourceMap
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain
@@ -343,6 +345,7 @@ test-suite keiro-dsl-conformance-behavior-complete
     Generated.BehaviorComplete.Nominals.Internal
     Generated.BehaviorComplete.ReplayAudit
     Generated.BehaviorComplete.Structural.Shape.StartPayload
+    Generated.BehaviorComplete.StructuralConformance
     Generated.BehaviorComplete.StructuralProjections
 
   build-depends:

@@ -13,6 +13,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy.IO qualified as TLIO
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
+import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.CheckReport qualified as CheckReport
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
@@ -27,10 +28,10 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (checkServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (checkIndexedServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effectiveContractLanguageVersion, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
-import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), emptySemanticSourceIndex)
+import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex, emptySemanticSourceIndex)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
@@ -508,12 +509,12 @@ run (Check fp options) = do
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
       validateCheckDenyCodes options
       let service = checkedSource parsedSource
           spec = checkedSpec service
           floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
-          semanticDiags = floorDiags <> checkServiceDiagnostics Nothing (mkContext Nothing False spec) service
+          semanticDiags = floorDiags <> checkIndexedServiceDiagnostics Nothing sourceIndex (mkContext Nothing False spec) service
           semanticFailed = any ((== Error) . severity) semanticDiags
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) semanticDiags
@@ -545,7 +546,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
       emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
@@ -557,7 +558,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
       let ctx = mkContext cliRoot cliCollocate spec
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
-      case (planServiceScaffoldWithRuntimePackageAndGoldens goldens cliRuntimePackage ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
+      case (planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens cliRuntimePackage sourceIndex ctx service, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
         (Left refusals, _) -> do
           mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
           exitFailure
@@ -590,15 +591,15 @@ run (BehaviorObligations fp format) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> do
+    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
           diagnostics = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diagnostics
       if any ((== Error) . severity) diagnostics
         then exitFailure
-        else case Behavior.behaviorObligationsReport fp spec of
-          Left errors -> renderBehaviorErrors errors
+        else case sourceAwareBehaviorReport fp Nothing sourceIndex spec of
+          Left failure -> renderBehaviorReportFailure failure
           Right report -> writeBehaviorReport format report
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions) = do
   -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
@@ -706,20 +707,38 @@ runWorkspaceBehaviorObligations fp format = do
       if any ((== Error) . wdSeverity) diagnostics
         then exitFailure
         else case workspaceBehaviorReport workspace of
-          Left errors -> renderBehaviorErrors errors
+          Left failure -> renderBehaviorReportFailure failure
           Right report -> writeBehaviorReport format report
 
-workspaceBehaviorReport :: WorkspaceSpec -> Either [Behavior.BehaviorDerivationError] Behavior.BehaviorObligationsReport
-workspaceBehaviorReport workspace = do
-  requirements <- Behavior.deriveBehaviorRequirements (checkedSpec (checkedWorkspace workspace))
+workspaceBehaviorReport :: WorkspaceSpec -> Either BehaviorReportFailure Behavior.BehaviorObligationsReport
+workspaceBehaviorReport workspace =
+  sourceAwareBehaviorReport
+    (wsManifestPath workspace)
+    (Just (wsService workspace))
+    (wsSourceIndex workspace)
+    (checkedSpec (checkedWorkspace workspace))
+    >>= \report ->
+      pure
+        report
+          { Behavior.behaviorRequirements =
+              map
+                (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate"))
+                (Behavior.behaviorRequirements report)
+          }
+
+data BehaviorReportFailure
+  = BehaviorReportDerivationFailed ![Behavior.BehaviorDerivationError]
+  | BehaviorReportSourceFailed ![BehaviorSource.BehaviorSourceFailure]
+
+sourceAwareBehaviorReport :: FilePath -> Maybe T.Text -> SemanticSourceIndex -> Spec -> Either BehaviorReportFailure Behavior.BehaviorObligationsReport
+sourceAwareBehaviorReport subject workspaceService sourceIndex spec = do
+  requirements <- either (Left . BehaviorReportDerivationFailed) Right (Behavior.deriveBehaviorRequirements spec)
+  sourceEntries <- either (Left . BehaviorReportSourceFailed) Right (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
   pure
     Behavior.BehaviorObligationsReport
-      { Behavior.behaviorSubject = wsManifestPath workspace,
-        Behavior.behaviorWorkspaceService = Just (wsService workspace),
-        Behavior.behaviorRequirements =
-          map
-            (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate"))
-            requirements
+      { Behavior.behaviorSubject = subject,
+        Behavior.behaviorWorkspaceService = workspaceService,
+        Behavior.behaviorRequirements = BehaviorSource.attachBehaviorSourceLocations sourceEntries requirements
       }
 
 writeBehaviorReport :: BehaviorFormat -> Behavior.BehaviorObligationsReport -> IO ()
@@ -731,6 +750,24 @@ renderBehaviorErrors :: [Behavior.BehaviorDerivationError] -> IO ()
 renderBehaviorErrors errors = do
   mapM_ (hPutStrLn stderr . ("behavior obligation derivation failed: " <>) . show) errors
   exitFailure
+
+renderBehaviorReportFailure :: BehaviorReportFailure -> IO ()
+renderBehaviorReportFailure failure = case failure of
+  BehaviorReportDerivationFailed errors -> renderBehaviorErrors errors
+  BehaviorReportSourceFailed errors -> do
+    mapM_
+      ( \sourceFailure ->
+          hPutStrLn
+            stderr
+            ( show (BehaviorSource.failureCode sourceFailure)
+                <> " "
+                <> T.unpack (Behavior.unBehaviorKey (BehaviorSource.failureKey sourceFailure))
+                <> ": "
+                <> T.unpack (BehaviorSource.failureMessage sourceFailure)
+            )
+      )
+      errors
+    exitFailure
 
 -- | @check@ on a workspace manifest: compose the whole service from its member
 -- @.keiro@ files and validate it as one contract. Diagnostics are rendered

@@ -21,6 +21,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   compatibility parser entry points retain syntax-valid duplicate-name graphs while reusing the
   same surface/lowering seam. Workspace members retain normalized member-local indices and
   `WorkspaceSpec` retains their checked, unrelocated union.
+- Exposes `Keiro.Dsl.BehaviorSourceMap` and emits one deterministic context source map from frozen
+  behavior keys to exact current file, line, and column. Generated behavior contracts resolve
+  failure positions through that map; contracts and newly created witness comments no longer
+  embed volatile source lines. `behavior-obligations` appends exact `file`, `column`, and `quality`
+  location fields without changing schema `keiro-dsl/behavior-obligations/1`.
 
 ### Breaking Changes
 
@@ -29,6 +34,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `WorkspaceSourceIndexInvalid`; exhaustive matches and direct record construction must be
   extended. Bare-`Spec` adapters remain available but expose only `CompatibilityLineOnly`
   positions rather than fabricated exact columns.
+- `BehaviorRequirement` gains stable `requirementOrigin` and optional
+  `requirementExactLocation` fields; `Refusal` and `DiagnosticCode` gain behavior-source-anchor
+  cases. Exhaustive library consumers must extend their matches. Scaffold and check planning now
+  require a complete exact source index and refuse missing, inexact, duplicate, or colliding
+  behavior anchors before writes.
 - Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
   `Harness` into the context `StructuralConformance` module, which must be added to the consuming
   Cabal module inventory. Unrelated aggregate files are now byte-stable when a declaration outside

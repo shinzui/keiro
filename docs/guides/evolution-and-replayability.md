@@ -464,11 +464,14 @@ fields remain hand-owned until the language can describe their transformation.
 
 Use `keiro-dsl behavior-obligations FILE --format=json` to inventory the finite
 behavior review created by a decision change. The static report includes every
-live-reachable state/command cell and every replay-only edge but cannot inspect
-consumer Haskell. The generated, consumer-compiled behavior contract then
-executes typed `BehaviorHoles` witnesses through exact Keiki 0.7 forward and
-replay attribution. Pending, missing, duplicate, stale, or false witnesses fail
-the completeness gate; guard-unknown, Hole-owned, and one-way-projection proof
+live-reachable state/command cell and every replay-only edge, with its exact
+current file, line, and column, but cannot inspect consumer Haskell. The one
+generated context `BehaviorSourceMap` owns those positions; aggregate contracts
+and create-once witnesses retain only stable behavior keys and semantic labels.
+The generated, consumer-compiled behavior contract then executes typed
+`BehaviorHoles` witnesses through exact Keiki 0.7 forward and replay
+attribution. Pending, missing, duplicate, stale, or false witnesses fail the
+completeness gate; guard-unknown, Hole-owned, and one-way-projection proof
 surfaces remain explicitly unverified unless `--fail-on-unverified` is chosen.
 
 The one-way projection classification is intentionally conservative. Keiki 0.7

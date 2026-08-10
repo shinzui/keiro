@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-08-10
+* **Update**: Require behavior-source joins through stable semantic subjects and one exact context source map (plan 220).
+* **Update**: Move behavior positions from aggregate contracts and witness comments into the checked context source map (plan 220).
+
 ## 2026-08-09
 * **Update**: Compose normalized member-local source indices without relocating points; retain LineMap only for compatibility diagnostics (plan 219).
 * **Update**: Keep exact aggregate state and transition provenance in a checked source index beside ParsedSource and project compatibility APIs from the same parse (plan 219).

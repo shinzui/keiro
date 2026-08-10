@@ -48,6 +48,7 @@ run_report() {
 expect_red() {
   local label="$1"
   local expected="$2"
+  local require_location="${3:-yes}"
   set +e
   run_report >"$BACKUP_DIR/mutation.log" 2>&1
   local status=$?
@@ -60,6 +61,11 @@ expect_red() {
   if ! grep -Fq "$expected" "$BACKUP_DIR/mutation.log"; then
     sed -n '1,240p' "$BACKUP_DIR/mutation.log"
     echo "FAIL: $label failed through an unexpected gate (wanted $expected)"
+    exit 1
+  fi
+  if [[ "$require_location" == "yes" ]] && ! grep -Eq 'keiro-dsl/test/fixtures/behavior-complete\.keiro:[0-9]+:[0-9]+' "$BACKUP_DIR/mutation.log"; then
+    sed -n '1,240p' "$BACKUP_DIR/mutation.log"
+    echo "FAIL: $label did not report the current exact source position"
     exit 1
   fi
   echo "ok: $label -> $expected"
@@ -92,7 +98,7 @@ restore_file Holes.hs "$LEGACY_HOLES"
 
 sed -i.sed-bak '/behavior-v1-43b8fc7fa48595dd/d' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
-expect_red "remove a later-state witness" '"missing":["behavior-v1-43b8fc7fa48595dd"]'
+expect_red "remove a later-state witness" '"missing":["behavior-v1-43b8fc7fa48595dd"]' no
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak 's/activeHistory = \[startedEvent 0\]/activeHistory = []/' "$WITNESSES"
@@ -121,7 +127,7 @@ restore_file Transducer.hs "$TRANSDUCER"
 
 sed -i.sed-bak '/behavior-v1-db1a553baa3eda84/d' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
-expect_red "omit one guard alternative" '"missing":["behavior-v1-db1a553baa3eda84"]'
+expect_red "omit one guard alternative" '"missing":["behavior-v1-db1a553baa3eda84"]' no
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 perl -0pi -e 's/ReplayWitness \(key "behavior-v1-f0fbe3a3ba0b40e8"\) activeHistory \[retiredEvent 0, retirementAuditedEvent 0\]/live "behavior-v1-f0fbe3a3ba0b40e8" activeHistory (retireCommand 0) (Emits (retiredEvent 0 :| [retirementAuditedEvent 0]))/' "$WITNESSES"
