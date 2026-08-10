@@ -56,8 +56,15 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-10T14:37:40Z) Documented the realistic benchmark command, scope, before/after
   largest-case measurements, compatibility guarantees, and parse-time-only impact in the typed-spec
   guide and `keiro-dsl` changelog.
-- [ ] Milestone 3: re-run and document the benchmark, pass the complete DSL/workspace and repository
-  gates, distill ADR impact, and close IR-15 only when all acceptance evidence is present.
+- [x] (2026-08-10T14:50:32Z) Passed the full acceptance sequence: `cabal build all`, both complete
+  DSL test selectors, strict ADR validation, `nix fmt`, `nix flake check`, and diff hygiene.
+- [x] (2026-08-10T14:51:25Z) Distilled the completed work against ADR 0014 and ADR 0016; neither
+  needs amendment because public span semantics, parser interfaces, workspace provenance, and
+  composition rules did not change.
+- [x] (2026-08-10T14:51:25Z) Closed IR-15 with its Plan 229 link and implementation log entry; both
+  improvement-request validators pass with 21 requests/concepts.
+- [x] (2026-08-10T14:51:25Z) Milestone 3: documented the result, passed complete repository gates,
+  distilled ADR impact, and closed IR-15 with all acceptance evidence present.
 
 
 ## Surprises & Discoveries
@@ -142,6 +149,12 @@ implementation. Provide concise evidence.
 
   Date: 2026-08-10
 
+- Observation: `okf log add` wrote the planned IR-15 `Implemented` entry but also warned that the
+  concept was not found. The warning did not reflect an invalid bundle: the Mori request validator
+  subsequently reported 21 valid improvement requests and strict OKF validation reported 21 valid
+  concepts with profile and log enforcement enabled.
+  Date: 2026-08-10
+
 
 ## Decision Log
 
@@ -195,6 +208,13 @@ Record every decision made while working on the plan.
   representative than inflating aggregate count to manufacture a timing separation.
   Date: 2026-08-10
 
+- Decision: Leave ADR 0014 and ADR 0016 unchanged after the mandatory distillation pass.
+  Rationale: The implementation changes only how the internal parser obtains the already-consumed
+  chunk. Exact half-open positions, compatibility projections, member-local provenance, and
+  order-independent workspace composition all retain their established contracts, so no durable
+  architectural decision changed.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -203,7 +223,34 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Plan 229 achieved its purpose with a minimal internal parser change. `withOwnedSpan` now asks
+Megaparsec `match` for the consumed chunk and trims trivia only within that chunk; it no longer
+measures the whole suffix before and after every located production. No public interface, syntax,
+semantic value, diagnostic golden, or generated artifact changed.
+
+The final benchmark uses a credible service shape: eight aggregates with 32, 64, 128, and 256
+nested transitions. Post-change means were lower at every size in both direct parser groups. At the
+largest 100,762-character source, `parseSurfaceSource` improved from 30.742 ms to 28.857 ms (6.1%)
+and compatibility `parseSource` improved from 55.581 ms to 50.273 ms (9.5%). The workspace group
+was statistically unchanged, which is expected because source indexing and semantic composition
+dominate its end-to-end time; it remains useful no-regression evidence.
+
+Correctness coverage now includes exact offsets and one-based positions for tabs, Unicode, LF,
+CRLF, mixed newlines, leading and trailing trivia, string-literal hashes, empty bodies, fields, and
+nested expressions, plus semantic parity across every public parser projection. The focused groups
+and frozen compatibility suite pass without golden updates.
+
+Final validation passed on GHC 9.12.4 with Cabal's `-O1` profile. `cabal build all` succeeded;
+`cabal test keiro-dsl:keiro-dsl-test --test-show-details=direct` passed 674 examples with zero
+failures in 234.991 seconds; `cabal test keiro-dsl --test-show-details=direct` passed every package
+test component, including its repeated 674-example suite in 238.840 seconds. Strict ADR validation
+passed 28 concepts, `nix fmt` changed no files, and both native `nix flake check` checks passed.
+The request validators pass 21 improvement requests/concepts after IR-15 closure.
+
+The main lesson was experimental: aggregate-count scaling can make a parser benchmark easy to
+separate while modeling no believable project. Holding aggregate count at eight and scaling nested
+located syntax produced smaller but defensible parser-only improvements and kept workspace claims
+honest. ADR 0014 and ADR 0016 remain unchanged because their durable contracts were preserved.
 
 
 ## Context and Orientation

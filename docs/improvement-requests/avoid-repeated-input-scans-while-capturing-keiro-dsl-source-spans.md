@@ -4,10 +4,11 @@ title: Avoid repeated input scans while capturing Keiro DSL source spans
 description: >-
   Keep exact source ownership without repeatedly traversing the remaining DSL input for every
   located production, so large specifications and workspaces retain predictable parse-time cost.
-timestamp: 2026-08-01T23:05:03Z
+timestamp: 2026-08-10T14:50:32Z
 requestId: IR-15
-status: proposed
+status: completed
 origin: mori://shinzui/keiro
+plan: docs/plans/229-eliminate-repeated-suffix-scans-from-keiro-dsl-source-span-capture.md
 reviews:
   - kind: model
     reviewer: codex
@@ -28,9 +29,18 @@ reviews:
 
 ## Status
 
-Proposed as a non-release-blocking parser/tooling improvement. It does not affect execution of
-generated services. It matters when a CLI, workspace loader, editor integration, or application
-parses Keiro DSL source.
+Completed by Plan 229. The parser benchmark now exercises eight-aggregate sources whose nested
+transitions double from 32 through 256, plus the same service split across one through eight
+workspace members. Source-span capture uses Megaparsec's consumed chunk instead of measuring two
+complete remaining-input suffixes per located production. On the recorded Apple arm64 run, the
+largest surface and compatibility parser cases improved by 6.1% and 9.5%, respectively; workspace
+wall time remained within measurement uncertainty because it also includes source indexing and
+semantic composition.
+
+Exact Unicode, tab, newline, trivia, string-literal, and nested-expression spans remain unchanged.
+All public parser projections agree, frozen compatibility fixtures are unchanged, and the complete
+DSL, package conformance, build, ADR, formatting, and flake gates pass. The improvement affects
+parse-time tooling only, not generated service execution.
 
 ## Context
 

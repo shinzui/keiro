@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Implemented**: Close IR-15 after Plan 229 benchmarked and removed repeated suffix scans while
+preserving exact spans and parser compatibility.
 * **Completed**: Close IR-21 after MasterPlan 34 and Plan 222 deliver checked semantic locality, stable behavior source maps, impact reporting, restoring mutations, the pinned Mori replay, and a byte-clean corpus; migrate legacy implemented statuses to the current completed vocabulary.
 
 ## 2026-08-09
