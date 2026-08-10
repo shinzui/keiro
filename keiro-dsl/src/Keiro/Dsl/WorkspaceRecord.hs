@@ -67,6 +67,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
+import Keiro.Dsl.ReadModelQueryContract (QueryContractIdentity, queryContractIdentityKey)
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
@@ -208,6 +209,8 @@ data WorkspaceRecord = WorkspaceRecord
     wrBindingObligations :: ![BindingHole],
     wrBehaviorRequirements :: ![BehaviorRecordRow],
     wrProjectionCatalogFacts :: ![Text],
+    wrQueryContractBaseline :: !Bool,
+    wrQueryContracts :: ![QueryContractIdentity],
     wrAdopted :: ![AdoptedRow],
     wrSemanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
@@ -237,6 +240,8 @@ renderWorkspaceRecord record =
       <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
       <> ["behavior " <> encodeRow requirement | requirement <- wrBehaviorRequirements record]
       <> ["projection-catalog-fact " <> fact | fact <- wrProjectionCatalogFacts record]
+      <> ["query-contract-baseline v1" | wrQueryContractBaseline record]
+      <> ["query-contract " <> encodeRow identity | identity <- wrQueryContracts record]
       <> ["semantic-impact " <> encodeRow snapshot | Just snapshot <- [wrSemanticImpact record]]
       <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
   where
@@ -271,6 +276,8 @@ parseWorkspaceRecord contents = case T.lines contents of
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
         behaviorRequirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
+        queryContractBaseline <- parseQueryContractBaseline rows
+        queryContracts <- traverse (decodeRow "query-contract ") (rowsWith "query-contract " rows)
         semanticImpact <- parseSemanticImpact rows
         adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
         checkedAdopted <- traverse checkedAdoption adopted
@@ -282,6 +289,7 @@ parseWorkspaceRecord contents = case T.lines contents of
           || hasDuplicates (map bindingKey obligations)
           || hasDuplicates (map behaviorRecordKey behaviorRequirements)
           || hasDuplicates catalogFacts
+          || hasDuplicates (map queryContractIdentityKey queryContracts)
           then Nothing
           else
             pure
@@ -302,6 +310,8 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrBindingObligations = obligations,
                   wrBehaviorRequirements = behaviorRequirements,
                   wrProjectionCatalogFacts = catalogFacts,
+                  wrQueryContractBaseline = queryContractBaseline,
+                  wrQueryContracts = queryContracts,
                   wrAdopted = checkedAdopted,
                   wrSemanticImpact = semanticImpact
                 }
@@ -348,6 +358,10 @@ parseWorkspaceRecord contents = case T.lines contents of
     parseSemanticImpact rows = case rowsWith "semantic-impact " rows of
       [] -> Just Nothing
       [row] -> Just <$> decodeRow "semantic-impact " row
+      _ -> Nothing
+    parseQueryContractBaseline rows = case rowsWith "query-contract-baseline " rows of
+      [] -> Just False
+      ["query-contract-baseline v1"] -> Just True
       _ -> Nothing
     checkedSourceLanguage row = do
       path <- safePath (T.pack (wrslPath row))

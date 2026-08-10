@@ -1,0 +1,94 @@
+language keiro-dsl 5
+context mapped-readmodel
+
+mapped structural record TenantKey {
+  haskell package=keiro-dsl module=Conformance.MappedReadModel.Domain type=TenantKey
+  binding = "Conformance.MappedReadModel.Bindings.tenantKeyBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-readmodel.TenantKey.v1"
+  fixtures = "Conformance.MappedReadModel.Bindings.tenantKeyCases"
+  wire object constructor=TenantKey unknown-fields=reject {
+    tenantId as "tenant_id" : Text required
+  }
+}
+
+mapped structural record AccountLookup {
+  haskell package=keiro-dsl module=Conformance.MappedReadModel.Domain type=AccountLookup
+  binding = "Conformance.MappedReadModel.Bindings.accountLookupBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-readmodel.AccountLookup.v1"
+  fixtures = "Conformance.MappedReadModel.Bindings.accountLookupCases"
+  wire object constructor=AccountLookup unknown-fields=reject {
+    accountId as "account_id" : Text      required
+    tenant    as "tenant"     : TenantKey required
+  }
+}
+
+mapped structural record AccountProfile {
+  haskell package=keiro-dsl module=Conformance.MappedReadModel.Domain type=AccountProfile
+  binding = "Conformance.MappedReadModel.Bindings.accountProfileBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-readmodel.AccountProfile.v1"
+  fixtures = "Conformance.MappedReadModel.Bindings.accountProfileCases"
+  wire object constructor=AccountProfile unknown-fields=reject {
+    displayName as "display_name" : Text required
+  }
+}
+
+mapped structural record AccountSummary {
+  haskell package=keiro-dsl module=Conformance.MappedReadModel.Domain type=AccountSummary
+  binding = "Conformance.MappedReadModel.Bindings.accountSummaryBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-readmodel.AccountSummary.v1"
+  fixtures = "Conformance.MappedReadModel.Bindings.accountSummaryCases"
+  wire object constructor=AccountSummary unknown-fields=reject {
+    accountId as "account_id" : Text                    required
+    tenant    as "tenant"     : TenantKey               required
+    profile   as "profile"    : Optional AccountProfile required
+  }
+}
+
+mapped structural record UnusedFilter {
+  haskell package=keiro-dsl module=Conformance.MappedReadModel.Domain type=UnusedFilter
+  binding = "Conformance.MappedReadModel.Bindings.unusedFilterBinding"
+  binding-version = "1"
+  canonical-type = "conformance.mapped-readmodel.UnusedFilter.v1"
+  fixtures = "Conformance.MappedReadModel.Bindings.unusedFilterCases"
+  wire object constructor=UnusedFilter unknown-fields=reject {
+    prefix as "prefix" : Text required
+  }
+}
+
+target account_summary_table {
+  schema = "public"
+  table = "account_summary"
+  reset = clear
+}
+
+rebuild-group reporting {
+  targets = [ account_summary_table ]
+  order = [ account_summary_table ]
+}
+
+projection-owner account_summary_writer {
+  source = category "account"
+  feed = subscription
+  group = reporting
+  targets = [ account_summary_table ]
+  order = 10
+  subscription = "mapped-readmodel-account-summary"
+  dedup = "mapped-readmodel-account-summary-v1"
+  replay = explicit
+}
+
+readmodel account_summary {
+  columns {}
+  query input = AccountLookup
+  query result = Optional AccountSummary
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ account_summary_table ]
+}

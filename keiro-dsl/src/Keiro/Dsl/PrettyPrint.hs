@@ -10,6 +10,7 @@ module Keiro.Dsl.PrettyPrint
     renderSpec,
     renderTransition,
     renderExpr,
+    renderTypeExpr,
     renderHandleSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
@@ -48,6 +49,9 @@ renderRouterDispatchSurface = renderDoc . docRouterDispatch
 renderTimerPayloadSurface :: TimerNode -> Text
 renderTimerPayloadSurface timer =
   renderDoc ("payload" <+> braced (map docFieldBinding (tmPayload timer)))
+
+renderTypeExpr :: TypeExpr -> Text
+renderTypeExpr = renderDoc . docTypeExpr
 
 renderDoc :: Doc ann -> Text
 renderDoc = renderStrict . layoutPretty LayoutOptions {layoutPageWidth = Unbounded}

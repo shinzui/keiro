@@ -246,6 +246,8 @@ data DiagnosticCode
   | ReadModelShapeChangedWithoutBump
   | ReadModelFeedChanged
   | ReadModelConsistencyWeakened
+  | ReadModelQueryInputChanged
+  | ReadModelQueryResultChanged
   | -- EP-108 (router and worker-policy surfaces).
     RouterUnresolvedRef
   | RouterKeyFieldUnknown
@@ -595,6 +597,8 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   QueueIdentityChanged -> DiffDiagnostic
   ReadModelConsistencyWeakened -> DiffDiagnostic
   ReadModelFeedChanged -> DiffDiagnostic
+  ReadModelQueryInputChanged -> DiffDiagnostic
+  ReadModelQueryResultChanged -> DiffDiagnostic
   ReadModelShapeChangedWithoutBump -> DiffDiagnostic
   ReadModelVersionDecreased -> DiffDiagnostic
   RouterDecideSurfaceChanged -> DiffDiagnostic
@@ -2361,14 +2365,9 @@ validateProjectionOwner languageContract spec owner
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding ++ loweringPending
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
   where
     readModelLine = locLine (rmLoc readModel)
-    loweringPending =
-      [ mkErr readModelLine MappedReadModelLoweringPending $
-          "readmodel '" <> rmName readModel <> "' uses candidate mapped query types whose generated query lowering is pending"
-      | queryTypes readModel /= Nothing
-      ]
     expectedShape = deriveShapeHash readModel
     shapeFixture =
       [ mkErr readModelLine RmShapeHashDrift $

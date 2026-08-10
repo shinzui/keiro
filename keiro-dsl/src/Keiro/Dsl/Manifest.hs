@@ -137,7 +137,7 @@ depsForNode service spec n = case n of
   NPublisher {} -> integration
   NWorkqueue workqueue -> ["aeson", "keiro-core", "keiro-pgmq", "text"] <> workqueueDependencies workqueue
   NPgmqDispatch {} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
-  NReadModel {} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
+  NReadModel readModel -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"] <> readModelDependencies readModel
   NProjectionTarget {} -> ["keiro", "kiroku-store", "text"]
   NRebuildGroup {} -> ["keiro", "kiroku-store", "text"]
   NProjectionOwner {} -> ["keiro", "kiroku-store", "text"]
@@ -160,6 +160,29 @@ workqueueDependencies workqueue =
   where
     expressions = [expression | field <- wqPayload workqueue, TypedQueueExpression expression <- [wqfType field]]
     isMap (TMap _) = True
+    isMap _ = False
+    isTime TTime = True
+    isTime _ = False
+    typeExprUses predicate expression =
+      predicate expression
+        || case expression of
+          TOptional value -> typeExprUses predicate value
+          TList value -> typeExprUses predicate value
+          TMap value -> typeExprUses predicate value
+          _ -> False
+
+readModelDependencies :: ReadModelNode -> [Text]
+readModelDependencies readModel =
+  ["aeson" | any (typeExprUses isJson) expressions]
+    <> ["containers" | any (typeExprUses isMap) expressions]
+    <> ["time" | any (typeExprUses isTime) expressions]
+  where
+    expressions = case queryTypes readModel of
+      Nothing -> []
+      Just queryPair -> [input queryPair, result queryPair]
+    isJson TJson = True
+    isJson _ = False
+    isMap TMap {} = True
     isMap _ = False
     isTime TTime = True
     isTime _ = False

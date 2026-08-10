@@ -59,6 +59,7 @@ module Keiro.Dsl.Scaffold
     scaffoldWorkqueue,
     scaffoldWorkqueueForService,
     scaffoldReadModel,
+    scaffoldReadModelForService,
     scaffoldProjectionCatalog,
     scaffoldRefusals,
     windowSeconds,
@@ -3723,6 +3724,16 @@ typeUsesTime = foldTypeExpr (falseAlgebra {onTime = True})
   where
     falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
 
+typeUsesText :: ResolvedTypeExpr -> Bool
+typeUsesText = foldTypeExpr (falseAlgebra {onText = True, onMap = const True})
+  where
+    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+
+typeUsesJson :: ResolvedTypeExpr -> Bool
+typeUsesJson = foldTypeExpr (falseAlgebra {onJson = True})
+  where
+    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+
 typeUsesParserAnnotation :: ResolvedTypeExpr -> Bool
 typeUsesParserAnnotation = foldTypeExpr (falseAlgebra {onList = const True, onMap = const True})
   where
@@ -3911,6 +3922,42 @@ scaffoldReadModel ctx readModel =
           origin = readModelOrigin
         }
 
+-- | Service-aware read-model generation adds a generated query contract only
+-- for the candidate typed query pair. Legacy read models stay on
+-- 'scaffoldReadModel' so their generated and create-once bytes remain exact.
+scaffoldReadModelForService :: Context -> CheckedService -> ReadModelNode -> [ScaffoldModule]
+scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
+  Nothing -> scaffoldReadModel ctx readModel
+  Just queryPair ->
+    [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
+      generated "QueryContract" (emitReadModelQueryContract queryContractModule graph stem readModel queryPair),
+      generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (Just queryContractModule) stem readModel),
+      ScaffoldModule
+        { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
+          moduleText = emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem readModel,
+          kind = HoleStub,
+          origin = readModelOrigin
+        }
+    ]
+  where
+    nodeSegment = pascal (rmName readModel)
+    stem = readModelStem readModel
+    readModelModule = genPrefixFor ctx nodeSegment
+    tableModule = readModelModule <> ".ReadModelTable"
+    queryContractModule = readModelModule <> ".QueryContract"
+    readModelHolePrefix = holePrefixFor ctx nodeSegment
+    readModelOrigin = nodeOrigin "readmodel" (rmName readModel) (rmLoc readModel)
+    graph = case resolveTypeGraph (checkedSpec service) of
+      Left errors -> error ("checked read-model type graph failed: " <> show errors)
+      Right value -> value
+    generated leaf body =
+      ScaffoldModule
+        { modulePath = modulePathFor readModelModule leaf,
+          moduleText = body,
+          kind = Generated,
+          origin = readModelOrigin
+        }
+
 -- | Generate one service-level catalog facade and one create-once module that
 -- owns application handler/decoder bodies. The checked DSL graph owns every
 -- identity and relationship; the hole supplies only executable projection
@@ -3962,8 +4009,8 @@ emitProjectionCatalog ctx spec =
            "import Effectful (Eff, IOE, (:>))"
          ]
       ++ concatMap aggregateImports aggregateSources
-      ++ [ "import Keiro.Projection (AsyncProjection (..), InlineProjection (..))",
-           "import Keiro.Projection.Catalog qualified as Catalog",
+      ++ projectionImports
+      ++ [ "import Keiro.Projection.Catalog qualified as Catalog",
            "import Keiro.ReadModel.Rebuild qualified as Rebuild",
            "import Kiroku.Store.Effect (Store)",
            "import Kiroku.Store.Types qualified as Kiroku",
@@ -4018,6 +4065,11 @@ emitProjectionCatalog ctx spec =
     sources = nub (concatMap poSources owners)
     aggregateSources = nub [aggregateName | CatalogAggregate aggregateName <- sources]
     asyncOwners = [owner | owner <- owners, poFeed owner == RmSubscription]
+    projectionImports = case (null asyncOwners, null inlineOwners) of
+      (False, False) -> ["import Keiro.Projection (AsyncProjection (..), InlineProjection (..))"]
+      (False, True) -> ["import Keiro.Projection (AsyncProjection (..))"]
+      (True, False) -> ["import Keiro.Projection (InlineProjection (..))"]
+      (True, True) -> []
     readModels = [readModel | NReadModel readModel <- specNodes spec]
     boundReadModels = [readModel | readModel <- readModels, isJust (rmGroup readModel)]
     readModelAlias readModel = "RM" <> pascal (rmName readModel)
@@ -4290,8 +4342,63 @@ emitReadModelTable tableModule stem readModel =
   where
     qualifiedName = stem <> "QualifiedTable"
 
+emitReadModelQueryContract :: Text -> TypeGraph -> Text -> ReadModelNode -> ReadModelQueryTypes -> Text
+emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
+  nl $
+    [ generatedBanner,
+      "module " <> queryContractModule,
+      "  ( " <> queryInputType,
+      "  , " <> queryResultType,
+      "  ) where",
+      ""
+    ]
+      <> imports
+      <> ["" | not (null imports)]
+      <> [ "type " <> queryInputType <> " = " <> renderType inputExpression,
+           "type " <> queryResultType <> " = " <> renderType resultExpression
+         ]
+  where
+    queryInputType = pascal stem <> "QueryInput"
+    queryResultType = pascal stem <> "QueryResult"
+    inputExpression = resolve "input" (inputLoc queryPair) (input queryPair)
+    resultExpression = resolve "result" (resultLoc queryPair) (result queryPair)
+    expressions = [inputExpression, resultExpression]
+    plans = map plan expressions
+    references = Set.unions (map consumerTypeReferences plans)
+    reservedNames = Set.fromList [queryInputType, queryResultType, "Map", "Natural", "Text", "UTCTime", "Value"]
+    importPlan = planImportsOrDie queryContractModule reservedNames references
+    imports =
+      ["import Data.Aeson (Value)" | any typeUsesJson expressions]
+        <> ["import Data.Map.Strict (Map)" | any typeUsesMap expressions]
+        <> ["import Data.Text (Text)" | any typeUsesText expressions]
+        <> ["import Data.Time (UTCTime)" | any typeUsesTime expressions]
+        <> ["import Numeric.Natural (Natural)" | any typeUsesNatural expressions]
+        <> T.lines (renderPlannedImports importPlan)
+    resolve position location expression =
+      either
+        (\failure -> error ("checked read-model query " <> T.unpack position <> " failed: " <> show failure))
+        id
+        (resolveTypeExpression graph owner location expression)
+      where
+        owner = "readmodel '" <> rmName readModel <> "' query " <> position
+    plan expression =
+      either
+        (error . ("validated read-model consumer type planning failed: " <>) . show)
+        id
+        (planConsumerType graph expression)
+    renderType expression =
+      unHaskellTypeOccurrence $
+        either
+          (error . ("validated read-model consumer type rendering failed: " <>) . show)
+          id
+          (renderConsumerType importPlan graph expression)
+
 emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
+  emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix Nothing stem readModel
+
+emitReadModelGenWithContract :: Context -> Text -> Text -> Text -> Maybe Text -> Text -> ReadModelNode -> Text
+emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix queryContractModule stem readModel =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | emitsLegacyAsync]
       <> [ generatedBanner,
@@ -4301,9 +4408,9 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
            ""
          ]
       ++ (if not catalogManaged then ["import Data.Functor (void)", "import Effectful (Eff, (:>))"] else [])
-      ++ [ "import " <> tableModule <> " (" <> qualifiedName <> ")",
-           "import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"
-         ]
+      ++ ["import " <> tableModule <> " (" <> qualifiedName <> ")"]
+      ++ ["import " <> contractModule <> " (" <> queryInputType <> ", " <> queryResultType <> ")" | Just contractModule <- [queryContractModule]]
+      ++ ["import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"]
       ++ asyncImports
       ++ [ "import Keiro.ReadModel (" <> readModelImports <> ")"
          ]
@@ -4348,7 +4455,7 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
       ]
         ++ (if not catalogManaged then [registerName, startName, finishName, abandonName] else [])
         ++ [asyncValueName | emitsLegacyAsync]
-    holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
+    holeImports = (if queryContractModule == Nothing then [queryInputType, queryResultType] else []) ++ [queryName] ++ [applyName | emitsLegacyAsync]
     asyncImports = ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
     readModelImports =
       "ConsistencyMode (..), ReadModel (..)"
@@ -4434,6 +4541,46 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
     applyName = "apply" <> pascal stem
     emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
     exports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
+    applyStub
+      | emitsLegacyAsync =
+          [ "",
+            "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe.",
+            applyName <> " :: RecordedEvent -> Tx.Transaction ()",
+            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
+          ]
+      | otherwise = []
+
+emitTypedReadModelHoles :: Text -> Text -> Text -> Text -> ReadModelNode -> Text
+emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem readModel =
+  nl $
+    [ "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it.",
+      "module " <> readModelHolePrefix <> ".ReadModelHoles",
+      "  ( " <> T.intercalate "\n  , " exports,
+      "  ) where",
+      "",
+      "import " <> tableModule <> " (" <> qualifiedName <> ")",
+      "import " <> queryContractModule <> " (" <> queryInputType <> ", " <> queryResultType <> ")",
+      "import Hasql.Transaction qualified as Tx"
+    ]
+      ++ ["import Kiroku.Store.Types (RecordedEvent(..))" | emitsLegacyAsync]
+      ++ [ "",
+           "-- HOLE: query " <> qualifiedTableLiteral readModel <> " via " <> qualifiedName <> "; never rely on search_path.",
+           "-- The generated QueryContract owns query input/result type identity.",
+           "-- Declared columns:"
+         ]
+      ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+      ++ [ queryName <> " :: " <> queryInputType <> " -> Tx.Transaction " <> queryResultType,
+           queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> rmName readModel <> " query")
+         ]
+      ++ applyStub
+  where
+    qualifiedName = stem <> "QualifiedTable"
+    queryInputType = pascal stem <> "QueryInput"
+    queryResultType = pascal stem <> "QueryResult"
+    queryName = stem <> "Query"
+    applyName = "apply" <> pascal stem
+    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
+    exports = [queryName] ++ [applyName | emitsLegacyAsync]
     applyStub
       | emitsLegacyAsync =
           [ "",

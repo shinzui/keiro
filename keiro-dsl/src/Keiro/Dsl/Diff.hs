@@ -82,6 +82,7 @@ import Keiro.Dsl.PrettyPrint
     renderRouterDispatchSurface,
     renderTimerPayloadSurface,
     renderTransition,
+    renderTypeExpr,
   )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
@@ -294,6 +295,8 @@ classifyCompatibility context code
   | code == SourceLanguageDeclarationChanged = sourceProvenanceVector
   | code == GeneratedHaskellNameChanged = sourceProvenanceVector {cvConsumerBuild = VAdvisory}
   | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
+  | code `elem` [ReadModelQueryInputChanged, ReadModelQueryResultChanged] =
+      compatibleVector {cvConsumerBuild = VBreaking}
   | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
   | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
   | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
@@ -1072,6 +1075,7 @@ readModelPairDiff env oldReadModel newReadModel =
     ++ consistencyChanges
     ++ scopeChanges
     ++ bindingChanges
+    ++ queryContractChanges
   where
     nodeName = rmName newReadModel
     versionChanges
@@ -1125,6 +1129,39 @@ readModelPairDiff env oldReadModel newReadModel =
       [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group or observed target binding changed; persisted lifecycle identity and rebuild completeness changed"
       | (rmGroup oldReadModel, rmObservedTargets oldReadModel) /= (rmGroup newReadModel, rmObservedTargets newReadModel)
       ]
+    queryContractChanges =
+      queryPositionChange
+        "input"
+        ReadModelQueryInputChanged
+        (input <$> queryTypes oldReadModel)
+        (input <$> queryTypes newReadModel)
+        "callers"
+        <> queryPositionChange
+          "result"
+          ReadModelQueryResultChanged
+          (result <$> queryTypes oldReadModel)
+          (result <$> queryTypes newReadModel)
+          "result consumers"
+    queryPositionChange position code oldExpression newExpression owner =
+      [ advisoryAt
+          (consumerBuildContext nodeName [nodeName <> " query " <> position])
+          nodeName
+          ("read-model-query-" <> position)
+          (nodeName <> " query " <> position)
+          code
+          ( "query "
+              <> position
+              <> " changed "
+              <> renderMaybeType oldExpression
+              <> " -> "
+              <> renderMaybeType newExpression
+              <> "; recompile "
+              <> owner
+              <> " against the generated QueryContract. SQL columns, projection replay, and persisted history are unaffected"
+          )
+      | oldExpression /= newExpression
+      ]
+    renderMaybeType = maybe "(absent)" renderTypeExpr
 
 projectionTargetDiff :: DiffEnv -> [Change]
 projectionTargetDiff env =

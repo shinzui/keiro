@@ -1,0 +1,41 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-readmodel.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    Conformance.MappedReadModel.Bindings
+    Generated.MappedReadmodel.AccountSummary.QueryContract
+    Generated.MappedReadmodel.AccountSummary.ReadModel
+    Generated.MappedReadmodel.AccountSummary.ReadModelHarness
+    Generated.MappedReadmodel.AccountSummary.ReadModelTable
+    Generated.MappedReadmodel.ProjectionCatalog
+    Generated.MappedReadmodel.Structural.Shape.AccountLookup
+    Generated.MappedReadmodel.Structural.Shape.AccountProfile
+    Generated.MappedReadmodel.Structural.Shape.AccountSummary
+    Generated.MappedReadmodel.Structural.Shape.TenantKey
+    Generated.MappedReadmodel.Structural.Shape.UnusedFilter
+    Generated.MappedReadmodel.StructuralConformance
+    Generated.MappedReadmodel.StructuralProjections
+    MappedReadmodel.AccountSummary.ReadModelHoles
+    MappedReadmodel.ProjectionCatalog.ProjectionCatalogHoles
+
+build-depends:
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , keiro-dsl
+    , kiroku-store
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.MappedReadModel.Bindings
+    Conformance.MappedReadModel.Domain

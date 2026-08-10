@@ -26,6 +26,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
+import Keiro.Dsl.ReadModelQueryContract (QueryContractIdentity, queryContractIdentityKey)
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
 import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
@@ -47,6 +48,8 @@ data ScaffoldRecord = ScaffoldRecord
     recBindingObligations :: ![BindingHole],
     recBehaviorRequirements :: ![BehaviorRecordRow],
     recProjectionCatalogFacts :: ![Text],
+    recQueryContractBaseline :: !Bool,
+    recQueryContracts :: ![QueryContractIdentity],
     recSemanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
@@ -107,6 +110,8 @@ renderRecord record =
       <> map renderBindingObligation (recBindingObligations record)
       <> map renderBehaviorRequirement (recBehaviorRequirements record)
       <> map ("projection-catalog-fact " <>) (recProjectionCatalogFacts record)
+      <> ["query-contract-baseline v1" | recQueryContractBaseline record]
+      <> map ("query-contract " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recQueryContracts record))
       <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [recSemanticImpact record]]
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
@@ -142,8 +147,10 @@ parseRecord contents = case T.lines contents of
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
         behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
+        queryContractBaseline <- parseQueryContractBaseline rows
+        queryContracts <- traverse parseQueryContract (filter ("query-contract " `T.isPrefixOf`) rows)
         semanticImpact <- parseSemanticImpact rows
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts)
           then Nothing
           else
             pure
@@ -162,6 +169,8 @@ parseRecord contents = case T.lines contents of
                   recBindingObligations = bindingEntries,
                   recBehaviorRequirements = behaviorEntries,
                   recProjectionCatalogFacts = catalogFacts,
+                  recQueryContractBaseline = queryContractBaseline,
+                  recQueryContracts = queryContracts,
                   recSemanticImpact = semanticImpact
                 }
   _ -> Nothing
@@ -188,6 +197,13 @@ parseRecord contents = case T.lines contents of
     parseBehaviorRequirement row = do
       payload <- T.stripPrefix "behavior " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseQueryContract row = do
+      payload <- T.stripPrefix "query-contract " row
+      Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseQueryContractBaseline rows = case filter ("query-contract-baseline " `T.isPrefixOf`) rows of
+      [] -> Just False
+      ["query-contract-baseline v1"] -> Just True
+      _ -> Nothing
     parseSemanticImpact rows = case filter ("semantic-impact " `T.isPrefixOf`) rows of
       [] -> Just Nothing
       [row] -> do

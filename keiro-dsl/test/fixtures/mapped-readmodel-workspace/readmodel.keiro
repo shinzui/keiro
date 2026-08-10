@@ -1,0 +1,36 @@
+language keiro-dsl 5
+context mapped-readmodel-workspace
+
+target account_summary_table {
+  schema = "public"
+  table = "account_summary"
+  reset = clear
+}
+
+rebuild-group reporting {
+  targets = [ account_summary_table ]
+  order = [ account_summary_table ]
+}
+
+projection-owner account_summary_writer {
+  source = category "account"
+  feed = subscription
+  group = reporting
+  targets = [ account_summary_table ]
+  order = 10
+  subscription = "mapped-readmodel-workspace-account-summary"
+  dedup = "mapped-readmodel-workspace-account-summary-v1"
+  replay = explicit
+}
+
+readmodel account_summary {
+  columns {}
+  query input = AccountLookup
+  query result = Optional AccountSummary
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ account_summary_table ]
+}

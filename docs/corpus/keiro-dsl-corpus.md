@@ -96,6 +96,8 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/intake-topic-mismatch.keiro` | negative intake event/topic affinity |
 | `test/fixtures/intake.keiro` | valid contract and inbox intake vertical |
 | `test/fixtures/mapped-workqueue.keiro` | candidate mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
+| `test/fixtures/mapped-readmodel.keiro` | candidate typed read-model input/result contract with direct, nested, shared, and unused mapped declarations |
+| `test/fixtures/mapped-readmodel-workspace/service.keiro-workspace` | two-member candidate workspace proving cross-member query-contract type resolution and ownership |
 | `test/fixtures/operation-ghost-aggregate.keiro` | negative command operation aggregate reference |
 | `test/fixtures/operation-signal-value.keiro` | negative signal/await value-type mismatch |
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |

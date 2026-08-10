@@ -101,7 +101,7 @@ for mapped queue payloads, query types, or projection source typing.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Register the mapped consumer-surface contract in candidate language 5 | [Plan 223](../plans/223-register-the-mapped-consumer-surface-contract-in-candidate-language-5.md) | None | None | Complete |
 | 2 | Generate mapped workqueue payloads with honest persisted-wire compatibility | [Plan 224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md) | EP-1 | None | Complete |
-| 3 | Make read-model query inputs and results checked mapped types | [Plan 225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md) | EP-1 | None | Not Started |
+| 3 | Make read-model query inputs and results checked mapped types | [Plan 225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md) | EP-1 | None | Complete |
 | 4 | Derive projection mapped consumers from authoritative event sources | [Plan 226](../plans/226-derive-projection-mapped-consumers-from-authoritative-event-sources.md) | EP-1 | None | Not Started |
 | 5 | Extend semantic impact conformance and evolution reporting to every mapped surface | [Plan 227](../plans/227-extend-semantic-impact-conformance-and-evolution-reporting-to-every-mapped-surface.md) | EP-2, EP-3, EP-4 | None | Not Started |
 | 6 | Qualify the complete mapped consumer surface before fleet adoption | [Plan 228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) | EP-5 | None | Not Started |
@@ -185,8 +185,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: freeze explicit queue/query positions and derived projection ownership with ADR/tests.
 - [x] EP-2: parse, validate, and generate mapped workqueue payload expressions and codecs.
 - [x] EP-2: classify queue wire evolution and prove structural/opaque payload conformance.
-- [ ] EP-3: generate checked read-model query input/result types without placeholder aliases.
-- [ ] EP-3: prove query API evolution, workspace composition, and SQL ownership boundaries.
+- [x] EP-3: generate checked read-model query input/result types without placeholder aliases.
+- [x] EP-3: prove query API evolution, workspace composition, and SQL ownership boundaries.
 - [ ] EP-4: derive aggregate-inline and catalog projection consumers from event-source authority.
 - [ ] EP-4: prove category/all sources remain honestly heterogeneous and projection impact is local.
 - [ ] EP-5: integrate every root into semantic impact, coverage, reports, ledgers, and conformance.
@@ -217,6 +217,12 @@ interactions between child plans. Provide concise evidence.
 - Nested consumer roots need outer container segments in addition to their first mapped key.
   Keeping those segments beside `UseSite` preserves stable root identities and complete rendered
   paths without fabricating intermediate declarations.
+- A subscription-only projection catalog exposed an unconditional generated inline-projection
+  import. Conditioning both inline and async imports on the actual owner inventory kept warnings
+  fatal in the candidate suite without changing mixed-catalog bytes.
+- Query-contract adoption needs an explicit ledger baseline marker. An absent row in an older
+  ledger cannot distinguish a genuine legacy `()` hole from lost current history, so both
+  standalone and workspace reports now say that the baseline is unavailable instead of guessing.
 
 
 ## Decision Log
@@ -282,3 +288,11 @@ semantics, and report queued-job history separately from events and snapshots. A
 suite and restoring mutations cover structural, opaque, nested, and explicit-`Json` boundaries;
 the released scalar queue and aggregate codec corpus remains byte-stable. EP-3 and EP-4 remain
 independently dependency-ready.
+
+EP-3 is complete. Candidate read models now generate one DSL-owned query-contract module and keep
+only the transaction body application-owned. Standalone and workspace ledgers retain explicit,
+baseline-aware input/result identities; legacy holes receive a reviewed migration obligation and
+are never rewritten. Query API changes are consumer-build breaking but leave SQL shape, catalog
+identity, persisted history, snapshots, and replay neutral. A compiled domain query plus four
+restoring mutations proves direct, nested, shared, unused, and stale-alias behavior. EP-4 remains
+dependency-ready.

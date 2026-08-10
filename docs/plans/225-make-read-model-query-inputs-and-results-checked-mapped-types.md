@@ -36,13 +36,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: generate one deterministic read-model query-contract module from the checked
+- [x] Milestone 1: generate one deterministic read-model query-contract module from the checked
   input/result expression pair and MP-35's shared Haskell type plan.
-- [ ] Milestone 2: wire generated `ReadModel q r` and new create-once query holes to the contract,
+- [x] Milestone 2: wire generated `ReadModel q r` and new create-once query holes to the contract,
   including an explicit legacy-hole migration path.
-- [ ] Milestone 3: classify query input/result evolution and semantic impact without contaminating
+- [x] Milestone 3: classify query input/result evolution and semantic impact without contaminating
   SQL shape or projection catalog fingerprints.
-- [ ] Milestone 4: compile query fixtures and mutations, document the ownership boundary, remove
+- [x] Milestone 4: compile query fixtures and mutations, document the ownership boundary, remove
   the read-model pending diagnostic, and pass full validation.
 
 
@@ -51,7 +51,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- A catalog containing only subscription projection owners exposed an unconditional generated
+  `InlineProjection` import. The candidate read-model fixture made the warning fatal; projection
+  catalog imports now follow the actual inline/async owner inventory while mixed catalogs retain
+  their existing bytes.
+- `DiagnosticCode` is an append-only machine vocabulary. Completing lowering removes every
+  emission of `MappedReadModelLoweringPending`, but the dormant constructor remains parseable so
+  historical check reports do not lose their registered code.
 
 
 ## Decision Log
@@ -84,6 +90,12 @@ Record every decision made while working on the plan.
   candidate syntax followed by a reviewed one-time hole edit, not an implicit rewrite.
   Date: 2026-08-09
 
+- Decision: Persist an explicit query-contract baseline marker plus one canonical row for each
+  input/result position in standalone and workspace ledgers.
+  Rationale: Clause removal and mapped-closure changes must remain visible, while an old ledger
+  cannot safely infer that its application-owned aliases were the scaffolded `()` placeholders.
+  Date: 2026-08-09
+
 
 ## Outcomes & Retrospective
 
@@ -92,7 +104,21 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+All milestones are complete. Standalone and workspace scaffolds emit one generated query-contract
+module, preserve existing create-once holes, and report an actionable migration until the
+application imports the generated aliases. Query identities and mapped closures round-trip through
+both ledgers; legacy history reports an unavailable baseline. Direct input/result evolution is
+consumer-build breaking with recompilation/conformance remedies and remains replay-neutral with
+unchanged SQL shape and catalog identity.
+
+The candidate fixture compiles a real `AccountLookup -> Transaction (Maybe AccountSummary)` query
+through direct, nested, shared, and unused mapped declarations. Four restoring mutations cover an
+imported input change, a removed result clause, a nested result binding change, and a stale local
+alias; every mutation turns the intended boundary red and restoration returns the suite to green.
+Focused generation, workspace, migration, evolution, and compiled conformance tests pass together
+with `cabal build all`, the full DSL test umbrella, the complete diff harness, ADR validation,
+formatting, and diff hygiene. Corpus policy is verified from the clean child commit as required by
+the MasterPlan workflow.
 
 
 ## Context and Orientation
@@ -207,7 +233,7 @@ cabal build all
 cabal test keiro-dsl:tests
 cabal run -v0 keiro-dsl-corpus-regen -- check
 scripts/check-conformance-corpus.sh
-just check-adr
+just adr-validate
 git diff --check
 git status --short
 ```

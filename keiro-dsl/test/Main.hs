@@ -60,12 +60,13 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consum
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
+import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.ServiceHarness
@@ -282,13 +283,13 @@ main = hspec $ do
       let snapshot = semanticImpactSnapshot impact
       Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
 
-    it "lowers mapped queues while retaining the read-model pending diagnostic" $ do
+    it "lowers mapped queues and checked read-model query contracts" $ do
       source <- mappedConsumerSurfaceSource
       parsed <- case parseSource "<mapped-consumer-pending>" source of
         Left failure -> expectationFailure (show failure) >> fail "unreachable"
         Right value -> pure value
       let codes = map code (validateService (checkedSource parsed))
-      codes `shouldContain` [MappedReadModelLoweringPending]
+      codes `shouldNotContain` [MappedReadModelLoweringPending]
       codes `shouldNotContain` [MappedQueueLoweringPending]
       case [workqueue | NWorkqueue workqueue <- specNodes (parsedSpec parsed)] of
         [workqueue] -> do
@@ -299,6 +300,175 @@ main = hspec $ do
           queue `shouldSatisfy` T.isInfixOf "explicitParseField (\\value -> (parseJSON value :: Parser [Value])"
           queue `shouldNotSatisfy` T.isInfixOf "Vendor.Geometry"
         workqueues -> expectationFailure ("unexpected workqueues: " <> show workqueues)
+      case [readModel | NReadModel readModel <- specNodes (parsedSpec parsed)] of
+        [readModel] -> do
+          let ctx = defaultContext (specContext (parsedSpec parsed))
+              modules = scaffoldReadModelForService ctx (checkedSource parsed) readModel
+              contract = generatedTextEndingIn "QueryContract.hs" modules
+              generatedReadModel = generatedTextEndingIn "ReadModel.hs" modules
+              holes = T.intercalate "\n" [moduleText value | value <- modules, kind value == HoleStub]
+          contract `shouldSatisfy` T.isInfixOf "type ArtifactLookupQueryInput = ArtifactInfo"
+          contract `shouldSatisfy` T.isInfixOf "type ArtifactLookupQueryResult = Maybe ArtifactLocation"
+          contract `shouldSatisfy` T.isInfixOf "import Example.Artifact.Domain (ArtifactInfo, ArtifactLocation)"
+          contract `shouldNotSatisfy` T.isInfixOf "Vendor.Geometry"
+          generatedReadModel `shouldSatisfy` T.isInfixOf ".QueryContract (ArtifactLookupQueryInput, ArtifactLookupQueryResult)"
+          generatedReadModel `shouldSatisfy` T.isInfixOf ".ReadModelHoles (artifactLookupQuery, applyArtifactLookup)"
+          holes `shouldSatisfy` T.isInfixOf ".QueryContract (ArtifactLookupQueryInput, ArtifactLookupQueryResult)"
+          holes `shouldNotSatisfy` T.isInfixOf "type ArtifactLookupQueryInput = ()"
+        readModels -> expectationFailure ("unexpected mapped read models: " <> show readModels)
+      queryContractIdentities (parsedSpec parsed)
+        `shouldBe` Right
+          [ QueryContractIdentity
+              { qciReadModel = "ArtifactLookup",
+                qciPosition = QueryInputConsumer,
+                qciTypeExpression = "ArtifactInfo",
+                qciMappedDependencies = ["ArtifactInfo", "ArtifactKind", "ArtifactLocation"]
+              },
+            QueryContractIdentity
+              { qciReadModel = "ArtifactLookup",
+                qciPosition = QueryResultConsumer,
+                qciTypeExpression = "Optional ArtifactLocation",
+                qciMappedDependencies = ["ArtifactLocation"]
+              }
+          ]
+
+    it "reports a retained legacy query hole until the application adopts the generated aliases" $
+      withTempDirectory "keiro-dsl-query-contract-migration" $ \out -> do
+        source <- mappedConsumerSurfaceSource
+        parsed <- case parseSource "<mapped-query-migration>" source of
+          Left failure -> expectationFailure (show failure) >> fail "unreachable"
+          Right value -> pure value
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (specContext spec)
+        modules <- case planTestServiceScaffold ctx service of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right values -> pure values
+        readModel <- case [value | NReadModel value <- specNodes spec] of
+          [value] -> pure value
+          values -> expectationFailure ("unexpected mapped read models: " <> show values) >> fail "unreachable"
+        let typedHole = case [value | value <- modules, kind value == HoleStub, "ReadModelHoles.hs" `T.isSuffixOf` T.pack (modulePath value)] of
+              [value] -> value
+              values -> error ("expected one query hole, got " <> show (map modulePath values))
+            legacyHole = case [value | value <- scaffoldReadModel ctx readModel, kind value == HoleStub] of
+              [value] -> value
+              values -> error ("expected one legacy query hole, got " <> show (map modulePath values))
+            holePath = out </> modulePath typedHole
+            run = executeServiceScaffold out False "mapped-query.keiro" (parsedSourceLanguage parsed) ctx service modules
+        createDirectoryIfMissing True (takeDirectory holePath)
+        TIO.writeFile holePath (moduleText legacyHole)
+        TIO.writeFile
+          (out </> recordFileName (specContext spec))
+          ( renderRecord
+              ScaffoldRecord
+                { recSpecPath = "mapped-query.keiro",
+                  recModuleRoot = "",
+                  recLayout = "prefixed",
+                  recSourceLanguage = parsedSourceLanguage parsed,
+                  recLanguageContract = checkedLanguageContract service,
+                  recNamingEdition = IdiomaticNamingV1,
+                  recModuleRoles = [],
+                  recFiles = [],
+                  recMappings = [],
+                  recIdDomains = [],
+                  recNominalEqualities = [],
+                  recBindingObligations = [],
+                  recBehaviorRequirements = [],
+                  recProjectionCatalogFacts = [],
+                  recQueryContractBaseline = False,
+                  recQueryContracts = [],
+                  recSemanticImpact = Nothing
+                }
+          )
+        first <- run >>= either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure
+        reportQueryContractBaselineUnavailable first `shouldBe` True
+        reportQueryContractMigrations first
+          `shouldBe` [ QueryContractMigration
+                         { qcmOwner = "ArtifactLookup",
+                           qcmHolePath = modulePath typedHole,
+                           qcmRequiredImport = "import Generated.ConsumerDemo.ArtifactLookup.QueryContract (ArtifactLookupQueryInput, ArtifactLookupQueryResult)"
+                         }
+                     ]
+        renderScaffoldReport first `shouldSatisfy` any (T.isInfixOf "remove the local QueryInput/QueryResult type aliases")
+        renderScaffoldReport first `shouldSatisfy` any (T.isInfixOf "baseline unavailable")
+        currentLedger <- TIO.readFile (reportRecordPath first)
+        case parseRecord currentLedger of
+          Just record -> do
+            recQueryContractBaseline record `shouldBe` True
+            length (recQueryContracts record) `shouldBe` 2
+          Nothing -> expectationFailure "standalone query-contract ledger did not parse"
+        case filter ("query-contract " `T.isPrefixOf`) (T.lines currentLedger) of
+          row : _ -> parseRecord (currentLedger <> row <> "\n") `shouldBe` Nothing
+          [] -> expectationFailure "expected standalone query-contract rows"
+        TIO.writeFile holePath (moduleText typedHole)
+        second <- run >>= either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure
+        reportQueryContractMigrations second `shouldBe` []
+        [disposition | (value, disposition) <- reportDispositions second, modulePath value == modulePath typedHole]
+          `shouldBe` [Skipped]
+
+        changedParsed <- case parseSource "<mapped-query-drift>" (T.replace "query result = Optional ArtifactLocation" "query result = ArtifactLocation" source) of
+          Left failure -> expectationFailure (show failure) >> fail "unreachable"
+          Right value -> pure value
+        let changedService = checkedSource changedParsed
+        changedModules <- case planTestServiceScaffold ctx changedService of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right values -> pure values
+        third <-
+          executeServiceScaffold out False "mapped-query.keiro" (parsedSourceLanguage changedParsed) ctx changedService changedModules
+            >>= either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure
+        reportQueryContractDrift third
+          `shouldSatisfy` \case
+            [QueryContractDrift {qcdKey = ("ArtifactLookup", QueryResultConsumer)}] -> True
+            _ -> False
+        renderScaffoldReport third `shouldSatisfy` any (T.isInfixOf "query contract drift: 1")
+
+        let withoutQuerySource =
+              T.unlines
+                [ line
+                | line <- T.lines source,
+                  not ("  query input =" `T.isPrefixOf` line),
+                  not ("  query result =" `T.isPrefixOf` line)
+                ]
+        withoutQueryParsed <- case parseSource "<mapped-query-removed>" withoutQuerySource of
+          Left failure -> expectationFailure (show failure) >> fail "unreachable"
+          Right value -> pure value
+        let withoutQueryService = checkedSource withoutQueryParsed
+        withoutQueryModules <- case planTestServiceScaffold ctx withoutQueryService of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right values -> pure values
+        fourth <-
+          executeServiceScaffold out False "mapped-query.keiro" (parsedSourceLanguage withoutQueryParsed) ctx withoutQueryService withoutQueryModules
+            >>= either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure
+        length (reportQueryContractDrift fourth) `shouldBe` 2
+        removedLedger <- TIO.readFile (reportRecordPath fourth)
+        case parseRecord removedLedger of
+          Just record -> do
+            recQueryContractBaseline record `shouldBe` True
+            recQueryContracts record `shouldBe` []
+          Nothing -> expectationFailure "removed query-contract ledger did not parse"
+
+    it "plans and records the same typed query contract across workspace members" $
+      withTempDirectory "keiro-dsl-mapped-query-workspace" $ \out -> do
+        plan <- shouldPlanWorkspace "test/fixtures/mapped-readmodel-workspace/service.keiro-workspace"
+        let contractRows =
+              [ (scaffoldModule, provenance)
+              | (scaffoldModule, provenance) <- wpModules plan,
+                "QueryContract.hs" `T.isSuffixOf` T.pack (modulePath scaffoldModule)
+              ]
+        case contractRows of
+          [(contract, MemberOwned owner)] -> do
+            owner `shouldBe` "readmodel.keiro"
+            moduleText contract `shouldSatisfy` T.isInfixOf "type AccountSummaryQueryInput = AccountLookup"
+            moduleText contract `shouldSatisfy` T.isInfixOf "type AccountSummaryQueryResult = Maybe AccountSummary"
+          values -> expectationFailure ("unexpected workspace query contracts: " <> show values)
+        report <- executeWorkspaceScaffold out False plan >>= either (\refusals -> expectationFailure (show refusals) >> fail "unreachable") pure
+        wsrQueryContractMigrations report `shouldBe` []
+        recordText <- TIO.readFile (wsrRecordPath report)
+        case parseWorkspaceRecord recordText of
+          Just record -> do
+            wrQueryContractBaseline record `shouldBe` True
+            length (wrQueryContracts record) `shouldBe` 2
+          Nothing -> expectationFailure "workspace query-contract ledger did not parse"
 
   describe "language support" $ do
     it "serializes support from the registered version and decodes older records" $ do
@@ -1164,6 +1334,9 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
+            "mapped-readmodel-workspace/readmodel.keiro",
+            "mapped-readmodel-workspace/types.keiro",
+            "mapped-readmodel.keiro",
             "mapped-workqueue.keiro",
             "nominal-v1.keiro",
             "projection-catalog.keiro"
@@ -2456,6 +2629,8 @@ main = hspec $ do
                 recBindingObligations = [],
                 recBehaviorRequirements = rows,
                 recProjectionCatalogFacts = [],
+                recQueryContractBaseline = True,
+                recQueryContracts = [],
                 recSemanticImpact = Nothing
               }
       T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
@@ -2486,6 +2661,8 @@ main = hspec $ do
                 wrBindingObligations = [],
                 wrBehaviorRequirements = ownedRows,
                 wrProjectionCatalogFacts = [],
+                wrQueryContractBaseline = True,
+                wrQueryContracts = [],
                 wrAdopted = [],
                 wrSemanticImpact = Nothing
               }
@@ -2647,6 +2824,8 @@ main = hspec $ do
                 recBindingObligations = [],
                 recBehaviorRequirements = [],
                 recProjectionCatalogFacts = [],
+                recQueryContractBaseline = True,
+                recQueryContracts = [],
                 recSemanticImpact = Nothing
               }
           encoded = renderRecord record
@@ -3265,6 +3444,8 @@ main = hspec $ do
                 recBindingObligations = [],
                 recBehaviorRequirements = [],
                 recProjectionCatalogFacts = [],
+                recQueryContractBaseline = True,
+                recQueryContracts = either (const []) id (queryContractIdentities spec),
                 recSemanticImpact = Just snapshot
               }
           encoded = renderRecord singleRecord
@@ -3744,6 +3925,8 @@ main = hspec $ do
                   recBindingObligations = [],
                   recBehaviorRequirements = [],
                   recProjectionCatalogFacts = [],
+                  recQueryContractBaseline = False,
+                  recQueryContracts = [],
                   recSemanticImpact = Nothing
                 }
             recordPath = out </> recordFileName (specContext spec)
@@ -6226,6 +6409,43 @@ main = hspec $ do
       [ckCode k | Breaking k <- unversioned] `shouldContain` [ReadModelShapeChangedWithoutBump]
       any isBreaking bumped `shouldBe` False
       [ckFacet k | Additive k <- bumped] `shouldContain` ["read-model-version"]
+    it "classifies query input and result changes only on the consumer-build surface" $ do
+      source <- mappedConsumerSurfaceSource
+      base <- parseInlineSpec "<mapped-query-diff-old>" source
+      let changeQuery update =
+            modifyReadModel
+              "ArtifactLookup"
+              ( \readModel ->
+                  readModel
+                    { queryTypes = fmap update (queryTypes readModel)
+                    }
+              )
+              base
+          inputChanged = changeQuery (\queryPair -> queryPair {input = TList (input queryPair)})
+          resultChanged = changeQuery (\queryPair -> queryPair {result = TRef "ArtifactInfo"})
+          assertBuildOnly expectedCode changes = case [kind | Advisory kind <- changes, ckCode kind == expectedCode] of
+            [kind] -> do
+              cvConsumerBuild (ckVector kind) `shouldBe` VBreaking
+              cvPrivateHistoryRead (ckVector kind) `shouldBe` VCompatible
+              cvOldBinaryReadNewEvents (ckVector kind) `shouldBe` VCompatible
+              cvSnapshotHydration (ckVector kind) `shouldBe` VNotApplicable
+              cvPublicConsumer (ckVector kind) `shouldBe` VNotApplicable
+              cvPersistedIdentity (ckVector kind) `shouldBe` VNotApplicable
+              ckMappedPersistedImpact kind `shouldBe` Nothing
+              remediationFor (ckContext kind) (ckCode kind)
+                `shouldBe` RemedyRecompileConsumers :| [RemedyRunConformance]
+            values -> expectationFailure ("expected one query build finding, got " <> show values)
+          onlyReadModel spec = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == "ArtifactLookup"] of
+            [readModel] -> readModel
+            values -> error ("expected one ArtifactLookup read model, got " <> show values)
+      assertBuildOnly ReadModelQueryInputChanged (diffSpecs base inputChanged)
+      assertBuildOnly ReadModelQueryResultChanged (diffSpecs base resultChanged)
+      canonicalShape (onlyReadModel inputChanged) `shouldBe` canonicalShape (onlyReadModel base)
+      deriveShapeHash (onlyReadModel resultChanged) `shouldBe` deriveShapeHash (onlyReadModel base)
+      projectionCatalogFacts inputChanged `shouldBe` projectionCatalogFacts base
+      registryNameFor (specContext inputChanged) (onlyReadModel inputChanged)
+        `shouldBe` registryNameFor (specContext base) (onlyReadModel base)
+      replayImpactSpecs base inputChanged `shouldBe` ReplayNeutral
     it "classifies read-model registry, table, subscription, and removal identities" $ do
       base <- specOf "test/fixtures/readmodel-runtime.keiro"
       let tableChanged = modifyReadModel "transfer_decisions" (\readModel -> readModel {rmTable = "transfer_decisions_v2"}) base
@@ -7781,6 +8001,8 @@ main = hspec $ do
                   recBindingObligations = [],
                   recBehaviorRequirements = Behavior.behaviorRecordRows requirements,
                   recProjectionCatalogFacts = [],
+                  recQueryContractBaseline = False,
+                  recQueryContracts = either (const []) id (queryContractIdentities spec),
                   recSemanticImpact = Just (semanticImpactSnapshotForSpec spec)
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
@@ -7788,6 +8010,7 @@ main = hspec $ do
             semanticRows = filter ("semantic-contract " `T.isPrefixOf`) (T.lines contents)
             withoutSemanticRows = T.unlines (filter (not . T.isPrefixOf "semantic-contract ") (T.lines contents))
         parseRecord contents `shouldBe` Just expected
+        contents `shouldNotSatisfy` T.isInfixOf "query-contract-baseline"
         parseRecord withoutSourceRows `shouldBe` Just expected
         parseRecord withoutSemanticRows `shouldBe` Just expected
         case sourceRows of
@@ -9002,6 +9225,8 @@ main = hspec $ do
             Just record -> do
               wrService record `shouldBe` "demo-project"
               wrManifest record `shouldBe` "service.keiro-workspace"
+              wrQueryContractBaseline record `shouldBe` False
+              contents `shouldNotSatisfy` T.isInfixOf "query-contract-baseline"
               wrMembers record
                 `shouldBe` [ "domain/project-artifact.keiro",
                              "domain/project.keiro",
@@ -10248,6 +10473,8 @@ sampleWorkspaceRecord workspace =
       wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace)),
       wrBehaviorRequirements = [],
       wrProjectionCatalogFacts = [],
+      wrQueryContractBaseline = True,
+      wrQueryContracts = either (const []) id (queryContractIdentities (wsMergedSpec workspace)),
       wrAdopted =
         [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-ledger.context.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing

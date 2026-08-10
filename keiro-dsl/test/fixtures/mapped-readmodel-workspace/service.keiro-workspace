@@ -1,0 +1,3 @@
+service mapped-readmodel-workspace
+spec types.keiro
+spec readmodel.keiro

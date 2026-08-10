@@ -85,6 +85,7 @@ library
     Keiro.Dsl.NominalType
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
+    Keiro.Dsl.ReadModelQueryContract
     Keiro.Dsl.ReadModelShape
     Keiro.Dsl.ReplayImpact
     Keiro.Dsl.RuntimePackage
@@ -501,6 +502,41 @@ test-suite keiro-dsl-conformance-mapped-queue
     , keiro-dsl
     , keiro-pgmq
     , text        >=2.1  && <2.2
+
+-- Plan 225: candidate language-5 read-model input/result expressions lower to
+-- generated mapped domain aliases while SQL and query bodies remain hand-owned.
+test-suite keiro-dsl-conformance-mapped-readmodel
+  import:         warnings, generated-output
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-mapped-readmodel
+  main-is:        Main.hs
+  other-modules:
+    Conformance.MappedReadModel.Bindings
+    Conformance.MappedReadModel.Domain
+    Generated.MappedReadmodel.AccountSummary.QueryContract
+    Generated.MappedReadmodel.AccountSummary.ReadModel
+    Generated.MappedReadmodel.AccountSummary.ReadModelHarness
+    Generated.MappedReadmodel.AccountSummary.ReadModelTable
+    Generated.MappedReadmodel.ProjectionCatalog
+    Generated.MappedReadmodel.Structural.Shape.AccountLookup
+    Generated.MappedReadmodel.Structural.Shape.AccountProfile
+    Generated.MappedReadmodel.Structural.Shape.AccountSummary
+    Generated.MappedReadmodel.Structural.Shape.TenantKey
+    Generated.MappedReadmodel.Structural.Shape.UnusedFilter
+    Generated.MappedReadmodel.StructuralConformance
+    Generated.MappedReadmodel.StructuralProjections
+    MappedReadmodel.AccountSummary.ReadModelHoles
+    MappedReadmodel.ProjectionCatalog.ProjectionCatalogHoles
+
+  build-depends:
+    , base               >=4.21 && <5
+    , effectful-core
+    , hasql-transaction
+    , keiki              >=0.9  && <0.10
+    , keiro
+    , keiro-dsl
+    , kiroku-store
+    , text               >=2.1  && <2.2
 
 -- Plan 184: colliding consumer type occurrences, local-name conflicts, and
 -- repeated binding/shape references compile with deterministic short aliases.

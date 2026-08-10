@@ -82,6 +82,15 @@ scaffold write. Every current writer emits the row, including for an empty mappe
 inventory. Absence is therefore reserved for pre-feature history and means
 “baseline unavailable,” not “no mapped impact.”
 
+Typed read-model queries use the same additive-history rule. Every current standalone and
+workspace writer emits a `query-contract-baseline v1` marker and one canonical `query-contract`
+JSON row per read-model input/result position, including its mapped dependency closure. Absence of
+the marker means only that the old ledger cannot prove a previous query API; it never means the
+legacy placeholder was `()`. Generated `QueryContract` modules are replaceable, but
+`ReadModelHoles` remains create-once. When a retained legacy hole still owns local query aliases,
+the scaffold report names the hand-owned file, the aliases to remove, and the generated import to
+add; it never parses or rewrites application Haskell.
+
 
 ## Consequences
 

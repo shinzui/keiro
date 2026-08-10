@@ -8,6 +8,7 @@ module Keiro.Dsl.ScaffoldRun
     StaleGeneratedEvidence (..),
     StaleModule (..),
     MappingDrift (..),
+    QueryContractMigration (..),
     SourceLanguageDrift (..),
     ScaffoldReport (..),
     scaffoldServiceModules,
@@ -61,6 +62,7 @@ module Keiro.Dsl.ScaffoldRun
     mappingDrift,
     behaviorDrift,
     newBindingObligations,
+    queryContractMigrations,
     obligationKindLabel,
     renderMappingIdentity,
   )
@@ -100,6 +102,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion,
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.ReadModelQueryContract
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
@@ -224,6 +227,9 @@ data ScaffoldReport = ScaffoldReport
     reportConsumerPlan :: !ConsumerPlan,
     reportConstraintPlan :: ![Text],
     reportMappingDrift :: ![MappingDrift],
+    reportQueryContractBaselineUnavailable :: !Bool,
+    reportQueryContractDrift :: ![QueryContractDrift],
+    reportQueryContractMigrations :: ![QueryContractMigration],
     reportSemanticImpact :: !SemanticImpactReport,
     reportGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift),
@@ -234,6 +240,13 @@ data ScaffoldReport = ScaffoldReport
     reportConformancePackage :: !(Maybe ConformancePackageReport),
     reportNameMoves :: ![SourceMove],
     reportSidecarMoves :: ![SidecarMove]
+  }
+  deriving stock (Eq, Show)
+
+data QueryContractMigration = QueryContractMigration
+  { qcmOwner :: !Text,
+    qcmHolePath :: !FilePath,
+    qcmRequiredImport :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -264,7 +277,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
           NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
           NReadModel readModel ->
             let resolved = resolveCatalogReadModel spec readModel
-             in scaffoldReadModel ctx resolved <> harnessReadModel ctx resolved
+             in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx resolved
           NProjectionTarget _ -> []
           NRebuildGroup _ -> []
           NProjectionOwner _ -> []
@@ -899,8 +912,19 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                       | otherwise -> do
                           applyPreparedSourceMoves out prepared
                           stale <- maybe (pure []) (existingStale out modules) previousRecord
+                          queryMigrations <- queryContractMigrations out modules
                           let currentConsumerPlan = consumerPlan spec
                               drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                              currentQueryContracts = either (const []) id (queryContractIdentities spec)
+                              queryHistoryBaseline =
+                                not (null currentQueryContracts)
+                                  || maybe False recQueryContractBaseline previousRecord
+                              queryBaselineUnavailable =
+                                not (null currentQueryContracts)
+                                  && maybe False (not . recQueryContractBaseline) previousRecord
+                              queryDrift = case previousRecord of
+                                Just previous | recQueryContractBaseline previous -> queryContractDrift currentQueryContracts (recQueryContracts previous)
+                                _ -> []
                               currentSemanticImpact = checkedSemanticImpactSnapshot spec
                               semanticReport = semanticImpactForMappingDrift (previousRecord >>= recSemanticImpact) currentSemanticImpact drift
                               languageDrift = do
@@ -916,7 +940,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                           dispositions <- mapM (writeModule out) modules
                           let manifestPath = out </> contextCabalFragmentFileName (specContext spec)
                           TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
-                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules currentBehavior currentSemanticImpact))
+                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact))
                           packageReport <- traverse executePreparedConformancePackage preparedPackage
                           pure $
                             Right
@@ -933,6 +957,9 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportConsumerPlan = currentConsumerPlan,
                                   reportConstraintPlan = constraintPlan spec currentConsumerPlan,
                                   reportMappingDrift = drift,
+                                  reportQueryContractBaselineUnavailable = queryBaselineUnavailable,
+                                  reportQueryContractDrift = queryDrift,
+                                  reportQueryContractMigrations = queryMigrations,
                                   reportSemanticImpact = semanticReport,
                                   reportGeneratedArtifactImpact = generatedArtifactImpact dispositions,
                                   reportSourceLanguageDrift = languageDrift,
@@ -1192,6 +1219,44 @@ newBindingObligations current previous =
   where
     previousSet = Set.fromList previous
 
+-- | Inspect, but never rewrite, an existing create-once read-model hole. A
+-- typed plan is complete only after the application removes its legacy local
+-- aliases and imports the generated QueryContract aliases.
+queryContractMigrations :: FilePath -> [ScaffoldModule] -> IO [QueryContractMigration]
+queryContractMigrations out modules = fmap concat (mapM inspect typedHoles)
+  where
+    typedHoles =
+      [ (hole, requiredImport)
+      | hole <- modules,
+        kind hole == HoleStub,
+        roleFamily (moduleRole hole) == "ReadModelHoles",
+        requiredImport <- T.lines (moduleText hole),
+        "import " `T.isPrefixOf` requiredImport,
+        ".QueryContract (" `T.isInfixOf` requiredImport
+      ]
+    inspect (hole, requiredImport) = do
+      let path = out </> modulePath hole
+      exists <- doesFileExist path
+      if not exists
+        then pure []
+        else do
+          contents <- TIO.readFile path
+          let ready = requiredImport `elem` T.lines contents && not (any isLocalQueryAlias (T.lines contents))
+          pure
+            [ QueryContractMigration
+                { qcmOwner = queryOwner (moduleRole hole),
+                  qcmHolePath = modulePath hole,
+                  qcmRequiredImport = requiredImport
+                }
+            | not ready
+            ]
+    isLocalQueryAlias line = case T.words (T.strip line) of
+      "type" : alias : "=" : _ -> "QueryInput" `T.isSuffixOf` alias || "QueryResult" `T.isSuffixOf` alias
+      _ -> False
+    queryOwner role = case T.words (roleOwnerName role) of
+      "readmodel" : owner : _ -> owner
+      _ -> roleOwnerName role
+
 behaviorDrift :: [BehaviorRecordRow] -> [BehaviorRecordRow] -> ([BehaviorRecordRow], [BehaviorRecordRow])
 behaviorDrift current previous =
   ( [row | row <- sortOn behaviorRecordKey current, behaviorRecordKey row `Set.notMember` previousKeys],
@@ -1233,8 +1298,8 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
                   else ExactGeneratedBannerMissing
           pure [StaleModule fileKind path evidence]
 
-currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> [BehaviorRecordRow] -> SemanticImpactSnapshot -> ScaffoldRecord
-currentRecord specPath sourceLanguage ctx service modules currentBehavior currentSemanticImpact =
+currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> Bool -> [BehaviorRecordRow] -> SemanticImpactSnapshot -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact =
   ScaffoldRecord
     { recSpecPath = T.pack specPath,
       recModuleRoot = moduleRoot ctx,
@@ -1250,6 +1315,8 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior curren
       recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior,
       recProjectionCatalogFacts = projectionCatalogFacts spec,
+      recQueryContractBaseline = queryHistoryBaseline,
+      recQueryContracts = either (const []) id (queryContractIdentities spec),
       recSemanticImpact = Just currentSemanticImpact
     }
   where
@@ -1460,6 +1527,8 @@ renderScaffoldReport report =
     <> previousSpecNote
     <> constraintSection
     <> newHolesSection
+    <> queryContractSection
+    <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (reportSemanticImpact report)
     <> renderGeneratedArtifactImpact (reportSemanticImpact report) (reportGeneratedArtifactImpact report)
@@ -1514,6 +1583,40 @@ renderScaffoldReport report =
     obligationLines hole =
       [ "  " <> holeModule hole,
         "    " <> holeSignature hole <> " (" <> obligationKindLabel (holeKind hole) <> ")"
+      ]
+    queryContractSection =
+      [ "query contract history: baseline unavailable in the previous ledger; no legacy `()` API was inferred"
+      | reportQueryContractBaselineUnavailable report
+      ]
+        <> case reportQueryContractDrift report of
+          [] -> []
+          drifts ->
+            ["query contract drift: " <> tshow (length drifts) <> " input/result position(s) changed since the previous scaffold:"]
+              <> concatMap queryDriftLines drifts
+    queryDriftLines drift =
+      [ "  " <> readModel <> " " <> queryPositionLabel position,
+        "    previous: " <> maybe "(absent)" renderQueryIdentity (qcdPrevious drift),
+        "    current:  " <> maybe "(absent)" renderQueryIdentity (qcdCurrent drift)
+      ]
+      where
+        (readModel, position) = qcdKey drift
+    renderQueryIdentity identity =
+      qciTypeExpression identity
+        <> " mapped=["
+        <> T.intercalate ", " (qciMappedDependencies identity)
+        <> "]"
+    queryPositionLabel QueryInputConsumer = "input"
+    queryPositionLabel QueryResultConsumer = "result"
+    queryContractMigrationSection = case reportQueryContractMigrations report of
+      [] -> []
+      migrations ->
+        ["query contract migration required: " <> tshow (length migrations) <> " hand-owned hole module(s)"]
+          <> concatMap migrationLines migrations
+    migrationLines migration =
+      [ "  " <> qcmOwner migration,
+        "    edit " <> T.pack (qcmHolePath migration),
+        "    remove the local QueryInput/QueryResult type aliases",
+        "    add " <> qcmRequiredImport migration
       ]
     previousSpecNote = case reportPreviousSpecPath report of
       Just previous

@@ -78,6 +78,13 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, lang
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
+import Keiro.Dsl.ReadModelQueryContract
+  ( QueryContractDrift (..),
+    QueryContractIdentity (..),
+    QueryContractPosition (..),
+    queryContractDrift,
+    queryContractIdentities,
+  )
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (projectionCatalogFacts)
@@ -85,6 +92,7 @@ import Keiro.Dsl.ScaffoldRun
   ( GeneratedArtifactImpact,
     MappingDrift (..),
     PreparedSourceMove,
+    QueryContractMigration (..),
     Refusal (..),
     StaleGeneratedEvidence (..),
     StaleModule (..),
@@ -102,6 +110,7 @@ import Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     preflightSourceMoves,
     preparedSourceMove,
+    queryContractMigrations,
     renderGeneratedArtifactImpact,
     renderInertNodeSection,
     renderMappingIdentity,
@@ -269,7 +278,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
       NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
       NReadModel readModel ->
         let resolved = resolveCatalogReadModel merged readModel
-         in scaffoldReadModel ctx resolved <> harnessReadModel ctx resolved
+         in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx resolved
       NProjectionTarget _ -> []
       NRebuildGroup _ -> []
       NProjectionOwner _ -> []
@@ -410,6 +419,9 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrConsumerPlan :: !ConsumerPlan,
     wsrConstraintPlan :: ![Text],
     wsrMappingDrift :: ![MappingDrift],
+    wsrQueryContractBaselineUnavailable :: !Bool,
+    wsrQueryContractDrift :: ![QueryContractDrift],
+    wsrQueryContractMigrations :: ![QueryContractMigration],
     wsrSemanticImpact :: !SemanticImpactReport,
     wsrGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift],
@@ -511,6 +523,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
       applyPreparedSourceMoves out preparedNameMoves
       previous <- readWorkspaceRecord recordPath
       stale <- staleAgainst out (map modulePath modules) (previousFiles previous)
+      queryMigrations <- queryContractMigrations out modules
       -- Adoption is a one-shot, guarded by the absence of workspace
       -- history: once this workspace owns the directory there is nothing
       -- left to import, and the migration report stays as written.
@@ -522,6 +535,16 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
           currentSemanticImpact = checkedSemanticImpactSnapshot merged
           semanticReport = semanticImpactForMappingDrift (previous >>= wrSemanticImpact) currentSemanticImpact drift
           languageDrift = workspaceSourceLanguageDrift workspace previous
+          currentQueryContracts = either (const []) id (queryContractIdentities merged)
+          queryHistoryBaseline =
+            not (null currentQueryContracts)
+              || maybe False wrQueryContractBaseline previous
+          queryBaselineUnavailable =
+            not (null currentQueryContracts)
+              && maybe False (not . wrQueryContractBaseline) previous
+          queryDrift = case previous of
+            Just record | wrQueryContractBaseline record -> queryContractDrift currentQueryContracts (wrQueryContracts record)
+            _ -> []
           currentObligations = either (const []) id (bindingHolesForService (wpCheckedService plan))
           newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
           currentBehavior = workspaceBehaviorRows workspace
@@ -535,7 +558,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
       let adopted = case migration of
             Just report -> adoptedRows report
             Nothing -> maybe [] wrAdopted previous
-      TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted currentSemanticImpact))
+      TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact))
       packageReport <- case packagePreflight of
         Right prepared -> traverse executePreparedConformancePackage prepared
         Left _ -> pure Nothing
@@ -565,6 +588,9 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrConsumerPlan = currentPlan,
               wsrConstraintPlan = constraintPlan merged currentPlan,
               wsrMappingDrift = drift,
+              wsrQueryContractBaselineUnavailable = queryBaselineUnavailable,
+              wsrQueryContractDrift = queryDrift,
+              wsrQueryContractMigrations = queryMigrations,
               wsrSemanticImpact = semanticReport,
               wsrGeneratedArtifactImpact = generatedArtifactImpact [(scaffoldModule, disposition) | (scaffoldModule, _, disposition) <- dispositions],
               wsrSourceLanguageDrift = languageDrift,
@@ -599,8 +625,8 @@ readWorkspaceRecord path = do
 -- | The record this run writes: the plan's modules with their owners, the
 -- canonical member list, the merged graph's mappings and obligations, and any
 -- files adopted from pre-workspace scaffold output.
-currentWorkspaceRecord :: WorkspacePlan -> [AdoptedRow] -> SemanticImpactSnapshot -> WorkspaceRecord
-currentWorkspaceRecord plan adopted currentSemanticImpact =
+currentWorkspaceRecord :: WorkspacePlan -> [AdoptedRow] -> Bool -> SemanticImpactSnapshot -> WorkspaceRecord
+currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
   WorkspaceRecord
     { wrService = wsService workspace,
       wrManifest = T.pack (takeFileName (wsManifestPath workspace)),
@@ -629,6 +655,8 @@ currentWorkspaceRecord plan adopted currentSemanticImpact =
       wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrProjectionCatalogFacts = projectionCatalogFacts merged,
+      wrQueryContractBaseline = queryHistoryBaseline,
+      wrQueryContracts = either (const []) id (queryContractIdentities merged),
       wrAdopted = adopted,
       wrSemanticImpact = Just currentSemanticImpact
     }
@@ -740,6 +768,8 @@ renderWorkspaceScaffoldReport report =
     <> nameMoveSection
     <> constraintSection
     <> newHolesSection
+    <> queryContractSection
+    <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (wsrSemanticImpact report)
     <> renderGeneratedArtifactImpact (wsrSemanticImpact report) (wsrGeneratedArtifactImpact report)
@@ -822,6 +852,40 @@ renderWorkspaceScaffoldReport report =
     obligationLines hole =
       [ "  " <> holeModule hole,
         "    " <> holeSignature hole <> " (" <> obligationKindLabel (holeKind hole) <> ")"
+      ]
+    queryContractSection =
+      [ "query contract history: baseline unavailable in the previous ledger; no legacy `()` API was inferred"
+      | wsrQueryContractBaselineUnavailable report
+      ]
+        <> case wsrQueryContractDrift report of
+          [] -> []
+          drifts ->
+            ["query contract drift: " <> tshow (length drifts) <> " input/result position(s) changed since the previous scaffold:"]
+              <> concatMap queryDriftLines drifts
+    queryDriftLines drift =
+      [ "  " <> readModel <> " " <> queryPositionLabel position,
+        "    previous: " <> maybe "(absent)" renderQueryIdentity (qcdPrevious drift),
+        "    current:  " <> maybe "(absent)" renderQueryIdentity (qcdCurrent drift)
+      ]
+      where
+        (readModel, position) = qcdKey drift
+    renderQueryIdentity identity =
+      qciTypeExpression identity
+        <> " mapped=["
+        <> T.intercalate ", " (qciMappedDependencies identity)
+        <> "]"
+    queryPositionLabel QueryInputConsumer = "input"
+    queryPositionLabel QueryResultConsumer = "result"
+    queryContractMigrationSection = case wsrQueryContractMigrations report of
+      [] -> []
+      migrations ->
+        ["query contract migration required: " <> tshow (length migrations) <> " hand-owned hole module(s)"]
+          <> concatMap queryMigrationLines migrations
+    queryMigrationLines migration =
+      [ "  " <> qcmOwner migration,
+        "    edit " <> T.pack (qcmHolePath migration),
+        "    remove the local QueryInput/QueryResult type aliases",
+        "    add " <> qcmRequiredImport migration
       ]
     mappingDriftSection = case wsrMappingDrift report of
       [] -> []

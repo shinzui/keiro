@@ -1,0 +1,63 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/mapped-readmodel.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-readmodel structural conformance","path":"Generated/MappedReadmodel/StructuralConformance.hs"}
+module-role {"family":"AccountLookup","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural AccountLookup (line 15)","path":"Generated/MappedReadmodel/Structural/Shape/AccountLookup.hs"}
+module-role {"family":"AccountProfile","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural AccountProfile (line 27)","path":"Generated/MappedReadmodel/Structural/Shape/AccountProfile.hs"}
+module-role {"family":"AccountSummary","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural AccountSummary (line 38)","path":"Generated/MappedReadmodel/Structural/Shape/AccountSummary.hs"}
+module-role {"family":"TenantKey","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural TenantKey (line 4)","path":"Generated/MappedReadmodel/Structural/Shape/TenantKey.hs"}
+module-role {"family":"UnusedFilter","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural UnusedFilter (line 51)","path":"Generated/MappedReadmodel/Structural/Shape/UnusedFilter.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context mapped-readmodel mapped structural facade","path":"Generated/MappedReadmodel/StructuralProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedReadModel.Bindings","path":"Conformance/MappedReadModel/Bindings.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"Generated/MappedReadmodel/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"MappedReadmodel/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"MappedReadmodel/AccountSummary/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelHarness.hs"}
+generated Generated/MappedReadmodel/StructuralConformance.hs
+generated Generated/MappedReadmodel/Structural/Shape/AccountLookup.hs
+generated Generated/MappedReadmodel/Structural/Shape/AccountProfile.hs
+generated Generated/MappedReadmodel/Structural/Shape/AccountSummary.hs
+generated Generated/MappedReadmodel/Structural/Shape/TenantKey.hs
+generated Generated/MappedReadmodel/Structural/Shape/UnusedFilter.hs
+generated Generated/MappedReadmodel/StructuralProjections.hs
+hole Conformance/MappedReadModel/Bindings.hs
+generated Generated/MappedReadmodel/ProjectionCatalog.hs
+hole MappedReadmodel/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs
+generated Generated/MappedReadmodel/AccountSummary/QueryContract.hs
+generated Generated/MappedReadmodel/AccountSummary/ReadModel.hs
+hole MappedReadmodel/AccountSummary/ReadModelHoles.hs
+generated Generated/MappedReadmodel/AccountSummary/ReadModelHarness.hs
+mapping {"bindingSymbol":"Conformance.MappedReadModel.Bindings.accountLookupBinding","bindingVersion":"1","canonicalType":"conformance.mapped-readmodel.AccountLookup.v1","mode":"structural","module":"Conformance.MappedReadModel.Domain","package":"keiro-dsl","schema":1,"specName":"AccountLookup","type":"AccountLookup"}
+mapping {"bindingSymbol":"Conformance.MappedReadModel.Bindings.accountProfileBinding","bindingVersion":"1","canonicalType":"conformance.mapped-readmodel.AccountProfile.v1","mode":"structural","module":"Conformance.MappedReadModel.Domain","package":"keiro-dsl","schema":1,"specName":"AccountProfile","type":"AccountProfile"}
+mapping {"bindingSymbol":"Conformance.MappedReadModel.Bindings.accountSummaryBinding","bindingVersion":"1","canonicalType":"conformance.mapped-readmodel.AccountSummary.v1","mode":"structural","module":"Conformance.MappedReadModel.Domain","package":"keiro-dsl","schema":1,"specName":"AccountSummary","type":"AccountSummary"}
+mapping {"bindingSymbol":"Conformance.MappedReadModel.Bindings.tenantKeyBinding","bindingVersion":"1","canonicalType":"conformance.mapped-readmodel.TenantKey.v1","mode":"structural","module":"Conformance.MappedReadModel.Domain","package":"keiro-dsl","schema":1,"specName":"TenantKey","type":"TenantKey"}
+mapping {"bindingSymbol":"Conformance.MappedReadModel.Bindings.unusedFilterBinding","bindingVersion":"1","canonicalType":"conformance.mapped-readmodel.UnusedFilter.v1","mode":"structural","module":"Conformance.MappedReadModel.Domain","package":"keiro-dsl","schema":1,"specName":"UnusedFilter","type":"UnusedFilter"}
+binding {"kind":"binding","mappedName":"AccountLookup","module":"Conformance.MappedReadModel.Bindings","path":"accountId","schema":1,"signature":"accountLookupBinding.accountId :: Text","symbol":"accountLookupBinding"}
+binding {"kind":"binding","mappedName":"AccountLookup","module":"Conformance.MappedReadModel.Bindings","path":"tenant","schema":1,"signature":"accountLookupBinding.tenant :: TenantKey","symbol":"accountLookupBinding"}
+binding {"kind":"fixtures","mappedName":"AccountLookup","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"accountLookupCases :: FixtureCases Conformance.MappedReadModel.Domain.AccountLookup","symbol":"accountLookupCases"}
+binding {"kind":"binding","mappedName":"AccountProfile","module":"Conformance.MappedReadModel.Bindings","path":"displayName","schema":1,"signature":"accountProfileBinding.displayName :: Text","symbol":"accountProfileBinding"}
+binding {"kind":"fixtures","mappedName":"AccountProfile","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"accountProfileCases :: FixtureCases Conformance.MappedReadModel.Domain.AccountProfile","symbol":"accountProfileCases"}
+binding {"kind":"binding","mappedName":"AccountSummary","module":"Conformance.MappedReadModel.Bindings","path":"accountId","schema":1,"signature":"accountSummaryBinding.accountId :: Text","symbol":"accountSummaryBinding"}
+binding {"kind":"binding","mappedName":"AccountSummary","module":"Conformance.MappedReadModel.Bindings","path":"profile","schema":1,"signature":"accountSummaryBinding.profile :: Maybe (AccountProfile)","symbol":"accountSummaryBinding"}
+binding {"kind":"binding","mappedName":"AccountSummary","module":"Conformance.MappedReadModel.Bindings","path":"tenant","schema":1,"signature":"accountSummaryBinding.tenant :: TenantKey","symbol":"accountSummaryBinding"}
+binding {"kind":"fixtures","mappedName":"AccountSummary","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"accountSummaryCases :: FixtureCases Conformance.MappedReadModel.Domain.AccountSummary","symbol":"accountSummaryCases"}
+binding {"kind":"binding","mappedName":"TenantKey","module":"Conformance.MappedReadModel.Bindings","path":"tenantId","schema":1,"signature":"tenantKeyBinding.tenantId :: Text","symbol":"tenantKeyBinding"}
+binding {"kind":"fixtures","mappedName":"TenantKey","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"tenantKeyCases :: FixtureCases Conformance.MappedReadModel.Domain.TenantKey","symbol":"tenantKeyCases"}
+binding {"kind":"binding","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":"prefix","schema":1,"signature":"unusedFilterBinding.prefix :: Text","symbol":"unusedFilterBinding"}
+binding {"kind":"fixtures","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"unusedFilterCases :: FixtureCases Conformance.MappedReadModel.Domain.UnusedFilter","symbol":"unusedFilterCases"}
+projection-catalog-fact group|reporting|account_summary_table|account_summary_table|68
+projection-catalog-fact owner|account_summary_writer|category:account|subscription|reporting|account_summary_table|10|mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1|explicit|73
+projection-catalog-fact query|account_summary|reporting|account_summary_table|84
+projection-catalog-fact target|account_summary_table|public|account_summary|clear||62
+query-contract-baseline v1
+query-contract {"mappedDependencies":["AccountLookup","TenantKey"],"position":"input","readModel":"account_summary","typeExpression":"AccountLookup"}
+query-contract {"mappedDependencies":["AccountProfile","AccountSummary","TenantKey"],"position":"result","readModel":"account_summary","typeExpression":"Optional AccountSummary"}
+semantic-impact {"declarations":[{"consumers":["read-model:account_summary"],"declaration":"AccountLookup","identity":"structural\u001fkeiro-dsl:Conformance.MappedReadModel.Domain:AccountLookup\u001fConformance.MappedReadModel.Bindings.accountLookupBinding\u001f1\u001fconformance.mapped-readmodel.AccountLookup.v1\u001fConformance.MappedReadModel.Bindings.accountLookupCases\u001f\u001fc9b15cdbe3466150\u001frecord:AccountLookup:accountId=account_id,tenant=tenant"},{"consumers":["read-model:account_summary"],"declaration":"AccountProfile","identity":"structural\u001fkeiro-dsl:Conformance.MappedReadModel.Domain:AccountProfile\u001fConformance.MappedReadModel.Bindings.accountProfileBinding\u001f1\u001fconformance.mapped-readmodel.AccountProfile.v1\u001fConformance.MappedReadModel.Bindings.accountProfileCases\u001f\u001f122e7346f0a9851b\u001frecord:AccountProfile:displayName=display_name"},{"consumers":["read-model:account_summary"],"declaration":"AccountSummary","identity":"structural\u001fkeiro-dsl:Conformance.MappedReadModel.Domain:AccountSummary\u001fConformance.MappedReadModel.Bindings.accountSummaryBinding\u001f1\u001fconformance.mapped-readmodel.AccountSummary.v1\u001fConformance.MappedReadModel.Bindings.accountSummaryCases\u001f\u001ff6029041cdfafd88\u001frecord:AccountSummary:accountId=account_id,profile=profile,tenant=tenant"},{"consumers":["read-model:account_summary"],"declaration":"TenantKey","identity":"structural\u001fkeiro-dsl:Conformance.MappedReadModel.Domain:TenantKey\u001fConformance.MappedReadModel.Bindings.tenantKeyBinding\u001f1\u001fconformance.mapped-readmodel.TenantKey.v1\u001fConformance.MappedReadModel.Bindings.tenantKeyCases\u001f\u001f83221e47fa0b3237\u001frecord:TenantKey:tenantId=tenant_id"},{"consumers":[],"declaration":"UnusedFilter","identity":"structural\u001fkeiro-dsl:Conformance.MappedReadModel.Domain:UnusedFilter\u001fConformance.MappedReadModel.Bindings.unusedFilterBinding\u001f1\u001fconformance.mapped-readmodel.UnusedFilter.v1\u001fConformance.MappedReadModel.Bindings.unusedFilterCases\u001f\u001fc325e320de08f16b\u001frecord:UnusedFilter:prefix=prefix"}],"serviceInventory":["AccountLookup","AccountProfile","AccountSummary","TenantKey","UnusedFilter"]}

@@ -218,12 +218,18 @@ remain heterogeneous decoder boundaries and are recorded as unsupported typed so
 fabricated mapped path. Public contracts remain outside this private mapped-consumer vocabulary.
 
 The new queue/query spellings are registered only in the unpublished language-5 candidate. Queue
-generation is complete and no longer emits its lowering-pending diagnostic; read-model query
-lowering remains gated until its complete generation plan lands, so a clean `check` still implies
-total scaffold lowering. Snapshot impact continues to follow register use because the snapshot is
-a cache of the register file. Query API and projection rebuild policies must consume these checked
-roots in their owning follow-up changes; downstream code must not infer unsupported consumers from
-descriptive notation.
+and read-model query generation are complete, so a clean `check` implies total scaffold lowering
+for both surfaces. A typed read model receives one generated `QueryContract` module whose aliases
+use the consumer domain types and deterministic imports from `ConsumerTypePlan`. It receives no
+generated JSON codec, structural shape conversion, SQL codec, or binding import: `ReadModel q r`
+passes application Haskell values to an application-owned transaction, while the structural
+declarations retain their separate JSON conformance authority.
+
+Snapshot impact continues to follow register use because the snapshot is a cache of the register
+file. Query input/result changes are consumer-build API changes only; they do not become event,
+queue, snapshot, table-shape, or projection-replay changes. Projection rebuild policies consume
+checked roots in their owning follow-up changes; downstream code must not infer unsupported
+consumers from descriptive notation.
 
 Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
 explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.

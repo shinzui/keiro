@@ -517,11 +517,11 @@ behavior-key changes.
 After that baseline, a mapped declaration change rewrites use-specific output
 only for consumers that reach it through checked roots, plus the service
 structural module. Released languages expose aggregate command, private-event,
-and register roots. Candidate language 5 additionally parses typed queue fields
+and register roots. Candidate language 5 additionally lowers typed queue fields
 and read-model query pairs and derives aggregate-sourced projection consumers.
-Those candidate queue/query forms remain fail-closed with a lowering-pending
-error until their complete generators land. Public contracts and heterogeneous
-category/all projection sources are not inferred as private mapped consumers.
+Queue fields receive generated persisted JSON codecs; read-model query pairs receive generated
+Haskell aliases only. Public contracts and heterogeneous category/all projection sources are not
+inferred as private mapped consumers.
 
 Source-only movement is separate. Moving an unchanged behavior requirement
 rewrites its context `BehaviorSourceMap` and source-bearing ledger provenance,
@@ -1326,11 +1326,21 @@ query result = Optional AccountSummary
 
 Both clauses are required together and resolve complete mapped type
 expressions. Languages 1 through 4 reject the first `query` token; an omitted
-second clause is a parse error rather than a partial semantic contract. The
-candidate form currently fails `check` with
-`MappedReadModelLoweringPending` until generated query aliases and imports are
-implemented. SQL columns, row codecs, DDL, migrations, and query bodies remain
-application-owned.
+second clause is a parse error rather than a partial semantic contract.
+
+Scaffolding emits `Generated.<Context>.<ReadModel>.QueryContract`; its aliases use the exact
+consumer domain types and deterministic imports. The generated `ReadModel` imports those aliases,
+and a newly created hand-owned `ReadModelHoles` imports them for the application query signature.
+No query JSON codec or SQL row conversion is generated. SQL columns, row codecs, DDL, migrations,
+and query bodies remain application-owned.
+
+If the output already contains a legacy create-once hole with local `QueryInput = ()` and
+`QueryResult = ()` aliases, scaffolding preserves it and reports a migration obligation. Remove
+those local aliases and import the generated pair; compilation stays red until that application
+edit is complete. Query input/result changes are build-breaking API changes, but do not change the
+read-model shape hash, catalog fingerprint, target reset policy, replay impact, or persisted
+history. A legacy ledger without query-contract rows reports its baseline as unavailable rather
+than guessing that the old API was `()`.
 
 ### Candidate Language 5 projection catalogs
 

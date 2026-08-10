@@ -50,6 +50,13 @@ must move through one lifecycle. A projection definition is the single owner of
 one or more targets and contains an explicitly ordered non-empty list of live
 handlers.
 
+Candidate language 5 may derive `q` and `r` from a complete checked mapped input/result pair. The
+generated `QueryContract` aliases are the compile-time API authority used by the generated
+`ReadModel` and hand-owned query function. Their identities are deliberately absent from target,
+group, registry, table-shape, and catalog fingerprints. Changing a query input or result therefore
+requires callers and consumers to rebuild, but does not imply target preparation, table migration,
+projection reset, or replay.
+
 Target reset policy and handler replay policy are independent. A target is
 either cleared before replay or preserved and reconciled. A projection is
 either replayable through an explicit replay adapter or live-only with a
