@@ -21,6 +21,7 @@ module Generated.StructuralConformance.ArtifactCatalog.BehaviorContract
 import Generated.StructuralConformance.ArtifactCatalog.Codec (encodeArtifactCatalogEvent, parseArtifactCatalogEvent, artifactCatalogCodec)
 import Generated.StructuralConformance.ArtifactCatalog.Domain
 import Generated.StructuralConformance.ArtifactCatalog.Transducer (artifactCatalogTransducer)
+import Generated.StructuralConformance.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ArtifactCatalogVertex))
   , requirementTarget :: !(Maybe ArtifactCatalogVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ArtifactCatalogEmpty x ObserveArtifact: live transition (spec line 80)
+  [ -- ArtifactCatalogEmpty x ObserveArtifact: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-5ef17e70af0d6ff7"
       , requirementKind = LiveTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ArtifactCatalogEmpty 0))
       , requirementTarget = Just ArtifactCatalogObserved
       , requirementEventKinds = ["ArtifactRecorded", "ArtifactAccepted"]
-      , requirementLine = 80
       }
-  , -- ArtifactCatalogObserved x ObserveArtifact: required rejection (spec line 74)
+  , -- ArtifactCatalogObserved x ObserveArtifact: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-c20f0b92a1f17333"
       , requirementKind = RequiredRejection
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 74
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

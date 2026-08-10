@@ -21,6 +21,7 @@ module Generated.Billing.Subscription.BehaviorContract
 import Generated.Billing.Subscription.Codec (encodeSubscriptionEvent, parseSubscriptionEvent, subscriptionCodec)
 import Generated.Billing.Subscription.Domain
 import Generated.Billing.Subscription.Transducer (subscriptionTransducer)
+import Generated.Billing.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef SubscriptionVertex))
   , requirementTarget :: !(Maybe SubscriptionVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- SubscriptionActive x ActivateSubscription: required rejection (spec line 12)
+  [ -- SubscriptionActive x ActivateSubscription: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-09842123ac52dd63"
       , requirementKind = RequiredRejection
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 12
       }
-  , -- SubscriptionInactive x ActivateSubscription: live transition (spec line 20)
+  , -- SubscriptionInactive x ActivateSubscription: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-9399755ba2b617d6"
       , requirementKind = LiveTransition
@@ -150,9 +149,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef SubscriptionInactive 0))
       , requirementTarget = Just SubscriptionActive
       , requirementEventKinds = ["SubscriptionActivated"]
-      , requirementLine = 20
       }
-  , -- SubscriptionInactive x CancelSubscription: required rejection (spec line 12)
+  , -- SubscriptionInactive x CancelSubscription: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-93f6f3f8cb36420d"
       , requirementKind = RequiredRejection
@@ -163,9 +161,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 12
       }
-  , -- SubscriptionClosed x CancelSubscription: required rejection (spec line 12)
+  , -- SubscriptionClosed x CancelSubscription: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-99ac0c974e512f76"
       , requirementKind = RequiredRejection
@@ -176,9 +173,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 12
       }
-  , -- SubscriptionClosed x ActivateSubscription: required rejection (spec line 12)
+  , -- SubscriptionClosed x ActivateSubscription: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-9b81e070774b3ae1"
       , requirementKind = RequiredRejection
@@ -189,9 +185,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 12
       }
-  , -- SubscriptionActive x CancelSubscription: live transition (spec line 24)
+  , -- SubscriptionActive x CancelSubscription: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-b5d1ca5d9ad9b2ec"
       , requirementKind = LiveTransition
@@ -202,7 +197,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef SubscriptionActive 0))
       , requirementTarget = Just SubscriptionClosed
       , requirementEventKinds = ["SubscriptionCancelled"]
-      , requirementLine = 24
       }
   ]
 
@@ -382,7 +376,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

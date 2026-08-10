@@ -21,6 +21,7 @@ module Generated.HospitalCapacity.Reservation.BehaviorContract
 import Generated.HospitalCapacity.Reservation.Codec (encodeReservationEvent, parseReservationEvent, reservationCodec)
 import Generated.HospitalCapacity.Reservation.Domain
 import Generated.HospitalCapacity.Reservation.Transducer (reservationTransducer)
+import Generated.HospitalCapacity.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ReservationVertex))
   , requirementTarget :: !(Maybe ReservationVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ReservationUnrequested x RequestTransferReservation: live transition (spec line 29)
+  [ -- ReservationUnrequested x RequestTransferReservation: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-25971c9701fc5660"
       , requirementKind = LiveTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ReservationUnrequested 0))
       , requirementTarget = Just ReservationHeld
       , requirementEventKinds = ["TransferReservationCreated"]
-      , requirementLine = 29
       }
-  , -- ReservationHeld x RequestTransferReservation: required rejection (spec line 20)
+  , -- ReservationHeld x RequestTransferReservation: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-a544566ac00664fb"
       , requirementKind = RequiredRejection
@@ -150,9 +149,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 20
       }
-  , -- ReservationHeld x ConfirmReservation: live transition (spec line 33)
+  , -- ReservationHeld x ConfirmReservation: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-bf9ebe70beb18440"
       , requirementKind = LiveTransition
@@ -163,9 +161,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ReservationHeld 0))
       , requirementTarget = Just ReservationConfirmed
       , requirementEventKinds = ["TransferReservationConfirmed"]
-      , requirementLine = 33
       }
-  , -- ReservationConfirmed x RequestTransferReservation: required rejection (spec line 20)
+  , -- ReservationConfirmed x RequestTransferReservation: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-cf40a84edc844a41"
       , requirementKind = RequiredRejection
@@ -176,9 +173,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 20
       }
-  , -- ReservationConfirmed x ConfirmReservation: required rejection (spec line 20)
+  , -- ReservationConfirmed x ConfirmReservation: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-e53a65263ad89283"
       , requirementKind = RequiredRejection
@@ -189,9 +185,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 20
       }
-  , -- ReservationUnrequested x ConfirmReservation: required rejection (spec line 20)
+  , -- ReservationUnrequested x ConfirmReservation: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-e7378f31cfa93bbf"
       , requirementKind = RequiredRejection
@@ -202,7 +197,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 20
       }
   ]
 
@@ -382,7 +376,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

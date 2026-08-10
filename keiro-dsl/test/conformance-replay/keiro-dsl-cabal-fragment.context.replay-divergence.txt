@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.ReplayDivergence.BehaviorSourceMap
     Generated.ReplayDivergence.Note.BehaviorContract
     Generated.ReplayDivergence.Note.Codec
     Generated.ReplayDivergence.Note.Domain

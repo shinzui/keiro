@@ -21,6 +21,7 @@ module Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract
 import Generated.AggregateScalarExpressions.ScalarAccount.Codec (encodeScalarAccountEvent, parseScalarAccountEvent, scalarAccountCodec)
 import Generated.AggregateScalarExpressions.ScalarAccount.Domain
 import Generated.AggregateScalarExpressions.ScalarAccount.Transducer (scalarAccountTransducer)
+import Generated.AggregateScalarExpressions.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ScalarAccountVertex))
   , requirementTarget :: !(Maybe ScalarAccountVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ScalarAccountOpen x Close: required rejection (spec line 32)
+  [ -- ScalarAccountOpen x Close: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-1de91883b9e3f8bc"
       , requirementKind = RequiredRejection
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 32
       }
-  , -- ScalarAccountReviewed x Adjust: required rejection (spec line 32)
+  , -- ScalarAccountReviewed x Adjust: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-5c58e0aafeb5f400"
       , requirementKind = RequiredRejection
@@ -150,9 +149,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 32
       }
-  , -- ScalarAccountClosed x Adjust: required rejection (spec line 32)
+  , -- ScalarAccountClosed x Adjust: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-a19a8e94d935493f"
       , requirementKind = RequiredRejection
@@ -163,9 +161,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 32
       }
-  , -- ScalarAccountReviewed x Close: live transition (spec line 62)
+  , -- ScalarAccountReviewed x Close: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-b7db52f28632d8da"
       , requirementKind = LiveTransition
@@ -176,9 +173,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ScalarAccountReviewed 0))
       , requirementTarget = Just ScalarAccountClosed
       , requirementEventKinds = ["ClosedEvent"]
-      , requirementLine = 62
       }
-  , -- ScalarAccountClosed x Close: required rejection (spec line 32)
+  , -- ScalarAccountClosed x Close: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-dbf483c868dd6d34"
       , requirementKind = RequiredRejection
@@ -189,9 +185,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 32
       }
-  , -- ScalarAccountOpen x Adjust: live transition (spec line 42)
+  , -- ScalarAccountOpen x Adjust: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-e9c863d5daf20011"
       , requirementKind = LiveTransition
@@ -202,7 +197,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ScalarAccountOpen 0))
       , requirementTarget = Just ScalarAccountReviewed
       , requirementEventKinds = ["Adjusted"]
-      , requirementLine = 42
       }
   ]
 
@@ -382,7 +376,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

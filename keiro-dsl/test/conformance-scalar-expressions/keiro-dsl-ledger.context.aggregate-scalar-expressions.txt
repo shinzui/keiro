@@ -6,6 +6,7 @@ source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourc
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
 module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions structural conformance","path":"Generated/AggregateScalarExpressions/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions behavior source map","path":"Generated/AggregateScalarExpressions/BehaviorSourceMap.hs"}
 module-role {"family":"Limits","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural Limits (line 7)","path":"Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs"}
 module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions mapped structural facade","path":"Generated/AggregateScalarExpressions/StructuralProjections.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions generated nominal declarations","path":"Generated/AggregateScalarExpressions/Nominals.hs"}
@@ -22,6 +23,7 @@ module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","o
 module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"AggregateScalarExpressions/ScalarAccount/Holes.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Harness.hs"}
 generated Generated/AggregateScalarExpressions/StructuralConformance.hs
+generated Generated/AggregateScalarExpressions/BehaviorSourceMap.hs
 generated Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs
 generated Generated/AggregateScalarExpressions/StructuralProjections.hs
 generated Generated/AggregateScalarExpressions/Nominals.hs
@@ -51,3 +53,4 @@ behavior {"aggregate":"ScalarAccount","command":"Adjust","evidence":"generated-a
 behavior {"aggregate":"ScalarAccount","command":"Close","evidence":"hole-witnessed","key":"behavior-v1-b7db52f28632d8da","kind":"live-transition","outputs":[{"command":"Close","ownership":"generated-command-identity"}],"source":"Reviewed"}
 behavior {"aggregate":"ScalarAccount","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-dbf483c868dd6d34","kind":"required-rejection","outputs":[],"source":"Closed"}
 behavior {"aggregate":"ScalarAccount","command":"Adjust","evidence":"generated-authoritative","key":"behavior-v1-e9c863d5daf20011","kind":"live-transition","outputs":[{"command":"Adjust","ownership":"generated-command-identity"}],"source":"Open"}
+semantic-impact {"declarations":[{"consumers":["ScalarAccount"],"declaration":"Limits","identity":"structural\u001fkeiro-dsl:ScalarExpressions.Domain:Limits\u001fScalarExpressions.Bindings.limitsBinding\u001f1\u001fscalar-expressions.Limits.v1\u001fScalarExpressions.Bindings.limitsCases\u001fScalarExpressions.Bindings.initialLimits\u001f4463db782a5b9924\u001frecord:Limits:ceiling=ceiling,minimum=minimum"}],"serviceInventory":["Limits"]}

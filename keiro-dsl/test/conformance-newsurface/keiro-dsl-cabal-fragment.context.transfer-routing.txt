@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.TransferRouting.BehaviorSourceMap
     Generated.TransferRouting.Hospital.BehaviorContract
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain

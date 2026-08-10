@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit

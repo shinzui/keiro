@@ -20,6 +20,7 @@ module Proof.WorkspaceProof.Alpha.Generated.BehaviorContract
 import Proof.WorkspaceProof.Alpha.Generated.Codec (encodeAlphaEvent, parseAlphaEvent, alphaCodec)
 import Proof.WorkspaceProof.Alpha.Generated.Domain
 import Proof.WorkspaceProof.Alpha.Generated.Transducer (alphaTransducer)
+import Proof.WorkspaceProof.Generated.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef AlphaVertex))
   , requirementTarget :: !(Maybe AlphaVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- AlphaActive x LegacyPingAlpha: replay-only transition (spec line 15)
+  [ -- AlphaActive x LegacyPingAlpha: replay-only transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-579df4e5e81f7729"
       , requirementKind = ReplayTransition
@@ -136,9 +136,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef AlphaActive 2))
       , requirementTarget = Just AlphaActive
       , requirementEventKinds = ["LegacyAlphaPinged"]
-      , requirementLine = 15
       }
-  , -- AlphaActive x PingAlpha: replay-only transition (spec line 14)
+  , -- AlphaActive x PingAlpha: replay-only transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-72a96c964b44a2b6"
       , requirementKind = ReplayTransition
@@ -149,9 +148,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef AlphaActive 1))
       , requirementTarget = Just AlphaActive
       , requirementEventKinds = ["AlphaPinged"]
-      , requirementLine = 14
       }
-  , -- AlphaActive x PingAlpha: live transition (spec line 13)
+  , -- AlphaActive x PingAlpha: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-baf43b4c31db955a"
       , requirementKind = LiveTransition
@@ -162,9 +160,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef AlphaActive 0))
       , requirementTarget = Just AlphaActive
       , requirementEventKinds = ["AlphaPinged"]
-      , requirementLine = 13
       }
-  , -- AlphaActive x LegacyPingAlpha: required rejection (spec line 6)
+  , -- AlphaActive x LegacyPingAlpha: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-c062ccf5e9b6f5c4"
       , requirementKind = RequiredRejection
@@ -175,7 +172,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 6
       }
   ]
 
@@ -355,7 +351,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

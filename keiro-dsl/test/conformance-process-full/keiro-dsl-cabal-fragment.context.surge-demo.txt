@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.SurgeDemo.BehaviorSourceMap
     Generated.SurgeDemo.Hospital.BehaviorContract
     Generated.SurgeDemo.Hospital.Codec
     Generated.SurgeDemo.Hospital.Domain

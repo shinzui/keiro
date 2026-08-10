@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.Page.BehaviorContract
     Generated.IncidentPaging.Page.Codec
     Generated.IncidentPaging.Page.Domain

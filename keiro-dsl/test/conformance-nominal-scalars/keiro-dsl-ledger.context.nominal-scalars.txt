@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars behavior source map","path":"Generated/NominalScalars/BehaviorSourceMap.hs"}
 module-role {"family":"OrderStatus","kind":"generated","ownerKind":"bound","ownerName":"bound nominal enum representation OrderStatus (line 13)","path":"Generated/NominalScalars/Nominal/Shape/OrderStatus.hs"}
 module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars nominal scalar projection facade","path":"Generated/NominalScalars/NominalProjections.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton NominalConformance.Bindings","path":"NominalConformance/Bindings.hs"}
@@ -17,6 +18,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Harness.hs"}
+generated Generated/NominalScalars/BehaviorSourceMap.hs
 generated Generated/NominalScalars/Nominal/Shape/OrderStatus.hs
 generated Generated/NominalScalars/NominalProjections.hs
 hole NominalConformance/Bindings.hs
@@ -62,3 +64,4 @@ binding {"kind":"fixtures","mappedName":"SequenceNumber","module":"NominalConfor
 binding {"kind":"initial-value","mappedName":"SequenceNumber","module":"NominalConformance.Bindings","path":null,"schema":1,"signature":"initialSequenceNumber :: NominalConformance.Domain.SequenceNumber","symbol":"initialSequenceNumber"}
 behavior {"aggregate":"NominalLedger","command":"RecordNominals","evidence":"generated-authoritative","key":"behavior-v1-274eaf83d346048a","kind":"live-transition","outputs":[{"command":"RecordNominals","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"NominalLedger","command":"RecordNominals","evidence":"generated-authoritative","key":"behavior-v1-971c0c80ffdfe018","kind":"required-rejection","outputs":[],"source":"Recorded"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

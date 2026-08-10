@@ -10,6 +10,7 @@ default-extensions:
 other-modules:
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
+    Generated.AggregateScalarExpressions.BehaviorSourceMap
     Generated.AggregateScalarExpressions.Nominals
     Generated.AggregateScalarExpressions.Nominals.Internal
     Generated.AggregateScalarExpressions.ReplayAudit

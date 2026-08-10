@@ -20,6 +20,7 @@ module Generated.SurgeDemo.Hospital.BehaviorContract
 import Generated.SurgeDemo.Hospital.Codec (encodeHospitalEvent, parseHospitalEvent, hospitalCodec)
 import Generated.SurgeDemo.Hospital.Domain
 import Generated.SurgeDemo.Hospital.Transducer (hospitalTransducer)
+import Generated.SurgeDemo.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef HospitalVertex))
   , requirementTarget :: !(Maybe HospitalVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- HospitalIdle x ActivateSurge: live transition (spec line 57)
+  [ -- HospitalIdle x ActivateSurge: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-4738b03b129c9778"
       , requirementKind = LiveTransition
@@ -136,9 +136,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef HospitalIdle 0))
       , requirementTarget = Just HospitalSurging
       , requirementEventKinds = ["SurgeActivated"]
-      , requirementLine = 57
       }
-  , -- HospitalSurging x ActivateSurge: required rejection (spec line 52)
+  , -- HospitalSurging x ActivateSurge: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-8cc737e3759c26c7"
       , requirementKind = RequiredRejection
@@ -149,7 +148,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 52
       }
   ]
 
@@ -328,7 +326,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

@@ -21,6 +21,7 @@ module Generated.ReplayDivergence.Note.BehaviorContract
 import Generated.ReplayDivergence.Note.Codec (encodeNoteEvent, parseNoteEvent, noteCodec)
 import Generated.ReplayDivergence.Note.Domain
 import Generated.ReplayDivergence.Note.Transducer (noteTransducer)
+import Generated.ReplayDivergence.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef NoteVertex))
   , requirementTarget :: !(Maybe NoteVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- NoteEmpty x WriteNote: live transition (spec line 12)
+  [ -- NoteEmpty x WriteNote: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-248e9c1b1eb3e5bc"
       , requirementKind = LiveTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef NoteEmpty 0))
       , requirementTarget = Just NoteRecorded
       , requirementEventKinds = ["NoteWritten"]
-      , requirementLine = 12
       }
-  , -- NoteRecorded x WriteNote: required rejection (spec line 7)
+  , -- NoteRecorded x WriteNote: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-7c36eda198514110"
       , requirementKind = RequiredRejection
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 7
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

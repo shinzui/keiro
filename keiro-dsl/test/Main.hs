@@ -1979,7 +1979,7 @@ main = hspec $ do
 
     it "keeps the committed scalar-expression conformance tree fresh" $ do
       modules <- scaffoldFixture "test/fixtures/aggregate-scalar-expressions-v2.keiro"
-      forM_ [generatedModule | generatedModule <- modules, kind generatedModule == Generated, not (isDeferredCorpusModule generatedModule)] $ \generatedModule -> do
+      forM_ [generatedModule | generatedModule <- modules, kind generatedModule == Generated] $ \generatedModule -> do
         committed <- readTestText ("test/conformance-scalar-expressions/" <> modulePath generatedModule)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
 
@@ -2906,7 +2906,7 @@ main = hspec $ do
         `shouldBe` legacyAggregateFoldSurface alias (onlyAggregate alias)
     it "keeps the committed scalar conformance generated tree fresh" $ do
       modules <- scaffoldFixture "test/fixtures/aggregate-scalars.keiro"
-      forM_ [generatedModule | generatedModule <- modules, Keiro.Dsl.Scaffold.kind generatedModule == Generated, not (isDeferredCorpusModule generatedModule)] $ \generatedModule -> do
+      forM_ [generatedModule | generatedModule <- modules, Keiro.Dsl.Scaffold.kind generatedModule == Generated] $ \generatedModule -> do
         committed <- readTestText ("test/conformance-aggregate-scalars/" <> modulePath generatedModule)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
     it "never sends a clean scalar aggregate to a type scaffold refusal" $
@@ -7866,7 +7866,7 @@ main = hspec $ do
       mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
     it "matches every committed new-surface Generated module (modulo formatting)" $ do
       modules <- scaffoldFixture "test/fixtures/transfer-routing.keiro"
-      forM_ [m | m <- modules, kind m == Generated, not (isDeferredCorpusModule m)] $ \m -> do
+      forM_ [m | m <- modules, kind m == Generated] $ \m -> do
         committed <- readTestText ("test/conformance-newsurface/" <> modulePath m)
         normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
     it "scaffolds the register-free OrderStream smoke target without error" $ do
@@ -8676,7 +8676,8 @@ main = hspec $ do
         workspace <- shouldComposeWorkspace "test/fixtures/workspace-nominals/service.keiro-workspace"
         plan <- shouldPlanWorkspaceSpec workspace
         let compiledPaths =
-              [ "Generated/WorkspaceNominalProof/Nominals.hs",
+              [ "Generated/WorkspaceNominalProof/BehaviorSourceMap.hs",
+                "Generated/WorkspaceNominalProof/Nominals.hs",
                 "Generated/WorkspaceNominalProof/Project/Domain.hs",
                 "Generated/WorkspaceNominalProof/Project/Codec.hs",
                 "Generated/WorkspaceNominalProof/Project/Transducer.hs",
@@ -8696,7 +8697,6 @@ main = hspec $ do
         map fst (wpModules plan) `shouldSatisfy` all (not . isSuffixOfPath "/Holes.hs")
         forM_ compiledPaths $ \path ->
           case [m | (m, _) <- wpModules plan, modulePath m == path] of
-            [generated] | isDeferredCorpusModule generated -> pure ()
             [generated] -> do
               committed <- readTestText ("test/conformance-workspace-nominals/" <> path)
               normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generated)
@@ -10492,18 +10492,10 @@ legacyScaffoldProcessFixture path = do
 -- ones the keiro-dsl-conformance suite compiles, so this pins the live scaffolder
 -- to known-compiling output.
 assertMatchesCommitted :: ScaffoldModule -> IO ()
-assertMatchesCommitted m | isDeferredCorpusModule m = pure ()
 assertMatchesCommitted m = do
   let committedPath = "test/conformance/" <> modulePath m
   committed <- readTestText committedPath
   normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
-
--- EP-6 owns the broad committed-corpus refresh. EP-4 updates only its focused
--- behavior-complete witness while keeping the other pins useful for all
--- unaffected module roles.
-isDeferredCorpusModule :: ScaffoldModule -> Bool
-isDeferredCorpusModule moduleValue =
-  any (`T.isSuffixOf` T.pack (modulePath moduleValue)) ["/BehaviorContract.hs", "/BehaviorSourceMap.hs", "/StructuralConformance.hs"]
 
 normalizeGenerated :: T.Text -> (T.Text, [T.Text])
 normalizeGenerated text =

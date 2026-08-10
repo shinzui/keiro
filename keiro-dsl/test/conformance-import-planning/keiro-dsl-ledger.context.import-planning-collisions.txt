@@ -5,6 +5,8 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions structural conformance","path":"Generated/ImportPlanningCollisions/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions behavior source map","path":"Generated/ImportPlanningCollisions/BehaviorSourceMap.hs"}
 module-role {"family":"Details","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural Details (line 28)","path":"Generated/ImportPlanningCollisions/Structural/Shape/Details.hs"}
 module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions mapped structural facade","path":"Generated/ImportPlanningCollisions/StructuralProjections.hs"}
 module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions nominal scalar projection facade","path":"Generated/ImportPlanningCollisions/NominalProjections.hs"}
@@ -18,6 +20,8 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Harness.hs"}
+generated Generated/ImportPlanningCollisions/StructuralConformance.hs
+generated Generated/ImportPlanningCollisions/BehaviorSourceMap.hs
 generated Generated/ImportPlanningCollisions/Structural/Shape/Details.hs
 generated Generated/ImportPlanningCollisions/StructuralProjections.hs
 generated Generated/ImportPlanningCollisions/NominalProjections.hs
@@ -45,3 +49,4 @@ binding {"kind":"binding","mappedName":"OrderStatus","module":"ImportPlanning.Bi
 binding {"kind":"fixtures","mappedName":"OrderStatus","module":"ImportPlanning.Bindings","path":null,"schema":1,"signature":"orderStatusFixtures :: NominalFixtureCases ImportPlanning.Consumer.Order.Types.Status","symbol":"orderStatusFixtures"}
 behavior {"aggregate":"CollisionLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-2134fce4a19c59d7","kind":"live-transition","outputs":[{"command":"Record","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"CollisionLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-995f9bf710ce7c6c","kind":"required-rejection","outputs":[],"source":"Recorded"}
+semantic-impact {"declarations":[{"consumers":["CollisionLedger"],"declaration":"Details","identity":"structural\u001fkeiro-dsl:ImportPlanning.Consumer.Shared.Types:Details\u001fImportPlanning.Bindings.detailsBinding\u001f1\u001fimport-planning.Details.v1\u001fImportPlanning.Bindings.detailsFixtures\u001f\u001f7b2032febfe42f05\u001frecord:Details:label=label"}],"serviceInventory":["Details"]}

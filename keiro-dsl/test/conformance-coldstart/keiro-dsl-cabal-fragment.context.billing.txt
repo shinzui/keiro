@@ -10,6 +10,7 @@ default-extensions:
 other-modules:
     Billing.Subscription.BehaviorHoles
     Billing.Subscription.Holes
+    Generated.Billing.BehaviorSourceMap
     Generated.Billing.Nominals
     Generated.Billing.Nominals.Internal
     Generated.Billing.ReplayAudit

@@ -20,6 +20,7 @@ module Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
 import Generated.ImportPlanningCollisions.CollisionLedger.Codec (encodeCollisionLedgerEvent, parseCollisionLedgerEvent, collisionLedgerCodec)
 import Generated.ImportPlanningCollisions.CollisionLedger.Domain
 import Generated.ImportPlanningCollisions.CollisionLedger.Transducer (collisionLedgerTransducer)
+import Generated.ImportPlanningCollisions.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef CollisionLedgerVertex))
   , requirementTarget :: !(Maybe CollisionLedgerVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- CollisionLedgerEmpty x Record: live transition (spec line 49)
+  [ -- CollisionLedgerEmpty x Record: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-2134fce4a19c59d7"
       , requirementKind = LiveTransition
@@ -136,9 +136,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef CollisionLedgerEmpty 0))
       , requirementTarget = Just CollisionLedgerRecorded
       , requirementEventKinds = ["RecordedValues"]
-      , requirementLine = 49
       }
-  , -- CollisionLedgerRecorded x Record: required rejection (spec line 41)
+  , -- CollisionLedgerRecorded x Record: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-995f9bf710ce7c6c"
       , requirementKind = RequiredRejection
@@ -149,7 +148,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 41
       }
   ]
 
@@ -328,7 +326,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

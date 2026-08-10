@@ -21,6 +21,7 @@ module Generated.AggregateScalars.ScalarLedger.BehaviorContract
 import Generated.AggregateScalars.ScalarLedger.Codec (encodeScalarLedgerEvent, parseScalarLedgerEvent, scalarLedgerCodec)
 import Generated.AggregateScalars.ScalarLedger.Domain
 import Generated.AggregateScalars.ScalarLedger.Transducer (scalarLedgerTransducer)
+import Generated.AggregateScalars.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ScalarLedgerVertex))
   , requirementTarget :: !(Maybe ScalarLedgerVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ScalarLedgerEmpty x Record: live transition (spec line 28)
+  [ -- ScalarLedgerEmpty x Record: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-4e461a9ba9271054"
       , requirementKind = LiveTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ScalarLedgerEmpty 0))
       , requirementTarget = Just ScalarLedgerRecorded
       , requirementEventKinds = ["ScalarsRecorded"]
-      , requirementLine = 28
       }
-  , -- ScalarLedgerRecorded x Record: required rejection (spec line 8)
+  , -- ScalarLedgerRecorded x Record: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-d15e326edfa1a438"
       , requirementKind = RequiredRejection
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 8
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

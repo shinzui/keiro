@@ -20,6 +20,7 @@ module Generated.TransferRouting.Hospital.BehaviorContract
 import Generated.TransferRouting.Hospital.Codec (encodeHospitalEvent, parseHospitalEvent, hospitalCodec)
 import Generated.TransferRouting.Hospital.Domain
 import Generated.TransferRouting.Hospital.Transducer (hospitalTransducer)
+import Generated.TransferRouting.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef HospitalVertex))
   , requirementTarget :: !(Maybe HospitalVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- HospitalAccepting x RouteAcceptedTransferNeed: live transition (spec line 39)
+  [ -- HospitalAccepting x RouteAcceptedTransferNeed: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-8c1612ae6464bb11"
       , requirementKind = LiveTransition
@@ -136,7 +136,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef HospitalAccepting 0))
       , requirementTarget = Just HospitalAccepting
       , requirementEventKinds = ["AcceptedTransferNeedRouted"]
-      , requirementLine = 39
       }
   ]
 
@@ -315,7 +314,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

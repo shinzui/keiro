@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.WorkspaceNominalProof.BehaviorSourceMap
     Generated.WorkspaceNominalProof.Nominals
     Generated.WorkspaceNominalProof.Nominals.Internal
     Generated.WorkspaceNominalProof.Project.BehaviorContract

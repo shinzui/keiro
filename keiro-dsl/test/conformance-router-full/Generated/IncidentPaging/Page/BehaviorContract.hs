@@ -20,6 +20,7 @@ module Generated.IncidentPaging.Page.BehaviorContract
 import Generated.IncidentPaging.Page.Codec (encodePageEvent, parsePageEvent, pageCodec)
 import Generated.IncidentPaging.Page.Domain
 import Generated.IncidentPaging.Page.Transducer (pageTransducer)
+import Generated.IncidentPaging.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef PageVertex))
   , requirementTarget :: !(Maybe PageVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- PageDelivered x SendPage: required rejection (spec line 33)
+  [ -- PageDelivered x SendPage: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-4cc963adc6662c5e"
       , requirementKind = RequiredRejection
@@ -136,9 +136,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 33
       }
-  , -- PagePending x SendPage: live transition (spec line 38)
+  , -- PagePending x SendPage: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-d0a1ec215dcca5f8"
       , requirementKind = LiveTransition
@@ -149,7 +148,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef PagePending 0))
       , requirementTarget = Just PageDelivered
       , requirementEventKinds = ["PageSent"]
-      , requirementLine = 38
       }
   ]
 
@@ -328,7 +326,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

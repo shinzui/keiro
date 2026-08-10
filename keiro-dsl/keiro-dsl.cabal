@@ -241,6 +241,7 @@ test-suite keiro-dsl-conformance
   hs-source-dirs: test/conformance
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -270,6 +271,7 @@ test-suite keiro-dsl-conformance-aggregate-scalars
   main-is:        Main.hs
   other-modules:
     AggregateScalars.ScalarLedger.Holes
+    Generated.AggregateScalars.BehaviorSourceMap
     Generated.AggregateScalars.ReplayAudit
     Generated.AggregateScalars.ScalarLedger.Codec
     Generated.AggregateScalars.ScalarLedger.Domain
@@ -297,6 +299,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
   other-modules:
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
+    Generated.AggregateScalarExpressions.BehaviorSourceMap
     Generated.AggregateScalarExpressions.Nominals
     Generated.AggregateScalarExpressions.Nominals.Internal
     Generated.AggregateScalarExpressions.ReplayAudit
@@ -366,6 +369,7 @@ test-suite keiro-dsl-conformance-nominal-scalars
   hs-source-dirs: test/conformance-nominal-scalars
   main-is:        Main.hs
   other-modules:
+    Generated.NominalScalars.BehaviorSourceMap
     Generated.NominalScalars.Nominal.Shape.OrderStatus
     Generated.NominalScalars.NominalLedger.BehaviorContract
     Generated.NominalScalars.NominalLedger.Codec
@@ -400,6 +404,7 @@ test-suite keiro-dsl-conformance-workspace-nominals
   hs-source-dirs: test/conformance-workspace-nominals
   main-is:        Main.hs
   other-modules:
+    Generated.WorkspaceNominalProof.BehaviorSourceMap
     Generated.WorkspaceNominalProof.Nominals
     Generated.WorkspaceNominalProof.Nominals.Internal
     Generated.WorkspaceNominalProof.Project.BehaviorContract
@@ -446,6 +451,7 @@ test-suite keiro-dsl-conformance-structural
     Generated.StructuralConformance.ArtifactCatalog.Harness
     Generated.StructuralConformance.ArtifactCatalog.Projection
     Generated.StructuralConformance.ArtifactCatalog.Transducer
+    Generated.StructuralConformance.BehaviorSourceMap
     Generated.StructuralConformance.ReplayAudit
     Generated.StructuralConformance.Structural.Shape.ArtifactInfo
     Generated.StructuralConformance.Structural.Shape.ArtifactKind
@@ -474,6 +480,7 @@ test-suite keiro-dsl-conformance-import-planning
   hs-source-dirs: test/conformance-import-planning
   main-is:        Main.hs
   other-modules:
+    Generated.ImportPlanningCollisions.BehaviorSourceMap
     Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
     Generated.ImportPlanningCollisions.CollisionLedger.Codec
     Generated.ImportPlanningCollisions.CollisionLedger.Domain
@@ -484,6 +491,7 @@ test-suite keiro-dsl-conformance-import-planning
     Generated.ImportPlanningCollisions.NominalProjections
     Generated.ImportPlanningCollisions.ReplayAudit
     Generated.ImportPlanningCollisions.Structural.Shape.Details
+    Generated.ImportPlanningCollisions.StructuralConformance
     Generated.ImportPlanningCollisions.StructuralProjections
     ImportPlanning.Bindings
     ImportPlanning.Consumer.Domain
@@ -546,6 +554,7 @@ test-suite keiro-dsl-conformance-replay
   hs-source-dirs: test/conformance-replay
   main-is:        Main.hs
   other-modules:
+    Generated.ReplayDivergence.BehaviorSourceMap
     Generated.ReplayDivergence.Note.Codec
     Generated.ReplayDivergence.Note.Domain
     Generated.ReplayDivergence.Note.EventStream
@@ -597,6 +606,7 @@ test-suite keiro-dsl-conformance-snapshot
   hs-source-dirs: test/conformance-snapshot
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -720,6 +730,7 @@ test-suite keiro-dsl-conformance-coldstart
   main-is:        Main.hs
   other-modules:
     Billing.Subscription.Holes
+    Generated.Billing.BehaviorSourceMap
     Generated.Billing.Nominals
     Generated.Billing.Nominals.Internal
     Generated.Billing.ReplayAudit
@@ -887,6 +898,7 @@ test-suite keiro-dsl-conformance-projection-catalog
     CatalogDemo.CatalogAudit.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
+    Generated.CatalogDemo.BehaviorSourceMap
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable
@@ -971,6 +983,7 @@ test-suite keiro-dsl-conformance-process-full
   hs-source-dirs: test/conformance-process-full
   main-is:        Main.hs
   other-modules:
+    Generated.SurgeDemo.BehaviorSourceMap
     Generated.SurgeDemo.Hospital.Codec
     Generated.SurgeDemo.Hospital.Domain
     Generated.SurgeDemo.Hospital.EventStream
@@ -1028,6 +1041,7 @@ test-suite keiro-dsl-conformance-process-runtime
   hs-source-dirs: test/conformance-process-runtime
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.HospitalSurge.Process
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
@@ -1056,6 +1070,7 @@ test-suite keiro-dsl-conformance-router-runtime
   hs-source-dirs: test/conformance-router-runtime
   main-is:        Main.hs
   other-modules:
+    Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.PagingRouter.Router
     Generated.IncidentPaging.PagingRouter.RouterHarness
 
@@ -1073,8 +1088,13 @@ test-suite keiro-dsl-conformance-router
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router
   main-is:        Main.hs
-  other-modules:  Generated.IncidentPaging.PagingRouter.RouterHarness
-  build-depends:  base >=4.21 && <5
+  other-modules:
+    Generated.IncidentPaging.BehaviorSourceMap
+    Generated.IncidentPaging.PagingRouter.RouterHarness
+
+  build-depends:
+    , base  >=4.21 && <5
+    , text  >=2.1  && <2.2
 
 -- EP-108 filled-router conformance: scaffolded Page aggregate plus a filled
 -- resolver and Router value compiled against the live API.
@@ -1084,6 +1104,7 @@ test-suite keiro-dsl-conformance-router-full
   hs-source-dirs: test/conformance-router-full
   main-is:        Main.hs
   other-modules:
+    Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.Page.Codec
     Generated.IncidentPaging.Page.Domain
     Generated.IncidentPaging.Page.EventStream
@@ -1113,6 +1134,7 @@ test-suite keiro-dsl-conformance-newsurface
   hs-source-dirs: test/conformance-newsurface
   main-is:        Main.hs
   other-modules:
+    Generated.TransferRouting.BehaviorSourceMap
     Generated.TransferRouting.Conformance
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain
@@ -1152,7 +1174,10 @@ test-suite keiro-dsl-conformance-process
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process
   main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.HospitalSurge.ProcessHarness
+  other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
+    Generated.HospitalCapacity.HospitalSurge.ProcessHarness
+
   build-depends:
     , base  >=4.21 && <5
     , text  >=2.1  && <2.2
@@ -1168,6 +1193,7 @@ test-suite keiro-dsl-conformance-v2
   hs-source-dirs: test/conformance-v2
   main-is:        Main.hs
   other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -1196,6 +1222,7 @@ test-suite keiro-dsl-conformance-id-domain-migration
   hs-source-dirs: test/conformance-id-domain-migration
   main-is:        Main.hs
   other-modules:
+    Generated.IdDomainMigration.BehaviorSourceMap
     Generated.IdDomainMigration.Nominals
     Generated.IdDomainMigration.Nominals.Internal
     Generated.IdDomainMigration.OrderBook.Codec

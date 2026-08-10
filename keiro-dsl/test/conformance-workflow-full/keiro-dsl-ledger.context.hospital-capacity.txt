@@ -9,3 +9,4 @@ module-role {"family":"WorkflowFacts","kind":"generated","ownerKind":"workflow",
 module-role {"family":"WorkflowRuntime","kind":"generated","ownerKind":"workflow","ownerName":"workflow HospitalTransferReservation (line 4)","path":"Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs"}
 generated Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs
 generated Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs
+semantic-impact {"declarations":[],"serviceInventory":[]}

@@ -11,6 +11,7 @@ other-modules:
     CatalogDemo.CatalogAudit.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
+    Generated.CatalogDemo.BehaviorSourceMap
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable

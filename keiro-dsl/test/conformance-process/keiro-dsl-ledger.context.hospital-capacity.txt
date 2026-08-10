@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity behavior source map","path":"Generated/HospitalCapacity/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal ID internals","path":"Generated/HospitalCapacity/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity replay-audit assembly","path":"Generated/HospitalCapacity/ReplayAudit.hs"}
@@ -27,6 +28,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 47)","path":"Generated/HospitalCapacity/Hospital/Harness.hs"}
+generated Generated/HospitalCapacity/BehaviorSourceMap.hs
 generated Generated/HospitalCapacity/Nominals.hs
 generated Generated/HospitalCapacity/Nominals/Internal.hs
 generated Generated/HospitalCapacity/ReplayAudit.hs
@@ -56,3 +58,4 @@ nominal-equality nominal-equality|name=HospitalId|contract=keiro-dsl/nominal-equ
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-5198a253324042e6","kind":"live-transition","outputs":[{"command":"NoteSurgeThreshold","ownership":"generated-command-identity"}],"source":"Idle"}
 behavior {"aggregate":"Surge","command":"MarkSurgeTimerFired","evidence":"generated-authoritative","key":"behavior-v1-6721e0b61aa38780","kind":"live-transition","outputs":[{"command":"MarkSurgeTimerFired","ownership":"generated-command-identity"}],"source":"Idle"}
 behavior {"aggregate":"Hospital","command":"ActivateSurge","evidence":"generated-authoritative","key":"behavior-v1-69ac3daa8569d350","kind":"live-transition","outputs":[{"command":"ActivateSurge","ownership":"generated-command-identity"}],"source":"Operational"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

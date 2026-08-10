@@ -21,6 +21,7 @@ module Generated.WorkspaceNominalProof.ProjectArtifact.BehaviorContract
 import Generated.WorkspaceNominalProof.ProjectArtifact.Codec (encodeProjectArtifactEvent, parseProjectArtifactEvent, projectArtifactCodec)
 import Generated.WorkspaceNominalProof.ProjectArtifact.Domain
 import Generated.WorkspaceNominalProof.ProjectArtifact.Transducer (projectArtifactTransducer)
+import Generated.WorkspaceNominalProof.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ProjectArtifactVertex))
   , requirementTarget :: !(Maybe ProjectArtifactVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ProjectArtifactRecorded x RecordArtifact: required rejection (spec line 8)
+  [ -- ProjectArtifactRecorded x RecordArtifact: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-11da0fd14ad66aa0"
       , requirementKind = RequiredRejection
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 8
       }
-  , -- ProjectArtifactEmpty x RecordArtifact: live transition (spec line 13)
+  , -- ProjectArtifactEmpty x RecordArtifact: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-c6d79387e567590e"
       , requirementKind = LiveTransition
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ProjectArtifactEmpty 0))
       , requirementTarget = Just ProjectArtifactRecorded
       , requirementEventKinds = ["ArtifactRecorded"]
-      , requirementLine = 13
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

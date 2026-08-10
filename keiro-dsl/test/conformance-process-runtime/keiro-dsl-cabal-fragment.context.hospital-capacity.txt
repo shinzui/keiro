@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Hospital.BehaviorContract
     Generated.HospitalCapacity.Hospital.Codec
     Generated.HospitalCapacity.Hospital.Domain

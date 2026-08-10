@@ -10,18 +10,12 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Either (isLeft)
-import Data.List (nub)
-import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiki.Shape (CanonicalTypeName (..))
-import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
-import Generated.ImportPlanningCollisions.StructuralProjections qualified as StructuralProjections
+import Keiro.Codec.Structural (FixtureCases (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
 import Generated.ImportPlanningCollisions.NominalProjections qualified as NominalProjections
-import Generated.ImportPlanningCollisions.Structural.Shape.Details qualified as ShapeDetails
 import ImportPlanning.Bindings qualified as Bindings
-import ImportPlanning.Consumer.Shared.Types (Details)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -70,34 +64,9 @@ forwardReplayRecord =
 mappedConformanceAssertions :: [(String, Bool)]
 mappedConformanceAssertions =
   concat
-    [ detailsBindingAssertions
-    , [("fixture coverage: import-planning.Details.v1", coverageDetails)]
-    , recordedValuesDetailsAssertions
+    [ recordedValuesDetailsAssertions
     , structuralWirePolicyAssertions
-    , structuralProjectionAssertions
     ]
-
-validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
-validFixtureLabels cases =
-  all (not . T.null) labels && length labels == length (nub labels)
-  where
-    labels = map fst (NonEmpty.toList cases)
-
-detailsBindingAssertions :: [(String, Bool)]
-detailsBindingAssertions =
-  ("fixture labels: import-planning.Details.v1", validFixtureLabels cases) :
-  ("canonical identity: import-planning.Details.v1", canonicalTypeName (Proxy @Details) == "import-planning.Details.v1") :
-  concat
-    [ [ ("binding domain round-trip: import-planning.Details.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.detailsBinding value)
-      , ("binding shape round-trip: import-planning.Details.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.detailsBinding (bindingToShape Bindings.detailsBinding value))
-      ]
-    | (label, value) <- NonEmpty.toList cases
-    ]
-  where
-    cases = fixtureCases Bindings.detailsFixtures
-
-coverageDetails :: Bool
-coverageDetails = True
 
 recordedValuesDetailsAssertions :: [(String, Bool)]
 recordedValuesDetailsAssertions =
@@ -108,11 +77,6 @@ recordedValuesDetailsAssertions =
 structuralWirePolicyAssertions :: [(String, Bool)]
 structuralWirePolicyAssertions =
   [ ("wire policy unknown fields: import-planning.Details.v1", all (\(_, value) -> isLeft (decodeDetailsMapped (insertObjectField "__keiro_unknown" (Aeson.Bool True) (encodeDetailsMapped value)))) (NonEmpty.toList (fixtureCases Bindings.detailsFixtures)))
-  ]
-
-structuralProjectionAssertions :: [(String, Bool)]
-structuralProjectionAssertions =
-  [ ("projection witness agreement: import-planning.Details.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.detailsLabelWitness (\referenceOwner -> ShapeDetails.label (bindingToShape Bindings.detailsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.detailsFixtures)))
   ]
 
 insertObjectField :: T.Text -> Aeson.Value -> Aeson.Value -> Aeson.Value

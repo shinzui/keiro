@@ -20,6 +20,7 @@ module Generated.HospitalCapacity.Hospital.BehaviorContract
 import Generated.HospitalCapacity.Hospital.Codec (encodeHospitalEvent, parseHospitalEvent, hospitalCodec)
 import Generated.HospitalCapacity.Hospital.Domain
 import Generated.HospitalCapacity.Hospital.Transducer (hospitalTransducer)
+import Generated.HospitalCapacity.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef HospitalVertex))
   , requirementTarget :: !(Maybe HospitalVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- HospitalOperational x ActivateSurge: live transition (spec line 54)
+  [ -- HospitalOperational x ActivateSurge: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-69ac3daa8569d350"
       , requirementKind = LiveTransition
@@ -136,7 +136,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef HospitalOperational 0))
       , requirementTarget = Just HospitalOperational
       , requirementEventKinds = ["SurgeActivated"]
-      , requirementLine = 54
       }
   ]
 
@@ -315,7 +314,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

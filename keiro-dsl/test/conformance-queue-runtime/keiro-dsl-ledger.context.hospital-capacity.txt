@@ -27,3 +27,4 @@ generated Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
 generated Generated/HospitalCapacity/ReservationWork/Queue.hs
 generated Generated/HospitalCapacity/ReservationWork/QueuePolicy.hs
 generated Generated/HospitalCapacity/ReservationWork/QueueCodec.hs
+semantic-impact {"declarations":[],"serviceInventory":[]}

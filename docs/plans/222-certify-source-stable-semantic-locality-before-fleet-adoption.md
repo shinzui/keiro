@@ -46,7 +46,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-10T03:17:44Z) Milestone 3: replayed the pinned Mori Plan 181 three-field scenario
   read-only, pinned its exact semantic/generated impact set, and measured generated churn falling
   from 22 files/1,869 lines to 9 files/629 lines (8 files/27 lines excluding the isolated map).
-- [ ] Milestone 4: regenerate the complete committed corpus once, run full repository/release-
+- [x] (2026-08-10T03:30:59Z) Milestone 4a: regenerated the 35-invocation committed corpus once,
+  removed deferred golden comparisons, added 21 source maps plus one service structural module to
+  explicit build inventories, and compiled every test component warning-free.
+- [ ] Milestone 4b: prove the committed corpus replay is byte-clean, run full repository/release-
   quality validation, publish adoption guidance, and close IR-21/MasterPlan evidence.
 
 
@@ -85,6 +88,11 @@ implementation. Provide concise evidence.
   can implement the three new optional fields. It is intentionally recorded separately from the
   generated metric: an adopted skeleton is hand-owned and is never overwritten, while both fresh
   revisions must still expose the correct obligation.
+- The coordinated corpus regeneration added 21 context behavior source maps and one previously
+  deferred import-planning structural facade to committed trees. The corpus inventory check first
+  identified 16 missing compiled artifacts; `-Werror=missing-home-modules` then found the
+  structural and workspace-nominal transitive source-map imports, and a complete inventory audit
+  added every map explicitly before the warning-free `cabal build all --enable-tests` passed.
 
 
 ## Decision Log

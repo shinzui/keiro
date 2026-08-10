@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":3,"effectiveLanguageVersion":3,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"compatibility-only","languageVersion":3,"runtimeSemantics":"keiro-dsl/runtime-semantics/2"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration behavior source map","path":"Generated/IdDomainMigration/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal declarations","path":"Generated/IdDomainMigration/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal ID internals","path":"Generated/IdDomainMigration/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration replay-audit assembly","path":"Generated/IdDomainMigration/ReplayAudit.hs"}
@@ -16,6 +17,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderBook (line 6)","path":"Generated/IdDomainMigration/OrderBook/Harness.hs"}
+generated Generated/IdDomainMigration/BehaviorSourceMap.hs
 generated Generated/IdDomainMigration/Nominals.hs
 generated Generated/IdDomainMigration/Nominals/Internal.hs
 generated Generated/IdDomainMigration/ReplayAudit.hs
@@ -31,3 +33,4 @@ id-domain id-domain|name=OrderId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix
 nominal-equality nominal-equality|name=OrderId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:ord:keiro-dsl/id-domain/typeid-v7/1|owner=generated
 behavior {"aggregate":"OrderBook","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-6b331af859e674ea","kind":"required-rejection","outputs":[],"source":"Recorded"}
 behavior {"aggregate":"OrderBook","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-a396f60ddb8f99be","kind":"live-transition","outputs":[{"command":"Record","ownership":"generated-command-identity"}],"source":"Empty"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

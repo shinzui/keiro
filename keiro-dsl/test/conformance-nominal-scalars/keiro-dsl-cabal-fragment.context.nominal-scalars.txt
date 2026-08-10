@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.NominalScalars.BehaviorSourceMap
     Generated.NominalScalars.Nominal.Shape.OrderStatus
     Generated.NominalScalars.NominalLedger.BehaviorContract
     Generated.NominalScalars.NominalLedger.Codec

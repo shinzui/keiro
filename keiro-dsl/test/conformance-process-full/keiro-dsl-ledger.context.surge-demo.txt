@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context surge-demo behavior source map","path":"Generated/SurgeDemo/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal declarations","path":"Generated/SurgeDemo/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal ID internals","path":"Generated/SurgeDemo/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context surge-demo replay-audit assembly","path":"Generated/SurgeDemo/ReplayAudit.hs"}
@@ -29,6 +30,7 @@ module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Projection.hs"}
 module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"SurgeDemo/Hospital/Holes.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 50)","path":"Generated/SurgeDemo/Hospital/Harness.hs"}
+generated Generated/SurgeDemo/BehaviorSourceMap.hs
 generated Generated/SurgeDemo/Nominals.hs
 generated Generated/SurgeDemo/Nominals/Internal.hs
 generated Generated/SurgeDemo/ReplayAudit.hs
@@ -63,3 +65,4 @@ behavior {"aggregate":"Hospital","command":"ActivateSurge","evidence":"generated
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-9d1377f4e60cd45a","kind":"required-rejection","outputs":[],"source":"Fired"}
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-c7783d8bb46678fe","kind":"required-rejection","outputs":[],"source":"Noted"}
 behavior {"aggregate":"Surge","command":"MarkSurgeTimerFired","evidence":"generated-authoritative","key":"behavior-v1-db2fec76864e5867","kind":"live-transition","outputs":[{"command":"MarkSurgeTimerFired","ownership":"generated-command-identity"}],"source":"Noted"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

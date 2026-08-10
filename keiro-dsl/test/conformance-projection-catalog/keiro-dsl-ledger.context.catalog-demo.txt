@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo behavior source map","path":"Generated/CatalogDemo/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo replay-audit assembly","path":"Generated/CatalogDemo/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"Generated/CatalogDemo/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs"}
@@ -20,6 +21,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Orders (line 60)","path":"Generated/CatalogDemo/Orders/Harness.hs"}
+generated Generated/CatalogDemo/BehaviorSourceMap.hs
 generated Generated/CatalogDemo/ReplayAudit.hs
 generated Generated/CatalogDemo/ProjectionCatalog.hs
 hole CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs
@@ -44,3 +46,4 @@ projection-catalog-fact query|catalogAudit|reporting|audit_log|37
 projection-catalog-fact target|audit_log|sales|audit_log|preserve||10
 projection-catalog-fact target|order_summary|sales|order_summary|clear||4
 projection-catalog-fact target|order_totals|sales|order_totals|clear|order_summary|16
+semantic-impact {"declarations":[],"serviceInventory":[]}

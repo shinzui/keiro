@@ -21,6 +21,7 @@ module Generated.WorkspaceNominalProof.Project.BehaviorContract
 import Generated.WorkspaceNominalProof.Project.Codec (encodeProjectEvent, parseProjectEvent, projectCodec)
 import Generated.WorkspaceNominalProof.Project.Domain
 import Generated.WorkspaceNominalProof.Project.Transducer (projectTransducer)
+import Generated.WorkspaceNominalProof.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef ProjectVertex))
   , requirementTarget :: !(Maybe ProjectVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ProjectArchived x ArchiveProject: required rejection (spec line 28)
+  [ -- ProjectArchived x ArchiveProject: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-3de05f6aced1fbd8"
       , requirementKind = RequiredRejection
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 28
       }
-  , -- ProjectEmpty x RegisterProject: live transition (spec line 35)
+  , -- ProjectEmpty x RegisterProject: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-3ef04b25c79aa821"
       , requirementKind = LiveTransition
@@ -150,9 +149,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ProjectEmpty 0))
       , requirementTarget = Just ProjectLive
       , requirementEventKinds = ["ProjectRegistered"]
-      , requirementLine = 35
       }
-  , -- ProjectArchived x RegisterProject: required rejection (spec line 28)
+  , -- ProjectArchived x RegisterProject: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-44c09c629d21fd17"
       , requirementKind = RequiredRejection
@@ -163,9 +161,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 28
       }
-  , -- ProjectLive x RegisterProject: required rejection (spec line 28)
+  , -- ProjectLive x RegisterProject: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-6134478c9aaa78cb"
       , requirementKind = RequiredRejection
@@ -176,9 +173,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 28
       }
-  , -- ProjectEmpty x ArchiveProject: required rejection (spec line 28)
+  , -- ProjectEmpty x ArchiveProject: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-c4b406a5be4a0d0b"
       , requirementKind = RequiredRejection
@@ -189,9 +185,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 28
       }
-  , -- ProjectLive x ArchiveProject: live transition (spec line 42)
+  , -- ProjectLive x ArchiveProject: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-ea703ecdfbda1e70"
       , requirementKind = LiveTransition
@@ -202,7 +197,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef ProjectLive 0))
       , requirementTarget = Just ProjectArchived
       , requirementEventKinds = ["ArchivalRecorded"]
-      , requirementLine = 42
       }
   ]
 
@@ -382,7 +376,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

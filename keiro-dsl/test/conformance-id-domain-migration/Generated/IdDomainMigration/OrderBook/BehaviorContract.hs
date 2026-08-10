@@ -21,6 +21,7 @@ module Generated.IdDomainMigration.OrderBook.BehaviorContract
 import Generated.IdDomainMigration.OrderBook.Codec (encodeOrderBookEvent, parseOrderBookEvent, orderBookCodec)
 import Generated.IdDomainMigration.OrderBook.Domain
 import Generated.IdDomainMigration.OrderBook.Transducer (orderBookTransducer)
+import Generated.IdDomainMigration.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef OrderBookVertex))
   , requirementTarget :: !(Maybe OrderBookVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- OrderBookRecorded x Record: required rejection (spec line 9)
+  [ -- OrderBookRecorded x Record: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-6b331af859e674ea"
       , requirementKind = RequiredRejection
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 9
       }
-  , -- OrderBookEmpty x Record: live transition (spec line 14)
+  , -- OrderBookEmpty x Record: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-a396f60ddb8f99be"
       , requirementKind = LiveTransition
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef OrderBookEmpty 0))
       , requirementTarget = Just OrderBookRecorded
       , requirementEventKinds = ["OrderRecorded"]
-      , requirementLine = 14
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

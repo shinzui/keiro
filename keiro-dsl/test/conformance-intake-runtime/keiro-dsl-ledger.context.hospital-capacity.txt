@@ -10,3 +10,4 @@ module-role {"family":"Inbox","kind":"generated","ownerKind":"intake","ownerName
 generated Generated/HospitalCapacity/Emergency/Contract.hs
 generated Generated/HospitalCapacity/IncidentInbox/Inbox.hs
 id-domain id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
+semantic-impact {"declarations":[],"serviceInventory":[]}

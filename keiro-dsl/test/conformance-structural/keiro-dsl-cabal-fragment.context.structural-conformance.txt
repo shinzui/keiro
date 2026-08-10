@@ -16,6 +16,7 @@ other-modules:
     Generated.StructuralConformance.ArtifactCatalog.Harness
     Generated.StructuralConformance.ArtifactCatalog.Projection
     Generated.StructuralConformance.ArtifactCatalog.Transducer
+    Generated.StructuralConformance.BehaviorSourceMap
     Generated.StructuralConformance.ReplayAudit
     Generated.StructuralConformance.Structural.Shape.ArtifactInfo
     Generated.StructuralConformance.Structural.Shape.ArtifactKind

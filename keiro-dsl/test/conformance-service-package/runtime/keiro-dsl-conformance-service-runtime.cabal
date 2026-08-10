@@ -35,6 +35,7 @@ library
     Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness
     Proof.WorkspaceProof.BetaView.Generated.ReadModelTable
     Proof.WorkspaceProof.BetaView.ReadModelHoles
+    Proof.WorkspaceProof.Generated.BehaviorSourceMap
     Proof.WorkspaceProof.Generated.Nominals
     Proof.WorkspaceProof.Generated.Nominals.Internal
     Proof.WorkspaceProof.Generated.ReplayAudit

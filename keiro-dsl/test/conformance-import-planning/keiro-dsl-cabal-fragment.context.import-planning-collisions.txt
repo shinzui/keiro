@@ -8,6 +8,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.ImportPlanningCollisions.BehaviorSourceMap
     Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
     Generated.ImportPlanningCollisions.CollisionLedger.Codec
     Generated.ImportPlanningCollisions.CollisionLedger.Domain
@@ -18,6 +19,7 @@ other-modules:
     Generated.ImportPlanningCollisions.NominalProjections
     Generated.ImportPlanningCollisions.ReplayAudit
     Generated.ImportPlanningCollisions.Structural.Shape.Details
+    Generated.ImportPlanningCollisions.StructuralConformance
     Generated.ImportPlanningCollisions.StructuralProjections
     ImportPlanning.Bindings
     ImportPlanningCollisions.CollisionLedger.BehaviorHoles

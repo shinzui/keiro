@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context incident-paging behavior source map","path":"Generated/IncidentPaging/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context incident-paging replay-audit assembly","path":"Generated/IncidentPaging/ReplayAudit.hs"}
 module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel service_oncall (line 4)","path":"Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs"}
 module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel service_oncall (line 4)","path":"Generated/IncidentPaging/ServiceOncall/ReadModel.hs"}
@@ -21,6 +22,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Page (line 31)","path":"Generated/IncidentPaging/Page/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Page (line 31)","path":"Generated/IncidentPaging/Page/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Page (line 31)","path":"Generated/IncidentPaging/Page/Harness.hs"}
+generated Generated/IncidentPaging/BehaviorSourceMap.hs
 generated Generated/IncidentPaging/ReplayAudit.hs
 generated Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
 generated Generated/IncidentPaging/ServiceOncall/ReadModel.hs
@@ -39,3 +41,4 @@ generated Generated/IncidentPaging/Page/Projection.hs
 generated Generated/IncidentPaging/Page/Harness.hs
 behavior {"aggregate":"Page","command":"SendPage","evidence":"generated-authoritative","key":"behavior-v1-4cc963adc6662c5e","kind":"required-rejection","outputs":[],"source":"Delivered"}
 behavior {"aggregate":"Page","command":"SendPage","evidence":"generated-authoritative","key":"behavior-v1-d0a1ec215dcca5f8","kind":"live-transition","outputs":[{"command":"SendPage","ownership":"generated-command-identity"}],"source":"Pending"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

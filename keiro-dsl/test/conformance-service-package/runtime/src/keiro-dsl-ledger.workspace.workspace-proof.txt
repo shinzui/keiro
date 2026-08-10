@@ -14,6 +14,7 @@ source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path"
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/evidence.keiro","sourceForm":"declared"}
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/shared.keiro","sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/BehaviorSourceMap.hs","roleFamily":"BehaviorSourceMap","roleOwnerKind":"context","roleOwnerName":"context workspace-proof behavior source map"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals.hs","roleFamily":"Nominals","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal declarations"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals/Internal.hs","roleFamily":"Internal","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal ID internals"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/ReplayAudit.hs","roleFamily":"ReplayAudit","roleOwnerKind":"context","roleOwnerName":"context workspace-proof replay-audit assembly"}
@@ -51,3 +52,4 @@ behavior {"aggregate":"Beta","command":"PingBeta","evidence":"generated-authorit
 behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-72a96c964b44a2b6","kind":"replay-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
 behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-baf43b4c31db955a","kind":"live-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
 behavior {"aggregate":"Alpha","command":"LegacyPingAlpha","evidence":"generated-authoritative","key":"behavior-v1-c062ccf5e9b6f5c4","kind":"required-rejection","outputs":[],"owner":"domain/alpha.keiro","source":"Active"}
+semantic-impact {"declarations":[],"serviceInventory":[]}

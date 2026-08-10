@@ -20,6 +20,7 @@ module Generated.SurgeDemo.Surge.BehaviorContract
 import Generated.SurgeDemo.Surge.Codec (encodeSurgeEvent, parseSurgeEvent, surgeCodec)
 import Generated.SurgeDemo.Surge.Domain
 import Generated.SurgeDemo.Surge.Transducer (surgeTransducer)
+import Generated.SurgeDemo.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -52,7 +53,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef SurgeVertex))
   , requirementTarget :: !(Maybe SurgeVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -125,7 +125,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- SurgeFired x MarkSurgeTimerFired: required rejection (spec line 36)
+  [ -- SurgeFired x MarkSurgeTimerFired: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-364cc8c97a1dccd7"
       , requirementKind = RequiredRejection
@@ -136,9 +136,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 36
       }
-  , -- SurgeWatching x NoteSurgeThreshold: live transition (spec line 43)
+  , -- SurgeWatching x NoteSurgeThreshold: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-7bd417bb60f14aea"
       , requirementKind = LiveTransition
@@ -149,9 +148,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef SurgeWatching 0))
       , requirementTarget = Just SurgeNoted
       , requirementEventKinds = ["SurgeThresholdNoted"]
-      , requirementLine = 43
       }
-  , -- SurgeWatching x MarkSurgeTimerFired: required rejection (spec line 36)
+  , -- SurgeWatching x MarkSurgeTimerFired: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-8303777877a78d98"
       , requirementKind = RequiredRejection
@@ -162,9 +160,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 36
       }
-  , -- SurgeFired x NoteSurgeThreshold: required rejection (spec line 36)
+  , -- SurgeFired x NoteSurgeThreshold: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-9d1377f4e60cd45a"
       , requirementKind = RequiredRejection
@@ -175,9 +172,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 36
       }
-  , -- SurgeNoted x NoteSurgeThreshold: required rejection (spec line 36)
+  , -- SurgeNoted x NoteSurgeThreshold: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-c7783d8bb46678fe"
       , requirementKind = RequiredRejection
@@ -188,9 +184,8 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 36
       }
-  , -- SurgeNoted x MarkSurgeTimerFired: live transition (spec line 44)
+  , -- SurgeNoted x MarkSurgeTimerFired: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-db2fec76864e5867"
       , requirementKind = LiveTransition
@@ -201,7 +196,6 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef SurgeNoted 0))
       , requirementTarget = Just SurgeFired
       , requirementEventKinds = ["SurgeTimerFired"]
-      , requirementLine = 44
       }
   ]
 
@@ -381,7 +375,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

@@ -21,6 +21,7 @@ module Generated.NominalScalars.NominalLedger.BehaviorContract
 import Generated.NominalScalars.NominalLedger.Codec (encodeNominalLedgerEvent, parseNominalLedgerEvent, nominalLedgerCodec)
 import Generated.NominalScalars.NominalLedger.Domain
 import Generated.NominalScalars.NominalLedger.Transducer (nominalLedgerTransducer)
+import Generated.NominalScalars.BehaviorSourceMap qualified as BehaviorSourceMap
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -53,7 +54,6 @@ data BehaviorRequirement = BehaviorRequirement
   , requirementExpectedEdge :: !(Maybe (K.EdgeRef NominalLedgerVertex))
   , requirementTarget :: !(Maybe NominalLedgerVertex)
   , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -126,7 +126,7 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- NominalLedgerEmpty x RecordNominals: live transition (spec line 84)
+  [ -- NominalLedgerEmpty x RecordNominals: live transition
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-274eaf83d346048a"
       , requirementKind = LiveTransition
@@ -137,9 +137,8 @@ behaviorRequirements =
       , requirementExpectedEdge = (Just (K.EdgeRef NominalLedgerEmpty 0))
       , requirementTarget = Just NominalLedgerRecorded
       , requirementEventKinds = ["NominalsRecorded"]
-      , requirementLine = 84
       }
-  , -- NominalLedgerRecorded x RecordNominals: required rejection (spec line 76)
+  , -- NominalLedgerRecorded x RecordNominals: required rejection
     BehaviorRequirement
       { requirementKey = BehaviorKey "behavior-v1-971c0c80ffdfe018"
       , requirementKind = RequiredRejection
@@ -150,7 +149,6 @@ behaviorRequirements =
       , requirementExpectedEdge = Nothing
       , requirementTarget = Nothing
       , requirementEventKinds = []
-      , requirementLine = 76
       }
   ]
 
@@ -329,7 +327,7 @@ failure requirement code detail =
   Left
     ( BehaviorFailure
         (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> ")")
         code
         detail
     )

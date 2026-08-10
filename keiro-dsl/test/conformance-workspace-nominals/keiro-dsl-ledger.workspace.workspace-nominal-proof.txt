@@ -12,6 +12,7 @@ source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path"
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/project.keiro","sourceForm":"declared"}
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/shared.keiro","sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+module {"kind":"generated","path":"Generated/WorkspaceNominalProof/BehaviorSourceMap.hs","roleFamily":"BehaviorSourceMap","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof behavior source map"}
 module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals.hs","roleFamily":"Nominals","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof generated nominal declarations"}
 module {"kind":"generated","path":"Generated/WorkspaceNominalProof/Nominals/Internal.hs","roleFamily":"Internal","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof generated nominal ID internals"}
 module {"kind":"generated","path":"Generated/WorkspaceNominalProof/ReplayAudit.hs","roleFamily":"ReplayAudit","roleOwnerKind":"context","roleOwnerName":"context workspace-nominal-proof replay-audit assembly"}
@@ -43,6 +44,7 @@ behavior {"aggregate":"Project","command":"RegisterProject","evidence":"generate
 behavior {"aggregate":"Project","command":"ArchiveProject","evidence":"generated-authoritative","key":"behavior-v1-c4b406a5be4a0d0b","kind":"required-rejection","outputs":[],"owner":"domain/project.keiro","source":"Empty"}
 behavior {"aggregate":"ProjectArtifact","command":"RecordArtifact","evidence":"generated-authoritative","key":"behavior-v1-c6d79387e567590e","kind":"live-transition","outputs":[{"command":"RecordArtifact","ownership":"generated-command-identity"}],"owner":"domain/project-artifact.keiro","source":"Empty"}
 behavior {"aggregate":"Project","command":"ArchiveProject","evidence":"generated-authoritative","key":"behavior-v1-ea703ecdfbda1e70","kind":"live-transition","outputs":[{"command":"ArchiveProject","ownership":"generated-command-identity"}],"owner":"domain/project.keiro","source":"Live"}
+semantic-impact {"declarations":[],"serviceInventory":[]}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/Nominals.hs"}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs"}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs"}

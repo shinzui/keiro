@@ -10,6 +10,7 @@ default-extensions:
 other-modules:
     AggregateScalars.ScalarLedger.BehaviorHoles
     AggregateScalars.ScalarLedger.Holes
+    Generated.AggregateScalars.BehaviorSourceMap
     Generated.AggregateScalars.ReplayAudit
     Generated.AggregateScalars.ScalarLedger.BehaviorContract
     Generated.AggregateScalars.ScalarLedger.Codec

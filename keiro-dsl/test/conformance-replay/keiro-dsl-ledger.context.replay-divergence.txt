@@ -5,6 +5,7 @@ layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence behavior source map","path":"Generated/ReplayDivergence/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence replay-audit assembly","path":"Generated/ReplayDivergence/ReplayAudit.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Codec.hs"}
@@ -14,6 +15,7 @@ module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","own
 module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/EventStream.hs"}
 module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Projection.hs"}
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Harness.hs"}
+generated Generated/ReplayDivergence/BehaviorSourceMap.hs
 generated Generated/ReplayDivergence/ReplayAudit.hs
 generated Generated/ReplayDivergence/Note/Domain.hs
 generated Generated/ReplayDivergence/Note/Codec.hs
@@ -25,3 +27,4 @@ generated Generated/ReplayDivergence/Note/Projection.hs
 generated Generated/ReplayDivergence/Note/Harness.hs
 behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-248e9c1b1eb3e5bc","kind":"live-transition","outputs":[{"command":"WriteNote","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-7c36eda198514110","kind":"required-rejection","outputs":[],"source":"Recorded"}
+semantic-impact {"declarations":[],"serviceInventory":[]}
