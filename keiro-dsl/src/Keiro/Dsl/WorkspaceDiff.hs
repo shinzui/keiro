@@ -10,6 +10,7 @@ module Keiro.Dsl.WorkspaceDiff
     WorkspaceMeta (..),
     WorkspaceDiffReport,
     workspaceDiffReport,
+    workspaceDiffReportWithSemanticImpact,
     diffWorkspaces,
     renderWorkspaceFinding,
   )
@@ -22,7 +23,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffServices, sourceLanguageChange)
-import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport)
+import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport, workspaceDiffReportWithSemanticImpact)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError)
 import Keiro.Dsl.Grammar (Loc (..), Name, Placement (..))
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))

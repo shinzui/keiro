@@ -36,7 +36,7 @@ import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
-import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
+import Keiro.Dsl.DiffReport (Remedy (..), diffReport, diffReportWithSemanticImpact, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding, renderSemanticImpact)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.Expression
@@ -5388,6 +5388,22 @@ main = hspec $ do
     it "covers every node family exactly once and explains exclusions" $ do
       sort (map fst familyRegistry) `shouldBe` ([minBound .. maxBound] :: [NodeFamily])
       [reason | (_, OutOfDiffScope reason) <- familyRegistry, T.null reason] `shouldBe` []
+    it "reports checked mapped consumers separately from compatibility findings" $ do
+      old <- specOf "test/fixtures/semantic-impact.keiro"
+      let new = mapMappedStructural "NestedPayload" changeMappedCanonical old
+          changes = diffSpecs old new
+          impact = CheckedDiff.mappedSemanticImpact old new
+          rendered = T.unlines (renderSemanticImpact impact)
+          encoded = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReportWithSemanticImpact defaultGate changes impact)))
+      map impactDeclaration impact `shouldBe` [MappedKey "NestedPayload"]
+      rendered `shouldSatisfy` T.isInfixOf "previous aggregate consumers: Alpha"
+      rendered `shouldSatisfy` T.isInfixOf "current aggregate consumers:  Alpha"
+      rendered `shouldSatisfy` T.isInfixOf "service-conformance: impacted"
+      rendered `shouldSatisfy` (not . T.isInfixOf "Beta")
+      encoded `shouldSatisfy` T.isInfixOf "\"semanticImpact\""
+      encoded `shouldSatisfy` T.isInfixOf "\"previousConsumers\":[\"Alpha\"]"
+      let reordered = old {specMapped = reverse (specMapped old), specNodes = reverse (specNodes old)}
+      CheckedDiff.mappedSemanticImpact old reordered `shouldBe` []
     it "derives every exercised headline from its vector under the default gate" $ do
       changes <-
         concat

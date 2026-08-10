@@ -37,8 +37,9 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 1: define a deterministic semantic-impact snapshot/delta shared by diff and
   scaffold reporting and serialize it as extension-tolerant ledger evidence. Completed
   2026-08-10T01:38:49Z; `cabal build keiro-dsl` and the focused `semantic impact` tests pass.
-- [ ] Milestone 2: add old/new semantic consumer summaries to single/workspace diff text and the
-  append-only JSON report without changing compatibility verdicts.
+- [x] Milestone 2: add old/new semantic consumer summaries to single/workspace diff text and the
+  append-only JSON report without changing compatibility verdicts. Completed 2026-08-10T01:43:00Z;
+  the focused A-only test, `cabal build keiro-dsl`, and `bash keiro-dsl/test/diff-test.sh` pass.
 - [ ] Milestone 3: add semantic and generated-artifact impact sections to single/workspace scaffold
   reports, including honest legacy-baseline behavior.
 - [ ] Milestone 4: prove mapped locality, source-only neutrality, ledger compatibility, and report
@@ -54,6 +55,9 @@ implementation. Provide concise evidence.
   map-key encoding as a file-format contract. Canonical arrays keep names explicit; parsing then
   rejects duplicate declarations, duplicate consumers, and disagreement with the service
   inventory before a scaffold write.
+- The workspace diff shell assertion still expected the pre-EP-3 approximate declaration line 3,
+  while the exact checked source index correctly reports the enum at line 4. The regression now
+  pins the exact line and additionally requires semantic impact in both text and JSON.
 
 
 ## Decision Log
@@ -80,6 +84,13 @@ Record every decision made while working on the plan.
   service inventory, and reserve absence of the single ledger row for pre-feature history.
   Rationale: The array encoding is deterministic and validates duplicates explicitly; the
   absent-versus-empty distinction prevents a legacy ledger from claiming zero old consumers.
+  Date: 2026-08-10
+
+- Decision: Preserve the existing `diffReport` and `workspaceDiffReport` smart constructors as
+  byte-compatible legacy entry points, and add explicit semantic-impact constructors for current
+  CLI output.
+  Rationale: The CLI must append `semanticImpact` to schema 1, while library callers that explicitly
+  selected the old constructor should not receive an unrequested output-byte change.
   Date: 2026-08-10
 
 
@@ -287,3 +298,5 @@ and ledger behavior as its adoption evidence.
 
 - 2026-08-10: Recorded Milestone 1's canonical snapshot/delta implementation, ledger compatibility
   evidence, and the durable absent-baseline encoding decision so the plan remains restartable.
+- 2026-08-10: Recorded Milestone 2's single/workspace diff summaries, append-only JSON projection,
+  exact-location shell evidence, and compatibility-preserving public constructor decision.

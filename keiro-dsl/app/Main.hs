@@ -17,7 +17,8 @@ import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.CheckReport qualified as CheckReport
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
-import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
+import Keiro.Dsl.Diff qualified as CheckedDiff
+import Keiro.Dsl.DiffReport (diffReportWithSemanticImpact, parseSurfaceName, renderExplainBlock, renderFinding, renderSemanticImpact)
 import Keiro.Dsl.ExplainBindings (bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
@@ -34,7 +35,7 @@ import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex, emptySemanticSourceIndex)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
-import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
+import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReportWithSemanticImpact)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
 import Options.Applicative
@@ -633,12 +634,14 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                     written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
                     mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
                     let effectiveGate = gateWith gatedSurfaces
+                        semanticImpact = CheckedDiff.mappedSemanticImpact oldSpec newSpec
                     mapM_ (TIO.putStrLn . renderFinding) changes
+                    mapM_ TIO.putStrLn (renderSemanticImpact semanticImpact)
                     when explain $
                       mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
                     TIO.putStrLn (renderReplayImpact impact)
                     mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                    mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                    mapM_ (\path -> Aeson.encodeFile path (diffReportWithSemanticImpact effectiveGate changes semanticImpact)) reportOut
                     coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
                     if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
@@ -959,6 +962,7 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                           mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
                           let changes = map wcChange workspaceChanges
                               effectiveGate = gateWith gatedSurfaces
+                              semanticImpact = CheckedDiff.mappedSemanticImpact oldSpec newSpec
                               reportMeta =
                                 WorkspaceMeta
                                   { wmIdentity = wsService newWorkspace,
@@ -969,11 +973,12 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                                     wmAdoptionBaseline = adoptionBaseline
                                   }
                           mapM_ (TIO.putStrLn . renderWorkspaceFinding) workspaceChanges
+                          mapM_ TIO.putStrLn (renderSemanticImpact semanticImpact)
                           when explain $
                             mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
                           TIO.putStrLn (renderReplayImpact impact)
                           mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                          mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReport reportMeta effectiveGate workspaceChanges)) reportOut
+                          mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReportWithSemanticImpact reportMeta effectiveGate workspaceChanges semanticImpact)) reportOut
                           coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
                           if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 

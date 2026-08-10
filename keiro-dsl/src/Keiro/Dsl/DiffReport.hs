@@ -10,16 +10,19 @@ module Keiro.Dsl.DiffReport
   ( Remedy (..),
     DiffReport,
     diffReport,
+    diffReportWithSemanticImpact,
     OwnedSite (..),
     WorkspaceChange (..),
     WorkspaceMeta (..),
     WorkspaceDiffReport,
     workspaceDiffReport,
+    workspaceDiffReportWithSemanticImpact,
     remediationFor,
     renderRemedy,
     renderFinding,
     renderVectorLine,
     renderExplainBlock,
+    renderSemanticImpact,
     surfaceName,
     parseSurfaceName,
     verdictName,
@@ -36,6 +39,8 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Diff
+import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta (..))
+import Keiro.Dsl.TypeGraph (MappedKey (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 data Remedy
@@ -59,12 +64,18 @@ data Remedy
 
 data DiffReport = DiffReport
   { reportGate :: !(Set CompatibilitySurface),
-    reportFindings :: ![Change]
+    reportFindings :: ![Change],
+    reportSemanticImpact :: !(Maybe [MappedImpactDelta])
   }
   deriving stock (Eq, Show)
 
 diffReport :: Set CompatibilitySurface -> [Change] -> DiffReport
-diffReport = DiffReport
+diffReport gate findings = DiffReport gate findings Nothing
+
+-- | Add the append-only semantic-impact object used by current CLI reports.
+-- The older smart constructor intentionally omits it for source compatibility.
+diffReportWithSemanticImpact :: Set CompatibilitySurface -> [Change] -> [MappedImpactDelta] -> DiffReport
+diffReportWithSemanticImpact gate findings impact = DiffReport gate findings (Just impact)
 
 -- | One source location from a composed workspace's ownership index.
 data OwnedSite = OwnedSite
@@ -95,31 +106,57 @@ data WorkspaceMeta = WorkspaceMeta
 data WorkspaceDiffReport = WorkspaceDiffReport
   { workspaceReportMeta :: !WorkspaceMeta,
     workspaceReportGate :: !(Set CompatibilitySurface),
-    workspaceReportFindings :: ![WorkspaceChange]
+    workspaceReportFindings :: ![WorkspaceChange],
+    workspaceReportSemanticImpact :: !(Maybe [MappedImpactDelta])
   }
   deriving stock (Eq, Show)
 
 workspaceDiffReport :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> WorkspaceDiffReport
-workspaceDiffReport = WorkspaceDiffReport
+workspaceDiffReport meta gate findings = WorkspaceDiffReport meta gate findings Nothing
+
+workspaceDiffReportWithSemanticImpact :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> [MappedImpactDelta] -> WorkspaceDiffReport
+workspaceDiffReportWithSemanticImpact meta gate findings impact = WorkspaceDiffReport meta gate findings (Just impact)
 
 instance ToJSON DiffReport where
   toJSON report =
-    object
+    object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
         "gate" .= map surfaceName (Set.toAscList (reportGate report)),
         "breaking" .= any (gatedBreaking (reportGate report)) (reportFindings report),
         "findings" .= map (findingValue (reportGate report)) (reportFindings report)
       ]
+        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [reportSemanticImpact report]]
 
 instance ToJSON WorkspaceDiffReport where
   toJSON report =
-    object
+    object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
         "gate" .= map surfaceName (Set.toAscList (workspaceReportGate report)),
         "breaking" .= any (gatedBreaking (workspaceReportGate report) . wcChange) (workspaceReportFindings report),
         "findings" .= map (workspaceFindingValue (workspaceReportGate report)) (workspaceReportFindings report),
         "workspace" .= workspaceMetaValue (workspaceReportMeta report)
       ]
+        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [workspaceReportSemanticImpact report]]
+
+semanticImpactValue :: [MappedImpactDelta] -> Value
+semanticImpactValue impact = object ["declarations" .= impact]
+
+-- | Human-facing semantic dependency summary, kept separate from ordinary
+-- compatibility findings and generated-file evidence.
+renderSemanticImpact :: [MappedImpactDelta] -> [Text]
+renderSemanticImpact [] = []
+renderSemanticImpact impact = "semantic impact:" : concatMap renderDelta impact
+  where
+    renderDelta delta =
+      [ "  " <> unMappedKey (impactDeclaration delta),
+        "    previous aggregate consumers: " <> renderConsumers (impactPreviousConsumers delta),
+        "    current aggregate consumers:  " <> renderConsumers (impactCurrentConsumers delta),
+        "    service-conformance: " <> if impactServiceConformance delta then "impacted" else "unchanged"
+      ]
+    renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
+      [] -> "(none)"
+      names -> T.intercalate ", " names
+    consumerName (AggregateConsumer aggregate) = aggregate
 
 findingValue :: Set CompatibilitySurface -> Change -> Value
 findingValue gate change = object (findingPairs gate change)

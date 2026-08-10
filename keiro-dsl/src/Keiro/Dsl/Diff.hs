@@ -41,6 +41,7 @@ module Keiro.Dsl.Diff
     diffSources,
     sourceLanguageChange,
     diffServices,
+    mappedSemanticImpact,
     DiffEnv (..),
     NodeFamily (..),
     familyOf,
@@ -82,7 +83,8 @@ import Keiro.Dsl.PrettyPrint
   )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
-import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
+import Keiro.Dsl.SemanticImpact (MappedImpactDelta, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.TypeGraph (MappedKey (..), UsePath (..), UseSite (..), resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 -- | A classified spec change.
@@ -841,6 +843,18 @@ sharedDeclarationDiff env = enumDiff env ++ idDiff env ++ nominalScalarDiff env 
 
 mappedDeclarationDiff :: DiffEnv -> [Change]
 mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld env) (deNew env))
+
+-- | Explain only declarations for which the authoritative mapped differ emits
+-- a finding. The compatibility findings remain unchanged; this projection adds
+-- the checked before/after aggregate consumer sets and service-conformance role.
+mappedSemanticImpact :: Spec -> Spec -> [MappedImpactDelta]
+mappedSemanticImpact oldSpec newSpec = case (resolveTypeGraph oldSpec, resolveTypeGraph newSpec) of
+  (Right oldGraph, Right newGraph) ->
+    mappedImpactForDeclarations
+      [MappedKey (mfDeclaration finding) | finding <- diffMapped oldSpec newSpec]
+      (semanticImpactSnapshot (semanticImpact oldGraph))
+      (semanticImpactSnapshot (semanticImpact newGraph))
+  _ -> []
 
 mappedFindingChanges :: MappedFinding -> [Change]
 mappedFindingChanges finding

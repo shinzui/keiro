@@ -261,14 +261,16 @@ WORKSPACE_COVERAGE="$CITATIONS/workspace-coverage.json"
 if output="$("$EXE" diff --since HEAD --report-out "$WORKSPACE_REPORT" --coverage-report "$WORKSPACE_COVERAGE" "$CITATIONS/service.keiro-workspace" 2>&1)"; then
   echo "$output"
   echo "FAIL: shared mapped wire change did not block"; exit 1
-elif [[ "$output" == *"declared: domain/shared.keiro:3"* \
+elif [[ "$output" == *"declared: domain/shared.keiro:4"* \
     && "$output" == *"use-site: Order"* \
     && "$output" == *"use-site: Shipment"* \
+    && "$output" == *"semantic impact:"* \
     && "$output" == *"replay-affected:"* \
     && -s "$WORKSPACE_REPORT" \
     && -s "$WORKSPACE_COVERAGE" ]] \
     && grep -q '"schema":"keiro-dsl/diff-report/1"' "$WORKSPACE_REPORT" \
     && grep -q '"identity":"workspace-diff"' "$WORKSPACE_REPORT" \
+    && grep -q '"semanticImpact":{"declarations":' "$WORKSPACE_REPORT" \
     && grep -q '"declaration":' "$WORKSPACE_REPORT" \
     && grep -q '"useSites":' "$WORKSPACE_REPORT"; then
   echo "$output"
