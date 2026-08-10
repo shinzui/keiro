@@ -65,6 +65,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
+import Keiro.Dsl.CanonicalEncoding (canonicalDomainOutcomeTypes, canonicalTransition, canonicalTransitionOutcome)
 import Keiro.Dsl.FieldIdentity
   ( ResolvedFieldIdentity (..),
     resolveAggregateFieldIdentity,
@@ -1387,7 +1388,51 @@ aggregatePairDiff oldSpec newSpec oldAgg newAgg =
     ++ wireDiff oldAgg newAgg
     ++ projectionDiff oldAgg newAgg
     ++ guardTighteningDiff oldAgg newAgg
+    ++ domainOutcomeDiff oldAgg newAgg
     ++ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
+
+-- | Typed outcomes are forward command behavior, not persisted fold behavior.
+-- Pair transitions by their frozen fold canonical form so a reason-only change
+-- reports precisely without also claiming replay or snapshot impact.
+domainOutcomeDiff :: Aggregate -> Aggregate -> [Change]
+domainOutcomeDiff oldAggregate newAggregate = declarationChange ++ transitionChanges
+  where
+    declarationChange =
+      [ advisory
+          (aggName newAggregate)
+          "domain-outcome-types"
+          (aggName newAggregate)
+          DomainOutcomeTypesChanged
+          ( "domain outcome types changed from '"
+              <> renderDeclaration (aggDomainOutcomeTypes oldAggregate)
+              <> "' to '"
+              <> renderDeclaration (aggDomainOutcomeTypes newAggregate)
+              <> "'; generated command result types and callers must be updated, while event history and snapshots remain compatible"
+          )
+      | canonicalDomainOutcomeTypes (aggDomainOutcomeTypes oldAggregate)
+          /= canonicalDomainOutcomeTypes (aggDomainOutcomeTypes newAggregate)
+      ]
+    transitionChanges =
+      [ advisory
+          (aggName newAggregate)
+          "transition-domain-outcome"
+          (transitionSubject ordinal newTransition)
+          DomainTransitionOutcomeChanged
+          ( "domain outcome changed from '"
+              <> canonicalTransitionOutcome (tOutcome oldTransition)
+              <> "' to '"
+              <> canonicalTransitionOutcome (tOutcome newTransition)
+              <> "'; forward command behavior changes, while the selected edge, emitted events, fold, replay, and snapshots remain unchanged"
+          )
+      | (ordinal, newTransition) <- zip [0 :: Int ..] (aggTransitions newAggregate),
+        Just oldTransition <- [find ((== canonicalTransition newTransition) . canonicalTransition) (aggTransitions oldAggregate)],
+        canonicalTransitionOutcome (tOutcome oldTransition) /= canonicalTransitionOutcome (tOutcome newTransition)
+      ]
+    renderDeclaration declaration = case canonicalDomainOutcomeTypes declaration of
+      "" -> "(disabled)"
+      value -> value
+    transitionSubject ordinal transition =
+      tSource transition <> " -- " <> tCommand transition <> " [edge " <> T.pack (show ordinal) <> "]"
 
 -- | Report replay-fold evolution. Regenerated scaffold code carries the new
 -- fingerprint and invalidates old snapshots, so this remains advisory.

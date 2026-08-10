@@ -1393,6 +1393,8 @@ instance HasLocs ContractField
 
 instance HasLocs ContractNode
 
+instance HasLocs DomainOutcomeTypes
+
 instance HasLocs ContractType
 
 instance HasLocs CorrelateDecl
@@ -1538,6 +1540,8 @@ instance HasLocs StateDecl
 instance HasLocs TimerNode
 
 instance HasLocs Transition
+
+instance HasLocs TransitionOutcome
 
 instance HasLocs TransitionImplementation
 

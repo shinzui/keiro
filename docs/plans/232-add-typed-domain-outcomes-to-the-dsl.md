@@ -49,8 +49,19 @@ unchanged.
 - [ ] Prerequisite closeout: Plan 231 still needs its same-machine latency,
   allocation, and maximum-residency acceptance on a quiet host. Do not generate
   or change a benchmark baseline under the current host load.
-- [ ] Milestone 1: add candidate language-5 grammar, typed AST nodes, and semantic validation.
-- [ ] Milestone 2: make outcomes participate in version profiles, semantic diff, and behavior identity without changing fold semantics.
+- [x] (2026-08-10T23:35:51Z) Implementation preflight: reconciled the committed
+  `Keiro.Command` exports, confirmed Keiki 0.9.0.0 against Hackage and upstream
+  tag `v0.9.0.0`, and retained the existing `>=0.9 && <0.10` bounds. The DSL
+  functional work can target the stable public API while Plan 231's quiet-host
+  performance closeout remains pending.
+- [x] (2026-08-10T23:56:31Z) Milestone 1: added candidate
+  language-5 grammar, typed AST nodes, canonical rendering, and semantic
+  validation for exhaustive accepted/rejected/no-op outcomes. The focused
+  `typed-domain-outcomes` suite passes 4 examples.
+- [x] (2026-08-10T23:56:31Z) Milestone 2: added separate syntax/runtime
+  capability markers, outcome-only semantic diff diagnostics, and command
+  behavior identity while retaining the frozen fold encoding and replay
+  identity. The exact released-language-profile suite passes 5 examples.
 - [ ] Milestone 3: generate a constant-dispatch runtime handler and prove generation scales linearly.
 - [ ] Milestone 4: generate exact-reason conformance and add end-to-end/mutation fixtures.
 - [ ] Milestone 5: finish DSL documentation, changelogs, request status, ADR updates, and full validation.
@@ -63,6 +74,14 @@ unchanged.
   the number of silent edges. The generator must instead emit direct nested `case` dispatch
   by source state and zero-based edge index, and source/generation scaling needs its own
   evidence.
+
+- Discovery: Cabal splits whitespace-bearing Hspec selectors passed through
+  `--test-options`, so `--match=released language profiles` is not an exact
+  component selector and can run unrelated examples.
+  Evidence: the forwarded command reported `unexpected argument 'language'`;
+  invoking the `cabal list-bin keiro-dsl:keiro-dsl-test` executable directly
+  with the quoted selector ran the intended 5 examples with 0 failures. The
+  whitespace-free `typed-domain-outcomes` selector remains safe through Cabal.
 
 
 ## Decision Log
@@ -124,6 +143,15 @@ unchanged.
   points are `runDomainCommandWithProjections`,
   `runDomainCommandWithCatalogProjections`, `DomainProcessManager`,
   `DomainRouter`, and their `runDomain*` one-shot/worker families.
+  Date: 2026-08-10
+
+- Decision: Proceed with the DSL milestones against Plan 231's committed public
+  API while leaving its explicitly deferred quiet-host benchmark closeout and
+  the shared improvement request open.
+  Rationale: The generator contract is stable and already fully tested, whereas
+  regenerating either performance baseline under the recorded host conditions
+  would contradict both plans. Functional DSL work does not depend on replacing
+  that evidence.
   Date: 2026-08-10
 
 
@@ -424,8 +452,8 @@ Use the main DSL suite for parser, validation, profile, diff, generation, and go
 
 ```bash
 cabal build keiro-dsl
-cabal test keiro-dsl:tests --test-show-details=direct \
-  --test-options='--match=typed domain outcomes'
+cabal test keiro-dsl:keiro-dsl-test --test-show-details=direct \
+  --test-options='--match=typed-domain-outcomes'
 ```
 
 The filtered run must report at least one selected example and no failures. Update the filter

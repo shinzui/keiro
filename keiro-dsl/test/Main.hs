@@ -1825,6 +1825,101 @@ main = hspec $ do
           map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
         _ -> expectationFailure "canonical workspace had no member"
 
+  describe "typed-domain-outcomes" $ do
+    it "parses, validates, and canonically round-trips the complete language-5 fixture" $ do
+      source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
+      parsed <- case parseSource "domain-command-outcomes.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      validateService (checkedSource parsed) `shouldBe` []
+      parseSource "domain-command-outcomes-rendered.keiro" (renderSource parsed) `shouldBe` Right parsed
+      let outcomeKind :: TransitionOutcome -> T.Text
+          outcomeKind outcome = case outcome of
+            OutcomeAccepted {} -> "accepted"
+            OutcomeRejected {} -> "rejected"
+            OutcomeNoOp {} -> "no-op"
+      case [aggregate | NAggregate aggregate <- specNodes (parsedSpec parsed)] of
+        [aggregate] -> do
+          fmap (\types -> (rejectionType types, noOpType types)) (aggDomainOutcomeTypes aggregate)
+            `shouldBe` Just ("ReservationRejection", "ReservationNoOp")
+          map (fmap outcomeKind . tOutcome) (aggTransitions aggregate)
+            `shouldBe` map Just ["accepted", "rejected", "no-op"]
+        aggregates -> expectationFailure ("unexpected outcome aggregates: " <> show aggregates)
+
+    it "gates the syntax to candidate language 5" $ do
+      source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
+      case parseSource "domain-command-outcomes-v4.keiro" (T.replace "language keiro-dsl 5" "language keiro-dsl 4" source) of
+        Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        other -> expectationFailure ("expected language feature refusal, got " <> show other)
+
+    it "reports complete, typed, and state-preserving outcome diagnostics" $ do
+      source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
+      let codes changed = do
+            case parseSource "domain-outcome-mutation.keiro" changed of
+              Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> pure []
+              Right parsed -> pure (map code (validateService (checkedSource parsed)))
+          expectCode expected changed = codes changed >>= (`shouldContain` [expected])
+      expectCode
+        DomainOutcomeDeclarationDuplicate
+        (T.replace "  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp\n" "  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp\n  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp\n" source)
+      expectCode
+        DomainOutcomeDeclarationMissing
+        (T.replace "  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp\n" "" source)
+      expectCode
+        DomainOutcomeClauseMissing
+        (T.replace "    outcome accepted\n" "" source)
+      expectCode
+        DomainOutcomeClauseDuplicate
+        (T.replace "    outcome accepted\n" "    outcome accepted\n    outcome accepted\n" source)
+      expectCode
+        DomainOutcomeTypeUnresolved
+        (T.replace "rejection=ReservationRejection" "rejection=MissingRejection" source)
+      expectCode
+        DomainOutcomeReasonTypeMismatch
+        (T.replace "ReservationRejection.AlreadyCancelled" "ReservationNoOp.DuplicateRequest" source)
+      expectCode
+        DomainOutcomeAcceptedWithoutEvents
+        (T.replace "    emit Cancelled\n" "" source)
+      expectCode
+        DomainOutcomeSilentEmits
+        (T.replace "    outcome rejected ReservationRejection.AlreadyCancelled\n" "    outcome rejected ReservationRejection.AlreadyCancelled\n    emit Cancelled\n" source)
+      expectCode
+        DomainOutcomeSilentWrites
+        (T.replace "    outcome no-op ReservationNoOp.DuplicateRequest\n" "    outcome no-op ReservationNoOp.DuplicateRequest\n    write lastRequestId := cmd.requestId\n" source)
+      expectCode
+        DomainOutcomeSilentStateChange
+        (T.replace "    outcome no-op ReservationNoOp.DuplicateRequest\n    goto CancelledState\n" "    outcome no-op ReservationNoOp.DuplicateRequest\n    goto Eligible\n" source)
+      expectCode
+        DomainOutcomeReplayOnlyClause
+        (T.replace "  CancelledState -- Cancel -->\n    guard cmd.requestId != reg.lastRequestId" "  replay-only CancelledState -- Cancel -->\n    guard cmd.requestId != reg.lastRequestId" source)
+
+    it "changes behavior identity and semantic diff without moving fold or replay identity" $ do
+      source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
+      let changedSource = T.replace "ReservationRejection.AlreadyCancelled" "ReservationRejection.CapacityUnavailable" source
+      oldParsed <- case parseSource "domain-outcomes-old.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      newParsed <- case parseSource "domain-outcomes-new.keiro" changedSource of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      validateService (checkedSource newParsed) `shouldBe` []
+      let [oldAggregate] = [aggregate | NAggregate aggregate <- specNodes (parsedSpec oldParsed)]
+          [newAggregate] = [aggregate | NAggregate aggregate <- specNodes (parsedSpec newParsed)]
+          changes = diffSources oldParsed newParsed
+          oldBehavior = Behavior.deriveAggregateBehaviorRequirements (parsedSpec oldParsed) oldAggregate
+          newBehavior = Behavior.deriveAggregateBehaviorRequirements (parsedSpec newParsed) newAggregate
+          changeKind change = case change of
+            Additive value -> value
+            Advisory value -> value
+            Breaking value -> value
+      map (ckCode . changeKind) changes `shouldContain` [DomainTransitionOutcomeChanged]
+      map (ckCode . changeKind) changes `shouldNotContain` [AggFoldSurfaceChanged]
+      aggregateFoldFingerprintForService (checkedSource oldParsed) oldAggregate
+        `shouldBe` aggregateFoldFingerprintForService (checkedSource newParsed) newAggregate
+      oldBehavior `shouldNotBe` newBehavior
+      ReplayImpact.replayImpactServices (checkedSource oldParsed) (checkedSource newParsed)
+        `shouldBe` Right ReplayImpact.ReplayNeutral
+
   describe "language-5 projection catalogs" $ do
     it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -10418,6 +10513,8 @@ renderExprText e =
             tGuard = Just e,
             tWrites = [],
             tEmits = [],
+            tOutcome = Nothing,
+            tOutcomeDuplicateLocs = [],
             tGoto = "S",
             tMode = TmLive,
             tLoc = noLoc
@@ -12265,7 +12362,7 @@ emptyStatesSpec =
     []
     []
     []
-    [NAggregate (Aggregate "Thing" [] [] [] [] [] Nothing Nothing Nothing noLoc)]
+    [NAggregate (Aggregate "Thing" [] [] [] [] [] Nothing [] Nothing Nothing Nothing noLoc)]
 
 crossFamilyBoundarySpec :: T.Text
 crossFamilyBoundarySpec =
@@ -12494,6 +12591,8 @@ genTransition =
     <*> genMaybe genExpr
     <*> smallList ((,) <$> genName <*> genExpr)
     <*> smallList genName
+    <*> pure Nothing
+    <*> pure []
     <*> genName
     <*> elements [TmLive, TmReplayOnly]
     <*> pure noLoc
@@ -12519,6 +12618,8 @@ genAggregate =
     <*> smallList genCommand
     <*> smallList genEvent
     <*> smallList genTransition
+    <*> pure Nothing
+    <*> pure []
     <*> genMaybe genWireSpec
     <*> genMaybe genProjection
     <*> genMaybe (SnapshotSpec <$> oneof [SnapEvery <$> choose (0, 5), pure SnapOnTerminal] <*> choose (0, 5) <*> genAdversarialText <*> pure noLoc)

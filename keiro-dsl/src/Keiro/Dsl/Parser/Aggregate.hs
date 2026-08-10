@@ -31,6 +31,7 @@ pAggregate context = do
   loc <- getLoc
   keyword "aggregate"
   name <- ident
+  outcomeDeclarations <- many (pDomainOutcomeTypes context)
   regs <- pRegsBlock context
   locatedStates <- pStatesLine
   positionedItems <- many ((,) <$> getOffset <*> pBodyItem context)
@@ -67,6 +68,10 @@ pAggregate context = do
           aggCommands = [c | BICommand c _ <- items],
           aggEvents = [e | BIEvent e _ <- items],
           aggTransitions = map locatedValue transitions,
+          aggDomainOutcomeTypes = case outcomeDeclarations of
+            declaration : _ -> Just declaration
+            [] -> Nothing,
+          aggDomainOutcomeDuplicateLocs = map outcomeTypesLoc (drop 1 outcomeDeclarations),
           aggWire = listToMaybe [w | BIWire w <- items],
           aggProjection = listToMaybe [p | BIProjection p <- items],
           aggSnapshot = listToMaybe [s | BISnapshot s <- items],
@@ -83,6 +88,22 @@ pAggregate context = do
       BIWire _ -> []
       BIProjection _ -> []
       BISnapshot _ -> []
+
+pDomainOutcomeTypes :: FrontendContext -> P DomainOutcomeTypes
+pDomainOutcomeTypes context = do
+  loc <- getLoc
+  marker <- withOwnedSpan (keyword "domain-outcomes")
+  requireLanguageFeatureAt context DomainCommandOutcomeSyntax (spanOf marker)
+  _ <- symbol "rejection" *> symbol "="
+  rejection <- ident
+  _ <- symbol "no-op" *> symbol "="
+  noOp <- ident
+  pure
+    DomainOutcomeTypes
+      { rejectionType = rejection,
+        noOpType = noOp,
+        outcomeTypesLoc = loc
+      }
 
 pRegsBlock :: FrontendContext -> P [RegDecl]
 pRegsBlock context = do
@@ -280,6 +301,7 @@ data Clause
   = CGuard Expr
   | CWrite Name Expr
   | CEmit Name
+  | COutcome TransitionOutcome
   | CGoto Name
   | CImplementationHole
 
@@ -299,6 +321,7 @@ pTransition context = do
       elements = concatMap (snd . snd) positionedClauses
       gotos = [(offset, target) | (offset, (CGoto target, _)) <- positionedClauses]
       holeOffsets = [offset | (offset, (CImplementationHole, _)) <- positionedClauses]
+      outcomes = [(offset, outcome) | (offset, (COutcome outcome, _)) <- positionedClauses]
       transitionName = T.unpack src <> " -- " <> T.unpack cmd
   gt <- case gotos of
     [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
@@ -322,6 +345,10 @@ pTransition context = do
           tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
           tWrites = [(r, e) | CWrite r e <- clauses],
           tEmits = [n | CEmit n <- clauses],
+          tOutcome = case outcomes of
+            (_, outcome) : _ -> Just outcome
+            [] -> Nothing,
+          tOutcomeDuplicateLocs = map (transitionOutcomeLoc . snd) (drop 1 outcomes),
           tGoto = gt,
           tMode = mode,
           tLoc = loc
@@ -333,6 +360,21 @@ pClause :: FrontendContext -> P (Clause, [Located SurfaceElement])
 pClause context =
   choice
     [ do
+        loc <- getLoc
+        marker <- withOwnedSpan (keyword "outcome")
+        requireLanguageFeatureAt context DomainCommandOutcomeSyntax (spanOf marker)
+        choice
+          [ (COutcome (OutcomeAccepted loc), []) <$ keyword "accepted",
+            do
+              keyword "rejected"
+              expression <- withOwnedSpan (pExpr context)
+              pure (COutcome (OutcomeRejected (locatedValue expression) loc), [mapLocated SurfaceExpression expression]),
+            do
+              keyword "no-op"
+              expression <- withOwnedSpan (pExpr context)
+              pure (COutcome (OutcomeNoOp (locatedValue expression) loc), [mapLocated SurfaceExpression expression])
+          ],
+      do
         marker <- withOwnedSpan (keyword "implementation" *> keyword "hole")
         requireLanguageFeatureAt context ExplicitTransitionImplementationSyntax (spanOf marker)
         pure (CImplementationHole, []),

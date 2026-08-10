@@ -139,6 +139,7 @@ data RuntimeCapability
   | ContractIdDomainTypeIdV7
   | StrictSpecSurfaceValidation
   | ProjectionCatalogRuntime
+  | TypedDomainCommandOutcomes
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -166,6 +167,7 @@ capabilityFoldSegment NominalEqualityV2 = Just "semantic-contract:keiro-dsl/runt
 capabilityFoldSegment ContractIdDomainTypeIdV7 = Nothing
 capabilityFoldSegment StrictSpecSurfaceValidation = Nothing
 capabilityFoldSegment ProjectionCatalogRuntime = Just "semantic-contract:keiro-dsl/projection-catalog/1"
+capabilityFoldSegment TypedDomainCommandOutcomes = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities} =
@@ -273,8 +275,11 @@ profileV4 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/4"
     ( Set.insert
-        MappedConsumerSurfaceSyntax
-        (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+        DomainCommandOutcomeSyntax
+        ( Set.insert
+            MappedConsumerSurfaceSyntax
+            (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+        )
     )
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
@@ -305,7 +310,7 @@ runtimeProfileV4 :: RuntimeSemanticsProfile
 runtimeProfileV4 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/4"
-    (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3))
+    (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3)))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -346,6 +351,7 @@ data LanguageFeature
   | FieldAliasSyntax
   | ProjectionCatalogSyntax
   | MappedConsumerSurfaceSyntax
+  | DomainCommandOutcomeSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

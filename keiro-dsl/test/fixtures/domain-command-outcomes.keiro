@@ -1,0 +1,31 @@
+language keiro-dsl 5
+context domain-outcomes
+
+enum ReservationRejection { AlreadyCancelled=already-cancelled CapacityUnavailable=capacity-unavailable }
+enum ReservationNoOp { DuplicateRequest=duplicate-request }
+
+aggregate Reservation
+  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp
+  regs
+    lastRequestId Text = "none"
+  states Eligible CancelledState
+
+  command Cancel { requestId:Text }
+
+  event Cancelled = fields(Cancel)
+
+  Eligible -- Cancel -->
+    write lastRequestId := cmd.requestId
+    outcome accepted
+    emit Cancelled
+    goto CancelledState
+
+  CancelledState -- Cancel -->
+    guard cmd.requestId != reg.lastRequestId
+    outcome rejected ReservationRejection.AlreadyCancelled
+    goto CancelledState
+
+  CancelledState -- Cancel -->
+    guard cmd.requestId == reg.lastRequestId
+    outcome no-op ReservationNoOp.DuplicateRequest
+    goto CancelledState

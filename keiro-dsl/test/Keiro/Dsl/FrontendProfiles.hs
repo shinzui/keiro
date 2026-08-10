@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes]
                    ]
       map (runtimeProfileFoldSegments . definitionRuntimeSemanticsProfile) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -68,6 +68,7 @@ frontendProfilesSpec = do
         let minimumVersion = case feature of
               ProjectionCatalogSyntax -> version 5
               MappedConsumerSurfaceSyntax -> version 5
+              DomainCommandOutcomeSyntax -> version 5
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -177,6 +178,8 @@ featureCases =
     FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
     FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax),
     FeatureCase ProjectionCatalogSyntax "target" (featureBody ProjectionCatalogSyntax),
+    FeatureCase DomainCommandOutcomeSyntax "domain-outcomes" (featureBody DomainCommandOutcomeSyntax),
+    FeatureCase DomainCommandOutcomeSyntax "outcome" domainOutcomeClauseFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody
   ]
@@ -224,9 +227,29 @@ featureBody = \case
         "}"
       ]
   MappedConsumerSurfaceSyntax -> mappedQueueFeatureBody
+  DomainCommandOutcomeSyntax ->
+    T.unlines
+      [ "context profile",
+        "aggregate Profile",
+        "  domain-outcomes rejection=ProfileRejection no-op=ProfileNoOp",
+        "  regs",
+        "  states Open"
+      ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax]
+
+domainOutcomeClauseFeatureBody :: Text
+domainOutcomeClauseFeatureBody =
+  T.unlines
+    [ "context profile",
+      "aggregate Profile",
+      "  regs",
+      "  states Open",
+      "  command Touch {}",
+      "  event Touched = fields(Touch)",
+      "  Open -- Touch --> outcome accepted ; emit Touched ; goto Open"
+    ]
 
 mappedQueueFeatureBody :: Text
 mappedQueueFeatureBody =

@@ -8,6 +8,8 @@
 module Keiro.Dsl.CanonicalEncoding
   ( canonicalExpr,
     canonicalTransition,
+    canonicalDomainOutcomeTypes,
+    canonicalTransitionOutcome,
     foldFingerprint128,
   )
 where
@@ -33,6 +35,23 @@ canonicalTransition =
   renderStrict
     . layoutPretty LayoutOptions {layoutPageWidth = Unbounded}
     . docTransition
+
+-- | Deterministic command-behavior identity for the aggregate-wide outcome
+-- types. This is deliberately separate from 'canonicalTransition', whose bytes
+-- are the frozen replay-fold surface.
+canonicalDomainOutcomeTypes :: Maybe DomainOutcomeTypes -> Text
+canonicalDomainOutcomeTypes Nothing = ""
+canonicalDomainOutcomeTypes (Just declaration) =
+  "rejection=" <> rejectionType declaration <> "|no-op=" <> noOpType declaration
+
+-- | Deterministic command-behavior identity for one transition outcome. It is
+-- excluded from persisted fold identity because it labels a selected edge
+-- without changing that edge's state update or event word.
+canonicalTransitionOutcome :: Maybe TransitionOutcome -> Text
+canonicalTransitionOutcome Nothing = ""
+canonicalTransitionOutcome (Just (OutcomeAccepted _)) = "accepted"
+canonicalTransitionOutcome (Just (OutcomeRejected expression _)) = "rejected:" <> canonicalExpr expression
+canonicalTransitionOutcome (Just (OutcomeNoOp expression _)) = "no-op:" <> canonicalExpr expression
 
 -- | A fixed-width FNV-1a-128 digest over the frozen fold surface's UTF-8
 -- bytes. The constants and octet fold are the standard values from RFC 9923;

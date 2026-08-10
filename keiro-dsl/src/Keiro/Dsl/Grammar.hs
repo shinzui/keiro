@@ -52,6 +52,9 @@ module Keiro.Dsl.Grammar
     Event (..),
     EventBody (..),
     Hole (..),
+    DomainOutcomeTypes (..),
+    TransitionOutcome (..),
+    transitionOutcomeLoc,
     Transition (..),
     TransitionImplementation (..),
     TransitionMode (..),
@@ -537,6 +540,29 @@ data EventBody
 data Hole = Hole | Filled !Text
   deriving stock (Eq, Show, Generic)
 
+-- | The aggregate-wide result types used by typed domain decisions. The
+-- declaration is opt-in so published sources without it retain their existing
+-- command surface.
+data DomainOutcomeTypes = DomainOutcomeTypes
+  { rejectionType :: !Name,
+    noOpType :: !Name,
+    outcomeTypesLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | The result attached to one live transition. Rejection and no-op reasons
+-- use the same typed scalar expression language as guards and register writes.
+data TransitionOutcome
+  = OutcomeAccepted !Loc
+  | OutcomeRejected !Expr !Loc
+  | OutcomeNoOp !Expr !Loc
+  deriving stock (Eq, Show, Generic)
+
+transitionOutcomeLoc :: TransitionOutcome -> Loc
+transitionOutcomeLoc (OutcomeAccepted loc) = loc
+transitionOutcomeLoc (OutcomeRejected _ loc) = loc
+transitionOutcomeLoc (OutcomeNoOp _ loc) = loc
+
 -- | A transition @Src -- Command --> clauses@. Clauses may be written
 -- indentation-stacked or @;@-separated on one line.
 data Transition = Transition
@@ -546,6 +572,10 @@ data Transition = Transition
     tGuard :: !(Maybe Expr),
     tWrites :: ![(Name, Expr)],
     tEmits :: ![Name],
+    tOutcome :: !(Maybe TransitionOutcome),
+    -- | Locations of clauses after the first. Invalid syntax is retained long
+    -- enough for semantic validation to emit stable located diagnostics.
+    tOutcomeDuplicateLocs :: ![Loc],
     tGoto :: !Name,
     tMode :: !TransitionMode,
     tLoc :: !Loc
@@ -618,6 +648,10 @@ data Aggregate = Aggregate
     aggCommands :: ![Command],
     aggEvents :: ![Event],
     aggTransitions :: ![Transition],
+    aggDomainOutcomeTypes :: !(Maybe DomainOutcomeTypes),
+    -- | Locations of declarations after the first; see
+    -- 'tOutcomeDuplicateLocs'.
+    aggDomainOutcomeDuplicateLocs :: ![Loc],
     aggWire :: !(Maybe WireSpec),
     aggProjection :: !(Maybe ProjectionSpec),
     aggSnapshot :: !(Maybe SnapshotSpec),

@@ -746,6 +746,7 @@ docAggregate :: Aggregate -> Doc ann
 docAggregate a =
   vsep $
     [ "aggregate" <+> pretty (aggName a),
+      maybe mempty (indent 2 . docDomainOutcomeTypes) (aggDomainOutcomeTypes a),
       indent 2 "regs",
       indent 4 (vsep (map docReg (aggRegs a))),
       indent 2 ("states" <+> hsep (map docState (aggStates a))),
@@ -762,6 +763,12 @@ docAggregate a =
       ++ maybe [] (\snapshot -> [indent 2 (docSnapshot snapshot)]) (aggSnapshot a)
   where
     blank xs = if null xs then [] else [mempty]
+
+docDomainOutcomeTypes :: DomainOutcomeTypes -> Doc ann
+docDomainOutcomeTypes declaration =
+  "domain-outcomes"
+    <+> ("rejection=" <> pretty (rejectionType declaration))
+    <+> ("no-op=" <> pretty (noOpType declaration))
 
 docSnapshot :: SnapshotSpec -> Doc ann
 docSnapshot snapshot =
@@ -856,8 +863,14 @@ docTransition t =
       ["implementation hole" | tImplementation t == HoleImplementation]
         ++ maybe [] (\g -> ["guard" <+> docExpr 0 g]) (tGuard t)
         ++ map (\(r, e) -> "write" <+> pretty r <+> ":=" <+> docExpr 0 e) (tWrites t)
+        ++ maybe [] (pure . docTransitionOutcome) (tOutcome t)
         ++ map (\ev -> "emit" <+> pretty ev) (tEmits t)
         ++ ["goto" <+> pretty (tGoto t)]
+
+docTransitionOutcome :: TransitionOutcome -> Doc ann
+docTransitionOutcome (OutcomeAccepted _) = "outcome accepted"
+docTransitionOutcome (OutcomeRejected expression _) = "outcome rejected" <+> docExpr 0 expression
+docTransitionOutcome (OutcomeNoOp expression _) = "outcome no-op" <+> docExpr 0 expression
 
 docWire :: WireSpec -> Doc ann
 docWire w =

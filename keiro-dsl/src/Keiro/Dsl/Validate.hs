@@ -367,6 +367,19 @@ data DiagnosticCode
   | AggregateExpressionWriteTargetUnknown
   | AggregateExpressionWriteTypeMismatch
   | AggregateTransitionOwnershipConflict
+  | DomainOutcomeDeclarationMissing
+  | DomainOutcomeDeclarationDuplicate
+  | DomainOutcomeTypeUnresolved
+  | DomainOutcomeClauseMissing
+  | DomainOutcomeClauseDuplicate
+  | DomainOutcomeReasonTypeMismatch
+  | DomainOutcomeAcceptedWithoutEvents
+  | DomainOutcomeSilentEmits
+  | DomainOutcomeSilentWrites
+  | DomainOutcomeSilentStateChange
+  | DomainOutcomeReplayOnlyClause
+  | DomainOutcomeTypesChanged
+  | DomainTransitionOutcomeChanged
   | CollectionExpressionUnsupported
   | -- EP-160: append-only source-language composition and diff facts.
     WorkspaceLanguageVersionMismatch
@@ -525,6 +538,8 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   -- Cross-revision evolution facts.
   AggFoldSurfaceChanged -> DiffDiagnostic
   AggGuardTightened -> DiffDiagnostic
+  DomainOutcomeTypesChanged -> DiffDiagnostic
+  DomainTransitionOutcomeChanged -> DiffDiagnostic
   CompatibilityStrengthened -> DiffDiagnostic
   ContractDiscriminatorChanged -> DiffDiagnostic
   ContractEventAdded -> DiffDiagnostic
@@ -763,7 +778,8 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
 
     aggregateRules aggregate =
-      concatMap commandRules (aggCommands aggregate)
+      outcomeTypeRules aggregate
+        ++ concatMap commandRules (aggCommands aggregate)
         ++ concatMap eventRules (aggEvents aggregate)
         ++ concatMap registerRules (aggRegs aggregate)
         ++ concatMap (transitionRules aggregate) (aggTransitions aggregate)
@@ -782,22 +798,61 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
     fieldRule aggregate useSite field =
       either (pure . aggregateTypeDiagnostic) (const []) (inferAggregateFieldType symbols aggregate useSite field)
 
-    transitionRules aggregate transition = case tImplementation transition of
-      LegacyHoleImplementation ->
-        concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
-      GeneratedImplementation ->
-        let environment = expressionEnvironment spec aggregate transition
-         in maybe [] (expressionDiagnostics . resolveGuardExpr environment) (tGuard transition)
+    outcomeTypeRules aggregate = case aggDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just declaration ->
+        unresolved "rejection" (rejectionType declaration)
+          ++ unresolved "no-op" (noOpType declaration)
+        where
+          unresolved label name = case resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef name) of
+            Right _ -> []
+            Left _ ->
+              [ mkErr (locLine (outcomeTypesLoc declaration)) DomainOutcomeTypeUnresolved $
+                  "aggregate '" <> aggName aggregate <> "' declares unknown or unsupported " <> label <> " outcome type '" <> name <> "'"
+              ]
+
+    transitionRules aggregate transition = ownershipRules ++ outcomeExpressionRules
+      where
+        environment = expressionEnvironment spec aggregate transition
+        ownershipRules = case tImplementation transition of
+          LegacyHoleImplementation ->
+            concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
+          GeneratedImplementation ->
+            maybe [] (expressionDiagnostics . resolveGuardExpr environment) (tGuard transition)
               ++ concatMap (expressionDiagnostics . uncurry (resolveWriteExpr environment)) (tWrites transition)
-      HoleImplementation ->
-        [ mkErr (locLine (tLoc transition)) AggregateTransitionOwnershipConflict $
-            "transition '"
-              <> tSource transition
-              <> " -- "
-              <> tCommand transition
-              <> "' selects implementation hole and therefore cannot also declare guard or write clauses"
-        | tGuard transition /= Nothing || not (null (tWrites transition))
-        ]
+          HoleImplementation ->
+            [ mkErr (locLine (tLoc transition)) AggregateTransitionOwnershipConflict $
+                "transition '"
+                  <> tSource transition
+                  <> " -- "
+                  <> tCommand transition
+                  <> "' selects implementation hole and therefore cannot also declare guard or write clauses"
+            | tGuard transition /= Nothing || not (null (tWrites transition))
+            ]
+        outcomeExpressionRules = case (aggDomainOutcomeTypes aggregate, tOutcome transition) of
+          (Just declaration, Just (OutcomeRejected expression _)) -> resolveReason "rejected" (rejectionType declaration) expression
+          (Just declaration, Just (OutcomeNoOp expression _)) -> resolveReason "no-op" (noOpType declaration) expression
+          _ -> []
+        resolveReason label typeName expression =
+          case resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef typeName) of
+            Left _ -> []
+            Right expected ->
+              case resolveScalarExpr environment (ExpectScalarType expected) expression of
+                Right _ -> []
+                Left diagnostics -> map (outcomeExpressionDiagnostic label . id) (NE.toList diagnostics)
+          where
+            declaration = case aggDomainOutcomeTypes aggregate of
+              Just value -> value
+              Nothing -> error "unreachable: outcome reason without declaration"
+
+    outcomeExpressionDiagnostic label diagnostic =
+      mkErr
+        (locLine (expressionDiagnosticLoc diagnostic))
+        ( if expressionDiagnosticCode diagnostic `elem` [ScalarOperandTypeMismatch, ScalarBooleanOperandRequired]
+            then DomainOutcomeReasonTypeMismatch
+            else expressionCode (expressionDiagnosticCode diagnostic)
+        )
+        ("typed " <> label <> " outcome reason is invalid: " <> expressionDiagnosticMessage diagnostic)
 
     expressionDiagnostics = either (map expressionDiagnostic . NE.toList) (const [])
 
@@ -3518,6 +3573,7 @@ validateAggregate languageContract spec agg =
       snapshotRules,
       replayOnlyRules,
       eventlessStateChangeRules,
+      domainOutcomeRules,
       wirePolicyRules,
       fieldWireKeyRules
     ]
@@ -4037,6 +4093,61 @@ validateAggregate languageContract spec agg =
       | tSource transition /= tGoto transition && not (null (tWrites transition)) = "the target vertex and registers"
       | tSource transition /= tGoto transition = "the target vertex"
       | otherwise = "registers"
+
+    domainOutcomeRules =
+      declarationRules
+        ++ concatMap transitionOutcomeRules (aggTransitions agg)
+      where
+        declarationRules =
+          [ mkErr (locLine loc) DomainOutcomeDeclarationDuplicate $
+              "aggregate '" <> aggName agg <> "' declares domain-outcomes more than once"
+          | loc <- aggDomainOutcomeDuplicateLocs agg
+          ]
+            ++ case aggDomainOutcomeTypes agg of
+              Nothing ->
+                [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeDeclarationMissing $
+                    "transition '" <> tSource transition <> " -- " <> tCommand transition <> "' declares an outcome but aggregate '" <> aggName agg <> "' has no domain-outcomes declaration"
+                | transition <- aggTransitions agg,
+                  Just outcome <- [tOutcome transition]
+                ]
+              Just _ -> []
+
+        transitionOutcomeRules transition =
+          [ mkErr (locLine loc) DomainOutcomeClauseDuplicate $
+              "transition '" <> tSource transition <> " -- " <> tCommand transition <> "' declares outcome more than once"
+          | loc <- tOutcomeDuplicateLocs transition
+          ]
+            ++ case (aggDomainOutcomeTypes agg, tMode transition, tOutcome transition) of
+              (Just _, TmLive, Nothing) ->
+                [ mkErr (locLine (tLoc transition)) DomainOutcomeClauseMissing $
+                    "live transition '" <> tSource transition <> " -- " <> tCommand transition <> "' is missing its required outcome clause"
+                ]
+              (Just _, TmReplayOnly, Just outcome) ->
+                [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeReplayOnlyClause $
+                    "replay-only transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot declare a forward command outcome"
+                ]
+              (Just _, TmLive, Just (OutcomeAccepted loc)) ->
+                [ mkErr (locLine loc) DomainOutcomeAcceptedWithoutEvents $
+                    "accepted transition '" <> tSource transition <> " -- " <> tCommand transition <> "' must emit at least one event"
+                | null (tEmits transition)
+                ]
+              (Just _, TmLive, Just outcome@OutcomeRejected {}) -> silentRules outcome
+              (Just _, TmLive, Just outcome@OutcomeNoOp {}) -> silentRules outcome
+              _ -> []
+          where
+            silentRules outcome =
+              [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentEmits $
+                  "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot emit events"
+              | not (null (tEmits transition))
+              ]
+                ++ [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentWrites $
+                       "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot write aggregate registers"
+                   | not (null (tWrites transition))
+                   ]
+                ++ [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentStateChange $
+                       "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' must preserve its source state"
+                   | tGoto transition /= tSource transition
+                   ]
 
 -- | The validator's re-derivation of the live
 -- 'Keiro.PGMQ.Runtime.queueRef' trio: physical queue, dead-letter queue, and

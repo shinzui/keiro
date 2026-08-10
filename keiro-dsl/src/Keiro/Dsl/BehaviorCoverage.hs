@@ -36,6 +36,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Keiro.Dsl.CanonicalEncoding (canonicalTransitionOutcome)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
@@ -376,20 +377,30 @@ transitionCanonical :: Spec -> Aggregate -> ObligationKind -> Transition -> [Eve
 transitionCanonical spec aggregate kind transition mappings =
   T.intercalate
     "|"
-    [ "behavior-v1",
-      "kind=" <> obligationKindText kind,
-      "context=" <> specContext spec,
-      "aggregate=" <> aggName aggregate,
-      "mode=" <> transitionModeText (tMode transition),
-      "source=" <> tSource transition,
-      "command=" <> tCommand transition,
-      "implementation=" <> implementationText (tImplementation transition),
-      "guard=" <> maybe "" renderExpr (tGuard transition),
-      "writes=" <> T.intercalate ";" [name <> ":=" <> renderExpr expression | (name, expression) <- tWrites transition],
-      "events=" <> T.intercalate "," (tEmits transition),
-      "outputs=" <> T.intercalate "," (map eventOutputCanonical mappings),
-      "target=" <> tGoto transition
-    ]
+    ( [ "behavior-v1",
+        "kind=" <> obligationKindText kind,
+        "context=" <> specContext spec,
+        "aggregate=" <> aggName aggregate,
+        "mode=" <> transitionModeText (tMode transition),
+        "source=" <> tSource transition,
+        "command=" <> tCommand transition,
+        "implementation=" <> implementationText (tImplementation transition),
+        "guard=" <> maybe "" renderExpr (tGuard transition),
+        "writes=" <> T.intercalate ";" [name <> ":=" <> renderExpr expression | (name, expression) <- tWrites transition],
+        "events=" <> T.intercalate "," (tEmits transition),
+        "outputs=" <> T.intercalate "," (map eventOutputCanonical mappings),
+        "target=" <> tGoto transition
+      ]
+        ++ outcomeSegments
+    )
+  where
+    outcomeSegments = case aggDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just declaration ->
+        [ "outcome-rejection-type=" <> rejectionType declaration,
+          "outcome-no-op-type=" <> noOpType declaration,
+          "domain-outcome=" <> canonicalTransitionOutcome (tOutcome transition)
+        ]
 
 canonicalKey :: Text -> BehaviorKey
 canonicalKey canonical = BehaviorKey ("behavior-v1-" <> fnv1a64 canonical)
