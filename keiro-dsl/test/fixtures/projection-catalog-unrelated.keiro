@@ -1,0 +1,69 @@
+language keiro-dsl 5
+context catalog-demo
+
+target auxiliary_target {
+  schema = "auxiliary"
+  table = "auxiliary_projection"
+  reset = clear
+}
+
+rebuild-group auxiliary_support {
+  targets = [ auxiliary_target ]
+  order = [ auxiliary_target ]
+}
+
+projection-owner auxiliary_writer {
+  source = category "auxiliary"
+  feed = subscription
+  group = auxiliary_support
+  targets = [ auxiliary_target ]
+  order = 30
+  subscription = "catalog-demo-auxiliary"
+  dedup = "catalog-demo-auxiliary-v1"
+  replay = explicit
+}
+
+readmodel auxiliaryLookup {
+  columns {
+    auxiliary_id text required
+  }
+  version = 1
+  shape = "fnv1a:9e47caadf66af824"
+  consistency = Eventual
+  feed = subscription
+  subscription = "catalog-demo-auxiliary-lookup"
+  group = auxiliary_support
+  targets = [ auxiliary_target ]
+}
+
+workqueue auxiliary_jobs {
+  queue logical = "catalog-demo.auxiliary-jobs"
+  derive physical = "catalog_demo_auxiliary_jobs"
+         dlq = "catalog_demo_auxiliary_jobs_dlq"
+         table = "pgmq.q_catalog_demo_auxiliary_jobs"
+
+  payload AuxiliaryJob {
+    jobId -> "job_id" text required
+  }
+
+  retry maxRetries = 2 delay = 1s dlq = on
+
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+aggregate Auxiliary
+  regs
+    count Natural = 0
+  states Empty Recorded!
+
+  command RecordAuxiliary { amount:Natural }
+  event AuxiliaryCaptured = fields(RecordAuxiliary)
+
+  Empty -- RecordAuxiliary --> write count := amount ; emit AuxiliaryCaptured ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

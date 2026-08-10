@@ -7,7 +7,8 @@ import Data.Proxy (Proxy (..))
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Numeric.Natural (Natural)
-import CatalogDemo.MappedDomain (OrderPayload, SharedReference)
+import CatalogDemo.MappedBindings qualified as MappedBindings
+import CatalogDemo.MappedDomain (OrderPayload, RegisterState, SharedReference)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data OrdersVertex = OrdersEmpty | OrdersRecorded
@@ -35,11 +36,13 @@ data OrdersEvent = OrderRecorded !OrderRecordedData
 
 type OrdersRegs =
   '[ '("total", Natural)
+   , '("qualificationState", RegisterState)
    ]
 
 initialOrdersRegs :: RegFile OrdersRegs
 initialOrdersRegs =
-  RCons (Proxy @"total") 0 RNil
+  RCons (Proxy @"total") 0 $
+  RCons (Proxy @"qualificationState") MappedBindings.initialRegisterState RNil
 
 $(deriveAggregateCtorsAll ''OrdersCommand ''OrdersRegs)
 

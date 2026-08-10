@@ -5,7 +5,8 @@ module Generated.CatalogDemo.OrderInline.ReadModel
   ) where
 
 import Generated.CatalogDemo.OrderInline.ReadModelTable (orderInlineQualifiedTable)
-import CatalogDemo.OrderInline.ReadModelHoles (OrderInlineQueryInput, OrderInlineQueryResult, orderInlineQuery)
+import Generated.CatalogDemo.OrderInline.QueryContract (OrderInlineQueryInput, OrderInlineQueryResult)
+import CatalogDemo.OrderInline.ReadModelHoles (orderInlineQuery)
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
 
 orderInlineReadModel :: ReadModel OrderInlineQueryInput OrderInlineQueryResult

@@ -454,6 +454,21 @@ schema-version-1 `QueueCodec` backed by `keiroJobCodec`), and `QueuePolicy`
 still owns visibility timeout, batch size, and polling — `jobTuningFor` layers
 only the spec's ordering onto a tuning you supply.
 
+Candidate language 5 also accepts mapped payload rows such as
+`payload -> "payload" : QualificationPayload` and nested expressions such as
+`Optional QueueMetadata`. Structural declarations generate the exact object
+codec from their wire authority; opaque declarations use the application
+type's JSON instances. Generated decoders distinguish a missing required key
+from a present `null` admitted by `Optional`. The same checked declaration is
+registered as a workqueue semantic consumer, so `diff` reports both its exact
+build target and `workqueue-history:<queue>` consequence.
+
+Changing the mapped declaration does not allocate a new queue envelope version
+or write an upcaster automatically. Deploy a backward-reading worker first; if
+the old payload cannot be decoded, drain the queue or provide a temporary codec
+that accepts both forms. See
+[Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md).
+
 `keiro-dsl check` enforces the contracts that are dangerous to reconstruct by
 hand: FIFO queues require a group key and unordered queues reject one, and the
 captured physical/DLQ/table names must match the logical-name derivation.

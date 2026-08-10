@@ -21,6 +21,9 @@ pieces those modules import.
 - [Keiro DSL Language 4 Reference](typed-spec-toolchain.md): the complete
   Language 4 grammar, type and expression rules, every node family, workspaces,
   generated ownership, CLI commands, validation, and evolution workflow.
+- [Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md): the candidate
+  language-5 queue, query, projection, event, and snapshot gate; prerequisites;
+  one-service baseline; and rollout ownership.
 - [Choosing `keiro-dsl`](../guides/choosing-keiro-dsl.md): benefits, costs,
   granular escape hatches, and the service shapes that favor a typed
   specification, hybrid ownership, or hand-written Keiro.

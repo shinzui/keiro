@@ -37,13 +37,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: build one single/workspace candidate fixture that exercises every supported
+- [x] Milestone 1: extend the projection-catalog candidate fixture and its one-member workspace
+  form to exercise every supported
   explicit root, derived projection consumer, legacy path, and unsupported boundary.
-- [ ] Milestone 2: pin exact-tree locality, wire/API/fingerprint neutrality, and constant-churn
+- [x] Milestone 2: pin exact-tree locality, wire/API/fingerprint neutrality, and constant-churn
   behavior under unrelated consumer growth.
-- [ ] Milestone 3: add restoring mutations for queue, query, projection, declaration, report, and
+- [x] Milestone 3: add restoring mutations for queue, query, projection, declaration, report, and
   ledger authorities and run the complete compatibility matrix.
-- [ ] Milestone 4: regenerate the candidate corpus once, verify published-language stability,
+- [x] Milestone 4: regenerate the candidate corpus once, verify published-language stability,
   publish adoption guidance, and close MP-35's fleet-adoption gate.
 
 
@@ -52,7 +53,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Exact generated locality was narrower and more role-specific than the initial reviewed guess. A
+  structural queue-payload edit changes the queue, private shape, and service conformance modules,
+  but not `StructuralProjections`; an opaque register mapping edit changes the aggregate transducer
+  plus service conformance. The executable allowlists now pin those exact sets.
+- Adding the unrelated language-5 workspace member correctly required adding its source to the
+  explicit non-language-4 fixture inventory. The full suite also exposed a latent QuickCheck edge:
+  `genReadModel` could create a non-catalog read model with both table and schema empty, which has no
+  legal rendered grammar. Requiring non-empty generated physical names made the round-trip
+  property total over its intended syntax domain.
+- The restoring matrix caught all ten corruptions at their named boundaries and restored the six
+  authority files byte-for-byte before its final green run.
 
 
 ## Decision Log
@@ -84,6 +95,13 @@ Record every decision made while working on the plan.
   and twenty downstream migrations require independent operational authorization.
   Date: 2026-08-09
 
+- Decision: Extend the existing projection-catalog conformance service with queue, query,
+  register, unused, and structural/opaque mappings instead of creating another corpus entry.
+  Rationale: One compiled service now proves cross-surface composition, while the existing focused
+  queue/read-model suites continue to isolate codec and API failures. The unrelated-growth member
+  remains outside that runtime component and exists only to falsify locality amplification.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -92,7 +110,31 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Complete. The candidate projection-catalog fixture now covers an A-only event mapping, a shared
+event/queue mapping, structural and opaque queue-only mappings, non-unit query input/result,
+mapped snapshot state, unused declarations, aggregate-inline and catalog owners, an unsupported
+category owner, and legacy scalar paths. Its single source and workspace forms produce equal
+semantic snapshots; an added unrelated workspace member leaves every original mapped edit's exact
+generated delta unchanged.
+
+`MappedSurfaceQualification` selects only production `SemanticImpact`, coverage, diff, and
+scaffold authority. The locality script runs the exact semantic/tree assertions, integrated
+runtime conformance, and grown workspace check. The mutation script corrupts structural binding,
+queue encoder/decoder/null policy, query signature, projection fingerprint, consumer attribution,
+consequence rendering, service-law uniqueness, and a known ledger tag, requiring each named gate
+to fail and restoring exact bytes.
+
+The reviewed 37-entry candidate corpus was regenerated and is record/disk/Cabal consistent. The
+full Cabal build and test matrix (including the 664-example DSL driver), diff and restoring suites,
+ADR and improvement-request validation, formatter, Nix flake checks, and diff hygiene pass.
+Languages 1–4 remain feature-gated and their generated meaning is unchanged. Adoption guidance
+requires both MP-34 and MP-35 and assigns event upcasting, queue drain/transitional codec, query
+caller build, projection review/rebuild, snapshot replay, and SQL migration ownership separately.
+
+The existing ADR set already owns every durable boundary exercised here; this plan adds
+qualification and operating guidance rather than a new architecture decision. The repository gate
+permits a separately authorized fleet-adoption effort. It does not publish a package, migrate a
+downstream service, drain a queue, rebuild a projection, or apply DDL.
 
 
 ## Context and Orientation
@@ -212,7 +254,7 @@ cabal run -v0 keiro-dsl-corpus-regen -- check
 scripts/check-conformance-corpus.sh
 cabal build all
 cabal test all
-just check-adr
+just adr-validate
 mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
 nix fmt
 nix flake check

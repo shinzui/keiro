@@ -1,0 +1,3 @@
+service catalog-demo-qualification-grown
+spec projection-catalog.keiro
+spec projection-catalog-unrelated.keiro

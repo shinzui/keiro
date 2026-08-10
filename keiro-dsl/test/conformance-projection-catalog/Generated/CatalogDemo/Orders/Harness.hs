@@ -52,6 +52,7 @@ forwardReplayRecordOrder =
             Right (replayVertex, replayRegs) ->
               [ (prefix <> "final vertex", replayVertex == forwardVertex)
               , (prefix <> "register total", (replayRegs ! #total) == (forwardRegs ! #total))
+              , (prefix <> "register qualificationState", (replayRegs ! #qualificationState) == (forwardRegs ! #qualificationState))
               ]
   where
     prefix = "forward/replay equality: RecordOrder from OrdersEmpty -- "

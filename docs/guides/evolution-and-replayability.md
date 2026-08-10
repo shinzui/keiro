@@ -670,8 +670,11 @@ same rule.
 `keiroJobCodec` (a versioned `{v,t,data}` envelope with the full upcaster-chain
 story and a `JobPayloadFromFuture` rolling-deploy retry). Generated workqueues
 now expose a schema-version-1 `QueueCodec` backed by `keiroJobCodec`; payload
-evolution syntax remains future work, but new queues start inside a versioned
-envelope. Hand-written queues choose either codec themselves. Do not switch a
+rows in candidate language 5 may resolve structural or opaque mapped type
+expressions, but a mapped declaration edit does not synthesize a queue upcaster
+or silently bump that envelope. `diff` names the exact queue consumer and
+queued-job history consequence. Hand-written queues choose either codec
+themselves. Do not switch a
 non-empty queue between the two shapes — drain first or use a temporary decoder
 that accepts both.
 
@@ -816,7 +819,8 @@ DSL-only gates do not exist for hand-authored services.
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail; `resurrectFailedWorkflow` after a code fix | operator must notice the failed instance | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
-| Job payload | workqueue changes keep normal classifications | generated queues use versioned `QueueCodec` | future version retries; malformed shape dead-letters | hand-written `aesonJobCodec` remains unversioned | Landed: [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
+| Mapped job payload | exact queue consumer plus `workqueue-history`; incompatible edits are breaking | generated structural/opaque payload codec and versioned `QueueCodec`; mutation gate covers required/null arms | future version retries; malformed shape dead-letters | queue drain or transitional codec remains operationally owned | Landed: [224](../plans/224-generate-typed-workqueue-payloads-with-owned-codecs-and-conformance.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
+| Mapped query input/result | exact `query-api` input/result and consumer-build consequence | generated aliases compile the hand-owned query body and callers | no persisted runtime conversion | caller rollout and SQL migrations remain application-owned; SQL shape is deliberately neutral | Landed: [225](../plans/225-generate-typed-read-model-query-contracts-without-claiming-sql-ownership.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
 | Projection catalog target/group/owner/source/policy change | dedicated `Catalog*` finding plus catalog replay-impact groups, targets, sources, and adapters | generated facade validates one closed catalog; resume requires exact stored fingerprint | managed writers fence at group state; mismatched resume fails before handlers | arbitrary SQL target truth and application DDL remain consumer-owned | Landed: [212](../plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
 | Structural/opaque adoption coverage | Reporting-only named roots by default; optional existing-level or increase gate | Generated binding/codec conformance plus finite historical comparison | No runtime codec selector is added | Finite evidence cannot prove universal historical equivalence | Landed: [152](../plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md) |

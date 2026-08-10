@@ -8,12 +8,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
-- Candidate language 5 registers mapped workqueue fields
+- Candidate language 5 registers and generates mapped workqueue fields
   (`field -> "wire" : TypeExpr`) and atomic read-model query input/result
   clauses. Both resolve recursively into located `TypeGraph` roots, while
-  languages 1–4 reject the owned colon or `query` token. Until their complete
-  generators land, `MappedQueueLoweringPending` and
-  `MappedReadModelLoweringPending` keep `check` and scaffold fail-closed.
+  languages 1–4 reject the owned colon or `query` token. Workqueues receive
+  exact structural/opaque payload codecs inside their schema-version-1 envelope;
+  read models receive deterministic Haskell query aliases without claiming SQL
+  conversion or migration ownership.
+- Adds one integrated mapped-surface qualification gate across events,
+  registers, workqueues, query contracts, and aggregate-derived projections.
+  Exact-tree tests prove locality remains constant under unrelated workspace
+  growth; restoring mutations cover bindings, queue arms/null policy, query
+  signatures, projection fingerprints, semantic consumers/reports, service-law
+  uniqueness, and semantic-impact ledger tags.
 - Exposes `Keiro.Dsl.ConsumerTypePlan`, the codec-agnostic authority for
   rendering a resolved mapped expression's consumer Haskell occurrence,
   deterministic imports, and transitive mapped dependencies. Projection

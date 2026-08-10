@@ -316,8 +316,12 @@ resume, and promotion. Its application-owned replay adapter omits the
 live-only side effect. The candidate-language-5
 `keiro-dsl-conformance-projection-catalog` service supplies the generated path:
 it imports only `Generated.CatalogDemo.ProjectionCatalog` and proves the same
-inventory dimensions—three targets, mixed policies, a target dependency, one
-atomic ordered group, typed inline and async owners, and a query binding.
+inventory dimensions—four targets, mixed policies, a target dependency, two
+atomic ordered groups, typed inline and async owners, a non-unit mapped query
+contract, exact aggregate-source fingerprints, and a mapped workqueue beside the
+read side. The integrated qualification keeps queue/query-only mappings out of
+projection fingerprints while deriving event-only consumers for aggregate
+sources.
 
 ## Migrate Existing Projection Fleets In Stages
 

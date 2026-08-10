@@ -303,7 +303,7 @@ eventKind :: OrdersEvent -> Text
 eventKind event = case Codec.eventType ordersCodec event of Codec.EventType tag -> tag
 
 regsEqual :: K.RegFile OrdersRegs -> K.RegFile OrdersRegs -> Bool
-regsEqual left right = (left K.! #total) == (right K.! #total)
+regsEqual left right = (left K.! #total) == (right K.! #total) && (left K.! #qualificationState) == (right K.! #qualificationState)
 
 proofStrength :: BehaviorRequirement -> Bool
 proofStrength requirement =

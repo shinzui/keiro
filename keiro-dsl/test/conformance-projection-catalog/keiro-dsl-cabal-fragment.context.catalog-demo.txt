@@ -9,6 +9,7 @@ default-extensions:
 
 other-modules:
     CatalogDemo.CatalogAudit.ReadModelHoles
+    CatalogDemo.MappedBindings
     CatalogDemo.OrderInline.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
     CatalogDemo.Orders.Holes
@@ -19,6 +20,7 @@ other-modules:
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.OrderInline.QueryContract
     Generated.CatalogDemo.OrderInline.ReadModel
     Generated.CatalogDemo.OrderInline.ReadModelHarness
     Generated.CatalogDemo.OrderInline.ReadModelTable
@@ -30,6 +32,9 @@ other-modules:
     Generated.CatalogDemo.Orders.Projection
     Generated.CatalogDemo.Orders.Transducer
     Generated.CatalogDemo.ProjectionCatalog
+    Generated.CatalogDemo.QualificationJobs.Queue
+    Generated.CatalogDemo.QualificationJobs.QueueCodec
+    Generated.CatalogDemo.QualificationJobs.QueuePolicy
     Generated.CatalogDemo.ReplayAudit
     Generated.CatalogDemo.ShipmentLookup.ReadModel
     Generated.CatalogDemo.ShipmentLookup.ReadModelHarness
@@ -41,7 +46,9 @@ other-modules:
     Generated.CatalogDemo.Shipments.Harness
     Generated.CatalogDemo.Shipments.Projection
     Generated.CatalogDemo.Shipments.Transducer
+    Generated.CatalogDemo.Structural.Shape.QualificationPayload
     Generated.CatalogDemo.StructuralConformance
+    Generated.CatalogDemo.StructuralProjections
 
 build-depends:
     , aeson
@@ -50,7 +57,9 @@ build-depends:
     , hasql-transaction
     , keiki
     , keiro
+    , keiro-core
     , keiro-dsl
+    , keiro-pgmq
     , kiroku-store
     , text
 

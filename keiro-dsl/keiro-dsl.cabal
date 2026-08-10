@@ -975,6 +975,7 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.OrderInline.QueryContract
     Generated.CatalogDemo.OrderInline.ReadModel
     Generated.CatalogDemo.OrderInline.ReadModelHarness
     Generated.CatalogDemo.OrderInline.ReadModelTable
@@ -986,6 +987,9 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.Orders.Projection
     Generated.CatalogDemo.Orders.Transducer
     Generated.CatalogDemo.ProjectionCatalog
+    Generated.CatalogDemo.QualificationJobs.Queue
+    Generated.CatalogDemo.QualificationJobs.QueueCodec
+    Generated.CatalogDemo.QualificationJobs.QueuePolicy
     Generated.CatalogDemo.ReplayAudit
     Generated.CatalogDemo.ShipmentLookup.ReadModel
     Generated.CatalogDemo.ShipmentLookup.ReadModelHarness
@@ -997,7 +1001,9 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.Shipments.Harness
     Generated.CatalogDemo.Shipments.Projection
     Generated.CatalogDemo.Shipments.Transducer
+    Generated.CatalogDemo.Structural.Shape.QualificationPayload
     Generated.CatalogDemo.StructuralConformance
+    Generated.CatalogDemo.StructuralProjections
 
   build-depends:
     , aeson              >=2.2  && <2.3
@@ -1007,7 +1013,9 @@ test-suite keiro-dsl-conformance-projection-catalog
     , hasql-transaction
     , keiki              >=0.9  && <0.10
     , keiro
+    , keiro-core
     , keiro-dsl
+    , keiro-pgmq
     , kiroku-store
     , text               >=2.1  && <2.2
 

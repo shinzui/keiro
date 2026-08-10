@@ -6,15 +6,30 @@ module Generated.CatalogDemo.StructuralConformance
 import Data.Aeson qualified as Aeson
 import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Maybe (isJust, isNothing)
+import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiro.Codec.Structural (FixtureCases (..))
+import Keiki.Core (fieldWitnessAgrees)
+import Keiki.Shape (CanonicalTypeName (..))
+import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
+import Generated.CatalogDemo.StructuralProjections qualified as StructuralProjections
 import CatalogDemo.MappedBindings qualified as MappedBindings
+import CatalogDemo.MappedDomain (QualificationPayload)
+import Generated.CatalogDemo.Structural.Shape.QualificationPayload qualified as ShapeQualificationPayload
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
   concat
-    [ orderPayloadOpaqueAssertions
+    [ qualificationPayloadBindingAssertions
+    , orderPayloadOpaqueAssertions
+    , qualificationResultOpaqueAssertions
+    , queryCriteriaOpaqueAssertions
+    , queueMetadataOpaqueAssertions
+    , registerStateOpaqueAssertions
     , sharedReferenceOpaqueAssertions
+    , unusedQualificationOpaqueAssertions
+    , [("fixture coverage: catalog-demo.QualificationPayload.v1", coverageQualificationPayload)]
+    , structuralProjectionAssertions
     ]
 
 validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
@@ -22,6 +37,19 @@ validFixtureLabels cases =
   all (not . T.null) labels && length labels == length (nub labels)
   where
     labels = map fst (NonEmpty.toList cases)
+
+qualificationPayloadBindingAssertions :: [(String, Bool)]
+qualificationPayloadBindingAssertions =
+  ("fixture labels: catalog-demo.QualificationPayload.v1", validFixtureLabels cases) :
+  ("canonical identity: catalog-demo.QualificationPayload.v1", canonicalTypeName (Proxy @QualificationPayload) == "catalog-demo.QualificationPayload.v1") :
+  concat
+    [ [ ("binding domain round-trip: catalog-demo.QualificationPayload.v1/" <> T.unpack label, bindingDomainRoundTrip MappedBindings.qualificationPayloadBinding value)
+      , ("binding shape round-trip: catalog-demo.QualificationPayload.v1/" <> T.unpack label, bindingShapeRoundTrip MappedBindings.qualificationPayloadBinding (bindingToShape MappedBindings.qualificationPayloadBinding value))
+      ]
+    | (label, value) <- NonEmpty.toList cases
+    ]
+  where
+    cases = fixtureCases MappedBindings.qualificationPayloadCases
 
 orderPayloadOpaqueAssertions :: [(String, Bool)]
 orderPayloadOpaqueAssertions =
@@ -32,6 +60,42 @@ orderPayloadOpaqueAssertions =
   where
     cases = fixtureCases MappedBindings.orderPayloadCases
 
+qualificationResultOpaqueAssertions :: [(String, Bool)]
+qualificationResultOpaqueAssertions =
+  ("opaque boundary fixtures: catalog-demo.qualification-result.json@1", validFixtureLabels cases) :
+  [ ("opaque codec round-trip: catalog-demo.qualification-result.json@1/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
+  | (caseLabel, value) <- NonEmpty.toList cases
+  ]
+  where
+    cases = fixtureCases MappedBindings.qualificationResultCases
+
+queryCriteriaOpaqueAssertions :: [(String, Bool)]
+queryCriteriaOpaqueAssertions =
+  ("opaque boundary fixtures: catalog-demo.query-criteria.json@1", validFixtureLabels cases) :
+  [ ("opaque codec round-trip: catalog-demo.query-criteria.json@1/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
+  | (caseLabel, value) <- NonEmpty.toList cases
+  ]
+  where
+    cases = fixtureCases MappedBindings.queryCriteriaCases
+
+queueMetadataOpaqueAssertions :: [(String, Bool)]
+queueMetadataOpaqueAssertions =
+  ("opaque boundary fixtures: catalog-demo.queue-metadata.json@1", validFixtureLabels cases) :
+  [ ("opaque codec round-trip: catalog-demo.queue-metadata.json@1/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
+  | (caseLabel, value) <- NonEmpty.toList cases
+  ]
+  where
+    cases = fixtureCases MappedBindings.queueMetadataCases
+
+registerStateOpaqueAssertions :: [(String, Bool)]
+registerStateOpaqueAssertions =
+  ("opaque boundary fixtures: catalog-demo.register-state.json@1", validFixtureLabels cases) :
+  [ ("opaque codec round-trip: catalog-demo.register-state.json@1/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
+  | (caseLabel, value) <- NonEmpty.toList cases
+  ]
+  where
+    cases = fixtureCases MappedBindings.registerStateCases
+
 sharedReferenceOpaqueAssertions :: [(String, Bool)]
 sharedReferenceOpaqueAssertions =
   ("opaque boundary fixtures: catalog-demo.shared-reference.json@1", validFixtureLabels cases) :
@@ -40,3 +104,22 @@ sharedReferenceOpaqueAssertions =
   ]
   where
     cases = fixtureCases MappedBindings.sharedReferenceCases
+
+unusedQualificationOpaqueAssertions :: [(String, Bool)]
+unusedQualificationOpaqueAssertions =
+  ("opaque boundary fixtures: catalog-demo.unused-qualification.json@1", validFixtureLabels cases) :
+  [ ("opaque codec round-trip: catalog-demo.unused-qualification.json@1/" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)
+  | (caseLabel, value) <- NonEmpty.toList cases
+  ]
+  where
+    cases = fixtureCases MappedBindings.unusedQualificationCases
+
+coverageQualificationPayload :: Bool
+coverageQualificationPayload = any (isNothing . ShapeQualificationPayload.note) shapes && any (isJust . ShapeQualificationPayload.note) shapes
+  where
+    shapes = map (bindingToShape MappedBindings.qualificationPayloadBinding . snd) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases))
+
+structuralProjectionAssertions :: [(String, Bool)]
+structuralProjectionAssertions =
+  [ ("projection witness agreement: catalog-demo.QualificationPayload.v1/qualification_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.qualificationPayloadQualificationIdWitness (\referenceOwner -> ShapeQualificationPayload.qualificationId (bindingToShape MappedBindings.qualificationPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases)))
+  ]

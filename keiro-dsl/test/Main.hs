@@ -750,6 +750,150 @@ main = hspec $ do
       ckMappedConsequences projectionKind
         `shouldSatisfy` (not . any (\case MappedProjectionRebuild {} -> True; _ -> False) . Set.toList)
 
+  describe "mapped surface qualification" $ do
+    it "selects every explicit and derived surface from one integrated candidate authority" $ do
+      service <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
+      workspace <- shouldComposeWorkspace "test/fixtures/projection-catalog.keiro-workspace"
+      coverage <- shouldResolveCoverage "projection-catalog.keiro" (checkedSpec service)
+      let impact = semanticImpactForSpec (checkedSpec service)
+          qualify name = qualifyMappedSurface impact (MappedKey name)
+          orderPayload = qualify "OrderPayload"
+          sharedReference = qualify "SharedReference"
+          qualificationPayload = qualify "QualificationPayload"
+          queueMetadata = qualify "QueueMetadata"
+          queryCriteria = qualify "QueryCriteria"
+          qualificationResult = qualify "QualificationResult"
+          registerState = qualify "RegisterState"
+          unused = qualify "UnusedQualification"
+          standaloneSnapshot = semanticImpactSnapshot impact
+      standaloneSnapshot `shouldBe` semanticImpactSnapshotForSpec (wsMergedSpec workspace)
+      Aeson.decode (Aeson.encode standaloneSnapshot) `shouldBe` Just standaloneSnapshot
+      consumers orderPayload
+        `shouldBe` Set.fromList
+          [ AggregateConsumer "Orders",
+            DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline"),
+            DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders")
+          ]
+      Set.map evidenceRootKind (evidence orderPayload)
+        `shouldBe` Set.fromList [MappedCommandFieldRoot, MappedEventFieldRoot, MappedProjectionEventRoot]
+      consequences orderPayload
+        `shouldSatisfy` Set.member (MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") "reporting")
+      consumers sharedReference
+        `shouldBe` Set.fromList
+          [ AggregateConsumer "Orders",
+            AggregateConsumer "Shipments",
+            WorkqueueConsumer "qualification_jobs",
+            DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline"),
+            DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders"),
+            DerivedProjectionConsumer (CatalogProjectionConsumer "shipment_writer" "Shipments")
+          ]
+      consumers qualificationPayload `shouldBe` Set.singleton (WorkqueueConsumer "qualification_jobs")
+      consequences qualificationPayload
+        `shouldBe` Set.fromList [MappedConsumerBuild (WorkqueueConsumer "qualification_jobs"), MappedWorkqueueHistory "qualification_jobs"]
+      consumers queueMetadata `shouldBe` Set.singleton (WorkqueueConsumer "qualification_jobs")
+      consumers queryCriteria `shouldBe` Set.singleton (ReadModelQueryConsumer "order_inline" MappedQueryInput)
+      consequences queryCriteria
+        `shouldBe` Set.fromList [MappedConsumerBuild (ReadModelQueryConsumer "order_inline" MappedQueryInput), MappedQueryApi "order_inline" MappedQueryInput]
+      consumers qualificationResult `shouldBe` Set.singleton (ReadModelQueryConsumer "order_inline" MappedQueryResult)
+      consequences qualificationResult
+        `shouldBe` Set.fromList [MappedConsumerBuild (ReadModelQueryConsumer "order_inline" MappedQueryResult), MappedQueryApi "order_inline" MappedQueryResult]
+      consumers registerState `shouldBe` Set.singleton (AggregateConsumer "Orders")
+      consequences registerState
+        `shouldBe` Set.fromList [MappedConsumerBuild (AggregateConsumer "Orders"), MappedSnapshotHydration "Orders"]
+      consumers unused `shouldBe` Set.empty
+      evidence unused `shouldBe` Set.empty
+      consequences unused `shouldBe` Set.empty
+      Coverage.workqueuePayloads (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 4 1 3 1
+      Coverage.readModelQueryInputs (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 1 0 1 0
+      Coverage.readModelQueryResults (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 1 0 1 0
+      Coverage.projectionTypedConsumers (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 5 0 5 0
+      map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces coverage)
+        `shouldContain` ["projection-category:audit_writer:audit"]
+
+    it "aligns every mapping diff with the authority's exact consequence set" $ do
+      service <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
+      let spec = checkedSpec service
+          impact = semanticImpactForSpec spec
+          opaqueMutation name = mapMappedDeclaration name changeProjectionMappedWire spec
+          mutations =
+            [ ("OrderPayload", opaqueMutation "OrderPayload"),
+              ("SharedReference", opaqueMutation "SharedReference"),
+              ("QualificationPayload", addMappedOptionalTextField "QualificationPayload" "addedNote" spec),
+              ("QueueMetadata", opaqueMutation "QueueMetadata"),
+              ("QueryCriteria", opaqueMutation "QueryCriteria"),
+              ("QualificationResult", opaqueMutation "QualificationResult"),
+              ("RegisterState", opaqueMutation "RegisterState"),
+              ("UnusedQualification", opaqueMutation "UnusedQualification")
+            ]
+          actualConsequences candidate =
+            Set.unions
+              [ ckMappedConsequences (kindOfChange change)
+              | change <- diffServices service service {checkedSpec = candidate}
+              ]
+          expectedConsequences name = consequences (qualifyMappedSurface impact (MappedKey name))
+      forM_ mutations $ \(name, candidate) ->
+        actualConsequences candidate `shouldBe` expectedConsequences name
+
+    it "pins exact generated locality and keeps it constant under unrelated workspace growth" $ do
+      service <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
+      grown <- shouldComposeWorkspace "test/fixtures/projection-catalog-grown.keiro-workspace"
+      let spec = checkedSpec service
+          ctx = defaultContext (specContext spec)
+          baseline = scaffoldServiceModules ctx service
+          modulesFor candidate = scaffoldServiceModules ctx service {checkedSpec = candidate}
+          deltaFor candidate = generatedTreeDelta baseline (modulesFor candidate)
+          opaqueDelta name = deltaFor (mapMappedDeclaration name changeProjectionMappedWire spec)
+          structuralDelta = deltaFor (addMappedOptionalTextField "QualificationPayload" "addedNote" spec)
+          structuralPaths =
+            Set.fromList
+              [ "Generated/CatalogDemo/QualificationJobs/Queue.hs",
+                "Generated/CatalogDemo/Structural/Shape/QualificationPayload.hs",
+                "Generated/CatalogDemo/StructuralConformance.hs"
+              ]
+          projectionPaths =
+            Set.fromList
+              [ "Generated/CatalogDemo/ProjectionCatalog.hs",
+                "Generated/CatalogDemo/StructuralConformance.hs"
+              ]
+          registerPaths =
+            Set.fromList
+              [ "Generated/CatalogDemo/Orders/Transducer.hs",
+                "Generated/CatalogDemo/StructuralConformance.hs"
+              ]
+          serviceOnly = Set.singleton "Generated/CatalogDemo/StructuralConformance.hs"
+          assertExact delta paths = do
+            changedPaths delta `shouldBe` paths
+            addedPaths delta `shouldBe` Set.empty
+            removedPaths delta `shouldBe` Set.empty
+      assertExact structuralDelta structuralPaths
+      assertExact (opaqueDelta "OrderPayload") projectionPaths
+      assertExact (opaqueDelta "SharedReference") projectionPaths
+      assertExact (opaqueDelta "RegisterState") registerPaths
+      forM_ ["QueueMetadata", "QueryCriteria", "QualificationResult", "UnusedQualification"] $ \name ->
+        assertExact (opaqueDelta name) serviceOnly
+      let grownCandidate = mapWorkspaceSpec (mapMappedDeclaration "OrderPayload" changeProjectionMappedWire) grown
+      grownBaselinePlan <- shouldPlanWorkspaceSpec grown
+      grownCandidatePlan <- shouldPlanWorkspaceSpec grownCandidate
+      let grownDelta = generatedTreeDelta (map fst (wpModules grownBaselinePlan)) (map fst (wpModules grownCandidatePlan))
+      changedPaths grownDelta `shouldBe` changedPaths (opaqueDelta "OrderPayload")
+      addedPaths grownDelta `shouldBe` Set.empty
+      removedPaths grownDelta `shouldBe` Set.empty
+
+    it "keeps candidate syntax gated and published service facades unchanged" $ do
+      candidate <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
+      published <- checkedServiceOf "test/fixtures/consumer-types.keiro"
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      let candidateKeys = serviceConformanceFactKeys candidate
+          candidateValues = map snd (serviceConformanceFactValues candidate)
+      candidateKeys `shouldSatisfy` any (T.isPrefixOf "mapped-surface/")
+      length candidateKeys `shouldBe` Set.size (Set.fromList candidateKeys)
+      candidateValues `shouldSatisfy` any (T.isInfixOf "workqueue-history:qualification_jobs")
+      candidateValues `shouldSatisfy` any (T.isInfixOf "query-api:order_inline:input")
+      candidateValues `shouldSatisfy` any (T.isInfixOf "projection-handler-review:catalog-projection:order_summary_writer:Orders")
+      serviceConformanceFactKeys published `shouldSatisfy` all (not . T.isPrefixOf "mapped-surface/")
+      parseSource "<published-mapped-surfaces>" (T.replace "language keiro-dsl 5" "language keiro-dsl 4" source)
+        `shouldSatisfy` isLeft
+
   describe "language support" $ do
     it "serializes support from the registered version and decodes older records" $ do
       v1Contract <- maybe (expectationFailure "missing v1 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 1)
@@ -1619,6 +1763,7 @@ main = hspec $ do
             "mapped-readmodel.keiro",
             "mapped-workqueue.keiro",
             "nominal-v1.keiro",
+            "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro"
           ]
 
@@ -10853,6 +10998,25 @@ semanticImpactForSpec spec = case resolveTypeGraph spec of
   Left failures -> error ("test fixture type graph did not resolve: " <> show failures)
   Right graph -> semanticImpact graph
 
+-- | Test-facing selection from the production semantic authority. This does
+-- not walk the raw 'Spec' or reconstruct dependency edges.
+data MappedSurfaceQualification = MappedSurfaceQualification
+  { declaration :: !MappedKey,
+    evidence :: !(Set.Set MappedRootEvidence),
+    consumers :: !(Set.Set MappedConsumer),
+    consequences :: !(Set.Set MappedConsequence)
+  }
+  deriving stock (Eq, Show)
+
+qualifyMappedSurface :: SemanticImpact -> MappedKey -> MappedSurfaceQualification
+qualifyMappedSurface impact key =
+  MappedSurfaceQualification
+    { declaration = key,
+      evidence = Map.findWithDefault Set.empty key (impactDeclarationEvidence impact),
+      consumers = Map.findWithDefault Set.empty key (impactDeclarationConsumers impact),
+      consequences = Map.findWithDefault Set.empty key (impactDeclarationConsequences impact)
+    }
+
 -- | The canonical workspace with a case-variant copy of one member's aggregate
 -- grafted onto another member. Composition refuses this shape (EP-153 catches it
 -- at the earliest boundary), so the planner's own cross-member collision gate can
@@ -12565,8 +12729,8 @@ genReadModel :: Gen ReadModelNode
 genReadModel =
   ReadModelNode
     <$> genName
-    <*> genAdversarialText
-    <*> genAdversarialText
+    <*> nonEmptyText
+    <*> nonEmptyText
     <*> smallList (RmColumn <$> genWireWord <*> genName <*> arbitrary)
     <*> choose (0, 5)
     <*> genAdversarialText
@@ -12578,6 +12742,8 @@ genReadModel =
     <*> pure []
     <*> pure Nothing
     <*> pure noLoc
+  where
+    nonEmptyText = genAdversarialText `suchThat` (not . T.null)
 
 genPgmqDispatch :: Gen PgmqDispatchNode
 genPgmqDispatch =

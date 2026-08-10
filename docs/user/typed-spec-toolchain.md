@@ -505,8 +505,11 @@ inventories. Do not hand-move assertions between generated files.
 
 ### Adopting semantically local regeneration
 
-Adopt this contract only from a Keiro release that contains the complete
-locality qualification gate. Regenerate every service once, reconcile the
+Adopt this contract only from a Keiro revision where
+[MasterPlan 34](../masterplans/34-make-keiro-dsl-regeneration-semantically-local-and-source-stable-before-wide-adoption.md)
+and
+[MasterPlan 35](../masterplans/35-make-mapped-types-first-class-across-queues-read-models-and-projections-before-fleet-adoption.md)
+are complete. Regenerate every service once, reconcile the
 generated Cabal fragment (including `StructuralConformance` and
 `BehaviorSourceMap`), compile the runtime package, and run the generated service
 conformance target. The migration may move declaration-wide assertions out of
@@ -519,9 +522,12 @@ only for consumers that reach it through checked roots, plus the service
 structural module. Released languages expose aggregate command, private-event,
 and register roots. Candidate language 5 additionally lowers typed queue fields
 and read-model query pairs and derives aggregate-sourced projection consumers.
-Queue fields receive generated persisted JSON codecs; read-model query pairs receive generated
-Haskell aliases only. Public contracts and heterogeneous category/all projection sources are not
-inferred as private mapped consumers.
+Queue fields receive generated persisted JSON codecs; read-model query pairs
+receive generated Haskell aliases only. Public contracts and heterogeneous
+category/all projection sources are not inferred as private mapped consumers.
+Follow [Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md) for the
+baseline, consequence-to-owner checklist, and the boundary between a green
+repository gate and an authorized fleet rollout.
 
 Source-only movement is separate. Moving an unchanged behavior requirement
 rewrites its context `BehaviorSourceMap` and source-bearing ledger provenance,
@@ -1211,10 +1217,13 @@ jobData -> "job_data" : List (Optional ArtifactInfo)
 ```
 
 The colon is the language-5 feature boundary; languages 1 through 4 reject it
-at that token and retain their released scalar interpretation. The expression
-already resolves through the checked mapped graph, but `check` currently emits
-`MappedQueueLoweringPending`. Do not adopt this positive form until the mapped
-queue codec, compatibility, and conformance work removes that gate.
+at that token and retain their released scalar interpretation. Candidate
+scaffolding lowers the complete expression through the checked mapped graph,
+imports the exact application-owned Haskell types, and emits structural field
+codecs or opaque `ToJSON`/`FromJSON` boundaries. Required, optional, and
+present-null behavior is explicit. The queue keeps its schema-version-1
+`{v,t,data}` envelope; incompatible queued jobs still require a drain or a
+declared transitional codec rather than an automatic upcaster.
 
 Ordering is `unordered` (the default), `fifo-throughput`, or
 `fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
