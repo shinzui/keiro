@@ -3,6 +3,7 @@
 module Keiro.Dsl.FrontendSurface (frontendSurfaceSpec) where
 
 import Control.Monad (forM_)
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Frontend
@@ -14,7 +15,7 @@ import Keiro.Dsl.FrontendCompatibility
   )
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
-import Keiro.Dsl.Parser (parseSource, parseSourceDocument)
+import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec, parseSpecText)
 import Keiro.Dsl.Source
 import Keiro.Dsl.SourceIndex
 import Keiro.Dsl.Syntax
@@ -31,6 +32,15 @@ frontendSurfaceSpec = do
       let start = SourcePoint {offset = 3, line = 2, column = 2}
           end = SourcePoint {offset = 2, line = 2, column = 1}
       mkSourceSpan "invalid.keiro" start end `shouldBe` Nothing
+
+    forM_ exactSpanCases $ \ExactSpanCase {caseLabel, caseSource, caseSelector, caseOwnedSyntax} ->
+      it caseLabel $ do
+        surface <- parseSurfaceRight (caseLabel <> ".keiro") caseSource
+        actualSpan <- case selectSpan caseSource caseSelector surface of
+          Left problem -> expectationFailure problem >> fail "unreachable"
+          Right selected -> pure selected
+        spanText caseSource actualSpan `shouldBe` caseOwnedSyntax
+        spanPoints actualSpan `shouldBe` expectedSpanPoints caseSource caseOwnedSyntax
 
     it "locates Unicode-prefixed syntax and excludes trailing comments" $ do
       let leading = "# λ🙂\n"
@@ -172,6 +182,18 @@ frontendSurfaceSpec = do
         `shouldSatisfy` isFailure DuplicateSourceSubject
 
   describe "surface lowering" $ do
+    it "keeps every public parser projection equal for one rich source" $ do
+      surface <- parseSurfaceRight "parser-parity.keiro" richParitySource
+      lowered <- lowerRight surface
+      document <- case parseSourceDocument "parser-parity.keiro" richParitySource of
+        Left failure -> expectationFailure (show failure) >> fail "unreachable"
+        Right parsed -> pure parsed
+      let ParsedSourceDocument {documentParsedSource} = document
+      documentParsedSource `shouldBe` lowered
+      parseSource "parser-parity.keiro" richParitySource `shouldBe` Right lowered
+      parseSpec "parser-parity.keiro" richParitySource `shouldBe` Right (parsedSpec lowered)
+      parseSpecText richParitySource `shouldBe` Right (parsedSpec lowered)
+
     it "preserves top-level source order before grouping the semantic graph" $ do
       let source = T.unlines ["context ordering", "id FirstId prefix=first", "enum Mode { On=on Off=off }", "id SecondId prefix=second"]
       surface <- parseSurfaceRight "ordering.keiro" source
@@ -279,6 +301,140 @@ topItemKind Located {value} = case value of
 spanText :: Text -> SourceSpan -> Text
 spanText source SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}} =
   T.take (endOffset - startOffset) (T.drop startOffset source)
+
+data SpanSelector
+  = SelectPreamble
+  | SelectContext
+  | SelectFirstItem
+  | SelectDocumentBody
+  | SelectElement Text
+
+data ExactSpanCase = ExactSpanCase
+  { caseLabel :: String,
+    caseSource :: Text,
+    caseSelector :: SpanSelector,
+    caseOwnedSyntax :: Text
+  }
+
+exactSpanCases :: [ExactSpanCase]
+exactSpanCases =
+  [ ExactSpanCase
+      { caseLabel = "tracks a leading tab with Megaparsec tab stops",
+        caseSource = "\tcontext tabs\n",
+        caseSelector = SelectContext,
+        caseOwnedSyntax = "context tabs"
+      },
+    ExactSpanCase
+      { caseLabel = "counts Unicode characters before owned syntax",
+        caseSource = "# λ🙂\ncontext unicode\n",
+        caseSelector = SelectContext,
+        caseOwnedSyntax = "context unicode"
+      },
+    ExactSpanCase
+      { caseLabel = "tracks LF lines and excludes trailing spaces and comments",
+        caseSource = "# leading\n\ncontext lf\nid LfId prefix=lf   # trailing\n",
+        caseSelector = SelectFirstItem,
+        caseOwnedSyntax = "id LfId prefix=lf"
+      },
+    ExactSpanCase
+      { caseLabel = "tracks CRLF lines and excludes trailing comments",
+        caseSource = "# leading\r\ncontext crlf\r\nid CrlfId prefix=crlf  # trailing\r\n",
+        caseSelector = SelectFirstItem,
+        caseOwnedSyntax = "id CrlfId prefix=crlf"
+      },
+    ExactSpanCase
+      { caseLabel = "tracks mixed LF and CRLF sequences",
+        caseSource = "# first\r\n# second\ncontext mixed\r\nid MixedId prefix=mixed\n",
+        caseSelector = SelectFirstItem,
+        caseOwnedSyntax = "id MixedId prefix=mixed"
+      },
+    ExactSpanCase
+      { caseLabel = "keeps a hash inside a string literal as owned syntax",
+        caseSource = richParitySource,
+        caseSelector = SelectElement richGuardExpression,
+        caseOwnedSyntax = richGuardExpression
+      },
+    ExactSpanCase
+      { caseLabel = "ends an empty document body at its context clause",
+        caseSource = "context empty   # trailing\r\n",
+        caseSelector = SelectDocumentBody,
+        caseOwnedSyntax = "context empty"
+      },
+    ExactSpanCase
+      { caseLabel = "locates a nested aggregate field",
+        caseSource = richParitySource,
+        caseSelector = SelectElement "amount:Natural",
+        caseOwnedSyntax = "amount:Natural"
+      },
+    ExactSpanCase
+      { caseLabel = "locates a nested boolean and arithmetic expression",
+        caseSource = richParitySource,
+        caseSelector = SelectElement richGuardExpression,
+        caseOwnedSyntax = richGuardExpression
+      }
+  ]
+
+richParitySource :: Text
+richParitySource =
+  T.concat
+    [ "# leading λ🙂\r\n",
+      "language keiro-dsl 4\n",
+      "context parser-parity\r\n",
+      "aggregate SpanMatrix\n",
+      "  regs\r\n",
+      "    count Natural = 0\n",
+      "    limit Natural = 100\r\n",
+      "    label Text = \"ready # literal\"\n",
+      "  states Empty Active Closed!\r\n",
+      "  command Advance { amount:Natural delta:Natural note:Text }\n",
+      "  event Advanced = fields(Advance)\r\n",
+      "  Empty -- Advance -->\n",
+      "    guard " <> richGuardExpression <> "\r\n",
+      "    write count := reg.count + cmd.amount\n",
+      "    write limit := reg.limit + cmd.delta\r\n",
+      "    write label := cmd.note\n",
+      "    emit Advanced\r\n",
+      "    goto Active   # trailing\n"
+    ]
+
+richGuardExpression :: Text
+richGuardExpression = "cmd.amount + cmd.delta > reg.count && reg.limit >= cmd.amount && cmd.note == \"ready # literal\""
+
+selectSpan :: Text -> SpanSelector -> SurfaceSource -> Either String SourceSpan
+selectSpan source selector SurfaceSource {preamble, spec = Located {span = bodySpan, value = SurfaceSpec {context = locatedContext, items, elements}}} =
+  case selector of
+    SelectPreamble -> maybe (Left "expected a language preamble span") (Right . locatedSpan) preamble
+    SelectContext -> Right (locatedSpan locatedContext)
+    SelectFirstItem -> case items of
+      Located {span = itemSpan} : _ -> Right itemSpan
+      [] -> Left "expected at least one top-level item span"
+    SelectDocumentBody -> Right bodySpan
+    SelectElement expectedText ->
+      case find ((== expectedText) . spanText source . locatedSpan) elements of
+        Just Located {span = elementSpan} -> Right elementSpan
+        Nothing -> Left ("expected an element span owning " <> show expectedText)
+
+locatedSpan :: Located value -> SourceSpan
+locatedSpan Located {span} = span
+
+expectedSpanPoints :: Text -> Text -> ((Int, Int, Int), (Int, Int, Int))
+expectedSpanPoints source ownedSyntax =
+  case T.breakOn ownedSyntax source of
+    (_, suffix) | T.null suffix -> error ("expected owned syntax in exact-span fixture: " <> T.unpack ownedSyntax)
+    (prefix, _) -> (pointAfterMegaparsec prefix, pointAfterMegaparsec (prefix <> ownedSyntax))
+
+pointAfterMegaparsec :: Text -> (Int, Int, Int)
+pointAfterMegaparsec = T.foldl' advance (0, 1, 1)
+  where
+    advance (currentOffset, currentLine, currentColumn) character =
+      case character of
+        '\n' -> (currentOffset + 1, currentLine + 1, 1)
+        '\t' ->
+          ( currentOffset + 1,
+            currentLine,
+            currentColumn + 8 - ((currentColumn - 1) `mod` 8)
+          )
+        _ -> (currentOffset + 1, currentLine, currentColumn + 1)
 
 isFailure :: SourceIndexFailureCode -> Either SourceIndexFailure value -> Bool
 isFailure expected = \case

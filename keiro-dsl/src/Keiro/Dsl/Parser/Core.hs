@@ -304,11 +304,8 @@ withOwnedSpan parser = do
   startOffset <- getOffset
   startPosition <- getSourcePos
   startState <- getParserState
-  inputBefore <- getInput
-  value <- parser
-  inputAfter <- getInput
-  let consumedLength = T.length inputBefore - T.length inputAfter
-      ownedLength = ownedSyntaxLength (T.take consumedLength inputBefore)
+  (consumed, value) <- match parser
+  let ownedLength = ownedSyntaxLength consumed
       endOffset = startOffset + ownedLength
       endPosition = pstateSourcePos (reachOffsetNoLine endOffset (statePosState startState))
       span =
