@@ -7,6 +7,7 @@ module Main
 where
 
 import Control.Concurrent (threadDelay)
+import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), secondsToDiffTime)
@@ -22,6 +23,7 @@ import Keiki.Core
     SymTransducer (..),
     Update (..),
     WireCtor,
+    inpCtor,
     lit,
     matchInCtor,
     oNil,
@@ -577,6 +579,99 @@ domainCommandScenarioBench store benchmarkName handler target command =
 
 data FanoutInput = FanoutInput !Text !Int
 
+data FanoutCommand = EmitFanout !Int
+  deriving stock (Eq, Show)
+
+data FanoutEvent = FanoutEmitted !Int !Text
+  deriving stock (Eq, Show)
+
+data FanoutState = FanoutReady
+  deriving stock (Bounded, Enum, Eq, Ord, Show)
+
+type ValidatedFanoutEventStream = ValidatedEventStream (HsPred '[] FanoutCommand) '[] FanoutState FanoutCommand FanoutEvent
+
+type FanoutCommandFields = '[ '("targetIndex", Int)]
+
+fanoutCommandCtor :: InCtor FanoutCommand FanoutCommandFields
+fanoutCommandCtor =
+  unavailableInCtor
+    "EmitFanout"
+    (\case EmitFanout targetIndex -> Just (RCons Proxy targetIndex RNil))
+    (\(RCons _ targetIndex RNil) -> EmitFanout targetIndex)
+
+fanoutEventCtor :: WireCtor FanoutEvent (Int, ())
+fanoutEventCtor =
+  unavailableWireCtor
+    "FanoutEmitted"
+    ( \case
+        FanoutEmitted targetIndex payload
+          | payload == fanoutPayload targetIndex -> Just (targetIndex, ())
+        _ -> Nothing
+    )
+    (\(targetIndex, ()) -> FanoutEmitted targetIndex (fanoutPayload targetIndex))
+
+fanoutTransducer :: SymTransducer (HsPred '[] FanoutCommand) '[] FanoutState FanoutCommand FanoutEvent
+fanoutTransducer =
+  SymTransducer
+    { edgesOut = \FanoutReady ->
+        [ Edge
+            { guard = matchInCtor fanoutCommandCtor,
+              update = UKeep,
+              output = [pack fanoutCommandCtor fanoutEventCtor (inpCtor fanoutCommandCtor #targetIndex *: oNil)],
+              target = FanoutReady,
+              mode = Keiki.Live
+            }
+        ],
+      initial = FanoutReady,
+      initialRegs = RNil,
+      isFinal = const False
+    }
+
+fanoutEventCodec :: Codec FanoutEvent
+fanoutEventCodec =
+  Codec
+    { eventTypes = EventType "FanoutEmitted" :| [],
+      eventType = const (EventType "FanoutEmitted"),
+      schemaVersion = 1,
+      encode = \(FanoutEmitted targetIndex payload) -> toJSON (targetIndex, payload),
+      decode = \(EventType eventTypeName) payload ->
+        case eventTypeName of
+          "FanoutEmitted" ->
+            case Aeson.fromJSON payload of
+              Aeson.Success (targetIndex, value) -> Right (FanoutEmitted targetIndex value)
+              Aeson.Error err -> Left (Text.pack err)
+          other -> Left ("unknown fan-out benchmark event type: " <> other),
+      upcasters = []
+    }
+
+fanoutEventStream :: ValidatedFanoutEventStream
+fanoutEventStream =
+  mkEventStreamOrThrow
+    "bench-command-domain-fanout"
+    EventStream
+      { transducer = fanoutTransducer,
+        initialState = FanoutReady,
+        initialRegisters = RNil,
+        eventCodec = fanoutEventCodec,
+        resolveStreamName = streamName,
+        snapshotPolicy = Never,
+        stateCodec = Nothing
+      }
+
+fanoutDomainHandler :: DomainCommandHandler (HsPred '[] FanoutCommand) '[] FanoutState FanoutCommand FanoutEvent Text Text
+fanoutDomainHandler =
+  DomainCommandHandler
+    { eventStream = fanoutEventStream,
+      classifySilent = \_ -> error "fanoutDomainHandler: eventful edge classified as silent"
+    }
+
+fanoutPayload :: Int -> Text
+fanoutPayload targetIndex =
+  Text.take payloadSize (Text.replicate repetitions seed)
+  where
+    seed = Text.pack (show targetIndex) <> ":"
+    repetitions = payloadSize `div` Text.length seed + 1
+
 coordinatorFanouts :: [Int]
 coordinatorFanouts = [10, 100, 1000]
 
@@ -610,11 +705,11 @@ domainProcessManagerFanoutBench runner fanout =
 fanoutDomainRouter ::
   DomainRouter
     FanoutInput
-    (HsPred '[] BenchCommand)
+    (HsPred '[] FanoutCommand)
     '[]
-    BenchState
-    BenchCommand
-    BenchEvent
+    FanoutState
+    FanoutCommand
+    FanoutEvent
     Text
     Text
     es
@@ -623,7 +718,7 @@ fanoutDomainRouter =
     { name = "bench-domain-router",
       key = \(FanoutInput correlationId _) -> correlationId,
       resolve = \(FanoutInput correlationId fanout) -> pure (fanoutCommands "router" correlationId fanout),
-      targetHandler = domainAcceptedOneHandler,
+      targetHandler = fanoutDomainHandler,
       targetProjections = const []
     }
 
@@ -635,11 +730,11 @@ fanoutDomainProcessManager ::
     BenchState
     BenchCommand
     BenchEvent
-    (HsPred '[] BenchCommand)
+    (HsPred '[] FanoutCommand)
     '[]
-    BenchState
-    BenchCommand
-    BenchEvent
+    FanoutState
+    FanoutCommand
+    FanoutEvent
     Text
     Text
 fanoutDomainProcessManager =
@@ -648,7 +743,7 @@ fanoutDomainProcessManager =
       correlate = \(FanoutInput correlationId _) -> correlationId,
       eventStream = legacyNoOpStream,
       streamFor = \correlationId -> stream ("bench-command-domain-process-manager:" <> correlationId),
-      targetHandler = domainAcceptedOneHandler,
+      targetHandler = fanoutDomainHandler,
       targetProjections = const [],
       handle = \(FanoutInput correlationId fanout) ->
         ProcessManagerAction
@@ -658,11 +753,11 @@ fanoutDomainProcessManager =
           }
     }
 
-fanoutCommands :: Text -> Text -> Int -> [PMCommand BenchCommand]
+fanoutCommands :: Text -> Text -> Int -> [PMCommand FanoutCommand]
 fanoutCommands coordinator correlationId fanout =
   [ PMCommand
       { target = stream (fanoutTargetName coordinator correlationId targetIndex),
-        command = EmitOne
+        command = EmitFanout targetIndex
       }
   | targetIndex <- [0 .. fanout - 1]
   ]

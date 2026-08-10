@@ -62,10 +62,14 @@ the decision from the successful final evaluation.
   compatibility adapter, focused tests, after-only benchmarks, and in-suite
   1.25 ratio gates. `cabal build keiro keiro:bench:keiro-bench` and the four
   focused examples pass.
-- [ ] Milestone 1 performance acceptance: rerun the in-suite ratio gates and
-  large-result heap evidence when the machine is quiet. The user reported that
-  the computer is currently under heavy load, so do not change, regenerate, or
-  commit a performance baseline from the current session.
+- [ ] Milestone 1 performance acceptance: the stable repeated large-result
+  diagnostic measured the typed path at 6.29 ms ± 338 μs, 3.2 MB allocated,
+  28 KB copied, and 810,656 bytes maximum residency, versus the legacy path at
+  6.08 ms ± 565 μs, the same 3.2 MB allocated, 28 KB copied, and 635,312 bytes
+  maximum residency. This supports one retained 100-event typed batch without
+  a second encoded-workload-sized copy. Final ratio gates and baseline evidence
+  remain pending a reboot at the user's request; do not create, regenerate, or
+  commit a command performance baseline before then.
 - [x] (2026-08-10T18:29:56Z) Milestone 2: added typed SQL and controlled-SQL
   runners, ordinary and catalog-aware projection runners, a closed decision
   telemetry dimension on spans and metrics, and deterministic retry coverage.
@@ -81,10 +85,14 @@ the decision from the successful final evaluation.
   through strict payload-free summaries rather than detailed result lists. The
   10, 100, and 1000 target router/process-manager benchmark fixtures compile;
   all 13 focused examples pass.
-- [ ] Milestone 3 performance acceptance: collect worker time, allocation, and
-  maximum-residency evidence at fan-out 10, 100, and 1000 when the machine is
-  quiet. No benchmark was executed and no CSV was created or changed under the
-  current host load.
+- [ ] Milestone 3 performance acceptance: strengthened the worker fixtures so
+  each accepted target constructs a distinct deterministic 1 KiB event payload
+  from an integer command, rather than sharing one global `Text`. Relaxed-
+  tolerance diagnostic runs at fan-out 10, 100, and 1000 kept maximum residency
+  bounded at 8,189,480 bytes for the router and 8,579,784 bytes for the process
+  manager while producing up to 1 MiB of distinct accepted payload per
+  dispatch. Final default-tolerance timings and committed baseline evidence
+  remain pending the reboot; no CSV was created or changed.
 - [x] (2026-08-10T19:18:03Z) Milestone 4 non-performance work: documented
   direct, SQL, projection, coordinator, retry, telemetry, payload-cardinality,
   duplicate, and memory-ownership semantics; added accepted ADR 0029; updated
@@ -95,8 +103,9 @@ the decision from the successful final evaluation.
   Keiro examples, all 674 core DSL examples plus every generated conformance
   executable, all 23 Jitsurei examples, strict ADR/IR validation, `nix fmt`,
   and `nix flake check -j1 --cores 1` pass.
-- [ ] Milestone 4 performance-coupled closeout: run `just bench-regression` and
-  commit the finished command baseline only after the machine is quiet and the
+- [ ] Milestone 4 performance-coupled closeout: after the machine reboots, run
+  the default-tolerance command suite, create the finished command baseline,
+  extend and run `just bench-regression`, and accept the result only after the
   Milestone 1 and 3 latency/allocation/residency checks pass. Keep IR-7 open for
   Plan 232 regardless of this runtime closeout.
 - [ ] Follow-up: execute [the DSL plan](232-add-typed-domain-outcomes-to-the-dsl.md) after this runtime contract is stable.
@@ -131,6 +140,29 @@ the decision from the successful final evaluation.
   no-op comparison measured identical 128 μs means and a 1.00x ratio.
   Evidence: the benchmark code retains hard `bcompareWithin 0 1.25` gates, but
   no committed baseline was created or changed from these noisy samples.
+
+- Discovery: Lower foreground load was sufficient for stable isolated heap
+  comparisons but not for trustworthy baseline replacement before a reboot.
+  A read-only legacy comparison measured accepted-large at 27.9 ms ± 2.2 ms,
+  32 percent above the scratch baseline, while a subsequent isolated legacy
+  heap run measured 6.08 ms ± 565 μs and the matching typed run measured
+  6.29 ms ± 338 μs. The user therefore required all baseline creation or
+  changes to wait until after reboot.
+  Evidence: accepted-1 and no-op ratio gates passed, but accepted-1 samples
+  still showed deviations nearly as large as their means and the legacy hard
+  guard failed accepted-large during the noisy combined run.
+
+- Discovery: The original coordinator fixture reused one global 1 KiB `Text`
+  across every accepted target, so it could detect wrapper accumulation but
+  not retained payload batches. The corrected fixture sends only an integer
+  target index and constructs a distinct deterministic 1 KiB event payload in
+  the target transducer. With that stronger fixture and a deliberately relaxed
+  statistical tolerance, router and process-manager maximum residency remained
+  8.19 MB and 8.58 MB respectively through fan-out 1000.
+  Evidence: router per-iteration allocation scaled 1.8 MB, 18 MB, and 181 MB;
+  process-manager allocation scaled 1.7 MB, 16 MB, and 157 MB; neither retained
+  the 10 KiB, 100 KiB, or 1 MiB of completed accepted payloads in its strict
+  acknowledgement summary.
 
 - Discovery: The typed catalog path needs a fourth transactional state beyond
   accepted, rejected, and no-op: an accepted append can be condemned by a
@@ -226,6 +258,15 @@ the decision from the successful final evaluation.
   aggregate independent of test-only fixtures.
   Date: 2026-08-10
 
+- Decision: Give the benchmark component the same direct
+  `aeson >=2.2.2 && <2.3` dependency as the Keiro library for the strengthened
+  fan-out event codec.
+  Rationale: Cabal components cannot import Aeson's `Result` constructors
+  through `Keiro.Prelude`'s transitive library dependency. A real round-tripping
+  codec keeps the heap fixture representative without changing any package
+  bound or legacy benchmark scenario.
+  Date: 2026-08-10
+
 - Decision: Keep the unprefixed `SilentCommandContext` record labels `state`,
   `registers`, `command`, and `selectedEdge`, and define that record in the
   internal `Keiro.Command.Domain` module with `NoFieldSelectors`.
@@ -287,15 +328,17 @@ additive, and the Jitsurei proof demonstrates application-level exhaustive
 handling without projection effects for typed silent decisions. ADR 0029 now
 records the durable contract, while Plan 232 names the exact generated target.
 
-The remaining work is deliberately evidence-only: same-machine latency,
-allocation, and maximum-residency measurements for legacy/domain command paths
-and coordinator fan-out, followed by the committed command baseline and
-`just bench-regression`. The user's machine was under heavy load throughout the
-finished implementation, so running those checks or refreshing a baseline
-would produce untrustworthy evidence. The scratch pre-refactor CSV remains
-unchanged and uncommitted. Until those quiet-host checks pass, this plan is not
-fully closed even though all functional, documentation, Cabal, OKF, formatting,
-and Nix validation succeeds.
+The remaining work is deliberately evidence-only and reboot-gated: stable
+default-tolerance latency measurements, the committed command baseline, its
+`Justfile` guard, and `just bench-regression`. Isolated heap diagnostics already
+show that the large accepted outcome adds only one typed batch and that the
+strict router/process-manager summaries remain bounded through fan-out 1000,
+including after strengthening the fixture to create distinct 1 KiB payloads.
+The user's machine nevertheless produced contradictory combined latency runs,
+and the user explicitly deferred every baseline creation or change until after
+a reboot. The scratch pre-refactor CSV remains unchanged and uncommitted. Until
+those post-reboot checks pass, this plan is not fully closed even though all
+functional, documentation, Cabal, OKF, formatting, and Nix validation succeeds.
 
 
 ## Context and Orientation
@@ -908,3 +951,10 @@ changelogs, partial IR-7 reconciliation, exact Plan 232 interface names,
 Jitsurei proof, and full non-performance Cabal/OKF/Nix validation. Split final
 closeout from functional completion so the required benchmark and residency
 evidence remains pending a quiet host without changing any baseline.
+
+Revision note (2026-08-10): Recorded stable isolated large-batch allocation and
+residency evidence, strengthened coordinator fan-out to construct distinct
+per-target 1 KiB event payloads, and recorded bounded relaxed-tolerance heap
+diagnostics through fan-out 1000. Kept all default-tolerance latency gates,
+baseline creation, and `just bench-regression` pending the user-requested
+machine reboot after contradictory combined-run timings.

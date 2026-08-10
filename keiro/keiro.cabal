@@ -202,6 +202,7 @@ benchmark keiro-bench
   main-is:        Main.hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
+    , aeson                 >=2.2.2     && <2.3
     , base                  >=4.21      && <5
     , bytestring            >=0.11      && <0.13
     , effectful             >=2.6       && <2.7
