@@ -43,8 +43,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-10T03:09:12Z) Milestone 2: added and passed restoring correctness mutations for
   service structural evidence, aggregate-use evidence, complete behavior contracts, and moved
   behavior-source anchors; planner anchor failures also prove the output tree stays empty.
-- [ ] Milestone 3: replay the Mori Plan 181 three-field scenario read-only and pin the allowed
-  semantic/generated impact set and measured churn reduction.
+- [x] (2026-08-10T03:17:44Z) Milestone 3: replayed the pinned Mori Plan 181 three-field scenario
+  read-only, pinned its exact semantic/generated impact set, and measured generated churn falling
+  from 22 files/1,869 lines to 9 files/629 lines (8 files/27 lines excluding the isolated map).
 - [ ] Milestone 4: regenerate the complete committed corpus once, run full repository/release-
   quality validation, publish adoption guidance, and close IR-21/MasterPlan evidence.
 
@@ -75,6 +76,15 @@ implementation. Provide concise evidence.
   introduced refreshed its ledger even though all mutated source/generated modules were restored.
   The driver now backs up and restores that ledger too, so both successful and interrupted runs
   preserve every touched tracked byte.
+- The pinned Mori replay changes 602 lines in the one context `BehaviorSourceMap`; after separating
+  that positional artifact, the semantic generated delta is only 27 lines across three shapes,
+  one service structural module, and Project/ProjectArtifact codecs and harnesses. The complete
+  generated metric is 629 lines across 9 files, a 66.3% line reduction and 59.1% file reduction
+  from the recorded 1,869/22 pre-fix regeneration.
+- A fresh scaffold also changes 12 lines in the create-once `Project` binding skeleton so consumers
+  can implement the three new optional fields. It is intentionally recorded separately from the
+  generated metric: an adopted skeleton is hand-owned and is never overwritten, while both fresh
+  revisions must still expose the correct obligation.
 
 
 ## Decision Log
@@ -118,7 +128,13 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestones 1 through 3 establish the release-candidate locality claim at both scales. The minimized
+fixture holds its generated delta constant as ten unrelated aggregates are added, and restoring
+mutations prove centralized structural laws, aggregate-local use laws, and exact source anchors
+can all fail independently. The pinned real-world replay reduces generated churn from 22 files and
+1,869 lines to 9 files and 629 lines; only 27 changed lines remain after excluding the deliberately
+isolated positional map. Milestone 4 still owns the one-time corpus migration, documentation,
+request/ADR evidence, and full release-quality validation before fleet adoption is allowed.
 
 
 ## Context and Orientation
