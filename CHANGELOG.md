@@ -27,6 +27,18 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro**: add typed domain command outcomes for handwritten aggregates.
+  `DomainCommandHandler` classifies an exact selected silent edge as typed
+  rejection or no-op, while accepted results retain the exact non-empty event
+  batch and ordinary persistence metadata. Parallel SQL, projection, catalog,
+  router, and process-manager APIs preserve retry/atomicity behavior; workers
+  acknowledge typed silent decisions normally and drop handled payloads through
+  strict summaries. Telemetry uses only the bounded `accepted`, `rejected`, and
+  `no_op` dimension. Existing command/coordinator APIs remain unchanged.
+- **jitsurei**: demonstrate exhaustive accepted/rejected/no-op handling with
+  the order aggregate. Paid cancellation is a typed rejection, repeated
+  cancellation is a typed no-op, and the database-backed example proves only
+  accepted events invoke its inline projection.
 - **keiro-dsl**: make mapped regeneration semantically local. Aggregate harnesses now follow only
   checked command, private-event, register, workqueue, read-model query, and
   aggregate-derived projection reachability, while one service structural

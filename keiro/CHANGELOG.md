@@ -8,6 +8,25 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `DomainDecision`, `DomainCommandOutcome`, `SilentCommandContext`,
+  `SilentDomainDecision`, and `DomainCommandHandler`, plus `runDomainCommand`
+  and `forgetDomainDecision`. Accepted decisions carry the exact non-empty
+  event batch; explicitly selected state-preserving silent edges carry typed
+  rejection/no-op payloads; unmatched commands and infrastructure failures
+  remain `CommandError`.
+- Domain-aware SQL and projection runners, including controlled transaction and
+  catalog-fenced outcomes. Rejection/no-op opens no append transaction and runs
+  no callback or inline projection; an optimistic conflict returns only the
+  final rehydrated decision.
+- Additive `DomainRouter` and `DomainProcessManager` configurations, detailed
+  one-shot result families, and configurable/default workers. Accepted,
+  rejection, and no-op are handled; accepted duplicates remain distinct; only
+  genuine `CommandError` enters existing failure policy. Workers use strict
+  payload-free summaries rather than retaining detailed fan-out results.
+- The `keiro.command.decision` span attribute and
+  `keiro.command.decisions` counter, with the closed value set `accepted`,
+  `rejected`, and `no_op`. Application payloads never become telemetry labels
+  or error descriptions.
 - `subscriptionPositionFromInventory` derives a subscription's durable floor
   across all matching consumer-group members. `readSubscriptionPosition` and
   `storeHeadPosition` now consume Kiroku's public one-statement checkpoint

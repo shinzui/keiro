@@ -85,7 +85,20 @@ the decision from the successful final evaluation.
   maximum-residency evidence at fan-out 10, 100, and 1000 when the machine is
   quiet. No benchmark was executed and no CSV was created or changed under the
   current host load.
-- [ ] Milestone 4: document the API, record the architectural decision, and complete repository validation.
+- [x] (2026-08-10T19:18:03Z) Milestone 4 non-performance work: documented
+  direct, SQL, projection, coordinator, retry, telemetry, payload-cardinality,
+  duplicate, and memory-ownership semantics; added accepted ADR 0029; updated
+  both changelogs and IR-7 without falsely completing its pending DSL scope;
+  reconciled Plan 232 with the committed names; and added a database-backed
+  Jitsurei example that exhaustively renders all three decisions and proves
+  only accepted events reach inline projection SQL. `cabal build all`, all 456
+  Keiro examples, all 674 core DSL examples plus every generated conformance
+  executable, all 23 Jitsurei examples, strict ADR/IR validation, `nix fmt`,
+  and `nix flake check -j1 --cores 1` pass.
+- [ ] Milestone 4 performance-coupled closeout: run `just bench-regression` and
+  commit the finished command baseline only after the machine is quiet and the
+  Milestone 1 and 3 latency/allocation/residency checks pass. Keep IR-7 open for
+  Plan 232 regardless of this runtime closeout.
 - [ ] Follow-up: execute [the DSL plan](232-add-typed-domain-outcomes-to-the-dsl.md) after this runtime contract is stable.
 
 
@@ -132,6 +145,13 @@ the decision from the successful final evaluation.
   omitting the point.
   Evidence: the domain worker test asserts `IntNumber 0` and separately proves
   that neither rejection nor no-op payload text appears in exported metrics.
+
+- Discovery: Adding state-preserving silent cancellation behavior to the
+  Jitsurei order transducer still changes its executable fold contract even
+  though those edges emit no events and preserve state.
+  Evidence: the example advances the hand-owned snapshot discriminator from
+  `order-fold-v1` to `order-fold-v2`, and the full Jitsurei snapshot suite
+  passes with the new discriminator.
 
 
 ## Decision Log
@@ -249,10 +269,33 @@ the decision from the successful final evaluation.
   must release each handled result before the next target.
   Date: 2026-08-10
 
+- Decision: Keep IR-7 in `proposed` status after the handwritten runtime lands
+  and record runtime progress in its body/log rather than marking the whole
+  request completed.
+  Rationale: Plan 232 still owns the requested DSL syntax, generation, and
+  exact-reason conformance, while the current host also prevents honest
+  performance closeout for this runtime plan.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The handwritten/runtime surface is functionally implemented across direct
+commands, SQL, inline/catalog projections, optimistic retries, bounded
+telemetry, routers, and process managers. Existing entry points remain
+additive, and the Jitsurei proof demonstrates application-level exhaustive
+handling without projection effects for typed silent decisions. ADR 0029 now
+records the durable contract, while Plan 232 names the exact generated target.
+
+The remaining work is deliberately evidence-only: same-machine latency,
+allocation, and maximum-residency measurements for legacy/domain command paths
+and coordinator fan-out, followed by the committed command baseline and
+`just bench-regression`. The user's machine was under heavy load throughout the
+finished implementation, so running those checks or refreshing a baseline
+would produce untrustworthy evidence. The scratch pre-refactor CSV remains
+unchanged and uncommitted. Until those quiet-host checks pass, this plan is not
+fully closed even though all functional, documentation, Cabal, OKF, formatting,
+and Nix validation succeeds.
 
 
 ## Context and Orientation
@@ -859,3 +902,9 @@ process-manager interfaces, five-way coordinator behavior, strict worker
 summaries, payload-free acknowledgement telemetry, and compile-only fan-out
 fixtures. Kept heap/performance acceptance pending a quiet host and left every
 benchmark baseline untouched.
+
+Revision note (2026-08-10): Recorded Milestone 4 documentation, ADR 0029,
+changelogs, partial IR-7 reconciliation, exact Plan 232 interface names,
+Jitsurei proof, and full non-performance Cabal/OKF/Nix validation. Split final
+closeout from functional completion so the required benchmark and residency
+evidence remains pending a quiet host without changing any baseline.

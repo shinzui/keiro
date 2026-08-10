@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Runtime**: Plan 231 delivers the additive handwritten runtime contract across direct, SQL, projection, router, process-manager, retry, and bounded telemetry paths; keep IR-7 proposed until Plan 232 completes DSL generation and quiet-host performance evidence is recorded.
 * **Implemented**: Close IR-15 after Plan 229 benchmarked and removed repeated suffix scans while
 preserving exact spans and parser compatibility.
 * **Completed**: Close IR-21 after MasterPlan 34 and Plan 222 deliver checked semantic locality, stable behavior source maps, impact reporting, restoring mutations, the pinned Mori replay, and a byte-clean corpus; migrate legacy implemented statuses to the current completed vocabulary.

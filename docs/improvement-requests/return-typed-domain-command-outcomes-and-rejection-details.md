@@ -28,7 +28,29 @@ reviews:
 
 ## Status
 
-Proposed for later runtime/API design.
+Runtime/API delivery is implemented by
+[Plan 231](../plans/231-add-typed-domain-command-outcomes.md): handwritten
+aggregates now have typed direct, SQL, projection, router, process-manager, and
+bounded-telemetry outcomes. The request remains proposed rather than completed
+until [Plan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md) delivers
+DSL syntax, generation, and exact-reason conformance. Quiet-host performance
+and worker-residency acceptance for Plan 231 also remains pending; no baseline
+was changed under the current host load.
+
+## Progress
+
+- Runtime contract: `DomainDecision`, `DomainCommandOutcome`,
+  `SilentCommandContext`, `SilentDomainDecision`, and `DomainCommandHandler`
+  are public, additive interfaces.
+- Execution: direct, transactional, inline/catalog projection, router, and
+  process-manager runners preserve typed outcomes and final-retry authority.
+- Policy: selected rejection/no-op is successful and side-effect-free;
+  unmatched and infrastructure failures remain `CommandError`.
+- Operations: coordinator workers acknowledge typed silent decisions normally,
+  drop handled payloads through strict summaries, and expose only the closed
+  `accepted | rejected | no_op` telemetry dimension.
+- Remaining: Plan 232's DSL/generator/conformance work and Plan 231's
+  same-machine performance/maximum-residency evidence on a quiet host.
 
 ## Context
 

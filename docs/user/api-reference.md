@@ -158,13 +158,26 @@ for tests and emergency forensics.
 Types and functions:
 
 - `CommandResult (..)`
+- `DomainDecision (..)`
+- `DomainCommandOutcome (..)`
+- `SilentCommandContext (..)`
+- `SilentDomainDecision (..)`
+- `DomainCommandHandler (..)`
 - `CommandError (..)`
 - `HydrationReplayReason (..)`
 - `RunCommandOptions (..)`
 - `defaultRunCommandOptions`
 - `runCommand`
+- `runDomainCommand`
+- `forgetDomainDecision`
 - `runCommandWithSql`
 - `runCommandWithSqlEvents`
+- `SqlTransactionDecision (..)`, `SqlCommandOutcome (..)`,
+  `runCommandWithSqlEventsControlled`
+- `runDomainCommandWithSql`
+- `runDomainCommandWithSqlEvents`
+- `DomainSqlCommandOutcome (..)`,
+  `runDomainCommandWithSqlEventsControlled`
 - `commandErrorClass`
 - `Hydrated (..)`, `hydrate`, `hydrateFull`, `hydrateSeeded`
 
@@ -177,6 +190,15 @@ Commands may append zero, one, or many produced events as one store batch.
 All three runners require `ValidatedEventStream` as their stream argument.
 Transactional runners also require `KirokuStoreResource` so Kiroku's configured
 event enrichment runs before append preparation.
+
+`DomainCommandHandler` classifies an already-selected state-preserving silent
+edge as typed rejection or no-op. `runDomainCommand` returns accepted with the
+exact non-empty event batch, or the classifier's payload, together with the
+ordinary `CommandResult`. No match and every infrastructure failure remain
+`CommandError`. On optimistic retry, only the final evaluation is returned.
+Transactional domain callbacks run only for accepted appends; silent decisions
+have no append transaction for durable side effects. `forgetDomainDecision`
+provides the additive compatibility collapse for successfully matched commands.
 
 ## `Keiro.Snapshot`
 
@@ -219,9 +241,12 @@ Types and functions:
 - `AsyncProjection (..)`
 - `AsyncApplyOutcome (..)`
 - `ProjectionCommandOutcome (..)`
+- `DomainProjectionCommandOutcome (..)`
 - `CatalogAsyncApplyOutcome (..)`
 - `runCommandWithProjections`
+- `runDomainCommandWithProjections`
 - `runCommandWithCatalogProjections`
+- `runDomainCommandWithCatalogProjections`
 - `applyAsyncProjection`
 - `applyAsyncProjectionFromCatalog`
 - `applyAsyncProjectionUnfenced`
@@ -243,6 +268,11 @@ dispatch. Keep it empty for ordinary fan-out, analytics, reporting tables,
 integration publishing, or any projection work that can be eventually
 consistent; inline projection SQL runs inside the append transaction and can
 slow or fail the dispatch.
+
+The domain-aware inline runners apply only accepted event pairs. Typed
+rejection/no-op returns its `DomainCommandOutcome` without invoking projection
+SQL. A catalog fence after an accepted append is represented separately because
+the condemned transaction has no durable command outcome.
 
 ## `Keiro.Projection.Catalog`
 
@@ -401,10 +431,13 @@ single-read-model functions are an unmanaged compatibility path;
 Types and functions:
 
 - `ProcessManager (..)`
+- `DomainProcessManager (..)`
 - `ProcessManagerAction (..)`
 - `ProcessManagerResult (..)`
+- `DomainProcessManagerResult (..)`
 - `PMCommand (..)`
 - `PMCommandResult (..)`
+- `DomainPMCommandResult (..)`
 - `PMStateResult (..)`
 - `PoisonPolicy (..)`
 - `RejectedCommandPolicy (..)`
@@ -422,6 +455,9 @@ Types and functions:
 - `runProcessManagerOnce`
 - `runProcessManagerWorkerWith`
 - `runProcessManagerWorker`
+- `runDomainProcessManagerOnce`
+- `runDomainProcessManagerWorkerWith`
+- `runDomainProcessManagerWorker`
 
 Use it for event-sourced coordination across streams. `eventAlreadyIn` is the
 idempotency point-lookup pre-check, exported so routers and other callers can
@@ -440,15 +476,33 @@ persists a dispatch witness before acknowledging, while `RejectedSkip`
 acknowledges without one. `confirmBenignDuplicate` proves a duplicate event id
 belongs to the intended target stream before it is treated as success.
 
+`DomainProcessManager` keeps the manager's own state/timer path unchanged and
+uses a `DomainCommandHandler` for target commands. A handled accepted,
+rejection, or no-op appears as `DomainPMCommandHandled`; a confirmed accepted
+redelivery is `DomainPMCommandDuplicate`, and a genuine `CommandError` is
+`DomainPMCommandFailed`. A duplicate cannot reconstruct the original in-memory
+event batch. Domain workers acknowledge typed rejection/no-op as `AckOk` and
+bypass `RejectedCommandPolicy`.
+
+Detailed one-shot results retain every handled payload and therefore use
+memory proportional to accepted batches returned across the fan-out. Worker
+entry points instead summarize each target strictly into only duplicate/failure
+information and release handled payloads before dispatching the next target.
+
 ## `Keiro.Router`
 
 Types and functions:
 
 - `Router (..)`
 - `RouterResult (..)`
+- `DomainRouter (..)`
+- `DomainRouterResult (..)`
 - `runRouterOnce`
 - `runRouterWorkerWith`
 - `runRouterWorker`
+- `runDomainRouterOnce`
+- `runDomainRouterWorkerWith`
+- `runDomainRouterWorker`
 - `deterministicRouterCommandId`
 
 Use it for stateless, effectful fan-out (content-based router / recipient list).
@@ -460,6 +514,12 @@ or pass the target aggregate's inline projections when router-dispatched writes
 must update target read models in the append transaction. `runRouterWorkerWith`
 uses the same `WorkerOptions` as process-manager workers. Re-exported from
 `Keiro`.
+
+The domain router has the same handled/duplicate/failure distinction and
+bounded worker retention as the domain process manager. Target resolution
+order, target-identity deterministic ids, legacy-id duplicate compatibility,
+and one transaction per target are unchanged. Eventless rejection/no-op leaves
+no event id, so redelivery evaluates it again.
 
 ## `Keiro.Timer`
 
@@ -626,6 +686,12 @@ propagation, semantic-convention attribute-name constants, `KeiroMetrics`,
 Process-manager and router workers can record `keiro.dispatch.failed`,
 `keiro.dispatch.duplicates`, and `keiro.dispatch.poison` through
 `WorkerOptions.metrics`.
+
+Outcome-aware command spans add `keiro.command.decision`, whose complete value
+set is `accepted`, `rejected`, and `no_op`. The
+`keiro.command.decisions` counter uses the same bounded dimension. Application
+rejection/no-op payloads are never labels, error classes, span descriptions, or
+dead-letter reasons, and typed rejection/no-op keeps successful span status.
 
 The preferred projection gauge is
 `keiro.projection.global_position_distance` with unit `{position}`. The

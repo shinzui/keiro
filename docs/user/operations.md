@@ -398,6 +398,14 @@ workers; with no meter configured (`Nothing`) the instruments do nothing. The in
 names below are the canonical `keiro.*` names; they are defined and reconciled in
 [`opentelemetry-semconv-audit.md`](../research/opentelemetry-semconv-audit.md).
 
+Outcome-aware commands expose only the bounded decision class. Successful
+spans carry `keiro.command.decision = accepted | rejected | no_op`, and the
+`keiro.command.decisions` counter uses that same attribute. Never copy an
+application rejection/no-op payload into metric labels, `error.type`, span
+status descriptions, structured logs, or dispatch dead-letter reasons. Those
+values can be sensitive and high-cardinality. Typed rejection and no-op are
+successful span outcomes, not errors.
+
 ### Metric catalogue
 
 This is the complete set of instruments `newKeiroMetrics` builds. Every one is a
@@ -461,6 +469,10 @@ Async projection path (`Keiro.Projection` / `Keiro.ReadModel`):
 
 Command runners (`Keiro.Command`, opt in via `RunCommandOptions.metrics`):
 
+- `keiro.command.decisions` — Counter, `{decision}` — successfully selected
+  domain decisions partitioned by exactly `accepted`, `rejected`, or `no_op`.
+  Alerting may use those three classes; it must not derive labels from
+  application payloads.
 - `keiro.command.conflicts` — Counter, `{conflict}` — optimistic-concurrency conflicts
   observed.
 - `keiro.command.retries` — Counter, `{retry}` — retry attempts started after a conflict.

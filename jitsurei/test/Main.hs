@@ -7,6 +7,7 @@ import Control.Lens ((^.))
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
 import Data.Int (Int64)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -206,6 +207,77 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
           summary ^. #quantity `shouldBe` sampleQuantity
           summary ^. #status `shouldBe` "placed"
         other -> expectationFailure ("expected live order summary, got " <> show other)
+
+    it "returns all domain decisions while projecting only accepted events" $ \(_store, StoreRunner runner) -> do
+      Right () <- runner initializeJitsureiTables
+      let acceptedId = OrderId "domain-accepted"
+          rejectedId = OrderId "domain-rejected"
+          noOpId = OrderId "domain-no-op"
+          place orderId =
+            PlaceOrder
+              PlaceOrderData
+                { orderId,
+                  sku = sampleSku,
+                  quantity = sampleQuantity
+                }
+          approve orderId =
+            ApprovePayment
+              ApprovePaymentData
+                { orderId,
+                  paymentRef = samplePaymentRef
+                }
+          cancel orderId =
+            CancelOrder
+              CancelOrderData
+                { orderId,
+                  reason = "customer request"
+                }
+          runTyped orderId command =
+            runner $
+              runDomainCommandWithProjections
+                defaultRunCommandOptions
+                orderDomainCommandHandler
+                (orderStream orderId)
+                command
+                orderLiveProjections
+          readLiveEffectCount = do
+            Right (_, _, _, count) <- runner $ Store.runTransaction (Tx.statement () orderCatalogFactsStmt)
+            pure count
+
+      Right (Right accepted) <- runTyped acceptedId (place acceptedId)
+      case accepted ^. #decision of
+        DomainAccepted events -> do
+          NonEmpty.toList events
+            `shouldBe` [ OrderPlaced
+                           OrderPlacedData
+                             { orderId = acceptedId,
+                               sku = sampleSku,
+                               quantity = sampleQuantity
+                             }
+                       ]
+          renderOrderDecision (accepted ^. #decision) `shouldBe` "accepted 1 event(s)"
+        other -> expectationFailure ("expected accepted order decision, got " <> show other)
+      readLiveEffectCount `shouldReturn` 1
+
+      Right (Right _) <- runTyped rejectedId (place rejectedId)
+      Right (Right _) <- runTyped rejectedId (approve rejectedId)
+      beforeRejected <- readLiveEffectCount
+      Right (Right rejected) <- runTyped rejectedId (cancel rejectedId)
+      case rejected ^. #decision of
+        DomainRejected PaymentAlreadyApproved ->
+          renderOrderDecision (rejected ^. #decision) `shouldBe` "rejected: payment already approved"
+        other -> expectationFailure ("expected rejected order decision, got " <> show other)
+      readLiveEffectCount `shouldReturn` beforeRejected
+
+      Right (Right _) <- runTyped noOpId (place noOpId)
+      Right (Right _) <- runTyped noOpId (cancel noOpId)
+      beforeNoOp <- readLiveEffectCount
+      Right (Right noOp) <- runTyped noOpId (cancel noOpId)
+      case noOp ^. #decision of
+        DomainNoOp AlreadyCancelled ->
+          renderOrderDecision (noOp ^. #decision) `shouldBe` "no-op: order already cancelled"
+        other -> expectationFailure ("expected no-op order decision, got " <> show other)
+      readLiveEffectCount `shouldReturn` beforeNoOp
 
     it "drives live, async, preview, and mixed-policy rebuild paths from one catalog" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables

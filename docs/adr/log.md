@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Add**: Define typed domain decisions as successful additive command outcomes while preserving exact-edge authority, CommandError failures, legacy APIs, bounded telemetry, and worker retention (plan 231).
 * **Update**: Classify mapped queue evolution as WorkqueueHistory with workers-first drain or application-owned transitional-codec remediation, never event upcasters (plan 224).
 * **Update**: Report typed workqueue structural, opaque, and Json boundaries as a separate persisted coverage surface (plan 224).
 * **Update**: Share one resolved mapped codec lowering across aggregate events and candidate typed workqueues while preserving required queue keys and legacy scalar bytes (plan 224).

@@ -1,7 +1,11 @@
 module Jitsurei.OrderStream
   ( OrderEventStream,
     OrderRegs,
+    OrderCancellationRejection (..),
+    OrderCancellationNoOp (..),
     orderEventStream,
+    orderDomainCommandHandler,
+    renderOrderDecision,
     snapshotOrderEventStream,
     orderStream,
     orderCommandStream,
@@ -16,13 +20,21 @@ import Data.Aeson (Value, object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
+import GHC.Generics (Generic)
 import Jitsurei.Domain
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, RegFile (..), SymTransducer)
+import Keiki.Core (HsPred, RegFile (..), SymTransducer, edgeIndex)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
+import Keiro.Command
+  ( DomainCommandHandler (..),
+    DomainDecision (..),
+    SilentCommandContext (..),
+    SilentDomainDecision (..),
+  )
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.Snapshot (FoldVersion (..), defaultStateCodecWithFold)
@@ -35,6 +47,14 @@ type OrderRegs = '[]
 type OrderEventStream = EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 
 type ValidatedOrderEventStream = ValidatedEventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
+
+data OrderCancellationRejection
+  = PaymentAlreadyApproved
+  deriving stock (Generic, Eq, Show)
+
+data OrderCancellationNoOp
+  = AlreadyCancelled
+  deriving stock (Generic, Eq, Show)
 
 $( deriveAggregate
      ''OrderCommand
@@ -58,6 +78,40 @@ orderEventStream :: ValidatedOrderEventStream
 orderEventStream =
   mkEventStreamOrThrow "jitsurei-order" orderEventStreamDef
 
+-- | Outcome-aware order command handler. The exact selected silent edge is the
+-- classification authority; accepted commands never call this classifier.
+orderDomainCommandHandler ::
+  DomainCommandHandler
+    (HsPred OrderRegs OrderCommand)
+    OrderRegs
+    OrderState
+    OrderCommand
+    OrderEvent
+    OrderCancellationRejection
+    OrderCancellationNoOp
+orderDomainCommandHandler =
+  DomainCommandHandler
+    { eventStream = orderEventStream,
+      classifySilent = \SilentCommandContext {state, selectedEdge} ->
+        case (state, edgeIndex selectedEdge) of
+          (Paid, 1) -> SilentRejected PaymentAlreadyApproved
+          (Cancelled, 0) -> SilentNoOp AlreadyCancelled
+          other -> error ("orderDomainCommandHandler: unexpected silent edge " <> show other)
+    }
+
+-- | A small exhaustive application-boundary example. Accepted decisions own
+-- the exact event values until the result is released.
+renderOrderDecision ::
+  DomainDecision OrderEvent OrderCancellationRejection OrderCancellationNoOp ->
+  Text
+renderOrderDecision = \case
+  DomainAccepted events ->
+    "accepted " <> Text.pack (show (NonEmpty.length events)) <> " event(s)"
+  DomainRejected PaymentAlreadyApproved ->
+    "rejected: payment already approved"
+  DomainNoOp AlreadyCancelled ->
+    "no-op: order already cancelled"
+
 snapshotOrderEventStreamDef :: OrderEventStream
 snapshotOrderEventStreamDef =
   orderEventStreamDef
@@ -68,7 +122,7 @@ snapshotOrderEventStreamDef =
           ( defaultStateCodecWithFold
               @OrderRegs
               @OrderState
-              (FoldVersion "order-fold-v1")
+              (FoldVersion "order-fold-v2")
               1
           )
     }
@@ -128,6 +182,10 @@ orderTransducer =
             }
         B.goto Packed
 
+      B.onCmd inCtorCancelOrder $ \_d -> B.do
+        B.noEmit
+        B.goto Paid
+
     B.from Packed do
       B.onCmd inCtorShipOrder $ \d -> B.do
         B.emit
@@ -138,10 +196,14 @@ orderTransducer =
               trackingId = d.trackingId
             }
         B.goto Shipped
+
+    B.from Cancelled do
+      B.onCmd inCtorCancelOrder $ \_d -> B.do
+        B.noEmit
+        B.goto Cancelled
   where
     isTerminal = \case
       Shipped -> True
-      Cancelled -> True
       _ -> False
 
 orderCodec :: Codec OrderEvent

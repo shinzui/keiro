@@ -27,6 +27,30 @@ data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi
 The manager has its own event stream and may emit commands to one target event
 stream type.
 
+For typed target decisions, use the additive `DomainProcessManager` shape. It
+keeps the same manager state, correlation, timer, and action fields, but replaces
+`targetEventStream` with a `targetHandler :: DomainCommandHandler ...`:
+
+```haskell
+data DomainProcessManager input phi rs state command event
+    targetPhi targetRs targetState targetCommand targetEvent rejection noOp =
+  DomainProcessManager
+    { name :: Text
+    , correlate :: input -> Text
+    , eventStream :: ValidatedEventStream phi rs state command event
+    , streamFor :: Text -> Stream (EventStream phi rs state command event)
+    , targetHandler
+        :: DomainCommandHandler
+             targetPhi targetRs targetState targetCommand targetEvent rejection noOp
+    , targetProjections :: Stream targetCommand -> [InlineProjection targetEvent]
+    , handle :: input -> ProcessManagerAction command targetCommand
+    }
+```
+
+The manager's own state transition remains on the established command path.
+Only dispatched target commands return typed domain outcomes, so the existing
+state-and-timer transaction boundary is unchanged.
+
 `input` is the decoded source message your subscription worker gives to the
 manager.
 
@@ -74,6 +98,12 @@ duplicate results rather than appending again. If a concurrent worker wins the
 race after the pre-check, the store's duplicate-id rejection is folded into the
 same duplicate result.
 
+For a domain-aware target, an accepted duplicate stays a distinct
+`DomainPMCommandDuplicate EventId`. The event id proves the deterministic
+accepted append already happened, but it cannot reconstruct the original
+in-memory `NonEmpty` event values. Rejection and no-op append no event id, so
+redelivery safely re-evaluates their pure classifier.
+
 ## Running Once
 
 Use `runProcessManagerOnce` when you already have one recorded source event and
@@ -92,6 +122,19 @@ The result includes:
 - manager state append or duplicate;
 - one result per emitted target command;
 - count of timers scheduled.
+
+`runDomainProcessManagerOnce` returns the parallel
+`DomainProcessManagerResult`. Every target entry is one of:
+
+- `DomainPMCommandHandled outcome` for accepted, typed rejection, or typed
+  no-op;
+- `DomainPMCommandDuplicate eventId` for confirmed accepted redelivery;
+- `DomainPMCommandFailed streamName commandError` for a genuine command
+  failure.
+
+This detailed one-shot result owns all returned accepted batches, so its live
+memory is proportional to the payloads across the fan-out. Use it only when the
+caller needs those details.
 
 See [Process Managers And Timers](../guides/process-managers-and-timers.md) for
 the `jitsurei` fulfillment manager, duplicate-delivery test, and TypeID-backed
@@ -121,6 +164,33 @@ retry delay, or dispatch metrics. The worker finalizes each message's
 - deterministic command failures finalize `AckHalt`;
 - undecodable messages follow the configured `PoisonPolicy` (default:
   `PoisonHalt`).
+
+`runDomainProcessManagerWorker` and
+`runDomainProcessManagerWorkerWith` use the same adapter and policies. A typed
+rejection/no-op is handled and finalizes `AckOk`; it does not enter
+`RejectedCommandPolicy`, retry, or create a dead letter. `DomainPMCommandFailed`
+still follows the established transient, systemic, rejection-class, and poison
+policy.
+
+Domain workers do not construct the detailed result list and discard it. They
+strictly summarize each target into only duplicate count and failure identity,
+then release its handled payload before dispatching the next target. Prefer the
+worker/streamed path for high fan-out when only acknowledgement policy is
+needed.
+
+## Domain-Aware Routers
+
+`DomainRouter` is the stateless counterpart: it replaces `Router`'s
+`targetEventStream` with `targetHandler` and exposes
+`runDomainRouterOnce`, `runDomainRouterWorkerWith`, and
+`runDomainRouterWorker`. Resolution order, target-identity deterministic ids,
+legacy positional-id duplicate compatibility, and one transaction per target
+remain unchanged.
+
+Its detailed `DomainRouterResult` uses the same handled, duplicate, and failed
+target cases and therefore has the same proportional-memory contract. Router
+workers use the same bounded strict summary and acknowledge typed rejection or
+no-op normally.
 
 ## Snapshotting Manager State
 
