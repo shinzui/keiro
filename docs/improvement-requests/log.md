@@ -1,6 +1,13 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Addition**: IR-22 requests that read models become safely readable by out-of-process
+consumers — a fence a database-level reader observes, documented projection status metadata,
+zero-downtime versioned rebuild with atomic cutover, and targeted per-stream reprojection.
+Raised by `mori://tan/notification-render-service`, whose TypeScript render process reads live
+published content over SQL and therefore participates in none of the in-process fence checks in
+`runQuery`, `runCommandWithCatalogProjections`, or `applyAsyncProjectionFromCatalog`. Extends
+IR-20 to a reader class its offline in-place rebuild did not have to consider.
 * **Runtime**: Plan 231 delivers the additive handwritten runtime contract across direct, SQL, projection, router, process-manager, retry, and bounded telemetry paths; keep IR-7 proposed until Plan 232 completes DSL generation and quiet-host performance evidence is recorded.
 * **Implemented**: Close IR-15 after Plan 229 benchmarked and removed repeated suffix scans while
 preserving exact spans and parser compatibility.
