@@ -14,6 +14,24 @@ import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import Keiki.Core
+  ( Edge (..),
+    HsPred,
+    InCtor,
+    RegFile (..),
+    SymTransducer (..),
+    Update (..),
+    WireCtor,
+    lit,
+    matchInCtor,
+    oNil,
+    pack,
+    unavailableInCtor,
+    unavailableWireCtor,
+    (*:),
+  )
+import Keiki.Core qualified as Keiki
+import Keiro
 import Keiro.Inbox
   ( InboxDedupePolicy (..),
     InboxPersistence (..),
@@ -37,11 +55,13 @@ import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (withFreshStore, withMigratedSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Lifecycle qualified as Lifecycle
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
 import Test.Tasty.Bench (Benchmark, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+import Prelude
 
 workloadSize :: Int
 workloadSize = 2000
@@ -104,6 +124,15 @@ benchmarks store metrics =
         inboxScenarioBench store singleNoMetrics,
         inboxScenarioBench store batch100,
         inboxScenarioBench store singleSlim
+      ],
+    bgroup
+      "command"
+      [ bgroup
+          "legacy"
+          [ commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne,
+            commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge,
+            commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp
+          ]
       ]
   ]
   where
@@ -296,6 +325,154 @@ chunksOf n xs
       case splitAt n xs of
         ([], _) -> []
         (chunk, rest) -> chunk : chunksOf n rest
+
+-- * Command runner benchmark fixture ----------------------------------------
+
+data BenchCommand
+  = EmitOne
+  | EmitLarge
+  | SelectNoOp
+  deriving stock (Eq, Show)
+
+data BenchEvent
+  = BenchOneEmitted !Text
+  | BenchLargeEmitted !Text
+  deriving stock (Eq, Show)
+
+data BenchState = BenchReady
+  deriving stock (Bounded, Enum, Eq, Ord, Show)
+
+type BenchEventStream = EventStream (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+
+type ValidatedBenchEventStream = ValidatedEventStream (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+
+largeCommandBatchSize :: Int
+largeCommandBatchSize = 100
+
+fixedCommandPayload :: Text
+fixedCommandPayload = Text.replicate payloadSize "a"
+
+legacyAcceptedOneTarget :: Stream BenchEventStream
+legacyAcceptedOneTarget = stream "bench-command-legacy-accepted-1"
+
+legacyAcceptedLargeTarget :: Stream BenchEventStream
+legacyAcceptedLargeTarget = stream "bench-command-legacy-accepted-large"
+
+legacyNoOpTarget :: Stream BenchEventStream
+legacyNoOpTarget = stream "bench-command-legacy-no-op"
+
+legacyAcceptedOneStream :: ValidatedBenchEventStream
+legacyAcceptedOneStream = mkEventStreamOrThrow "bench-command-legacy-accepted-1" (benchEventStream oneTransducer)
+
+legacyAcceptedLargeStream :: ValidatedBenchEventStream
+legacyAcceptedLargeStream = mkEventStreamOrThrow "bench-command-legacy-accepted-large" (benchEventStream largeTransducer)
+
+legacyNoOpStream :: ValidatedBenchEventStream
+legacyNoOpStream = mkEventStreamOrThrow "bench-command-legacy-no-op" (benchEventStream noOpTransducer)
+
+benchEventStream :: SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent -> BenchEventStream
+benchEventStream transducer =
+  EventStream
+    { transducer,
+      initialState = BenchReady,
+      initialRegisters = RNil,
+      eventCodec = benchEventCodec,
+      resolveStreamName = streamName,
+      snapshotPolicy = Never,
+      stateCodec = Nothing
+    }
+
+oneTransducer :: SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+oneTransducer = singleEdgeTransducer emitOneCtor [pack emitOneCtor oneEventCtor (lit fixedCommandPayload *: oNil)]
+
+largeTransducer :: SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+largeTransducer =
+  singleEdgeTransducer
+    emitLargeCtor
+    (Prelude.replicate largeCommandBatchSize (pack emitLargeCtor largeEventCtor (lit fixedCommandPayload *: oNil)))
+
+noOpTransducer :: SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+noOpTransducer = singleEdgeTransducer selectNoOpCtor []
+
+singleEdgeTransducer :: InCtor BenchCommand '[] -> [Keiki.OutTerm '[] BenchCommand BenchEvent] -> SymTransducer (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent
+singleEdgeTransducer commandCtor emitted =
+  SymTransducer
+    { edgesOut = \BenchReady ->
+        [ Edge
+            { guard = matchInCtor commandCtor,
+              update = UKeep,
+              output = emitted,
+              target = BenchReady,
+              mode = Keiki.Live
+            }
+        ],
+      initial = BenchReady,
+      initialRegs = RNil,
+      isFinal = \_ -> False
+    }
+
+emitOneCtor :: InCtor BenchCommand '[]
+emitOneCtor =
+  unavailableInCtor
+    "EmitOne"
+    (\case EmitOne -> Just RNil; _ -> Nothing)
+    (\RNil -> EmitOne)
+
+emitLargeCtor :: InCtor BenchCommand '[]
+emitLargeCtor =
+  unavailableInCtor
+    "EmitLarge"
+    (\case EmitLarge -> Just RNil; _ -> Nothing)
+    (\RNil -> EmitLarge)
+
+selectNoOpCtor :: InCtor BenchCommand '[]
+selectNoOpCtor =
+  unavailableInCtor
+    "SelectNoOp"
+    (\case SelectNoOp -> Just RNil; _ -> Nothing)
+    (\RNil -> SelectNoOp)
+
+oneEventCtor :: WireCtor BenchEvent (Text, ())
+oneEventCtor =
+  unavailableWireCtor
+    "BenchOneEmitted"
+    (\case BenchOneEmitted value -> Just (value, ()); _ -> Nothing)
+    (\(value, ()) -> BenchOneEmitted value)
+
+largeEventCtor :: WireCtor BenchEvent (Text, ())
+largeEventCtor =
+  unavailableWireCtor
+    "BenchLargeEmitted"
+    (\case BenchLargeEmitted value -> Just (value, ()); _ -> Nothing)
+    (\(value, ()) -> BenchLargeEmitted value)
+
+benchEventCodec :: Codec BenchEvent
+benchEventCodec =
+  Codec
+    { eventTypes = EventType "BenchOneEmitted" :| [EventType "BenchLargeEmitted"],
+      eventType = \case
+        BenchOneEmitted {} -> EventType "BenchOneEmitted"
+        BenchLargeEmitted {} -> EventType "BenchLargeEmitted",
+      schemaVersion = 1,
+      encode = \case
+        BenchOneEmitted value -> toJSON value
+        BenchLargeEmitted value -> toJSON value,
+      decode = \(EventType eventTypeName) _ ->
+        case eventTypeName of
+          "BenchOneEmitted" -> Right (BenchOneEmitted fixedCommandPayload)
+          "BenchLargeEmitted" -> Right (BenchLargeEmitted fixedCommandPayload)
+          other -> Left ("unknown command benchmark event type: " <> other),
+      upcasters = []
+    }
+
+commandScenarioBench :: Store.KirokuStore -> String -> ValidatedBenchEventStream -> Stream BenchEventStream -> BenchCommand -> Benchmark
+commandScenarioBench store benchmarkName validatedStream target command =
+  bench benchmarkName $ nfIO $ runStoreChecked store do
+    void (Lifecycle.hardDeleteStream (streamName target))
+    result <- runCommand defaultRunCommandOptions validatedStream target command
+    case result of
+      Right _ -> pure ()
+      Left err -> liftIO (fail ("unexpected command benchmark result: " <> show err))
 
 runStoreChecked :: Store.KirokuStore -> Eff [Store, Error Store.StoreError, IOE] a -> IO a
 runStoreChecked store action = do
