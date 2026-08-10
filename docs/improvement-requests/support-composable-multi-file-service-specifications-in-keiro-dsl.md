@@ -6,7 +6,7 @@ description: >-
   declarations, validating the whole service, and scaffolding context-level outputs atomically.
 timestamp: 2026-08-01T15:50:45Z
 requestId: IR-2
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md
 reviews:

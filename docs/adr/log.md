@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Update**: Amend ADR 0020 with the checked mapped-root boundary and release qualification requirements for semantically local service conformance (plan 222).
 * **Update**: Define the additive semantic-impact ledger row, absent-versus-empty baseline semantics, and strict known-row validation (plan 221).
 * **Update**: Record source-independent semantic-impact snapshots, honest legacy baselines, separate generated-artifact roles, and byte-aware standalone idempotence (plan 221).
 * **Update**: Require behavior-source joins through stable semantic subjects and one exact context source map (plan 220).

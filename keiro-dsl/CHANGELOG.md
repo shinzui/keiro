@@ -50,8 +50,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   workspace path instead of rewriting it.
 - Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
   `Harness` into the context `StructuralConformance` module, which must be added to the consuming
-  Cabal module inventory. Unrelated aggregate files are now byte-stable when a declaration outside
-  their semantic closure changes.
+  Cabal module inventory; the context `BehaviorSourceMap` and additive ledger `semantic-impact`
+  row must be added at the same baseline. Compile the runtime package and run the generated service
+  conformance target after reconciling the Cabal fragment. Unrelated aggregate files are now
+  byte-stable when a declaration outside their semantic closure changes, and source-only movement
+  rewrites the source map rather than behavior contracts or create-once witnesses.
 - Requires `kiroku-store >=0.4 && <0.5`, keeping generated conformance and
   runtime fixtures on the same Kiroku effect surface as Keiro 0.11.
 

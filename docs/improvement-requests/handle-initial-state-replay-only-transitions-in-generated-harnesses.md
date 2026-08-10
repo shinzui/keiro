@@ -7,7 +7,7 @@ description: >-
   and service conformance.
 timestamp: 2026-08-05T14:23:30Z
 requestId: IR-18
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md
 reviews:

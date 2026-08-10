@@ -7,7 +7,7 @@ description: >-
   inventory wiring while rejecting structural drift before startup.
 timestamp: 2026-08-08T00:19:11Z
 requestId: IR-20
-status: implemented
+status: completed
 origin: mori://shinzui/keiro
 plan: docs/masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md
 reviews:

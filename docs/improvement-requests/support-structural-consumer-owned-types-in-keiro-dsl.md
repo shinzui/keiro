@@ -6,7 +6,7 @@ description: >-
   structural wire contracts without lossy surrogates or duplicate business models.
 timestamp: 2026-07-28T16:54:33Z
 requestId: IR-1
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md
 reviews:

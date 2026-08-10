@@ -1,25 +1,28 @@
 # Bundle Update Log
 
+## 2026-08-10
+* **Completed**: Close IR-21 after MasterPlan 34 and Plan 222 deliver checked semantic locality, stable behavior source maps, impact reporting, restoring mutations, the pinned Mori replay, and a byte-clean corpus; migrate legacy implemented statuses to the current completed vocabulary.
+
 ## 2026-08-09
 * **Review**: Correct IR-21 technical scope to current command, private-event, and register roots
-  and separate service-owned declaration laws from aggregate-use evidence.
+and separate service-owned declaration laws from aggregate-use evidence.
 * **Addition**: IR-21 requests semantically local workspace regeneration and stable behavior
-  source anchors so a mapped-shape change rewrites only reachable aggregate outputs while
-  whole-service conformance and current source-located diagnostics remain complete.
+source anchors so a mapped-shape change rewrites only reachable aggregate outputs while
+whole-service conformance and current source-located diagnostics remain complete.
 * **Implemented**: Reconciled IR-20 after [MasterPlan 32](../masterplans/32-build-typed-projection-catalogs-and-safe-coordinated-rebuilds.md)
-  and all five child plans completed; follow-up
-  [MasterPlan 33](../masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md)
-  extends missing-checkpoint lifecycle semantics without reopening the typed catalog request.
+and all five child plans completed; follow-up
+[MasterPlan 33](../masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md)
+extends missing-checkpoint lifecycle semantics without reopening the typed catalog request.
 * **Implemented**: Reconciled IR-16 from
-  [Plan 190](../plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md)'s
-  completed checked Haskell naming, migration, conformance, and documentation evidence.
+[Plan 190](../plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md)'s
+completed checked Haskell naming, migration, conformance, and documentation evidence.
 * **Implemented**: Reconciled IR-4 from
-  [Plan 157](../plans/157-unify-aggregate-type-capabilities-and-lower-time-and-natural.md)'s
-  completed aggregate Time/Natural lowering, conformance, and repository validation evidence.
+[Plan 157](../plans/157-unify-aggregate-type-capabilities-and-lower-time-and-natural.md)'s
+completed aggregate Time/Natural lowering, conformance, and repository validation evidence.
 * **Implemented**: Reconciled IR-1 after
-  [MasterPlan 25](../masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md)
-  delivered and released the structural/opaque consumer-owned type contract, and Mori recorded the
-  upstream prerequisite as already satisfied.
+[MasterPlan 25](../masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md)
+delivered and released the structural/opaque consumer-owned type contract, and Mori recorded the
+upstream prerequisite as already satisfied.
 
 ## 2026-08-08
 * **Acceptance and planning**: IR-20 requests one typed runtime catalog for projection ownership,

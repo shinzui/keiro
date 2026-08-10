@@ -6,7 +6,7 @@ description: >-
   forcing Text shadow registers or hand-owned behavior holes.
 timestamp: 2026-08-01T18:05:45Z
 requestId: IR-12
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md
 reviews:

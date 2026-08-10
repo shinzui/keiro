@@ -27,7 +27,7 @@ assertion.
 Completing implementation work is not enough to pass this plan. The plan closes only when missing
 evidence and stale source anchors have been falsified, exact byte allowlists pass for single and
 workspace paths, wire/fold/snapshot/behavior identities remain frozen, adoption documentation is
-published, and IR-21 records implemented evidence. It does not release packages or migrate a
+published, and IR-21 records completed evidence. It does not release packages or migrate a
 service fleet.
 
 
@@ -49,8 +49,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-10T03:30:59Z) Milestone 4a: regenerated the 35-invocation committed corpus once,
   removed deferred golden comparisons, added 21 source maps plus one service structural module to
   explicit build inventories, and compiled every test component warning-free.
-- [ ] Milestone 4b: prove the committed corpus replay is byte-clean, run full repository/release-
-  quality validation, publish adoption guidance, and close IR-21/MasterPlan evidence.
+- [x] (2026-08-10T04:02:10Z) Milestone 4b: proved the committed corpus replay byte-clean, passed
+  full repository and Nix validation, published adoption/release guidance, closed IR-21 under the
+  current Mori lifecycle vocabulary, and recorded the durable root/release gate in ADR 0020.
 
 
 ## Surprises & Discoveries
@@ -93,6 +94,14 @@ implementation. Provide concise evidence.
   identified 16 missing compiled artifacts; `-Werror=missing-home-modules` then found the
   structural and workspace-nominal transitive source-map imports, and a complete inventory audit
   added every map explicitly before the warning-free `cabal build all --enable-tests` passed.
+- The actively developed Mori CLI now rejects the legacy `implemented` request status even though
+  Keiro's pinned v0.5.0 profile does not enumerate lifecycle values. The bundle's twelve historical
+  completed requests were migrated mechanically to `completed`; validation then passed for all 21
+  requests. Mori's registered Keiro snapshot does not yet index Plan 222, so IR-21 retains the
+  bundle's repository-local `plan` field rather than adding an unresolvable `targetPlan`.
+- The policy explicitly freezes `conformance-skeletons` as historical authored output. Those
+  create-once skeletons retain old source-line comments for historical verification; all 35
+  policy-regenerated active invocations use source maps and pass byte-current comparison.
 
 
 ## Decision Log
@@ -128,6 +137,13 @@ Record every decision made while working on the plan.
   qualify Keiro rather than coordinate or alter concurrent Mori development.
   Date: 2026-08-10
 
+- Decision: Close IR-21 with Mori's current `completed` vocabulary without refreshing Mori's
+  registry or manufacturing a resolvable Plan 222 artifact.
+  Rationale: Keiro must pass the current read-only validator, while qualification is not authorized
+  to mutate an actively developed dependency's registry. The repository-local plan link remains
+  unambiguous inside this bundle.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -136,13 +152,26 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-Milestones 1 through 3 establish the release-candidate locality claim at both scales. The minimized
-fixture holds its generated delta constant as ten unrelated aggregates are added, and restoring
-mutations prove centralized structural laws, aggregate-local use laws, and exact source anchors
-can all fail independently. The pinned real-world replay reduces generated churn from 22 files and
-1,869 lines to 9 files and 629 lines; only 27 changed lines remain after excluding the deliberately
-isolated positional map. Milestone 4 still owns the one-time corpus migration, documentation,
-request/ADR evidence, and full release-quality validation before fleet adoption is allowed.
+Completed on 2026-08-10. The minimized fixture holds its four-file semantic delta constant as ten
+unrelated aggregates are added, and restoring mutations prove centralized structural laws,
+aggregate-local use laws, complete behavior contracts, and exact source anchors can all fail
+independently while restoring every touched byte. The pinned real-world replay reduces generated
+churn from 22 files/1,869 lines to 9 files/629 lines; only 27 changed lines across eight files remain
+after excluding the deliberately isolated 602-line source map. A fresh create-once binding
+skeleton exposes 12 changed obligation lines separately from generated output.
+
+The one-time 35-invocation corpus regeneration is committed and repeatable. Its second replay,
+suite coverage, record/disk consistency, and Cabal inventories are clean, and every active
+generated component compiles and runs. Final acceptance passed `cabal build all`, all 40
+`keiro-dsl` test components (641 main-suite examples), all three restoring mutation scripts, the
+pinned Mori replay, `just verify`, Mori request validation (21 requests), strict ADR validation
+(28 concepts), `nix fmt` with zero changes, `nix flake check`, and diff hygiene. Adoption and
+release notes now require the one-time Cabal/source-map/structural-conformance reconciliation and
+the generated service gate; ADR 0020 records the exhaustive mapped-root and release boundary.
+
+This completes MasterPlan 34's locality prerequisite and IR-21. It does not publish a release or
+authorize fleet adoption: MasterPlan 35 must still qualify mapped queue, read-model query, and
+projection consumers, and adoption must use a release containing both gates.
 
 
 ## Context and Orientation

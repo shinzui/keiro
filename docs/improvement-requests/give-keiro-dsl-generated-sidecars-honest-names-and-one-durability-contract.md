@@ -7,7 +7,7 @@ description: >-
   and hold the conformance package record to the workspace record's forward-compatibility contract.
 timestamp: 2026-08-05T21:32:35Z
 requestId: IR-19
-status: implemented
+status: completed
 origin: mori://shinzui/keiro
 plan: docs/plans/198-rename-keiro-dsl-sidecars-to-explicit-slot-ledger-names-with-one-durability-contract.md
 reviews:

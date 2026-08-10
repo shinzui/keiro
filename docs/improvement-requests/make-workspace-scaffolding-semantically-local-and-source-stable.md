@@ -4,10 +4,17 @@ title: Make workspace scaffolding semantically local and source-stable
 description: >-
   Keep a local DSL change from rewriting generated harnesses and behavior contracts for unrelated
   aggregates, while preserving complete workspace conformance and source-located diagnostics.
-timestamp: 2026-08-09T21:37:23Z
+timestamp: 2026-08-10T03:36:12Z
 requestId: IR-21
-status: proposed
+status: completed
 origin: mori://shinzui/mori
+completedAt: 2026-08-10T03:36:12Z
+resolution: >-
+  MasterPlan 34 and Plan 222 delivered checked semantic locality, one service structural owner,
+  stable behavior source maps, impact reporting, restoring mutations, a pinned Mori replay, and a
+  byte-clean regenerated corpus; fleet adoption still requires MasterPlan 35 and a release that
+  contains both gates.
+plan: docs/plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md
 reviews:
   - kind: model
     reviewer: codex
@@ -44,10 +51,22 @@ reviews:
 
 ## Status
 
-Proposed for the next Keiro release. This is not a generated-runtime correctness defect: current
-output compiles and the whole-service conformance package passes. It is an adoption and review
-quality defect because a small, local contract change creates a large semantically unrelated diff
-that reviewers must audit and downstream repositories must carry.
+**Completed.** [MasterPlan 34](../masterplans/34-make-keiro-dsl-regeneration-semantically-local-and-source-stable-before-wide-adoption.md)
+and [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md)
+delivered the corrected checked-root model, localized aggregate evidence, one service structural
+owner, stable behavior source maps, semantic-versus-artifact impact reporting, restoring
+mutations, and the regenerated conformance corpus. This closes the Keiro locality prerequisite;
+wide fleet adoption remains blocked on MasterPlan 35's mapped-consumer qualification and on a
+Keiro release containing both complete gates.
+
+The pinned regression for
+`mori://shinzui/mori/plans/181-add-dependency-version-constraints-and-upstream-pointers`
+changes only Project and ProjectArtifact as aggregate consumers and the three intended payload
+declarations. Generated churn falls from 22 files/1,869 lines to 9 files/629 lines, or 8 files/27
+lines when the deliberately isolated 602-line positional source map is excluded. The minimized
+fixture keeps its four-file semantic delta constant while ten unrelated aggregates are added, and
+source movement changes only the context source map plus source-bearing ledger provenance while a
+failing witness reports the new exact position.
 
 ## Context
 

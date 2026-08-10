@@ -6,7 +6,7 @@ description: >-
   legacy persisted events readable through explicit language-version and migration policy.
 timestamp: 2026-08-01T19:21:22Z
 requestId: IR-14
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/171-enforce-versioned-id-prefix-domains-across-construction-decode-replay-and-evolution.md
 reviews:

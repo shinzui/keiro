@@ -6,7 +6,7 @@ description: >-
   strings, and identifiers cannot be mistaken for file-level feature declarations.
 timestamp: 2026-08-01T16:29:14Z
 requestId: IR-11
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md
 reviews:

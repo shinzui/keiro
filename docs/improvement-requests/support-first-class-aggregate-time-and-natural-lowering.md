@@ -6,7 +6,7 @@ description: >-
   types, and make keiro-dsl check reject every type the selected scaffold cannot lower.
 timestamp: 2026-07-31T13:41:01Z
 requestId: IR-4
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/157-unify-aggregate-type-capabilities-and-lower-time-and-natural.md
 reviews:

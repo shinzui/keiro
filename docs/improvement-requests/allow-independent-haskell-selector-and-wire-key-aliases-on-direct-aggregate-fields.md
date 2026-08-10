@@ -6,7 +6,7 @@ description: >-
   wire key so reserved names and brownfield contracts do not force domain renaming.
 timestamp: 2026-07-31T15:03:54Z
 requestId: IR-6
-status: implemented
+status: completed
 origin: mori://shinzui/keiro
 plan: docs/plans/192-decouple-wire-keys-from-generated-haskell-selectors-with-field-aliases.md
 reviews:

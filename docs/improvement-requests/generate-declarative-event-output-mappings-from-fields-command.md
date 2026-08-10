@@ -6,7 +6,7 @@ description: >-
   reserving hand-owned output holes for explicit transformations and external decisions.
 timestamp: 2026-08-01T15:58:47Z
 requestId: IR-13
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md
 reviews:

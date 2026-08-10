@@ -6,7 +6,7 @@ description: >-
   value names, independently of DSL, wire, registry, schema, and table spellings.
 timestamp: 2026-08-04T04:14:15Z
 requestId: IR-16
-status: implemented
+status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md
 reviews:

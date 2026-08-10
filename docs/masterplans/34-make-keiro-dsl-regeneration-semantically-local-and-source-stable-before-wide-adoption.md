@@ -137,7 +137,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Complete |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Complete |
 | 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Complete |
-| 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | In Progress |
+| 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -230,8 +230,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4: remove volatile positions from aggregate behavior contracts and diagnostics.
 - [x] EP-5: persist semantic-impact snapshots and render scaffold/diff consumers honestly.
 - [x] EP-5: prove source-only movement never becomes aggregate semantic impact.
-- [ ] EP-6: pass minimized locality, evidence mutation, and single/workspace stability fixtures.
-- [ ] EP-6: replay the Mori Plan 181 regression, regenerate the corpus once, and publish the gate.
+- [x] EP-6: pass minimized locality, evidence mutation, and single/workspace stability fixtures.
+- [x] EP-6: replay the Mori Plan 181 regression, regenerate the corpus once, and publish the gate.
 
 
 ## Surprises & Discoveries
@@ -278,7 +278,17 @@ interactions between child plans. Provide concise evidence.
 - EP-5's corpus probe reached the coordinated migration boundary exactly as designed: the policy
   generated EP-2's `StructuralConformance`, EP-4's `BehaviorSourceMap`, and EP-5's additive ledger
   rows, then refused context modules not yet present in generated Cabal inventories. No probe output
-  was retained; EP-6 remains the only owner of the complete refresh and clean second replay.
+  was retained; EP-6 remained the only owner and completed the refresh plus clean second replay.
+- EP-6's minimized fixture holds a four-file semantic delta constant while adding ten unrelated
+  aggregates. The pinned Mori replay falls from 22 files/1,869 lines to 9 files/629 lines, or eight
+  files/27 semantic lines after separating the 602-line source map; the fresh create-once binding
+  obligation changes 12 lines and remains outside the generated metric.
+- The coordinated corpus refresh selected 35/35 invocations, added 21 behavior source maps and one
+  structural module, and exposed every new transitive module through explicit Cabal inventories.
+  The second replay, suite coverage, record/disk consistency, and inventories are byte-clean.
+- Mori's actively developed CLI requires `completed` rather than Keiro's historical `implemented`
+  request status. EP-6 mechanically migrated the twelve existing completed statuses and closed
+  IR-21 with that vocabulary; all 21 requests validate without mutating Mori's moving registry.
 
 
 ## Decision Log
@@ -335,10 +345,9 @@ service facade executes the structural gate exactly once. A two-aggregate fixtur
 that an Aggregate A-only mapped edit leaves every Aggregate B generated artifact byte-identical,
 and the existing mutation suite preserves all declaration and use-site evidence after relocation.
 
-The final corpus migration remains intentionally open for EP-6, along with the source-provenance,
-behavior-source-map, and reporting work in EP-3 through EP-5. The focused implementation passed
-the full 623-example DSL suite, representative compiled conformance targets, restoring mutations,
-generated-source policy checks, ADR validation, and repeat-scaffold idempotence.
+At the EP-2 checkpoint, the final corpus migration remained intentionally reserved for EP-6. EP-6
+has now completed that combined refresh and the broader release-quality qualification without
+reopening EP-2's ownership contract.
 
 EP-3 completed on 2026-08-09. Exact state and transition spans now survive parsing in a checked
 `SemanticSourceIndex` beside the normalized `Spec`, and workspace composition unions member-local,
@@ -371,8 +380,24 @@ legacy/current, reordering, and workspace source-motion evidence passed the comp
 DSL suite and diff shell regressions, along with build, strict ADR, and diff-hygiene gates. The
 corpus probe produced only the combined migration reserved for EP-6 and its output was restored.
 
+EP-6 and this MasterPlan completed on 2026-08-10. Exact locality allowlists, constant-scale
+fixtures, six structural mutations, complete-behavior mutations, moved-source diagnostics, and
+the pinned Mori Plan 181 replay establish both locality and retained correctness. The 35-invocation
+corpus was regenerated once, reconciled with explicit Cabal inventories, and replayed byte-clean.
+The final gate passed all 40 DSL test components (641 main-suite examples), the repository-wide
+live-database verification, request/ADR policies, formatting, Nix checks, and diff hygiene.
+
+The durable decisions are recorded across ADRs 0015, 0017, 0020, and 0022; ADR 0020 now explicitly
+states the checked command/private-event/register root boundary and the executable release gate.
+IR-21 is completed and adoption guidance is published. This completes Keiro's locality
+prerequisite only: wide fleet adoption remains blocked on MasterPlan 35 and on a Keiro release
+containing both completed gates.
+
 
 ## Revision Notes
 
 - 2026-08-09: Linked MasterPlan 35 as the separate mapped-consumer language follow-up and clarified
   that MP-34 completion is necessary but not sufficient for fleet adoption.
+- 2026-08-10: Completed EP-6, IR-21, and the MasterPlan after the pinned Mori replay, one coordinated
+  corpus migration, restoring mutations, documentation/ADR distillation, and full repository/Nix
+  validation; fleet adoption remains blocked on MasterPlan 35 plus a release containing both gates.

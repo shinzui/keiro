@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service conformance packages import one runtime-owned facade
 description: A configured Keiro service generates at most one local conformance package whose runner imports one generated facade from an explicitly named runtime package while create-once expectations remain application-owned.
-timestamp: 2026-08-09T22:25:17Z
+timestamp: 2026-08-10T03:36:12Z
 docId: ADR-20
 status: Accepted
 date: 2026-08-03
@@ -81,6 +81,17 @@ alias for that module, imports it exactly once, and prefixes its results with
 checked mapped closure. Declaration-law results are executable checks, never
 entries in the create-once facts baseline.
 
+That aggregate closure is defined only by mapped command fields, private-event
+fields, and registers in the current checked graph. Queue payloads, public
+contracts, read-model query schemas, and aggregate-owned projections are not
+inferred as consumers. Adding a future mapped root is a language change that
+must extend the checked semantic-impact fold, harness selection, reporting, and
+service conformance before the release can claim locality. A release adopting
+this ownership split must regenerate its committed corpus, reconcile generated
+module inventories, compile the runtime facade, and execute the generated
+service conformance package; a smaller diff is not evidence if those gates are
+absent.
+
 The existing `keiro-dsl-manifest.*.txt` remains the authoritative runtime build
 inventory and compatibility artifact. A runnable conformance package removes
 the need to translate that manifest into a hand-written runner; it does not
@@ -117,6 +128,9 @@ distinct history slots.
   decisions because the generator never replaces their accepted baseline.
 - A mapped declaration change updates one context conformance module and only
   the aggregate harnesses whose checked use closure reaches that declaration.
+- Locality claims are limited to mapped roots represented by the checked graph;
+  adding a root without extending generation, reporting, and executable
+  conformance is a release-blocking omission.
 - The text build manifest remains necessary when generated runtime modules or
   their dependencies change.
 

@@ -503,6 +503,37 @@ release: regenerate the service output, add `StructuralConformance` from the
 Cabal fragment, and remove declaration-law expectations from aggregate-specific
 inventories. Do not hand-move assertions between generated files.
 
+### Adopting semantically local regeneration
+
+Adopt this contract only from a Keiro release that contains the complete
+locality qualification gate. Regenerate every service once, reconcile the
+generated Cabal fragment (including `StructuralConformance` and
+`BehaviorSourceMap`), compile the runtime package, and run the generated service
+conformance target. The migration may move declaration-wide assertions out of
+aggregate harnesses and add `semantic-impact` rows to scaffold ledgers; these
+are generated layout and evidence changes, not wire, fold, snapshot, or
+behavior-key changes.
+
+After that baseline, a mapped declaration change rewrites use-specific output
+only for aggregates that reach it through a command field, private-event field,
+or register, plus the service structural module. Queue payloads, public
+contracts, read-model query schemas, and aggregate-owned projections are not
+typed mapped roots in the current checked graph and are not inferred as
+consumers. A future language feature that adds one of those roots must extend
+checking, semantic impact, generation, reporting, and conformance together.
+
+Source-only movement is separate. Moving an unchanged behavior requirement
+rewrites its context `BehaviorSourceMap` and source-bearing ledger provenance,
+while its stable key, generated contract, create-once witness, fold, and runtime
+semantics remain byte-identical. Failures still resolve the key against the
+current map and report the exact file, line, and column.
+
+Review scaffold and diff output as two independent projections: `semantic
+impact` names checked consumers and service conformance, while
+`generated-artifact impact` names bytes that changed. A legacy ledger has no
+historic semantic snapshot, so its first report says `baseline: unavailable
+(legacy ledger)` rather than guessing an empty old consumer set.
+
 ## Aggregate expressions
 
 Guards and register writes use a typed scalar expression language.
