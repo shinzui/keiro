@@ -46,4 +46,4 @@ behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"g
 behavior {"aggregate":"Reservation","command":"RequestTransferReservation","evidence":"generated-authoritative","key":"behavior-v1-cf40a84edc844a41","kind":"required-rejection","outputs":[],"source":"Confirmed"}
 behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"generated-authoritative","key":"behavior-v1-e53a65263ad89283","kind":"required-rejection","outputs":[],"source":"Confirmed"}
 behavior {"aggregate":"Reservation","command":"ConfirmReservation","evidence":"generated-authoritative","key":"behavior-v1-e7378f31cfa93bbf","kind":"required-rejection","outputs":[],"source":"Unrequested"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

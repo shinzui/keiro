@@ -13,4 +13,4 @@ generated Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
 generated Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
 hole HospitalCapacity/TransferDecisions/ReadModelHoles.hs
 generated Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

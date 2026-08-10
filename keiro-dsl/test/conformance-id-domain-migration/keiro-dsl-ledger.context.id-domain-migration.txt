@@ -33,4 +33,4 @@ id-domain id-domain|name=OrderId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix
 nominal-equality nominal-equality|name=OrderId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:ord:keiro-dsl/id-domain/typeid-v7/1|owner=generated
 behavior {"aggregate":"OrderBook","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-6b331af859e674ea","kind":"required-rejection","outputs":[],"source":"Recorded"}
 behavior {"aggregate":"OrderBook","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-a396f60ddb8f99be","kind":"live-transition","outputs":[{"command":"Record","ownership":"generated-command-identity"}],"source":"Empty"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

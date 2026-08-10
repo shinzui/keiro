@@ -110,10 +110,13 @@ import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
   ( MappedImpactDelta (..),
+    MappedRootEvidence (..),
     SemanticImpactReport (..),
     SemanticImpactSnapshot (..),
     diffSemanticImpact,
+    mappedConsequenceIdentity,
     mappedConsumerIdentity,
+    mappedRootKindIdentity,
     semanticImpact,
     semanticImpactReport,
     semanticImpactSnapshot,
@@ -1478,18 +1481,32 @@ renderSemanticImpactReport report = case semanticReportDeclarations report of
     renderCurrent declaration =
       [ "  " <> unMappedKey declaration,
         "    current aggregate consumers: " <> renderConsumers (Map.findWithDefault Set.empty declaration (snapshotMappedConsumers (semanticReportCurrent report))),
+        "    current roots: " <> maybe "baseline unavailable" (renderEvidence . Map.findWithDefault Set.empty declaration) (snapshotMappedEvidence (semanticReportCurrent report)),
+        "    current consequences: " <> maybe "baseline unavailable" (renderConsequences . Map.findWithDefault Set.empty declaration) (snapshotMappedConsequences (semanticReportCurrent report)),
         "    service-conformance: impacted"
       ]
     renderDelta delta =
       [ "  " <> unMappedKey (impactDeclaration delta),
         "    previous aggregate consumers: " <> renderConsumers (impactPreviousConsumers delta),
         "    current aggregate consumers:  " <> renderConsumers (impactCurrentConsumers delta),
+        "    previous roots: " <> maybe "baseline unavailable" renderEvidence (impactPreviousEvidence delta),
+        "    current roots:  " <> maybe "baseline unavailable" renderEvidence (impactCurrentEvidence delta),
+        "    previous consequences: " <> maybe "baseline unavailable" renderConsequences (impactPreviousConsequences delta),
+        "    current consequences:  " <> maybe "baseline unavailable" renderConsequences (impactCurrentConsequences delta),
         "    service-conformance: " <> if impactServiceConformance delta then "impacted" else "unchanged"
       ]
     renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
       [] -> "(none)"
       names -> T.intercalate ", " names
     consumerName = mappedConsumerIdentity
+    renderEvidence = renderSet renderRoot
+    renderRoot evidence =
+      T.intercalate "|" [mappedRootKindIdentity (evidenceRootKind evidence), mappedConsumerIdentity (evidenceConsumer evidence), evidencePath evidence]
+        <> maybe "" ("|" <>) (evidenceOperation evidence)
+    renderConsequences = renderSet mappedConsequenceIdentity
+    renderSet render values = case map render (Set.toAscList values) of
+      [] -> "(none)"
+      rendered -> T.intercalate ", " rendered
 
 renderGeneratedArtifactImpact :: SemanticImpactReport -> [GeneratedArtifactImpact] -> [Text]
 renderGeneratedArtifactImpact _ [] = []

@@ -27,4 +27,4 @@ generated Generated/ReplayDivergence/Note/Projection.hs
 generated Generated/ReplayDivergence/Note/Harness.hs
 behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-248e9c1b1eb3e5bc","kind":"live-transition","outputs":[{"command":"WriteNote","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"Note","command":"WriteNote","evidence":"generated-authoritative","key":"behavior-v1-7c36eda198514110","kind":"required-rejection","outputs":[],"source":"Recorded"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

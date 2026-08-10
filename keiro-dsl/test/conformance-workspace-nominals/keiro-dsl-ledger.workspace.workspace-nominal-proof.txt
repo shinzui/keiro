@@ -44,7 +44,7 @@ behavior {"aggregate":"Project","command":"RegisterProject","evidence":"generate
 behavior {"aggregate":"Project","command":"ArchiveProject","evidence":"generated-authoritative","key":"behavior-v1-c4b406a5be4a0d0b","kind":"required-rejection","outputs":[],"owner":"domain/project.keiro","source":"Empty"}
 behavior {"aggregate":"ProjectArtifact","command":"RecordArtifact","evidence":"generated-authoritative","key":"behavior-v1-c6d79387e567590e","kind":"live-transition","outputs":[{"command":"RecordArtifact","ownership":"generated-command-identity"}],"owner":"domain/project-artifact.keiro","source":"Empty"}
 behavior {"aggregate":"Project","command":"ArchiveProject","evidence":"generated-authoritative","key":"behavior-v1-ea703ecdfbda1e70","kind":"live-transition","outputs":[{"command":"ArchiveProject","ownership":"generated-command-identity"}],"owner":"domain/project.keiro","source":"Live"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/Nominals.hs"}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Domain.hs"}
 adopted {"evidence":"banner","path":"Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs"}

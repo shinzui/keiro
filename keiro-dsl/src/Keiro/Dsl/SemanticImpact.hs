@@ -10,9 +10,12 @@
 module Keiro.Dsl.SemanticImpact
   ( DerivedMappedConsumer (..),
     UnsupportedProjectionSource (..),
+    MappedQueryPosition (..),
     MappedConsumer (..),
     MappedRootKind (..),
     MappedRoot (..),
+    MappedRootEvidence (..),
+    MappedConsequence (..),
     SemanticImpact (..),
     SemanticImpactSnapshot (..),
     MappedImpactDelta (..),
@@ -23,6 +26,9 @@ module Keiro.Dsl.SemanticImpact
     mappedImpactForDeclarations,
     semanticImpactReport,
     mappedConsumerIdentity,
+    mappedRootKindIdentity,
+    mappedConsequenceIdentity,
+    mappedSurfaceFactValues,
     aggregateMappedRoots,
     aggregateMappedClosure,
     mappedDeclarationConsumers,
@@ -31,10 +37,12 @@ module Keiro.Dsl.SemanticImpact
 where
 
 import Control.Monad (unless)
-import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
+import Data.Aeson.Types (Parser)
 import Data.List (sort, sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -46,10 +54,15 @@ import Keiro.Dsl.TypeGraph
 -- | A checked generated consumer of mapped declarations. Projection consumers
 -- are derived from an aggregate event authority rather than owning another
 -- source type expression.
+data MappedQueryPosition
+  = MappedQueryInput
+  | MappedQueryResult
+  deriving stock (Eq, Ord, Show, Generic)
+
 data MappedConsumer
   = AggregateConsumer !Name
   | WorkqueueConsumer !Name
-  | ReadModelConsumer !Name
+  | ReadModelQueryConsumer !Name !MappedQueryPosition
   | DerivedProjectionConsumer !DerivedMappedConsumer
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -75,6 +88,30 @@ data MappedRoot = MappedRoot
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | A source-independent, surface-tagged path from one generated consumer to
+-- one declaration. Unlike 'MappedRoot', this also represents transitive paths
+-- and therefore is suitable for durable ledgers and exact conformance facts.
+data MappedRootEvidence = MappedRootEvidence
+  { evidenceConsumer :: !MappedConsumer,
+    evidenceRootKind :: !MappedRootKind,
+    evidencePath :: !Text,
+    evidenceOperation :: !(Maybe Text)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Orthogonal consequences of a mapped declaration. These deliberately do
+-- not collapse persisted history, API/build impact, or projection rebuilds
+-- into one severity.
+data MappedConsequence
+  = MappedConsumerBuild !MappedConsumer
+  | MappedPrivateEventHistory !Name
+  | MappedSnapshotHydration !Name
+  | MappedWorkqueueHistory !Name
+  | MappedQueryApi !Name !MappedQueryPosition
+  | MappedProjectionHandlerReview !DerivedMappedConsumer
+  | MappedProjectionRebuild !DerivedMappedConsumer !Name
+  deriving stock (Eq, Ord, Show, Generic)
+
 -- | One deterministic dependency projection over a checked 'TypeGraph'.
 --
 -- 'impactAggregateDeclarations' contains the union of every root declaration
@@ -87,6 +124,8 @@ data SemanticImpact = SemanticImpact
     impactUsePaths :: !(Map MappedKey [UsePath]),
     impactAggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
     impactDeclarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
+    impactDeclarationEvidence :: !(Map MappedKey (Set MappedRootEvidence)),
+    impactDeclarationConsequences :: !(Map MappedKey (Set MappedConsequence)),
     impactServiceDeclarations :: !(Set MappedKey),
     impactDeclarationIdentities :: !(Map MappedKey Text),
     impactUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
@@ -100,6 +139,8 @@ data SemanticImpact = SemanticImpact
 -- for future non-aggregate roots.
 data SemanticImpactSnapshot = SemanticImpactSnapshot
   { snapshotMappedConsumers :: !(Map MappedKey (Set MappedConsumer)),
+    snapshotMappedEvidence :: !(Maybe (Map MappedKey (Set MappedRootEvidence))),
+    snapshotMappedConsequences :: !(Maybe (Map MappedKey (Set MappedConsequence))),
     snapshotServiceInventory :: !(Set MappedKey),
     snapshotDeclarationIdentities :: !(Map MappedKey Text)
   }
@@ -111,6 +152,10 @@ data MappedImpactDelta = MappedImpactDelta
   { impactDeclaration :: !MappedKey,
     impactPreviousConsumers :: !(Set MappedConsumer),
     impactCurrentConsumers :: !(Set MappedConsumer),
+    impactPreviousEvidence :: !(Maybe (Set MappedRootEvidence)),
+    impactCurrentEvidence :: !(Maybe (Set MappedRootEvidence)),
+    impactPreviousConsequences :: !(Maybe (Set MappedConsequence)),
+    impactCurrentConsequences :: !(Maybe (Set MappedConsequence)),
     impactServiceConformance :: !Bool
   }
   deriving stock (Eq, Show, Generic)
@@ -131,34 +176,59 @@ data SemanticImpactReport = SemanticImpactReport
 -- and consumer identities and require the two inventory projections to agree.
 instance ToJSON SemanticImpactSnapshot where
   toJSON snapshot =
-    object
+    object $
       [ "declarations"
           .= [ object
-                 [ "declaration" .= unMappedKey declaration,
-                   "consumers" .= map mappedConsumerIdentity (Set.toAscList declarationConsumers),
-                   "identity" .= Map.findWithDefault "" declaration (snapshotDeclarationIdentities snapshot)
-                 ]
+                 ( [ "declaration" .= unMappedKey declaration,
+                     "consumers" .= map mappedConsumerIdentity (Set.toAscList declarationConsumers),
+                     "identity" .= Map.findWithDefault "" declaration (snapshotDeclarationIdentities snapshot)
+                   ]
+                     <> maybe [] (\evidence -> ["consumerEvidence" .= Set.toAscList (Map.findWithDefault Set.empty declaration evidence)]) (snapshotMappedEvidence snapshot)
+                     <> maybe [] (\consequences -> ["consequences" .= Set.toAscList (Map.findWithDefault Set.empty declaration consequences)]) (snapshotMappedConsequences snapshot)
+                 )
              | (declaration, declarationConsumers) <- Map.toAscList (snapshotMappedConsumers snapshot)
              ],
         "serviceInventory" .= map unMappedKey (Set.toAscList (snapshotServiceInventory snapshot))
       ]
+        <> [ "mappedSurfaceEvidenceVersion" .= (1 :: Int)
+           | isJust (snapshotMappedEvidence snapshot)
+               || isJust (snapshotMappedConsequences snapshot)
+           ]
 
 instance FromJSON SemanticImpactSnapshot where
   parseJSON = withObject "SemanticImpactSnapshot" $ \fields -> do
     declarations <- fields .: "declarations" >>= traverse parseDeclaration
     inventoryNames <- fields .: "serviceInventory"
-    let declarationNames = [declaration | (declaration, _, _) <- declarations]
+    surfaceEvidenceVersion <- (fields .:? "mappedSurfaceEvidenceVersion" :: Parser (Maybe Int))
+    let declarationNames = [declaration | (declaration, _, _, _, _) <- declarations]
         inventoryKeys = map MappedKey inventoryNames
-        declarationMap = Map.fromList [(declaration, declarationConsumers) | (declaration, declarationConsumers, _) <- declarations]
-        declarationIdentities = Map.fromList [(declaration, identity) | (declaration, _, identity) <- declarations]
+        declarationMap = Map.fromList [(declaration, declarationConsumers) | (declaration, declarationConsumers, _, _, _) <- declarations]
+        declarationIdentities = Map.fromList [(declaration, identity) | (declaration, _, identity, _, _) <- declarations]
+        evidenceRows = [(declaration, value) | (declaration, _, _, value, _) <- declarations]
+        consequenceRows = [(declaration, value) | (declaration, _, _, _, value) <- declarations]
         inventory = Set.fromList inventoryKeys
     unless (distinct declarationNames) (fail "duplicate semantic-impact declaration")
     unless (distinct inventoryKeys) (fail "duplicate semantic-impact service inventory declaration")
     unless (Map.keysSet declarationMap == inventory) (fail "semantic-impact declarations and service inventory differ")
     unless (Map.keysSet declarationIdentities == inventory) (fail "semantic-impact declaration identities and service inventory differ")
+    parsedEvidence <- completeOptionalRows "consumer evidence" evidenceRows
+    parsedConsequences <- completeOptionalRows "consequences" consequenceRows
+    (evidence, consequences) <- case surfaceEvidenceVersion of
+      Nothing -> do
+        unless (isJust parsedEvidence == isJust parsedConsequences) (fail "semantic-impact root evidence and consequences must be present together")
+        pure (parsedEvidence, parsedConsequences)
+      Just 1 -> do
+        currentEvidence <- requireCurrentRows "consumer evidence" parsedEvidence declarationMap
+        currentConsequences <- requireCurrentRows "consequences" parsedConsequences declarationMap
+        pure (Just currentEvidence, Just currentConsequences)
+      Just version -> fail ("unsupported semantic-impact mappedSurfaceEvidenceVersion: " <> show version)
+    unless (maybe True (evidenceAgrees declarationMap) evidence) (fail "semantic-impact consumer evidence and consumer inventory differ")
+    unless (maybe True (consequencesAgree declarationMap) consequences) (fail "semantic-impact consequences and consumer inventory differ")
     pure
       SemanticImpactSnapshot
         { snapshotMappedConsumers = declarationMap,
+          snapshotMappedEvidence = evidence,
+          snapshotMappedConsequences = consequences,
           snapshotServiceInventory = inventory,
           snapshotDeclarationIdentities = declarationIdentities
         }
@@ -167,11 +237,80 @@ instance FromJSON SemanticImpactSnapshot where
         declarationName <- row .: "declaration"
         consumerNames <- row .: "consumers"
         identity <- row .: "identity"
+        evidence <- row .:? "consumerEvidence"
+        consequences <- row .:? "consequences"
         consumers <- traverse parseConsumerName consumerNames
         unless (distinct consumers) (fail "duplicate semantic-impact consumer")
+        maybe (pure ()) (\values -> unless (distinct values) (fail "duplicate semantic-impact consumer evidence")) evidence
+        maybe (pure ()) (\values -> unless (distinct values) (fail "duplicate semantic-impact consequence")) consequences
         unless (not (T.null identity)) (fail "empty semantic-impact declaration identity")
-        pure (MappedKey declarationName, Set.fromList consumers, identity)
+        pure (MappedKey declarationName, Set.fromList consumers, identity, Set.fromList <$> evidence, Set.fromList <$> consequences)
       distinct values = length values == Set.size (Set.fromList values)
+      evidenceAgrees consumers evidence =
+        and
+          [ Set.map evidenceConsumer (Map.findWithDefault Set.empty declaration evidence) == declarationConsumers
+              && all operationAgrees (Set.toList (Map.findWithDefault Set.empty declaration evidence))
+          | (declaration, declarationConsumers) <- Map.toList consumers
+          ]
+      operationAgrees evidence = case evidenceRootKind evidence of
+        MappedProjectionEventRoot -> maybe False (not . T.null) (evidenceOperation evidence)
+        _ -> evidenceOperation evidence == Nothing
+      consequencesAgree consumers consequences =
+        and
+          [ Set.fromList
+              [ consumer
+              | MappedConsumerBuild consumer <- Set.toList (Map.findWithDefault Set.empty declaration consequences)
+              ]
+              == declarationConsumers
+          | (declaration, declarationConsumers) <- Map.toList consumers
+          ]
+      completeOptionalRows label rows
+        | all (maybe True (const False) . snd) rows = pure Nothing
+        | all (maybe False (const True) . snd) rows = pure (Just (Map.fromList [(key, value) | (key, Just value) <- rows]))
+        | otherwise = fail ("semantic-impact " <> label <> " is present for only part of the service inventory")
+      requireCurrentRows label rows declarations
+        | Map.null declarations = pure (maybe Map.empty id rows)
+        | otherwise = maybe (fail ("semantic-impact " <> label <> " is absent from a versioned current snapshot")) pure rows
+
+instance ToJSON MappedRootEvidence where
+  toJSON evidence =
+    object
+      [ "consumer" .= mappedConsumerIdentity (evidenceConsumer evidence),
+        "surface" .= mappedRootKindIdentity (evidenceRootKind evidence),
+        "path" .= evidencePath evidence,
+        "operation" .= evidenceOperation evidence
+      ]
+
+instance FromJSON MappedRootEvidence where
+  parseJSON = withObject "MappedRootEvidence" $ \fields ->
+    MappedRootEvidence
+      <$> (fields .: "consumer" >>= parseConsumerName)
+      <*> (fields .: "surface" >>= parseMappedRootKind)
+      <*> fields .: "path"
+      <*> fields .:? "operation"
+
+instance ToJSON MappedConsequence where
+  toJSON consequence = case consequence of
+    MappedConsumerBuild consumer -> object ["kind" .= ("consumer-build" :: Text), "consumer" .= mappedConsumerIdentity consumer]
+    MappedPrivateEventHistory aggregate -> object ["kind" .= ("private-event-history" :: Text), "aggregate" .= aggregate]
+    MappedSnapshotHydration aggregate -> object ["kind" .= ("snapshot-hydration" :: Text), "aggregate" .= aggregate]
+    MappedWorkqueueHistory workqueue -> object ["kind" .= ("workqueue-history" :: Text), "workqueue" .= workqueue]
+    MappedQueryApi readModel position -> object ["kind" .= ("query-api" :: Text), "readModel" .= readModel, "position" .= mappedQueryPositionIdentity position]
+    MappedProjectionHandlerReview consumer -> object ["kind" .= ("projection-handler-review" :: Text), "consumer" .= mappedConsumerIdentity (DerivedProjectionConsumer consumer)]
+    MappedProjectionRebuild consumer groupName -> object ["kind" .= ("projection-rebuild" :: Text), "consumer" .= mappedConsumerIdentity (DerivedProjectionConsumer consumer), "group" .= groupName]
+
+instance FromJSON MappedConsequence where
+  parseJSON = withObject "MappedConsequence" $ \fields -> do
+    kind <- fields .: "kind"
+    case (kind :: Text) of
+      "consumer-build" -> MappedConsumerBuild <$> (fields .: "consumer" >>= parseConsumerName)
+      "private-event-history" -> MappedPrivateEventHistory <$> fields .: "aggregate"
+      "snapshot-hydration" -> MappedSnapshotHydration <$> fields .: "aggregate"
+      "workqueue-history" -> MappedWorkqueueHistory <$> fields .: "workqueue"
+      "query-api" -> MappedQueryApi <$> fields .: "readModel" <*> (fields .: "position" >>= parseMappedQueryPosition)
+      "projection-handler-review" -> MappedProjectionHandlerReview <$> (fields .: "consumer" >>= parseDerivedConsumer)
+      "projection-rebuild" -> MappedProjectionRebuild <$> (fields .: "consumer" >>= parseDerivedConsumer) <*> fields .: "group"
+      _ -> fail "unknown semantic-impact consequence kind"
 
 instance ToJSON MappedImpactDelta where
   toJSON delta =
@@ -179,6 +318,10 @@ instance ToJSON MappedImpactDelta where
       [ "declaration" .= unMappedKey (impactDeclaration delta),
         "previousConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactPreviousConsumers delta)),
         "currentConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactCurrentConsumers delta)),
+        "previousConsumerEvidence" .= fmap Set.toAscList (impactPreviousEvidence delta),
+        "currentConsumerEvidence" .= fmap Set.toAscList (impactCurrentEvidence delta),
+        "previousConsequences" .= fmap Set.toAscList (impactPreviousConsequences delta),
+        "currentConsequences" .= fmap Set.toAscList (impactCurrentConsequences delta),
         "serviceConformance" .= impactServiceConformance delta
       ]
 
@@ -187,6 +330,10 @@ instance FromJSON MappedImpactDelta where
     declaration <- MappedKey <$> fields .: "declaration"
     previousNames <- fields .: "previousConsumers"
     currentNames <- fields .: "currentConsumers"
+    previousEvidence <- fields .:? "previousConsumerEvidence"
+    currentEvidence <- fields .:? "currentConsumerEvidence"
+    previousConsequences <- fields .:? "previousConsequences"
+    currentConsequences <- fields .:? "currentConsequences"
     serviceConformance <- fields .: "serviceConformance"
     previous <- traverse parseConsumerName previousNames
     current <- traverse parseConsumerName currentNames
@@ -197,6 +344,10 @@ instance FromJSON MappedImpactDelta where
         { impactDeclaration = declaration,
           impactPreviousConsumers = Set.fromList previous,
           impactCurrentConsumers = Set.fromList current,
+          impactPreviousEvidence = Set.fromList <$> previousEvidence,
+          impactCurrentEvidence = Set.fromList <$> currentEvidence,
+          impactPreviousConsequences = Set.fromList <$> previousConsequences,
+          impactCurrentConsequences = Set.fromList <$> currentConsequences,
           impactServiceConformance = serviceConformance
         }
     where
@@ -209,9 +360,11 @@ semanticImpact :: TypeGraph -> SemanticImpact
 semanticImpact graph =
   SemanticImpact
     { impactRoots = roots,
-      impactUsePaths = Map.fromSet (sort . usePaths graph . unMappedKey) serviceDeclarations,
+      impactUsePaths = pathsByDeclaration,
       impactAggregateDeclarations = aggregateDeclarations,
       impactDeclarationConsumers = declarationConsumers,
+      impactDeclarationEvidence = declarationEvidence,
+      impactDeclarationConsequences = Map.map (Set.unions . map consequencesForEvidence . Set.toAscList) declarationEvidence,
       impactServiceDeclarations = serviceDeclarations,
       impactDeclarationIdentities = Map.mapWithKey (declarationIdentity graph) (tgDeclarations graph),
       impactUnsupportedProjectionSources = tgUnsupportedProjectionSources graph
@@ -236,6 +389,7 @@ semanticImpact graph =
         | root <- roots
         ]
     serviceDeclarations = Map.keysSet (tgDeclarations graph)
+    pathsByDeclaration = Map.fromSet (sort . usePaths graph . unMappedKey) serviceDeclarations
     declarationConsumers =
       Map.unionWith
         Set.union
@@ -247,12 +401,63 @@ semanticImpact graph =
               declaration <- Set.toList declarations
             ]
         )
+    declarationEvidence =
+      Map.mapWithKey
+        (\_ paths -> Set.fromList (concatMap evidenceForPath paths))
+        pathsByDeclaration
+    evidenceForPath usePath =
+      let directRoot = mappedRootFromUseSite (upRoot usePath)
+          direct =
+            MappedRootEvidence
+              { evidenceConsumer = mappedRootConsumer directRoot,
+                evidenceRootKind = mappedRootKind directRoot,
+                evidencePath = renderUsePath usePath,
+                evidenceOperation = Nothing
+              }
+          projections =
+            [ MappedRootEvidence
+                { evidenceConsumer = DerivedProjectionConsumer derived,
+                  evidenceRootKind = MappedProjectionEventRoot,
+                  evidencePath = renderUsePath usePath,
+                  evidenceOperation = Map.lookup derived (tgProjectionOperationalIdentities graph)
+                }
+            | aggregate <- maybeToList (eventAuthority usePath),
+              derived <- tgDerivedMappedConsumers graph,
+              derivedAuthority derived == aggregate
+            ]
+       in direct : projections
+    consequencesForEvidence evidence =
+      Set.fromList (MappedConsumerBuild (evidenceConsumer evidence) : surfaceConsequences evidence)
+    surfaceConsequences evidence = case evidenceRootKind evidence of
+      MappedCommandFieldRoot -> []
+      MappedEventFieldRoot -> case evidenceConsumer evidence of
+        AggregateConsumer aggregate -> [MappedPrivateEventHistory aggregate]
+        _ -> []
+      MappedRegisterRoot -> case evidenceConsumer evidence of
+        AggregateConsumer aggregate -> [MappedSnapshotHydration aggregate]
+        _ -> []
+      MappedWorkqueueFieldRoot -> case evidenceConsumer evidence of
+        WorkqueueConsumer workqueue -> [MappedWorkqueueHistory workqueue]
+        _ -> []
+      MappedReadModelQueryInputRoot -> case evidenceConsumer evidence of
+        ReadModelQueryConsumer readModel MappedQueryInput -> [MappedQueryApi readModel MappedQueryInput]
+        _ -> []
+      MappedReadModelQueryResultRoot -> case evidenceConsumer evidence of
+        ReadModelQueryConsumer readModel MappedQueryResult -> [MappedQueryApi readModel MappedQueryResult]
+        _ -> []
+      MappedProjectionEventRoot -> case evidenceConsumer evidence of
+        DerivedProjectionConsumer derived ->
+          MappedProjectionHandlerReview derived
+            : [MappedProjectionRebuild derived groupName | groupName <- maybeToList (Map.lookup derived (tgReplayableProjectionGroups graph))]
+        _ -> []
 
 -- | Freeze the checked dependency projection in canonical map/set form.
 semanticImpactSnapshot :: SemanticImpact -> SemanticImpactSnapshot
 semanticImpactSnapshot impact =
   SemanticImpactSnapshot
     { snapshotMappedConsumers = impactDeclarationConsumers impact,
+      snapshotMappedEvidence = Just (impactDeclarationEvidence impact),
+      snapshotMappedConsequences = Just (impactDeclarationConsequences impact),
       snapshotServiceInventory = impactServiceDeclarations impact,
       snapshotDeclarationIdentities = impactDeclarationIdentities impact
     }
@@ -264,6 +469,8 @@ diffSemanticImpact previous current =
   [ delta
   | delta <- mappedImpactForDeclarations allDeclarations previous current,
     impactPreviousConsumers delta /= impactCurrentConsumers delta
+      || impactPreviousEvidence delta /= impactCurrentEvidence delta
+      || impactPreviousConsequences delta /= impactCurrentConsequences delta
       || serviceMember previous (impactDeclaration delta) /= serviceMember current (impactDeclaration delta)
       || declarationIdentityAt previous (impactDeclaration delta) /= declarationIdentityAt current (impactDeclaration delta)
   ]
@@ -278,6 +485,10 @@ mappedImpactForDeclarations declarations previous current =
       { impactDeclaration = declaration,
         impactPreviousConsumers = snapshotConsumers previous declaration,
         impactCurrentConsumers = snapshotConsumers current declaration,
+        impactPreviousEvidence = snapshotEvidence previous declaration,
+        impactCurrentEvidence = snapshotEvidence current declaration,
+        impactPreviousConsequences = snapshotConsequences previous declaration,
+        impactCurrentConsequences = snapshotConsequences current declaration,
         impactServiceConformance = serviceMember previous declaration || serviceMember current declaration
       }
   | declaration <- Set.toAscList (Set.fromList declarations),
@@ -299,6 +510,12 @@ semanticImpactReport previous current declarations =
 
 snapshotConsumers :: SemanticImpactSnapshot -> MappedKey -> Set MappedConsumer
 snapshotConsumers snapshot declaration = Map.findWithDefault Set.empty declaration (snapshotMappedConsumers snapshot)
+
+snapshotEvidence :: SemanticImpactSnapshot -> MappedKey -> Maybe (Set MappedRootEvidence)
+snapshotEvidence snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> snapshotMappedEvidence snapshot
+
+snapshotConsequences :: SemanticImpactSnapshot -> MappedKey -> Maybe (Set MappedConsequence)
+snapshotConsequences snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> snapshotMappedConsequences snapshot
 
 serviceMember :: SemanticImpactSnapshot -> MappedKey -> Bool
 serviceMember snapshot declaration = declaration `Set.member` snapshotServiceInventory snapshot
@@ -345,7 +562,8 @@ declarationIdentity graph key declaration =
 mappedConsumerIdentity :: MappedConsumer -> Name
 mappedConsumerIdentity (AggregateConsumer aggregate) = aggregate
 mappedConsumerIdentity (WorkqueueConsumer workqueue) = "workqueue:" <> workqueue
-mappedConsumerIdentity (ReadModelConsumer readModel) = "read-model:" <> readModel
+mappedConsumerIdentity (ReadModelQueryConsumer readModel position) =
+  "read-model-query:" <> readModel <> ":" <> mappedQueryPositionIdentity position
 mappedConsumerIdentity (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection)) =
   "aggregate-projection:" <> aggregate <> ":" <> projection
 mappedConsumerIdentity (DerivedProjectionConsumer (CatalogProjectionConsumer owner aggregate)) =
@@ -354,13 +572,81 @@ mappedConsumerIdentity (DerivedProjectionConsumer (CatalogProjectionConsumer own
 parseConsumerName :: (MonadFail m) => Text -> m MappedConsumer
 parseConsumerName raw = case T.splitOn ":" raw of
   ["workqueue", workqueue] -> pure (WorkqueueConsumer workqueue)
-  ["read-model", readModel] -> pure (ReadModelConsumer readModel)
+  ["read-model", readModel] -> pure (ReadModelQueryConsumer readModel MappedQueryInput)
+  ["read-model-query", readModel, position] -> ReadModelQueryConsumer readModel <$> parseMappedQueryPosition position
   ["aggregate-projection", aggregate, projection] ->
     pure (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection))
   ["catalog-projection", owner, aggregate] ->
     pure (DerivedProjectionConsumer (CatalogProjectionConsumer owner aggregate))
   [_] -> pure (AggregateConsumer raw)
   _ -> fail "invalid semantic-impact consumer identity"
+
+parseDerivedConsumer :: (MonadFail m) => Text -> m DerivedMappedConsumer
+parseDerivedConsumer raw = do
+  consumer <- parseConsumerName raw
+  case consumer of
+    DerivedProjectionConsumer derived -> pure derived
+    _ -> fail "semantic-impact projection consequence names a non-projection consumer"
+
+mappedQueryPositionIdentity :: MappedQueryPosition -> Text
+mappedQueryPositionIdentity MappedQueryInput = "input"
+mappedQueryPositionIdentity MappedQueryResult = "result"
+
+parseMappedQueryPosition :: (MonadFail m) => Text -> m MappedQueryPosition
+parseMappedQueryPosition "input" = pure MappedQueryInput
+parseMappedQueryPosition "result" = pure MappedQueryResult
+parseMappedQueryPosition _ = fail "unknown semantic-impact read-model query position"
+
+mappedRootKindIdentity :: MappedRootKind -> Text
+mappedRootKindIdentity MappedCommandFieldRoot = "aggregate-command"
+mappedRootKindIdentity MappedEventFieldRoot = "private-event-payload"
+mappedRootKindIdentity MappedRegisterRoot = "snapshot-register"
+mappedRootKindIdentity MappedWorkqueueFieldRoot = "workqueue-payload"
+mappedRootKindIdentity MappedReadModelQueryInputRoot = "read-model-query-input"
+mappedRootKindIdentity MappedReadModelQueryResultRoot = "read-model-query-result"
+mappedRootKindIdentity MappedProjectionEventRoot = "projection-event-consumer"
+
+parseMappedRootKind :: (MonadFail m) => Text -> m MappedRootKind
+parseMappedRootKind "aggregate-command" = pure MappedCommandFieldRoot
+parseMappedRootKind "private-event-payload" = pure MappedEventFieldRoot
+parseMappedRootKind "snapshot-register" = pure MappedRegisterRoot
+parseMappedRootKind "workqueue-payload" = pure MappedWorkqueueFieldRoot
+parseMappedRootKind "read-model-query-input" = pure MappedReadModelQueryInputRoot
+parseMappedRootKind "read-model-query-result" = pure MappedReadModelQueryResultRoot
+parseMappedRootKind "projection-event-consumer" = pure MappedProjectionEventRoot
+parseMappedRootKind _ = fail "unknown semantic-impact root surface"
+
+mappedConsequenceIdentity :: MappedConsequence -> Text
+mappedConsequenceIdentity consequence = case consequence of
+  MappedConsumerBuild consumer -> "consumer-build:" <> mappedConsumerIdentity consumer
+  MappedPrivateEventHistory aggregate -> "private-event-history:" <> aggregate
+  MappedSnapshotHydration aggregate -> "snapshot-hydration:" <> aggregate
+  MappedWorkqueueHistory workqueue -> "workqueue-history:" <> workqueue
+  MappedQueryApi readModel position -> "query-api:" <> readModel <> ":" <> mappedQueryPositionIdentity position
+  MappedProjectionHandlerReview consumer -> "projection-handler-review:" <> mappedConsumerIdentity (DerivedProjectionConsumer consumer)
+  MappedProjectionRebuild consumer groupName -> "projection-rebuild:" <> mappedConsumerIdentity (DerivedProjectionConsumer consumer) <> ":" <> groupName
+
+-- | Stable expected-fact inventory for the generated service facade. The key
+-- contains the surface, typed consumer, declaration, and complete mapped path;
+-- the value carries the consequence set, so stale or misattributed evidence is
+-- rejected by the existing exact-set conformance package comparison.
+mappedSurfaceFactValues :: SemanticImpact -> [(Text, Text)]
+mappedSurfaceFactValues impact =
+  [ ( T.intercalate
+        "/"
+        [ "mapped-surface",
+          mappedRootKindIdentity (evidenceRootKind evidence),
+          mappedConsumerIdentity (evidenceConsumer evidence),
+          unMappedKey declaration,
+          evidencePath evidence
+        ],
+      T.intercalate "," (map mappedConsequenceIdentity (Set.toAscList consequences))
+        <> maybe "" (";projection-operation:" <>) (evidenceOperation evidence)
+    )
+  | (declaration, evidenceValues) <- Map.toAscList (impactDeclarationEvidence impact),
+    evidence <- Set.toAscList evidenceValues,
+    let consequences = Map.findWithDefault Set.empty declaration (impactDeclarationConsequences impact)
+  ]
 
 derivedAuthority :: DerivedMappedConsumer -> Name
 derivedAuthority (AggregateInlineProjectionConsumer aggregate _) = aggregate
@@ -427,15 +713,22 @@ mappedRootFromUseSite site@(RootWorkqueueField workqueue _ declaration) =
     }
 mappedRootFromUseSite site@(RootReadModelQueryInput readModel declaration) =
   MappedRoot
-    { mappedRootConsumer = ReadModelConsumer readModel,
+    { mappedRootConsumer = ReadModelQueryConsumer readModel MappedQueryInput,
       mappedRootKind = MappedReadModelQueryInputRoot,
       mappedRootUseSite = site,
       mappedRootDeclaration = declaration
     }
 mappedRootFromUseSite site@(RootReadModelQueryResult readModel declaration) =
   MappedRoot
-    { mappedRootConsumer = ReadModelConsumer readModel,
+    { mappedRootConsumer = ReadModelQueryConsumer readModel MappedQueryResult,
       mappedRootKind = MappedReadModelQueryResultRoot,
       mappedRootUseSite = site,
       mappedRootDeclaration = declaration
     }
+
+eventAuthority :: UsePath -> Maybe Name
+eventAuthority UsePath {upRoot = RootEventField aggregate _ _ _} = Just aggregate
+eventAuthority _ = Nothing
+
+maybeToList :: Maybe value -> [value]
+maybeToList = maybe [] pure

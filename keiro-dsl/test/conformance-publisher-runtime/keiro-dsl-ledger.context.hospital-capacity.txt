@@ -14,4 +14,4 @@ id-domain id-domain|name=contract:emergency.TransferReservationAccepted.reservat
 id-domain id-domain|name=contract:emergency.TransferReservationRejected.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
 id-domain id-domain|name=contract:emergency.TransferExpired.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
 id-domain id-domain|name=contract:emergency.PatientAdmitted.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

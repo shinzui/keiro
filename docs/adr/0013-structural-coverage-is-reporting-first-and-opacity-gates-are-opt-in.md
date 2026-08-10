@@ -26,8 +26,8 @@ failure would reward authors for making a dishonest structural claim merely to
 pass a gate.
 
 The graph does not represent every persisted surface. It has mapped roots
-for aggregate command/event fields, registers, and candidate typed workqueue
-payloads. Private events are durable
+for aggregate command/event fields, registers, candidate typed workqueue
+payloads, read-model query positions, and aggregate-sourced projection consumers. Private events are durable
 history owned by the generated codec, but mapped registers are serialized into
 snapshots by consumer `ToJSON`/`FromJSON` instances. Queued jobs are separately
 persisted under the queue envelope rather than the aggregate event codec.
@@ -54,6 +54,11 @@ The stable JSON report has separate inventories for:
   invalidation status, and whether snapshots are currently enabled; and
 - typed workqueue payload roots, with separate structural, opaque, and explicit
   `Json` boundaries under the schema-version-1 queue-envelope authority; and
+- read-model query input/result roots, labelled as generated Haskell API
+  compilation surfaces without fabricated JSON or table-migration claims;
+- projection consumers inherited from private-event roots, labelled separately
+  from their operational targets and observing read models; heterogeneous
+  category/all sources remain named operational-only boundaries; and
 - public-contract surfaces, labelled not-applicable without a ratio.
 
 There is no global coverage percentage. `check --coverage-report FILE` emits
@@ -100,9 +105,10 @@ runner is never a runtime fallback and can never upgrade an opaque declaration.
 - Snapshot reporting remains explicit about consumer JSON and cache
   invalidation; event-codec coverage is never relabelled snapshot-codec
   coverage.
-- Queue payloads remain a separately named persisted coverage surface; public
-  contracts remain visible as not applicable instead of disappearing from a
-  denominator.
+- Queue payloads remain a separately named persisted coverage surface. Query API
+  roots and projection handler roots remain separately named non-persisted
+  surfaces, while public contracts remain visible as not applicable instead of
+  disappearing from a denominator.
 - Finite historical comparison must be combined with generated conformance,
   explicit versions/upcasters for differences, and the real-log replay audit.
 

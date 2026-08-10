@@ -16,22 +16,27 @@ WARNING: OrderStatus enum-constructor Expired: new constructor with wire spellin
     use-site: Shipment.event.ShipmentCompleted.finalStatus (domain/shipment.keiro:4)
 WARNING: Order mapped-command Order command CloseOrder .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
     vector: private-history-read=compatible old-binary-read-new-events=compatible consumer-build=advisory
+    mapped-consequences: consumer-build:Order
     declared: domain/shared.keiro:6
     use-site: Order command CloseOrder .details : SharedDetails .field label["label"].type (domain/order.keiro:4)
 BREAKING: Order mapped-event Order event OrderClosed .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
     vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
+    mapped-consequences: consumer-build:Order, private-event-history:Order
     declared: domain/shared.keiro:6
     use-site: Order event OrderClosed .details : SharedDetails .field label["label"].type (domain/order.keiro:4)
 WARNING: Order mapped-register Order register details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
     vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+    mapped-consequences: consumer-build:Order, snapshot-hydration:Order
     declared: domain/shared.keiro:6
     use-site: Order register details : SharedDetails .field label["label"].type (domain/order.keiro:4)
 WARNING: Shipment mapped-command Shipment command CompleteShipment .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
     vector: private-history-read=compatible old-binary-read-new-events=compatible consumer-build=advisory
+    mapped-consequences: consumer-build:Shipment
     declared: domain/shared.keiro:6
     use-site: Shipment command CompleteShipment .details : SharedDetails .field label["label"].type (domain/shipment.keiro:4)
 BREAKING: Shipment mapped-event Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
     vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
+    mapped-consequences: consumer-build:Shipment, private-event-history:Shipment
     declared: domain/shared.keiro:6
     use-site: Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type (domain/shipment.keiro:4)
 WARNING: Order transitions Order: aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change. [AggFoldSurfaceChanged]

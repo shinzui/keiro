@@ -39,7 +39,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Diff
-import Keiro.Dsl.SemanticImpact (MappedImpactDelta (..), mappedConsumerIdentity)
+import Keiro.Dsl.SemanticImpact (MappedImpactDelta (..), MappedRootEvidence (..), mappedConsequenceIdentity, mappedConsumerIdentity, mappedRootKindIdentity)
 import Keiro.Dsl.TypeGraph (MappedKey (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -151,14 +151,28 @@ renderSemanticImpact impact = "semantic impact:" : concatMap renderDelta impact
   where
     renderDelta delta =
       [ "  " <> unMappedKey (impactDeclaration delta),
-        "    previous aggregate consumers: " <> renderConsumers (impactPreviousConsumers delta),
+        "    previous aggregate consumers: " <> renderBaseline (impactPreviousEvidence delta) (renderConsumers (impactPreviousConsumers delta)),
         "    current aggregate consumers:  " <> renderConsumers (impactCurrentConsumers delta),
+        "    previous roots: " <> maybe "baseline unavailable" renderEvidence (impactPreviousEvidence delta),
+        "    current roots:  " <> maybe "baseline unavailable" renderEvidence (impactCurrentEvidence delta),
+        "    previous consequences: " <> maybe "baseline unavailable" renderConsequences (impactPreviousConsequences delta),
+        "    current consequences:  " <> maybe "baseline unavailable" renderConsequences (impactCurrentConsequences delta),
         "    service-conformance: " <> if impactServiceConformance delta then "impacted" else "unchanged"
       ]
     renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
       [] -> "(none)"
       names -> T.intercalate ", " names
     consumerName = mappedConsumerIdentity
+    renderBaseline Nothing _ = "baseline unavailable"
+    renderBaseline (Just _) value = value
+    renderEvidence values = renderSet renderRoot values
+    renderRoot evidence =
+      T.intercalate "|" [mappedRootKindIdentity (evidenceRootKind evidence), mappedConsumerIdentity (evidenceConsumer evidence), evidencePath evidence]
+        <> maybe "" ("|" <>) (evidenceOperation evidence)
+    renderConsequences = renderSet mappedConsequenceIdentity
+    renderSet render values = case map render (Set.toAscList values) of
+      [] -> "(none)"
+      rendered -> T.intercalate ", " rendered
 
 findingValue :: Set CompatibilitySurface -> Change -> Value
 findingValue gate change = object (findingPairs gate change)
@@ -184,6 +198,7 @@ findingPairs gate change =
     "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor (ckContext kind) (ckCode kind)))
   ]
     <> ["mappedPersistedSurface" .= mappedPersistedImpactValue impact | Just impact <- [ckMappedPersistedImpact kind]]
+    <> ["mappedConsequences" .= map mappedConsequenceIdentity (Set.toAscList (ckMappedConsequences kind)) | not (Set.null (ckMappedConsequences kind))]
   where
     kind = changeKind change
 
@@ -388,6 +403,7 @@ renderFinding change =
   headline
     <> vectorDetail
     <> persistedDetail
+    <> consequenceDetail
   where
     kind = changeKind change
     headline =
@@ -411,6 +427,11 @@ renderFinding change =
           <> persistedSurfaceName (mappedPersistedSurface impact)
           <> "="
           <> verdictName (mappedPersistedVerdict impact)
+    consequenceDetail
+      | Set.null (ckMappedConsequences kind) = ""
+      | otherwise =
+          "\n    mapped-consequences: "
+            <> T.intercalate ", " (map mappedConsequenceIdentity (Set.toAscList (ckMappedConsequences kind)))
 
 renderVectorLine :: CompatibilityVector -> Text
 renderVectorLine vector =

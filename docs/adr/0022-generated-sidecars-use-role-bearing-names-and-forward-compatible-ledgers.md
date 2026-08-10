@@ -75,12 +75,18 @@ its original bytes are preserved in the retirement slot.
 Standalone and workspace scaffold ledgers additionally carry at most one
 `semantic-impact` row with a canonical single-line JSON payload. Unknown row
 kinds and unknown JSON object keys remain ignorable. A present known row is
-strict: duplicate declaration keys, duplicate aggregate consumers, duplicate
-service-inventory entries, disagreement between declaration rows and the
-inventory, or malformed declaration identities invalidate the ledger before any
-scaffold write. Every current writer emits the row, including for an empty mapped
-inventory. Absence is therefore reserved for pre-feature history and means
-“baseline unavailable,” not “no mapped impact.”
+strict: duplicate declaration keys, duplicate typed consumers, duplicate root
+evidence or consequences, unknown known surface/consequence tags, partial
+surface evidence, disagreement among consumers/evidence/consequences and the
+service inventory, or malformed declaration identities invalidate the ledger
+before any scaffold write. Root evidence distinguishes queue, query position,
+event, snapshot, and projection consumers and carries complete logical paths;
+projection evidence also freezes operational group/target/observer/replay facts.
+Every current writer emits the row with `mappedSurfaceEvidenceVersion: 1`,
+including for an empty mapped inventory. The marker distinguishes a known-empty
+current graph from pre-feature history even though both have no declaration
+rows. Its absence is therefore reserved for legacy evidence and means “baseline
+unavailable,” not “no mapped impact.”
 
 Typed read-model queries use the same additive-history rule. Every current standalone and
 workspace writer emits a `query-contract-baseline v1` marker and one canonical `query-contract`

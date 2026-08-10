@@ -41,12 +41,20 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (DiagnosticCode (..), Severity (..))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeDirectory)
 
-data CoverageSurface = PrivateEventPayload | SnapshotRegister | WorkqueuePayload
+data CoverageSurface
+  = AggregateCommandPayload
+  | PrivateEventPayload
+  | SnapshotRegister
+  | WorkqueuePayload
+  | ReadModelQueryInput
+  | ReadModelQueryResult
+  | ProjectionTypedConsumer
   deriving stock (Eq, Ord, Show)
 
 data CoverageMode = StructuralCoverage | OpaqueCoverage
@@ -54,6 +62,7 @@ data CoverageMode = StructuralCoverage | OpaqueCoverage
 
 data CoverageRoot = CoverageRoot
   { rootSurface :: !CoverageSurface,
+    rootConsumer :: !Text,
     rootPath :: !Text,
     rootMappedType :: !Text,
     rootMode :: !CoverageMode,
@@ -118,9 +127,13 @@ data CoverageCounts = CoverageCounts
   deriving stock (Eq, Show)
 
 data CoverageSummary = CoverageSummary
-  { privateEventPayloads :: !CoverageCounts,
+  { aggregateCommandPayloads :: !CoverageCounts,
+    privateEventPayloads :: !CoverageCounts,
     snapshotRegisters :: !CoverageCounts,
-    workqueuePayloads :: !CoverageCounts
+    workqueuePayloads :: !CoverageCounts,
+    readModelQueryInputs :: !CoverageCounts,
+    readModelQueryResults :: !CoverageCounts,
+    projectionTypedConsumers :: !CoverageCounts
   }
   deriving stock (Eq, Show)
 
@@ -140,9 +153,13 @@ data CoveragePrevious = CoveragePrevious
   deriving stock (Eq, Show)
 
 data CoverageDelta = CoverageDelta
-  { privateEventRootDelta :: !Int,
+  { aggregateCommandRootDelta :: !Int,
+    privateEventRootDelta :: !Int,
     snapshotRegisterRootDelta :: !Int,
     workqueuePayloadRootDelta :: !Int,
+    readModelQueryInputRootDelta :: !Int,
+    readModelQueryResultRootDelta :: !Int,
+    projectionTypedConsumerRootDelta :: !Int,
     opaqueBoundaryDelta :: !Int,
     addedOpaqueBoundaries :: ![OpaqueBoundary],
     removedOpaqueBoundaries :: ![OpaqueBoundary]
@@ -167,7 +184,8 @@ data CoverageReport = CoverageReport
 coverageReport :: FilePath -> Spec -> Either (NonEmpty TypeGraphError) CoverageReport
 coverageReport specPath spec = do
   graph <- resolveTypeGraph spec
-  let roots = sortOn rootPath (map (coverageRoot graph) (persistedSites graph))
+  let impact = semanticImpact graph
+      roots = sortOn (\root -> (rootPath root, rootConsumer root, rootSurface root)) (map (coverageRoot graph) (impactRoots impact))
       structural = structuralBoundaryInventory graph
       opaque = opaqueBoundaryInventory graph
       json = sortOn jsonPath (jsonBoundaryInventory graph <> queueExplicitJsonBoundaries spec)
@@ -182,7 +200,7 @@ coverageReport specPath spec = do
         coverageOpaqueBoundaries = opaque,
         coverageJsonBoundaries = json,
         coverageSnapshotBoundaries = snapshots,
-        coverageUnsupportedSurfaces = unsupportedInventory,
+        coverageUnsupportedSurfaces = unsupportedInventory graph,
         coverageSummary = summary,
         coverageFindings = findings,
         coveragePrevious = Nothing,
@@ -201,9 +219,13 @@ coverageDiffReport specPath reference oldSpec newSpec = do
       newSummary = coverageSummary newReport
       delta =
         CoverageDelta
-          { privateEventRootDelta = totalRoots (privateEventPayloads newSummary) - totalRoots (privateEventPayloads oldSummary),
+          { aggregateCommandRootDelta = totalRoots (aggregateCommandPayloads newSummary) - totalRoots (aggregateCommandPayloads oldSummary),
+            privateEventRootDelta = totalRoots (privateEventPayloads newSummary) - totalRoots (privateEventPayloads oldSummary),
             snapshotRegisterRootDelta = totalRoots (snapshotRegisters newSummary) - totalRoots (snapshotRegisters oldSummary),
             workqueuePayloadRootDelta = totalRoots (workqueuePayloads newSummary) - totalRoots (workqueuePayloads oldSummary),
+            readModelQueryInputRootDelta = totalRoots (readModelQueryInputs newSummary) - totalRoots (readModelQueryInputs oldSummary),
+            readModelQueryResultRootDelta = totalRoots (readModelQueryResults newSummary) - totalRoots (readModelQueryResults oldSummary),
+            projectionTypedConsumerRootDelta = totalRoots (projectionTypedConsumers newSummary) - totalRoots (projectionTypedConsumers oldSummary),
             opaqueBoundaryDelta = length added - length removed,
             addedOpaqueBoundaries = added,
             removedOpaqueBoundaries = removed
@@ -255,9 +277,13 @@ renderCoverageSummary :: CoverageReport -> Text
 renderCoverageSummary report =
   T.unlines
     [ "structural/opaque boundaries (reporting only):",
+      "  aggregate-command-payloads: " <> renderCounts (aggregateCommandPayloads summary) <> "; encoding=consumer-build-only",
       "  private-event-payloads: " <> renderCounts (privateEventPayloads summary),
       "  snapshot-registers: " <> renderCounts (snapshotRegisters summary) <> "; encoding=consumer-json-cache; invalidation=tracked",
       "  queue-payloads: " <> renderCounts (workqueuePayloads summary) <> "; encoding=queue-envelope-v1; migration=drain-or-transitional-codec",
+      "  read-model-query-inputs: " <> renderCounts (readModelQueryInputs summary) <> "; encoding=generated-haskell-api",
+      "  read-model-query-results: " <> renderCounts (readModelQueryResults summary) <> "; encoding=generated-haskell-api",
+      "  projection-typed-consumers: " <> renderCounts (projectionTypedConsumers summary) <> "; encoding=inherited-event-source",
       "  public-contracts: not-applicable (separately owned grammar)"
     ]
   where
@@ -309,15 +335,17 @@ persistedSites = filter isPersisted . tgUseSites
     isPersisted RootReadModelQueryInput {} = False
     isPersisted RootReadModelQueryResult {} = False
 
-coverageRoot :: TypeGraph -> UseSite -> CoverageRoot
-coverageRoot graph site =
-  let key = useSiteKey site
+coverageRoot :: TypeGraph -> MappedRoot -> CoverageRoot
+coverageRoot graph mappedRoot =
+  let site = mappedRootUseSite mappedRoot
+      key = mappedRootDeclaration mappedRoot
       path = renderUsePath (UsePath site (useSiteSegments graph site))
       fingerprint = wireFingerprint graph (unMappedKey key)
    in case Map.lookup key (tgDeclarations graph) of
         Just (ResolvedStructural declaration _) ->
           CoverageRoot
-            { rootSurface = useSiteSurface site,
+            { rootSurface = rootKindSurface (mappedRootKind mappedRoot),
+              rootConsumer = mappedConsumerIdentity (mappedRootConsumer mappedRoot),
               rootPath = path,
               rootMappedType = unMappedKey key,
               rootMode = StructuralCoverage,
@@ -328,7 +356,8 @@ coverageRoot graph site =
             }
         Just (ResolvedOpaque declaration) ->
           CoverageRoot
-            { rootSurface = useSiteSurface site,
+            { rootSurface = rootKindSurface (mappedRootKind mappedRoot),
+              rootConsumer = mappedConsumerIdentity (mappedRootConsumer mappedRoot),
               rootPath = path,
               rootMappedType = unMappedKey key,
               rootMode = OpaqueCoverage,
@@ -492,9 +521,13 @@ jsonPathsFromExpr graph visited =
 summarize :: [CoverageRoot] -> [JsonBoundary] -> CoverageSummary
 summarize roots json =
   CoverageSummary
-    { privateEventPayloads = countsFor PrivateEventPayload,
+    { aggregateCommandPayloads = countsFor AggregateCommandPayload,
+      privateEventPayloads = countsFor PrivateEventPayload,
       snapshotRegisters = countsFor SnapshotRegister,
-      workqueuePayloads = countsFor WorkqueuePayload
+      workqueuePayloads = countsFor WorkqueuePayload,
+      readModelQueryInputs = countsFor ReadModelQueryInput,
+      readModelQueryResults = countsFor ReadModelQueryResult,
+      projectionTypedConsumers = countsFor ProjectionTypedConsumer
     }
   where
     countsFor surface =
@@ -527,14 +560,24 @@ gateFinding message boundaries =
       findingMessage = message
     }
 
-unsupportedInventory :: [UnsupportedSurface]
-unsupportedInventory =
+unsupportedInventory :: TypeGraph -> [UnsupportedSurface]
+unsupportedInventory graph =
   [ UnsupportedSurface
       { unsupportedSurface = "public-contracts",
         unsupportedSupport = "not-applicable",
         unsupportedReason = "public contracts have a separately owned grammar and compatibility surface"
       }
   ]
+    <> [ UnsupportedSurface
+           { unsupportedSurface = unsupportedProjectionIdentity boundary,
+             unsupportedSupport = "operational-only",
+             unsupportedReason = "heterogeneous projection sources have no single generated event type or mapped declaration root"
+           }
+       | boundary <- tgUnsupportedProjectionSources graph
+       ]
+  where
+    unsupportedProjectionIdentity (UnsupportedCatalogCategory owner categoryName) = "projection-category:" <> owner <> ":" <> categoryName
+    unsupportedProjectionIdentity (UnsupportedCatalogAll owner) = "projection-all:" <> owner
 
 useSiteKey :: UseSite -> MappedKey
 useSiteKey (RootCommandField _ _ _ key) = key
@@ -545,12 +588,21 @@ useSiteKey (RootReadModelQueryInput _ key) = key
 useSiteKey (RootReadModelQueryResult _ key) = key
 
 useSiteSurface :: UseSite -> CoverageSurface
+useSiteSurface RootCommandField {} = AggregateCommandPayload
 useSiteSurface RootEventField {} = PrivateEventPayload
 useSiteSurface RootRegister {} = SnapshotRegister
-useSiteSurface RootCommandField {} = error "command fields are not persisted coverage roots"
 useSiteSurface RootWorkqueueField {} = WorkqueuePayload
-useSiteSurface RootReadModelQueryInput {} = error "read-model query inputs are not persisted coverage roots"
-useSiteSurface RootReadModelQueryResult {} = error "read-model query results are not persisted coverage roots"
+useSiteSurface RootReadModelQueryInput {} = ReadModelQueryInput
+useSiteSurface RootReadModelQueryResult {} = ReadModelQueryResult
+
+rootKindSurface :: MappedRootKind -> CoverageSurface
+rootKindSurface MappedCommandFieldRoot = AggregateCommandPayload
+rootKindSurface MappedEventFieldRoot = PrivateEventPayload
+rootKindSurface MappedRegisterRoot = SnapshotRegister
+rootKindSurface MappedWorkqueueFieldRoot = WorkqueuePayload
+rootKindSurface MappedReadModelQueryInputRoot = ReadModelQueryInput
+rootKindSurface MappedReadModelQueryResultRoot = ReadModelQueryResult
+rootKindSurface MappedProjectionEventRoot = ProjectionTypedConsumer
 
 isWireSite :: UseSite -> Bool
 isWireSite RootEventField {} = True
@@ -572,9 +624,13 @@ declarationMode =
       }
 
 instance ToJSON CoverageSurface where
+  toJSON AggregateCommandPayload = toJSON ("aggregate-command-payload" :: Text)
   toJSON PrivateEventPayload = toJSON ("private-event-payload" :: Text)
   toJSON SnapshotRegister = toJSON ("snapshot-register" :: Text)
   toJSON WorkqueuePayload = toJSON ("workqueue-payload" :: Text)
+  toJSON ReadModelQueryInput = toJSON ("read-model-query-input" :: Text)
+  toJSON ReadModelQueryResult = toJSON ("read-model-query-result" :: Text)
+  toJSON ProjectionTypedConsumer = toJSON ("projection-typed-consumer" :: Text)
 
 instance ToJSON CoverageMode where
   toJSON StructuralCoverage = toJSON ("structural" :: Text)
@@ -584,6 +640,7 @@ instance ToJSON CoverageRoot where
   toJSON root =
     object
       [ "surface" .= rootSurface root,
+        "consumer" .= rootConsumer root,
         "path" .= rootPath root,
         "mappedType" .= rootMappedType root,
         "mode" .= rootMode root,
@@ -650,9 +707,13 @@ instance ToJSON CoverageCounts where
 instance ToJSON CoverageSummary where
   toJSON summary =
     object
-      [ "privateEventPayloads" .= privateEventPayloads summary,
+      [ "aggregateCommandPayloads" .= aggregateCommandPayloads summary,
+        "privateEventPayloads" .= privateEventPayloads summary,
         "snapshotRegisters" .= snapshotRegisters summary,
-        "workqueuePayloads" .= workqueuePayloads summary
+        "workqueuePayloads" .= workqueuePayloads summary,
+        "readModelQueryInputs" .= readModelQueryInputs summary,
+        "readModelQueryResults" .= readModelQueryResults summary,
+        "projectionTypedConsumers" .= projectionTypedConsumers summary
       ]
 
 instance ToJSON CoverageFinding where
@@ -681,9 +742,13 @@ instance ToJSON CoveragePrevious where
 instance ToJSON CoverageDelta where
   toJSON delta =
     object
-      [ "privateEventRootDelta" .= privateEventRootDelta delta,
+      [ "aggregateCommandRootDelta" .= aggregateCommandRootDelta delta,
+        "privateEventRootDelta" .= privateEventRootDelta delta,
         "snapshotRegisterRootDelta" .= snapshotRegisterRootDelta delta,
         "workqueuePayloadRootDelta" .= workqueuePayloadRootDelta delta,
+        "readModelQueryInputRootDelta" .= readModelQueryInputRootDelta delta,
+        "readModelQueryResultRootDelta" .= readModelQueryResultRootDelta delta,
+        "projectionTypedConsumerRootDelta" .= projectionTypedConsumerRootDelta delta,
         "opaqueBoundaryDelta" .= opaqueBoundaryDelta delta,
         "addedOpaqueBoundaries" .= addedOpaqueBoundaries delta,
         "removedOpaqueBoundaries" .= removedOpaqueBoundaries delta

@@ -40,4 +40,4 @@ generated Generated/TransferRouting/Hospital/EventStream.hs
 generated Generated/TransferRouting/Hospital/Projection.hs
 generated Generated/TransferRouting/Hospital/Harness.hs
 behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"generated-authoritative","key":"behavior-v1-8c1612ae6464bb11","kind":"live-transition","outputs":[{"command":"RouteAcceptedTransferNeed","ownership":"generated-command-identity"}],"source":"Accepting"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

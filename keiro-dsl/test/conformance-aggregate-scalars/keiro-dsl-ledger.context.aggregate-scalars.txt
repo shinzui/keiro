@@ -29,4 +29,4 @@ hole AggregateScalars/ScalarLedger/Holes.hs
 generated Generated/AggregateScalars/ScalarLedger/Harness.hs
 behavior {"aggregate":"ScalarLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-4e461a9ba9271054","kind":"live-transition","outputs":[{"obligation":"event-output-v1/ScalarLedger/live/Empty/Record/cmd.observedAt >= reg.observedAt && cmd.revision >= reg.revision/observedAt:=cmd.observedAt;revision:=cmd.revision/ScalarsRecorded/Recorded/1/ScalarsRecorded","ownership":"hand-owned"}],"source":"Empty"}
 behavior {"aggregate":"ScalarLedger","command":"Record","evidence":"generated-authoritative","key":"behavior-v1-d15e326edfa1a438","kind":"required-rejection","outputs":[],"source":"Recorded"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

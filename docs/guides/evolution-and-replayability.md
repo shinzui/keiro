@@ -545,6 +545,14 @@ live-only and inline consumers remain build/review obligations. A mapped change
 reachable only from a command, register, workqueue, or query contract does not
 change a catalog source fingerprint.
 
+The semantic-impact block is the cross-surface inventory behind those findings.
+It keeps consumer identity separate from consequence: event history, snapshot
+hydration, queued-job history, query input/result API, projection handler review,
+and replayable catalog rebuild are independent facts. Projection evidence also
+freezes group, target, observing-read-model, and replay policy identity. A
+category/all source remains an explicit heterogeneous operational boundary and
+never acquires a fabricated mapped declaration.
+
 Generated and hand-owned changes have different review paths. Re-scaffolding
 may replace `Generated.<Context>.ProjectionCatalog`, but it never overwrites
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles`. Review changes to live

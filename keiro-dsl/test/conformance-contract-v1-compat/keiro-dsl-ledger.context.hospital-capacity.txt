@@ -7,4 +7,4 @@ semantic-contract {"languageSupport":"compatibility-only","languageVersion":1,"r
 naming-edition idiomatic-v1
 module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract emergency (line 4)","path":"Generated/HospitalCapacity/Emergency/Contract.hs"}
 generated Generated/HospitalCapacity/Emergency/Contract.hs
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

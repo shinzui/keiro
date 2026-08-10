@@ -52,4 +52,4 @@ behavior {"aggregate":"Beta","command":"PingBeta","evidence":"generated-authorit
 behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-72a96c964b44a2b6","kind":"replay-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
 behavior {"aggregate":"Alpha","command":"PingAlpha","evidence":"generated-authoritative","key":"behavior-v1-baf43b4c31db955a","kind":"live-transition","outputs":[{"command":"PingAlpha","ownership":"generated-command-identity"}],"owner":"domain/alpha.keiro","source":"Active"}
 behavior {"aggregate":"Alpha","command":"LegacyPingAlpha","evidence":"generated-authoritative","key":"behavior-v1-c062ccf5e9b6f5c4","kind":"required-rejection","outputs":[],"owner":"domain/alpha.keiro","source":"Active"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

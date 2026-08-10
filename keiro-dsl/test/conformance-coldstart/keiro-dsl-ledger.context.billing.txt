@@ -42,4 +42,4 @@ behavior {"aggregate":"Subscription","command":"CancelSubscription","evidence":"
 behavior {"aggregate":"Subscription","command":"CancelSubscription","evidence":"generated-authoritative","key":"behavior-v1-99ac0c974e512f76","kind":"required-rejection","outputs":[],"source":"Closed"}
 behavior {"aggregate":"Subscription","command":"ActivateSubscription","evidence":"generated-authoritative","key":"behavior-v1-9b81e070774b3ae1","kind":"required-rejection","outputs":[],"source":"Closed"}
 behavior {"aggregate":"Subscription","command":"CancelSubscription","evidence":"generated-authoritative","key":"behavior-v1-b5d1ca5d9ad9b2ec","kind":"live-transition","outputs":[{"obligation":"event-output-v1/Subscription/live/Active/CancelSubscription/unguarded//SubscriptionCancelled/Closed/1/SubscriptionCancelled","ownership":"hand-owned"}],"source":"Active"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

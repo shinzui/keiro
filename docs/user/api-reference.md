@@ -692,10 +692,10 @@ for the queue-payload rollout rules.
 ## `Keiro.Dsl.*` (package `keiro-dsl`)
 
 The library exposes the grammar, parser, pretty-printer, validator, type graph,
-compatibility-vector differ and JSON report, coverage inventory, historical
+surface-aware `SemanticImpact` model, compatibility-vector differ and JSON report, coverage inventory, historical
 codec-comparison engine, binding-obligation report, scaffolder,
 planner/runner, manifest, starter skeleton, and harness modules. In particular,
-`Keiro.Dsl.TypeGraph`, `Keiro.Dsl.Coverage`, `Keiro.Dsl.CodecCompare`, and
+`Keiro.Dsl.TypeGraph`, `Keiro.Dsl.SemanticImpact`, `Keiro.Dsl.Coverage`, `Keiro.Dsl.CodecCompare`, and
 `Keiro.Dsl.ExplainBindings` are public library surfaces for tooling and
 consumer-compiled migration tests. `Keiro.Dsl.Expression` exposes the checked
 version-2 scalar resolver and its typed roots, required projections, literals,

@@ -57,6 +57,7 @@ import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
+import Keiro.Dsl.MappedDiff (diffMapped)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
@@ -304,7 +305,8 @@ main = hspec $ do
         `shouldBe` Set.fromList
           [ AggregateConsumer "Catalog",
             WorkqueueConsumer "ArtifactJobs",
-            ReadModelConsumer "ArtifactLookup",
+            ReadModelQueryConsumer "ArtifactLookup" MappedQueryInput,
+            ReadModelQueryConsumer "ArtifactLookup" MappedQueryResult,
             DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Catalog" "artifact_view"),
             DerivedProjectionConsumer (CatalogProjectionConsumer "artifactProjection" "Catalog"),
             DerivedProjectionConsumer (CatalogProjectionConsumer "liveProjection" "Catalog")
@@ -596,6 +598,157 @@ main = hspec $ do
             wrQueryContractBaseline record `shouldBe` True
             length (wrQueryContracts record) `shouldBe` 2
           Nothing -> expectationFailure "workspace query-contract ledger did not parse"
+
+  describe "complete mapped surfaces" $ do
+    it "projects exact queue, query, event, snapshot, and replayable projection consequences" $ do
+      aggregateSpec <- specOf "test/fixtures/semantic-impact.keiro"
+      queueSpec <- specOf "test/fixtures/mapped-workqueue.keiro"
+      querySpec <- specOf "test/fixtures/mapped-readmodel.keiro"
+      projectionSpec <- specOf "test/fixtures/projection-catalog.keiro"
+      let aggregateImpact = semanticImpactForSpec aggregateSpec
+          queueImpact = semanticImpactForSpec queueSpec
+          queryImpact = semanticImpactForSpec querySpec
+          projectionImpact = semanticImpactForSpec projectionSpec
+          consequences impact declaration = Map.findWithDefault Set.empty (MappedKey declaration) (impactDeclarationConsequences impact)
+      consequences aggregateImpact "CommandPayload"
+        `shouldBe` Set.singleton (MappedConsumerBuild (AggregateConsumer "Alpha"))
+      consequences aggregateImpact "EventPayload"
+        `shouldBe` Set.fromList [MappedConsumerBuild (AggregateConsumer "Alpha"), MappedPrivateEventHistory "Alpha"]
+      consequences aggregateImpact "RegisterPayload"
+        `shouldBe` Set.fromList [MappedConsumerBuild (AggregateConsumer "Alpha"), MappedSnapshotHydration "Alpha"]
+      consequences queueImpact "JobPayload"
+        `shouldBe` Set.fromList [MappedConsumerBuild (WorkqueueConsumer "mapped_jobs"), MappedWorkqueueHistory "mapped_jobs"]
+      consequences queryImpact "AccountLookup"
+        `shouldBe` Set.fromList [MappedConsumerBuild (ReadModelQueryConsumer "account_summary" MappedQueryInput), MappedQueryApi "account_summary" MappedQueryInput]
+      consequences queryImpact "AccountSummary"
+        `shouldBe` Set.fromList [MappedConsumerBuild (ReadModelQueryConsumer "account_summary" MappedQueryResult), MappedQueryApi "account_summary" MappedQueryResult]
+      consequences projectionImpact "OrderPayload"
+        `shouldBe` Set.fromList
+          [ MappedConsumerBuild (AggregateConsumer "Orders"),
+            MappedPrivateEventHistory "Orders",
+            MappedConsumerBuild (DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline")),
+            MappedProjectionHandlerReview (AggregateInlineProjectionConsumer "Orders" "order_inline"),
+            MappedConsumerBuild (DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders")),
+            MappedProjectionHandlerReview (CatalogProjectionConsumer "order_summary_writer" "Orders"),
+            MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") "reporting"
+          ]
+
+    it "reports every surface independently without inventing Json or heterogeneous typed roots" $ do
+      queueSpec <- specOf "test/fixtures/mapped-workqueue.keiro"
+      querySpec <- specOf "test/fixtures/mapped-readmodel.keiro"
+      projectionSpec <- specOf "test/fixtures/projection-catalog.keiro"
+      queueCoverage <- shouldResolveCoverage "mapped-workqueue.keiro" queueSpec
+      queryCoverage <- shouldResolveCoverage "mapped-readmodel.keiro" querySpec
+      projectionCoverage <- shouldResolveCoverage "projection-catalog.keiro" projectionSpec
+      Coverage.workqueuePayloads (Coverage.coverageSummary queueCoverage)
+        `shouldBe` Coverage.CoverageCounts 2 2 0 1
+      Coverage.readModelQueryInputs (Coverage.coverageSummary queryCoverage)
+        `shouldBe` Coverage.CoverageCounts 1 1 0 0
+      Coverage.readModelQueryResults (Coverage.coverageSummary queryCoverage)
+        `shouldBe` Coverage.CoverageCounts 1 1 0 0
+      Coverage.projectionTypedConsumers (Coverage.coverageSummary projectionCoverage)
+        `shouldBe` Coverage.CoverageCounts 5 0 5 0
+      map Coverage.rootConsumer [root | root <- Coverage.coverageRoots queryCoverage, Coverage.rootSurface root `elem` [Coverage.ReadModelQueryInput, Coverage.ReadModelQueryResult]]
+        `shouldBe` ["read-model-query:account_summary:input", "read-model-query:account_summary:result"]
+      map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces projectionCoverage)
+        `shouldContain` ["projection-category:audit_writer:audit"]
+
+    it "places one deterministic surface/consumer/root/path fact set behind the service facade" $ do
+      services <- mapM checkedServiceOf ["test/fixtures/mapped-workqueue.keiro", "test/fixtures/mapped-readmodel.keiro", "test/fixtures/projection-catalog.keiro"]
+      let facts = concatMap serviceConformanceFactValues services
+          surfaceFacts = [(key, value) | (key, value) <- facts, "mapped-surface/" `T.isPrefixOf` key]
+          keys = map fst surfaceFacts
+      length keys `shouldBe` Set.size (Set.fromList keys)
+      keys `shouldSatisfy` any (T.isInfixOf "/workqueue-payload/workqueue:mapped_jobs/JobPayload/workqueue mapped_jobs payload .job : JobPayload")
+      keys `shouldSatisfy` any (T.isInfixOf "/read-model-query-input/read-model-query:account_summary:input/AccountLookup/readmodel account_summary query input : AccountLookup")
+      keys `shouldSatisfy` any (T.isInfixOf "/projection-event-consumer/catalog-projection:order_summary_writer:Orders/OrderPayload/Orders event OrderRecorded .orderPayload : OrderPayload")
+      map snd surfaceFacts `shouldSatisfy` any (T.isInfixOf "workqueue-history:mapped_jobs")
+      map snd surfaceFacts `shouldSatisfy` any (T.isInfixOf "projection-rebuild:catalog-projection:order_summary_writer:Orders:reporting")
+
+    it "keeps published-language facades byte-stable while extending the candidate facade" $ do
+      published <- checkedServiceOf "test/fixtures/semantic-impact.keiro"
+      candidate <- checkedServiceOf "test/fixtures/mapped-workqueue.keiro"
+      serviceConformanceFactKeys published
+        `shouldSatisfy` all (not . T.isPrefixOf "mapped-surface/")
+      serviceConformanceFactKeys candidate
+        `shouldSatisfy` any (T.isPrefixOf "mapped-surface/")
+
+    it "detects replay policy and observer relation drift without fabricating mapped declaration changes" $ do
+      projectionSpec <- specOf "test/fixtures/projection-catalog.keiro"
+      let makeLiveOnly node = case node of
+            NProjectionOwner owner@ProjectionOwnerNode {poName = "order_summary_writer"} ->
+              NProjectionOwner owner {poReplay = ProjectionLiveOnly "candidate is intentionally live-only"}
+            other -> other
+          moveObserver node = case node of
+            NReadModel readModel@ReadModelNode {rmName = "catalogAudit"} ->
+              NReadModel readModel {rmObservedTargets = ["order_summary"]}
+            other -> other
+          liveOnly = projectionSpec {specNodes = map makeLiveOnly (specNodes projectionSpec)}
+          observerMoved = projectionSpec {specNodes = map moveObserver (specNodes projectionSpec)}
+          liveDeltas = CheckedDiff.mappedSemanticImpact projectionSpec liveOnly
+          observerDeltas = CheckedDiff.mappedSemanticImpact projectionSpec observerMoved
+      map impactDeclaration liveDeltas `shouldBe` [MappedKey "OrderPayload", MappedKey "SharedReference"]
+      map impactCurrentConsequences liveDeltas
+        `shouldSatisfy` all (maybe False (not . any (\case MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") _ -> True; _ -> False) . Set.toList))
+      map impactDeclaration observerDeltas `shouldBe` [MappedKey "OrderPayload", MappedKey "SharedReference"]
+      map impactCurrentEvidence observerDeltas
+        `shouldSatisfy` any (maybe False (any (maybe False (T.isInfixOf "catalogAudit") . evidenceOperation) . Set.toList))
+      diffMapped projectionSpec liveOnly `shouldBe` []
+
+  describe "mapped surface ledger" $ do
+    it "round-trips complete evidence, treats aggregate-only history as unknown, and rejects corrupt known tags" $ do
+      spec <- specOf "test/fixtures/semantic-impact.keiro"
+      let snapshot = semanticImpactSnapshotForSpec spec
+          legacy = snapshot {snapshotMappedEvidence = Nothing, snapshotMappedConsequences = Nothing}
+          declaration = MappedKey "EventPayload"
+          report = semanticImpactReport (Just legacy) snapshot [declaration]
+          encoded = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode snapshot))
+          corrupt = T.replace "\"surface\":\"aggregate-command\"" "\"surface\":\"future-surface\"" encoded
+      Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
+      Aeson.decode (Aeson.encode legacy) `shouldBe` Just legacy
+      semanticReportDeltas report `shouldSatisfy` \case
+        [delta] -> impactPreviousEvidence delta == Nothing && impactCurrentEvidence delta /= Nothing
+        _ -> False
+      renderSemanticImpactReport report `shouldSatisfy` any (T.isInfixOf "previous roots: baseline unavailable")
+      corrupt `shouldNotBe` encoded
+      (Aeson.decode (LazyTextEncoding.encodeUtf8 (LazyText.fromStrict corrupt)) :: Maybe SemanticImpactSnapshot) `shouldBe` Nothing
+
+  describe "mapped compatibility vectors" $ do
+    it "keeps queue, query, event, snapshot, and projection consequences orthogonal" $ do
+      queueSpec <- specOf "test/fixtures/mapped-workqueue.keiro"
+      querySpec <- specOf "test/fixtures/mapped-readmodel.keiro"
+      aggregateSpec <- specOf "test/fixtures/semantic-impact.keiro"
+      projectionSpec <- specOf "test/fixtures/projection-catalog.keiro"
+      let changeQueue node = case node of
+            NWorkqueue queue ->
+              NWorkqueue queue {wqPayload = [if wqfName field == "job" then field {wqfType = TypedQueueExpression (TRef "JobMetadata")} else field | field <- wqPayload queue]}
+            other -> other
+          queueChanged = queueSpec {specNodes = map changeQueue (specNodes queueSpec)}
+          changeQuery node = case node of
+            NReadModel readModel@ReadModelNode {queryTypes = Just queryPair} -> NReadModel readModel {queryTypes = Just queryPair {input = TRef "TenantKey"}}
+            other -> other
+          queryChanged = querySpec {specNodes = map changeQuery (specNodes querySpec)}
+          findKind predicate changes = case [kindOfChange change | change <- changes, predicate (kindOfChange change)] of
+            value : _ -> value
+            [] -> error "expected mapped compatibility finding"
+          queueKind = findKind ((== WqPayloadFieldChanged) . ckCode) (diffSpecs queueSpec queueChanged)
+          queryKind = findKind ((== ReadModelQueryInputChanged) . ckCode) (diffSpecs querySpec queryChanged)
+          eventKind = findKind ((== "mapped-event") . ckFacet) [change | mutation <- mappedWireMutations aggregateSpec, change <- diffSpecs aggregateSpec (mmCandidate mutation)]
+          snapshotKind = findKind ((== "mapped-register") . ckFacet) [change | mutation <- mappedWireMutations aggregateSpec, change <- diffSpecs aggregateSpec (mmCandidate mutation)]
+          projectionChanged = mapMappedDeclaration "OrderPayload" changeProjectionMappedWire projectionSpec
+          projectionKind = findKind ((== "mapped-projection") . ckFacet) (diffSpecs projectionSpec projectionChanged)
+      ckMappedConsequences queueKind
+        `shouldBe` Set.fromList [MappedConsumerBuild (WorkqueueConsumer "mapped_jobs"), MappedWorkqueueHistory "mapped_jobs"]
+      cvPrivateHistoryRead (ckVector queueKind) `shouldBe` VNotApplicable
+      cvConsumerBuild (ckVector queueKind) `shouldBe` VBreaking
+      ckMappedConsequences queryKind
+        `shouldBe` Set.fromList [MappedConsumerBuild (ReadModelQueryConsumer "account_summary" MappedQueryInput), MappedQueryApi "account_summary" MappedQueryInput]
+      cvSnapshotHydration (ckVector queryKind) `shouldBe` VNotApplicable
+      ckMappedConsequences eventKind `shouldSatisfy` Set.member (MappedPrivateEventHistory "Alpha")
+      ckMappedConsequences snapshotKind `shouldSatisfy` Set.member (MappedSnapshotHydration "Alpha")
+      ckMappedConsequences projectionKind `shouldSatisfy` Set.member (MappedProjectionHandlerReview (AggregateInlineProjectionConsumer "Orders" "order_inline"))
+      ckMappedConsequences projectionKind
+        `shouldSatisfy` (not . any (\case MappedProjectionRebuild {} -> True; _ -> False) . Set.toList)
 
   describe "language support" $ do
     it "serializes support from the registered version and decodes older records" $ do
@@ -3616,10 +3769,21 @@ main = hspec $ do
               { snapshotMappedConsumers =
                   Map.adjust (Set.delete (AggregateConsumer "Beta")) shared (snapshotMappedConsumers snapshot)
               }
-      diffSemanticImpact snapshot changed
-        `shouldBe` [MappedImpactDelta shared (Set.fromList [AggregateConsumer "Alpha", AggregateConsumer "Beta"]) (Set.singleton (AggregateConsumer "Alpha")) True]
-      mappedImpactForDeclarations [MappedKey "NestedPayload"] snapshot snapshot
-        `shouldBe` [MappedImpactDelta (MappedKey "NestedPayload") (Set.singleton (AggregateConsumer "Alpha")) (Set.singleton (AggregateConsumer "Alpha")) True]
+      case diffSemanticImpact snapshot changed of
+        [delta] -> do
+          impactDeclaration delta `shouldBe` shared
+          impactPreviousConsumers delta `shouldBe` Set.fromList [AggregateConsumer "Alpha", AggregateConsumer "Beta"]
+          impactCurrentConsumers delta `shouldBe` Set.singleton (AggregateConsumer "Alpha")
+          impactServiceConformance delta `shouldBe` True
+        deltas -> expectationFailure ("expected one semantic-impact delta, got " <> show deltas)
+      case mappedImpactForDeclarations [MappedKey "NestedPayload"] snapshot snapshot of
+        [delta] -> do
+          impactDeclaration delta `shouldBe` MappedKey "NestedPayload"
+          impactPreviousConsumers delta `shouldBe` Set.singleton (AggregateConsumer "Alpha")
+          impactCurrentConsumers delta `shouldBe` Set.singleton (AggregateConsumer "Alpha")
+          impactPreviousEvidence delta `shouldSatisfy` maybe False (not . Set.null)
+          impactCurrentConsequences delta `shouldSatisfy` maybe False (not . Set.null)
+        deltas -> expectationFailure ("expected one nested semantic-impact delta, got " <> show deltas)
     it "round-trips additive semantic impact ledger rows and rejects known-row corruption" $ do
       spec <- specOf "test/fixtures/semantic-impact.keiro"
       let snapshot = semanticImpactSnapshotForSpec spec
@@ -6946,8 +7110,12 @@ main = hspec $ do
             currentOut = root </> "current"
             legacyOut = root </> "legacy"
             assertAlphaOnly report = do
-              semanticReportDeltas (reportSemanticImpact report)
-                `shouldBe` [MappedImpactDelta (MappedKey "AlphaPayload") (Set.singleton (AggregateConsumer "Alpha")) (Set.singleton (AggregateConsumer "Alpha")) True]
+              map impactDeclaration (semanticReportDeltas (reportSemanticImpact report))
+                `shouldBe` [MappedKey "AlphaPayload"]
+              map impactPreviousConsumers (semanticReportDeltas (reportSemanticImpact report))
+                `shouldBe` [Set.singleton (AggregateConsumer "Alpha")]
+              map impactCurrentConsumers (semanticReportDeltas (reportSemanticImpact report))
+                `shouldBe` [Set.singleton (AggregateConsumer "Alpha")]
               let semanticLines = renderSemanticImpactReport (reportSemanticImpact report)
               semanticLines `shouldSatisfy` any (T.isInfixOf "current aggregate consumers:  Alpha")
               semanticLines `shouldSatisfy` all (not . T.isInfixOf "Beta")
@@ -7223,7 +7391,7 @@ main = hspec $ do
         changedPaths nestedDelta `shouldSatisfy` Set.null . Set.intersection betaPaths
         changedPaths fixtureDelta `shouldSatisfy` Set.null . Set.intersection betaPaths
         map impactDeclaration (CheckedDiff.mappedSemanticImpact (wsMergedSpec workspace) (addNestedPayloadOptionalField (wsMergedSpec workspace)))
-          `shouldBe` [MappedKey "NestedPayload"]
+          `shouldBe` [MappedKey "AlphaPayload", MappedKey "NestedPayload"]
         mappedDeclarationConsumers (semanticImpactForSpec (wsMergedSpec workspace)) (MappedKey "SharedPayload")
           `shouldBe` [AggregateConsumer "Alpha", AggregateConsumer "Beta"]
         mappedDeclarationConsumers (semanticImpactForSpec (wsMergedSpec workspace)) (MappedKey "UnusedPayload")

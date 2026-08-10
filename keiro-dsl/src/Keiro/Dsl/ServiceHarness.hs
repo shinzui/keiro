@@ -15,9 +15,12 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValues, workflowHarnessFactValues)
+import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveContractLanguageVersion)
+import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpact)
 import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
+import Keiro.Dsl.TypeGraph (resolveTypeGraph)
 import Keiro.Dsl.Validate (nodeIdentity)
 
 -- | A fully qualified process, router, or workflow fact key that would occur
@@ -39,7 +42,7 @@ serviceConformanceFactKeys service =
 -- | The create-once expectation baseline for all facts-producing nodes.
 serviceConformanceFactValues :: CheckedService -> [(Text, Text)]
 serviceConformanceFactValues service =
-  concatMap valuesForNode (serviceHarnessNodes service)
+  surfaceFactValues service <> concatMap valuesForNode (serviceHarnessNodes service)
 
 -- | Emit exactly one facade, including an empty facade for a service with no
 -- harness-producing nodes. Duplicate normalized expectation keys are refused
@@ -76,7 +79,7 @@ renderServiceHarness ctx service =
       <> [""]
       <> renderChecks hasStructural checkSources
       <> [""]
-      <> renderFacts factSources
+      <> renderFacts (surfaceFactValues service) factSources
   where
     hasStructural = hasStructuralConformance service
     aliased = aliasNodes hasStructural (serviceHarnessNodes service)
@@ -143,16 +146,24 @@ checkExpression (node, alias) = case node of
     "[(\"readmodel/" <> rmName readModel <> "/\" <> fact, passed) | (fact, passed) <- " <> alias <> ".readModelFactResults]"
   _ -> error "checkExpression called for a fact-only node"
 
-renderFacts :: [(Node, Text)] -> [Text]
-renderFacts [] =
+renderFacts :: [(Text, Text)] -> [(Node, Text)] -> [Text]
+renderFacts [] [] =
   [ "serviceConformanceFacts :: [(String, String)]",
     "serviceConformanceFacts = []"
   ]
-renderFacts sources =
+renderFacts surfaceFacts sources =
   [ "serviceConformanceFacts :: [(String, String)]",
     "serviceConformanceFacts ="
   ]
-    <> renderConcatenation (map factExpression sources)
+    <> renderConcatenation (surfaceExpression surfaceFacts <> map factExpression sources)
+
+surfaceExpression :: [(Text, Text)] -> [Text]
+surfaceExpression [] = []
+surfaceExpression values =
+  [ "[ " <> T.intercalate "\n    , " ["(" <> quoted key <> ", " <> quoted value <> ")" | (key, value) <- values] <> "\n    ]"
+  ]
+  where
+    quoted = T.pack . show . T.unpack
 
 factExpression :: (Node, Text) -> Text
 factExpression (node, alias) =
@@ -197,3 +208,15 @@ valuesForNode node =
       NRouter router -> routerHarnessFactValues router
       NWorkflow workflow -> workflowHarnessFactValues workflow
       _ -> []
+
+surfaceFactValues :: CheckedService -> [(Text, Text)]
+surfaceFactValues service
+  | not
+      ( languageSupportsFeature
+          (effectiveContractLanguageVersion (checkedLanguageContract service))
+          MappedConsumerSurfaceSyntax
+      ) =
+      []
+  | otherwise = case resolveTypeGraph (checkedSpec service) of
+      Left _ -> []
+      Right graph -> mappedSurfaceFactValues (semanticImpact graph)

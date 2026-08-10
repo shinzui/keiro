@@ -41,4 +41,4 @@ generated Generated/IncidentPaging/Page/Projection.hs
 generated Generated/IncidentPaging/Page/Harness.hs
 behavior {"aggregate":"Page","command":"SendPage","evidence":"generated-authoritative","key":"behavior-v1-4cc963adc6662c5e","kind":"required-rejection","outputs":[],"source":"Delivered"}
 behavior {"aggregate":"Page","command":"SendPage","evidence":"generated-authoritative","key":"behavior-v1-d0a1ec215dcca5f8","kind":"live-transition","outputs":[{"command":"SendPage","ownership":"generated-command-identity"}],"source":"Pending"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

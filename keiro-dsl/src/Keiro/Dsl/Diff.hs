@@ -59,7 +59,7 @@ where
 import Data.Char (toUpper)
 import Data.Foldable (traverse_)
 import Data.List (find, sort, (\\))
-import Data.Maybe (isJust, isNothing, mapMaybe)
+import Data.Maybe (isJust, isNothing, mapMaybe, maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -87,7 +87,7 @@ import Keiro.Dsl.PrettyPrint
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
-import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
 import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -180,6 +180,7 @@ data ChangeKind = ChangeKind
     ckContext :: !ChangeContext,
     ckVector :: !CompatibilityVector,
     ckMappedPersistedImpact :: !(Maybe MappedPersistedImpact),
+    ckMappedConsequences :: !(Set MappedConsequence),
     ckPaths :: ![Text],
     ckDetail :: !Text
   }
@@ -883,13 +884,14 @@ mappedProjectionFindingChanges env finding = case (projectionImpactFor (deOld en
     let derivedConsumers =
           maybe Set.empty (`ProjectionImpact.projectionConsumersFor` declarationKey) oldImpact
             <> maybe Set.empty (`ProjectionImpact.projectionConsumersFor` declarationKey) newImpact
-     in [ appendChangeDetail (operationDetail oldOperation newOperation) $
-            mappedChange
-              (consumerBuildContext root inheritedPaths)
-              root
-              "mapped-projection"
-              subject
-              finding
+     in [ withMappedConsequences (projectionConsequences derived oldOperation newOperation) $
+            appendChangeDetail (operationDetail oldOperation newOperation) $
+              mappedChange
+                (consumerBuildContext root inheritedPaths)
+                root
+                "mapped-projection"
+                subject
+                finding
         | derived <- Set.toAscList derivedConsumers,
           let oldOperation = oldImpact >>= operationFor declarationKey derived,
           let newOperation = newImpact >>= operationFor declarationKey derived,
@@ -939,6 +941,13 @@ mappedProjectionFindingChanges env finding = case (projectionImpactFor (deOld en
       Additive kind -> Additive kind {ckDetail = ckDetail kind <> suffix}
       Advisory kind -> Advisory kind {ckDetail = ckDetail kind <> suffix}
       Breaking kind -> Breaking kind {ckDetail = ckDetail kind <> suffix}
+    projectionConsequences derived oldOperation newOperation =
+      Set.fromList
+        ( [MappedConsumerBuild (DerivedProjectionConsumer derived), MappedProjectionHandlerReview derived]
+            <> [ MappedProjectionRebuild derived groupName
+               | ProjectionImpact.ProjectionOperationalImpact _ (Just groupName) _ _ True _ <- maybeToList oldOperation <> maybeToList newOperation
+               ]
+        )
     projectionConsumerRoot (AggregateInlineProjectionConsumer aggregate _) = aggregate
     projectionConsumerRoot (CatalogProjectionConsumer owner _) = owner
 
@@ -948,10 +957,11 @@ mappedProjectionFindingChanges env finding = case (projectionImpactFor (deOld en
 mappedSemanticImpact :: Spec -> Spec -> [MappedImpactDelta]
 mappedSemanticImpact oldSpec newSpec = case (resolveTypeGraph oldSpec, resolveTypeGraph newSpec) of
   (Right oldGraph, Right newGraph) ->
-    mappedImpactForDeclarations
-      [MappedKey (mfDeclaration finding) | finding <- diffMapped oldSpec newSpec]
-      (semanticImpactSnapshot (semanticImpact oldGraph))
-      (semanticImpactSnapshot (semanticImpact newGraph))
+    let oldSnapshot = semanticImpactSnapshot (semanticImpact oldGraph)
+        newSnapshot = semanticImpactSnapshot (semanticImpact newGraph)
+        declarationChanges = [MappedKey (mfDeclaration finding) | finding <- diffMapped oldSpec newSpec]
+        relationChanges = map impactDeclaration (diffSemanticImpact oldSnapshot newSnapshot)
+     in mappedImpactForDeclarations (declarationChanges <> relationChanges) oldSnapshot newSnapshot
   _ -> []
 
 mappedFindingChanges :: MappedFinding -> [Change]
@@ -983,7 +993,7 @@ mappedDeclarationChange label finding =
 
 mappedUseChange :: MappedFinding -> UsePath -> Change
 mappedUseChange finding path =
-  mappedChange context root facet subject finding
+  withMappedConsequences (mappedUseConsequences path) (mappedChange context root facet subject finding)
   where
     subject = renderMappedSubject path (mfLeaf finding)
     (root, facet, kind) = case upRoot path of
@@ -994,6 +1004,21 @@ mappedUseChange finding path =
       RootReadModelQueryInput readModel _ -> (readModel, "mapped-query-input", ContextConsumerBuild)
       RootReadModelQueryResult readModel _ -> (readModel, "mapped-query-result", ContextConsumerBuild)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
+
+mappedUseConsequences :: UsePath -> Set MappedConsequence
+mappedUseConsequences path = Set.fromList $ case upRoot path of
+  RootCommandField aggregate _ _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate)]
+  RootEventField aggregate _ _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedPrivateEventHistory aggregate]
+  RootRegister aggregate _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedSnapshotHydration aggregate]
+  RootWorkqueueField workqueue _ _ -> [MappedConsumerBuild (WorkqueueConsumer workqueue), MappedWorkqueueHistory workqueue]
+  RootReadModelQueryInput readModel _ -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryInput), MappedQueryApi readModel MappedQueryInput]
+  RootReadModelQueryResult readModel _ -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryResult), MappedQueryApi readModel MappedQueryResult]
+
+withMappedConsequences :: Set MappedConsequence -> Change -> Change
+withMappedConsequences consequences = \case
+  Additive kind -> Additive kind {ckMappedConsequences = consequences}
+  Advisory kind -> Advisory kind {ckMappedConsequences = consequences}
+  Breaking kind -> Breaking kind {ckMappedConsequences = consequences}
 
 mappedContextHint :: MappedFinding -> ContextKind -> Label
 mappedContextHint finding kind = case kind of
@@ -1206,35 +1231,42 @@ readModelPairDiff env oldReadModel newReadModel =
     queryContractChanges =
       queryPositionChange
         "input"
+        MappedQueryInput
         ReadModelQueryInputChanged
         (input <$> queryTypes oldReadModel)
         (input <$> queryTypes newReadModel)
         "callers"
         <> queryPositionChange
           "result"
+          MappedQueryResult
           ReadModelQueryResultChanged
           (result <$> queryTypes oldReadModel)
           (result <$> queryTypes newReadModel)
           "result consumers"
-    queryPositionChange position code oldExpression newExpression owner =
-      [ advisoryAt
-          (consumerBuildContext nodeName [nodeName <> " query " <> position])
-          nodeName
-          ("read-model-query-" <> position)
-          (nodeName <> " query " <> position)
-          code
-          ( "query "
-              <> position
-              <> " changed "
-              <> renderMaybeType oldExpression
-              <> " -> "
-              <> renderMaybeType newExpression
-              <> "; recompile "
-              <> owner
-              <> " against the generated QueryContract. SQL columns, projection replay, and persisted history are unaffected"
+    queryPositionChange position mappedPosition code oldExpression newExpression owner =
+      [ withMappedConsequences
+          (Set.fromList [MappedConsumerBuild consumer, MappedQueryApi nodeName mappedPosition])
+          ( advisoryAt
+              (consumerBuildContext nodeName [nodeName <> " query " <> position])
+              nodeName
+              ("read-model-query-" <> position)
+              (nodeName <> " query " <> position)
+              code
+              ( "query "
+                  <> position
+                  <> " changed "
+                  <> renderMaybeType oldExpression
+                  <> " -> "
+                  <> renderMaybeType newExpression
+                  <> "; recompile "
+                  <> owner
+                  <> " against the generated QueryContract. SQL columns, projection replay, and persisted history are unaffected"
+              )
           )
       | oldExpression /= newExpression
       ]
+      where
+        consumer = ReadModelQueryConsumer nodeName mappedPosition
     renderMaybeType = maybe "(absent)" renderTypeExpr
 
 projectionTargetDiff :: DiffEnv -> [Change]
@@ -2170,7 +2202,12 @@ workqueuePairDiff oldQueue newQueue =
     -- queued under the old shape; there is no optional variant to strengthen.
     addedFieldDiff field = [payloadBreaking field "new required field; queued jobs do not contain it"]
     removedFieldDiff field = [payloadBreaking field "field removed; queued jobs still contain the old payload shape"]
-    payloadBreaking field detail = breaking (wqName newQueue) "payload-field" (wqfName field) WqPayloadFieldChanged detail
+    payloadBreaking field detail =
+      withMappedConsequences
+        (Set.fromList [MappedConsumerBuild consumer, MappedWorkqueueHistory (wqName newQueue)])
+        (breaking (wqName newQueue) "payload-field" (wqfName field) WqPayloadFieldChanged detail)
+      where
+        consumer = WorkqueueConsumer (wqName newQueue)
 
 addedWorkqueueDiff :: WorkqueueNode -> [Change]
 addedWorkqueueDiff queue =
@@ -2713,6 +2750,7 @@ mkChange label context n facet subj code detail =
         ckMappedPersistedImpact = case contextKind context of
           ContextQueue -> Just (MappedPersistedImpact (WorkqueueHistory (changeContextRoot context)) VBreaking)
           _ -> Nothing,
+        ckMappedConsequences = Set.empty,
         ckPaths = changeContextPaths context,
         ckDetail = detail
       }

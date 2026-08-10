@@ -58,4 +58,4 @@ nominal-equality nominal-equality|name=HospitalId|contract=keiro-dsl/nominal-equ
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-5198a253324042e6","kind":"live-transition","outputs":[{"command":"NoteSurgeThreshold","ownership":"generated-command-identity"}],"source":"Idle"}
 behavior {"aggregate":"Surge","command":"MarkSurgeTimerFired","evidence":"generated-authoritative","key":"behavior-v1-6721e0b61aa38780","kind":"live-transition","outputs":[{"command":"MarkSurgeTimerFired","ownership":"generated-command-identity"}],"source":"Idle"}
 behavior {"aggregate":"Hospital","command":"ActivateSurge","evidence":"generated-authoritative","key":"behavior-v1-69ac3daa8569d350","kind":"live-transition","outputs":[{"command":"ActivateSurge","ownership":"generated-command-identity"}],"source":"Operational"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

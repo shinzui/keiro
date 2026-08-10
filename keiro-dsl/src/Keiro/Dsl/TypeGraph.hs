@@ -297,6 +297,8 @@ data TypeGraph = TypeGraph
     tgUseSites :: ![UseSite],
     tgRootSegments :: !(Map UseSite [PathSeg]),
     tgDerivedMappedConsumers :: ![DerivedMappedConsumer],
+    tgReplayableProjectionGroups :: !(Map DerivedMappedConsumer Name),
+    tgProjectionOperationalIdentities :: !(Map DerivedMappedConsumer Text),
     tgUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
   }
   deriving stock (Eq, Show, Generic)
@@ -320,6 +322,8 @@ resolveTypeGraph spec = do
         tgUseSites = map fst (catMaybes rootSites),
         tgRootSegments = Map.fromList (catMaybes rootSites),
         tgDerivedMappedConsumers = sort (derivedMappedConsumers spec),
+        tgReplayableProjectionGroups = replayableProjectionGroups spec,
+        tgProjectionOperationalIdentities = projectionOperationalIdentities spec,
         tgUnsupportedProjectionSources = sort (unsupportedProjectionSources spec)
       }
 
@@ -333,6 +337,51 @@ derivedMappedConsumers spec =
        | NProjectionOwner owner <- specNodes spec,
          CatalogAggregate aggregate <- poSources owner
        ]
+
+replayableProjectionGroups :: Spec -> Map DerivedMappedConsumer Name
+replayableProjectionGroups spec =
+  Map.fromList
+    [ (CatalogProjectionConsumer (poName owner) aggregate, poGroup owner)
+    | NProjectionOwner owner <- specNodes spec,
+      poReplay owner == ProjectionReplayExplicit,
+      CatalogAggregate aggregate <- poSources owner
+    ]
+
+projectionOperationalIdentities :: Spec -> Map DerivedMappedConsumer Text
+projectionOperationalIdentities spec =
+  Map.fromList (inlineRows <> catalogRows)
+  where
+    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    inlineRows =
+      [ ( AggregateInlineProjectionConsumer (aggName aggregate) (projTable projection),
+          renderOperation Nothing [projTable projection] [rmName readModel | readModel <- readModels, rmName readModel == projTable projection] False
+        )
+      | NAggregate aggregate <- specNodes spec,
+        Just projection <- [aggProjection aggregate]
+      ]
+    catalogRows =
+      [ ( CatalogProjectionConsumer (poName owner) aggregate,
+          renderOperation
+            (Just (poGroup owner))
+            (poTargets owner)
+            [ rmName readModel
+            | readModel <- readModels,
+              rmGroup readModel == Just (poGroup owner),
+              not (Set.disjoint (Set.fromList (rmObservedTargets readModel)) (Set.fromList (poTargets owner)))
+            ]
+            (poReplay owner == ProjectionReplayExplicit)
+        )
+      | NProjectionOwner owner <- specNodes spec,
+        CatalogAggregate aggregate <- poSources owner
+      ]
+    renderOperation groupName targets observers canReplay =
+      T.intercalate
+        ";"
+        [ "group=" <> maybe "(inline)" id groupName,
+          "targets=" <> T.intercalate "," (sort targets),
+          "read-models=" <> T.intercalate "," (sort observers),
+          "replayable=" <> if canReplay then "yes" else "no"
+        ]
 
 unsupportedProjectionSources :: Spec -> [UnsupportedProjectionSource]
 unsupportedProjectionSources spec =

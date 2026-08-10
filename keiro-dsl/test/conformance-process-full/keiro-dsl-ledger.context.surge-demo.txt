@@ -65,4 +65,4 @@ behavior {"aggregate":"Hospital","command":"ActivateSurge","evidence":"generated
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-9d1377f4e60cd45a","kind":"required-rejection","outputs":[],"source":"Fired"}
 behavior {"aggregate":"Surge","command":"NoteSurgeThreshold","evidence":"generated-authoritative","key":"behavior-v1-c7783d8bb46678fe","kind":"required-rejection","outputs":[],"source":"Noted"}
 behavior {"aggregate":"Surge","command":"MarkSurgeTimerFired","evidence":"generated-authoritative","key":"behavior-v1-db2fec76864e5867","kind":"live-transition","outputs":[{"command":"MarkSurgeTimerFired","ownership":"generated-command-identity"}],"source":"Noted"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

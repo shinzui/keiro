@@ -64,4 +64,4 @@ binding {"kind":"fixtures","mappedName":"SequenceNumber","module":"NominalConfor
 binding {"kind":"initial-value","mappedName":"SequenceNumber","module":"NominalConformance.Bindings","path":null,"schema":1,"signature":"initialSequenceNumber :: NominalConformance.Domain.SequenceNumber","symbol":"initialSequenceNumber"}
 behavior {"aggregate":"NominalLedger","command":"RecordNominals","evidence":"generated-authoritative","key":"behavior-v1-274eaf83d346048a","kind":"live-transition","outputs":[{"command":"RecordNominals","ownership":"generated-command-identity"}],"source":"Empty"}
 behavior {"aggregate":"NominalLedger","command":"RecordNominals","evidence":"generated-authoritative","key":"behavior-v1-971c0c80ffdfe018","kind":"required-rejection","outputs":[],"source":"Recorded"}
-semantic-impact {"declarations":[],"serviceInventory":[]}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

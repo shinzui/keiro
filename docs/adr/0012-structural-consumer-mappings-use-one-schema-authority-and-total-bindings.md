@@ -166,12 +166,15 @@ change through those root paths so event migration, snapshot invalidation, and c
 not conflated.
 
 Consumer dependency impact has one checked authority, `Keiro.Dsl.SemanticImpact`. It derives from
-the resolved graph, groups every command-field, private-event-field, and register root by owning
-aggregate, unions each root with its transitive mapped-declaration closure, and inverts those
-closures into declaration consumers. Every public projection is deterministically ordered, and
-the root fold is exhaustive so a future `UseSite` constructor cannot compile until the impact
-model assigns it semantics. Generators, scaffold history, and impact reports consume this model;
-they do not reconstruct reachability from raw `Spec` fields.
+the resolved graph and keeps consumer identity and consequence as orthogonal dimensions. Aggregate
+command, private-event, register, workqueue, read-model query input/result, aggregate-inline
+projection, and aggregate-sourced catalog consumers each retain their complete logical path and
+transitive declaration closure. Consequences separately name consumer builds, private history,
+snapshot hydration, queued-job history, query API positions, projection handler review, and
+replayable catalog rebuild groups. Every public projection is deterministically ordered, and the
+root fold is exhaustive so a future `UseSite` constructor cannot compile until the impact model
+assigns it semantics. Generators, service conformance, coverage, scaffold history, and impact
+reports serialize this model; they do not reconstruct reachability from raw `Spec` fields.
 
 The complete service declaration inventory is deliberately separate from aggregate consumer
 closures. Declaration-owned binding, canonical-identity, fixture, branch-coverage,
@@ -228,8 +231,10 @@ declarations retain their separate JSON conformance authority.
 Snapshot impact continues to follow register use because the snapshot is a cache of the register
 file. Query input/result changes are consumer-build API changes only; they do not become event,
 queue, snapshot, table-shape, or projection-replay changes. Projection rebuild policies consume
-checked roots in their owning follow-up changes; downstream code must not infer unsupported
-consumers from descriptive notation.
+checked private-event roots only. Durable projection evidence includes group, target, observing
+read-model, and replay-policy identity, so an operational relation change is visible even when the
+mapped declarations themselves are unchanged. Category/all sources remain explicit unsupported
+typed boundaries; downstream code must not infer consumers from descriptive notation.
 
 Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
 explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.
