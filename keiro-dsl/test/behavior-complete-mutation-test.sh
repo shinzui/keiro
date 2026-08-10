@@ -9,6 +9,7 @@ CODEC="keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/J
 SCAFFOLD_SOURCE="keiro-dsl/src/Keiro/Dsl/Scaffold.hs"
 SPEC="keiro-dsl/test/fixtures/behavior-complete.keiro"
 OUT="keiro-dsl/test/conformance-behavior-complete"
+LEDGER="$OUT/keiro-dsl-ledger.context.behavior-complete.txt"
 
 BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/keiro-behavior-mutation.XXXXXX")"
 case "$BACKUP_DIR" in
@@ -21,6 +22,7 @@ cp "$LEGACY_HOLES" "$BACKUP_DIR/Holes.hs"
 cp "$TRANSDUCER" "$BACKUP_DIR/Transducer.hs"
 cp "$CODEC" "$BACKUP_DIR/Codec.hs"
 cp "$SCAFFOLD_SOURCE" "$BACKUP_DIR/Scaffold.hs"
+cp "$LEDGER" "$BACKUP_DIR/ledger.txt"
 
 restore_all() {
   cp "$BACKUP_DIR/BehaviorHoles.hs" "$WITNESSES"
@@ -28,11 +30,12 @@ restore_all() {
   cp "$BACKUP_DIR/Transducer.hs" "$TRANSDUCER"
   cp "$BACKUP_DIR/Codec.hs" "$CODEC"
   cp "$BACKUP_DIR/Scaffold.hs" "$SCAFFOLD_SOURCE"
+  cp "$BACKUP_DIR/ledger.txt" "$LEDGER"
 }
 
 cleanup() {
   restore_all
-  rm -f "$BACKUP_DIR/BehaviorHoles.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Codec.hs" "$BACKUP_DIR/Scaffold.hs" "$BACKUP_DIR/mutation.log"
+  rm -f "$BACKUP_DIR/BehaviorHoles.hs" "$BACKUP_DIR/Holes.hs" "$BACKUP_DIR/Transducer.hs" "$BACKUP_DIR/Codec.hs" "$BACKUP_DIR/Scaffold.hs" "$BACKUP_DIR/ledger.txt" "$BACKUP_DIR/mutation.log"
   rmdir "$BACKUP_DIR"
 }
 trap cleanup EXIT

@@ -40,8 +40,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-10T02:52:37Z) Milestone 1: built minimized single/workspace locality fixtures
   with exact generated-tree baselines, a four-file A-only allowlist, explicit source-map/ledger
   provenance exceptions, and constant churn as the workspace grows from two to twelve aggregates.
-- [ ] Milestone 2: add restoring correctness mutations for service structural evidence,
-  aggregate-use evidence, and behavior-source anchor coherence.
+- [x] (2026-08-10T03:09:12Z) Milestone 2: added and passed restoring correctness mutations for
+  service structural evidence, aggregate-use evidence, complete behavior contracts, and moved
+  behavior-source anchors; planner anchor failures also prove the output tree stays empty.
 - [ ] Milestone 3: replay the Mori Plan 181 three-field scenario read-only and pin the allowed
   semantic/generated impact set and measured churn reduction.
 - [ ] Milestone 4: regenerate the complete committed corpus once, run full repository/release-
@@ -70,6 +71,10 @@ implementation. Provide concise evidence.
   workspace ledger that records source-bearing role provenance. Every other emitted file remains
   byte-identical, and the scaffold disposition/report identifies only the source-map artifact as
   generated impact.
+- Running the pre-existing complete-behavior mutation driver after semantic-impact persistence was
+  introduced refreshed its ledger even though all mutated source/generated modules were restored.
+  The driver now backs up and restores that ledger too, so both successful and interrupted runs
+  preserve every touched tracked byte.
 
 
 ## Decision Log

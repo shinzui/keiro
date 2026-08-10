@@ -2011,30 +2011,33 @@ main = hspec $ do
       [Behavior.requirementOrigin requirement | requirement <- requirements, Behavior.requirementKind requirement == Behavior.RequiredRejection]
         `shouldSatisfy` all (\case Behavior.RejectionRequirementOrigin "Journey" _ -> True; _ -> False)
 
-    it "refuses line-only, missing, and duplicate behavior source anchors" $ do
-      spec <- specOf "test/fixtures/behavior-complete.keiro"
-      requirements <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (Behavior.deriveBehaviorRequirements spec)
-      compatibility <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (compatibilitySemanticSourceIndex "behavior-complete.keiro" spec)
-      let failureCodes result = case result of
-            Left failures -> map BehaviorSource.failureCode failures
-            Right _ -> []
-      failureCodes (BehaviorSource.planBehaviorSourceMap requirements compatibility)
-        `shouldSatisfy` all (== BehaviorSource.BehaviorSourceAnchorInexact)
-      failureCodes (BehaviorSource.planBehaviorSourceMap requirements emptySemanticSourceIndex)
-        `shouldSatisfy` all (== BehaviorSource.BehaviorSourceAnchorMissing)
-      case BehaviorSource.planBehaviorSourceMap requirements emptySemanticSourceIndex of
-        Left (failure : _) -> do
-          let diagnostics = planningRefusalDiagnostics [BehaviorSourceRefusal [failure]]
-          map code diagnostics `shouldBe` [BehaviorSourceAnchorMissing]
-          map message diagnostics `shouldSatisfy` all (T.isInfixOf "behavior-v1-")
-          map message diagnostics `shouldSatisfy` all (T.isInfixOf "Journey:")
-          map message diagnostics `shouldSatisfy` all (T.isInfixOf "subject=Aggregate")
-        result -> expectationFailure ("expected missing-anchor diagnostics, got " <> show result)
-      case requirements of
-        first : _ ->
-          failureCodes (BehaviorSource.planBehaviorSourceMap (first : requirements) compatibility)
-            `shouldContain` [BehaviorSource.BehaviorSourceAnchorCollision]
-        [] -> expectationFailure "behavior fixture unexpectedly has no requirements"
+    it "refuses line-only, missing, and duplicate behavior source anchors before writes" $
+      withTempDirectory "keiro-dsl-source-anchor-refusal" $ \out -> do
+        baselineTree <- treeSnapshot out
+        spec <- specOf "test/fixtures/behavior-complete.keiro"
+        requirements <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (Behavior.deriveBehaviorRequirements spec)
+        compatibility <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (compatibilitySemanticSourceIndex "behavior-complete.keiro" spec)
+        let failureCodes result = case result of
+              Left failures -> map BehaviorSource.failureCode failures
+              Right _ -> []
+        failureCodes (BehaviorSource.planBehaviorSourceMap requirements compatibility)
+          `shouldSatisfy` all (== BehaviorSource.BehaviorSourceAnchorInexact)
+        failureCodes (BehaviorSource.planBehaviorSourceMap requirements emptySemanticSourceIndex)
+          `shouldSatisfy` all (== BehaviorSource.BehaviorSourceAnchorMissing)
+        case BehaviorSource.planBehaviorSourceMap requirements emptySemanticSourceIndex of
+          Left (failure : _) -> do
+            let diagnostics = planningRefusalDiagnostics [BehaviorSourceRefusal [failure]]
+            map code diagnostics `shouldBe` [BehaviorSourceAnchorMissing]
+            map message diagnostics `shouldSatisfy` all (T.isInfixOf "behavior-v1-")
+            map message diagnostics `shouldSatisfy` all (T.isInfixOf "Journey:")
+            map message diagnostics `shouldSatisfy` all (T.isInfixOf "subject=Aggregate")
+          result -> expectationFailure ("expected missing-anchor diagnostics, got " <> show result)
+        case requirements of
+          first : _ ->
+            failureCodes (BehaviorSource.planBehaviorSourceMap (first : requirements) compatibility)
+              `shouldContain` [BehaviorSource.BehaviorSourceAnchorCollision]
+          [] -> expectationFailure "behavior fixture unexpectedly has no requirements"
+        treeSnapshot out `shouldReturn` baselineTree
 
     it "plans one exact context source map and removes line-derived contract and witness bytes" $ do
       source <- readTestText "test/fixtures/behavior-complete.keiro"

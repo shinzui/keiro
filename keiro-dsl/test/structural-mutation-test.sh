@@ -4,20 +4,31 @@ set -euo pipefail
 
 BINDINGS="keiro-dsl/test/conformance-structural/Conformance/Structural/Bindings.hs"
 TRANSDUCER="keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Transducer.hs"
-BINDINGS_BACKUP="$(mktemp)"
-TRANSDUCER_BACKUP="$(mktemp)"
+HARNESS="keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Harness.hs"
+BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/keiro-structural-mutation.XXXXXX")"
+case "$BACKUP_DIR" in
+  *keiro-structural-mutation.*) ;;
+  *) echo "FAIL: unexpected backup path: $BACKUP_DIR"; exit 1 ;;
+esac
+BINDINGS_BACKUP="$BACKUP_DIR/Bindings.hs"
+TRANSDUCER_BACKUP="$BACKUP_DIR/Transducer.hs"
+HARNESS_BACKUP="$BACKUP_DIR/Harness.hs"
 cp "$BINDINGS" "$BINDINGS_BACKUP"
 cp "$TRANSDUCER" "$TRANSDUCER_BACKUP"
+cp "$HARNESS" "$HARNESS_BACKUP"
 
 restore() {
   cp "$BINDINGS_BACKUP" "$BINDINGS"
   cp "$TRANSDUCER_BACKUP" "$TRANSDUCER"
-  rm -f "$BINDINGS_BACKUP" "$TRANSDUCER_BACKUP"
+  cp "$HARNESS_BACKUP" "$HARNESS"
+  rm -f "$BINDINGS_BACKUP" "$TRANSDUCER_BACKUP" "$HARNESS_BACKUP"
+  rmdir "$BACKUP_DIR"
 }
 trap restore EXIT
 
 restore_bindings() { cp "$BINDINGS_BACKUP" "$BINDINGS"; }
 restore_transducer() { cp "$TRANSDUCER_BACKUP" "$TRANSDUCER"; }
+restore_harness() { cp "$HARNESS_BACKUP" "$HARNESS"; }
 
 run_suite() {
   cabal test keiro-dsl-conformance-structural --test-show-details=direct 2>&1
@@ -62,6 +73,18 @@ rm -f "$BINDINGS.sed-bak"
 expect_red "missing union fixture" '^FAIL  structural/fixture coverage: conformance\.structural\.ArtifactLocation\.v1$'
 restore_bindings
 
+echo "== mutate fixtures: remove the populated optional-field case =="
+sed -i.sed-bak 's/:| \[("with-note", Domain\.ArtifactMetadata (Just "consumer note"))\]/:| []/' "$BINDINGS"
+rm -f "$BINDINGS.sed-bak"
+expect_red "missing optional fixture" '^FAIL  structural/fixture coverage: conformance\.structural\.ArtifactMetadata\.v1$'
+restore_bindings
+
+echo "== mutate aggregate use: force one mapped codec assertion false =="
+sed -i.sed-bak '/mapped codec round-trip: ArtifactRecorded\/artifact\// s/, roundTrips /, False \&\& roundTrips /' "$HARNESS"
+rm -f "$HARNESS.sed-bak"
+expect_red "aggregate-local mapped codec assertion" '^FAIL  mapped codec round-trip: ArtifactRecorded/artifact/'
+restore_harness
+
 echo "== mutate event stream: omit the mapped-state event =="
 sed -i.sed-bak '/^        B\.emit wireArtifactRecorded /,/^          })$/c\
         B.noEmit' "$TRANSDUCER"
@@ -71,4 +94,4 @@ restore_transducer
 
 echo "== restored baseline: structural conformance is green =="
 run_suite >/dev/null
-echo "PASS: all four structural mutations were caught and the baseline was restored"
+echo "PASS: all six structural mutations were caught and the baseline was restored"
