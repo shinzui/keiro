@@ -56,6 +56,10 @@ implementation. Provide concise evidence.
   not the 41 estimated while this plan was drafted. `scripts/check-conformance-corpus.sh` also
   proves suite coverage, record/disk consistency, and Cabal inventory consistency; Milestone 4
   must trust that live inventory rather than hard-code an invocation count.
+- Mori is under active development while this qualification runs. Resolve its current registered
+  path and inspect repository state for orientation, but pin the replay to the before/after
+  revisions recorded by Plan 181; never treat a moving working tree as the acceptance baseline or
+  write qualification output into Mori.
 
 
 ## Decision Log
@@ -84,6 +88,12 @@ Record every decision made while working on the plan.
   Rationale: Qualification establishes the release candidate baseline. Version selection,
   dependency bounds, tagging, and twenty-service rollout remain separately reviewed changes.
   Date: 2026-08-09
+
+- Decision: Treat the actively developed Mori checkout as read-only orientation and reconstruct
+  Plan 181 evidence from its recorded revisions into Keiro-owned temporary directories.
+  Rationale: A moving checkout is not a reproducible baseline, and this plan is authorized to
+  qualify Keiro rather than coordinate or alter concurrent Mori development.
+  Date: 2026-08-10
 
 
 ## Outcomes & Retrospective
@@ -325,3 +335,9 @@ substring guesses. The Mori dependency is evidence at
 `mori://shinzui/mori/plans/181-add-dependency-version-constraints-and-upstream-pointers`; no Mori
 API or code is imported. The release skill and fleet rewrite tooling are downstream and out of
 scope until this plan and MasterPlan 34 are complete.
+
+
+## Revision Notes
+
+- 2026-08-10: Recorded that Mori is under active development and made the plan's read-only,
+  revision-pinned replay rule explicit before qualification began.
