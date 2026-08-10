@@ -664,6 +664,19 @@ benchmark keiro-dsl-codec-bench
     , text         >=2.1  && <2.2
     , time         >=1.12 && <1.15
 
+benchmark keiro-dsl-parser-bench
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/parser-scaling
+  main-is:        Main.hs
+  build-depends:
+    , base         >=4.21 && <5
+    , containers   >=0.6  && <0.8
+    , deepseq      >=1.5  && <1.6
+    , keiro-dsl
+    , tasty-bench  >=0.5  && <0.6
+    , text         >=2.1  && <2.2
+
 -- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
 -- defaultStateCodec and stream-construction guards, with the captured codec
 -- identity checked against keiki's regFileShapeHash.
