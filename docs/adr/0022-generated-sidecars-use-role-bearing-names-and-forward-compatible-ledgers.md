@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Generated sidecars use role-bearing names and forward-compatible ledgers
 description: Keiro DSL names machine history as explicit-slot ledgers, names pasted build metadata as Cabal fragments, and migrates old names only through an explicit lossless apply step.
-timestamp: 2026-08-05T21:24:11Z
+timestamp: 2026-08-10T02:00:37Z
 docId: ADR-22
 status: Accepted
 date: 2026-08-05
@@ -72,6 +72,16 @@ case-folded duplicate paths, and a service-key mismatch. A historical
 conformance record is parsed and converted only during the explicit migration;
 its original bytes are preserved in the retirement slot.
 
+Standalone and workspace scaffold ledgers additionally carry at most one
+`semantic-impact` row with a canonical single-line JSON payload. Unknown row
+kinds and unknown JSON object keys remain ignorable. A present known row is
+strict: duplicate declaration keys, duplicate aggregate consumers, duplicate
+service-inventory entries, disagreement between declaration rows and the
+inventory, or malformed declaration identities invalidate the ledger before any
+scaffold write. Every current writer emits the row, including for an empty mapped
+inventory. Absence is therefore reserved for pre-feature history and means
+“baseline unavailable,” not “no mapped impact.”
+
 
 ## Consequences
 
@@ -83,6 +93,9 @@ its original bytes are preserved in the retirement slot.
   ledger's authority or overwriting prior backups.
 - Future conformance-ledger extensions do not break older readers merely because
   they add a row kind or JSON key, while invalid known data remains a refusal.
+- Semantic-impact history extends the same rule: old readers ignore the new row,
+  current readers distinguish absent legacy evidence from a present empty
+  inventory, and corrupted known evidence refuses before generation.
 - `Refusal`, `ScaffoldReport`, and `WorkspaceScaffoldReport` gain public sidecar
   migration surfaces, so exhaustive library consumers must update.
 

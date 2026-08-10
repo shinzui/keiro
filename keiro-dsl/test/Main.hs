@@ -3094,10 +3094,16 @@ main = hspec $ do
           semanticRows = filter ("semantic-impact " `T.isPrefixOf`) (T.lines encoded)
           legacyEncoded = T.unlines (filter (not . T.isPrefixOf "semantic-impact ") (T.lines encoded))
           futureEncoded = T.replace "semantic-impact {" "semantic-impact {\"future\":true," encoded
+          emptyIdentitySnapshot =
+            snapshot
+              { snapshotDeclarationIdentities =
+                  Map.adjust (const "") (MappedKey "CommandPayload") (snapshotDeclarationIdentities snapshot)
+              }
       length semanticRows `shouldBe` 1
       parseRecord encoded `shouldBe` Just singleRecord
       recSemanticImpact <$> parseRecord legacyEncoded `shouldBe` Just Nothing
       parseRecord futureEncoded `shouldBe` Just singleRecord
+      (Aeson.decode (Aeson.encode emptyIdentitySnapshot) :: Maybe SemanticImpactSnapshot) `shouldBe` Nothing
       case semanticRows of
         [row] -> do
           parseRecord (encoded <> row <> "\n") `shouldBe` Nothing
@@ -5404,6 +5410,30 @@ main = hspec $ do
       encoded `shouldSatisfy` T.isInfixOf "\"previousConsumers\":[\"Alpha\"]"
       let reordered = old {specMapped = reverse (specMapped old), specNodes = reverse (specNodes old)}
       CheckedDiff.mappedSemanticImpact old reordered `shouldBe` []
+    it "reports added, removed, and unused mapped declarations without inventing aggregate consumers" $ do
+      let declarationA = completeStructural "A" (recordShape [TText])
+          declarationB = completeStructural "B" (recordShape [TInt])
+          onlyA = mappedSpec [declarationA]
+          withB = mappedSpec [declarationA, declarationB]
+          added = CheckedDiff.mappedSemanticImpact onlyA withB
+          removed = CheckedDiff.mappedSemanticImpact withB onlyA
+          expectedB = MappedKey "B"
+      map impactDeclaration added `shouldBe` [expectedB]
+      map impactPreviousConsumers added `shouldBe` [Set.empty]
+      map impactCurrentConsumers added `shouldBe` [Set.empty]
+      map impactServiceConformance added `shouldBe` [True]
+      map impactDeclaration removed `shouldBe` [expectedB]
+      map impactPreviousConsumers removed `shouldBe` [Set.empty]
+      map impactCurrentConsumers removed `shouldBe` [Set.empty]
+      map impactServiceConformance removed `shouldBe` [True]
+
+      old <- specOf "test/fixtures/semantic-impact.keiro"
+      let changed = mapMappedStructural "UnusedPayload" changeMappedCanonical old
+          unusedImpact = CheckedDiff.mappedSemanticImpact old changed
+      map impactDeclaration unusedImpact `shouldBe` [MappedKey "UnusedPayload"]
+      map impactPreviousConsumers unusedImpact `shouldBe` [Set.empty]
+      map impactCurrentConsumers unusedImpact `shouldBe` [Set.empty]
+      map impactServiceConformance unusedImpact `shouldBe` [True]
     it "derives every exercised headline from its vector under the default gate" $ do
       changes <-
         concat

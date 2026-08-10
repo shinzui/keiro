@@ -157,6 +157,7 @@ instance FromJSON SemanticImpactSnapshot where
         identity <- row .: "identity"
         let aggregateConsumers = map AggregateConsumer consumerNames
         unless (distinct aggregateConsumers) (fail "duplicate semantic-impact aggregate consumer")
+        unless (not (T.null identity)) (fail "empty semantic-impact declaration identity")
         pure (MappedKey declarationName, Set.fromList aggregateConsumers, identity)
       distinct values = length values == Set.size (Set.fromList values)
 

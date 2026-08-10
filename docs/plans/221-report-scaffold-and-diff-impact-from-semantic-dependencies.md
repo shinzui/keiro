@@ -43,8 +43,11 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 3: add semantic and generated-artifact impact sections to single/workspace scaffold
   reports, including honest legacy-baseline behavior. Completed 2026-08-10T02:00:37Z; focused
   semantic-impact, structural-record, source-movement, and all 31 workspace-scaffold examples pass.
-- [ ] Milestone 4: prove mapped locality, source-only neutrality, ledger compatibility, and report
-  determinism; update ADRs/docs and pass focused/full tests.
+- [x] Milestone 4: prove mapped locality, source-only neutrality, ledger compatibility, and report
+  determinism; update ADRs/docs and pass focused/full tests. Completed 2026-08-10T02:14:38Z;
+  `cabal build keiro-dsl`, all 636 DSL examples, the diff shell suite, strict ADR validation, and
+  diff hygiene pass. The corpus probe exposed only EP-2/EP-4/EP-5's deliberately deferred combined
+  regeneration, which Plan 222 owns; no corpus changes were retained here.
 
 
 ## Surprises & Discoveries
@@ -64,6 +67,13 @@ implementation. Provide concise evidence.
   while its consumers stayed the same. The durable snapshot therefore also carries a canonical
   declaration identity built from source-independent resolved metadata, wire fingerprint, and
   generated Haskell-facing names. Exact source movement leaves it byte-identical.
+- The child plan named a `just check-adr` recipe that does not exist in the repository. The live
+  equivalent is `just adr-validate`; both it and the underlying strict `okf validate` command pass.
+- The corpus checker correctly refuses before Plan 222's migration because the new context
+  `StructuralConformance` and `BehaviorSourceMap` modules are not yet in every generated Cabal
+  inventory, and current ledgers do not yet contain the additive snapshot row. This is the combined
+  refresh explicitly assigned to Plan 222, so this plan accepted none of the probe's generated
+  changes.
 
 
 ## Decision Log
@@ -107,6 +117,12 @@ Record every decision made while working on the plan.
   diff/scaffold equivalence without putting source locations into history.
   Date: 2026-08-10
 
+- Decision: Leave the complete conformance-corpus refresh and new generated-module inventories to
+  Plan 222, while running the checker once here as an integration probe and retaining no output.
+  Rationale: MasterPlan 34 assigns one coordinated regeneration to its qualification plan so the
+  corpus does not absorb separate high-churn migrations after each template/report child.
+  Date: 2026-08-10
+
 
 ## Outcomes & Retrospective
 
@@ -115,7 +131,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed 2026-08-10. Diff and scaffold now share the checked semantic-impact projection. Text and
+schema-1 JSON name old/current aggregate consumers and service conformance without altering any
+compatibility verdict, replay result, rollout constraint, or legacy smart-constructor bytes.
+Standalone and workspace ledgers persist one canonical source-independent snapshot row; legacy
+absence remains unknown, malformed known evidence refuses, and unknown rows/keys remain forwards
+compatible.
+
+Scaffold reports expose semantic impact and generated-artifact dispositions as separate typed
+facts. A-only and nested edits exclude Aggregate B, shared declarations name both consumers, and
+added, removed, or unused declarations retain honest empty aggregate sets while naming service
+conformance. Source-only workspace motion names only `BehaviorSourceMap`; standalone writes are
+also byte-aware and unchanged reruns do not rewrite files. Ordering regressions cover declaration
+and member stability.
+
+The implementation passed `cabal build keiro-dsl`, the complete 636-example DSL suite,
+`bash keiro-dsl/test/diff-test.sh`, strict ADR/profile/log validation, and `git diff --check`.
+The corpus probe regenerated the combined EP-2/EP-4/EP-5 migration and then refused its not-yet-
+compiled context modules, exactly the remaining work assigned to Plan 222. Those generated changes
+were restored, so Plan 222 remains the single corpus migration owner.
 
 
 ## Context and Orientation
@@ -234,13 +268,16 @@ Before closure, run:
 cabal build keiro-dsl
 cabal test keiro-dsl:keiro-dsl-test
 scripts/check-conformance-corpus.sh
-just check-adr
+just adr-validate
 git diff --check
 git status --short
 ```
 
 Expected focused output names Aggregate A and service conformance for an A-only change, never
 Aggregate B. Source-only movement names the behavior source-map artifact and no semantic consumer.
+Before Plan 222's coordinated corpus regeneration, the corpus command is an integration probe and
+is expected to identify the deferred context-module/inventory migration; Plan 222 must make its
+second replay byte-clean.
 
 
 ## Validation and Acceptance
@@ -263,8 +300,9 @@ before writes, while unknown row kinds/keys remain compatible.
 
 Adding lines before a later member may overwrite only `BehaviorSourceMap`; it produces no mapped
 semantic delta. Module dispositions and semantic impact are both deterministic under member and
-declaration reordering. Full tests, diff shell regressions, corpus byte policy, ADR validation, and
-diff hygiene pass.
+declaration reordering. Full tests, diff shell regressions, ADR validation, and diff hygiene pass.
+The combined generated-corpus migration and byte-clean replay remain Plan 222 acceptance, as
+assigned by MasterPlan 34.
 
 
 ## Idempotence and Recovery
@@ -317,3 +355,5 @@ and ledger behavior as its adoption evidence.
 - 2026-08-10: Recorded Milestone 3's typed scaffold impact sections, byte-aware standalone writes,
   legacy-baseline behavior, and the declaration-identity correction required for same-consumer
   shape changes.
+- 2026-08-10: Completed Milestone 4 with the impact matrix, strict ledger/ADR evidence, full DSL
+  suite, diff shell regressions, user guidance, and the explicit Plan 222 corpus-refresh boundary.

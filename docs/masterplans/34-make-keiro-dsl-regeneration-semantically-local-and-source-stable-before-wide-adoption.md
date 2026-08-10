@@ -136,7 +136,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Complete |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Complete |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Complete |
-| 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | In Progress |
+| 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Complete |
 | 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -228,8 +228,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3: compose workspace source indices without contaminating the merged semantic graph.
 - [x] EP-4: generate and preflight one behavior-key source map for single and workspace inputs.
 - [x] EP-4: remove volatile positions from aggregate behavior contracts and diagnostics.
-- [ ] EP-5: persist semantic-impact snapshots and render scaffold/diff consumers honestly.
-- [ ] EP-5: prove source-only movement never becomes aggregate semantic impact.
+- [x] EP-5: persist semantic-impact snapshots and render scaffold/diff consumers honestly.
+- [x] EP-5: prove source-only movement never becomes aggregate semantic impact.
 - [ ] EP-6: pass minimized locality, evidence mutation, and single/workspace stability fixtures.
 - [ ] EP-6: replay the Mori Plan 181 regression, regenerate the corpus once, and publish the gate.
 
@@ -271,6 +271,14 @@ interactions between child plans. Provide concise evidence.
   semantic validation can report them later. Production CLI and workspace paths require an
   unambiguous exact index before checking or writes; compatibility parsing shares surface lowering
   but may discard exact provenance rather than narrowing the released parser domain.
+- EP-5 found that consumer reachability alone is insufficient scaffold history: a mapped schema
+  can change while its aggregate consumer set remains constant. The canonical snapshot therefore
+  includes a source-independent resolved declaration identity beside consumers and service
+  inventory, preserving same-consumer change detection without importing source position.
+- EP-5's corpus probe reached the coordinated migration boundary exactly as designed: the policy
+  generated EP-2's `StructuralConformance`, EP-4's `BehaviorSourceMap`, and EP-5's additive ledger
+  rows, then refused context modules not yet present in generated Cabal inventories. No probe output
+  was retained; EP-6 remains the only owner of the complete refresh and clean second replay.
 
 
 ## Decision Log
@@ -352,6 +360,16 @@ implementation passed the full 631-example DSL suite, the 19-obligation compiled
 behavior mutations, generated-source policies, build, strict ADR, and diff-hygiene gates. EP-5 is
 now unblocked to classify source-map impact separately in reports and scaffold history, while EP-6
 continues to own the deferred full-corpus refresh.
+
+EP-5 completed on 2026-08-10. Diff and scaffold reporting now project one checked semantic-impact
+model into old/current aggregate consumers and the separate service-conformance role. Standalone
+and workspace ledgers persist canonical, source-independent snapshots with honest legacy-baseline
+semantics; malformed known rows refuse while unknown extensions remain compatible. Generated-file
+dispositions remain a distinct typed report, so source-only movement names `BehaviorSourceMap`
+without manufacturing aggregate semantic impact. A-only, nested, shared, added, removed, unused,
+legacy/current, reordering, and workspace source-motion evidence passed the complete 636-example
+DSL suite and diff shell regressions, along with build, strict ADR, and diff-hygiene gates. The
+corpus probe produced only the combined migration reserved for EP-6 and its output was restored.
 
 
 ## Revision Notes
