@@ -66,7 +66,12 @@ the decision from the successful final evaluation.
   large-result heap evidence when the machine is quiet. The user reported that
   the computer is currently under heavy load, so do not change, regenerate, or
   commit a performance baseline from the current session.
-- [ ] Milestone 2: integrate SQL callbacks, projections, retry semantics, and bounded telemetry.
+- [x] (2026-08-10T18:29:56Z) Milestone 2: added typed SQL and controlled-SQL
+  runners, ordinary and catalog-aware projection runners, a closed decision
+  telemetry dimension on spans and metrics, and deterministic retry coverage.
+  The focused suite proves exact accepted callback pairs, atomic projection
+  writes, accepted catalog rollback, zero silent-decision callbacks/projections,
+  and final-decision freshness after conflict; all 10 focused examples pass.
 - [ ] Milestone 3: expose typed outcomes through routers and process managers without retaining worker payloads across fan-out.
 - [ ] Milestone 4: document the API, record the architectural decision, and complete repository validation.
 - [ ] Follow-up: execute [the DSL plan](232-add-typed-domain-outcomes-to-the-dsl.md) after this runtime contract is stable.
@@ -101,6 +106,14 @@ the decision from the successful final evaluation.
   no-op comparison measured identical 128 μs means and a 1.00x ratio.
   Evidence: the benchmark code retains hard `bcompareWithin 0 1.25` gates, but
   no committed baseline was created or changed from these noisy samples.
+
+- Discovery: The typed catalog path needs a fourth transactional state beyond
+  accepted, rejected, and no-op: an accepted append can be condemned by a
+  rebuild fence before it commits. Returning that as `DomainAccepted` would
+  falsely claim persistence metadata for an append that does not exist.
+  Evidence: `DomainSqlCommandRolledBack` carries only the fence result, while
+  the focused catalog test proves the event stream and target table remain
+  unchanged.
 
 
 ## Decision Log
@@ -183,6 +196,23 @@ the decision from the successful final evaluation.
   `Hydrated.state` and `Hydrated.registers` selector calls ambiguous, while
   record construction, pattern matching, overloaded labels, and record-dot
   access remain available for the new context.
+  Date: 2026-08-10
+
+- Decision: Represent controlled SQL execution with
+  `DomainSqlCommandSilent`, `DomainSqlCommandCommitted`, and
+  `DomainSqlCommandRolledBack`, and expose catalog results through the parallel
+  `DomainProjectionCommandOutcome` family.
+  Rationale: A silent decision is successful but opens no transaction, a
+  committed accepted decision owns both its exact event batch and callback
+  value, and a condemned append has neither a valid `CommandResult` nor a
+  durable domain outcome to fabricate.
+  Date: 2026-08-10
+
+- Decision: Model telemetry's three allowed metric labels as the closed
+  `CommandDecisionClass` type and render its text in `Keiro.Telemetry`.
+  Rationale: Keeping the metric recorder typed prevents arbitrary application
+  reason text from entering the decision dimension while spans and metrics
+  share the exact stable spellings.
   Date: 2026-08-10
 
 
@@ -784,3 +814,8 @@ corrected the focused Hspec invocation to preserve its space-containing match as
 argument, kept unprefixed silent-context record labels without adding colliding selector
 functions, and deferred all baseline generation or changes until the user's machine is no
 longer under heavy load.
+
+Revision note (2026-08-10): Recorded Milestone 2's typed SQL, projection,
+catalog-fence, retry-finality, and closed telemetry interfaces and their focused
+database-backed evidence. Functional validation used one build job under host
+load; no benchmark result or baseline was created or changed.

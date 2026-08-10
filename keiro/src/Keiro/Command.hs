@@ -73,6 +73,10 @@ module Keiro.Command
     SqlTransactionDecision (..),
     SqlCommandOutcome (..),
     runCommandWithSqlEventsControlled,
+    runDomainCommandWithSql,
+    runDomainCommandWithSqlEvents,
+    DomainSqlCommandOutcome (..),
+    runDomainCommandWithSqlEventsControlled,
 
     -- * Hydration primitives (replay audit)
     Hydrated (..),
@@ -116,11 +120,15 @@ import Keiro.Snapshot
 import Keiro.Snapshot.Policy (shouldSnapshotSpan)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry
-  ( KeiroMetrics,
+  ( CommandDecisionClass (..),
+    KeiroMetrics,
+    commandDecisionClassText,
+    keiro_command_decision,
     keiro_events_appended,
     keiro_replay_divergence,
     keiro_retry_attempt,
     recordCommandConflicts,
+    recordCommandDecision,
     recordCommandDuplicates,
     recordCommandRetries,
     recordSnapshotApplyDivergence,
@@ -268,6 +276,16 @@ data SqlCommandOutcome target a
   | SqlCommandRolledBack !a
   deriving stock (Generic, Eq, Show)
 
+-- | Result of a controlled transactional domain command. Selected silent
+-- decisions perform no transaction callback. A rolled-back accepted append has
+-- no 'DomainCommandOutcome' because neither its append nor its SQL effects
+-- exist.
+data DomainSqlCommandOutcome target co rejection noOp a
+  = DomainSqlCommandSilent !(DomainCommandOutcome target co rejection noOp)
+  | DomainSqlCommandCommitted !(DomainCommandOutcome target co rejection noOp) !a
+  | DomainSqlCommandRolledBack !a
+  deriving stock (Generic, Eq, Show)
+
 -- | Why replay of stored events stalled, projected from keiki's structured
 -- failure types onto a monomorphic vocabulary suitable for 'CommandError'.
 data HydrationReplayReason
@@ -289,8 +307,10 @@ data HydrationReplayReason
 -- * 'eventIds' — caller-supplied ids assigned to the emitted events in order;
 --   the basis for deterministic, idempotent appends (see 'Keiro.Router' and
 --   'Keiro.ProcessManager').
--- * 'beforeAppend' — a hook run immediately before each append attempt,
---   primarily a test seam for injecting concurrent writes.
+-- * 'beforeAppend' — an observation/test hook run immediately before each
+--   append attempt, primarily for injecting concurrent writes. It is not an
+--   application transaction callback: it may run for an accepted decision that
+--   later conflicts and is discarded.
 -- * 'retryBackoffMicros' — base delay before the k-th OCC retry, capped at
 --   100 ms and jittered. Set to 0 to disable backoff.
 -- * 'metrics' — optional metrics handle for command and snapshot counters.
@@ -770,7 +790,7 @@ runDomainCommand ::
 runDomainCommand options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command =
   withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream' targetStream) Nothing $ \mSpan -> do
     (outcome, attemptNo) <- attempt mSpan 1 Nothing
-    recordCommandOutcome mSpan ((^. #eventsAppended) . forgetDomainDecision) attemptNo outcome
+    recordDomainCommandOutcome options mSpan attemptNo outcome
     pure outcome
   where
     eventStream' = unvalidated validatedEventStream
@@ -959,6 +979,137 @@ runCommandWithSqlEventsControlled options validatedEventStream targetStream comm
         Left (_, storeError) ->
           retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
 
+-- | Domain-aware counterpart to 'runCommandWithSql'. The callback runs only
+-- for an accepted non-empty event batch and commits atomically with it. A typed
+-- rejection or no-op returns 'Nothing' and opens no SQL transaction.
+runDomainCommandWithSql ::
+  forall phi rs s ci co rejection noOp a es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  (AppendResult -> Tx.Transaction a) ->
+  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp, Maybe a))
+runDomainCommandWithSql options handler targetStream command afterAppend =
+  runDomainCommandWithSqlEvents options handler targetStream command (\_ appendResult -> afterAppend appendResult)
+
+-- | Domain-aware counterpart to 'runCommandWithSqlEvents'. Accepted commands
+-- pass the exact typed events paired with their reconstructed persisted events
+-- to the callback in append order. Selected silent decisions never invoke it.
+runDomainCommandWithSqlEvents ::
+  forall phi rs s ci co rejection noOp a es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a) ->
+  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp, Maybe a))
+runDomainCommandWithSqlEvents options handler targetStream command afterAppend =
+  fmap (fmap collapse)
+    $ runDomainCommandWithSqlEventsControlled
+      options
+      handler
+      targetStream
+      command
+      (\pairs appendResult -> CommitSqlTransaction <$> afterAppend pairs appendResult)
+  where
+    collapse = \case
+      DomainSqlCommandSilent outcome -> (outcome, Nothing)
+      DomainSqlCommandCommitted outcome userValue -> (outcome, Just userValue)
+      DomainSqlCommandRolledBack _ ->
+        error "runDomainCommandWithSqlEvents: an always-commit callback rolled back"
+
+-- | Controlled domain transaction variant used by catalog projection fences.
+-- A rollback discards the accepted batch and callback effects and therefore
+-- cannot fabricate a successful 'DomainCommandOutcome'.
+runDomainCommandWithSqlEventsControlled ::
+  forall phi rs s ci co rejection noOp a es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction (SqlTransactionDecision a)) ->
+  Eff es (Either CommandError (DomainSqlCommandOutcome (EventStream phi rs s ci co) co rejection noOp a))
+runDomainCommandWithSqlEventsControlled options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command afterAppend =
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream' targetStream) Nothing $ \mSpan -> do
+    (outcome, attemptNo) <- attempt mSpan 1 Nothing
+    recordDomainSqlCommandOutcome options mSpan attemptNo outcome
+    pure outcome
+  where
+    eventStream' = unvalidated validatedEventStream
+
+    attempt mSpan attemptNo lastConflict = do
+      hydrated <- hydrate options eventStream' targetStream
+      either (\err -> pure (Left err, attemptNo)) (runPlan mSpan attemptNo lastConflict) hydrated
+
+    runPlan mSpan attemptNo lastConflict current =
+      case conflictFixpoint lastConflict (current ^. #streamVersion) of
+        Just err -> pure (Left err, attemptNo)
+        Nothing ->
+          case prepareDomainCommandPlan options handler eventStream' targetStream current command of
+            Left err -> pure (Left err, attemptNo)
+            Right (DomainCommandSilent silentDecision result) ->
+              pure
+                ( Right
+                    ( DomainSqlCommandSilent
+                        DomainCommandOutcome
+                          { decision = domainDecisionFromSilent silentDecision,
+                            result
+                          }
+                    ),
+                  attemptNo
+                )
+            Right (DomainCommandAppend current' events encoded) ->
+              appendWithSqlOnce mSpan attemptNo current' events encoded
+
+    appendWithSqlOnce mSpan attemptNo current events encoded = do
+      liftIO (options ^. #beforeAppend)
+      store <- getKirokuStore
+      enriched <- liftIO (enrichEventsIO store encoded)
+      prepared <- prepareEventsIO enriched
+      now <- liftIO getCurrentTime
+      let streamName = (eventStream' ^. #resolveStreamName) targetStream
+          expected = expectedVersion (current ^. #streamVersion)
+          body = do
+            appended <- appendToStreamTx streamName expected prepared now
+            case appended of
+              Left conflict ->
+                Tx.condemn $> Left (appendConflictToStoreError conflict)
+              Right appendResult -> do
+                let typedEvents = NonEmpty.toList events
+                    recordeds = reconstructRecorded appendResult now prepared
+                sqlDecision <- afterAppend (Prelude.zip typedEvents recordeds) appendResult
+                case sqlDecision of
+                  CommitSqlTransaction userValue ->
+                    pure (Right (appendResult, Right userValue))
+                  RollbackSqlTransaction userValue -> do
+                    Tx.condemn
+                    pure (Right (appendResult, Left userValue))
+      outcome <- tryError @StoreError (runTransaction body)
+      case outcome of
+        Right (Right (appendResult, Right userValue)) -> do
+          verifyAndSnapshot options mSpan eventStream' current (NonEmpty.toList events) appendResult
+          pure
+            ( Right
+                ( DomainSqlCommandCommitted
+                    DomainCommandOutcome
+                      { decision = DomainAccepted events,
+                        result = appendedResult targetStream appendResult (Prelude.length encoded)
+                      }
+                    userValue
+                ),
+              attemptNo
+            )
+        Right (Right (_, Left userValue)) ->
+          pure (Right (DomainSqlCommandRolledBack userValue), attemptNo)
+        Right (Left storeError) ->
+          retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
+        Left (_, storeError) ->
+          retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
+
 prepareCommandPlan ::
   (BoolAlg phi (RegFile rs, ci)) =>
   RunCommandOptions ->
@@ -1061,6 +1212,60 @@ recordCommandOutcome (Just sp) eventsOf attemptNo result = do
     Left err -> do
       addAttribute sp (unkey error_type) (commandErrorClass err)
       setStatus sp (Error (Text.take 256 (Text.pack (show err))))
+
+recordDomainCommandOutcome ::
+  (IOE :> es) =>
+  RunCommandOptions ->
+  Maybe Span ->
+  Int ->
+  Either CommandError (DomainCommandOutcome target co rejection noOp) ->
+  Eff es ()
+recordDomainCommandOutcome options mSpan attemptNo outcome = do
+  recordCommandOutcome mSpan ((^. #eventsAppended) . forgetDomainDecision) attemptNo outcome
+  case outcome of
+    Left _ -> pure ()
+    Right DomainCommandOutcome {decision} ->
+      recordDomainDecision options mSpan decision
+
+recordDomainSqlCommandOutcome ::
+  (IOE :> es) =>
+  RunCommandOptions ->
+  Maybe Span ->
+  Int ->
+  Either CommandError (DomainSqlCommandOutcome target co rejection noOp a) ->
+  Eff es ()
+recordDomainSqlCommandOutcome options mSpan attemptNo outcome = do
+  recordCommandOutcome mSpan eventsAppended attemptNo outcome
+  case outcome of
+    Right (DomainSqlCommandSilent DomainCommandOutcome {decision}) ->
+      recordDomainDecision options mSpan decision
+    Right (DomainSqlCommandCommitted DomainCommandOutcome {decision} _) ->
+      recordDomainDecision options mSpan decision
+    Right (DomainSqlCommandRolledBack _) -> pure ()
+    Left _ -> pure ()
+  where
+    eventsAppended = \case
+      DomainSqlCommandSilent DomainCommandOutcome {result} -> result ^. #eventsAppended
+      DomainSqlCommandCommitted DomainCommandOutcome {result} _ -> result ^. #eventsAppended
+      DomainSqlCommandRolledBack _ -> 0
+
+recordDomainDecision ::
+  (IOE :> es) =>
+  RunCommandOptions ->
+  Maybe Span ->
+  DomainDecision co rejection noOp ->
+  Eff es ()
+recordDomainDecision options mSpan domainDecision = do
+  let decisionClass = domainDecisionClass domainDecision
+  for_ mSpan $ \sp ->
+    addAttribute sp (unkey keiro_command_decision) (commandDecisionClassText decisionClass)
+  recordCommandDecision (options ^. #metrics) decisionClass
+
+domainDecisionClass :: DomainDecision co rejection noOp -> CommandDecisionClass
+domainDecisionClass = \case
+  DomainAccepted _ -> DecisionAccepted
+  DomainRejected _ -> DecisionRejected
+  DomainNoOp _ -> DecisionNoOp
 
 -- | Low-cardinality classifier for a 'CommandError'. Used as the
 -- @error.type@ attribute value on the command span.

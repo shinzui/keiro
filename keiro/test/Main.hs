@@ -18,6 +18,7 @@ import Data.ByteString (ByteString)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
 import Data.List (isInfixOf)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Monoid (mempty)
 import Data.Set qualified as Set
@@ -1160,6 +1161,246 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             map eswReason warnings
               `shouldSatisfy` any (Text.isInfixOf "state-changing-epsilon")
           Right _ -> expectationFailure "expected validation to reject a state-changing silent edge"
+
+      it "runs SQL once with the exact accepted event pairs" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          let target = stream "domain-command-sql-accepted" :: Stream CounterEventStream
+          outcome <-
+            runner $
+              runDomainCommandWithSqlEvents
+                defaultRunCommandOptions
+                multiCounterDomainHandler
+                target
+                (Add 6)
+                (\pairs _appendResult -> pure (Prelude.fst <$> pairs))
+          case outcome of
+            Right
+              ( Right
+                  ( DomainCommandOutcome {decision = DomainAccepted events, result},
+                    Just callbackEvents
+                    )
+                ) -> do
+                events `shouldBe` (CounterAdded 6 :| [CounterAudited 6])
+                callbackEvents `shouldBe` NonEmpty.toList events
+                result ^. #eventsAppended `shouldBe` 2
+            other -> expectationFailure ("expected accepted SQL domain command, got " <> show other)
+
+      it "skips SQL callbacks and inline projections for rejection and no-op" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          let rejectionTarget = stream "domain-command-sql-rejected" :: Stream SilentChoiceEventStream
+              noOpTarget = stream "domain-command-projection-no-op" :: Stream SilentChoiceEventStream
+              callback _ _ = error "silent domain decision invoked SQL callback" :: Tx.Transaction Text
+              projection =
+                InlineProjection
+                  { name = "silent-domain-bomb",
+                    apply = \_ _ -> error "silent domain decision invoked projection"
+                  }
+          rejected <-
+            runner $
+              runDomainCommandWithSqlEvents
+                defaultRunCommandOptions
+                silentChoiceDomainHandler
+                rejectionTarget
+                RejectSilently
+                callback
+          case rejected of
+            Right (Right (DomainCommandOutcome {decision = DomainRejected reason}, Nothing)) ->
+              reason `shouldBe` "edge-0: rejected"
+            other -> expectationFailure ("expected silent SQL rejection, got " <> show other)
+          noOp <-
+            runner $
+              runDomainCommandWithProjections
+                defaultRunCommandOptions
+                silentChoiceDomainHandler
+                noOpTarget
+                NoOpSilently
+                [projection]
+          case noOp of
+            Right (Right DomainCommandOutcome {decision = DomainNoOp explanation, result}) -> do
+              explanation `shouldBe` "edge-1: already complete"
+              result ^. #eventsAppended `shouldBe` 0
+            other -> expectationFailure ("expected silent projection no-op, got " <> show other)
+
+      it "applies inline projections atomically for accepted domain events" $ \_ ->
+        withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+          Right () <-
+            Store.runStoreIO storeHandle $
+              initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+          let target = stream "domain-command-projection-accepted" :: Stream CounterEventStream
+          outcome <-
+            runner $
+              runDomainCommandWithProjections
+                defaultRunCommandOptions
+                multiCounterDomainHandler
+                target
+                (Add 7)
+                [counterInlineProjection]
+          case outcome of
+            Right (Right DomainCommandOutcome {decision = DomainAccepted events}) ->
+              events `shouldBe` (CounterAdded 7 :| [CounterAudited 7])
+            other -> expectationFailure ("expected accepted projected domain command, got " <> show other)
+          projected <-
+            Store.runStoreIO storeHandle $
+              runQuery Nothing counterReadModel "inline"
+          projected `shouldBe` Right (Right 7)
+
+      it "preserves catalog outcomes while skipping catalog SQL for silent decisions" $ \_ ->
+        withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+          validated <-
+            case validateProjectionCatalog catalogInlineProjectionCatalog of
+              Failure diagnostics ->
+                expectationFailure ("catalog fixture failed validation: " <> show diagnostics)
+                  >> error "unreachable"
+              Success value -> pure value
+          Right () <- runner $ Store.runTransaction (Tx.sql catalogInlineFixtureSql)
+          Right (Right _) <- runner $ Rebuild.registerProjectionCatalog validated
+          let target = stream "domain-command-catalog-rejected" :: Stream SilentChoiceEventStream
+          outcome <-
+            runner $
+              runDomainCommandWithCatalogProjections
+                defaultRunCommandOptions
+                silentChoiceDomainHandler
+                target
+                RejectSilently
+                validated
+                catalogInlineProjectionSet
+          case outcome of
+            Right (Right (DomainProjectionCommandApplied DomainCommandOutcome {decision = DomainRejected reason})) ->
+              reason `shouldBe` "edge-0: rejected"
+            other -> expectationFailure ("expected applied silent catalog decision, got " <> show other)
+          Right 0 <- runner $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+          let acceptedTarget = stream "domain-command-catalog-accepted" :: Stream CounterEventStream
+          accepted <-
+            runner $
+              runDomainCommandWithCatalogProjections
+                defaultRunCommandOptions
+                multiCounterDomainHandler
+                acceptedTarget
+                (Add 5)
+                validated
+                catalogInlineProjectionSet
+          case accepted of
+            Right (Right (DomainProjectionCommandApplied DomainCommandOutcome {decision = DomainAccepted events})) ->
+              events `shouldBe` (CounterAdded 5 :| [CounterAudited 5])
+            other -> expectationFailure ("expected applied accepted catalog decision, got " <> show other)
+          Right 2 <- runner $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
+          Right (Right _) <-
+            runner $
+              Rebuild.beginGroupRebuild
+                validated
+                catalogInlineGroupId
+                Rebuild.RebuildRequest
+                  { rebuildRunId = catalogInlineRunId,
+                    requestedBy = "keiro-test",
+                    requestReason = "typed domain catalog fence proof",
+                    replayFrom = GlobalPosition 0
+                  }
+          let fencedTarget = stream "domain-command-catalog-fenced" :: Stream CounterEventStream
+          fenced <-
+            runner $
+              runDomainCommandWithCatalogProjections
+                defaultRunCommandOptions
+                multiCounterDomainHandler
+                fencedTarget
+                (Add 8)
+                validated
+                catalogInlineProjectionSet
+          fenced
+            `shouldBe` Right (Right (DomainProjectionCommandFenced catalogInlineGroupId catalogInlineRunId))
+          Right recorded <-
+            runner $
+              Store.readStreamForward (StreamName "domain-command-catalog-fenced") (StreamVersion 0) 10
+          recorded `shouldBe` Vector.empty
+          pure ()
+
+      it "discards an accepted conflict attempt and returns the rehydrated silent decision" $ \_ ->
+        withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+          conflictInserted <- newIORef False
+          let target = stream "domain-command-conflict-final-no-op" :: Stream RetryDecisionEventStream
+              targetStreamName = StreamName "domain-command-conflict-final-no-op"
+              insertConflict = do
+                shouldInsert <- atomicModifyIORef' conflictInserted $ \inserted -> (True, not inserted)
+                when shouldInsert $ do
+                  encoded <- shouldBeRight (encodeForAppend counterCodec (CounterAdded 9))
+                  appended <-
+                    Store.runStoreIO storeHandle $
+                      Store.appendToStream targetStreamName NoStream [encoded]
+                  case appended of
+                    Right _ -> pure ()
+                    Left err -> expectationFailure ("failed to inject domain conflict: " <> show err)
+              options =
+                defaultRunCommandOptions
+                  & #beforeAppend
+                  .~ insertConflict
+                  & #retryBackoffMicros
+                  .~ 0
+              callback _ _ = error "stale accepted decision invoked SQL callback" :: Tx.Transaction Text
+          outcome <-
+            runner $
+              runDomainCommandWithSqlEvents
+                options
+                retryDecisionDomainHandler
+                target
+                (Add 1)
+                callback
+          case outcome of
+            Right (Right (DomainCommandOutcome {decision = DomainNoOp explanation, result}, Nothing)) -> do
+              explanation `shouldBe` "already drained"
+              result ^. #streamVersion `shouldBe` StreamVersion 1
+              result ^. #eventsAppended `shouldBe` 0
+            other -> expectationFailure ("expected rehydrated no-op decision, got " <> show other)
+          readIORef conflictInserted `shouldReturn` True
+          Right recorded <-
+            Store.runStoreIO storeHandle $
+              Store.readStreamForward targetStreamName (StreamVersion 0) 10
+          traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+            `shouldBe` Right [CounterAdded 9]
+
+      it "records only bounded decision classes on successful spans and metrics" $ \storeHandle -> do
+        (processor, spansRef) <- inMemoryListExporter
+        tracerProvider <- createTracerProvider [processor] emptyTracerProviderOptions
+        (metricExporter, metricsRef) <- inMemoryMetricExporter
+        (meterProvider, _env) <-
+          createMeterProvider
+            emptyMaterializedResources
+            defaultSdkMeterProviderOptions {metricExporter = Just metricExporter}
+        meter <- getMeter meterProvider Telemetry.keiroInstrumentationLibrary
+        keiroMetrics <- Telemetry.newKeiroMetrics meter
+        let tracer = makeTracer tracerProvider "keiro-test" tracerOptions
+            options =
+              defaultRunCommandOptions
+                & #tracer
+                ?~ tracer
+                & #metrics
+                ?~ keiroMetrics
+        Right (Right _) <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand options multiCounterDomainHandler (stream "domain-telemetry-accepted") (Add 1)
+        Right (Right _) <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand options silentChoiceDomainHandler (stream "domain-telemetry-rejected") RejectSilently
+        Right (Right _) <-
+          Store.runStoreIO storeHandle $
+            runDomainCommand options silentChoiceDomainHandler (stream "domain-telemetry-no-op") NoOpSilently
+        _ <- shutdownTracerProvider tracerProvider Nothing
+        _ <- forceFlushMeterProvider meterProvider Nothing
+        spans <- traverse captureSpan =<< readIORef spansRef
+        fmap (\sp -> textAttr (csAttributes sp) "keiro.command.decision") spans
+          `shouldMatchList` [Just "accepted", Just "rejected", Just "no_op"]
+        fmap csStatus spans `shouldSatisfy` all (== Unset)
+        fmap (\sp -> textAttr (csAttributes sp) "error.type") spans
+          `shouldSatisfy` all (== Nothing)
+        exported <- readIORef metricsRef
+        let decisionPoints =
+              [ (textAttr attrs "keiro.command.decision", value)
+              | (name, value, attrs) <- flattenScalarPointsWithAttributes exported,
+                name == "keiro.command.decisions"
+              ]
+        decisionPoints
+          `shouldMatchList` [ (Just "accepted", IntNumber 1),
+                              (Just "rejected", IntNumber 1),
+                              (Just "no_op", IntNumber 1)
+                            ]
 
     it "creates a stream and appends the first command event" $ \storeHandle -> do
       let target = stream "counter-command-create" :: Stream CounterEventStream
@@ -12466,6 +12707,10 @@ type SilentChoiceEventStream = EventStream (HsPred '[] SilentChoiceCommand) '[] 
 
 type ValidatedSilentChoiceEventStream = ValidatedEventStream (HsPred '[] SilentChoiceCommand) '[] CounterState SilentChoiceCommand CounterEvent
 
+type RetryDecisionEventStream = EventStream (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
+
+type ValidatedRetryDecisionEventStream = ValidatedEventStream (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
+
 skipEventStream :: ValidatedSkipEventStream
 skipEventStream = mkEventStreamOrThrow "skip-command" skipEventStreamDef
 
@@ -12489,6 +12734,45 @@ silentChoiceEventStreamDef =
   EventStream
     { transducer = silentChoiceTransducer,
       initialState = Counting,
+      initialRegisters = RNil,
+      eventCodec = counterCodec,
+      resolveStreamName = Stream.streamName,
+      snapshotPolicy = Never,
+      stateCodec = Nothing
+    }
+
+retryDecisionEventStream :: ValidatedRetryDecisionEventStream
+retryDecisionEventStream = mkEventStreamOrThrow "retry-domain-decision" retryDecisionEventStreamDef
+
+retryDecisionEventStreamDef :: RetryDecisionEventStream
+retryDecisionEventStreamDef =
+  EventStream
+    { transducer =
+        SymTransducer
+          { edgesOut = \case
+              Draining ->
+                [ Edge
+                    { guard = matchInCtor addCtor,
+                      update = UKeep,
+                      output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)],
+                      target = Drained,
+                      mode = Keiki.Live
+                    }
+                ]
+              Drained ->
+                [ Edge
+                    { guard = matchInCtor addCtor,
+                      update = UKeep,
+                      output = [],
+                      target = Drained,
+                      mode = Keiki.Live
+                    }
+                ],
+            initial = Draining,
+            initialRegs = RNil,
+            isFinal = const False
+          },
+      initialState = Draining,
       initialRegisters = RNil,
       eventCodec = counterCodec,
       resolveStreamName = Stream.streamName,
@@ -12558,6 +12842,16 @@ silentChoiceDomainHandler =
           (RejectSilently, 0) -> SilentRejected "edge-0: rejected"
           (NoOpSilently, 1) -> SilentNoOp "edge-1: already complete"
           other -> error ("silentChoiceDomainHandler: unexpected selected edge " <> show other)
+    }
+
+retryDecisionDomainHandler :: DomainCommandHandler (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent Text Text
+retryDecisionDomainHandler =
+  DomainCommandHandler
+    { eventStream = retryDecisionEventStream,
+      classifySilent = \SilentCommandContext {state, selectedEdge} ->
+        case (state, Keiki.edgeIndex selectedEdge) of
+          (Drained, 0) -> SilentNoOp "already drained"
+          other -> error ("retryDecisionDomainHandler: unexpected selected edge " <> show other)
     }
 
 skipTransducer :: SymTransducer (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
@@ -13971,6 +14265,26 @@ flattenScalarPoints rmes =
       [(n, sumDataPointValue p) | p <- Vector.toList pts]
     pointsOf (MetricExportGauge n _ _ _ _ pts) =
       [(n, gaugeDataPointValue p) | p <- Vector.toList pts]
+    pointsOf _ = []
+
+-- Flatten scalar points while retaining their bounded metric attributes.
+flattenScalarPointsWithAttributes :: [ResourceMetricsExport] -> [(Text, NumberValue, Attributes)]
+flattenScalarPointsWithAttributes rmes =
+  [ point
+  | rme <- rmes,
+    scope <- Vector.toList (resourceMetricsScopes rme),
+    export <- Vector.toList (scopeMetricsExports scope),
+    point <- pointsOf export
+  ]
+  where
+    pointsOf (MetricExportSum name _ _ _ _ _ _ points) =
+      [ (name, sumDataPointValue point, sumDataPointAttributes point)
+      | point <- Vector.toList points
+      ]
+    pointsOf (MetricExportGauge name _ _ _ _ points) =
+      [ (name, gaugeDataPointValue point, gaugeDataPointAttributes point)
+      | point <- Vector.toList points
+      ]
     pointsOf _ = []
 
 -- Flatten exported histogram points to (instrument name, count, sum).

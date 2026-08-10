@@ -56,9 +56,12 @@ module Keiro.Telemetry
     keiro_retry_attempt,
     keiro_events_appended,
     keiro_replay_divergence,
+    keiro_command_decision,
     keiro_workflow_name,
     keiro_workflow_id,
     keiro_workflow_step,
+    CommandDecisionClass (..),
+    commandDecisionClassText,
 
     -- * Metrics surface
 
@@ -95,6 +98,7 @@ module Keiro.Telemetry
     keiroCommandConflictsName,
     keiroCommandRetriesName,
     keiroCommandDuplicatesName,
+    keiroCommandDecisionsName,
     keiroSnapshotDecodeFailuresName,
     keiroSnapshotEncodeFailuresName,
     keiroSnapshotReadHitsName,
@@ -146,6 +150,7 @@ module Keiro.Telemetry
     recordCommandConflicts,
     recordCommandRetries,
     recordCommandDuplicates,
+    recordCommandDecision,
     recordSnapshotDecodeFailures,
     recordSnapshotEncodeFailures,
     recordSnapshotReadHits,
@@ -187,7 +192,12 @@ import Kiroku.Store.Observability (KirokuEvent (..))
 import "base" Control.Exception (bracket)
 import "base" GHC.Stack (HasCallStack)
 import "bytestring" Data.ByteString qualified as ByteString
-import "hs-opentelemetry-api" OpenTelemetry.Attributes (emptyAttributes)
+import "hs-opentelemetry-api" OpenTelemetry.Attributes
+  ( addAttributesFromBuilder,
+    defaultAttributeLimits,
+    emptyAttributes,
+    (.@),
+  )
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
@@ -268,6 +278,24 @@ keiro_events_appended = AttributeKey "keiro.events.appended"
 
 keiro_replay_divergence :: AttributeKey Text
 keiro_replay_divergence = AttributeKey "keiro.replay.divergence"
+
+-- | Bounded domain-command outcome class. The complete value set is
+-- @accepted@, @rejected@, and @no_op@; application payloads never belong here.
+keiro_command_decision :: AttributeKey Text
+keiro_command_decision = AttributeKey "keiro.command.decision"
+
+-- | Closed, payload-free dimension for domain command telemetry.
+data CommandDecisionClass
+  = DecisionAccepted
+  | DecisionRejected
+  | DecisionNoOp
+  deriving stock (Generic, Eq, Show)
+
+commandDecisionClassText :: CommandDecisionClass -> Text
+commandDecisionClassText = \case
+  DecisionAccepted -> "accepted"
+  DecisionRejected -> "rejected"
+  DecisionNoOp -> "no_op"
 
 keiro_workflow_name :: AttributeKey Text
 keiro_workflow_name = AttributeKey "keiro.workflow.name"
@@ -629,6 +657,9 @@ keiroCommandRetriesName = "keiro.command.retries"
 keiroCommandDuplicatesName :: Text
 keiroCommandDuplicatesName = "keiro.command.duplicates"
 
+keiroCommandDecisionsName :: Text
+keiroCommandDecisionsName = "keiro.command.decisions"
+
 keiroSnapshotDecodeFailuresName :: Text
 keiroSnapshotDecodeFailuresName = "keiro.snapshot.decode.failures"
 
@@ -731,6 +762,7 @@ data KeiroMetrics = KeiroMetrics
     commandConflicts :: Counter Int64,
     commandRetries :: Counter Int64,
     commandDuplicates :: Counter Int64,
+    commandDecisions :: Counter Int64,
     snapshotDecodeFailures :: Counter Int64,
     snapshotEncodeFailures :: Counter Int64,
     snapshotReadHits :: Counter Int64,
@@ -790,6 +822,7 @@ newKeiroMetrics meter = liftIO $ do
   commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
   commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
   commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
+  commandDecisions' <- counterI64 keiroCommandDecisionsName "{decision}" "Successfully selected domain command decisions, partitioned by bounded decision class."
   snapshotDecodeFailures' <- counterI64 keiroSnapshotDecodeFailuresName "{failure}" "Snapshot rows whose bytes failed to decode; hydration fell back to full replay."
   snapshotEncodeFailures' <- counterI64 keiroSnapshotEncodeFailuresName "{failure}" "Post-commit snapshot encodes that failed and were swallowed."
   snapshotReadHits' <- counterI64 keiroSnapshotReadHitsName "{read}" "Snapshot lookups that yielded a usable hydration seed."
@@ -841,6 +874,7 @@ newKeiroMetrics meter = liftIO $ do
         commandConflicts = commandConflicts',
         commandRetries = commandRetries',
         commandDuplicates = commandDuplicates',
+        commandDecisions = commandDecisions',
         snapshotDecodeFailures = snapshotDecodeFailures',
         snapshotEncodeFailures = snapshotEncodeFailures',
         snapshotReadHits = snapshotReadHits',
@@ -975,6 +1009,18 @@ recordCommandRetries = recordCounter commandRetries
 
 recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandDuplicates = recordCounter commandDuplicates
+
+-- | Record one successful domain-command decision using only the bounded
+-- @accepted@, @rejected@, or @no_op@ class supplied by 'Keiro.Command'.
+recordCommandDecision :: (MonadIO m) => Maybe KeiroMetrics -> CommandDecisionClass -> m ()
+recordCommandDecision Nothing _ = pure ()
+recordCommandDecision (Just ms) decisionClass =
+  liftIO
+    ( counterAdd
+        (commandDecisions ms)
+        1
+        (addAttributesFromBuilder defaultAttributeLimits emptyAttributes (keiro_command_decision .@ commandDecisionClassText decisionClass))
+    )
 
 recordSnapshotDecodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotDecodeFailures = recordCounter snapshotDecodeFailures

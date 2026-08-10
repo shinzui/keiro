@@ -20,8 +20,11 @@ module Keiro.Projection
   ( -- * Inline projections
     InlineProjection (..),
     runCommandWithProjections,
+    runDomainCommandWithProjections,
     ProjectionCommandOutcome (..),
     runCommandWithCatalogProjections,
+    DomainProjectionCommandOutcome (..),
+    runDomainCommandWithCatalogProjections,
 
     -- * Asynchronous projections
     AsyncProjection (..),
@@ -50,11 +53,16 @@ import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command
   ( CommandError,
     CommandResult,
+    DomainCommandHandler,
+    DomainCommandOutcome,
+    DomainSqlCommandOutcome (..),
     RunCommandOptions,
     SqlCommandOutcome (..),
     SqlTransactionDecision (..),
     runCommandWithSqlEvents,
     runCommandWithSqlEventsControlled,
+    runDomainCommandWithSqlEvents,
+    runDomainCommandWithSqlEventsControlled,
   )
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream)
@@ -109,6 +117,16 @@ data ProjectionCommandOutcome target
   | ProjectionCommandCatalogMismatch !SourceId
   deriving stock (Generic, Eq, Show)
 
+-- | Outcome-aware counterpart to 'ProjectionCommandOutcome'. Successful
+-- selected silent decisions are applied outcomes even though no projection
+-- handler ran. Fence outcomes prove an accepted append was rolled back.
+data DomainProjectionCommandOutcome target co rejection noOp
+  = DomainProjectionCommandApplied !(DomainCommandOutcome target co rejection noOp)
+  | DomainProjectionCommandFenced !RebuildGroupId !RebuildRunId
+  | DomainProjectionCommandGroupUnregistered !RebuildGroupId
+  | DomainProjectionCommandCatalogMismatch !SourceId
+  deriving stock (Generic, Eq, Show)
+
 -- | Catalog-aware result of one asynchronous projection application.
 data CatalogAsyncApplyOutcome
   = CatalogAsyncApplied
@@ -151,6 +169,36 @@ runCommandWithProjections options eventStream targetStream command projections =
             projections
       )
   pure (fmap Prelude.fst result)
+
+-- | Run a domain command and apply every supplied inline projection to an
+-- accepted event batch in the append transaction. Typed rejection and no-op
+-- decisions return directly without invoking any projection.
+runDomainCommandWithProjections ::
+  forall phi rs s ci co rejection noOp es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  [InlineProjection co] ->
+  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp))
+runDomainCommandWithProjections options handler targetStream command projections = do
+  outcome <-
+    runDomainCommandWithSqlEvents
+      options
+      handler
+      targetStream
+      command
+      ( \pairs _appendResult ->
+          traverse_
+            ( \projection ->
+                traverse_
+                  (\(event, recorded) -> (projection ^. #apply) event recorded)
+                  pairs
+            )
+            projections
+      )
+  pure (fmap Prelude.fst outcome)
 
 -- | Run a command through the typed source view derived from one validated
 -- catalog. Every distinct rebuild group is locked in stable ID order inside the
@@ -206,6 +254,61 @@ runCommandWithCatalogProjections options eventStream targetStream command catalo
         error "runCommandWithCatalogProjections: rolled back with writes allowed"
       ProjectionWriteFenced groupId runId -> ProjectionCommandFenced groupId runId
       ProjectionWriteGroupUnregistered groupId -> ProjectionCommandGroupUnregistered groupId
+
+-- | Domain-aware catalog projection runner. Accepted commands retain existing
+-- catalog fence semantics. Typed rejection/no-op decisions invoke neither the
+-- fence transaction nor projection handlers and carry no fabricated projection
+-- result.
+runDomainCommandWithCatalogProjections ::
+  forall phi rs s ci co rejection noOp es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ValidatedProjectionCatalog ->
+  ProjectionSet co ->
+  Eff es (Either CommandError (DomainProjectionCommandOutcome (EventStream phi rs s ci co) co rejection noOp))
+runDomainCommandWithCatalogProjections options handler targetStream command catalog projectionSet = do
+  if Prelude.null groups
+    then pure (Right (DomainProjectionCommandCatalogMismatch (projectionSet ^. #projectionSource)))
+    else do
+      outcome <-
+        runDomainCommandWithSqlEventsControlled
+          options
+          handler
+          targetStream
+          command
+          applyCatalogProjections
+      pure (fmap toProjectionOutcome outcome)
+  where
+    projections = typedInlineProjections catalog projectionSet
+    groups = typedProjectionRebuildGroups catalog projectionSet
+
+    applyCatalogProjections pairs _appendResult = do
+      fence <- lockProjectionGroupsTx groups
+      case fence of
+        ProjectionWritesAllowed -> do
+          traverse_
+            ( \projection ->
+                traverse_
+                  (\(event, recorded) -> (projection ^. #apply) event recorded)
+                  pairs
+            )
+            projections
+          pure (CommitSqlTransaction fence)
+        _ -> pure (RollbackSqlTransaction fence)
+
+    toProjectionOutcome = \case
+      DomainSqlCommandSilent outcome -> DomainProjectionCommandApplied outcome
+      DomainSqlCommandCommitted outcome _ -> DomainProjectionCommandApplied outcome
+      DomainSqlCommandRolledBack fence -> fenceOutcome fence
+
+    fenceOutcome = \case
+      ProjectionWritesAllowed ->
+        error "runDomainCommandWithCatalogProjections: rolled back with writes allowed"
+      ProjectionWriteFenced groupId runId -> DomainProjectionCommandFenced groupId runId
+      ProjectionWriteGroupUnregistered groupId -> DomainProjectionCommandGroupUnregistered groupId
 
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
