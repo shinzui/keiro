@@ -47,6 +47,9 @@ This section must always reflect the actual current state of the work.
       `--force`, and reconcile both MasterPlans.
 - [x] Publish migration, API, runbook, example, and changelog documentation; pass the example and
       full repository verification, and close the operator integration gate.
+- [x] (2026-08-10T13:47:00Z) Audit the canonical `docs/user` and `docs/guides`
+      projection documentation, correct the Jitsurei catalog-registration narrative, and add an
+      executable embedded rebuild rehearsal with index and cross-reference coverage.
 
 
 ## Surprises & Discoveries
@@ -67,6 +70,12 @@ implementation. Provide concise evidence.
   `ProjectionCatalogOperations` value already exported by Jitsurei. The embedded
   command has no caller-provided target/source/handler list; its inventory and
   JSON values come from the adapter this plan landed.
+- 2026-08-10: The canonical user reference already covered the catalog, managed writers,
+  replay runner, migration boundary, operations adapter, and language-5 generation. The
+  long-form Jitsurei runbook was the remaining gap: it still described the order summary as
+  using legacy per-model registration and did not show the mounted rebuild commands. The guide
+  now reflects `registerProjectionCatalog`, distinguishes standalone from embedded operations,
+  and exercises read-only list, JSON preview, and the non-mutating force boundary.
 
 
 ## Decision Log
@@ -136,6 +145,15 @@ text/JSON rendering, preview, and `--force` without accepting a second fleet lis
 Verification on 2026-08-09 passed with 441 `keiro-test`, 27 `keiro-ops-test`,
 22 `jitsurei-test`, and 615 `keiro-dsl-test` examples, the generated
 projection-catalog conformance executable, and the complete `just verify` gate.
+
+A follow-up documentation audit on 2026-08-10 found no need for another canonical page:
+`docs/user/read-models-and-projections.md` remains the complete reference and
+`docs/guides/project-read-models.md` remains the implementation walkthrough. The Jitsurei runbook
+now supplies the missing executable operator rehearsal, and the relevant indexes and
+cross-references lead to it. Read-only `list` and JSON `preview` succeeded against the registered
+`jitsurei-order-reporting` group, `start` without `--force` returned the documented preview and
+exit status 1, link/anchor checks and `git diff --check` passed, and the current 30-example
+`keiro-ops-test` plus 22-example `jitsurei-test` suites passed.
 
 
 ## Context and Orientation

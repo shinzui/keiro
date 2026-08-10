@@ -307,7 +307,9 @@ database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
 `rebuild list|preview|start|status|resume|abandon` renders the same reports and
 requires preview plus `--force` for mutations. Applications therefore do not
-maintain a second rebuild map.
+maintain a second rebuild map. The
+[Jitsurei rebuild rehearsal](../guides/run-and-operate-jitsurei.md#rehearse-a-catalog-rebuild)
+shows the exact embedded commands against the disposable example database.
 
 The hand-written `jitsureiProjectionCatalog` is executable adoption evidence:
 one catalog drives managed inline application, async application, registration,

@@ -221,6 +221,12 @@ yourapp ops rebuild resume RUN
 yourapp ops rebuild abandon RUN --code CODE --detail TEXT
 ```
 
+For a runnable local mount with the real `jitsurei-order-reporting` group, see
+[Rehearse A Catalog Rebuild](../guides/run-and-operate-jitsurei.md#rehearse-a-catalog-rebuild).
+That walkthrough distinguishes the standalone binary from an application
+binary, shows read-only text/JSON inventory and preview, and keeps forced
+execution scoped to the disposable example database.
+
 `list`, `preview`, and `status` are read-only. `start`, `resume`, and `abandon`
 return a preview unless `--force` is supplied. The preview comes directly from
 the mounted validated catalog and reports its fingerprint, qualified targets,

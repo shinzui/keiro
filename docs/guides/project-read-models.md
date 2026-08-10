@@ -89,5 +89,6 @@ initializeJitsureiTables :: (Store :> es) => Eff es ()
 
 Production services should put the application table in their migration system
 and run Keiro's framework migrations before startup. See
-[Run And Operate Jitsurei](run-and-operate-jitsurei.md) for the operational
-shape.
+[Rehearse A Catalog Rebuild](run-and-operate-jitsurei.md#rehearse-a-catalog-rebuild)
+for the exact read-only inventory/preview commands, force boundary, and
+failure-recovery shape in the embedded Jitsurei operator binary.

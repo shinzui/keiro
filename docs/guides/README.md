@@ -56,7 +56,8 @@ are adopting:
 - [Snapshots And Hydration](snapshots-and-hydration.md) enables advisory
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,
-  migration, and production-readiness commands.
+  migration, catalog rebuild rehearsal, embedded operator, and
+  production-readiness commands.
 - [Dead Letters And Replay](../user/dead-letters.md) is the operator reference
   for rejected dispatches and subscription replay.
 - [Integration Events With Kafka](integration-events-with-kafka.md) describes

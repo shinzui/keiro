@@ -63,7 +63,8 @@ pieces those modules import.
 - [Deploy Ordering](deploy-ordering.md): which binaries must roll first for
   codec, queue, decide, timer, integration, and workflow changes.
 - [Operations](operations.md): database requirements, schema initialization,
-  workers, retries, idempotency, and production checklist.
+  workers, catalog-backed rebuild commands, retries, idempotency, and the
+  production checklist.
 - [Roadmap](roadmap.md): capability matrix, v1.x workflow substrate, read-side
   maturity work, adoption milestones, and the v2 durable-execution direction.
 - [API Reference](api-reference.md): module-by-module public surface.

@@ -17,12 +17,15 @@ The tests use `EphemeralPg` through
 temporary PostgreSQL instance instead of mutating a developer database.
 
 For local demos and tests, `initializeJitsureiTables` creates the
-application-owned `jitsurei_order_summary` read-model table in the example's own
-`jitsurei` schema (via an opt-in `CREATE SCHEMA IF NOT EXISTS "jitsurei"` and a
-schema-qualified `CREATE TABLE`) and explicitly registers the model as `Live`.
-That keeps the data out of both the `kiroku` event-store schema and Keiro's
-`keiro` framework schema while satisfying `runQuery`'s fail-closed startup
-contract:
+application-owned order read-side tables in the example's own `jitsurei`
+schema (via an opt-in `CREATE SCHEMA IF NOT EXISTS "jitsurei"` and
+schema-qualified `CREATE TABLE` statements). It then registers
+`jitsureiProjectionCatalog`, which creates the catalog's rebuild-group metadata
+and binds `orderSummaryReadModel` to that group. Repeating startup with the same
+catalog fingerprint is idempotent; drift fails before the application serves
+queries. This keeps application data out of both the `kiroku` event-store
+schema and Keiro's `keiro` framework schema while satisfying `runQuery`'s
+fail-closed startup contract:
 
 ```haskell
 initializeJitsureiTables :: (Store :> es) => Eff es ()
@@ -33,7 +36,7 @@ The router examples follow the same rule through `initializeOncallRoster` and
 `registerReadModel` before any query is served. Production startup should do
 the registration after service migrations have succeeded.
 
-Production services should not depend on those compatibility initializers.
+Production services should not depend on those runtime DDL initializers.
 Instead, run `keiro-migrate` before the application starts, then apply your
 service migrations for application tables such as `jitsurei_order_summary`.
 Keiro owns framework tables like `keiro_snapshots`, `keiro_read_models`, and
@@ -41,6 +44,73 @@ Keiro owns framework tables like `keiro_snapshots`, `keiro_read_models`, and
 tables, indexes, and reporting views in a schema you choose (the example uses
 `jitsurei`) — see
 [Read Models And Projections](../user/read-models-and-projections.md#choosing-your-projection-schema).
+
+## Rehearse A Catalog Rebuild
+
+The standalone `keiro-ops` binary cannot discover application handlers and
+therefore omits catalog rebuild commands. `jitsurei-demo ops` is the candidate
+application binary: it mounts the exact `orderCatalogOperations` value derived
+from `jitsureiProjectionCatalog` through `AppHooks.projectionCatalog`.
+
+Create or refresh the disposable repository-local database, then point the
+embedded command at it:
+
+```bash
+just jitsurei-all
+export PGHOST="$PWD/db"
+export PGDATABASE=jitsurei
+export PGUSER="$(whoami)"
+```
+
+List the mounted groups and inspect the complete registered preview. Both
+commands are read-only; `--json` changes only the renderer:
+
+```bash
+cabal run jitsurei-demo -- ops rebuild list
+cabal run jitsurei-demo -- ops rebuild preview jitsurei-order-reporting --json
+```
+
+The preview names the three qualified targets, their clear-versus-preserve
+policies, dependency order, category source, projection owners, query binding,
+subscription and dedup resets, verification hook, catalog fingerprint, and
+current lifecycle state. It does not fence writers, create a run, truncate a
+target, or reset framework state.
+
+A `start`, `resume`, or `abandon` invocation without `--force` is also a
+non-mutating preview and exits unsuccessfully so automation cannot mistake it
+for execution:
+
+```bash
+cabal run jitsurei-demo -- ops rebuild start jitsurei-order-reporting \
+  --run-id guide-rebuild-1 \
+  --requested-by guide \
+  --reason "local rebuild rehearsal"
+```
+
+Only against the disposable local database, review that output and repeat the
+same embedded invocation with `--force`. Keep the
+`cabal run jitsurei-demo -- ops` application prefix when following a rendered
+force hint; the standalone `keiro-ops` binary has no application catalog to
+mount. The start call fences the whole group,
+captures one fixed event-store head, prepares the declared targets, replays and
+verifies them, and promotes only complete evidence:
+
+```bash
+cabal run jitsurei-demo -- ops rebuild start jitsurei-order-reporting \
+  --run-id guide-rebuild-1 \
+  --requested-by guide \
+  --reason "local rebuild rehearsal" \
+  --force
+cabal run jitsurei-demo -- ops rebuild status guide-rebuild-1 --json
+```
+
+If application verification or replay fails, the run remains inspectable and
+the group remains fenced. Repair the application-owned cause, then preview and
+force `rebuild resume guide-rebuild-1`; use `rebuild abandon` only when the run
+must become terminal, knowing abandonment preserves the fence rather than
+restoring cleared data. The `Jitsurei read model` acceptance test in
+`jitsurei/test/Main.hs` is the safe automated proof of verification failure,
+repair, exact-run resume, brownfield preservation, and live-writer fencing.
 
 For command handlers, keep these operational rules:
 
