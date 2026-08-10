@@ -53,6 +53,9 @@ This section must always reflect the actual current state of the work.
   measurement uncertainty.
 - [x] (2026-08-10T14:34:24Z) Milestone 2: derive the consumed slice from Megaparsec offsets, retain
   consumed-syntax trivia trimming, and pass the expanded exact-span and compatibility regressions.
+- [x] (2026-08-10T14:37:40Z) Documented the realistic benchmark command, scope, before/after
+  largest-case measurements, compatibility guarantees, and parse-time-only impact in the typed-spec
+  guide and `keiro-dsl` changelog.
 - [ ] Milestone 3: re-run and document the benchmark, pass the complete DSL/workspace and repository
   gates, distill ADR impact, and close IR-15 only when all acceptance evidence is present.
 

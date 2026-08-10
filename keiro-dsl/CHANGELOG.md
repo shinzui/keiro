@@ -49,6 +49,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   persist an additive `semantic-impact` row, and current diff CLI JSON appends `semanticImpact` to
   `keiro-dsl/diff-report/1`; legacy ledgers retain an explicitly unavailable old baseline.
 
+### Changed
+
+- Source-span capture now uses Megaparsec's offset-derived consumed chunk instead of repeatedly
+  measuring the complete remaining `Text` suffix. Exact half-open spans, parser compatibility, and
+  generated service behavior are unchanged; the effect is limited to DSL parse-time tooling.
+
 ### Breaking Changes
 
 - The public DSL AST changes `WqField.wqfType` from `Name` to

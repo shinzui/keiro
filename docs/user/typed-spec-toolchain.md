@@ -191,6 +191,29 @@ Top-level declarations in the same category must have unique names. Node names
 must be unique within their node family. Generated Haskell names must also avoid
 case-folded path collisions and constructor collisions.
 
+### Parser scaling
+
+Source-span capture derives each production's consumed slice from Megaparsec offsets, so attaching
+exact locations does not measure the complete remaining input before and after every nested field,
+expression, state, or transition. Reproduce the manual scaling benchmark with:
+
+```bash
+cabal bench keiro-dsl:keiro-dsl-parser-bench \
+  --benchmark-options='-j1 --csv /tmp/keiro-dsl-parser.csv'
+```
+
+The benchmark keeps a service at eight aggregates and doubles nested transitions from 32 to 256;
+its workspace group keeps eight aggregates and 128 transitions while splitting them across one,
+two, four, or eight in-memory members. On one Apple arm64 machine with GHC 9.12.4 and Cabal's `-O1`
+profile, the 100,762-character largest case changed from 30.742 ms to 28.857 ms through
+`parseSurfaceSource` and from 55.581 ms to 50.273 ms through the compatibility `parseSource` route.
+The workspace means stayed within measurement uncertainty because `loadWorkspace` also constructs
+source indices and composes the semantic service graph.
+
+Exact Unicode/tab/newline spans, diagnostics, semantic results, and frozen compatibility fixtures
+remain unchanged. This affects parsing performed by the CLI, workspace loading, code generation,
+and source-aware library or editor tooling; it does not speed up generated application runtime.
+
 ## Shared declarations
 
 Shared declarations are visible to all nodes in the source or composed
