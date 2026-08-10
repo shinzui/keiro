@@ -2304,7 +2304,8 @@ main = hspec $ do
                 recNominalEqualities = [],
                 recBindingObligations = [],
                 recBehaviorRequirements = rows,
-                recProjectionCatalogFacts = []
+                recProjectionCatalogFacts = [],
+                recSemanticImpact = Nothing
               }
       T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
       parseRecord (renderRecord singleRecord) `shouldBe` Just singleRecord
@@ -2334,7 +2335,8 @@ main = hspec $ do
                 wrBindingObligations = [],
                 wrBehaviorRequirements = ownedRows,
                 wrProjectionCatalogFacts = [],
-                wrAdopted = []
+                wrAdopted = [],
+                wrSemanticImpact = Nothing
               }
       map Behavior.behaviorRecordOwner ownedRows `shouldSatisfy` all (== Just "journey.keiro")
       T.count "behavior " (renderWorkspaceRecord workspaceRecord) `shouldBe` 19
@@ -2493,7 +2495,8 @@ main = hspec $ do
                 recNominalEqualities = nominalEqualityIdentities spec,
                 recBindingObligations = [],
                 recBehaviorRequirements = [],
-                recProjectionCatalogFacts = []
+                recProjectionCatalogFacts = [],
+                recSemanticImpact = Nothing
               }
           encoded = renderRecord record
           workspaceRecord =
@@ -3052,6 +3055,62 @@ main = hspec $ do
         ]
         `shouldBe` replicate 3 True
       source `shouldSatisfy` (not . T.isInfixOf "mappedRootFromUseSite _")
+    it "round-trips canonical snapshots and reports only checked consumer membership changes" $ do
+      spec <- specOf "test/fixtures/semantic-impact.keiro"
+      snapshot <- semanticImpactSnapshot . semanticImpact <$> shouldResolveTypeGraph spec
+      Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
+      let shared = MappedKey "SharedPayload"
+          changed =
+            snapshot
+              { snapshotMappedConsumers =
+                  Map.adjust (Set.delete (AggregateConsumer "Beta")) shared (snapshotMappedConsumers snapshot)
+              }
+      diffSemanticImpact snapshot changed
+        `shouldBe` [MappedImpactDelta shared (Set.fromList [AggregateConsumer "Alpha", AggregateConsumer "Beta"]) (Set.singleton (AggregateConsumer "Alpha")) True]
+      mappedImpactForDeclarations [MappedKey "NestedPayload"] snapshot snapshot
+        `shouldBe` [MappedImpactDelta (MappedKey "NestedPayload") (Set.singleton (AggregateConsumer "Alpha")) (Set.singleton (AggregateConsumer "Alpha")) True]
+    it "round-trips additive semantic impact ledger rows and rejects known-row corruption" $ do
+      spec <- specOf "test/fixtures/semantic-impact.keiro"
+      let snapshot = semanticImpactSnapshotForSpec spec
+          singleRecord =
+            ScaffoldRecord
+              { recSpecPath = "semantic-impact.keiro",
+                recModuleRoot = "",
+                recLayout = "prefixed",
+                recSourceLanguage = LegacyUnversioned,
+                recLanguageContract = effectiveLanguageContract LegacyUnversioned,
+                recNamingEdition = IdiomaticNamingV1,
+                recModuleRoles = [],
+                recFiles = [],
+                recMappings = [],
+                recIdDomains = [],
+                recNominalEqualities = [],
+                recBindingObligations = [],
+                recBehaviorRequirements = [],
+                recProjectionCatalogFacts = [],
+                recSemanticImpact = Just snapshot
+              }
+          encoded = renderRecord singleRecord
+          semanticRows = filter ("semantic-impact " `T.isPrefixOf`) (T.lines encoded)
+          legacyEncoded = T.unlines (filter (not . T.isPrefixOf "semantic-impact ") (T.lines encoded))
+          futureEncoded = T.replace "semantic-impact {" "semantic-impact {\"future\":true," encoded
+      length semanticRows `shouldBe` 1
+      parseRecord encoded `shouldBe` Just singleRecord
+      recSemanticImpact <$> parseRecord legacyEncoded `shouldBe` Just Nothing
+      parseRecord futureEncoded `shouldBe` Just singleRecord
+      case semanticRows of
+        [row] -> do
+          parseRecord (encoded <> row <> "\n") `shouldBe` Nothing
+          let duplicateConsumer = T.replace "\"consumers\":[\"Alpha\",\"Beta\"]" "\"consumers\":[\"Alpha\",\"Alpha\"]" encoded
+          duplicateConsumer `shouldNotBe` encoded
+          parseRecord duplicateConsumer `shouldBe` Nothing
+        _ -> expectationFailure "expected exactly one semantic-impact row"
+      workspace <- shouldComposeWorkspace canonicalWorkspacePath
+      let workspaceRecord = (sampleWorkspaceRecord workspace) {wrSemanticImpact = Just snapshot}
+          workspaceEncoded = renderWorkspaceRecord workspaceRecord
+      T.count "semantic-impact " workspaceEncoded `shouldBe` 1
+      parseWorkspaceRecord workspaceEncoded `shouldBe` Just workspaceRecord
+      parseWorkspaceRecord (workspaceEncoded <> "future-row ignored\n") `shouldBe` Just workspaceRecord
 
   describe "string literal integrity" $ do
     it "parses an escaped emit-map value as exactly one row" $ do
@@ -3501,7 +3560,8 @@ main = hspec $ do
                   recNominalEqualities = [],
                   recBindingObligations = [],
                   recBehaviorRequirements = [],
-                  recProjectionCatalogFacts = []
+                  recProjectionCatalogFacts = [],
+                  recSemanticImpact = Nothing
                 }
             recordPath = out </> recordFileName (specContext spec)
         TIO.writeFile recordPath (renderRecord legacyRecord)
@@ -7300,7 +7360,8 @@ main = hspec $ do
                   recNominalEqualities = [],
                   recBindingObligations = [],
                   recBehaviorRequirements = Behavior.behaviorRecordRows requirements,
-                  recProjectionCatalogFacts = []
+                  recProjectionCatalogFacts = [],
+                  recSemanticImpact = Just (semanticImpactSnapshotForSpec spec)
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
             withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines contents))
@@ -9677,8 +9738,14 @@ sampleWorkspaceRecord workspace =
       wrAdopted =
         [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-ledger.context.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing
-        ]
+        ],
+      wrSemanticImpact = Just (semanticImpactSnapshotForSpec (wsMergedSpec workspace))
     }
+
+semanticImpactSnapshotForSpec :: Spec -> SemanticImpactSnapshot
+semanticImpactSnapshotForSpec spec = case resolveTypeGraph spec of
+  Left failures -> error ("test fixture type graph did not resolve: " <> show failures)
+  Right graph -> semanticImpactSnapshot (semanticImpact graph)
 
 -- | The canonical workspace with a case-variant copy of one member's aggregate
 -- grafted onto another member. Composition refuses this shape (EP-153 catches it

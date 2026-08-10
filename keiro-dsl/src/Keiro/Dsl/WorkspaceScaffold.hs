@@ -105,9 +105,11 @@ import Keiro.Dsl.ScaffoldRun
     withSidecarMovesApplied,
   )
 import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticImpact (semanticImpact, semanticImpactSnapshot)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
+import Keiro.Dsl.TypeGraph (resolveTypeGraph)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
 import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
@@ -616,7 +618,11 @@ currentWorkspaceRecord plan adopted =
       wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
       wrBehaviorRequirements = workspaceBehaviorRows workspace,
       wrProjectionCatalogFacts = projectionCatalogFacts merged,
-      wrAdopted = adopted
+      wrAdopted = adopted,
+      wrSemanticImpact =
+        case resolveTypeGraph merged of
+          Left failures -> error ("validated workspace type graph did not resolve: " <> show failures)
+          Right graph -> Just (semanticImpactSnapshot (semanticImpact graph))
     }
   where
     workspace = wpWorkspace plan

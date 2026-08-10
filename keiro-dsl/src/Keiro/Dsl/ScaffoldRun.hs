@@ -97,6 +97,7 @@ import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticImpact (semanticImpact, semanticImpactSnapshot)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
@@ -1175,7 +1176,11 @@ currentRecord specPath sourceLanguage ctx service modules currentBehavior =
       recNominalEqualities = nominalEqualityIdentitiesForService service,
       recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior,
-      recProjectionCatalogFacts = projectionCatalogFacts spec
+      recProjectionCatalogFacts = projectionCatalogFacts spec,
+      recSemanticImpact =
+        case resolveTypeGraph spec of
+          Left failures -> error ("validated scaffold type graph did not resolve: " <> show failures)
+          Right graph -> Just (semanticImpactSnapshot (semanticImpact graph))
     }
   where
     spec = checkedSpec service

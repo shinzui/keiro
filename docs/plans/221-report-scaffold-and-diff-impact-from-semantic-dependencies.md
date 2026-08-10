@@ -34,8 +34,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: define a deterministic semantic-impact snapshot/delta shared by diff and
-  scaffold reporting and serialize it as extension-tolerant ledger evidence.
+- [x] Milestone 1: define a deterministic semantic-impact snapshot/delta shared by diff and
+  scaffold reporting and serialize it as extension-tolerant ledger evidence. Completed
+  2026-08-10T01:38:49Z; `cabal build keiro-dsl` and the focused `semantic impact` tests pass.
 - [ ] Milestone 2: add old/new semantic consumer summaries to single/workspace diff text and the
   append-only JSON report without changing compatibility verdicts.
 - [ ] Milestone 3: add semantic and generated-artifact impact sections to single/workspace scaffold
@@ -49,7 +50,10 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The durable snapshot cannot use a JSON object keyed by `MappedKey` without inheriting Aeson's
+  map-key encoding as a file-format contract. Canonical arrays keep names explicit; parsing then
+  rejects duplicate declarations, duplicate consumers, and disagreement with the service
+  inventory before a scaffold write.
 
 
 ## Decision Log
@@ -71,6 +75,12 @@ Record every decision made while working on the plan.
   Rationale: `MappedDiff` already classifies event, register/snapshot, and consumer-build surfaces
   from complete `UsePath` values. This plan adds an explanation projection, not a second differ.
   Date: 2026-08-09
+
+- Decision: Encode semantic-impact snapshots as sorted declaration rows plus a sorted explicit
+  service inventory, and reserve absence of the single ledger row for pre-feature history.
+  Rationale: The array encoding is deterministic and validates duplicates explicitly; the
+  absent-versus-empty distinction prevents a legacy ledger from claiming zero old consumers.
+  Date: 2026-08-10
 
 
 ## Outcomes & Retrospective
@@ -271,3 +281,9 @@ state and write a present current snapshot. Public scaffold report records gain 
 field rather than only rendered text. `DiffReport` JSON appends an ignore-unknown
 `semanticImpact` object with sorted declarations and consumers. EP-6 consumes the final text/JSON
 and ledger behavior as its adoption evidence.
+
+
+## Revision Notes
+
+- 2026-08-10: Recorded Milestone 1's canonical snapshot/delta implementation, ledger compatibility
+  evidence, and the durable absent-baseline encoding decision so the plan remains restartable.

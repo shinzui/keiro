@@ -12,7 +12,14 @@ module Keiro.Dsl.SemanticImpact
     MappedRootKind (..),
     MappedRoot (..),
     SemanticImpact (..),
+    SemanticImpactSnapshot (..),
+    MappedImpactDelta (..),
+    SemanticImpactReport (..),
     semanticImpact,
+    semanticImpactSnapshot,
+    diffSemanticImpact,
+    mappedImpactForDeclarations,
+    semanticImpactReport,
     aggregateMappedRoots,
     aggregateMappedClosure,
     mappedDeclarationConsumers,
@@ -20,6 +27,8 @@ module Keiro.Dsl.SemanticImpact
   )
 where
 
+import Control.Monad (unless)
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.List (sort)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -69,6 +78,107 @@ data SemanticImpact = SemanticImpact
   }
   deriving stock (Eq, Show, Generic)
 
+-- | Durable, source-independent evidence for the mapped consumer graph. The
+-- map contains every service declaration, including declarations with no
+-- aggregate consumer. The explicit service inventory makes the declaration
+-- ownership boundary visible and leaves room for future non-aggregate roots.
+data SemanticImpactSnapshot = SemanticImpactSnapshot
+  { snapshotMappedConsumers :: !(Map MappedKey (Set MappedConsumer)),
+    snapshotServiceInventory :: !(Set MappedKey)
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | One declaration's before/after consumer explanation. Compatibility and
+-- generated-file writes deliberately remain outside this type.
+data MappedImpactDelta = MappedImpactDelta
+  { impactDeclaration :: !MappedKey,
+    impactPreviousConsumers :: !(Set MappedConsumer),
+    impactCurrentConsumers :: !(Set MappedConsumer),
+    impactServiceConformance :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Scaffold-facing evidence for the declarations whose mapping identities
+-- changed. A missing previous snapshot means legacy history, not an empty old
+-- graph; callers can still report the checked current consumers honestly.
+data SemanticImpactReport = SemanticImpactReport
+  { semanticReportPrevious :: !(Maybe SemanticImpactSnapshot),
+    semanticReportCurrent :: !SemanticImpactSnapshot,
+    semanticReportDeclarations :: ![MappedKey],
+    semanticReportDeltas :: ![MappedImpactDelta]
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- JSON uses arrays rather than object keys so the on-disk representation does
+-- not depend on aeson's map-key encoding. Parsers reject duplicate declaration
+-- and consumer identities and require the two inventory projections to agree.
+instance ToJSON SemanticImpactSnapshot where
+  toJSON snapshot =
+    object
+      [ "declarations"
+          .= [ object
+                 [ "declaration" .= unMappedKey declaration,
+                   "consumers" .= map consumerName (Set.toAscList declarationConsumers)
+                 ]
+             | (declaration, declarationConsumers) <- Map.toAscList (snapshotMappedConsumers snapshot)
+             ],
+        "serviceInventory" .= map unMappedKey (Set.toAscList (snapshotServiceInventory snapshot))
+      ]
+
+instance FromJSON SemanticImpactSnapshot where
+  parseJSON = withObject "SemanticImpactSnapshot" $ \fields -> do
+    declarations <- fields .: "declarations" >>= traverse parseDeclaration
+    inventoryNames <- fields .: "serviceInventory"
+    let declarationNames = map fst declarations
+        inventoryKeys = map MappedKey inventoryNames
+        declarationMap = Map.fromList declarations
+        inventory = Set.fromList inventoryKeys
+    unless (distinct declarationNames) (fail "duplicate semantic-impact declaration")
+    unless (distinct inventoryKeys) (fail "duplicate semantic-impact service inventory declaration")
+    unless (Map.keysSet declarationMap == inventory) (fail "semantic-impact declarations and service inventory differ")
+    pure
+      SemanticImpactSnapshot
+        { snapshotMappedConsumers = declarationMap,
+          snapshotServiceInventory = inventory
+        }
+    where
+      parseDeclaration = withObject "SemanticImpactDeclaration" $ \row -> do
+        declarationName <- row .: "declaration"
+        consumerNames <- row .: "consumers"
+        let aggregateConsumers = map AggregateConsumer consumerNames
+        unless (distinct aggregateConsumers) (fail "duplicate semantic-impact aggregate consumer")
+        pure (MappedKey declarationName, Set.fromList aggregateConsumers)
+      distinct values = length values == Set.size (Set.fromList values)
+
+instance ToJSON MappedImpactDelta where
+  toJSON delta =
+    object
+      [ "declaration" .= unMappedKey (impactDeclaration delta),
+        "previousConsumers" .= map consumerName (Set.toAscList (impactPreviousConsumers delta)),
+        "currentConsumers" .= map consumerName (Set.toAscList (impactCurrentConsumers delta)),
+        "serviceConformance" .= impactServiceConformance delta
+      ]
+
+instance FromJSON MappedImpactDelta where
+  parseJSON = withObject "MappedImpactDelta" $ \fields -> do
+    declaration <- MappedKey <$> fields .: "declaration"
+    previousNames <- fields .: "previousConsumers"
+    currentNames <- fields .: "currentConsumers"
+    serviceConformance <- fields .: "serviceConformance"
+    let previous = map AggregateConsumer previousNames
+        current = map AggregateConsumer currentNames
+    unless (distinct previous) (fail "duplicate previous semantic-impact consumer")
+    unless (distinct current) (fail "duplicate current semantic-impact consumer")
+    pure
+      MappedImpactDelta
+        { impactDeclaration = declaration,
+          impactPreviousConsumers = Set.fromList previous,
+          impactCurrentConsumers = Set.fromList current,
+          impactServiceConformance = serviceConformance
+        }
+    where
+      distinct values = length values == Set.size (Set.fromList values)
+
 -- | Derive the single mapped-consumer dependency model from a checked graph.
 -- Lists and query projections are sorted so source declaration and aggregate
 -- order cannot affect the result.
@@ -100,6 +210,64 @@ semanticImpact graph =
               declaration <- Set.toList declarations
             ]
         )
+
+-- | Freeze the checked dependency projection in canonical map/set form.
+semanticImpactSnapshot :: SemanticImpact -> SemanticImpactSnapshot
+semanticImpactSnapshot impact =
+  SemanticImpactSnapshot
+    { snapshotMappedConsumers = impactDeclarationConsumers impact,
+      snapshotServiceInventory = impactServiceDeclarations impact
+    }
+
+-- | Compare only consumer and service-inventory membership. A declaration's
+-- schema may change while these sets remain equal; differ/scaffold callers use
+-- 'mappedImpactForDeclarations' with their authoritative changed-key set for
+-- that case.
+diffSemanticImpact :: SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedImpactDelta]
+diffSemanticImpact previous current =
+  [ delta
+  | delta <- mappedImpactForDeclarations allDeclarations previous current,
+    impactPreviousConsumers delta /= impactCurrentConsumers delta
+      || serviceMember previous (impactDeclaration delta) /= serviceMember current (impactDeclaration delta)
+  ]
+  where
+    allDeclarations = Set.toAscList (snapshotServiceInventory previous <> snapshotServiceInventory current)
+
+-- | Explain an authoritative set of changed mapped declarations. Keys are
+-- sorted and deduplicated; a key absent from both inventories is ignored.
+mappedImpactForDeclarations :: [MappedKey] -> SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedImpactDelta]
+mappedImpactForDeclarations declarations previous current =
+  [ MappedImpactDelta
+      { impactDeclaration = declaration,
+        impactPreviousConsumers = snapshotConsumers previous declaration,
+        impactCurrentConsumers = snapshotConsumers current declaration,
+        impactServiceConformance = serviceMember previous declaration || serviceMember current declaration
+      }
+  | declaration <- Set.toAscList (Set.fromList declarations),
+    serviceMember previous declaration || serviceMember current declaration
+  ]
+
+-- | Build the typed scaffold explanation. With legacy history the delta list
+-- stays empty because the missing old row is unknown rather than empty.
+semanticImpactReport :: Maybe SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedKey] -> SemanticImpactReport
+semanticImpactReport previous current declarations =
+  SemanticImpactReport
+    { semanticReportPrevious = previous,
+      semanticReportCurrent = current,
+      semanticReportDeclarations = canonicalDeclarations,
+      semanticReportDeltas = maybe [] (\old -> mappedImpactForDeclarations canonicalDeclarations old current) previous
+    }
+  where
+    canonicalDeclarations = Set.toAscList (Set.fromList declarations)
+
+snapshotConsumers :: SemanticImpactSnapshot -> MappedKey -> Set MappedConsumer
+snapshotConsumers snapshot declaration = Map.findWithDefault Set.empty declaration (snapshotMappedConsumers snapshot)
+
+serviceMember :: SemanticImpactSnapshot -> MappedKey -> Bool
+serviceMember snapshot declaration = declaration `Set.member` snapshotServiceInventory snapshot
+
+consumerName :: MappedConsumer -> Name
+consumerName (AggregateConsumer aggregate) = aggregate
 
 -- | Return the checked roots owned by one aggregate in stable order.
 aggregateMappedRoots :: SemanticImpact -> Name -> [MappedRoot]

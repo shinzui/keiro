@@ -136,7 +136,7 @@ semantic-index/source-map boundary by amending the ADRs above or creating a focu
 | 2 | Centralize structural conformance at the service boundary and localize aggregate harnesses | [Plan 218](../plans/218-centralize-structural-conformance-at-the-service-boundary-and-localize-aggregate-harnesses.md) | EP-1 | None | Complete |
 | 3 | Preserve exact semantic source provenance through parsing and workspace composition | [Plan 219](../plans/219-preserve-exact-semantic-source-provenance-through-parsing-and-workspace-composition.md) | None | None | Complete |
 | 4 | Generate one stable behavior source map from semantic anchors | [Plan 220](../plans/220-generate-one-stable-behavior-source-map-from-semantic-anchors.md) | EP-3 | EP-1 | Complete |
-| 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | Not Started |
+| 5 | Report scaffold and diff impact from semantic dependencies | [Plan 221](../plans/221-report-scaffold-and-diff-impact-from-semantic-dependencies.md) | EP-1 | EP-2, EP-4 | In Progress |
 | 6 | Certify source-stable semantic locality before fleet adoption | [Plan 222](../plans/222-certify-source-stable-semantic-locality-before-fleet-adoption.md) | EP-2, EP-4, EP-5 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.

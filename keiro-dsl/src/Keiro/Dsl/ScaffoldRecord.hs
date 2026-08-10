@@ -28,6 +28,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
+import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
 import Keiro.Dsl.SidecarNames (contextLedgerFileName)
 import System.FilePath (isAbsolute, splitDirectories)
 
@@ -45,7 +46,8 @@ data ScaffoldRecord = ScaffoldRecord
     recNominalEqualities :: ![Text],
     recBindingObligations :: ![BindingHole],
     recBehaviorRequirements :: ![BehaviorRecordRow],
-    recProjectionCatalogFacts :: ![Text]
+    recProjectionCatalogFacts :: ![Text],
+    recSemanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
 
@@ -105,6 +107,7 @@ renderRecord record =
       <> map renderBindingObligation (recBindingObligations record)
       <> map renderBehaviorRequirement (recBehaviorRequirements record)
       <> map ("projection-catalog-fact " <>) (recProjectionCatalogFacts record)
+      <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [recSemanticImpact record]]
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
     renderFile (Generated, path) = "generated " <> T.pack path
@@ -139,6 +142,7 @@ parseRecord contents = case T.lines contents of
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
         behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
+        semanticImpact <- parseSemanticImpact rows
         if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts
           then Nothing
           else
@@ -157,7 +161,8 @@ parseRecord contents = case T.lines contents of
                   recNominalEqualities = nominalEqualities,
                   recBindingObligations = bindingEntries,
                   recBehaviorRequirements = behaviorEntries,
-                  recProjectionCatalogFacts = catalogFacts
+                  recProjectionCatalogFacts = catalogFacts,
+                  recSemanticImpact = semanticImpact
                 }
   _ -> Nothing
   where
@@ -183,6 +188,12 @@ parseRecord contents = case T.lines contents of
     parseBehaviorRequirement row = do
       payload <- T.stripPrefix "behavior " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseSemanticImpact rows = case filter ("semantic-impact " `T.isPrefixOf`) rows of
+      [] -> Just Nothing
+      [row] -> do
+        payload <- T.stripPrefix "semantic-impact " row
+        Just <$> Aeson.decodeStrict' (Text.encodeUtf8 payload)
+      _ -> Nothing
     parseModuleRole row = do
       payload <- T.stripPrefix "module-role " row
       decoded <- Aeson.decodeStrict' (Text.encodeUtf8 payload)
