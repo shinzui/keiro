@@ -66,7 +66,7 @@ import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractI
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -1852,6 +1852,33 @@ main = hspec $ do
         Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
         other -> expectationFailure ("expected language feature refusal, got " <> show other)
 
+    it "generates one direct exact-edge classifier arm per silent outcome" $ do
+      source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
+      parsed <- case parseSource "domain-command-outcomes.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      aggregate <- case [value | NAggregate value <- specNodes (parsedSpec parsed)] of
+        [value] -> pure value
+        values -> expectationFailure ("unexpected outcome aggregates: " <> show values) >> fail "unreachable"
+      let scaffoldContext = defaultContext (specContext (parsedSpec parsed))
+          modules = scaffoldAggregateForService scaffoldContext (checkedSource parsed) aggregate
+          modulesAgain = scaffoldAggregateForService scaffoldContext (checkedSource parsed) aggregate
+          eventStream = case [moduleText value | value <- modules, "/EventStream.hs" `T.isSuffixOf` T.pack (modulePath value)] of
+            [value] -> value
+            values -> error ("unexpected outcome event-stream modules: " <> show values)
+      map moduleText modulesAgain `shouldBe` map moduleText modules
+      firewallBreaches modules `shouldBe` []
+      eventStream `shouldSatisfy` T.isInfixOf "reservationDomainCommandHandler"
+      eventStream `shouldSatisfy` T.isInfixOf "case edgeSource of"
+      eventStream `shouldSatisfy` T.isInfixOf "case edgeIndex of"
+      T.count " -> SilentRejected" eventStream `shouldBe` 1
+      T.count " -> SilentNoOp" eventStream `shouldBe` 1
+      T.count "K.evalTerm" eventStream `shouldBe` 2
+      eventStream `shouldSatisfy` T.isInfixOf "0 -> SilentRejected"
+      eventStream `shouldSatisfy` T.isInfixOf "1 -> SilentNoOp"
+      forM_ ["Data.Map", "lookup", "find", "edgesOut", "Keiro.Command.Domain"] $ \forbidden ->
+        eventStream `shouldSatisfy` (not . T.isInfixOf forbidden)
+
     it "reports complete, typed, and state-preserving outcome diagnostics" $ do
       source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
       let codes changed = do
@@ -1903,9 +1930,13 @@ main = hspec $ do
         Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
         Right value -> pure value
       validateService (checkedSource newParsed) `shouldBe` []
-      let [oldAggregate] = [aggregate | NAggregate aggregate <- specNodes (parsedSpec oldParsed)]
-          [newAggregate] = [aggregate | NAggregate aggregate <- specNodes (parsedSpec newParsed)]
-          changes = diffSources oldParsed newParsed
+      oldAggregate <- case [aggregate | NAggregate aggregate <- specNodes (parsedSpec oldParsed)] of
+        [aggregate] -> pure aggregate
+        aggregates -> expectationFailure ("unexpected old outcome aggregates: " <> show aggregates) >> fail "unreachable"
+      newAggregate <- case [aggregate | NAggregate aggregate <- specNodes (parsedSpec newParsed)] of
+        [aggregate] -> pure aggregate
+        aggregates -> expectationFailure ("unexpected new outcome aggregates: " <> show aggregates) >> fail "unreachable"
+      let changes = diffSources oldParsed newParsed
           oldBehavior = Behavior.deriveAggregateBehaviorRequirements (parsedSpec oldParsed) oldAggregate
           newBehavior = Behavior.deriveAggregateBehaviorRequirements (parsedSpec newParsed) newAggregate
           changeKind change = case change of

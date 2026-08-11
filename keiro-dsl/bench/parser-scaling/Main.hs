@@ -2,15 +2,19 @@ module Main (main) where
 
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Frontend (parseSurfaceSource, renderFrontendFailure)
-import Keiro.Dsl.LanguageVersion (ParsedSource)
+import Keiro.Dsl.Grammar (Node (..), Spec (..))
+import Keiro.Dsl.LanguageVersion (ParsedSource (..))
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
+import Keiro.Dsl.Scaffold (ScaffoldModule, defaultContext, firewallBreaches, modulePath, moduleText, scaffoldAggregateForService)
+import Keiro.Dsl.SemanticContract (checkedSource)
 import Keiro.Dsl.Syntax (SurfaceSource)
+import Keiro.Dsl.Validate (validateService)
 import Keiro.Dsl.Workspace
   ( ContentSource (..),
     WorkspaceSpec,
@@ -33,9 +37,15 @@ data WorkspaceFixture = WorkspaceFixture
     fixtureContents :: !(Map FilePath Text)
   }
 
+data OutcomeFixture = OutcomeFixture
+  { fixtureSilentEdgeCount :: !Int,
+    fixtureOutcomeSource :: !Text
+  }
+
 main :: IO ()
 main = do
   let sourceFixtures = map (uncurry sourceFixture) sourceShapes
+      outcomeFixtures = map outcomeFixture outcomeShapes
       workspaceFixtures =
         [ workspaceFixture memberCount aggregateCount transitionsPerAggregate
         | (memberCount, aggregateCount, transitionsPerAggregate) <- workspaceShapes
@@ -43,9 +53,9 @@ main = do
   -- Build and force immutable inputs directly before registering benchmarks.
   -- tasty-bench's env accessor is deliberately unnecessary here and would
   -- reintroduce a lazy resource thunk around these already prepared values.
-  forceFixtures sourceFixtures workspaceFixtures
-  preflightFixtures sourceFixtures workspaceFixtures
-  defaultMain (benchmarks sourceFixtures workspaceFixtures)
+  forceFixtures sourceFixtures workspaceFixtures outcomeFixtures
+  preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures
+  defaultMain (benchmarks sourceFixtures workspaceFixtures outcomeFixtures)
 
 sourceShapes :: [(Int, Int)]
 sourceShapes = [(8, 4), (8, 8), (8, 16), (8, 32)]
@@ -53,30 +63,64 @@ sourceShapes = [(8, 4), (8, 8), (8, 16), (8, 32)]
 workspaceShapes :: [(Int, Int, Int)]
 workspaceShapes = [(1, 8, 16), (2, 8, 16), (4, 8, 16), (8, 8, 16)]
 
-forceFixtures :: [SourceFixture] -> [WorkspaceFixture] -> IO ()
-forceFixtures sourceFixtures workspaceFixtures = do
+outcomeShapes :: [Int]
+outcomeShapes = [8, 32, 128, 512]
+
+forceFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> IO ()
+forceFixtures sourceFixtures workspaceFixtures outcomeFixtures = do
   forM_ sourceFixtures $ \SourceFixture {fixtureSource} ->
     evaluate (force fixtureSource)
   forM_ workspaceFixtures $ \WorkspaceFixture {fixtureContents} ->
     evaluate (force fixtureContents)
+  forM_ outcomeFixtures $ \OutcomeFixture {fixtureOutcomeSource} ->
+    evaluate (force fixtureOutcomeSource)
 
-preflightFixtures :: [SourceFixture] -> [WorkspaceFixture] -> IO ()
-preflightFixtures sourceFixtures workspaceFixtures = do
+preflightFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> IO ()
+preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures = do
   forM_ sourceFixtures $ \fixture@SourceFixture {fixtureSource} -> do
     _ <- evaluate (parseSurfaceOrFail (sourcePath fixture) fixtureSource)
     _ <- evaluate (parseCompatibilityOrFail (sourcePath fixture) fixtureSource)
     pure ()
   forM_ workspaceFixtures loadWorkspaceOrFail
+  forM_ outcomeFixtures $ \fixture -> do
+    _ <- evaluate (checkOutcomeOrFail fixture)
+    let modules = generateOutcomeModulesOrFail fixture
+        eventStream = outcomeEventStreamOrFail modules
+        armCount = T.count " -> SilentRejected" eventStream + T.count " -> SilentNoOp" eventStream
+    _ <- evaluate (sum (map (T.length . moduleText) modules))
+    unless (armCount == fixtureSilentEdgeCount fixture) $
+      error ("outcome classifier arm count mismatch for " <> outcomeLabel fixture)
+    unless (firewallBreaches modules == []) $
+      error ("outcome fixture breached generated symbolic firewall for " <> outcomeLabel fixture)
+    forM_ ["Data.Map", "lookup", "find", "edgesOut"] $ \forbidden ->
+      unless (not (forbidden `T.isInfixOf` eventStream)) $
+        error ("outcome classifier contains forbidden dispatch token " <> T.unpack forbidden)
+    pure ()
+  forM_ (zip outcomeFixtures (drop 1 outcomeFixtures)) $ \(smaller, larger) -> do
+    let smallerBytes = generateOutcomeBytesOrFail smaller
+        largerBytes = generateOutcomeBytesOrFail larger
+    unless (largerBytes <= 6 * smallerBytes) $
+      error
+        ( "outcome generated source grew by more than sixfold across a fourfold edge increase: "
+            <> show smallerBytes
+            <> " -> "
+            <> show largerBytes
+        )
 
-benchmarks :: [SourceFixture] -> [WorkspaceFixture] -> [Benchmark]
-benchmarks sourceFixtures workspaceFixtures =
+benchmarks :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> [Benchmark]
+benchmarks sourceFixtures workspaceFixtures outcomeFixtures =
   -- Weak-head evaluation is sufficient: producing the outer Right requires
   -- each Megaparsec route to consume its explicit eof, and loadWorkspace does
   -- all member reads, parses, and composition before returning its Either.
   -- The public parse results intentionally have no NFData instance.
   [ bgroup "surface-source" (map surfaceBenchmark sourceFixtures),
     bgroup "compatibility-source" (map compatibilityBenchmark sourceFixtures),
-    bgroup "workspace" (map workspaceBenchmark workspaceFixtures)
+    bgroup "workspace" (map workspaceBenchmark workspaceFixtures),
+    bgroup
+      "domain-outcomes"
+      [ bgroup "check" (map outcomeCheckBenchmark outcomeFixtures),
+        bgroup "generate" (map outcomeGenerationBenchmark outcomeFixtures)
+      ]
   ]
 
 surfaceBenchmark :: SourceFixture -> Benchmark
@@ -102,6 +146,14 @@ workspaceBenchmark fixture@WorkspaceFixture {fixtureMemberCount, fixtureAggregat
         <> show (sum (map T.length (Map.elems fixtureContents)))
     )
     (whnfIO (loadWorkspaceOrFail fixture))
+
+outcomeCheckBenchmark :: OutcomeFixture -> Benchmark
+outcomeCheckBenchmark fixture =
+  bench (outcomeLabel fixture) $ whnf checkOutcomeOrFail fixture
+
+outcomeGenerationBenchmark :: OutcomeFixture -> Benchmark
+outcomeGenerationBenchmark fixture =
+  bench (outcomeLabel fixture) $ whnf generateOutcomeBytesOrFail fixture
 
 sourceFixture :: Int -> Int -> SourceFixture
 sourceFixture fixtureAggregateCount fixtureTransitionsPerAggregate =
@@ -175,6 +227,101 @@ paddedDecimal :: Int -> Text
 paddedDecimal number =
   let rendered = T.pack (show number)
    in T.replicate (6 - T.length rendered) "0" <> rendered
+
+outcomeFixture :: Int -> OutcomeFixture
+outcomeFixture fixtureSilentEdgeCount =
+  OutcomeFixture
+    { fixtureSilentEdgeCount,
+      fixtureOutcomeSource = outcomeSpecification fixtureSilentEdgeCount
+    }
+
+outcomeLabel :: OutcomeFixture -> String
+outcomeLabel fixture@OutcomeFixture {fixtureSilentEdgeCount, fixtureOutcomeSource} =
+  "silent-edges-"
+    <> show fixtureSilentEdgeCount
+    <> "-chars-"
+    <> show (T.length fixtureOutcomeSource)
+    <> "-generated-bytes-"
+    <> show (generateOutcomeBytesOrFail fixture)
+
+outcomePath :: OutcomeFixture -> FilePath
+outcomePath OutcomeFixture {fixtureSilentEdgeCount} =
+  "domain-outcomes-" <> show fixtureSilentEdgeCount <> ".keiro"
+
+outcomeSpecification :: Int -> Text
+outcomeSpecification silentEdgeCount =
+  T.unlines
+    [ "language keiro-dsl 5",
+      "context domain-outcome-bench",
+      "",
+      "enum BenchRejection { Rejected=rejected }",
+      "enum BenchNoOp { Duplicate=duplicate }",
+      "",
+      "aggregate BenchOutcome",
+      "  domain-outcomes rejection=BenchRejection no-op=BenchNoOp",
+      "  regs",
+      "    marker Text = \"ready\"",
+      "  states Ready",
+      "",
+      "  command Accept { token:Text }",
+      "  event Accepted = fields(Accept)"
+    ]
+    <> T.concat
+      [ T.unlines
+          [ "  command Silent" <> paddedDecimal edgeIndex <> " { token:Text }"
+          ]
+      | edgeIndex <- [0 .. silentEdgeCount - 1]
+      ]
+    <> T.unlines
+      [ "",
+        "  Ready -- Accept -->",
+        "    outcome accepted",
+        "    emit Accepted",
+        "    goto Ready"
+      ]
+    <> T.concat
+      [ T.unlines
+          [ "",
+            "  Ready -- Silent" <> paddedDecimal edgeIndex <> " -->",
+            if even edgeIndex
+              then "    outcome rejected BenchRejection.Rejected"
+              else "    outcome no-op BenchNoOp.Duplicate",
+            "    goto Ready"
+          ]
+      | edgeIndex <- [0 .. silentEdgeCount - 1]
+      ]
+
+checkOutcomeOrFail :: OutcomeFixture -> Int
+checkOutcomeOrFail fixture =
+  case parseSource (outcomePath fixture) (fixtureOutcomeSource fixture) of
+    Left failure -> error (T.unpack (renderParseFailure failure))
+    Right parsed -> case validateService (checkedSource parsed) of
+      [] -> fixtureSilentEdgeCount fixture
+      diagnostics -> error ("outcome benchmark validation failed: " <> show diagnostics)
+
+generateOutcomeBytesOrFail :: OutcomeFixture -> Int
+generateOutcomeBytesOrFail = sum . map (T.length . moduleText) . generateOutcomeModulesOrFail
+
+generateOutcomeModulesOrFail :: OutcomeFixture -> [ScaffoldModule]
+generateOutcomeModulesOrFail fixture =
+  case parseSource (outcomePath fixture) (fixtureOutcomeSource fixture) of
+    Left failure -> error (T.unpack (renderParseFailure failure))
+    Right parsed -> case [aggregate | NAggregate aggregate <- specNodes (parsedSpec parsed)] of
+      [aggregate] ->
+        scaffoldAggregateForService
+          (defaultContext (specContext (parsedSpec parsed)))
+          (checkedSource parsed)
+          aggregate
+      aggregates -> error ("outcome benchmark expected one aggregate, got " <> show (length aggregates))
+
+outcomeEventStreamOrFail :: [ScaffoldModule] -> Text
+outcomeEventStreamOrFail modules =
+  case [ moduleText scaffoldModule
+       | scaffoldModule <- modules,
+         "/EventStream.hs" `T.isSuffixOf` T.pack (modulePath scaffoldModule)
+       ] of
+    [eventStream] -> eventStream
+    eventStreams -> error ("outcome benchmark expected one event-stream module, got " <> show (length eventStreams))
 
 workspaceFixture :: Int -> Int -> Int -> WorkspaceFixture
 workspaceFixture memberCount aggregateCount transitionsPerAggregate

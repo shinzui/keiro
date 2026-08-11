@@ -3,11 +3,11 @@
 -- @-- \@generated@ modules plus create-if-absent Hole modules for the behavior
 -- that remains explicitly hand-owned.
 --
--- The load-bearing invariant of this module is the __firewall__: only a
--- generated aggregate @Transducer.hs@ may contain Keiki symbolic operators
--- (@./=@, @.==@, @.||@, @lit@, @B.slot@, @B.requireGuard@). Hand-owned Hole
--- modules remain the other intentional construction boundary. A generated-text
--- scan enforces the exception by path.
+-- The load-bearing invariant of this module is the __firewall__: generated
+-- aggregate @Transducer.hs@ owns transition terms, while an outcome-enabled
+-- @EventStream.hs@ may evaluate its checked reason terms after exact-edge
+-- selection. Hand-owned Hole modules remain the other intentional construction
+-- boundary. A generated-text scan enforces these narrow exceptions.
 --
 -- Version-2 generated-owned transition bodies are rendered authoritatively in
 -- that transducer. Explicit Hole-owned transitions keep only predicate/update
@@ -71,6 +71,7 @@ module Keiro.Dsl.Scaffold
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
+    ResolvedDomainOutcomeTypes (..),
     aggregateCheckedService,
     ResolvedRegister (..),
     ResolvedCtor (..),
@@ -103,7 +104,7 @@ import Data.List (find, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe, maybeToList)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -376,17 +377,24 @@ firewallBreaches mods =
   [ (modulePath m, breach, n)
   | m <- mods,
     kind m == Generated,
-    not (authoritativeScalarModule (modulePath m)),
+    not (authoritativeScalarModule m),
     (n, line) <- zip [1 ..] (T.lines (moduleText m)),
     breach <- lineBreaches line
   ]
 
--- The version-2 aggregate transducer is the narrow, intentional exception to
--- the generated symbolic-operator firewall: it is precisely the generated
--- authority that constructs Keiki terms. Every other generated module remains
--- subject to the original firewall.
-authoritativeScalarModule :: FilePath -> Bool
-authoritativeScalarModule path = "/Transducer.hs" `isSuffixOf` path
+-- The version-2 aggregate transducer and an outcome-enabled aggregate event
+-- stream are the narrow, intentional exceptions to the generated
+-- symbolic-operator firewall. The former owns transition terms; the latter
+-- evaluates a checked reason term only after Keiki has selected an exact edge.
+-- Ordinary event-stream modules remain scanned.
+authoritativeScalarModule :: ScaffoldModule -> Bool
+authoritativeScalarModule scaffoldModule =
+  "/Transducer.hs" `isSuffixOf` path
+    || ( "/EventStream.hs" `isSuffixOf` path
+           && "DomainCommandHandler" `T.isInfixOf` moduleText scaffoldModule
+       )
+  where
+    path = modulePath scaffoldModule
 
 lineBreaches :: Text -> [Text]
 lineBreaches line = case importModule line of
@@ -482,6 +490,7 @@ data Agg = Agg
     aStates :: ![StateDecl],
     aCommands :: ![ResolvedCtor],
     aEvents :: ![ResolvedCtor],
+    aDomainOutcomeTypes :: !(Maybe ResolvedDomainOutcomeTypes),
     -- | Generated IDs and enums used by this aggregate, in stable name order.
     aGeneratedNominals :: ![ResolvedNominalType],
     aTransitions :: ![Transition],
@@ -498,6 +507,12 @@ data Agg = Agg
     -- | e.g. @HospitalCapacity.Reservation@
     aHolePrefix :: !Text
   }
+
+data ResolvedDomainOutcomeTypes = ResolvedDomainOutcomeTypes
+  { resolvedRejectionType :: !ResolvedAggregateType,
+    resolvedNoOpType :: !ResolvedAggregateType
+  }
+  deriving stock (Eq, Show)
 
 aggregateCheckedService :: Agg -> CheckedService
 aggregateCheckedService aggregate =
@@ -550,6 +565,7 @@ resolveAggForService ctx service agg =
       aStates = aggStates agg,
       aCommands = map resolveCommand (aggCommands agg),
       aEvents = map resolveEvent (aggEvents agg),
+      aDomainOutcomeTypes = resolvedDomainOutcomeTypes,
       aGeneratedNominals = generatedNominalsInTypes aggregateResolvedTypes,
       aTransitions = aggTransitions agg,
       aOutputMappings =
@@ -598,6 +614,16 @@ resolveAggForService ctx service agg =
       map rrType (map resolveRegister (aggRegs agg))
         <> map snd (concatMap rcFields (map resolveCommand (aggCommands agg)))
         <> map snd (concatMap rcFields (map resolveEvent (aggEvents agg)))
+    resolvedDomainOutcomeTypes = case aggDomainOutcomeTypes agg of
+      Nothing -> Nothing
+      Just declaration ->
+        Just
+          ResolvedDomainOutcomeTypes
+            { resolvedRejectionType = resolveOutcomeType declaration (rejectionType declaration),
+              resolvedNoOpType = resolveOutcomeType declaration (noOpType declaration)
+            }
+    resolveOutcomeType declaration name =
+      orDie (resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef name))
     resolveRegister register =
       let resolvedType = orDie (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
           resolvedInitial = orDie (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
@@ -654,7 +680,9 @@ planNominalGenerationForService ctx service = do
 
 nominalEqualityUsedInGeneratedExpressions :: ResolvedNominalType -> Agg -> Bool
 nominalEqualityUsedInGeneratedExpressions nominal aggregate =
-  any (anyTypedExpression comparesNominal) (resolvedGeneratedExpressions aggregate)
+  any
+    (anyTypedExpression comparesNominal)
+    (resolvedGeneratedExpressions aggregate <> resolvedOutcomeExpressions aggregate)
   where
     comparesNominal expression = case typedScalarNode expression of
       TypedEqual left _ -> typedScalarType left == AggregateNominal nominal
@@ -670,11 +698,17 @@ aggregateUseKinds nominal aggregate =
       <> [CodecUse | nominal `elem` eventNominals]
       <> [SnapshotUse | hasSnapshot aggregate && nominal `elem` registerNominals]
       <> [HarnessSampleUse | nominal `elem` commandNominals || nominal `elem` eventNominals]
-      <> [HaskellLoweringUse | nominal `elem` aGeneratedNominals aggregate]
+      <> [HaskellLoweringUse | nominal `elem` (aGeneratedNominals aggregate <> outcomeNominals)]
   where
     registerNominals = generatedNominalsInTypes (map rrType (aRegs aggregate))
     commandNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aCommands aggregate)))
     eventNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aEvents aggregate)))
+    outcomeNominals =
+      generatedNominalsInTypes
+        [ resolvedType
+        | outcomeTypes <- maybeToList (aDomainOutcomeTypes aggregate),
+          resolvedType <- [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+        ]
 
 --------------------------------------------------------------------------------
 -- Entry point
@@ -2453,8 +2487,10 @@ emitBehaviorContract aggregate =
            "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
            "import " <> aGenPrefix aggregate <> ".Domain",
            "import " <> aGenPrefix aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
-           "import " <> contextGeneratedPrefix (aContext aggregate) <> ".BehaviorSourceMap qualified as BehaviorSourceMap",
-           "import Data.Aeson (ToJSON (..), object, (.=))",
+           "import " <> contextGeneratedPrefix (aContext aggregate) <> ".BehaviorSourceMap qualified as BehaviorSourceMap"
+         ]
+      <> outcomeBehaviorImports
+      <> [ "import Data.Aeson (ToJSON (..), object, (.=))",
            "import Data.List (sortOn)",
            "import Data.List.NonEmpty (NonEmpty)",
            "import Data.List.NonEmpty qualified as NonEmpty",
@@ -2494,8 +2530,10 @@ emitBehaviorContract aggregate =
            "",
            "data LiveExpectation",
            "  = Emits (NonEmpty " <> name <> "Event)",
-           "  | Rejects RejectionClass",
-           "  | NoOp",
+           "  | Rejects RejectionClass"
+         ]
+      <> outcomeExpectationConstructors
+      <> [ "  | NoOp",
            "  deriving stock (Eq, Show)",
            "",
            "data BehaviorWitness",
@@ -2630,8 +2668,10 @@ emitBehaviorContract aggregate =
            "",
            "runRejection :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runRejection requirement seed command expectation = case expectation of",
-           "  Emits _ -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect emitted events\"",
-           "  NoOp -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect an accepted no-op\"",
+           "  Emits _ -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect emitted events\""
+         ]
+      <> outcomeGenericRejectionCases
+      <> [ "  NoOp -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect an accepted no-op\"",
            "  Rejects expectedClass -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
            "    Left K.NoOutgoingEdges {} -> ensure requirement (expectedClass == RejectNoOutgoingEdges) \"rejection-class\" \"expected NoMatchingEdge but runtime returned NoOutgoingEdges\"",
            "    Left K.NoMatchingEdge {} -> ensure requirement (expectedClass == RejectNoMatchingEdge) \"rejection-class\" \"expected NoOutgoingEdges but runtime returned NoMatchingEdge\"",
@@ -2640,15 +2680,11 @@ emitBehaviorContract aggregate =
            "",
            "runAcceptance :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runAcceptance requirement seed command expectation = case expectation of",
-           "  Rejects _ -> failure requirement \"expectation-kind\" \"a live-transition requirement needs Emits or NoOp\"",
-           "  NoOp -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
-           "    Left stepFailure -> failure requirement \"unexpected-rejection\" (tshow stepFailure)",
-           "    Right success -> do",
-           "      checkAcceptedEnvelope requirement success",
-           "      ensure requirement (null (K.stepSuccessOutputs success)) \"noop-emitted\" \"NoOp emitted one or more events\"",
-           "      ensure requirement (K.stepSuccessState success == fst seed) \"noop-vertex-change\" \"NoOp changed the control vertex\"",
-           "      ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) \"noop-register-change\" \"NoOp changed one or more registers\"",
-           "  Emits expectedEvents -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
+           "  Rejects _ -> failure requirement \"expectation-kind\" \"a live-transition requirement needs Emits or NoOp\""
+         ]
+      <> outcomeExactAcceptanceCases
+      <> genericNoOpAcceptanceLines
+      <> [ "  Emits expectedEvents -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
            "    Left stepFailure -> failure requirement \"unexpected-rejection\" (tshow stepFailure)",
            "    Right success -> do",
            "      checkAcceptedEnvelope requirement success",
@@ -2662,8 +2698,10 @@ emitBehaviorContract aggregate =
            "        Right replaySuccess -> Right replaySuccess",
            "      ensure requirement (K.replaySuccessState replayed == K.stepSuccessState success) \"forward-replay-vertex\" \"decoded emissions replay to a different vertex\"",
            "      ensure requirement (regsEqual (K.replaySuccessRegs replayed) (K.stepSuccessRegs success)) \"forward-replay-registers\" \"decoded emissions replay to different registers\"",
-           "      checkSingleAttribution requirement K.Live (length decoded) (K.replaySuccessTrace replayed)",
-           "",
+           "      checkSingleAttribution requirement K.Live (length decoded) (K.replaySuccessTrace replayed)"
+         ]
+      <> outcomeSilentRunnerLines
+      <> [ "",
            "checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess " <> name <> "Regs " <> aVertexType aggregate <> " " <> name <> "Event -> Either BehaviorFailure ()",
            "checkAcceptedEnvelope requirement success = do",
            "  ensure requirement (K.stepSuccessMode success == K.Live) \"forward-mode\" (\"forward execution selected a non-live edge; actual=\" <> tshow (K.stepSuccessMode success) <> \" expected=\" <> tshow K.Live)",
@@ -2755,6 +2793,82 @@ emitBehaviorContract aggregate =
   where
     name = aName aggregate
     valueStem = lowerFirst name
+    handlerName = valueStem <> "DomainCommandHandler"
+    outcomeResultTypes = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just outcomeTypes -> [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+    outcomeImportPlan = eventStreamImportPlan aggregate outcomeResultTypes []
+    outcomeGeneratedNominals = generatedNominalsInTypes outcomeResultTypes
+    outcomeBehaviorImports = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just _ ->
+        ["import " <> aGenPrefix aggregate <> ".EventStream (" <> handlerName <> ")"]
+          <> [ "import "
+                 <> generatedNominalModule (aContext aggregate)
+                 <> " ("
+                 <> T.intercalate ", " (map resolvedNominalName (stableNominals outcomeGeneratedNominals))
+                 <> ")"
+             | not (null outcomeGeneratedNominals)
+             ]
+          <> T.lines (renderPlannedImports outcomeImportPlan)
+          <> ["import Keiro.Command (DomainCommandHandler (..), SilentCommandContext (..), SilentDomainDecision (..))"]
+    outcomeExpectationConstructors = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just outcomeTypes ->
+        [ "  | RejectedWith " <> renderDomainType outcomeImportPlan aggregate (resolvedRejectionType outcomeTypes),
+          "  | NoOpWith " <> renderDomainType outcomeImportPlan aggregate (resolvedNoOpType outcomeTypes)
+        ]
+    outcomeGenericRejectionCases = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just _ ->
+        [ "  RejectedWith _ -> failure requirement \"expectation-kind\" \"an unmatched-command rejection cannot expect a selected domain rejection\"",
+          "  NoOpWith _ -> failure requirement \"expectation-kind\" \"an unmatched-command rejection cannot expect a selected domain no-op\""
+        ]
+    genericNoOpAcceptanceLines = case aDomainOutcomeTypes aggregate of
+      Just _ -> ["  NoOp -> failure requirement \"expectation-kind\" \"an outcome-enabled transition requires RejectedWith or NoOpWith exact reason evidence\""]
+      Nothing ->
+        [ "  NoOp -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
+          "    Left stepFailure -> failure requirement \"unexpected-rejection\" (tshow stepFailure)",
+          "    Right success -> do",
+          "      checkAcceptedEnvelope requirement success",
+          "      ensure requirement (null (K.stepSuccessOutputs success)) \"noop-emitted\" \"NoOp emitted one or more events\"",
+          "      ensure requirement (K.stepSuccessState success == fst seed) \"noop-vertex-change\" \"NoOp changed the control vertex\"",
+          "      ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) \"noop-register-change\" \"NoOp changed one or more registers\""
+        ]
+    outcomeExactAcceptanceCases = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just _ ->
+        [ "  RejectedWith expectedReason -> do",
+          "    decision <- runSilentDecision requirement seed command",
+          "    case decision of",
+          "      SilentRejected actualReason -> ensure requirement (actualReason == expectedReason) \"domain-rejection-reason\" (\"selected rejection reason differs; actual=\" <> tshow actualReason <> \" expected=\" <> tshow expectedReason)",
+          "      SilentNoOp actualReason -> failure requirement \"domain-outcome-kind\" (\"expected a selected rejection but classifier returned no-op \" <> tshow actualReason)",
+          "  NoOpWith expectedReason -> do",
+          "    decision <- runSilentDecision requirement seed command",
+          "    case decision of",
+          "      SilentRejected actualReason -> failure requirement \"domain-outcome-kind\" (\"expected a selected no-op but classifier returned rejection \" <> tshow actualReason)",
+          "      SilentNoOp actualReason -> ensure requirement (actualReason == expectedReason) \"domain-noop-reason\" (\"selected no-op reason differs; actual=\" <> tshow actualReason <> \" expected=\" <> tshow expectedReason)"
+        ]
+    outcomeSilentRunnerLines = case aDomainOutcomeTypes aggregate of
+      Nothing -> []
+      Just outcomeTypes ->
+        [ "",
+          "runSilentDecision",
+          "  :: BehaviorRequirement",
+          "  -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs)",
+          "  -> " <> name <> "Command",
+          "  -> Either BehaviorFailure (SilentDomainDecision " <> renderDomainType outcomeImportPlan aggregate (resolvedRejectionType outcomeTypes) <> " " <> renderDomainType outcomeImportPlan aggregate (resolvedNoOpType outcomeTypes) <> ")",
+          "runSilentDecision requirement seed command = case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
+          "  Left stepFailure -> failure requirement \"unexpected-rejection\" (tshow stepFailure)",
+          "  Right success -> do",
+          "    checkAcceptedEnvelope requirement success",
+          "    ensure requirement (null (K.stepSuccessOutputs success)) \"silent-emitted\" \"typed silent outcome emitted one or more events\"",
+          "    ensure requirement (K.stepSuccessState success == fst seed) \"silent-vertex-change\" \"typed silent outcome changed the control vertex\"",
+          "    ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) \"silent-register-change\" \"typed silent outcome changed one or more registers\"",
+          "    case " <> handlerName <> " of",
+          "      DomainCommandHandler _ classify ->",
+          "        Right (classify (SilentCommandContext (fst seed) (snd seed) command (K.stepSuccessEdge success)))"
+        ]
     behaviorCoreImports =
       [ "EdgeMode (..)",
         "EdgeRef (..)",
@@ -6134,6 +6248,16 @@ data ResolvedGeneratedTransition = ResolvedGeneratedTransition
   }
   deriving stock (Eq, Show)
 
+data SilentOutcomeKind = RejectedOutcome | NoOpOutcome
+  deriving stock (Eq, Show)
+
+data ResolvedSilentOutcome = ResolvedSilentOutcome
+  { resolvedSilentLayout :: !TransitionLayoutEntry,
+    resolvedSilentKind :: !SilentOutcomeKind,
+    resolvedSilentReason :: !TypedScalarExpr
+  }
+  deriving stock (Eq, Show)
+
 -- Resolve each generated-owned transition exactly once. Import analysis,
 -- projection planning, and Haskell emission all consume this inventory.
 resolvedGeneratedTransitions :: Agg -> [ResolvedGeneratedTransition]
@@ -6166,6 +6290,34 @@ generatedTransitionExpressions = concatMap transitionExpressions
     transitionExpressions resolved =
       maybe [] pure (resolvedTransitionGuard resolved)
         <> map snd (resolvedTransitionWrites resolved)
+
+resolvedSilentOutcomes :: Agg -> [ResolvedSilentOutcome]
+resolvedSilentOutcomes aggregate =
+  [ ResolvedSilentOutcome
+      { resolvedSilentLayout = entry,
+        resolvedSilentKind = kind,
+        resolvedSilentReason = resolveReason entry expected expression
+      }
+  | entry <- transitionLayout (aTransitions aggregate),
+    let transition = layoutTransition entry,
+    tMode transition == TmLive,
+    (kind, expected, expression) <- outcomeReason transition
+  ]
+  where
+    outcomeReason transition = case (aDomainOutcomeTypes aggregate, tOutcome transition) of
+      (Just outcomeTypes, Just (OutcomeRejected expression _)) ->
+        [(RejectedOutcome, resolvedRejectionType outcomeTypes, expression)]
+      (Just outcomeTypes, Just (OutcomeNoOp expression _)) ->
+        [(NoOpOutcome, resolvedNoOpType outcomeTypes, expression)]
+      _ -> []
+    resolveReason entry expected expression =
+      let transition = layoutTransition entry
+          owner = transitionStem (layoutDeclarationIndex entry) transition <> "OutcomeReason"
+          environment = expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition
+       in expressionOrDie owner (resolveScalarExpr environment (ExpectScalarType expected) expression)
+
+resolvedOutcomeExpressions :: Agg -> [TypedScalarExpr]
+resolvedOutcomeExpressions = map resolvedSilentReason . resolvedSilentOutcomes
 
 -- | Guard expressions only.
 --
@@ -6470,6 +6622,94 @@ renderKeikiTerm importPlan aliases aggregate transition expression = case typedS
         (renderKeikiTerm importPlan aliases aggregate transition right)
     impossiblePredicate = error "predicate-valued Boolean expressions cannot be lowered as register terms"
 
+renderOutcomeReasonEvaluation :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> Text
+renderOutcomeReasonEvaluation importPlan aggregate transition expression =
+  evaluator
+    <> " ("
+    <> renderedKeikiText rendered
+    <> ") registers command"
+  where
+    (evaluator, rendered) = case typedScalarNode expression of
+      TypedEqual {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
+      TypedNotEqual {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
+      TypedCompare {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
+      TypedAnd {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
+      TypedOr {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
+      _ -> ("K.evalTerm", renderOutcomeKeikiTerm importPlan aggregate transition expression)
+
+renderOutcomePredicate :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderOutcomePredicate importPlan aggregate transition = renderPredicate
+  where
+    renderPredicate expression = case typedScalarNode expression of
+      TypedEqual left right -> comparison ".==" left right
+      TypedNotEqual left right -> comparison "./=" left right
+      TypedCompare operator left right -> comparison (renderComparisonOperator operator) left right
+      TypedAnd left right -> boolean 3 RenderRight ".&&" left right
+      TypedOr left right -> boolean 2 RenderRight ".||" left right
+      _ ->
+        renderedInfix
+          4
+          RenderNonAssociative
+          ".=="
+          (renderOutcomeKeikiTerm importPlan aggregate transition expression)
+          (renderedAtom "K.lit True")
+    comparison operator left right =
+      renderedInfix
+        4
+        RenderNonAssociative
+        operator
+        (renderOutcomeComparisonTerm importPlan aggregate transition left)
+        (renderOutcomeComparisonTerm importPlan aggregate transition right)
+    boolean precedence associativity operator left right =
+      renderedInfix precedence associativity operator (renderPredicate left) (renderPredicate right)
+
+renderOutcomeComparisonTerm :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderOutcomeComparisonTerm importPlan aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
+  (AggregateNominal nominal, TypedRoot provenance)
+    | nominalComparisonProjection nominal ->
+        renderedAtom (renderNominalProjectionTerm importPlan aggregate transition nominal provenance)
+  (AggregateNominal nominal, TypedLiteral (ScalarEnumValue _ constructor)) ->
+    renderedAtom ("K.lit (" <> tshow (enumWireFor nominal constructor) <> " :: Text)")
+  (AggregateNominal _, TypedLiteral (ScalarIdValue _ value)) ->
+    renderedAtom ("K.lit (" <> tshow value <> " :: Text)")
+  _ -> renderOutcomeKeikiTerm importPlan aggregate transition expression
+
+renderOutcomeKeikiTerm :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
+renderOutcomeKeikiTerm importPlan aggregate transition expression = case typedScalarNode expression of
+  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate (typedScalarType expression) value)
+  TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
+  TypedRoot (ScalarCommandRoot fieldName ownerType) ->
+    renderedAtom
+      ( "K.inpCtor inCtor"
+          <> tCommand transition
+          <> " (#"
+          <> commandFieldSelector aggregate (tCommand transition) fieldName
+          <> " :: K.Index ("
+          <> commandFieldsType transition
+          <> ") "
+          <> renderDomainType importPlan aggregate ownerType
+          <> ")"
+      )
+  TypedProject provenance projection ->
+    renderedAtom (renderStructuralProjectionTerm importPlan aggregate transition provenance projection)
+  TypedAdd _ left right -> arithmetic 6 ".+" left right
+  TypedSubtract _ left right -> arithmetic 6 ".-" left right
+  TypedMultiply _ left right -> arithmetic 7 ".*" left right
+  TypedEqual {} -> impossiblePredicate
+  TypedNotEqual {} -> impossiblePredicate
+  TypedCompare {} -> impossiblePredicate
+  TypedAnd {} -> impossiblePredicate
+  TypedOr {} -> impossiblePredicate
+  where
+    arithmetic precedence operator left right =
+      renderedInfix
+        precedence
+        RenderLeft
+        operator
+        (renderOutcomeKeikiTerm importPlan aggregate transition left)
+        (renderOutcomeKeikiTerm importPlan aggregate transition right)
+    impossiblePredicate = error "predicate-valued Boolean outcome cannot be lowered as a Keiki term"
+
 renderStructuralProjectionTerm :: HaskellImportPlan -> Agg -> Transition -> ScalarRootProvenance -> ResolvedScalarProjection -> Text
 renderStructuralProjectionTerm importPlan aggregate transition provenance projection = case provenance of
   ScalarRegisterRoot registerName ownerType ->
@@ -6766,21 +7006,33 @@ expressionOperatorOrder = [".*", ".+", ".-", ".==", "./=", ".<", ".<=", ".>", ".
 
 generatedTransitionOperators :: ResolvedGeneratedTransition -> [Text]
 generatedTransitionOperators resolved =
-  maybe [] predicateOperators (resolvedTransitionGuard resolved)
-    <> concatMap (termOperators . snd) (resolvedTransitionWrites resolved)
-  where
-    predicateOperators expression = case typedScalarNode expression of
-      TypedEqual left right -> ".==" : termOperators left <> termOperators right
-      TypedNotEqual left right -> "./=" : termOperators left <> termOperators right
-      TypedCompare operator left right -> renderComparisonOperator operator : termOperators left <> termOperators right
-      TypedAnd left right -> ".&&" : predicateOperators left <> predicateOperators right
-      TypedOr left right -> ".||" : predicateOperators left <> predicateOperators right
-      _ -> ".==" : termOperators expression
-    termOperators expression = case typedScalarNode expression of
-      TypedAdd _ left right -> ".+" : termOperators left <> termOperators right
-      TypedSubtract _ left right -> ".-" : termOperators left <> termOperators right
-      TypedMultiply _ left right -> ".*" : termOperators left <> termOperators right
-      _ -> concatMap termOperators (typedExpressionChildren expression)
+  maybe [] expressionPredicateOperators (resolvedTransitionGuard resolved)
+    <> concatMap (expressionTermOperators . snd) (resolvedTransitionWrites resolved)
+
+outcomeExpressionOperators :: TypedScalarExpr -> [Text]
+outcomeExpressionOperators expression = case typedScalarNode expression of
+  TypedEqual {} -> expressionPredicateOperators expression
+  TypedNotEqual {} -> expressionPredicateOperators expression
+  TypedCompare {} -> expressionPredicateOperators expression
+  TypedAnd {} -> expressionPredicateOperators expression
+  TypedOr {} -> expressionPredicateOperators expression
+  _ -> expressionTermOperators expression
+
+expressionPredicateOperators :: TypedScalarExpr -> [Text]
+expressionPredicateOperators expression = case typedScalarNode expression of
+  TypedEqual left right -> ".==" : expressionTermOperators left <> expressionTermOperators right
+  TypedNotEqual left right -> "./=" : expressionTermOperators left <> expressionTermOperators right
+  TypedCompare operator left right -> renderComparisonOperator operator : expressionTermOperators left <> expressionTermOperators right
+  TypedAnd left right -> ".&&" : expressionPredicateOperators left <> expressionPredicateOperators right
+  TypedOr left right -> ".||" : expressionPredicateOperators left <> expressionPredicateOperators right
+  _ -> ".==" : expressionTermOperators expression
+
+expressionTermOperators :: TypedScalarExpr -> [Text]
+expressionTermOperators expression = case typedScalarNode expression of
+  TypedAdd _ left right -> ".+" : expressionTermOperators left <> expressionTermOperators right
+  TypedSubtract _ left right -> ".-" : expressionTermOperators left <> expressionTermOperators right
+  TypedMultiply _ left right -> ".*" : expressionTermOperators left <> expressionTermOperators right
+  _ -> concatMap expressionTermOperators (typedExpressionChildren expression)
 
 anyHoleOwned :: Agg -> Bool
 anyHoleOwned = any ((== HoleImplementation) . tImplementation) . aTransitions
@@ -6972,26 +7224,44 @@ outputMappingFor aggregate transitionIndex emitIndex =
 emitEventStream :: Agg -> Text
 emitEventStream a =
   nl $
-    [ generatedBanner,
-      "module " <> aGenPrefix a <> ".EventStream",
-      "  ( " <> lowerFirst (aName a) <> "Category",
-      "  , " <> lowerFirst (aName a) <> "CommandCategory",
-      "  , " <> lowerFirst (aName a) <> "EventStream",
-      "  , " <> lowerFirst (aName a) <> "EventStreamDef",
-      "  , " <> aName a <> "EventStream",
-      "  , " <> aName a <> "EventStreamDef"
-    ]
+    renderGeneratedLanguagePragmas [ExtOverloadedLabels | outcomeUsesLabels]
+      ++ [ generatedBanner,
+           "module " <> aGenPrefix a <> ".EventStream",
+           "  ( " <> lowerFirst (aName a) <> "Category",
+           "  , " <> lowerFirst (aName a) <> "CommandCategory",
+           "  , " <> lowerFirst (aName a) <> "EventStream",
+           "  , " <> lowerFirst (aName a) <> "EventStreamDef",
+           "  , " <> aName a <> "EventStream",
+           "  , " <> aName a <> "EventStreamDef"
+         ]
       ++ ["  , " <> lowerFirst (aName a) <> "SnapshotFixture" | hasSnapshot a]
+      ++ ["  , " <> lowerFirst (aName a) <> "DomainCommandHandler" | outcomeEnabled]
       ++ [ "  ) where",
            "",
            "import " <> aGenPrefix a <> ".Domain",
            "import " <> aGenPrefix a <> ".Codec (" <> lowerFirst (aName a) <> "Codec)",
-           transducerImport a,
-           "import Keiki.Core (HsPred)",
-           "import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))",
+           transducerImport a
+         ]
+      ++ generatedOutcomeNominalImports
+      ++ structuralProjectionImports
+      ++ generatedNominalProjectionImports
+      ++ consumerNominalProjectionImports
+      ++ consumerImports
+      ++ ["import Data.KindID qualified as KindID" | outcomeUsesConsumerIdLiteral]
+      ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation)" | outcomeUsesConsumerNominalLiteral]
+      ++ ["import Keiki.Builder qualified as B" | outcomeUsesRegisterRoot]
+      ++ [keikiCoreImport]
+      ++ ["import Keiki.Core qualified as K" | outcomeEnabled]
+      ++ ["import Keiki.Generics (RegFieldsOf)" | outcomeUsesCommandRoot]
+      ++ ["import Keiro.Command (DomainCommandHandler (..), SilentCommandContext (..), SilentDomainDecision (..))" | outcomeEnabled]
+      ++ [ "import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))",
            "import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)"
          ]
-      ++ ["import Data.Text (Text)" | hasSnapshot a]
+      ++ ["import Data.Text (Text)" | hasSnapshot a || outcomeUsesText]
+      ++ ["import Data.Time.Calendar (fromGregorian)" | outcomeUsesTimeLiteral]
+      ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | outcomeUsesTimeLiteral]
+      ++ ["import Data.Time.Clock (UTCTime)" | outcomeUsesTimeType && not outcomeUsesTimeLiteral]
+      ++ ["import Numeric.Natural (Natural)" | outcomeUsesNaturalType]
       ++ ["import Keiro.Snapshot.Codec (defaultStateCodec, withFoldFingerprint)" | hasSnapshot a]
       ++ [ "import Keiro.Stream qualified as Stream",
            "",
@@ -7030,8 +7300,197 @@ emitEventStream a =
            lowerFirst (aName a) <> "EventStream =",
            "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
          ]
+      ++ outcomeHandlerLines importPlan a silentOutcomes
   where
     categoryName = staticCategory ("aggregate " <> aName a) (lowerFirst (aName a))
+    outcomeEnabled = isJust (aDomainOutcomeTypes a)
+    silentOutcomes = resolvedSilentOutcomes a
+    outcomeExpressions = map resolvedSilentReason silentOutcomes
+    outcomeResultTypes = case aDomainOutcomeTypes a of
+      Nothing -> []
+      Just outcomeTypes -> [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+    outcomeImportTypes =
+      nub
+        ( outcomeResultTypes
+            <> concatMap typedExpressionImportTypes outcomeExpressions
+            <> concatMap typedExpressionLiteralTypes outcomeExpressions
+        )
+    consumerLiteralNominals = nub [nominal | expression <- outcomeExpressions, nominal <- typedConsumerLiteralNominals expression]
+    importPlan = eventStreamImportPlan a outcomeImportTypes consumerLiteralNominals
+    consumerImports = T.lines (renderPlannedImports importPlan)
+    generatedOutcomeNominals =
+      stableNominals
+        ( generatedNominalsInTypes outcomeResultTypes
+            <> [nominal | expression <- outcomeExpressions, nominal <- typedGeneratedNominals expression]
+        )
+    generatedLiteralNominals =
+      stableNominals
+        [ nominal
+        | expression <- outcomeExpressions,
+          literal <- typedExpressionLiterals expression,
+          nominal <- typedGeneratedNominals literal
+        ]
+    generatedOutcomeNominalImports =
+      generatedNominalTypeImportsWithParsers
+        (aggregateCheckedService a)
+        (aContext a)
+        generatedOutcomeNominals
+        generatedLiteralNominals
+    projectionTargets = nub (concatMap projectionAliasTargets outcomeExpressions)
+    structuralProjectionImports =
+      [ "import " <> structuralProjectionModule (aContext a) <> " qualified as StructuralProjections"
+      | any isStructuralProjection projectionTargets
+      ]
+    generatedNominalProjectionImports =
+      [ "import " <> generatedNominalModule (aContext a) <> " qualified as GeneratedNominals"
+      | any isGeneratedNominalProjection projectionTargets
+      ]
+    consumerNominalProjectionImports =
+      [ "import " <> nominalProjectionModule (aContext a) <> " qualified as NominalProjections"
+      | any isConsumerNominalProjection projectionTargets
+      ]
+    outcomeUsesRegisterRoot = any (anyTypedExpression usesRegisterRoot) outcomeExpressions
+    outcomeUsesCommandRoot = any (anyTypedExpression usesCommandRoot) outcomeExpressions
+    outcomeUsesLabels = outcomeUsesCommandRoot || not (null projectionTargets)
+    outcomeUsesText =
+      AggregateText `elem` outcomeImportTypes
+        || any (anyTypedExpression isTextLiteral) outcomeExpressions
+        || any isNominalProjection projectionTargets
+    outcomeUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) outcomeExpressions
+    outcomeUsesTimeType = AggregateTime `elem` outcomeImportTypes
+    outcomeUsesNaturalType = AggregateNatural `elem` outcomeImportTypes
+    outcomeUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
+    outcomeUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
+    usedOperators = nub (concatMap outcomeExpressionOperators outcomeExpressions)
+    keikiCoreImport
+      | not outcomeEnabled = "import Keiki.Core (HsPred)"
+      | otherwise =
+          "import Keiki.Core (EdgeRef (..), HsPred"
+            <> T.concat [", (" <> operator <> ")" | operator <- expressionOperatorOrder, operator `elem` usedOperators]
+            <> ")"
+    usesRegisterRoot expression = case typedScalarNode expression of
+      TypedRoot ScalarRegisterRoot {} -> True
+      TypedProject provenance _ -> case provenance of
+        ScalarRegisterRoot {} -> True
+        ScalarCommandRoot {} -> False
+      _ -> False
+    usesCommandRoot expression = case typedScalarNode expression of
+      TypedRoot ScalarCommandRoot {} -> True
+      TypedProject provenance _ -> case provenance of
+        ScalarCommandRoot {} -> True
+        ScalarRegisterRoot {} -> False
+      _ -> False
+    isTextLiteral expression = case typedScalarNode expression of
+      TypedLiteral ScalarTextValue {} -> True
+      _ -> False
+    isTimeLiteral expression = case typedScalarNode expression of
+      TypedLiteral ScalarTimeValue {} -> True
+      _ -> False
+    isNominalProjection NominalProjectionAlias {} = True
+    isNominalProjection StructuralProjectionAlias {} = False
+    isIdRepresentation IdRepresentation {} = True
+    isIdRepresentation _ = False
+
+outcomeHandlerLines :: HaskellImportPlan -> Agg -> [ResolvedSilentOutcome] -> [Text]
+outcomeHandlerLines importPlan aggregate silentOutcomes = case aDomainOutcomeTypes aggregate of
+  Nothing -> []
+  Just outcomeTypes ->
+    [ "",
+      handlerName,
+      "  :: DomainCommandHandler",
+      "       (HsPred " <> aName aggregate <> "Regs " <> aName aggregate <> "Command)",
+      "       " <> aName aggregate <> "Regs",
+      "       " <> aVertexType aggregate,
+      "       " <> aName aggregate <> "Command",
+      "       " <> aName aggregate <> "Event",
+      "       " <> renderDomainType importPlan aggregate (resolvedRejectionType outcomeTypes),
+      "       " <> renderDomainType importPlan aggregate (resolvedNoOpType outcomeTypes),
+      handlerName <> " =",
+      "  DomainCommandHandler " <> lowerFirst (aName aggregate) <> "EventStream " <> classifierName,
+      "",
+      classifierName,
+      "  :: SilentCommandContext " <> aName aggregate <> "Regs " <> aVertexType aggregate <> " " <> aName aggregate <> "Command",
+      "  -> SilentDomainDecision",
+      "       " <> renderDomainType importPlan aggregate (resolvedRejectionType outcomeTypes),
+      "       " <> renderDomainType importPlan aggregate (resolvedNoOpType outcomeTypes),
+      classifierName <> " (SilentCommandContext _ registers command (EdgeRef edgeSource edgeIndex)) =",
+      "  case edgeSource of"
+    ]
+      ++ concatMap renderSourceGroup sourceGroups
+      ++ [ "    _ -> outcomeInvariant edgeSource edgeIndex",
+           " where",
+           "  outcomeInvariant source index =",
+           "    error ("
+             <> tshow ("generated domain outcome invariant failed for aggregate " <> aName aggregate <> " edge ")
+             <> " <> show source <> \"#\" <> show index)"
+         ]
+  where
+    handlerName = lowerFirst (aName aggregate) <> "DomainCommandHandler"
+    classifierName = lowerFirst (aName aggregate) <> "SilentDecision"
+    sourceGroups =
+      [ (source, filter ((== source) . tSource . layoutTransition . resolvedSilentLayout) silentOutcomes)
+      | source <- nub (map (tSource . layoutTransition . resolvedSilentLayout) silentOutcomes)
+      ]
+    renderSourceGroup (source, outcomes) =
+      [ "    " <> vertexCtor aggregate source <> " ->",
+        "      case edgeIndex of"
+      ]
+        ++ map renderArm outcomes
+        ++ ["        _ -> outcomeInvariant edgeSource edgeIndex"]
+    renderArm outcome =
+      let entry = resolvedSilentLayout outcome
+          transition = layoutTransition entry
+          constructor = case resolvedSilentKind outcome of
+            RejectedOutcome -> "SilentRejected"
+            NoOpOutcome -> "SilentNoOp"
+       in "        "
+            <> tshow' (layoutOutgoingIndex entry)
+            <> " -> "
+            <> constructor
+            <> " ("
+            <> renderOutcomeReasonEvaluation importPlan aggregate transition (resolvedSilentReason outcome)
+            <> ")"
+
+eventStreamImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
+eventStreamImportPlan aggregate importedTypes literalNominals =
+  planImportsOrDie
+    (aGenPrefix aggregate <> ".EventStream")
+    localDeclarations
+    ( Set.unions
+        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
+        | resolvedType <- importedTypes
+        ]
+        <> Set.fromList
+          [ reference
+          | nominal <- literalNominals,
+            ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+            reference <-
+              qualifiedValueReference (consumerNominalBinding binding)
+                : case resolvedNominalRepresentation nominal of
+                  EnumRepresentation constructors ->
+                    [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+                    | (constructor, _) <- NE.toList constructors
+                    ]
+                  _ -> []
+          ]
+    )
+  where
+    localDeclarations =
+      Set.fromList
+        ( [ aVertexType aggregate,
+            aName aggregate <> "Command",
+            aName aggregate <> "Event",
+            aName aggregate <> "Regs",
+            aName aggregate <> "EventStream",
+            aName aggregate <> "EventStreamDef"
+          ]
+            <> map resolvedNominalName (aGeneratedNominals aggregate)
+            <> [ resolvedNominalName nominal
+               | resolvedType <- importedTypes,
+                 AggregateNominal nominal <- [resolvedType],
+                 GeneratedNominal <- [resolvedNominalOwnership nominal]
+               ]
+        )
 
 snapshotPolicyExpr :: Agg -> Text
 snapshotPolicyExpr aggregate = case aSnapshot aggregate of

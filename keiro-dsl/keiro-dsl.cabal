@@ -365,6 +365,32 @@ test-suite keiro-dsl-conformance-behavior-complete
     , text        >=2.1  && <2.2
     , time        >=1.12 && <1.15
 
+test-suite keiro-dsl-conformance-domain-outcomes
+  import:         warnings, generated-output
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-domain-outcomes
+  main-is:        Main.hs
+  other-modules:
+    DomainOutcomes.Reservation.BehaviorHoles
+    Generated.DomainOutcomes.BehaviorSourceMap
+    Generated.DomainOutcomes.Nominals
+    Generated.DomainOutcomes.ReplayAudit
+    Generated.DomainOutcomes.Reservation.BehaviorContract
+    Generated.DomainOutcomes.Reservation.Codec
+    Generated.DomainOutcomes.Reservation.Domain
+    Generated.DomainOutcomes.Reservation.EventStream
+    Generated.DomainOutcomes.Reservation.Harness
+    Generated.DomainOutcomes.Reservation.Projection
+    Generated.DomainOutcomes.Reservation.Transducer
+
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , containers  >=0.6  && <0.8
+    , keiki       >=0.9  && <0.10
+    , keiro
+    , text        >=2.1  && <2.2
+
 -- EP-158: consumer-owned direct IDs, enums, and nominal scalar wrappers,
 -- checked KindID decoding, total bindings, projections, and snapshot caches.
 test-suite keiro-dsl-conformance-nominal-scalars

@@ -101,6 +101,7 @@ data BehaviorRequirement = BehaviorRequirement
     requirementMode :: !(Maybe TransitionMode),
     requirementEvents :: ![Name],
     requirementOutputs :: ![OutputEvidence],
+    requirementDomainOutcome :: !(Maybe TransitionOutcome),
     requirementLocation :: !Loc,
     requirementExactLocation :: !(Maybe BehaviorExactLocation),
     requirementOwner :: !(Maybe FilePath),
@@ -210,27 +211,29 @@ instance FromJSON BehaviorRecordRow where
 instance ToJSON BehaviorRequirement where
   toJSON requirement =
     object
-      [ "key" .= requirementKey requirement,
-        "kind" .= requirementKind requirement,
-        "evidence" .= requirementEvidence requirement,
-        "guardCoverage" .= requirementGuardCoverage requirement,
-        "context" .= requirementContext requirement,
-        "aggregate" .= requirementAggregate requirement,
-        "source" .= requirementSource requirement,
-        "command" .= requirementCommand requirement,
-        "target" .= requirementTarget requirement,
-        "mode" .= fmap transitionModeText (requirementMode requirement),
-        "events" .= requirementEvents requirement,
-        "outputs" .= requirementOutputs requirement,
-        "location"
-          .= object
-            ( ["line" .= maybe (unLoc (requirementLocation requirement)) exactSourceLine (requirementExactLocation requirement)]
-                <> ["member" .= owner | Just owner <- [requirementOwner requirement]]
-                <> ["file" .= exactSourceFile exact | Just exact <- [requirementExactLocation requirement]]
-                <> ["column" .= exactSourceColumn exact | Just exact <- [requirementExactLocation requirement]]
-                <> ["quality" .= maybe ("line-only" :: Text) (const "exact") (requirementExactLocation requirement)]
-            )
-      ]
+      ( [ "key" .= requirementKey requirement,
+          "kind" .= requirementKind requirement,
+          "evidence" .= requirementEvidence requirement,
+          "guardCoverage" .= requirementGuardCoverage requirement,
+          "context" .= requirementContext requirement,
+          "aggregate" .= requirementAggregate requirement,
+          "source" .= requirementSource requirement,
+          "command" .= requirementCommand requirement,
+          "target" .= requirementTarget requirement,
+          "mode" .= fmap transitionModeText (requirementMode requirement),
+          "events" .= requirementEvents requirement,
+          "outputs" .= requirementOutputs requirement,
+          "location"
+            .= object
+              ( ["line" .= maybe (unLoc (requirementLocation requirement)) exactSourceLine (requirementExactLocation requirement)]
+                  <> ["member" .= owner | Just owner <- [requirementOwner requirement]]
+                  <> ["file" .= exactSourceFile exact | Just exact <- [requirementExactLocation requirement]]
+                  <> ["column" .= exactSourceColumn exact | Just exact <- [requirementExactLocation requirement]]
+                  <> ["quality" .= maybe ("line-only" :: Text) (const "exact") (requirementExactLocation requirement)]
+              )
+        ]
+          <> ["domainOutcome" .= canonicalTransitionOutcome (Just outcome) | Just outcome <- [requirementDomainOutcome requirement]]
+      )
 
 instance ToJSON BehaviorObligationsReport where
   toJSON report =
@@ -334,6 +337,7 @@ transitionRequirement spec aggregate guardCoverage ordinal transition = do
         requirementMode = Just (tMode transition),
         requirementEvents = tEmits transition,
         requirementOutputs = outputs,
+        requirementDomainOutcome = tOutcome transition,
         requirementLocation = tLoc transition,
         requirementExactLocation = Nothing,
         requirementOwner = Nothing,
@@ -356,6 +360,7 @@ rejectionRequirement spec aggregate state command =
       requirementMode = Nothing,
       requirementEvents = [],
       requirementOutputs = [],
+      requirementDomainOutcome = Nothing,
       requirementLocation = maybe (aggLoc aggregate) stLoc (find ((== state) . stName) (aggStates aggregate)),
       requirementExactLocation = Nothing,
       requirementOwner = Nothing,
