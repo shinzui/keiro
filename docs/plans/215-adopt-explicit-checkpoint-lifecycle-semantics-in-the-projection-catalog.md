@@ -43,8 +43,9 @@ This section must always reflect the actual current state of the work.
   representation.
 - [x] (2026-08-11T18:44:58Z) Milestone 2: enforced replay-safe policy combinations at catalog
   validation/startup with precise diagnostics and focused pure tests.
-- [ ] Milestone 3: replace raw checkpoint SQL in grouped rebuild preparation with Kiroku's reset
-  transaction, condemn missing declarations, and prove commit/rollback behavior in PostgreSQL.
+- [x] (2026-08-11T18:44:58Z) Milestone 3: replaced raw checkpoint SQL with Kiroku's reset
+  transaction, condemned missing declarations, returned exact reset keys, and proved
+  commit/rollback behavior in PostgreSQL.
 - [ ] Milestone 4: update examples, operator docs, changelogs, capability evidence, ADRs, and all
   source-cohort validation while leaving release versions and public bounds unchanged.
 
@@ -70,6 +71,10 @@ implementation. Provide concise evidence.
   the upstream type directly and defines its own exhaustive stable rank and constructor spelling
   for canonical inventory ordering, fingerprints, and operator JSON instead of adding an orphan
   instance or encoding `show` output accidentally.
+- The public reset combinator can replace both grouped and unmanaged Keiro rebuild SQL without
+  weakening transactionality. The grouped path additionally treats `missingSubscriptionNames` as
+  a typed failure and exposes the exact two-member `resetCheckpointKeys`; the 466-example Keiro
+  suite proves the failure rolls back targets, fence state, dedup rows, and matched checkpoints.
 
 
 ## Decision Log

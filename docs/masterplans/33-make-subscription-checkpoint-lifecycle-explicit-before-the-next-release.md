@@ -106,7 +106,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [x] EP-1: consume the completed Kiroku source contract and extend catalog/inventory identity.
-- [ ] EP-1: validate lifecycle combinations and replace private rebuild SQL with the public reset.
+- [x] EP-1: validate lifecycle combinations and replace private rebuild SQL with the public reset.
 - [ ] EP-1: prove operator, rollback, example, documentation, and full-repository acceptance.
 - [ ] EP-2: require and round-trip `checkpoint-on-missing` in candidate Language 5.
 - [ ] EP-2: generate the runtime policy and reject replay-unsafe combinations before scaffolding.
@@ -127,6 +127,10 @@ interactions between child plans. Provide concise evidence.
 - Kiroku EP-70 completed and was published as `kiroku-store` 0.5.0.0 before EP-1 began. Hackage,
   upstream tag `kiroku-store-v0.5.0.0`, and the sibling source exports agree, so EP-1 can consume
   the released owning-library contract rather than relying on an unpublished source override.
+- Kiroku's reset report composes cleanly inside Keiro's existing condemned preparation
+  transaction. A focused two-member test resets both rows, while a second test proves that one
+  absent declared name rolls back the target clear, group fence, dedup deletion, and already
+  matched member resets together.
 
 
 ## Decision Log

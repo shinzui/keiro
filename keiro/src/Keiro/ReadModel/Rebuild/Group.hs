@@ -21,6 +21,7 @@ module Keiro.ReadModel.Rebuild.Group
     groupRebuildHandleRun,
     groupRebuildHandleFingerprint,
     groupRebuildHandlePreparation,
+    groupRebuildHandleResetCheckpointKeys,
     GroupCompletionToken,
     completionTokenForHandle,
     groupRebuildHandleFor,
@@ -37,10 +38,12 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.Functor (($>))
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
+import Data.Vector qualified as Vector
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -64,6 +67,14 @@ import Keiro.Projection.Catalog
   )
 import Keiro.Projection.Catalog qualified as Catalog
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Subscription.Checkpoint
+  ( SubscriptionCheckpointResetReport (..),
+    resetSubscriptionCheckpointsTx,
+  )
+import Kiroku.Store.Subscription.Types
+  ( SubscriptionCheckpointKey,
+    SubscriptionName (..),
+  )
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -130,6 +141,7 @@ data RebuildStartError
   | RebuildGroupUnregistered !RebuildGroupId
   | RebuildCatalogFingerprintDrift !RebuildGroupId !Text !Text
   | RebuildGroupNotLive !RebuildGroupId !GroupLifecycleStatus !(Maybe RebuildRunId)
+  | RebuildSubscriptionCheckpointsMissing !RebuildGroupId ![SubscriptionName]
   deriving stock (Eq, Show, Generic)
 
 data GroupTransitionError
@@ -155,7 +167,8 @@ data GroupRebuildHandle = GroupRebuildHandle
   { handleGroup :: !RebuildGroupId,
     handleRun :: !RebuildRunId,
     handleFingerprint :: !CatalogFingerprint,
-    handlePreparation :: !GroupPreparation
+    handlePreparation :: !GroupPreparation,
+    handleResetCheckpointKeys :: ![SubscriptionCheckpointKey]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -170,6 +183,10 @@ groupRebuildHandleFingerprint = handleFingerprint
 
 groupRebuildHandlePreparation :: GroupRebuildHandle -> GroupPreparation
 groupRebuildHandlePreparation = handlePreparation
+
+-- | Exact persisted subscription-member rows reset during preparation.
+groupRebuildHandleResetCheckpointKeys :: GroupRebuildHandle -> [SubscriptionCheckpointKey]
+groupRebuildHandleResetCheckpointKeys = handleResetCheckpointKeys
 
 -- | Opaque proof that completion verification was recorded for this exact
 -- group, run, and catalog. Plan 211 constructs it only after durable completion
@@ -203,7 +220,8 @@ groupRebuildHandleFor catalog groupId runId = do
       { handleGroup = groupId,
         handleRun = runId,
         handleFingerprint = Catalog.catalogFingerprint catalog,
-        handlePreparation = preparation
+        handlePreparation = preparation,
+        handleResetCheckpointKeys = []
       }
 
 registerProjectionCatalog ::
@@ -348,22 +366,37 @@ beginGroupRebuild catalog groupId request =
                 truncateTargets (preparation ^. #clearTargets)
                 unless (null (preparation ^. #resetDedupNames))
                   $ Tx.statement (preparation ^. #resetDedupNames) deleteProjectionDedupStmt
-                unless (null (preparation ^. #resetSubscriptionNames))
-                  $ Tx.statement
-                    (preparation ^. #resetSubscriptionNames, globalPositionToInt (request ^. #replayFrom))
-                    resetSubscriptionCheckpointsStmt
-                pure
-                  ( Right
-                      GroupRebuildHandle
-                        { handleGroup = groupId,
-                          handleRun = request ^. #rebuildRunId,
-                          handleFingerprint = expectedFingerprint,
-                          handlePreparation = preparation
-                        }
-                  )
+                resetReport <- resetDeclaredSubscriptions preparation (request ^. #replayFrom)
+                let missingNames = Vector.toList (resetReport ^. #missingSubscriptionNames)
+                if null missingNames
+                  then
+                    pure
+                      ( Right
+                          GroupRebuildHandle
+                            { handleGroup = groupId,
+                              handleRun = request ^. #rebuildRunId,
+                              handleFingerprint = expectedFingerprint,
+                              handlePreparation = preparation,
+                              handleResetCheckpointKeys = Vector.toList (resetReport ^. #resetCheckpointKeys)
+                            }
+                      )
+                  else
+                    Tx.condemn
+                      $> Left (RebuildSubscriptionCheckpointsMissing groupId missingNames)
   where
     expectedFingerprint = Catalog.catalogFingerprint catalog
     expectedFingerprintText = catalogFingerprintText expectedFingerprint
+
+resetDeclaredSubscriptions :: GroupPreparation -> GlobalPosition -> Tx.Transaction SubscriptionCheckpointResetReport
+resetDeclaredSubscriptions preparation replayFrom =
+  case NonEmpty.nonEmpty (SubscriptionName <$> preparation ^. #resetSubscriptionNames) of
+    Nothing ->
+      pure
+        SubscriptionCheckpointResetReport
+          { resetCheckpointKeys = Vector.empty,
+            missingSubscriptionNames = Vector.empty
+          }
+    Just subscriptionNames -> resetSubscriptionCheckpointsTx subscriptionNames replayFrom
 
 finishGroupRebuild ::
   (Store :> es) =>
@@ -752,20 +785,6 @@ deleteProjectionDedupStmt =
     (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     D.noResult
 
-resetSubscriptionCheckpointsStmt :: Statement ([Text], Int64) ()
-resetSubscriptionCheckpointsStmt =
-  preparable
-    """
-    UPDATE subscriptions
-    SET last_seen = $2, updated_at = now()
-    WHERE subscription_name = ANY($1)
-    """
-    ( contrazip2
-        (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
-        (E.param (E.nonNullable E.int8))
-    )
-    D.noResult
-
 groupMetadataSingle :: D.Result GroupRebuildMetadata
 groupMetadataSingle = D.singleRow groupMetadataDecoder
 
@@ -795,6 +814,3 @@ groupStatusFromText = \case
   "rebuilding" -> GroupRebuilding
   "failed" -> GroupFailed
   raw -> UnknownGroupStatus raw
-
-globalPositionToInt :: GlobalPosition -> Int64
-globalPositionToInt (GlobalPosition value) = value

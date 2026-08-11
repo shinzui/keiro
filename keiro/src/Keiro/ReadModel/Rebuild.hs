@@ -53,6 +53,7 @@ module Keiro.ReadModel.Rebuild
     groupRebuildHandleRun,
     groupRebuildHandleFingerprint,
     groupRebuildHandlePreparation,
+    groupRebuildHandleResetCheckpointKeys,
     GroupCompletionToken,
     registerProjectionCatalog,
     lookupProjectionRebuildGroup,
@@ -85,7 +86,7 @@ module Keiro.ReadModel.Rebuild
   )
 where
 
-import Contravariant.Extras (contrazip2)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -96,6 +97,8 @@ import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
 import Keiro.ReadModel.Rebuild.Runner
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Subscription.Checkpoint (resetSubscriptionCheckpointsTx)
+import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -113,9 +116,9 @@ data RebuildError
 --
 -- The registry transition runs first and holds the row lock that
 -- 'Keiro.Projection.applyAsyncProjection' uses as its writer fence. PostgreSQL
--- keeps the table truncate transactional. Kiroku's public checkpoint save is
--- monotonic, so this helper deliberately resets @subscriptions.last_seen@
--- directly inside the same fenced transaction.
+-- keeps the table truncate transactional. Kiroku's ordinary checkpoint save is
+-- monotonic, so this helper uses the owning library's explicitly named reset
+-- transaction inside the same fence.
 startRebuild ::
   (Store :> es) =>
   ReadModel q r ->
@@ -128,9 +131,10 @@ startRebuild readModel projectionNames replayFrom =
     Tx.sql (TE.encodeUtf8 ("TRUNCATE TABLE " <> qualifiedTableName readModel))
     unless (null projectionNames) $
       Tx.statement projectionNames deleteProjectionDedupStmt
-    Tx.statement
-      (readModel ^. #subscriptionName, globalPositionToInt replayFrom)
-      resetSubscriptionCheckpointStmt
+    _ <-
+      resetSubscriptionCheckpointsTx
+        (NonEmpty.singleton (SubscriptionName (readModel ^. #subscriptionName)))
+        replayFrom
     pure metadata
 
 -- | Promote a completed rebuild in the same transaction as its safety check.
@@ -213,20 +217,6 @@ countProjectionDedupStmt =
     (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     (D.singleRow (D.column (D.nonNullable D.int8)))
 
-resetSubscriptionCheckpointStmt :: Statement (Text, Int64) ()
-resetSubscriptionCheckpointStmt =
-  preparable
-    """
-    UPDATE subscriptions
-    SET last_seen = $2, updated_at = now()
-    WHERE subscription_name = $1
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.int8))
-    )
-    D.noResult
-
 storeHeadPositionStmt :: Statement () GlobalPosition
 storeHeadPositionStmt =
   preparable
@@ -237,6 +227,3 @@ storeHeadPositionStmt =
     """
     E.noParams
     (D.singleRow (GlobalPosition <$> D.column (D.nonNullable D.int8)))
-
-globalPositionToInt :: GlobalPosition -> Int64
-globalPositionToInt (GlobalPosition position) = position

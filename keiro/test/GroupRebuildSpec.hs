@@ -33,6 +33,10 @@ import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Subscription.Types
+  ( SubscriptionCheckpointKey (..),
+    SubscriptionName (..),
+  )
 import Kiroku.Store.Types
   ( EventId (..),
     EventType (..),
@@ -83,8 +87,12 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
           resetDedupNames = ["catalog-async"],
           resetSubscriptionNames = ["catalog-async-subscription"]
         }
+    groupRebuildHandleResetCheckpointKeys started
+      `shouldBe` [ SubscriptionCheckpointKey (SubscriptionName "catalog-async-subscription") 0,
+                   SubscriptionCheckpointKey (SubscriptionName "catalog-async-subscription") 1
+                 ]
     facts <- expectStore store (Store.runTransaction (Tx.statement () preparationFactsStmt))
-    facts `shouldBe` (1, 0, 0, 3)
+    facts `shouldBe` (1, 0, 0, 2, 3)
 
     fenced <-
       expectStore
@@ -95,7 +103,7 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     fenced
       `shouldBe` CatalogAsyncFenced Catalog.mainGroupId (runId "mixed-run")
     expectStore store (Store.runTransaction (Tx.statement () preparationFactsStmt))
-      `shouldReturn` (1, 0, 0, 3)
+      `shouldReturn` (1, 0, 0, 2, 3)
 
     abandoned <-
       expectStore
@@ -110,6 +118,25 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
         (abandonGroupRebuild started (RebuildFailure "again" "must not replace evidence"))
     secondAbandon
       `shouldBe` Left (RebuildHandleNoLongerActive Catalog.mainGroupId (runId "mixed-run"))
+
+  it "condemns missing subscription names and rolls back targets, fences, dedup, and matched member resets" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql mixedFixtureSql))
+    validated <- expectValid missingSubscriptionCatalog
+    _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+    started <-
+      expectStore
+        store
+        (beginGroupRebuild validated Catalog.mainGroupId (request "missing-subscription-run" (GlobalPosition 3)))
+    started
+      `shouldBe` Left
+        ( RebuildSubscriptionCheckpointsMissing
+            Catalog.mainGroupId
+            [SubscriptionName "catalog-missing-subscription"]
+        )
+    expectStore store (Store.runTransaction (Tx.statement () preparationFactsStmt))
+      `shouldReturn` (1, 1, 1, 2, 50)
+    stored <- expectStore store (lookupProjectionRebuildGroup Catalog.mainGroupId)
+    stored ^? _Just . #status `shouldBe` Just GroupLive
 
   it "clears a foreign-key parent and child through one multi-table truncate" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql clearFixtureSql))
@@ -198,13 +225,19 @@ catalogWithCodecFingerprint fingerprint =
     }
 
 mixedPolicyCatalog :: ProjectionCatalog
-mixedPolicyCatalog =
-  Catalog.validCatalog
+mixedPolicyCatalog = mixedPolicyCatalogFor Catalog.validCatalog
+
+missingSubscriptionCatalog :: ProjectionCatalog
+missingSubscriptionCatalog = mixedPolicyCatalogFor Catalog.catalogWithMissingSubscription
+
+mixedPolicyCatalogFor :: ProjectionCatalog -> ProjectionCatalog
+mixedPolicyCatalogFor catalog =
+  catalog
     { targets =
         [ if target ^. #targetId == Catalog.counterTargetId
             then target & #resetPolicy .~ PreserveAndReconcile
             else target & #resetPolicy .~ ClearBeforeReplay
-        | target <- Catalog.validCatalog ^. #targets
+        | target <- catalog ^. #targets
         ]
     }
 
@@ -261,8 +294,10 @@ mixedFixtureSql =
   INSERT INTO app.counter_audit VALUES (1, 1);
   INSERT INTO keiro.keiro_projection_dedup (projection_name, event_id)
   VALUES ('catalog-async', '00000000-0000-0000-0000-000000000001');
-  INSERT INTO subscriptions (subscription_name, last_seen)
-  VALUES ('catalog-async-subscription', 50);
+  INSERT INTO subscriptions (subscription_name, consumer_group_member, consumer_group_size, last_seen)
+  VALUES
+    ('catalog-async-subscription', 0, 2, 50),
+    ('catalog-async-subscription', 1, 2, 60);
   """
 
 clearFixtureSql :: ByteString
@@ -276,6 +311,8 @@ clearFixtureSql =
   );
   INSERT INTO app.counter VALUES (1);
   INSERT INTO app.counter_audit VALUES (1, 1);
+  INSERT INTO subscriptions (subscription_name, last_seen)
+  VALUES ('catalog-async-subscription', 50);
   """
 
 blockedFixtureSql :: ByteString
@@ -296,7 +333,7 @@ blockedFixtureSql =
   INSERT INTO app.external_ref VALUES (1, 1);
   """
 
-preparationFactsStmt :: Statement () (Int64, Int64, Int64, Int64)
+preparationFactsStmt :: Statement () (Int64, Int64, Int64, Int64, Int64)
 preparationFactsStmt =
   preparable
     """
@@ -304,12 +341,14 @@ preparationFactsStmt =
       (SELECT count(*) FROM app.counter),
       (SELECT count(*) FROM app.counter_audit),
       (SELECT count(*) FROM keiro.keiro_projection_dedup WHERE projection_name = 'catalog-async'),
-      (SELECT last_seen FROM subscriptions WHERE subscription_name = 'catalog-async-subscription')
+      (SELECT count(*) FROM subscriptions WHERE subscription_name = 'catalog-async-subscription'),
+      (SELECT min(last_seen) FROM subscriptions WHERE subscription_name = 'catalog-async-subscription')
     """
     E.noParams
     ( D.singleRow
-        ( (,,,)
+        ( (,,,,)
             <$> int8Column
+            <*> int8Column
             <*> int8Column
             <*> int8Column
             <*> int8Column
