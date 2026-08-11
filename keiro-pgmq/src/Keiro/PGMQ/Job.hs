@@ -174,6 +174,7 @@ import "shibuya-core" Shibuya.Core.Ack
     DeadLetterReason (..),
     HaltReason (..),
     RetryDelay (..),
+    renderDeadLetterReason,
   )
 import "shibuya-core" Shibuya.Core.Ingested qualified as Shibuya
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
@@ -821,7 +822,7 @@ recordAckOnSpan traceSpan decision = do
   setStatus traceSpan $ case decision of
     AckOk -> Ok
     AckRetry _ -> Ok
-    AckDeadLetter reason -> Error (deadLetterReasonText reason)
+    AckDeadLetter reason -> Error (renderDeadLetterReason reason)
     AckHalt reason -> Error (haltReasonText reason)
 
 -- | The @shibuya.ack.decision@ value for a decision, matching shibuya's runner.
@@ -830,12 +831,6 @@ ackDecisionText AckOk = "ack_ok"
 ackDecisionText (AckRetry _) = "ack_retry"
 ackDecisionText (AckDeadLetter _) = "ack_dead_letter"
 ackDecisionText (AckHalt _) = "ack_halt"
-
--- | The @ERROR@ status description for a dead-letter, matching shibuya's runner.
-deadLetterReasonText :: DeadLetterReason -> Text
-deadLetterReasonText (PoisonPill t) = "poison_pill: " <> t
-deadLetterReasonText (InvalidPayload t) = "invalid_payload: " <> t
-deadLetterReasonText MaxRetriesExceeded = "max_retries_exceeded"
 
 -- | The @ERROR@ status description for a halt, matching shibuya's runner.
 haltReasonText :: HaltReason -> Text

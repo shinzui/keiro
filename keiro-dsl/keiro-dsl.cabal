@@ -229,10 +229,11 @@ test-suite keiro-dsl-runtime-vocabulary-test
   hs-source-dirs: test/runtime-vocabulary
   main-is:        Main.hs
   build-depends:
-    , base       >=4.21 && <5
+    , base          >=4.21 && <5
     , keiro
     , keiro-dsl
-    , text       >=2.1  && <2.2
+    , shibuya-core
+    , text          >=2.1  && <2.2
 
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
 -- Holes.hs compile against keiki/keiro and that the filled transducer passes
