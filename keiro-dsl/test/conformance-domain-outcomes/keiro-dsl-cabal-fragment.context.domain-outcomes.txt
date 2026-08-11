@@ -1,0 +1,28 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/domain-command-outcomes.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    DomainOutcomes.Reservation.BehaviorHoles
+    Generated.DomainOutcomes.BehaviorSourceMap
+    Generated.DomainOutcomes.Nominals
+    Generated.DomainOutcomes.ReplayAudit
+    Generated.DomainOutcomes.Reservation.BehaviorContract
+    Generated.DomainOutcomes.Reservation.Codec
+    Generated.DomainOutcomes.Reservation.Domain
+    Generated.DomainOutcomes.Reservation.EventStream
+    Generated.DomainOutcomes.Reservation.Harness
+    Generated.DomainOutcomes.Reservation.Projection
+    Generated.DomainOutcomes.Reservation.Transducer
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , text

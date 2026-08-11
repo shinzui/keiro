@@ -1,0 +1,35 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/domain-command-outcomes.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+naming-edition idiomatic-v1
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes behavior source map","path":"Generated/DomainOutcomes/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes generated nominal declarations","path":"Generated/DomainOutcomes/Nominals.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes replay-audit assembly","path":"Generated/DomainOutcomes/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Reservation (line 7)","path":"DomainOutcomes/Reservation/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Harness.hs"}
+generated Generated/DomainOutcomes/BehaviorSourceMap.hs
+generated Generated/DomainOutcomes/Nominals.hs
+generated Generated/DomainOutcomes/ReplayAudit.hs
+generated Generated/DomainOutcomes/Reservation/Domain.hs
+generated Generated/DomainOutcomes/Reservation/Codec.hs
+generated Generated/DomainOutcomes/Reservation/Transducer.hs
+generated Generated/DomainOutcomes/Reservation/BehaviorContract.hs
+hole DomainOutcomes/Reservation/BehaviorHoles.hs
+generated Generated/DomainOutcomes/Reservation/EventStream.hs
+generated Generated/DomainOutcomes/Reservation/Projection.hs
+generated Generated/DomainOutcomes/Reservation/Harness.hs
+nominal-equality nominal-equality|name=ReservationNoOp|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:duplicate-request|owner=generated
+nominal-equality nominal-equality|name=ReservationRejection|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:already-cancelled,capacity-unavailable|owner=generated
+behavior {"aggregate":"Reservation","command":"Cancel","evidence":"generated-authoritative","key":"behavior-v1-0b1588f69a27bc77","kind":"live-transition","outputs":[{"command":"Cancel","ownership":"generated-command-identity"}],"source":"Eligible"}
+behavior {"aggregate":"Reservation","command":"Cancel","evidence":"generated-authoritative","key":"behavior-v1-316c9e96fc1a94b1","kind":"live-transition","outputs":[],"source":"CancelledState"}
+behavior {"aggregate":"Reservation","command":"Cancel","evidence":"generated-authoritative","key":"behavior-v1-fd391b55fbbfa640","kind":"live-transition","outputs":[],"source":"CancelledState"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}
