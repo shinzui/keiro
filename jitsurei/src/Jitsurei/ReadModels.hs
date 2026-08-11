@@ -31,6 +31,7 @@ import Keiro.Projection (AsyncProjection (..), InlineProjection (..))
 import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog.Operations (ProjectionCatalogOperations, projectionCatalogOperations)
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (FromBeginning))
 import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
@@ -251,6 +252,7 @@ jitsureiProjectionCatalogDefinition =
             { subscriptionId = orderAuditSubscriptionId,
               subscriptionName = orderAuditAsyncProjection ^. #subscriptionName,
               subscriptionSource = orderSourceId,
+              checkpointOnMissing = FromBeginning,
               claimSite = claim "jitsurei:order-audit-subscription"
             }
         ],

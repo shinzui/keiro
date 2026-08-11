@@ -387,7 +387,8 @@ subscriptionValue subscription =
   Aeson.object
     [ "subscriptionId" Aeson..= subscriptionIdText (subscription ^. #subscriptionId),
       "name" Aeson..= (subscription ^. #subscriptionName),
-      "sourceId" Aeson..= sourceIdText (subscription ^. #sourceId)
+      "sourceId" Aeson..= sourceIdText (subscription ^. #sourceId),
+      "checkpointOnMissing" Aeson..= missingCheckpointPolicyText (subscription ^. #checkpointOnMissing)
     ]
 
 dedupValue :: InventoryDedupKey -> Aeson.Value

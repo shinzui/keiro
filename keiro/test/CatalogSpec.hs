@@ -3,6 +3,7 @@ module CatalogSpec
     CatalogEvent (..),
     validCatalog,
     validProjectionSet,
+    catalogWithMissingSubscription,
     catalogAsyncProjection,
     inlineProjectionId,
     asyncProjectionId,
@@ -15,10 +16,12 @@ where
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Text qualified as Text
 import Keiro.Prelude
 import Keiro.Projection (AsyncProjection (..), InlineProjection (..))
 import Keiro.Projection.Catalog
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
 import Kiroku.Store.Types (CategoryName (..))
 import Test.Hspec
 
@@ -37,11 +40,21 @@ spec = describe "Keiro.Projection.Catalog" $ do
       `shouldSatisfy` ((== [auditQueryId, counterQueryId]) . map (^. #queryModelId))
     asyncProjectionRegistrations validated
       `shouldSatisfy` ((== [asyncProjectionId]) . map (^. #projectionId))
+    map (^. #checkpointOnMissing) (asyncProjectionRegistrations validated)
+      `shouldBe` [FromBeginning]
 
     reordered <- expectValid (reverseCatalog validCatalog)
     catalogInventory reordered `shouldBe` catalogInventory validated
     catalogFingerprint reordered `shouldBe` catalogFingerprint validated
     renderCatalogInventory reordered `shouldBe` renderCatalogInventory validated
+
+  it "fingerprints and renders checkpoint policy without changing subscription identity" $ do
+    fromBeginning <- expectValid validCatalog
+    failIfMissing <- expectValid (catalogWithCheckpointPolicy FailIfMissing PreserveAndReconcile)
+    catalogFingerprint fromBeginning `shouldNotBe` catalogFingerprint failIfMissing
+    map (^. #subscriptionId) (catalogInventory fromBeginning ^. #inventorySubscriptions)
+      `shouldBe` map (^. #subscriptionId) (catalogInventory failIfMissing ^. #inventorySubscriptions)
+    renderCatalogInventory failIfMissing `shouldSatisfy` Text.isInfixOf "FailIfMissing"
 
   it "reports missing and independent duplicate owners with every claim site" $ do
     let missing = catalogWithDefinitions (inlineDefinition :| [])
@@ -161,6 +174,24 @@ spec = describe "Keiro.Projection.Catalog" $ do
     diagnosticsFor liveOnlyClear
       `shouldSatisfy` any ((== ClearTargetRequiresReplayableOwner) . (^. #diagnosticCode))
 
+  it "accepts every explicit policy except current-head seeding after a replayable clear" $ do
+    for_ [FromBeginning, FailIfMissing] $ \policy -> do
+      _ <- expectValid (catalogWithCheckpointPolicy policy ClearBeforeReplay)
+      pure ()
+    for_ [FromBeginning, FromCurrentHead, FailIfMissing] $ \policy -> do
+      _ <- expectValid (catalogWithCheckpointPolicy policy PreserveAndReconcile)
+      pure ()
+    let diagnostics = diagnosticsFor (catalogWithCheckpointPolicy FromCurrentHead ClearBeforeReplay)
+    diagnostics
+      `shouldSatisfy` hasDiagnostic
+        ReplayableClearTargetStartsAtCurrentHead
+        (subscriptionIdText asyncSubscriptionId <> "/" <> targetIdText auditTargetId)
+    diagnostics
+      `shouldSatisfy` any
+        ( Text.isInfixOf "FromCurrentHead"
+            . (^. #diagnosticMessage)
+        )
+
   it "rejects all-stream/category overlap while accepting distinct category fan-in" $ do
     let secondSourceId = source "audit-source"
         categoryCatalog = twoSourceCatalog (CategorySource (CategoryName "counter")) (CategorySource (CategoryName "audit")) secondSourceId
@@ -267,6 +298,59 @@ validProjectionSet =
     { projectionSource = headSourceId,
       projectionDefinitions = inlineDefinition :| [asyncDefinition],
       claimSite = site "catalog:set"
+    }
+
+catalogWithCheckpointPolicy :: MissingCheckpointPolicy -> TargetResetPolicy -> ProjectionCatalog
+catalogWithCheckpointPolicy policy reset =
+  validCatalog
+    { subscriptions = [catalogSubscription & #checkpointOnMissing .~ policy],
+      targets =
+        [ if target ^. #targetId == auditTargetId
+            then target & #resetPolicy .~ reset
+            else target & #resetPolicy .~ PreserveAndReconcile
+        | target <- validCatalog ^. #targets
+        ]
+    }
+
+catalogWithMissingSubscription :: ProjectionCatalog
+catalogWithMissingSubscription =
+  validCatalog
+    { subscriptions =
+        validCatalog ^. #subscriptions
+          <> [ SubscriptionDeclaration
+                 { subscriptionId = missingSubscriptionId,
+                   subscriptionName = "catalog-missing-subscription",
+                   subscriptionSource = headSourceId,
+                   checkpointOnMissing = FromBeginning,
+                   claimSite = site "catalog:missing-subscription"
+                 }
+             ],
+      dedupKeys =
+        validCatalog ^. #dedupKeys
+          <> [ DedupKeyDeclaration
+                 { dedupKeyId = missingDedupId,
+                   dedupName = "catalog-missing-async",
+                   claimSite = site "catalog:missing-dedup"
+                 }
+             ],
+      projectionSets =
+        [ SomeProjectionSet
+            validProjectionSet
+              { projectionDefinitions =
+                  inlineDefinition
+                    :| [ asyncDefinition
+                           & #handlers
+                           .~ ( AsyncHandler catalogAsyncProjection asyncSubscriptionId asyncDedupId (site "catalog:async-handler")
+                                  :| [ AsyncHandler
+                                         catalogMissingAsyncProjection
+                                         missingSubscriptionId
+                                         missingDedupId
+                                         (site "catalog:missing-async-handler")
+                                     ]
+                              )
+                       ]
+              }
+        ]
     }
 
 catalogWithDefinitions :: NonEmpty (ProjectionDefinition CatalogEvent) -> ProjectionCatalog
@@ -380,6 +464,7 @@ catalogSubscription =
     { subscriptionId = asyncSubscriptionId,
       subscriptionName = "catalog-async-subscription",
       subscriptionSource = headSourceId,
+      checkpointOnMissing = FromBeginning,
       claimSite = site "catalog:subscription"
     }
 
@@ -447,6 +532,13 @@ catalogAsyncProjection =
       idempotencyKey = (^. #eventId)
     }
 
+catalogMissingAsyncProjection :: AsyncProjection
+catalogMissingAsyncProjection =
+  catalogAsyncProjection
+    { name = "catalog-missing-async",
+      subscriptionName = "catalog-missing-subscription"
+    }
+
 counterBinding :: QueryModelBinding Text ()
 counterBinding =
   QueryModelBinding
@@ -512,9 +604,15 @@ asyncSubscriptionId, unknownSubscriptionId :: SubscriptionId
 asyncSubscriptionId = subscription "counter-subscription"
 unknownSubscriptionId = subscription "unknown-subscription"
 
+missingSubscriptionId :: SubscriptionId
+missingSubscriptionId = subscription "missing-subscription"
+
 asyncDedupId, unknownDedupId :: DedupKeyId
 asyncDedupId = dedup "counter-dedup"
 unknownDedupId = dedup "unknown-dedup"
+
+missingDedupId :: DedupKeyId
+missingDedupId = dedup "missing-dedup"
 
 projection :: Text -> ProjectionId
 projection = identityOrError mkProjectionId

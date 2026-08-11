@@ -12,6 +12,7 @@ import Data.ByteString (ByteString)
 import Data.Either (isLeft)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Text qualified as Text
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Prelude
@@ -36,8 +37,20 @@ spec fixture = do
           previewResult = Operations.previewGroupRebuild operations Catalog.mainGroupId
       inventory ^. #reportSchema `shouldBe` "keiro/catalog-inventory/v1"
       case Aeson.toJSON inventory of
-        Aeson.Object fields ->
+        Aeson.Object fields -> do
           KeyMap.lookup "catalogFingerprint" fields `shouldSatisfy` (/= Nothing)
+          KeyMap.lookup "inventory" fields
+            `shouldSatisfy` \case
+              Just (Aeson.Object inventoryFields) ->
+                case KeyMap.lookup "subscriptions" inventoryFields of
+                  Just (Aeson.Array subscriptions) ->
+                    case Vector.toList subscriptions of
+                      Aeson.Object subscriptionFields : _ ->
+                        KeyMap.lookup "checkpointOnMissing" subscriptionFields
+                          == Just (Aeson.String "FromBeginning")
+                      _ -> False
+                  _ -> False
+              _ -> False
         other -> expectationFailure ("expected inventory object, got " <> show other)
       report <- case previewResult of
         Left err -> expectationFailure ("expected preview, got " <> show err) >> error "unreachable"
@@ -230,4 +243,6 @@ operationsFixtureSql =
     id bigint PRIMARY KEY,
     counter_id bigint REFERENCES app.counter(id)
   );
+  INSERT INTO subscriptions (subscription_name, last_seen)
+  VALUES ('catalog-async-subscription', 0);
   """

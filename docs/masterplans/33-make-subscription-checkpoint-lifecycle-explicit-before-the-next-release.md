@@ -57,7 +57,7 @@ criteria are recorded in `mori://shinzui/mori/okf/adrs/concepts/ADR-20` and
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Adopt explicit checkpoint lifecycle semantics in the projection catalog | [Plan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md) | `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit` | None | Not Started |
+| 1 | Adopt explicit checkpoint lifecycle semantics in the projection catalog | [Plan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md) | `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit` | None | In Progress |
 | 2 | Generate and classify missing-checkpoint policy in candidate Language 5 | [Plan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md) | EP-1 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -105,7 +105,7 @@ integration tail: update it only after both child plans prove the terminology an
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: consume the completed Kiroku source contract and extend catalog/inventory identity.
+- [x] EP-1: consume the completed Kiroku source contract and extend catalog/inventory identity.
 - [ ] EP-1: validate lifecycle combinations and replace private rebuild SQL with the public reset.
 - [ ] EP-1: prove operator, rollback, example, documentation, and full-repository acceptance.
 - [ ] EP-2: require and round-trip `checkpoint-on-missing` in candidate Language 5.
@@ -124,6 +124,9 @@ interactions between child plans. Provide concise evidence.
 - Kiroku's released 0.4.0.0 checkpoint inventory is intentionally read-only, while Keiro's current
   grouped rebuild updates the private table and silently accepts zero affected rows. The repair
   therefore requires a new owning-library mutation API and an explicit caller-side refusal rule.
+- Kiroku EP-70 completed and was published as `kiroku-store` 0.5.0.0 before EP-1 began. Hackage,
+  upstream tag `kiroku-store-v0.5.0.0`, and the sibling source exports agree, so EP-1 can consume
+  the released owning-library contract rather than relying on an unpublished source override.
 
 
 ## Decision Log
@@ -153,6 +156,13 @@ plan.
   Rationale: The user is intentionally collecting all breaking language/runtime improvements for
   one later coordinated release.
   Date: 2026-08-09
+
+- Decision: Consume the published `kiroku-store` 0.5 series and advance direct source-package
+  bounds to `>=0.5 && <0.6`; continue deferring Keiro version selection and publication.
+  Rationale: Kiroku EP-70 was released after this MasterPlan was written. Keiro now requires API
+  that does not exist in 0.4, and the authoritative Hackage release and upstream tag establish the
+  compatible dependency series without deciding the later Keiro release version.
+  Date: 2026-08-11
 
 
 ## Outcomes & Retrospective

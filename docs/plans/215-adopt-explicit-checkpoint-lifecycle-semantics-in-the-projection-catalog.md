@@ -4,6 +4,7 @@ slug: adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog
 title: "Adopt explicit checkpoint lifecycle semantics in the projection catalog"
 kind: exec-plan
 created_at: 2026-08-09T17:50:24Z
+intention: intention_01kzrnkgtcey6a8ar7xqn9tjxx
 master_plan: "docs/masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md"
 ---
 
@@ -37,10 +38,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: validate the completed Kiroku source interface and add the lifecycle policy to
-  every Keiro catalog, registration, inventory, fingerprint, and operator representation.
-- [ ] Milestone 2: enforce replay-safe policy combinations at catalog validation and startup, with
-  precise diagnostics and focused pure tests.
+- [x] (2026-08-11T18:44:58Z) Milestone 1: validated published `kiroku-store` 0.5.0.0 and added the
+  lifecycle policy to every Keiro catalog, registration, inventory, fingerprint, and operator
+  representation.
+- [x] (2026-08-11T18:44:58Z) Milestone 2: enforced replay-safe policy combinations at catalog
+  validation/startup with precise diagnostics and focused pure tests.
 - [ ] Milestone 3: replace raw checkpoint SQL in grouped rebuild preparation with Kiroku's reset
   transaction, condemn missing declarations, and prove commit/rollback behavior in PostgreSQL.
 - [ ] Milestone 4: update examples, operator docs, changelogs, capability evidence, ADRs, and all
@@ -61,6 +63,13 @@ implementation. Provide concise evidence.
 - A subscription name is catalog authority, but consumer-group member rows are Kiroku runtime
   state. Keiro can require at least one persisted row per requested name and report exact affected
   keys; it cannot safely create member rows from a configured group size.
+- Kiroku EP-70 is complete and `kiroku-store` 0.5.0.0 is now on Hackage under upstream tag
+  `kiroku-store-v0.5.0.0`. EP-1 should consume the released API directly; the plan's anticipated
+  sibling-source-only integration state no longer applies.
+- Kiroku intentionally gives `MissingCheckpointPolicy` `Eq` and `Show` but not `Ord`. Keiro keeps
+  the upstream type directly and defines its own exhaustive stable rank and constructor spelling
+  for canonical inventory ordering, fingerprints, and operator JSON instead of adding an orphan
+  instance or encoding `show` output accidentally.
 
 
 ## Decision Log
@@ -96,6 +105,13 @@ Record every decision made while working on the plan.
   Rationale: The feature must integrate before publication, while package versions and bounds are
   intentionally deferred to the later coordinated release.
   Date: 2026-08-09
+
+- Decision: Supersede the sibling-source-only assumption by consuming published `kiroku-store`
+  0.5.0.0 and advancing direct bounds to `>=0.5 && <0.6`.
+  Rationale: EP-70 was released before EP-1 began. The required public types and transaction
+  combinator are now an authoritative Hackage contract, while Keiro's own version and publication
+  still belong to the later coordinated release.
+  Date: 2026-08-11
 
 
 ## Outcomes & Retrospective

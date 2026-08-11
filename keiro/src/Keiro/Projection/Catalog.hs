@@ -50,6 +50,7 @@ module Keiro.Projection.Catalog
     SourceScope (..),
     SourceDeclaration (..),
     SubscriptionDeclaration (..),
+    missingCheckpointPolicyText,
     DedupKeyDeclaration (..),
     QueryModelBinding (..),
     SomeQueryModelBinding (..),
@@ -139,6 +140,7 @@ import Keiro.Codec (Codec (..), decodeRecorded)
 import Keiro.Prelude
 import Keiro.Projection.Types (AsyncProjection, InlineProjection)
 import Keiro.ReadModel (ReadModel)
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
 import Kiroku.Store.Types (CategoryName (..), RecordedEvent)
 
 newtype ProjectionId = ProjectionId Text
@@ -290,9 +292,39 @@ data SubscriptionDeclaration = SubscriptionDeclaration
   { subscriptionId :: !SubscriptionId,
     subscriptionName :: !Text,
     subscriptionSource :: !SourceId,
+    checkpointOnMissing :: !MissingCheckpointPolicy,
     claimSite :: !ClaimSite
   }
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Show, Generic)
+
+instance Ord SubscriptionDeclaration where
+  compare left right =
+    compare
+      ( left ^. #subscriptionId,
+        left ^. #subscriptionName,
+        left ^. #subscriptionSource,
+        missingCheckpointPolicyRank (left ^. #checkpointOnMissing),
+        left ^. #claimSite
+      )
+      ( right ^. #subscriptionId,
+        right ^. #subscriptionName,
+        right ^. #subscriptionSource,
+        missingCheckpointPolicyRank (right ^. #checkpointOnMissing),
+        right ^. #claimSite
+      )
+
+-- | Stable runtime spelling used by fingerprints and operator reports.
+missingCheckpointPolicyText :: MissingCheckpointPolicy -> Text
+missingCheckpointPolicyText = \case
+  FromBeginning -> "FromBeginning"
+  FromCurrentHead -> "FromCurrentHead"
+  FailIfMissing -> "FailIfMissing"
+
+missingCheckpointPolicyRank :: MissingCheckpointPolicy -> Int
+missingCheckpointPolicyRank = \case
+  FromBeginning -> 0
+  FromCurrentHead -> 1
+  FailIfMissing -> 2
 
 data DedupKeyDeclaration = DedupKeyDeclaration
   { dedupKeyId :: !DedupKeyId,
@@ -443,6 +475,7 @@ data CatalogDiagnosticCode
   | EmptyRebuildGroup
   | QueryModelOutsideRebuildGroup
   | ClearTargetRequiresReplayableOwner
+  | ReplayableClearTargetStartsAtCurrentHead
   | MixedResetGroupRequiresReplayAdapter
   | AmbiguousSourceOrdering
   | DuplicateRebuildVerificationId
@@ -480,6 +513,7 @@ diagnosticCodeText = \case
   EmptyRebuildGroup -> "catalog.empty-rebuild-group"
   QueryModelOutsideRebuildGroup -> "catalog.query-model-outside-rebuild-group"
   ClearTargetRequiresReplayableOwner -> "catalog.clear-target-requires-replayable-owner"
+  ReplayableClearTargetStartsAtCurrentHead -> "catalog.replayable-clear-target-starts-at-current-head"
   MixedResetGroupRequiresReplayAdapter -> "catalog.mixed-reset-group-requires-replay-adapter"
   AmbiguousSourceOrdering -> "catalog.ambiguous-source-ordering"
   DuplicateRebuildVerificationId -> "catalog.duplicate-rebuild-verification-id"
@@ -544,9 +578,24 @@ data InventoryQueryModel = InventoryQueryModel
 data InventorySubscription = InventorySubscription
   { subscriptionId :: !SubscriptionId,
     subscriptionName :: !Text,
-    sourceId :: !SourceId
+    sourceId :: !SourceId,
+    checkpointOnMissing :: !MissingCheckpointPolicy
   }
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Show, Generic)
+
+instance Ord InventorySubscription where
+  compare left right =
+    compare
+      ( left ^. #subscriptionId,
+        left ^. #subscriptionName,
+        left ^. #sourceId,
+        missingCheckpointPolicyRank (left ^. #checkpointOnMissing)
+      )
+      ( right ^. #subscriptionId,
+        right ^. #subscriptionName,
+        right ^. #sourceId,
+        missingCheckpointPolicyRank (right ^. #checkpointOnMissing)
+      )
 
 data InventoryDedupKey = InventoryDedupKey
   { dedupKeyId :: !DedupKeyId,
@@ -605,10 +654,31 @@ data AsyncProjectionRegistration = AsyncProjectionRegistration
     projectionName :: !Text,
     subscriptionId :: !SubscriptionId,
     subscriptionName :: !Text,
+    checkpointOnMissing :: !MissingCheckpointPolicy,
     dedupKeyId :: !DedupKeyId,
     dedupName :: !Text
   }
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Show, Generic)
+
+instance Ord AsyncProjectionRegistration where
+  compare left right =
+    compare
+      ( left ^. #projectionId,
+        left ^. #projectionName,
+        left ^. #subscriptionId,
+        left ^. #subscriptionName,
+        missingCheckpointPolicyRank (left ^. #checkpointOnMissing),
+        left ^. #dedupKeyId,
+        left ^. #dedupName
+      )
+      ( right ^. #projectionId,
+        right ^. #projectionName,
+        right ^. #subscriptionId,
+        right ^. #subscriptionName,
+        missingCheckpointPolicyRank (right ^. #checkpointOnMissing),
+        right ^. #dedupKeyId,
+        right ^. #dedupName
+      )
 
 data ReplayAdapterMetadata = ReplayAdapterMetadata
   { projectionId :: !ProjectionId,
@@ -833,24 +903,19 @@ asyncProjectionRegistrations validated =
         { projectionId = factProjectionId projection,
           projectionName = projectionName,
           subscriptionId = subscriptionId,
-          subscriptionName = subscriptionNameFor subscriptionId,
+          subscriptionName = subscription ^. #subscriptionName,
+          checkpointOnMissing = subscription ^. #checkpointOnMissing,
           dedupKeyId = dedupKeyId,
           dedupName = dedupNameFor dedupKeyId
         }
     | projection <- validated ^. #projectionFacts,
-      AsyncFacts projectionName _ _ subscriptionId dedupKeyId _ <- factHandlers projection
+      AsyncFacts projectionName _ _ subscriptionId dedupKeyId _ <- factHandlers projection,
+      Just subscription <- [subscriptionFor subscriptionId]
     ]
   where
     inventory = validated ^. #validatedInventory
-    subscriptionNameFor ref =
-      fromMaybe
-        ""
-        ( List.lookup
-            ref
-            [ (entry ^. #subscriptionId, entry ^. #subscriptionName)
-            | entry <- inventory ^. #inventorySubscriptions
-            ]
-        )
+    subscriptionFor ref =
+      List.find ((== ref) . (^. #subscriptionId)) (inventory ^. #inventorySubscriptions)
     dedupNameFor ref =
       fromMaybe
         ""
@@ -1205,12 +1270,13 @@ groupDiagnostics catalog facts queryFacts =
 
 replayDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [CatalogDiagnostic]
 replayDiagnostics catalog facts =
-  clearRequiresReplay <> mixedGroupReplay
+  clearRequiresReplay <> currentHeadAfterClear <> mixedGroupReplay
   where
     ownerFor targetId = List.find (\fact -> targetId `List.elem` factTargets fact) facts
     targets = catalog ^. #targets
     groups = catalog ^. #rebuildGroups
     targetMap = Map.fromList [(target ^. #targetId, target) | target <- targets]
+    subscriptionsById = Map.fromList [(subscription ^. #subscriptionId, subscription) | subscription <- catalog ^. #subscriptions]
     clearRequiresReplay =
       [ diagnostic
           ClearTargetRequiresReplayableOwner
@@ -1221,6 +1287,28 @@ replayDiagnostics catalog facts =
         target ^. #resetPolicy == ClearBeforeReplay,
         Just owner <- [ownerFor (target ^. #targetId)],
         not (factReplayable owner)
+      ]
+    currentHeadAfterClear =
+      [ diagnostic
+          ReplayableClearTargetStartsAtCurrentHead
+          (subscriptionIdText subscriptionId <> "/" <> targetIdText targetId)
+          [subscription ^. #claimSite, target ^. #claimSite, handlerSite, factSite fact]
+          ( "subscription "
+              <> subscription ^. #subscriptionName
+              <> " ("
+              <> subscriptionIdText subscriptionId
+              <> ") uses FromCurrentHead for replayable target "
+              <> targetIdText targetId
+              <> " with ClearBeforeReplay; seeding the current head would skip the history required to rebuild the cleared target"
+          )
+      | fact <- facts,
+        factReplayable fact,
+        AsyncFacts _ _ _ subscriptionId _ handlerSite <- factHandlers fact,
+        Just subscription <- [Map.lookup subscriptionId subscriptionsById],
+        subscription ^. #checkpointOnMissing == FromCurrentHead,
+        targetId <- factTargets fact,
+        Just target <- [Map.lookup targetId targetMap],
+        target ^. #resetPolicy == ClearBeforeReplay
       ]
     mixedGroupReplay =
       [ diagnostic
@@ -1382,9 +1470,11 @@ buildInventory catalog facts queryFacts =
       inventorySubscriptions =
         List.sort
           [ InventorySubscription
-              (subscription ^. #subscriptionId)
-              (subscription ^. #subscriptionName)
-              (subscription ^. #subscriptionSource)
+              { subscriptionId = subscription ^. #subscriptionId,
+                subscriptionName = subscription ^. #subscriptionName,
+                sourceId = subscription ^. #subscriptionSource,
+                checkpointOnMissing = subscription ^. #checkpointOnMissing
+              }
           | subscription <- catalog ^. #subscriptions
           ],
       inventoryDedupKeys =
@@ -1501,7 +1591,8 @@ renderInventory inventory =
         [ "subscription",
           subscriptionIdText (subscription ^. #subscriptionId),
           subscription ^. #subscriptionName,
-          sourceIdText (subscription ^. #sourceId)
+          sourceIdText (subscription ^. #sourceId),
+          missingCheckpointPolicyText (subscription ^. #checkpointOnMissing)
         ]
     renderDedup :: InventoryDedupKey -> Text
     renderDedup key =
