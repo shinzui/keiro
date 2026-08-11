@@ -76,14 +76,16 @@ unchanged.
   package and mutation script pass; the older 19-obligation complete-behavior
   package also remains green. The successful idempotent public CLI scaffold is
   retained at `/tmp/keiro-domain-outcomes.k88pOH/generated` for inspection.
-- [ ] Milestone 5: documentation, changelogs, ADR 0029 consequences, and the
+- [x] (2026-08-11T00:57:59Z) Milestone 5: documentation, changelogs, ADR 0029 consequences, and the
   improvement-request evidence are updated. `cabal build all`, the 456-example
   Keiro suite, the 679-example DSL suite, the 23-example Jitsurei suite, strict
-  ADR/OKF validation, targeted `nix fmt`, and `nix flake check` pass. Final
-  completion remains pending the performance closeout: `just bench-regression`
-  cannot start measurements because the configured database lacks relation
-  `keiro_outbox`, and the outcome-generation baseline remains intentionally
-  deferred to the prerequisite quiet-host run.
+  ADR/OKF validation, targeted `nix fmt`, `nix flake check`, and
+  `just bench-regression` pass. The benchmark gate initially exposed stale bare
+  cleanup table names; qualifying them as `keiro.keiro_outbox` and
+  `keiro.keiro_inbox` restored all 3 outbox and 4 inbox comparisons without
+  changing either baseline. The outcome-generation baseline remains
+  intentionally deferred to the prerequisite quiet-host run, so the
+  improvement request remains proposed as required.
 
 
 ## Surprises & Discoveries
@@ -124,11 +126,12 @@ unchanged.
   them after `outcome`/`domain-outcomes` restored all fixtures; the complete rerun
   passed 679 examples with 0 failures.
 
-- Discovery: The repository benchmark regression gate depends on a migrated
-  PostgreSQL benchmark database before it can compare existing baselines.
-  Evidence: `just bench-regression` stopped in all three outbox cases at
-  `TRUNCATE keiro_outbox` with PostgreSQL `42P01`; it produced no timing result
-  and no baseline file was changed.
+- Discovery: The repository benchmark regression cleanup had not followed the
+  framework tables into the `keiro` schema.
+  Evidence: the first `just bench-regression` stopped in all three outbox cases
+  at bare `TRUNCATE keiro_outbox` with PostgreSQL `42P01`. Qualifying both
+  cleanup statements made all 3 outbox and 4 inbox comparisons pass against the
+  unchanged baselines.
 
 
 ## Decision Log
@@ -244,9 +247,9 @@ silent-edge fixtures generated 40,202/66,467/171,656/593,480 bytes in
 complete because its durable benchmark acceptance is deliberately environment
 bound. Plan 231 still needs quiet-host latency/allocation/residency evidence;
 this plan still needs the corresponding committed DSL baseline/regression
-wiring, and the existing repository regression gate needs a migrated benchmark
-database. The improvement request therefore remains proposed rather than
-claiming both plans are accepted.
+wiring. The existing repository outbox/inbox regression gate passes after its
+schema-qualified cleanup fix. The improvement request therefore remains
+proposed rather than claiming both plans are accepted.
 
 
 ## Context and Orientation
@@ -836,6 +839,7 @@ create or change a benchmark baseline.
 
 Revision note (2026-08-11): Recorded the completed functional implementation,
 exact-reason conformance, source/generation scaling, documentation and
-repository validation evidence. Kept Milestones 3 and 5 open for the quiet-host
-baseline and migrated-database regression gate, and recorded the contextual
-keyword compatibility correction found by the full DSL suite.
+repository validation evidence. Kept Milestone 3 open for the quiet-host
+baseline, fixed the stale schema qualification found by the repository
+regression gate, and recorded the contextual keyword compatibility correction
+found by the full DSL suite.

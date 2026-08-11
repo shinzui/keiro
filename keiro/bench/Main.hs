@@ -238,7 +238,7 @@ scenarioBench store scenario =
 runScenario :: Store.KirokuStore -> OutboxScenario -> IO ()
 runScenario store scenario = do
   runStoreChecked store do
-    Store.runTransaction (Tx.sql "TRUNCATE keiro_outbox")
+    Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
   seedOutbox store scenario.messages
   runStoreChecked store (drainOutbox scenario.brokerModel 0)
 
@@ -250,7 +250,7 @@ inboxScenarioBench store scenario =
 runInboxScenario :: Store.KirokuStore -> InboxScenario -> IO ()
 runInboxScenario store scenario = do
   runStoreChecked store do
-    Store.runTransaction (Tx.sql "TRUNCATE keiro_inbox")
+    Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_inbox")
   runStoreChecked store $
     case scenario.inboxBatchSize of
       Nothing ->
