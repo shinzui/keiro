@@ -58,8 +58,13 @@ silently treating them as ordinary source edits.
   profile and declarative selection tests pass; 23 isolated rejection mutations prove the
   dedicated diagnostics, the executable accepts the bounded fixture, and it refuses the
   unbounded twin at line 79 with `RouterSelectionRecipientLimitMissing`.
-- [ ] Milestone 2: add the runtime selection contract, normalization, policy lowering, and safe
-  dispatch runner.
+- [x] (2026-08-11T02:48:08Z) Milestone 2: added the public runtime selection contract and smart
+  positive limit/version constructors, target-stream sort/dedup/conflict/overflow normalization,
+  safe application dead-letter reasons, additive `DeclarativeRouter` once/worker runners, and one
+  shared legacy-compatible dispatch loop.  Seven focused database-backed runtime examples and all
+  22 router examples pass, including zero callbacks before conflict/overflow, exact-cap dispatch,
+  partial target success, stable-union redelivery, the full empty/failure policy matrix, and the
+  existing router runtime conformance component.
 - [ ] Milestone 3: generate executable selection code and compiled/database-backed evidence.
 - [ ] Milestone 4: report mapped semantic and coordination impact.
 - [ ] Milestone 5: document, record the final ADR, and run complete qualification.
@@ -112,6 +117,12 @@ silently treating them as ordinary source edits.
   uses values such as `target-stream` and `stable-union`.  The selection parser therefore owns a
   small hyphenated-name parser and the checker, rather than the lexer, decides whether the parsed
   value is one of the closed admitted policies.
+
+- The legacy router computes dispatch identity through the target event stream's
+  `resolveStreamName`, while declarative normalization is explicitly keyed by
+  `Keiro.Stream.streamName` on `PMCommand.target`.  Extracting the dispatch helper initially made
+  that distinction easy to erase.  The final helper retains the exact legacy resolver and
+  positional-ID compatibility probe; normalization remains a separate pre-dispatch phase.
 
 
 ## Decision Log
@@ -244,6 +255,19 @@ silently treating them as ordinary source edits.
   total two-digit byte rendering.
   Date: 2026-08-11
 
+- Decision: Normalize the complete declarative command set before invoking the shared dispatch
+  helper, but keep target dispatch transactionality unchanged.
+  Rationale: Conflict and overflow must cause zero writes, while a later target failure must retain
+  earlier successes and recover through redelivery plus the frozen target-keyed command identity.
+  Date: 2026-08-11
+
+- Decision: Lower declarative empty/failure `deadLetter` directly to Shibuya
+  `AckDeadLetter (ApplicationFailure code safeDetail)` and ignore raw query/evaluation text in the
+  transported detail.
+  Rationale: The adapter owns DLQ mechanics and structured serialization; omitting unrestricted
+  backend and payload text preserves the released Shibuya safety contract.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -256,9 +280,10 @@ independently confirm both releases.
 Keiro has now adopted those releases across the local workspace, and the cross-package vocabulary
 proof validates the five planned selection reason codes through Shibuya's public API.  Candidate
 language version 5 now owns a bounded declarative selection grammar and a checked semantic value;
-version 4 refuses the feature at its marker and retains its custom-router syntax.  The runtime,
-generator, diff, conformance, and documentation acceptance items remain open, so implementation
-continues at Milestone 2 and IR-9 remains open.
+version 4 refuses the feature at its marker and retains its custom-router syntax.  The runtime now
+also exposes checked-contract normalization and additive declarative runners without changing the
+legacy router path.  Generator, new declarative conformance, diff, and documentation acceptance
+items remain open, so implementation continues at Milestone 3 and IR-9 remains open.
 
 
 ## Context and Orientation
@@ -1117,3 +1142,8 @@ types.
   policy checks, SHA-256 fingerprint choice, workspace location coverage, focused mutation tests,
   and the bounded/unbounded executable evidence.  Milestone 2 now starts from a checked value and
   does not need to reinterpret parser expressions.
+- 2026-08-11: Completed Milestone 2.  Recorded the runtime contract, pre-dispatch physical-target
+  normalization, safe application dead-letter lowering, additive once/worker APIs, extraction of
+  the byte-compatible legacy dispatch path, and database-backed evidence for the cap, conflict,
+  partial-success, redelivery, and policy guarantees.  Milestone 3 can now generate only checked
+  declarations into this public runtime surface.

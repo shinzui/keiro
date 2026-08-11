@@ -30,8 +30,11 @@ module Keiro.Router
   ( -- * Definition
     Router (..),
     RouterResult (..),
+    DeclarativeRouter (..),
+    DeclarativeRouterResult (..),
     DomainRouter (..),
     DomainRouterResult (..),
+    module Keiro.Router.Selection,
 
     -- * Idempotency
     deterministicRouterCommandId,
@@ -40,6 +43,9 @@ module Keiro.Router
     runRouterOnce,
     runRouterWorkerWith,
     runRouterWorker,
+    runDeclarativeRouterOnce,
+    runDeclarativeRouterWorkerWith,
+    runDeclarativeRouterWorker,
     runDomainRouterOnce,
     runDomainRouterWorkerWith,
     runDomainRouterWorker,
@@ -82,6 +88,7 @@ import Keiro.ProcessManager
     summarizeDomainCommandResult,
   )
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
+import Keiro.Router.Selection
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Kiroku.Store.Effect (Store)
@@ -89,13 +96,13 @@ import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Types (EventId (..), RecordedEvent, StreamName (..))
 import Shibuya.Adapter (Adapter (..))
-import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..))
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Attempt (..), Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (filter, fromIntegral, length, reverse, seq, snd, zip, (+))
+import Prelude (fromIntegral, length, reverse, seq, snd, zip, (+))
 
 -- | A stateless, content-based router (in the Enterprise Integration Patterns
 -- sense): for each incoming event it resolves a data-dependent set of target
@@ -139,6 +146,18 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   }
   deriving stock (Generic)
 
+-- | A checked, bounded router whose application-owned query seam returns
+-- commands under a closed declarative selection contract.
+data DeclarativeRouter input targetPhi targetRs targetState targetCi targetCo es = DeclarativeRouter
+  { name :: !Text,
+    key :: !(input -> Text),
+    selectionContract :: !RouterSelectionContract,
+    select :: !(input -> Eff es (Either RouterSelectionFailure [PMCommand targetCi])),
+    targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo),
+    targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
+  }
+  deriving stock (Generic)
+
 -- | Stateless router whose target aggregate returns typed domain decisions.
 data DomainRouter input targetPhi targetRs targetState targetCi targetCo rejection noOp es = DomainRouter
   { name :: !Text,
@@ -158,6 +177,15 @@ data DomainRouter input targetPhi targetRs targetState targetCi targetCo rejecti
 newtype RouterResult target = RouterResult
   { commandResults :: [PMCommandResult target]
   }
+  deriving stock (Generic, Eq, Show)
+
+-- | Pre-dispatch selection outcomes stay distinct from target dispatch
+-- outcomes so worker policy cannot accidentally acknowledge a failed query or
+-- evaluation as an empty successful query.
+data DeclarativeRouterResult target
+  = DeclarativeSelectionFailed !RouterSelectionFailure
+  | DeclarativeSelectionEmpty
+  | DeclarativeSelectionDispatched !(RouterResult target)
   deriving stock (Generic, Eq, Show)
 
 -- | Detailed result of one domain router invocation. Accepted handled entries
@@ -238,8 +266,35 @@ runRouterOnce ::
   input ->
   Eff es (RouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
 runRouterOnce options router sourceEvent input = do
-  let correlationId = (router ^. #key) input
   commands <- (router ^. #resolve) input
+  dispatchRouterCommands
+    options
+    (router ^. #name)
+    (router ^. #targetEventStream)
+    (router ^. #targetProjections)
+    ((router ^. #key) input)
+    (sourceEvent ^. #eventId)
+    commands
+
+dispatchRouterCommands ::
+  forall targetPhi targetRs targetState targetCi targetCo es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  Text ->
+  ValidatedEventStream targetPhi targetRs targetState targetCi targetCo ->
+  (Stream targetCi -> [InlineProjection targetCo]) ->
+  Text ->
+  EventId ->
+  [PMCommand targetCi] ->
+  Eff es (RouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
+dispatchRouterCommands options routerName targetEventStream targetProjections correlationId sourceEventId commands = do
   let named =
         [ (streamNameOf command, command)
         | command <- commands
@@ -252,18 +307,18 @@ runRouterOnce options router sourceEvent input = do
             )
   results <-
     traverse
-      (dispatchCommand correlationId (sourceEvent ^. #eventId))
+      dispatchCommand
       annotated
   pure (RouterResult results)
   where
     streamNameOf command =
-      ((unvalidated (router ^. #targetEventStream)) ^. #resolveStreamName)
+      ((unvalidated targetEventStream) ^. #resolveStreamName)
         (retarget (command ^. #target))
 
-    dispatchCommand correlationId sourceEventId (legacyIndex, occurrence, targetStreamName, command) = do
+    dispatchCommand (legacyIndex, occurrence, targetStreamName, command) = do
       let commandId =
             deterministicRouterCommandId
-              (router ^. #name)
+              routerName
               correlationId
               sourceEventId
               targetStreamName
@@ -273,12 +328,11 @@ runRouterOnce options router sourceEvent input = do
           -- later release after the compatibility window closes.
           legacyCommandId =
             deterministicCommandId
-              (router ^. #name)
+              routerName
               correlationId
               sourceEventId
               legacyIndex
           targetOptions = options & #eventIds .~ [commandId]
-          targetEventStream = router ^. #targetEventStream
           targetStream = retarget (command ^. #target)
       commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
       legacyAlreadyProcessed <-
@@ -297,7 +351,7 @@ runRouterOnce options router sourceEvent input = do
                   targetEventStream
                   targetStream
                   (command ^. #command)
-                  ((router ^. #targetProjections) (command ^. #target))
+                  (targetProjections (command ^. #target))
               case outcome of
                 Right result -> pure (PMCommandAppended result)
                 Left err -> do
@@ -306,6 +360,42 @@ runRouterOnce options router sourceEvent input = do
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
+
+-- | Evaluate and normalize one declarative selection before performing any
+-- target write. Conflict and overflow therefore have an all-or-nothing
+-- pre-dispatch boundary; target dispatch itself retains legacy per-target
+-- idempotency and partial-success recovery.
+runDeclarativeRouterOnce ::
+  forall input targetPhi targetRs targetState targetCi targetCo es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCi,
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DeclarativeRouter input targetPhi targetRs targetState targetCi targetCo es ->
+  RecordedEvent ->
+  input ->
+  Eff es (DeclarativeRouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
+runDeclarativeRouterOnce options router sourceEvent input = do
+  selected <- (router ^. #select) input
+  case selected >>= normalizeRecipients ((router ^. #selectionContract) ^. #limit) of
+    Left failure -> pure (DeclarativeSelectionFailed failure)
+    Right [] -> pure DeclarativeSelectionEmpty
+    Right commands ->
+      DeclarativeSelectionDispatched
+        <$> dispatchRouterCommands
+          options
+          (router ^. #name)
+          (router ^. #targetEventStream)
+          (router ^. #targetProjections)
+          ((router ^. #key) input)
+          (sourceEvent ^. #eventId)
+          commands
 
 -- | Detailed domain-aware router invocation. Typed rejection/no-op is handled,
 -- accepted carries the exact event batch, and deterministic accepted
@@ -623,35 +713,10 @@ runRouterWorkerWith workerOptions options router Adapter {source = adapterSource
             Left (_, storeErr) -> do
               recordDispatchFailed (workerOptions ^. #metrics) 1
               pure (ackForCommandError (workerOptions ^. #transientRetryDelay) (StoreFailed storeErr))
-            Right (RouterResult results) -> ackDecisionFor recorded correlationId attemptCount results
+            Right (RouterResult results) ->
+              ackForRouterResults workerOptions (router ^. #name) recorded correlationId attemptCount results
       finalizeAck decision
       pure decision
-
-    ackDecisionFor :: RecordedEvent -> Text -> Int -> [PMCommandResult target] -> Eff es AckDecision
-    ackDecisionFor sourceEvent correlationId attemptCount results = do
-      let duplicateCount = commandDuplicateCount results
-          failures =
-            [ DispatchFailure emitIndex targetStreamName err
-            | (emitIndex, PMCommandFailed targetStreamName err) <- zip [0 ..] results
-            ]
-      recordDispatchDuplicate (workerOptions ^. #metrics) duplicateCount
-      recordDispatchFailed (workerOptions ^. #metrics) (fromIntegral (length failures))
-      decideForFailures
-        workerOptions
-        DispatcherRouter
-        (router ^. #name)
-        correlationId
-        sourceEvent
-        attemptCount
-        failures
-
-    commandDuplicateCount :: [PMCommandResult target] -> Int64
-    commandDuplicateCount =
-      fromIntegral . length . filter isDuplicateResult
-      where
-        isDuplicateResult = \case
-          PMCommandDuplicate {} -> True
-          _ -> False
 
     decideForPoison :: Text -> Envelope msg -> Eff es AckDecision
     decideForPoison reason env = do
@@ -666,6 +731,130 @@ runRouterWorkerWith workerOptions options router Adapter {source = adapterSource
           pure (AckDeadLetter (InvalidPayload reason))
 
     envelopeAttemptCount :: Envelope msg -> Int
+    envelopeAttemptCount env =
+      case env ^. #attempt of
+        Nothing -> 1
+        Just (Attempt attempt) -> fromIntegral attempt + 1
+
+ackForRouterResults ::
+  (IOE :> es, Store :> es) =>
+  WorkerOptions es msg ->
+  Text ->
+  RecordedEvent ->
+  Text ->
+  Int ->
+  [PMCommandResult target] ->
+  Eff es AckDecision
+ackForRouterResults workerOptions routerName sourceEvent correlationId attemptCount results = do
+  let duplicateCount =
+        fromIntegral
+          ( length
+              [ ()
+              | PMCommandDuplicate {} <- results
+              ]
+          )
+      failures =
+        [ DispatchFailure emitIndex targetStreamName err
+        | (emitIndex, PMCommandFailed targetStreamName err) <- zip [0 ..] results
+        ]
+  recordDispatchDuplicate (workerOptions ^. #metrics) duplicateCount
+  recordDispatchFailed (workerOptions ^. #metrics) (fromIntegral (length failures))
+  decideForFailures
+    workerOptions
+    DispatcherRouter
+    routerName
+    correlationId
+    sourceEvent
+    attemptCount
+    failures
+
+-- | Declarative router worker using 'defaultWorkerOptions'. Selection
+-- empty/failure policies belong to the checked contract; target dispatch
+-- failures continue through the ordinary router worker policy.
+runDeclarativeRouterWorker ::
+  forall msg input targetPhi targetRs targetState targetCi targetCo es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCi,
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  DeclarativeRouter input targetPhi targetRs targetState targetCi targetCo es ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDeclarativeRouterWorker = runDeclarativeRouterWorkerWith defaultWorkerOptions
+
+runDeclarativeRouterWorkerWith ::
+  forall msg input targetPhi targetRs targetState targetCi targetCo es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq targetCi,
+    Eq targetCo
+  ) =>
+  WorkerOptions es msg ->
+  RunCommandOptions ->
+  DeclarativeRouter input targetPhi targetRs targetState targetCi targetCo es ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runDeclarativeRouterWorkerWith workerOptions options router Adapter {source = adapterSource} decodeMessage =
+  Streamly.fold Fold.drain
+    $ Streamly.mapM handleIngested adapterSource
+  where
+    contract = router ^. #selectionContract
+
+    handleIngested :: Ingested es msg -> Eff es AckDecision
+    handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
+      decision <- case decodeMessage message of
+        Nothing -> decideForPoison "declarative router worker could not decode message" env
+        Just (recorded, input) -> do
+          let correlationId = (router ^. #key) input
+              attemptCount = envelopeAttemptCount env
+          outcome <- tryError @StoreError (runDeclarativeRouterOnce options router recorded input)
+          case outcome of
+            Left (_, storeErr) -> do
+              recordDispatchFailed (workerOptions ^. #metrics) 1
+              pure (ackForCommandError (workerOptions ^. #transientRetryDelay) (StoreFailed storeErr))
+            Right DeclarativeSelectionEmpty -> pure emptyDecision
+            Right (DeclarativeSelectionFailed failure) -> do
+              recordDispatchFailed (workerOptions ^. #metrics) 1
+              pure (failureDecision failure)
+            Right (DeclarativeSelectionDispatched (RouterResult results)) ->
+              ackForRouterResults workerOptions (router ^. #name) recorded correlationId attemptCount results
+      finalizeAck decision
+      pure decision
+
+    emptyDecision = case contract ^. #emptyPolicy of
+      EmptyAck -> AckOk
+      EmptyRetry -> AckRetry (workerOptions ^. #transientRetryDelay)
+      EmptyDeadLetter -> AckDeadLetter (emptySelectionDeadLetterReason contract)
+      EmptyHalt -> AckHalt (HaltFatal (renderDeadLetterReason (emptySelectionDeadLetterReason contract)))
+
+    failureDecision failure = case contract ^. #failurePolicy of
+      FailureRetry -> AckRetry (workerOptions ^. #transientRetryDelay)
+      FailureDeadLetter -> AckDeadLetter (selectionFailureDeadLetterReason contract failure)
+      FailureHalt -> AckHalt (HaltFatal (renderDeadLetterReason (selectionFailureDeadLetterReason contract failure)))
+
+    decideForPoison reason env = do
+      recordDispatchPoison (workerOptions ^. #metrics) 1
+      case workerOptions ^. #poisonPolicy of
+        PoisonHalt -> pure (AckHalt (HaltFatal reason))
+        PoisonSkip callback -> do
+          callback env
+          pure AckOk
+        PoisonDeadLetter callback -> do
+          callback env
+          pure (AckDeadLetter (InvalidPayload reason))
+
     envelopeAttemptCount env =
       case env ^. #attempt of
         Nothing -> 1

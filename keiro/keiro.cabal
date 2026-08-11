@@ -65,6 +65,7 @@ library
     Keiro.ReadModel.Schema
     Keiro.ReplayAudit
     Keiro.Router
+    Keiro.Router.Selection
     Keiro.Snapshot
     Keiro.Snapshot.Codec
     Keiro.Snapshot.Schema

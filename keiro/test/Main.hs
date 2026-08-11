@@ -333,6 +333,7 @@ import Kiroku.Store.Types
     StreamName (..),
     StreamVersion (..),
   )
+import Numeric.Natural (Natural)
 import OpenTelemetry.Attributes (Attribute (..), Attributes, PrimitiveAttribute (..), lookupAttribute)
 import OpenTelemetry.Attributes.Key (AttributeKey, unkey)
 import OpenTelemetry.Exporter.InMemory.Metric (inMemoryMetricExporter)
@@ -374,7 +375,7 @@ import OpenTelemetry.Trace.Core
   )
 import ProjectionReplaySpec qualified
 import Shibuya.Adapter (Adapter (..))
-import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..))
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
@@ -4415,6 +4416,156 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected snapshot-assisted PM reaction, got " <> show other)
 
   describe "Keiro.Router" $ around (withFreshResourceStore fixture) $ do
+    it "RouterSelection validates positive runtime invariants" $ \(_storeHandle, StoreRunner _runner) -> do
+      mkRecipientLimit 0 `shouldSatisfy` \case Left _ -> True; Right _ -> False
+      mkSelectionVersion 0 `shouldSatisfy` \case Left _ -> True; Right _ -> False
+      limit <- shouldBeRight (mkRecipientLimit 2)
+      selectionVersion <- shouldBeRight (mkSelectionVersion 3)
+      recipientLimitValue limit `shouldBe` 2
+      selectionVersionValue selectionVersion `shouldBe` 3
+
+    it "RouterSelection sorts, deduplicates, caps, and rejects conflicts before dispatch" $ \(_storeHandle, StoreRunner _runner) -> do
+      limit <- shouldBeRight (mkRecipientLimit 2)
+      one <- shouldBeRight (mkRecipientLimit 1)
+      let targetA = PMCommand {target = stream "selection-a", command = Add 1}
+          targetB = PMCommand {target = stream "selection-b", command = Add 1}
+          targetBConflict = PMCommand {target = stream "selection-b", command = Add 2}
+      normalizeRecipients limit [targetB, targetA, targetB]
+        `shouldBe` Right [targetA, targetB]
+      normalizeRecipients limit [targetB, targetBConflict, targetA]
+        `shouldBe` Left (SelectionConflictingCommands (StreamName "selection-b"))
+      normalizeRecipients one [targetB, targetA, targetB]
+        `shouldBe` Left (SelectionRecipientOverflow one 2)
+      normalizeRecipients limit [targetB, targetA]
+        `shouldBe` Right [targetA, targetB]
+
+    it "RouterSelection exposes stable public dead-letter code, detail, and rendering" $ \(_storeHandle, StoreRunner _runner) -> do
+      contract <- testSelectionContract EmptyDeadLetter FailureDeadLetter 4
+      recipientLimit <- shouldBeRight (mkRecipientLimit 4)
+      let failures =
+            [ (SelectionQueryFailed "secret backend detail", "keiro.router.selection.query_failed"),
+              (SelectionEvaluationFailed "secret payload", "keiro.router.selection.evaluation_failed"),
+              (SelectionConflictingCommands (StreamName "hospital-1"), "keiro.router.selection.target_conflict"),
+              (SelectionRecipientOverflow recipientLimit 5, "keiro.router.selection.recipient_overflow")
+            ]
+          assertReason expectedCode reason = do
+            deadLetterCodeText (deadLetterReasonCode reason) `shouldBe` expectedCode
+            deadLetterReasonDetail reason `shouldSatisfy` maybe False (not . Text.null)
+            renderDeadLetterReason reason `shouldSatisfy` Text.isPrefixOf (expectedCode <> ": ")
+      assertReason "keiro.router.selection.empty" (emptySelectionDeadLetterReason contract)
+      for_ failures $ \(failure, expectedCode) -> do
+        let reason = selectionFailureDeadLetterReason contract failure
+        assertReason expectedCode reason
+        renderDeadLetterReason reason `shouldNotSatisfy` Text.isInfixOf "secret"
+
+    it "RouterSelection performs no target callback on conflict or overflow and dispatches exactly at the cap" $ \(_storeHandle, StoreRunner _runner) -> do
+      twoRecipientContract <- testSelectionContract EmptyAck FailureRetry 2
+      oneRecipientContract <- testSelectionContract EmptyAck FailureRetry 1
+      callbacks <- newIORef (0 :: Int)
+      let options = defaultRunCommandOptions & #beforeAppend .~ modifyIORef' callbacks (+ 1)
+          sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          targetA = PMCommand {target = stream "bounded-a", command = Add 1}
+          targetB = PMCommand {target = stream "bounded-b", command = Add 1}
+          targetBConflict = PMCommand {target = stream "bounded-b", command = Add 2}
+      Right conflict <-
+        _runner $
+          runDeclarativeRouterOnce
+            options
+            (selectionRouter twoRecipientContract (pure (Right [targetB, targetBConflict, targetA])))
+            sourceEvent
+            (RouteGroup "g1")
+      conflict `shouldBe` DeclarativeSelectionFailed (SelectionConflictingCommands (StreamName "bounded-b"))
+      readIORef callbacks `shouldReturn` 0
+      Right overflow <-
+        _runner $
+          runDeclarativeRouterOnce
+            options
+            (selectionRouter oneRecipientContract (pure (Right [targetB, targetA, targetB])))
+            sourceEvent
+            (RouteGroup "g1")
+      overflow `shouldBe` DeclarativeSelectionFailed (SelectionRecipientOverflow (oneRecipientContract ^. #limit) 2)
+      readIORef callbacks `shouldReturn` 0
+      Right atCap <-
+        _runner $
+          runDeclarativeRouterOnce
+            options
+            (selectionRouter twoRecipientContract (pure (Right [targetB, targetA, targetB])))
+            sourceEvent
+            (RouteGroup "g1")
+      atCap `shouldSatisfy` \case
+        DeclarativeSelectionDispatched (RouterResult results) -> length results == 2 && all isAppended results
+        _ -> False
+      readIORef callbacks `shouldReturn` 2
+
+    it "RouterSelection retains successful targets after a later target dispatch fails" $ \(_storeHandle, StoreRunner _runner) -> do
+      contract <- testSelectionContract EmptyAck FailureRetry 2
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          router =
+            selectionRouter contract (pure (Right [PMCommand {target = stream "partial-a", command = Add 1}, PMCommand {target = stream "partial-b", command = Add 9}]))
+              & #targetEventStream
+              .~ rejectNineEventStream
+      Right result <- _runner (runDeclarativeRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1"))
+      result `shouldSatisfy` \case
+        DeclarativeSelectionDispatched (RouterResult [first, second]) -> isAppended first && isFailed second
+        _ -> False
+      Right partialA <- _runner (Store.readStreamForward (StreamName "partial-a") (StreamVersion 0) 10)
+      Right partialB <- _runner (Store.readStreamForward (StreamName "partial-b") (StreamVersion 0) 10)
+      Vector.length partialA `shouldBe` 1
+      Vector.length partialB `shouldBe` 0
+
+    it "RouterSelection preserves target-keyed stable union across result drift" $ \(_storeHandle, StoreRunner _runner) -> do
+      contract <- testSelectionContract EmptyAck FailureRetry 2
+      attempts <- newIORef (0 :: Int)
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          selectAttempt _ = do
+            attempt <- liftIO (atomicModifyIORef' attempts (\value -> (value + 1, value)))
+            pure $ Right $ case attempt of
+              0 -> commandsFor ["union-b", "union-a"]
+              _ -> commandsFor ["union-c", "union-a"]
+          commandsFor targetNames = [PMCommand {target = stream targetName, command = Add 1} | targetName <- targetNames]
+          router = (selectionRouter contract (pure (Right []))) {select = selectAttempt}
+      Right first <- _runner (runDeclarativeRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1"))
+      Right second <- _runner (runDeclarativeRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1"))
+      first `shouldSatisfy` \case
+        DeclarativeSelectionDispatched (RouterResult results) -> all isAppended results
+        _ -> False
+      second `shouldSatisfy` \case
+        DeclarativeSelectionDispatched (RouterResult [unionA, unionC]) -> isDuplicate unionA && isAppended unionC
+        _ -> False
+      for_ ["union-a", "union-b", "union-c"] $ \targetName -> do
+        Right events <- _runner (Store.readStreamForward (StreamName targetName) (StreamVersion 0) 10)
+        Vector.length events `shouldBe` 1
+
+    it "RouterSelection worker lowers the complete empty and failure policy matrices" $ \(_storeHandle, StoreRunner _runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          message = (sourceEvent, RouteGroup "g1")
+          runCase emptySelectionPolicy failureSelectionPolicy selected = do
+            contract <- testSelectionContract emptySelectionPolicy failureSelectionPolicy 2
+            decisions <- newIORef []
+            Right () <-
+              _runner $
+                runDeclarativeRouterWorker
+                  defaultRunCommandOptions
+                  (selectionRouter contract (pure selected))
+                  (inMemoryAdapter decisions [message])
+                  Just
+            readIORef decisions
+      runCase EmptyAck FailureRetry (Right []) `shouldReturn` [AckOk]
+      runCase EmptyRetry FailureRetry (Right []) `shouldReturn` [AckRetry (RetryDelay 5)]
+      emptyDeadLetter <- runCase EmptyDeadLetter FailureRetry (Right [])
+      emptyDeadLetter `shouldSatisfy` \case
+        [AckDeadLetter reason] -> deadLetterCodeText (deadLetterReasonCode reason) == "keiro.router.selection.empty"
+        _ -> False
+      emptyHalt <- runCase EmptyHalt FailureRetry (Right [])
+      emptyHalt `shouldSatisfy` \case [AckHalt {}] -> True; _ -> False
+      runCase EmptyAck FailureRetry (Left (SelectionQueryFailed "private")) `shouldReturn` [AckRetry (RetryDelay 5)]
+      failureDeadLetter <- runCase EmptyAck FailureDeadLetter (Left (SelectionEvaluationFailed "private"))
+      failureDeadLetter `shouldSatisfy` \case
+        [AckDeadLetter reason] -> deadLetterCodeText (deadLetterReasonCode reason) == "keiro.router.selection.evaluation_failed"
+        _ -> False
+      failureHalt <- runCase EmptyAck FailureHalt (Left (SelectionQueryFailed "private"))
+      failureHalt `shouldSatisfy` \case [AckHalt {}] -> True; _ -> False
+
     it "encodes colon-bearing and non-ASCII id components without collisions" $ \(_storeHandle, StoreRunner _runner) -> do
       let sourceEventId = EventId sampleUuid
           colonLeft =
@@ -14335,6 +14486,24 @@ metadataActor recorded = do
 newtype RouteGroup = RouteGroup Text
   deriving stock (Generic, Eq, Show)
 
+testSelectionContract :: EmptySelectionPolicy -> SelectionFailurePolicy -> Natural -> IO RouterSelectionContract
+testSelectionContract selectedEmptyPolicy selectedFailurePolicy limitValue = do
+  recipientLimit <- shouldBeRight (mkRecipientLimit limitValue)
+  selectionVersion <- shouldBeRight (mkSelectionVersion 1)
+  pure
+    RouterSelectionContract
+      { identity = SelectionIdentity "router-test-selection",
+        version = selectionVersion,
+        fingerprint = SelectionFingerprint (Text.replicate 64 "a"),
+        limit = recipientLimit,
+        order = OrderByTargetStream,
+        dedupe = DedupeByTargetStream,
+        emptyPolicy = selectedEmptyPolicy,
+        failurePolicy = selectedFailurePolicy,
+        redeliveryPolicy = StableUnion,
+        partialPolicy = RetainSuccesses
+      }
+
 -- | Maps a routing group to the list of target counter stream identifiers seeded
 -- for it. The query is genuinely effectful: 'demoRouter' calls it via 'runQuery'.
 routerTargetsReadModel :: ReadModel Text [Text]
@@ -14377,6 +14546,27 @@ demoRouter =
       targetProjections = const []
     }
 
+selectionRouter ::
+  RouterSelectionContract ->
+  Eff es (Either RouterSelectionFailure [PMCommand CounterCommand]) ->
+  DeclarativeRouter
+    RouteGroup
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    es
+selectionRouter contract selection =
+  DeclarativeRouter
+    { name = "declarative-test-router",
+      key = \(RouteGroup groupName) -> groupName,
+      selectionContract = contract,
+      select = const selection,
+      targetEventStream = counterEventStream,
+      targetProjections = const []
+    }
+
 unstableRouter ::
   (IOE :> es) =>
   IORef Int ->
@@ -14411,6 +14601,11 @@ isAppended = \case
 isDuplicate :: PMCommandResult target -> Bool
 isDuplicate = \case
   PMCommandDuplicate {} -> True
+  _ -> False
+
+isFailed :: PMCommandResult target -> Bool
+isFailed = \case
+  PMCommandFailed {} -> True
   _ -> False
 
 initializeRouterTargetsTable :: Tx.Transaction ()
