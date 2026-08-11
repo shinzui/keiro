@@ -167,9 +167,10 @@ stateDiagram-v2
     Placed --> Paid : ApprovePayment / PaymentApproved<br/>u: (keep)<br/>g: ApprovePayment
     Placed --> Cancelled : CancelOrder / OrderCancelled<br/>u: (keep)<br/>g: CancelOrder
     Paid --> Packed : MarkPacked / OrderPacked<br/>u: (keep)<br/>g: MarkPacked
+    Paid --> Paid : CancelOrder / ε<br/>u: (keep)<br/>g: CancelOrder
     Packed --> Shipped : ShipOrder / OrderShipped<br/>u: (keep)<br/>g: ShipOrder
+    Cancelled --> Cancelled : CancelOrder / ε<br/>u: (keep)<br/>g: CancelOrder
     Shipped --> [*]
-    Cancelled --> [*]
 ```
 <!-- jitsurei-diagram: order-stream end -->
 

@@ -12,9 +12,8 @@ module SkelRouter.MyService.Page.Holes (
     -- (no projection)
 ) where
 
-import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, RegFile, SymTransducer, lit, (./=), (.==), (.||))
+import Keiki.Core (HsPred, SymTransducer)
 import SkelRouter.Generated.MyService.Page.Domain
 
 -- HOLE: the transducer body. Reproduce the structure below, replacing each
@@ -29,7 +28,7 @@ pageTransducer ::
 pageTransducer =
     B.buildTransducer PagePending initialPageRegs isTerminal do
         B.from PagePending do
-            B.onCmd inCtorSendPage $ \d -> B.do
+            B.onCmd inCtorSendPage $ \_ -> B.do
                 -- HOLE emit PageSent (B.emit wirePageSent ...)
                 B.goto PageDelivered
   where
