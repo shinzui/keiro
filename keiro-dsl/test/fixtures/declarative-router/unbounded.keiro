@@ -45,6 +45,7 @@ projection-owner hospital_load_writer {
   order = 10
   subscription = "declarative-router-hospital-load"
   dedup = "declarative-router-hospital-load-v1"
+  checkpoint-on-missing = fail
   replay = explicit
 }
 

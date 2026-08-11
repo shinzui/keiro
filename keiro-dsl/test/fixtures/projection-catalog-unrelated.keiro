@@ -20,6 +20,7 @@ projection-owner auxiliary_writer {
   order = 30
   subscription = "catalog-demo-auxiliary"
   dedup = "catalog-demo-auxiliary-v1"
+  checkpoint-on-missing = fail
   replay = explicit
 }
 

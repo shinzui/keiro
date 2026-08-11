@@ -137,6 +137,7 @@ projection-owner order_summary_writer {
   order = 10
   subscription = "orders-summary"
   dedup = "orders-summary-v1"
+  checkpoint-on-missing = from-beginning
   replay = explicit
 }
 
@@ -150,6 +151,13 @@ readmodel orderSummary {
   targets = [ order_summary ]
 }
 ```
+
+Candidate Language 5 requires exactly one `checkpoint-on-missing` choice for
+each subscription owner and forbids the field on inline owners. Use
+`from-beginning` to consume retained history, `from-current-head` to begin with
+future events, or `fail` to require an operator-provisioned row. A replayable
+owner of a `reset = clear` target cannot use `from-current-head`: clearing the
+target and skipping history cannot reconstruct it.
 
 Changing only the preamble does not invent ownership and will fail checking:
 the author or a future upgrade tool must add the target, group, owner, source,
@@ -386,6 +394,12 @@ target is a validation error; removing the entire target and owner together
 requires `compareCatalogBaseline` or candidate-language-5 diff evidence because
 the new catalog alone cannot prove that a declaration used to exist. Keiro never
 creates or migrates application targets.
+
+Changing only `checkpoint-on-missing` produces the dedicated
+`CatalogCheckpointPolicyChanged` finding. The generated catalog and its
+fingerprint change, so consumers must rebuild and deployment is
+stop-the-world; the persisted subscription identity and existing checkpoint
+rows remain compatible and unchanged.
 
 ## Initialize Legacy Metadata
 

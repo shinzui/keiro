@@ -4,6 +4,7 @@ slug: generate-and-classify-missing-checkpoint-policy-in-candidate-language-5
 title: "Generate and classify missing-checkpoint policy in candidate Language 5"
 kind: exec-plan
 created_at: 2026-08-09T17:50:24Z
+intention: intention_01kzrnkgtcey6a8ar7xqn9tjxx
 master_plan: "docs/masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md"
 ---
 
@@ -37,12 +38,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: add required `checkpoint-on-missing` syntax to the Language 5 model, parser,
-  formatter, inspection, mutation, workspace snapshots, and round-trip/golden tests.
-- [ ] Milestone 2: validate placement and replay-safety combinations with dedicated diagnostics
-  before scaffolding or runtime startup.
-- [ ] Milestone 3: generate Plan 215's runtime policy in catalogs, conformance facades, and hole
-  helpers, then compile every projection-catalog conformance fixture.
+- [x] (2026-08-11T20:07:26Z) Milestone 1: add required `checkpoint-on-missing` syntax to the
+  Language 5 model, parser, formatter, inspection, mutation, workspace snapshots, and
+  round-trip/golden tests.
+- [x] (2026-08-11T20:07:26Z) Milestone 2: validate placement and replay-safety combinations with
+  dedicated diagnostics before scaffolding or runtime startup.
+- [x] (2026-08-11T20:14:23Z) Milestone 3: generate Plan 215's runtime policy in catalogs,
+  conformance facades, and hole helpers, then compile every projection-catalog conformance fixture.
 - [ ] Milestone 4: classify policy changes in structural diff/replay impact, update ledgers,
   docs/examples/runtime patterns, and pass full source acceptance without releasing Language 5.
 
@@ -60,6 +62,11 @@ implementation. Provide concise evidence.
 - A checkpoint-policy change alters startup behavior and the catalog fingerprint but does not
   rename the persisted subscription/member key. Diff must express both facts instead of reporting
   an identity replacement.
+- The corpus regeneration driver completed all three selected candidate-Language-5 scaffold
+  invocations, then its repository-wide inventory audit reported the pre-existing untracked
+  `keiro-dsl-conformance-domain-outcomes` ledger gap. The generated catalog and ledger deltas were
+  still written and are independently testable; this unrelated corpus-manifest gap must not be
+  mistaken for a checkpoint-policy generation failure.
 
 
 ## Decision Log
@@ -94,6 +101,13 @@ Record every decision made while working on the plan.
   Rationale: Language 5 is unreleased. A new version gate would institutionalize the omission, and
   package publication is intentionally deferred until all accumulated improvements are complete.
   Date: 2026-08-09
+
+- Decision: Retain zero or more parsed `checkpoint-on-missing` occurrences until validation, then
+  require exactly one for subscription owners and zero for inline owners.
+  Rationale: This preserves a closed three-value policy after validation while allowing omission,
+  duplication, and inline placement to receive distinct stable diagnostics instead of falling
+  through to a generic parser failure or compatibility default.
+  Date: 2026-08-11
 
 
 ## Outcomes & Retrospective

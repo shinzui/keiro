@@ -15,11 +15,11 @@ module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"co
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedReadModel.Bindings","path":"Conformance/MappedReadModel/Bindings.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"Generated/MappedReadmodel/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"MappedReadmodel/ProjectionCatalog/ProjectionCatalogHoles.hs"}
-module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs"}
-module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/QueryContract.hs"}
-module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModel.hs"}
-module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"MappedReadmodel/AccountSummary/ReadModelHoles.hs"}
-module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 84)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelHarness.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"MappedReadmodel/AccountSummary/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelHarness.hs"}
 generated Generated/MappedReadmodel/StructuralConformance.hs
 generated Generated/MappedReadmodel/Structural/Shape/AccountLookup.hs
 generated Generated/MappedReadmodel/Structural/Shape/AccountProfile.hs
@@ -54,8 +54,8 @@ binding {"kind":"fixtures","mappedName":"TenantKey","module":"Conformance.Mapped
 binding {"kind":"binding","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":"prefix","schema":1,"signature":"unusedFilterBinding.prefix :: Text","symbol":"unusedFilterBinding"}
 binding {"kind":"fixtures","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"unusedFilterCases :: FixtureCases Conformance.MappedReadModel.Domain.UnusedFilter","symbol":"unusedFilterCases"}
 projection-catalog-fact group|reporting|account_summary_table|account_summary_table|68
-projection-catalog-fact owner|account_summary_writer|category:account|subscription|reporting|account_summary_table|10|mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1|explicit|73
-projection-catalog-fact query|account_summary|reporting|account_summary_table|84
+projection-catalog-fact owner|account_summary_writer|category:account|subscription|reporting|account_summary_table|10|mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1|from-beginning|explicit|73
+projection-catalog-fact query|account_summary|reporting|account_summary_table|85
 projection-catalog-fact target|account_summary_table|public|account_summary|clear||62
 query-contract-baseline v1
 query-contract {"mappedDependencies":["AccountLookup","TenantKey"],"position":"input","readModel":"account_summary","typeExpression":"AccountLookup"}

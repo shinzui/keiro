@@ -1497,6 +1497,8 @@ instance HasLocs RebuildGroupNode
 
 instance HasLocs CatalogSource
 
+instance HasLocs CheckpointOnMissingNode
+
 instance HasLocs ProjectionReplayPolicy
 
 instance HasLocs ProjectionOwnerNode

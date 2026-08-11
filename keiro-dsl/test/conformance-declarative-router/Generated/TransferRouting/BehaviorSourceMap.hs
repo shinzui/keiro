@@ -17,8 +17,8 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
-  "behavior-v1-51a443ca8bbb0eab" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/declarative-router/valid.keiro" 66 15)
-  "behavior-v1-6dc56a81dec7fe2b" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/declarative-router/valid.keiro" 71 3)
+  "behavior-v1-51a443ca8bbb0eab" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/declarative-router/valid.keiro" 67 15)
+  "behavior-v1-6dc56a81dec7fe2b" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/declarative-router/valid.keiro" 72 3)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text

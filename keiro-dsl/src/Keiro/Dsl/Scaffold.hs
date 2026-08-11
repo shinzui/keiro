@@ -4131,9 +4131,10 @@ emitProjectionCatalog ctx spec =
       ++ [ "import Keiro.Projection.Catalog qualified as Catalog",
            "import Keiro.ReadModel.Rebuild qualified as Rebuild",
            "import Kiroku.Store.Effect (Store)",
-           "import Kiroku.Store.Types qualified as Kiroku",
-           "import " <> holesModule <> " qualified as Holes"
+           "import Kiroku.Store.Types qualified as Kiroku"
          ]
+      ++ ["import Kiroku.Store.Subscription.Types qualified as KirokuSubscription" | not (null asyncOwners)]
+      ++ ["import " <> holesModule <> " qualified as Holes"]
       ++ map readModelImport readModels
       ++ [ "",
            "must :: Show error => Either error value -> value",
@@ -4248,6 +4249,8 @@ emitProjectionCatalog ctx spec =
         <> tshow (fromMaybe "" (poSubscription owner))
         <> " "
         <> smart "mkSourceId" (catalogSourceId (ownerPrimarySource owner))
+        <> " "
+        <> checkpointOnMissingExpr owner
         <> " "
         <> claim ("projection-owner " <> poName owner <> " subscription")
     dedupExpr owner =
@@ -4373,6 +4376,11 @@ emitProjectionCatalog ctx spec =
     ownerPrimarySource owner = case poSources owner of
       source : _ -> source
       [] -> CatalogAll
+    checkpointOnMissingExpr owner = case poCheckpointOnMissing owner of
+      [CheckpointFromBeginning] -> "KirokuSubscription.FromBeginning"
+      [CheckpointFromCurrentHead] -> "KirokuSubscription.FromCurrentHead"
+      [CheckpointFail] -> "KirokuSubscription.FailIfMissing"
+      _ -> "error \"keiro-dsl invariant: validated subscription owner must declare exactly one checkpoint-on-missing policy\""
 
 emitProjectionCatalogHoles :: Context -> [ProjectionOwnerNode] -> Text
 emitProjectionCatalogHoles ctx owners =

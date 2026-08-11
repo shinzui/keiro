@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Subscription checkpoint policy is catalog identity and replay safety
 description: Keiro fingerprints every explicit missing-checkpoint policy, rejects current-head seeding after a replayable clear, and composes Kiroku-owned checkpoint resets with rebuild preparation.
-timestamp: 2026-08-11T18:47:11Z
+timestamp: 2026-08-11T20:10:15Z
 docId: ADR-31
 status: Accepted
 date: 2026-08-11
@@ -40,6 +40,13 @@ constructor spelling, included in the deterministic catalog fingerprint, and exp
 JSON. Keiro defines local canonical ordering for the upstream type rather than adding an orphan
 `Ord` instance or deriving persistent text from `Show`.
 
+Candidate Keiro DSL Language 5 requires exactly one `checkpoint-on-missing` clause on every
+subscription projection owner and forbids the clause on inline owners. Its closed source spellings
+`from-beginning`, `from-current-head`, and `fail` lower directly to Kiroku's three constructors;
+there is no compatibility default because Language 5 remains unreleased. The DSL repeats the
+runtime replay-safety gate before scaffolding so an unsafe source fails at the earliest boundary,
+while runtime validation continues to protect hand-written and stale generated catalogs.
+
 Catalog validation rejects `FromCurrentHead` when the subscription feeds a replayable projection
 that owns a `ClearBeforeReplay` target. The diagnostic identifies the subscription ID and name,
 target ID, policy, reset mode, and claim sites. `FromBeginning` and `FailIfMissing` remain safe for
@@ -54,6 +61,12 @@ condemns the entire transaction when any catalog-declared subscription name is m
 creates member rows, deletes checkpoints, infers group topology, or issues private SQL against
 Kiroku's table.
 
+A policy-only DSL change emits `CatalogCheckpointPolicyChanged`. Its compatibility vector marks the
+generated consumer build breaking and requires stop-the-world operational review, but marks
+persisted subscription identity compatible. Text and JSON include the old and new policy; catalog
+replay impact names the affected group, targets, source, and adapter. Existing rows remain
+authoritative and do not move merely because source policy changed.
+
 
 ## Consequences
 
@@ -67,6 +80,8 @@ Kiroku's table.
   repair missing state or change the declaration; Keiro does not synthesize topology.
 - Changing only `checkpointOnMissing` changes the catalog fingerprint even though the persisted
   subscription/member identity is unchanged.
+- Candidate Language 5 cannot omit or default the policy, and evolution tooling does not conflate a
+  policy change with a subscription rename or checkpoint mutation.
 
 
 ## Alternatives considered
@@ -93,3 +108,5 @@ Kiroku's table.
   precedence, monotonic save, and explicit reset semantics.
 - [ExecPlan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md)
   implements this decision.
+- [ExecPlan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md)
+  implements the candidate-language and evolution-tooling boundary.

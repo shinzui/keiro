@@ -188,6 +188,7 @@ projection-owner audit_writer {
   order = 20
   subscription = "catalog-demo-audit"
   dedup = "catalog-demo-audit-v1"
+  checkpoint-on-missing = from-current-head
   replay = explicit
 }
 

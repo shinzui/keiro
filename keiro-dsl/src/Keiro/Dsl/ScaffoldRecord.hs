@@ -293,6 +293,7 @@ projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
             T.pack (show (poOrder owner)),
             maybe "" id (poSubscription owner),
             maybe "" id (poDedup owner),
+            T.intercalate "," (map checkpointOnMissingText (poCheckpointOnMissing owner)),
             replayText (poReplay owner),
             lineText (poLoc owner)
           ]
@@ -307,6 +308,9 @@ projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
     sourceText (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
     feedText RmInline = "inline"
     feedText RmSubscription = "subscription"
+    checkpointOnMissingText CheckpointFromBeginning = "from-beginning"
+    checkpointOnMissingText CheckpointFromCurrentHead = "from-current-head"
+    checkpointOnMissingText CheckpointFail = "fail"
     replayText ProjectionReplayExplicit = "explicit"
     replayText (ProjectionLiveOnly reason) = "live-only:" <> reason
     lineText (Loc lineNumber) = T.pack (show lineNumber)

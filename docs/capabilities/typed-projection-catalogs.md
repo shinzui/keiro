@@ -4,7 +4,7 @@ type: Capability
 description: "Declare a pure typed inventory of query models, physical targets, atomic rebuild groups, projection owners, and missing-checkpoint policy, then rebuild a whole group atomically behind one writer fence."
 generated:
   by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  at: "2026-08-11T20:10:15Z"
 capabilityId: CAP-6
 provider: mori://shinzui/keiro
 status: shipped
@@ -12,8 +12,10 @@ stability: experimental
 since: unreleased
 packages:
   - keiro
+  - keiro-dsl
 interface:
   - Keiro.Projection.Catalog
+  - Keiro.Dsl.Grammar
 requires:
   - CAP-5
 evidence:
@@ -29,6 +31,12 @@ evidence:
   - kind: module
     resource: keiro/src/Keiro/Projection/Catalog.hs
     proves: "The pure catalog type projects missing-checkpoint policy into registration and inventory with stable rendering, ordering, and fingerprint input beside independent target-reset and replay policies."
+  - kind: test
+    resource: keiro-dsl/test/Main.hs
+    proves: "Candidate Language 5 requires one closed checkpoint-on-missing policy per subscription owner, rejects inline or replay-unsafe placement, round-trips workspace facts, generates the runtime policy, and classifies a change as build-breaking and stop-the-world without re-keying persisted subscription identity."
+  - kind: test
+    resource: keiro-dsl/test/conformance-projection-catalog/Main.hs
+    proves: "The generated candidate-Language-5 catalog compiles and exposes FromCurrentHead unchanged through runtime inventory; companion conformance catalogs compile FromBeginning and FailIfMissing."
 ---
 
 # Typed projection catalogs and coordinated rebuilds
@@ -52,6 +60,13 @@ validation refuses `FromCurrentHead` when a replayable owner clears its target
 before replay. Coordinated rebuilds call Kiroku's public reset transaction,
 return the exact member keys moved, and condemn the whole preparation when any
 declared subscription has no persisted member.
+
+Candidate Language 5 requires the same choice as `checkpoint-on-missing =
+from-beginning`, `from-current-head`, or `fail` on every subscription owner and
+forbids it on inline owners. Generated catalogs lower the choice directly to
+Kiroku. Structural diff reports a policy change as a breaking generated-catalog
+change with stop-the-world coordination while explicitly preserving the
+persisted subscription/member identity and every existing checkpoint row.
 
 This is recorded as its own capability rather than an advance of
 [CAP-5](read-models-and-projections.md)'s `since`, because it arrived in a later

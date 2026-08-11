@@ -288,6 +288,9 @@ remediationFor context code
              RemedyRescaffoldContractConsumers,
              RemedyRunContractConformance
            ]
+  | code == CatalogCheckpointPolicyChanged =
+      RemedyDeploymentOrder RolloutStopTheWorld
+        :| [RemedyRescaffoldGenerated, RemedyRecompileConsumers, RemedyRunConformance]
   | code `elem` mappedWireCodes = mappedWireRemedy
   | code `elem` [MappedFieldAddedWithDefault, MappedArmAdded, MappedEnumValueAdded] = mappedAdditionRemedy
   | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged] =

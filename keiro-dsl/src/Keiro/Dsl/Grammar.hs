@@ -139,6 +139,7 @@ module Keiro.Dsl.Grammar
     ProjectionTargetNode (..),
     RebuildGroupNode (..),
     CatalogSource (..),
+    CheckpointOnMissingNode (..),
     ProjectionReplayPolicy (..),
     ProjectionOwnerNode (..),
 
@@ -1242,6 +1243,15 @@ data CatalogSource
   | CatalogAll
   deriving stock (Eq, Show, Generic)
 
+-- | What a subscription feed does when its exact durable checkpoint is absent.
+-- The parser retains a list so validation can diagnose omission and duplication
+-- precisely; a validated subscription owner has exactly one value.
+data CheckpointOnMissingNode
+  = CheckpointFromBeginning
+  | CheckpointFromCurrentHead
+  | CheckpointFail
+  deriving stock (Eq, Show, Generic)
+
 -- | Whether a projection has an application-owned replay adapter or is
 -- intentionally live-only for the recorded reason.
 data ProjectionReplayPolicy
@@ -1259,6 +1269,7 @@ data ProjectionOwnerNode = ProjectionOwnerNode
     poOrder :: !Int,
     poSubscription :: !(Maybe Text),
     poDedup :: !(Maybe Text),
+    poCheckpointOnMissing :: ![CheckpointOnMissingNode],
     poReplay :: !ProjectionReplayPolicy,
     poLoc :: !Loc
   }

@@ -19,6 +19,7 @@ import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types qualified as Kiroku
+import Kiroku.Store.Subscription.Types qualified as KirokuSubscription
 import MappedReadmodel.ProjectionCatalog.ProjectionCatalogHoles qualified as Holes
 import Generated.MappedReadmodel.AccountSummary.ReadModel qualified as RMAccountSummary
 
@@ -45,7 +46,7 @@ projectionCatalog =
     [Catalog.SourceDeclaration (must (Catalog.mkSourceId "category:account")) (Catalog.CategorySource (Kiroku.CategoryName "account")) "category:account/application-decoder/v1" (must (Catalog.mkClaimSite "source category:account"))]
     [Catalog.TargetDeclaration (must (Catalog.mkTargetId "account_summary_table")) (Catalog.QualifiedTable "public" "account_summary") Catalog.ClearBeforeReplay [] (must (Catalog.mkClaimSite "target account_summary_table"))]
     [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "account_summary_table"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting"))]
-    [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "mapped-readmodel-account-summary")) "mapped-readmodel-account-summary" (must (Catalog.mkSourceId "category:account")) (must (Catalog.mkClaimSite "projection-owner account_summary_writer subscription"))]
+    [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "mapped-readmodel-account-summary")) "mapped-readmodel-account-summary" (must (Catalog.mkSourceId "category:account")) KirokuSubscription.FromBeginning (must (Catalog.mkClaimSite "projection-owner account_summary_writer subscription"))]
     [Catalog.DedupKeyDeclaration (must (Catalog.mkDedupKeyId "mapped-readmodel-account-summary-v1")) "mapped-readmodel-account-summary-v1" (must (Catalog.mkClaimSite "projection-owner account_summary_writer dedup"))]
     [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "account_summary")) RMAccountSummary.accountSummaryReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "account_summary_table"))] (must (Catalog.mkClaimSite "readmodel account_summary")))]
     [Catalog.SomeProjectionSet accountSummaryWriterProjectionSet]

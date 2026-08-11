@@ -54,6 +54,7 @@ pProjectionOwner context = do
   ownerOrder <- symbol "order" *> symbol "=" *> boundedDecimal
   subscription <- optional (try (symbol "subscription" *> symbol "=" *> stringLit))
   dedup <- optional (try (symbol "dedup" *> symbol "=" *> stringLit))
+  checkpointOnMissing <- many (try (symbol "checkpoint-on-missing") *> symbol "=" *> pCheckpointOnMissing)
   replay <- symbol "replay" *> symbol "=" *> pReplay
   _ <- symbol "}"
   pure
@@ -66,10 +67,19 @@ pProjectionOwner context = do
         poOrder = ownerOrder,
         poSubscription = subscription,
         poDedup = dedup,
+        poCheckpointOnMissing = checkpointOnMissing,
         poReplay = replay,
         poLoc = loc
       }
   where
     pSource = symbol "source" *> symbol "=" *> choice [CatalogAggregate <$> (keyword "aggregate" *> ident), CatalogCategory <$> (keyword "category" *> stringLit), CatalogAll <$ keyword "all"]
     pFeed = choice [RmInline <$ keyword "inline", RmSubscription <$ keyword "subscription"]
+    pCheckpointOnMissing = do
+      startOffset <- getOffset
+      choice
+        [ CheckpointFromBeginning <$ keyword "from-beginning",
+          CheckpointFromCurrentHead <$ keyword "from-current-head",
+          CheckpointFail <$ keyword "fail",
+          failAt startOffset "unknown checkpoint-on-missing policy; expected from-beginning, from-current-head, or fail"
+        ]
     pReplay = choice [ProjectionReplayExplicit <$ keyword "explicit", ProjectionLiveOnly <$> (keyword "live-only" *> stringLit)]

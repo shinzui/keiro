@@ -25,6 +25,7 @@ import Generated.CatalogDemo.QualificationJobs.QueueCodec (qualificationJobsJobC
 import Generated.CatalogDemo.StructuralConformance (structuralConformanceAssertions)
 import Keiro.PGMQ.Codec (JobCodec (..))
 import Keiro.Projection.Catalog qualified as Catalog
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (FromCurrentHead))
 
 main :: IO ()
 main = do
@@ -62,6 +63,7 @@ main = do
   assert "two typed aggregate handlers" (length orderSummaryWriterInlineProjections == 1 && length shipmentWriterInlineProjections == 1)
   assert "three query registrations" (length projectionCatalogRegistrations == 3)
   assert "one async registration" (length projectionCatalogAsyncRegistrations == 1)
+  assert "generated missing-checkpoint policy" (map inventoryCheckpointPolicy (Catalog.inventorySubscriptions projectionCatalogInventory) == [FromCurrentHead])
   assert "catalog-scoped rebuild group" (Catalog.rebuildGroupIdText reportingRebuildGroupId == "reporting")
   assert "disjoint catalog rebuild group" (Catalog.rebuildGroupIdText shippingRebuildGroupId == "shipping")
   putStrLn "projection catalog conformance: PASS"
@@ -127,3 +129,6 @@ inventoryOrderedTargets Catalog.InventoryGroup {orderedTargets = targets} = targ
 
 inventoryCodecFingerprint :: Catalog.InventorySource -> Text
 inventoryCodecFingerprint (Catalog.InventorySource _ _ fingerprint) = fingerprint
+
+inventoryCheckpointPolicy :: Catalog.InventorySubscription -> MissingCheckpointPolicy
+inventoryCheckpointPolicy (Catalog.InventorySubscription _ _ _ policy) = policy

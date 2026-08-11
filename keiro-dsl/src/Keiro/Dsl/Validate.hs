@@ -34,6 +34,7 @@ import Data.List (sortOn)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -225,6 +226,10 @@ data DiagnosticCode
   | CatalogAsyncIdentityMissing
   | CatalogAsyncQueryBindingMissing
   | CatalogInlineIdentityUnexpected
+  | CatalogCheckpointPolicyMissing
+  | CatalogCheckpointPolicyDuplicate
+  | CatalogCheckpointPolicyUnexpected
+  | CatalogCheckpointPolicyReplayUnsafe
   | CatalogClearTargetLiveOnly
   | CatalogDuplicateHandlerOrder
   | CatalogReadModelBindingMissing
@@ -240,6 +245,7 @@ data DiagnosticCode
   | CatalogHandlerOrderChanged
   | CatalogSourceChanged
   | CatalogFeedIdentityChanged
+  | CatalogCheckpointPolicyChanged
   | CatalogReplayPolicyChanged
   | CatalogQueryBindingChanged
   | -- EP-107 diff-only read-model evolution rules.
@@ -2378,7 +2384,7 @@ validateRebuildGroup languageContract spec groupNode
 validateProjectionOwner :: EffectiveLanguageContract -> Spec -> ProjectionOwnerNode -> [Diagnostic]
 validateProjectionOwner languageContract spec owner
   | not (hasProjectionCatalog languageContract) = []
-  | otherwise = noSources <> noTargets <> unknownGroup <> outsideGroup <> sourceRules <> identityRules <> asyncQueryBinding <> replayRules
+  | otherwise = noSources <> noTargets <> unknownGroup <> outsideGroup <> sourceRules <> identityRules <> checkpointRules <> asyncQueryBinding <> replayRules
   where
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
     targets = [target | NProjectionTarget target <- specNodes spec]
@@ -2427,6 +2433,21 @@ validateProjectionOwner languageContract spec owner
             "projection owner '" <> poName owner <> "' with inline feed cannot declare subscription or dedup identities"
         | poSubscription owner /= Nothing || poDedup owner /= Nothing
         ]
+    checkpointRules = case poFeed owner of
+      RmSubscription ->
+        [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyMissing $
+            "projection owner '" <> poName owner <> "' with subscription feed requires exactly one checkpoint-on-missing policy"
+        | null (poCheckpointOnMissing owner)
+        ]
+          <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyDuplicate $
+                 "projection owner '" <> poName owner <> "' declares checkpoint-on-missing more than once; choose exactly one of from-beginning, from-current-head, or fail"
+             | length (poCheckpointOnMissing owner) > 1
+             ]
+      RmInline ->
+        [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyUnexpected $
+            "projection owner '" <> poName owner <> "' with inline feed cannot declare checkpoint-on-missing because inline delivery has no durable subscription checkpoint"
+        | not (null (poCheckpointOnMissing owner))
+        ]
     asyncQueryBinding =
       [ mkErr (locLine (poLoc owner)) CatalogAsyncQueryBindingMissing $
           "projection owner '" <> poName owner <> "' has no query model in group '" <> poGroup owner <> "' observing one of its targets"
@@ -2446,6 +2467,15 @@ validateProjectionOwner languageContract spec owner
         ptName target `elem` poTargets owner,
         ptReset target == TargetClear
       ]
+        <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyReplayUnsafe $
+               "projection owner '" <> poName owner <> "' uses from-current-head for subscription '" <> fromMaybe "" (poSubscription owner) <> "' while replayable target '" <> ptName target <> "' is cleared before replay; use from-beginning or fail"
+           | poFeed owner == RmSubscription,
+             poCheckpointOnMissing owner == [CheckpointFromCurrentHead],
+             poReplay owner == ProjectionReplayExplicit,
+             target <- targets,
+             ptName target `elem` poTargets owner,
+             ptReset target == TargetClear
+           ]
 
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]

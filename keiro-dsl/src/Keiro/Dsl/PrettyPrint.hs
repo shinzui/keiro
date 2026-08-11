@@ -454,11 +454,15 @@ docProjectionOwner owner =
          ]
       ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (poSubscription owner)
       ++ maybe [] (pure . indent 2 . ("dedup =" <+>) . dquoted) (poDedup owner)
+      ++ map (indent 2 . ("checkpoint-on-missing =" <+>) . docCheckpointOnMissing) (poCheckpointOnMissing owner)
       ++ [indent 2 ("replay =" <+> docReplay (poReplay owner)), "}"]
   where
     docSource (CatalogAggregate aggregateName) = "aggregate" <+> pretty aggregateName
     docSource (CatalogCategory categoryName) = "category" <+> dquoted categoryName
     docSource CatalogAll = "all"
+    docCheckpointOnMissing CheckpointFromBeginning = "from-beginning"
+    docCheckpointOnMissing CheckpointFromCurrentHead = "from-current-head"
+    docCheckpointOnMissing CheckpointFail = "fail"
     docReplay ProjectionReplayExplicit = "explicit"
     docReplay (ProjectionLiveOnly reason) = "live-only" <+> dquoted reason
 

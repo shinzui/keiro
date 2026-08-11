@@ -275,6 +275,17 @@ queueBreakingVector =
     VBreaking
     (Set.fromList [RolloutWorkersFirst, RolloutDrainRequired])
 
+catalogCheckpointPolicyVector :: CompatibilityVector
+catalogCheckpointPolicyVector =
+  CompatibilityVector
+    VCompatible
+    VCompatible
+    VNotApplicable
+    VNotApplicable
+    VCompatible
+    VBreaking
+    (Set.singleton RolloutStopTheWorld)
+
 advisoryVector :: CompatibilitySurface -> Set RolloutConstraint -> CompatibilityVector
 advisoryVector surface rollout =
   compatibleVector
@@ -323,6 +334,7 @@ classifyCompatibility context code
   | code `elem` readModelBreakingCodes = persistedIdentityBreakingVector
   | code `elem` catalogIdentityCodes = persistedIdentityBreakingVector
   | code `elem` catalogReplayCodes = privateDecodeBreakingVector
+  | code == CatalogCheckpointPolicyChanged = catalogCheckpointPolicyVector
   | code == CatalogHandlerOrderChanged =
       (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
   | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
@@ -1328,7 +1340,7 @@ projectionOwnerDiff env =
     paired = pairByName nodeProjectionOwner poName env
 
 projectionOwnerPairDiff :: ProjectionOwnerNode -> ProjectionOwnerNode -> [Change]
-projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> sourceChange <> feedIdentityChange <> replayChange
+projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> sourceChange <> feedIdentityChange <> checkpointPolicyChange <> replayChange
   where
     ownerName = poName newOwner
     groupAndTargets =
@@ -1347,10 +1359,22 @@ projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> so
       [ breaking ownerName "projection-owner-feed-identity" ownerName CatalogFeedIdentityChanged "feed, subscription, or dedup identity changed; cursors or dedup evidence remain under the old identity"
       | (poFeed oldOwner, poSubscription oldOwner, poDedup oldOwner) /= (poFeed newOwner, poSubscription newOwner, poDedup newOwner)
       ]
+    checkpointPolicyChange =
+      [ breaking ownerName "projection-owner-checkpoint-on-missing" ownerName CatalogCheckpointPolicyChanged $
+          "checkpoint-on-missing changed " <> renderCheckpointOnMissing oldPolicy <> " -> " <> renderCheckpointOnMissing newPolicy <> "; the generated catalog and next absent-row startup behavior change, while persisted subscription identity and existing checkpoint rows remain unchanged"
+      | [oldPolicy] <- [poCheckpointOnMissing oldOwner],
+        [newPolicy] <- [poCheckpointOnMissing newOwner],
+        oldPolicy /= newPolicy
+      ]
     replayChange =
       [ breaking ownerName "projection-owner-replay-policy" ownerName CatalogReplayPolicyChanged "replay policy changed; abandon any active run before rebuilding under the new contract"
       | poReplay oldOwner /= poReplay newOwner
       ]
+
+renderCheckpointOnMissing :: CheckpointOnMissingNode -> Text
+renderCheckpointOnMissing CheckpointFromBeginning = "from-beginning"
+renderCheckpointOnMissing CheckpointFromCurrentHead = "from-current-head"
+renderCheckpointOnMissing CheckpointFail = "fail"
 
 addedReadModelDiff :: ReadModelNode -> [Change]
 addedReadModelDiff readModel =

@@ -1518,6 +1518,7 @@ projection-owner order_summary_writer {
   order = 10
   subscription = "catalog-demo-orders"
   dedup = "catalog-demo-orders-v1"
+  checkpoint-on-missing = from-beginning
   replay = explicit
 }
 
@@ -1545,8 +1546,15 @@ Each `projection-owner` selects exactly one typed source: `aggregate Name`,
 It owns at least one target in one group and has a globally unique numeric
 handler order. Subscription feeds also require `subscription` and `dedup`
 identities and a query model that observes one of their targets. Inline feeds
-must omit those identities. `replay = explicit` generates distinct live and
-replay apply holes. `replay = live-only "reason"` generates no replay adapter
+must omit those identities. A subscription must also choose exactly one
+`checkpoint-on-missing` policy: `from-beginning` replays retained history,
+`from-current-head` starts with future events when no row exists, and `fail`
+refuses startup until an operator provisions the checkpoint. Inline feeds must
+omit this policy because they have no durable checkpoint. A replayable owner of
+a `reset = clear` target cannot choose `from-current-head`, because clearing the
+target and skipping retained history cannot reconstruct it. `replay =
+explicit` generates distinct live and replay apply holes. `replay = live-only
+"reason"` generates no replay adapter
 and is invalid for a clear target.
 
 A catalog-bound `readmodel` is a typed query contract. It names its group and

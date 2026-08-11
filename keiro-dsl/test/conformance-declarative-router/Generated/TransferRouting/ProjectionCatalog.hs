@@ -19,6 +19,7 @@ import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types qualified as Kiroku
+import Kiroku.Store.Subscription.Types qualified as KirokuSubscription
 import TransferRouting.ProjectionCatalog.ProjectionCatalogHoles qualified as Holes
 import Generated.TransferRouting.HospitalLoad.ReadModel qualified as RMHospitalLoad
 
@@ -45,7 +46,7 @@ projectionCatalog =
     [Catalog.SourceDeclaration (must (Catalog.mkSourceId "category:hospitalLoad")) (Catalog.CategorySource (Kiroku.CategoryName "hospitalLoad")) "category:hospitalLoad/application-decoder/v1" (must (Catalog.mkClaimSite "source category:hospitalLoad"))]
     [Catalog.TargetDeclaration (must (Catalog.mkTargetId "hospital_load_table")) (Catalog.QualifiedTable "public" "hospital_load") Catalog.ClearBeforeReplay [] (must (Catalog.mkClaimSite "target hospital_load_table"))]
     [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "hospital_load_table"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting"))]
-    [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "declarative-router-hospital-load")) "declarative-router-hospital-load" (must (Catalog.mkSourceId "category:hospitalLoad")) (must (Catalog.mkClaimSite "projection-owner hospital_load_writer subscription"))]
+    [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "declarative-router-hospital-load")) "declarative-router-hospital-load" (must (Catalog.mkSourceId "category:hospitalLoad")) KirokuSubscription.FailIfMissing (must (Catalog.mkClaimSite "projection-owner hospital_load_writer subscription"))]
     [Catalog.DedupKeyDeclaration (must (Catalog.mkDedupKeyId "declarative-router-hospital-load-v1")) "declarative-router-hospital-load-v1" (must (Catalog.mkClaimSite "projection-owner hospital_load_writer dedup"))]
     [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "hospital_load")) RMHospitalLoad.hospitalLoadReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "hospital_load_table"))] (must (Catalog.mkClaimSite "readmodel hospital_load")))]
     [Catalog.SomeProjectionSet hospitalLoadWriterProjectionSet]

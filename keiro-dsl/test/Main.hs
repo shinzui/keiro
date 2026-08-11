@@ -264,6 +264,7 @@ main = hspec $ do
                   poOrder = 1,
                   poSubscription = if feed == RmSubscription then Just (name <> "-subscription") else Nothing,
                   poDedup = if feed == RmSubscription then Just (name <> "-dedup") else Nothing,
+                  poCheckpointOnMissing = if feed == RmSubscription then [CheckpointFromBeginning] else [],
                   poReplay = replayPolicy,
                   poLoc = noLoc
                 }
@@ -1982,6 +1983,7 @@ main = hspec $ do
       map ptName targets `shouldBe` ["order_summary", "audit_log", "order_totals", "shipment_summary"]
       map rgName groups `shouldBe` ["reporting", "shipping"]
       map poName owners `shouldBe` ["order_summary_writer", "shipment_writer", "audit_writer"]
+      map poCheckpointOnMissing owners `shouldBe` [[], [], [CheckpointFromCurrentHead]]
 
     it "derives and restores mapped projection impact for the compiled A/B catalog fixture" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -2060,6 +2062,27 @@ main = hspec $ do
             pure (map code (validateService service))
       missingAsyncIdentity <- mutationCodes (T.replace "  subscription = \"catalog-demo-audit\"\n" "")
       missingAsyncIdentity `shouldContain` [CatalogAsyncIdentityMissing]
+      missingCheckpointPolicy <- mutationCodes (T.replace "  checkpoint-on-missing = from-current-head\n" "")
+      missingCheckpointPolicy `shouldContain` [CatalogCheckpointPolicyMissing]
+      duplicateCheckpointPolicy <- mutationCodes (T.replace "  checkpoint-on-missing = from-current-head\n" "  checkpoint-on-missing = from-current-head\n  checkpoint-on-missing = fail\n")
+      duplicateCheckpointPolicy `shouldContain` [CatalogCheckpointPolicyDuplicate]
+      unexpectedInlineCheckpointPolicy <- mutationCodes (T.replace "  order = 10\n  replay = explicit" "  order = 10\n  checkpoint-on-missing = from-beginning\n  replay = explicit")
+      unexpectedInlineCheckpointPolicy `shouldContain` [CatalogCheckpointPolicyUnexpected]
+      replayUnsafeCheckpointPolicy <- mutationCodes (T.replace "table = \"audit_log\"\n  reset = preserve" "table = \"audit_log\"\n  reset = clear")
+      replayUnsafeCheckpointPolicy `shouldContain` [CatalogCheckpointPolicyReplayUnsafe]
+      case parseSource "projection-catalog-unknown-checkpoint-policy.keiro" (T.replace "checkpoint-on-missing = from-current-head" "checkpoint-on-missing = newest" source) of
+        Left failure -> do
+          let rendered = renderParseFailure failure
+          rendered `shouldSatisfy` T.isInfixOf "unknown checkpoint-on-missing policy"
+          rendered `shouldSatisfy` T.isInfixOf "from-beginning"
+          rendered `shouldSatisfy` T.isInfixOf "from-current-head"
+          rendered `shouldSatisfy` T.isInfixOf "fail"
+        Right _ -> expectationFailure "unknown checkpoint-on-missing value parsed successfully"
+      forM_ ["from-beginning", "fail"] $ \policy -> do
+        acceptedPolicy <- mutationCodes (T.replace "checkpoint-on-missing = from-current-head" ("checkpoint-on-missing = " <> policy))
+        acceptedPolicy `shouldNotContain` [CatalogCheckpointPolicyMissing, CatalogCheckpointPolicyDuplicate, CatalogCheckpointPolicyUnexpected, CatalogCheckpointPolicyReplayUnsafe]
+        acceptedClearPolicy <- mutationCodes (T.replace "table = \"audit_log\"\n  reset = preserve" "table = \"audit_log\"\n  reset = clear" . T.replace "checkpoint-on-missing = from-current-head" ("checkpoint-on-missing = " <> policy))
+        acceptedClearPolicy `shouldNotContain` [CatalogCheckpointPolicyReplayUnsafe]
       unsafeLiveOnly <- mutationCodes (T.replace "  replay = explicit\n}" "  replay = live-only \"external side effect\"\n}")
       unsafeLiveOnly `shouldContain` [CatalogClearTargetLiveOnly]
       duplicateOrder <- mutationCodes (T.replace "  order = 20\n" "  order = 10\n")
@@ -2090,6 +2113,7 @@ main = hspec $ do
       facade `shouldSatisfy` T.isInfixOf "Catalog.validateProjectionCatalog projectionCatalog"
       facade `shouldSatisfy` T.isInfixOf "Catalog.ClearBeforeReplay"
       facade `shouldSatisfy` T.isInfixOf "Catalog.PreserveAndReconcile"
+      facade `shouldSatisfy` T.isInfixOf "KirokuSubscription.FromCurrentHead"
       facade
         `shouldSatisfy` ( \text ->
                             let (_, fromFirst) = T.breakOn "orderSummaryWriterProjectionSet" text
@@ -2100,6 +2124,7 @@ main = hspec $ do
       facts `shouldBe` sort facts
       facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
+      facts `shouldSatisfy` any (T.isInfixOf "|from-current-head|explicit|")
 
     it "preserves edited catalog behavior holes on regeneration" $
       withTempDirectory "keiro-dsl-projection-catalog-create-once" $ \out -> do
@@ -2145,6 +2170,7 @@ main = hspec $ do
                 "  order = 20",
                 "  subscription = \"catalog-demo-audit\"",
                 "  dedup = \"catalog-demo-audit-v1\"",
+                "  checkpoint-on-missing = from-current-head",
                 "  replay = explicit",
                 "}",
                 ""
@@ -2163,6 +2189,7 @@ main = hspec $ do
               ("feed", CatalogFeedIdentityChanged, T.replace "feed = subscription" "feed = inline"),
               ("subscription", CatalogFeedIdentityChanged, T.replace "subscription = \"catalog-demo-audit\"" "subscription = \"catalog-demo-audit-v2\""),
               ("dedup", CatalogFeedIdentityChanged, T.replace "dedup = \"catalog-demo-audit-v1\"" "dedup = \"catalog-demo-audit-v2\""),
+              ("checkpoint-policy", CatalogCheckpointPolicyChanged, T.replace "checkpoint-on-missing = from-current-head" "checkpoint-on-missing = fail"),
               ("replay-policy", CatalogReplayPolicyChanged, T.replace "replay = live-only \"carrier events cannot be replayed\"" "replay = explicit"),
               ("query-binding", CatalogQueryBindingChanged, T.replace "targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
             ]
@@ -2174,6 +2201,34 @@ main = hspec $ do
       sourceChanged <- case lookup "source" changedServices of
         Just changed -> pure changed
         Nothing -> expectationFailure "source mutation was not exercised" >> fail "unreachable"
+      policyChanged <- case lookup "checkpoint-policy" changedServices of
+        Just changed -> pure changed
+        Nothing -> expectationFailure "checkpoint policy mutation was not exercised" >> fail "unreachable"
+      let policyChanges = [change | change <- diffServices oldService policyChanged, ckCode (kindOfChange change) == CatalogCheckpointPolicyChanged]
+      case policyChanges of
+        [change] -> do
+          let finding = kindOfChange change
+              rendered = renderFinding change
+              encoded = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReport defaultGate [change])))
+          cvPersistedIdentity (ckVector finding) `shouldBe` VCompatible
+          cvConsumerBuild (ckVector finding) `shouldBe` VBreaking
+          cvRollout (ckVector finding) `shouldBe` Set.singleton RolloutStopTheWorld
+          ckDetail finding `shouldSatisfy` T.isInfixOf "existing checkpoint rows remain unchanged"
+          rendered `shouldSatisfy` T.isInfixOf "from-current-head -> fail"
+          rendered `shouldSatisfy` T.isInfixOf "rollout=stop-the-world"
+          encoded `shouldSatisfy` T.isInfixOf "CatalogCheckpointPolicyChanged"
+          encoded `shouldSatisfy` T.isInfixOf "from-current-head -> fail"
+          encoded `shouldSatisfy` T.isInfixOf "\"persisted-identity\":\"compatible\""
+          encoded `shouldSatisfy` T.isInfixOf "\"rollout\":[\"stop-the-world\"]"
+        changes -> expectationFailure ("expected one checkpoint-policy finding, got " <> show (length changes))
+      case ReplayImpact.catalogReplayImpactServices oldService policyChanged of
+        CatalogReplayAffected groups targets sources adapters invalidates -> do
+          groups `shouldBe` Set.singleton "reporting"
+          targets `shouldBe` Set.singleton "audit_log"
+          sources `shouldBe` Set.singleton "category:audit"
+          adapters `shouldBe` Set.singleton "audit_writer"
+          invalidates `shouldBe` True
+        CatalogReplayNeutral -> expectationFailure "checkpoint-policy change was replay-neutral"
       case ReplayImpact.catalogReplayImpactServices oldService sourceChanged of
         CatalogReplayAffected groups targets sources adapters invalidates -> do
           groups `shouldBe` Set.singleton "reporting"
@@ -5758,7 +5813,7 @@ main = hspec $ do
     it "RouterSelection rejects unbounded selection at its declaration" $ do
       diagnostics <- diagnosticsOf "test/fixtures/declarative-router/unbounded.keiro"
       [(line diagnostic, code diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
-        `shouldBe` [(79, RouterSelectionRecipientLimitMissing)]
+        `shouldBe` [(80, RouterSelectionRecipientLimitMissing)]
 
     it "RouterSelection assigns a dedicated diagnostic to every declarative selection rejection class" $ do
       source <- readTestText "test/fixtures/declarative-router/valid.keiro"

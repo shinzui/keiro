@@ -78,6 +78,7 @@ projection-owner account_summary_writer {
   order = 10
   subscription = "mapped-readmodel-account-summary"
   dedup = "mapped-readmodel-account-summary-v1"
+  checkpoint-on-missing = from-beginning
   replay = explicit
 }
 
