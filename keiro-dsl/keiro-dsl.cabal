@@ -1232,25 +1232,35 @@ test-suite keiro-dsl-conformance-declarative-router
   other-modules:
     Conformance.DeclarativeRouter.Bindings
     Conformance.DeclarativeRouter.Domain
+    Generated.TransferRouting.BehaviorSourceMap
+    Generated.TransferRouting.Hospital.BehaviorContract
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain
     Generated.TransferRouting.Hospital.EventStream
+    Generated.TransferRouting.Hospital.Harness
+    Generated.TransferRouting.Hospital.Projection
     Generated.TransferRouting.Hospital.Transducer
     Generated.TransferRouting.HospitalLoad.QueryContract
     Generated.TransferRouting.HospitalLoad.ReadModel
+    Generated.TransferRouting.HospitalLoad.ReadModelHarness
     Generated.TransferRouting.HospitalLoad.ReadModelTable
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.ProjectionCatalog
+    Generated.TransferRouting.ReplayAudit
     Generated.TransferRouting.Structural.Shape.HospitalLoadRow
     Generated.TransferRouting.Structural.Shape.TransferRouteInput
     Generated.TransferRouting.StructuralConformance
     Generated.TransferRouting.StructuralProjections
+    TransferRouting.Hospital.BehaviorHoles
     TransferRouting.HospitalLoad.ReadModelHoles
+    TransferRouting.ProjectionCatalog.ProjectionCatalogHoles
 
   build-depends:
     , aeson               >=2.2      && <2.3
     , base                >=4.21     && <5
     , bytestring          >=0.11     && <0.13
+    , containers          >=0.6      && <0.8
     , effectful-core
     , hasql               >=1.10     && <1.11
     , hasql-transaction   >=1.1      && <1.3
