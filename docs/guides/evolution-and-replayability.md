@@ -510,6 +510,39 @@ re-runs the *current* handler against the stored source event.
 > PM/router redelivery and replay any dead letters **before** deploying a decide
 > change (see [Deploy ordering](#deploy-ordering-rules)).
 
+## Changing typed domain outcomes
+
+Candidate language 5 treats outcome annotations as forward command behavior,
+not persisted fold behavior. Changing a declared rejection/no-op type or a
+transition's accepted/rejected/no-op kind or reason produces
+`DomainOutcomeTypesChanged` or `DomainTransitionOutcomeChanged` in semantic
+diff and changes the aggregate's behavior identity. It does not change event
+compatibility, the fold fingerprint, snapshot compatibility, or replay impact:
+the annotation is evaluated only after Keiki has selected a live edge and is
+never stored in history.
+
+To migrate an existing untyped aggregate:
+
+1. Adopt `language keiro-dsl 5` and declare
+   `domain-outcomes rejection=<Type> no-op=<Type>` before `regs`.
+2. Mark every event-emitting live transition `outcome accepted`.
+3. Inspect every existing epsilon transition. It must already be a write-free
+   self-loop; classify it explicitly as `outcome rejected <reason>` or
+   `outcome no-op <reason>`. If it changes durable state, model and emit an
+   accepted event instead.
+4. Leave replay-only transitions unannotated. They invert stored events and do
+   not handle forward commands.
+5. Re-scaffold and adopt the generated `<aggregate>DomainCommandHandler` with
+   `runDomainCommand*`. Fill exact `RejectedWith` and `NoOpWith` conformance
+   witnesses, then run the generated package and mutation gate.
+
+This migration needs no event rewrite or replay-only twin because stored events
+and fold terms are unchanged. Deploy the DSL source, generated facade, and
+caller pattern matches together: removing or changing the declaration changes
+the forward command API even though it is replay-neutral. A command with no
+selected edge still returns generic `CommandRejected`; adding a domain reason
+requires an explicit guarded silent transition, not a fallback classifier arm.
+
 ## Changing a projection catalog
 
 Candidate language 5 makes read-side ownership an evolution surface instead of

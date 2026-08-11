@@ -59,6 +59,22 @@ effects. Validated event streams continue to reject eventless durable state
 changes. Replay-only edges never handle forward commands and cannot produce a
 domain decision.
 
+Candidate Keiro DSL language 5 exposes this contract directly. An
+outcome-enabled aggregate declares its rejection and no-op types, and every
+live transition declares exactly one accepted, rejected, or no-op result.
+Accepted transitions emit a non-empty event word. Rejected/no-op transitions
+are write-free, eventless self-loops whose checked reason expression resolves
+to the declared type. Replay-only transitions remain unannotated.
+
+The generated event-stream module is the single owner of the aggregate's
+`DomainCommandHandler`. Its classifier dispatches directly on the selected
+edge's source state and zero-based outgoing index and evaluates only that arm's
+Keiki term against the pre-command registers and command. It does not keep a
+runtime map, search outgoing edges, re-run guards, or create an application
+hole for the reason. Generated conformance steps Keiki once, checks exact edge
+and silent-state preservation, and compares the public handler result with an
+independently owned typed witness reason.
+
 No outgoing edge and no matching edge remain `Left CommandRejected`.
 Ambiguity, hydration, encoding, store, conflict-fixpoint, and retry-exhaustion
 failures remain their existing `CommandError` values. Typed rejection and no-op
@@ -118,6 +134,13 @@ define a second generated outcome type.
   second result authority.
 - Existing applications remain source-compatible and may adopt the typed
   runner family one aggregate or coordinator at a time.
+- DSL adoption is exhaustive: once an aggregate declares outcome types, an
+  omitted or inconsistent live-edge outcome is rejected before scaffolding.
+- Outcome-only source edits change command behavior identity and semantic diff
+  but remain fold-, snapshot-, event-, and replay-neutral.
+- Generated classifier source grows once per silent edge. Direct nested
+  dispatch keeps runtime selection independent of edge position while the DSL
+  scaling gate makes the intentional linear source cost visible.
 
 
 ## References

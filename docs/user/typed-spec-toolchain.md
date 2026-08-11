@@ -757,6 +757,78 @@ clauses. Its create-once module supplies the implementation and a `FoldVersion`.
 Bump that token whenever hand-owned predicate or update behavior changes so
 snapshots and replay audits can detect the new fold.
 
+### Candidate Language 5 typed domain outcomes
+
+Language 5 can make every selected command result explicit without turning a
+business rejection into an event:
+
+```text
+language keiro-dsl 5
+context reservations
+
+enum ReservationRejection {
+  AlreadyCancelled=already-cancelled
+  CapacityUnavailable=capacity-unavailable
+}
+enum ReservationNoOp { DuplicateRequest=duplicate-request }
+
+aggregate Reservation
+  domain-outcomes rejection=ReservationRejection no-op=ReservationNoOp
+  regs
+    lastRequestId Text = "none"
+  states Eligible CancelledState
+
+  command Cancel { requestId:Text }
+  event Cancelled = fields(Cancel)
+
+  Eligible -- Cancel -->
+    write lastRequestId := cmd.requestId
+    outcome accepted
+    emit Cancelled
+    goto CancelledState
+
+  CancelledState -- Cancel -->
+    guard cmd.requestId != reg.lastRequestId
+    outcome rejected ReservationRejection.AlreadyCancelled
+    goto CancelledState
+
+  CancelledState -- Cancel -->
+    guard cmd.requestId == reg.lastRequestId
+    outcome no-op ReservationNoOp.DuplicateRequest
+    goto CancelledState
+```
+
+The aggregate declaration is opt-in. Once present, every live transition has
+exactly one outcome clause. `accepted` requires at least one emitted event.
+`rejected` and `no-op` require an eventless, write-free self-loop; replay-only
+transitions have no outcome. Rejection and no-op reasons use the same typed
+scalar expression scope as guards and writes: literals, enum/ID values,
+command fields, pre-command registers, arithmetic, and checked mapped
+projections. The expression must resolve to the declared result type.
+
+Scaffolding exports
+`Generated.<Context>.<Aggregate>.EventStream.<aggregate>DomainCommandHandler`.
+Its pure classifier receives Keiki's already-selected `EdgeRef`, dispatches
+directly by source state and zero-based outgoing index, and evaluates only that
+arm's reason term against the pre-command registers and command. It contains
+one constant-size arm per rejected/no-op edge; it does not search a map or
+association list and never re-runs a guard. Accepted event retention remains a
+responsibility of `Keiro.Command.runDomainCommand`, not generated code.
+
+Behavior conformance uses `RejectedWith reason` and `NoOpWith reason` witnesses.
+The generated contract steps Keiki once, verifies the exact edge and unchanged
+state/registers, then compares the public handler's result with the independently
+owned witness value. `Rejects RejectNoOutgoingEdges` and
+`Rejects RejectNoMatchingEdge` remain the expectations for a command that did
+not select an edge at all.
+
+The parser-scaling benchmark includes `domain-outcomes/check` and
+`domain-outcomes/generate` rows for 8, 32, 128, and 512 silent edges. Its
+preflight asserts one arm per silent edge, rejects sequential lookup/search
+dispatch, and enforces the sixfold source-growth cap for a fourfold edge
+increase. The performance baseline is intentionally not published until the
+repository's quiet-host benchmark prerequisite is satisfied.
+
 ### Replay-only transitions and event retirement
 
 A replay-only transition participates in hydration but never accepts a new
@@ -2059,13 +2131,14 @@ A source without a `language keiro-dsl N` preamble selects compatibility-only
 language 1. Declared languages 1 through 3 are compatibility-only, language 4
 remains the published stable contract, and candidate language 5 is the current
 development authoring default. Earlier languages do not gain language 5's catalog or mapped
-consumer syntax.
+consumer syntax or typed domain-outcome declarations/clauses.
 `check` and `scaffold`
 print one `language contract:` notice for those sources (workspace notices
 summarize member provenance); `diff` prints it for the working-tree side only.
 Use `--min-language 5` only after a service intentionally adopts the candidate
-catalog contract; mapped queue/query spellings, generation, conformance, coverage,
-and evolution reporting are all checked before adoption.
+catalog and typed-outcome contract; mapped queue/query spellings, outcome
+exhaustiveness, generation, conformance, coverage, and evolution reporting are
+all checked before adoption.
 Existing language-4 CI may keep `--min-language 4` without
 triggering a mechanical rewrite.
 

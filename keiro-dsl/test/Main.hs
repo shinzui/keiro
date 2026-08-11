@@ -1749,6 +1749,7 @@ main = hspec $ do
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
             "contract-v1-compat.keiro",
+            "domain-command-outcomes.keiro",
             "id-domain-migration-v3.keiro",
             "language-duplicate.keiro",
             "language-identifier-v1.keiro",
@@ -1866,6 +1867,9 @@ main = hspec $ do
           eventStream = case [moduleText value | value <- modules, "/EventStream.hs" `T.isSuffixOf` T.pack (modulePath value)] of
             [value] -> value
             values -> error ("unexpected outcome event-stream modules: " <> show values)
+          behaviorContract = case [moduleText value | value <- modules, "/BehaviorContract.hs" `T.isSuffixOf` T.pack (modulePath value)] of
+            [value] -> value
+            values -> error ("unexpected outcome behavior-contract modules: " <> show values)
       map moduleText modulesAgain `shouldBe` map moduleText modules
       firewallBreaches modules `shouldBe` []
       eventStream `shouldSatisfy` T.isInfixOf "reservationDomainCommandHandler"
@@ -1878,6 +1882,10 @@ main = hspec $ do
       eventStream `shouldSatisfy` T.isInfixOf "1 -> SilentNoOp"
       forM_ ["Data.Map", "lookup", "find", "edgesOut", "Keiro.Command.Domain"] $ \forbidden ->
         eventStream `shouldSatisfy` (not . T.isInfixOf forbidden)
+      behaviorContract `shouldSatisfy` T.isInfixOf "RejectedWith ReservationRejection"
+      behaviorContract `shouldSatisfy` T.isInfixOf "NoOpWith ReservationNoOp"
+      behaviorContract `shouldSatisfy` T.isInfixOf "runSilentDecision"
+      behaviorContract `shouldSatisfy` T.isInfixOf "reservationDomainCommandHandler"
 
     it "reports complete, typed, and state-preserving outcome diagnostics" $ do
       source <- readTestText "test/fixtures/domain-command-outcomes.keiro"

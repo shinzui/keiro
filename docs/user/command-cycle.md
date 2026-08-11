@@ -131,6 +131,29 @@ its ordinary `CommandResult`. Apply it under the outer `Either` with `fmap`.
 An unmatched command remains `Left CommandRejected` and never reaches the
 adapter.
 
+For a candidate-language-5 aggregate with a `domain-outcomes` declaration,
+`keiro-dsl scaffold` constructs this handler in the generated event-stream
+module and exports it under the normalized aggregate name. For example:
+
+```haskell
+import Generated.Reservations.Reservation.EventStream
+  ( reservationDomainCommandHandler )
+
+result <-
+  runDomainCommand
+    defaultRunCommandOptions
+    reservationDomainCommandHandler
+    reservationStream
+    command
+```
+
+The generated classifier does not re-evaluate a guard. It matches the exact
+`EdgeRef` selected by Keiki with a direct state/index `case` and evaluates only
+that edge's checked reason term using the pre-command registers and command.
+Accepted edges bypass the classifier; `runDomainCommand` owns the returned
+non-empty event batch. Rejected/no-op edges are state-preserving and emit
+nothing, so they open no append transaction.
+
 Use `runCommandWithSql` when you need one SQL continuation in the same
 transaction as the append.
 

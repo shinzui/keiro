@@ -57,7 +57,7 @@ unchanged.
 - [x] (2026-08-10T23:56:31Z) Milestone 1: added candidate
   language-5 grammar, typed AST nodes, canonical rendering, and semantic
   validation for exhaustive accepted/rejected/no-op outcomes. The focused
-  `typed-domain-outcomes` suite passes 4 examples.
+  `typed-domain-outcomes` suite passes 5 examples.
 - [x] (2026-08-10T23:56:31Z) Milestone 2: added separate syntax/runtime
   capability markers, outcome-only semantic diff diagnostics, and command
   behavior identity while retaining the frozen fold encoding and replay
@@ -74,8 +74,16 @@ unchanged.
   `keiro-dsl-conformance-domain-outcomes` package, and added falsification for
   wrong reason/kind plus all planned source-invalid mutations. The clean
   package and mutation script pass; the older 19-obligation complete-behavior
-  package also remains green.
-- [ ] Milestone 5: finish DSL documentation, changelogs, request status, ADR updates, and full validation.
+  package also remains green. The successful idempotent public CLI scaffold is
+  retained at `/tmp/keiro-domain-outcomes.k88pOH/generated` for inspection.
+- [ ] Milestone 5: documentation, changelogs, ADR 0029 consequences, and the
+  improvement-request evidence are updated. `cabal build all`, the 456-example
+  Keiro suite, the 679-example DSL suite, the 23-example Jitsurei suite, strict
+  ADR/OKF validation, targeted `nix fmt`, and `nix flake check` pass. Final
+  completion remains pending the performance closeout: `just bench-regression`
+  cannot start measurements because the configured database lacks relation
+  `keiro_outbox`, and the outcome-generation baseline remains intentionally
+  deferred to the prerequisite quiet-host run.
 
 
 ## Surprises & Discoveries
@@ -107,6 +115,20 @@ unchanged.
   import. The scanner now recognizes only an event-stream module that actually
   exposes `DomainCommandHandler`; ordinary event-stream modules remain scanned,
   and both the idempotent fixture scaffold and focused firewall assertion pass.
+
+- Discovery: Outcome values must be contextual transition keywords rather than
+  globally reserved identifiers.
+  Evidence: the first full DSL run failed 84 examples because existing candidate
+  fixtures use `accepted` as a command/register field. Removing `accepted`,
+  `rejected`, and `rejection` from the global reserved-word list while retaining
+  them after `outcome`/`domain-outcomes` restored all fixtures; the complete rerun
+  passed 679 examples with 0 failures.
+
+- Discovery: The repository benchmark regression gate depends on a migrated
+  PostgreSQL benchmark database before it can compare existing baselines.
+  Evidence: `just bench-regression` stopped in all three outbox cases at
+  `TRUNCATE keiro_outbox` with PostgreSQL `42P01`; it produced no timing result
+  and no baseline file was changed.
 
 
 ## Decision Log
@@ -188,10 +210,43 @@ unchanged.
   `NoMatchingEdge` witnesses remain separate from selected domain outcomes.
   Date: 2026-08-11
 
+- Decision: Keep `accepted`, `rejected`, and `rejection` legal as ordinary DSL
+  identifiers and parse them contextually only after the new construct's owning
+  keyword.
+  Rationale: Existing candidate-language sources already use `accepted` as a
+  field name. The transition/declaration introducers provide an unambiguous
+  parse boundary without expanding the global reserved-word surface.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The functional DSL delivery is complete. Candidate language 5 now models an
+aggregate-wide rejection/no-op type pair and one exhaustive typed outcome per
+live transition. Validation ties accepted/silent categories to persisted-event,
+state, and register facts. Generation exposes one public Plan 231
+`DomainCommandHandler` whose silent classifier dispatches directly by exact
+source state and `EdgeRef` index, and the conformance package independently
+checks the selected typed reason. Mutation coverage proves wrong reasons,
+wrong kinds, missing clauses, replay-only annotations, eventful rejection, and
+silent writes cannot pass.
+
+Compatibility boundaries held: released-language profiles and the older
+19-obligation behavior package remain green; outcome-only edits affect command
+behavior identity/diff while fold and replay identity remain neutral. The full
+DSL rerun also caught and corrected an initially over-broad keyword reservation,
+which is why contextual-keyword behavior is now explicitly tested through the
+existing candidate fixtures.
+
+Performance structure is implemented and bounded in the same run: 8/32/128/512
+silent-edge fixtures generated 40,202/66,467/171,656/593,480 bytes in
+0.855/2.65/10.8/59.2 ms, within the sixfold growth rule. The plan is not marked
+complete because its durable benchmark acceptance is deliberately environment
+bound. Plan 231 still needs quiet-host latency/allocation/residency evidence;
+this plan still needs the corresponding committed DSL baseline/regression
+wiring, and the existing repository regression gate needs a migrated benchmark
+database. The improvement request therefore remains proposed rather than
+claiming both plans are accepted.
 
 
 ## Context and Orientation
@@ -778,3 +833,9 @@ Revision note (2026-08-10): Reconciled the follow-up against ADR 0029 and the
 committed Plan 231 direct, SQL, projection, router, and process-manager names.
 Kept the prerequisite performance closeout pending a quiet host and did not
 create or change a benchmark baseline.
+
+Revision note (2026-08-11): Recorded the completed functional implementation,
+exact-reason conformance, source/generation scaling, documentation and
+repository validation evidence. Kept Milestones 3 and 5 open for the quiet-host
+baseline and migrated-database regression gate, and recorded the contextual
+keyword compatibility correction found by the full DSL suite.

@@ -111,6 +111,11 @@ language-version-2 aggregate:
 - `Generated.<Context>.<Aggregate>.Transducer` exports the assembled transducer,
   the aggregate fold fingerprint, `BehaviorOwnership (GeneratedOwned,
   HoleOwned)`, and an aggregate-specific `...PredicateVerifications` action.
+- For a candidate-language-5 aggregate declaring typed outcomes,
+  `Generated.<Context>.<Aggregate>.EventStream` additionally exports
+  `<aggregate>DomainCommandHandler`. It pairs the validated stream with a pure
+  classifier over the exact selected `EdgeRef` and uses only public
+  `Keiro.Command` types.
 
 Each generated-owned `B.onCmd` block contains its checked guard, ordered writes,
 emits, and target together. Scalar operators use Keiki's readable infix surface.
@@ -130,6 +135,15 @@ command/event/target/mode envelope. Event-output field hooks remain create-once
 in both modes. Do not construct a replacement aggregate transducer in the
 Holes module, and bump the per-transition `FoldVersion` whenever Hole predicate
 or update behavior changes.
+
+The generated outcome classifier has one nested source-state/edge-index arm per
+rejected or no-op live edge. It evaluates only the selected checked Keiki term
+against pre-command values and raises a generated invariant naming the
+aggregate and edge if called with an impossible reference. It contains no map,
+linear lookup, repeated guard evaluation, or create-once reason hole. Generated
+behavior conformance compares `RejectedWith`/`NoOpWith` witness values against
+this public handler after independently checking edge identity and silent-state
+preservation.
 
 ## `Keiro.EventStream.Validate`
 

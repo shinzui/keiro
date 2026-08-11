@@ -31,11 +31,13 @@ reviews:
 Runtime/API delivery is implemented by
 [Plan 231](../plans/231-add-typed-domain-command-outcomes.md): handwritten
 aggregates now have typed direct, SQL, projection, router, process-manager, and
-bounded-telemetry outcomes. The request remains proposed rather than completed
-until [Plan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md) delivers
-DSL syntax, generation, and exact-reason conformance. Quiet-host performance
-and worker-residency acceptance for Plan 231 also remains pending; no baseline
-was changed under the current host load.
+bounded-telemetry outcomes. [Plan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md)
+has now delivered candidate language-5 syntax, exhaustive checking, generated
+handlers, exact-reason conformance, mutation coverage, and fixed-size scaling
+fixtures. The request remains proposed rather than completed only because the
+shared quiet-host latency/allocation/residency acceptance and committed DSL
+generation baseline remain pending; no baseline was changed under the current
+host load.
 
 ## Progress
 
@@ -49,8 +51,20 @@ was changed under the current host load.
 - Operations: coordinator workers acknowledge typed silent decisions normally,
   drop handled payloads through strict summaries, and expose only the closed
   `accepted | rejected | no_op` telemetry dimension.
-- Remaining: Plan 232's DSL/generator/conformance work and Plan 231's
-  same-machine performance/maximum-residency evidence on a quiet host.
+- DSL: candidate language 5 declares typed rejection/no-op types and exhaustive
+  accepted/rejected/no-op transition outcomes. Generated event-stream modules
+  export a public `DomainCommandHandler` whose direct state/index classifier
+  evaluates only the reason for Keiki's exact selected edge.
+- Conformance: `keiro-dsl-conformance-domain-outcomes` compares independently
+  owned typed witness reasons with the generated handler; its mutation script
+  detects wrong reason/kind, missing clauses, replay-only annotations, silent
+  emits, and silent writes.
+- Scaling: fixed 8/32/128/512 check/generation rows enforce one classifier arm
+  per silent edge, forbid lookup/search dispatch, and keep each fourfold size
+  increase below the sixfold cap.
+- Remaining: Plan 231's same-machine latency/allocation/maximum-residency
+  evidence and Plan 232's committed outcome-generation baseline plus
+  `bench-regression` wiring, both on a quiet host.
 
 ## Context
 

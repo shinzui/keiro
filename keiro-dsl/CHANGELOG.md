@@ -8,6 +8,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Candidate language 5 adds exhaustive typed domain outcomes. Aggregates may
+  declare rejection/no-op result types and label each live transition as
+  accepted, rejected with a checked reason, or no-op with a checked reason.
+  Scaffolding exports the aggregate `DomainCommandHandler`, dispatches directly
+  on Keiki's exact selected edge, and evaluates only the selected reason term.
+  Exact-reason conformance, mutation coverage, semantic diff/behavior identity,
+  and 8/32/128/512 linear generation scaling are included; fold fingerprints,
+  event history, snapshots, replay, and published languages 1–4 are unchanged.
 - Candidate language 5 registers and generates mapped workqueue fields
   (`field -> "wire" : TypeExpr`) and atomic read-model query input/result
   clauses. Both resolve recursively into located `TypeGraph` roots, while
@@ -57,6 +65,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- The public DSL AST adds `DomainOutcomeTypes`, `TransitionOutcome`, outcome
+  fields to `Aggregate`/`Transition`, and corresponding located duplicate
+  evidence. `LanguageFeature`, `RuntimeCapability`, and `DiagnosticCode` gain
+  typed-outcome cases, and `BehaviorRequirement` gains
+  `requirementDomainOutcome`; exhaustive consumers and direct record
+  construction must be updated. The syntax and generated API exist only in
+  candidate language 5.
 - The public DSL AST changes `WqField.wqfType` from `Name` to
   `QueuePayloadType`, adds `wqfLoc`, and adds optional `queryTypes` to
   `ReadModelNode`. `UseSite`, `MappedRootKind`, `MappedConsumer`,
