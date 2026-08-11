@@ -81,7 +81,13 @@ silently treating them as ordinary source edits.
   formatting preserves the fingerprint, and a changed `HospitalLoadRow` appears in both mapped
   semantic and coordination evidence.  The formatted library/CLI build, focused report/baseline
   suites, and regenerated PostgreSQL declarative conformance executable pass.
-- [ ] Milestone 5: document, record the final ADR, and run complete qualification.
+- [x] (2026-08-11T04:08:02Z) Milestone 5: documented declarative syntax, checked/application
+  boundaries, normalization, policy matrices, stable-union behavior, version workflow, and the
+  custom-unverified fallback; accepted ADR 0030; closed IR-9; and added fixture/conformance
+  guidance.  `cabal build all`, all 463 `keiro-test` examples, every `keiro-dsl:tests`
+  component including all 686 DSL unit examples, two successful conformance-corpus passes with a
+  byte-clean final rerun, `nix fmt`, `nix flake check`, strict ADR validation, and diff/status
+  hygiene all pass.
 
 
 ## Surprises & Discoveries
@@ -159,6 +165,17 @@ silently treating them as ordinary source edits.
   `conformance-baseline.json`, and the language-5 fixture whitelist predated the declarative
   router directory.  Registering the candidate suite and both positive/unbounded fixtures made
   the focused baseline guards pass.
+
+- The first complete conformance-corpus regeneration added exactly one `custom-unverified`
+  `router-selection` row to each of the four existing Language 4 router ledgers.  No generated
+  module or create-once file changed.  Committing that append-only baseline and running the corpus
+  again produced only `unchanged`/`skipped: already present` dispositions, confirming that the
+  version-4 churn is intentional metadata adoption rather than source or generated-code drift.
+
+- `scripts/check-conformance-corpus.sh` continues to print the pre-existing informational note
+  that `keiro-dsl-conformance-domain-outcomes` has no corpus-plan regeneration entry.  The script
+  selects all 38 registered invocations and exits successfully; this unrelated inventory note did
+  not change during Plan 230.
 
 
 ## Decision Log
@@ -357,8 +374,18 @@ legacy router path.  Declarative scaffolding now lowers that checked value into 
 selection without a selection-owned hole, and the generated database conformance proves ordering,
 deduplication, redelivery, and pre-dispatch conflict behavior against the public runtime.  Diff and
 scaffold history now expose the same checked fingerprint and distinguish semantic, coordination,
-and replay consequences without changing the aggregate replay contract.  Documentation and final
-qualification remain open, so implementation continues at Milestone 5 and IR-9 remains open.
+and replay consequences without changing the aggregate replay contract.  Existing custom routers
+remain executable and their ledgers now state `custom-unverified` without changing generated or
+create-once bytes.
+
+The authoring guide, command reference, API reference, deployment ordering guide, and fixture
+READMEs now describe the verified boundary and version-bump workflow.  ADR 0030 records the durable
+normalization, versioning, and frozen-identity decision, and IR-9 is completed.  Complete
+qualification passed: the repository build, 463 runtime examples, every DSL test component
+including 686 unit examples and the PostgreSQL declarative-router executable, the 38-entry
+conformance corpus, formatter, Nix flake checks, strict ADR validation, and diff hygiene.  The only
+remaining working-tree entry is the pre-existing untracked `keiro/bench-command-before.csv`, which
+is unrelated user data and was deliberately left untouched.
 
 
 ## Context and Orientation
@@ -1232,3 +1259,8 @@ types.
   explicitly unverified ledger snapshots, scaffold reconciliation, candidate conformance registry
   coverage, formatting neutrality, and the nested mapped dependency proof.  Aggregate replay
   report bytes remain unchanged; Milestone 5 now documents and qualifies the finished surface.
+- 2026-08-11: Completed Milestone 5 and the plan.  Added the router authoring/evolution guide,
+  command and API references, deployment guidance, and fixture READMEs; accepted ADR 0030; closed
+  IR-9; adopted append-only `custom-unverified` rows in the four existing Language 4 router
+  ledgers; and recorded successful complete Cabal, corpus, formatting, Nix, ADR, and diff
+  qualification.  The final corpus rerun changed no generated or create-once file.
