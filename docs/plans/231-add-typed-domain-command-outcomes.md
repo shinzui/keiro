@@ -62,14 +62,17 @@ the decision from the successful final evaluation.
   compatibility adapter, focused tests, after-only benchmarks, and in-suite
   1.25 ratio gates. `cabal build keiro keiro:bench:keiro-bench` and the four
   focused examples pass.
-- [ ] Milestone 1 performance acceptance: the stable repeated large-result
+- [x] (2026-08-11T14:42:12Z) Milestone 1 performance acceptance: the stable repeated large-result
   diagnostic measured the typed path at 6.29 ms ± 338 μs, 3.2 MB allocated,
   28 KB copied, and 810,656 bytes maximum residency, versus the legacy path at
   6.08 ms ± 565 μs, the same 3.2 MB allocated, 28 KB copied, and 635,312 bytes
   maximum residency. This supports one retained 100-event typed batch without
   a second encoded-workload-sized copy. Final ratio gates and baseline evidence
-  remain pending a reboot at the user's request; do not create, regenerate, or
-  commit a command performance baseline before then.
+  passed after reboot. The final same-run guards measured accepted-small at
+  1.08x, accepted-large at 1.16x, rejected at 1.02x, and no-op at 1.02x of
+  their matched legacy controls. The historical legacy guard also passed:
+  accepted-small remained statistically unchanged, accepted-large was 13
+  percent slower, and no-op was 13 percent faster than the scratch baseline.
 - [x] (2026-08-10T18:29:56Z) Milestone 2: added typed SQL and controlled-SQL
   runners, ordinary and catalog-aware projection runners, a closed decision
   telemetry dimension on spans and metrics, and deterministic retry coverage.
@@ -85,14 +88,17 @@ the decision from the successful final evaluation.
   through strict payload-free summaries rather than detailed result lists. The
   10, 100, and 1000 target router/process-manager benchmark fixtures compile;
   all 13 focused examples pass.
-- [ ] Milestone 3 performance acceptance: strengthened the worker fixtures so
+- [x] (2026-08-11T14:42:12Z) Milestone 3 performance acceptance: strengthened the worker fixtures so
   each accepted target constructs a distinct deterministic 1 KiB event payload
   from an integer command, rather than sharing one global `Text`. Relaxed-
   tolerance diagnostic runs at fan-out 10, 100, and 1000 kept maximum residency
   bounded at 8,189,480 bytes for the router and 8,579,784 bytes for the process
   manager while producing up to 1 MiB of distinct accepted payload per
-  dispatch. Final default-tolerance timings and committed baseline evidence
-  remain pending the reboot; no CSV was created or changed.
+  dispatch. Post-reboot one-dispatch RTS runs measured 2,215,584 bytes maximum
+  residency for the router and 2,399,736 bytes for the process manager through
+  fan-out 1000. Allocation scaled from 2.0 MB to 163 MB for the router and from
+  1.8 MB to 139 MB for the process manager, while residency stayed bounded.
+  The finished default-tolerance latency baseline also passed all fan-out rows.
 - [x] (2026-08-10T19:18:03Z) Milestone 4 non-performance work: documented
   direct, SQL, projection, coordinator, retry, telemetry, payload-cardinality,
   duplicate, and memory-ownership semantics; added accepted ADR 0029; updated
@@ -184,6 +190,20 @@ the decision from the successful final evaluation.
   Evidence: the example advances the hand-owned snapshot discriminator from
   `order-fold-v1` to `order-fold-v2`, and the full Jitsurei snapshot suite
   passes with the new discriminator.
+
+- Discovery: A default-tolerance `+RTS -s` run is not valid post-dispatch heap
+  evidence for these database-backed benchmarks. Tasty-bench adaptively doubles
+  the number of action executions until it reaches its relative-deviation
+  target, while both its displayed `peak memory` field and the RTS maximum
+  residency cover the entire process run. Noisy short cases can therefore run
+  thousands of append/delete cycles and report a large cumulative maximum that
+  is unrelated to one returned outcome or one completed fan-out.
+  Evidence: the router group initially reported 104,161,136 bytes maximum
+  residency, but a non-router accepted-one control likewise reached 41,064,624
+  bytes after allocating 4,984,906,512 bytes across its adaptive campaign. With
+  `--stdev Infinity`, which tasty-bench documents as exactly one iteration per
+  selected case, router and process-manager fan-out through 1000 retained only
+  2,215,584 and 2,399,736 bytes respectively.
 
 
 ## Decision Log
@@ -317,6 +337,15 @@ the decision from the successful final evaluation.
   exact-reason conformance, while the current host also prevents honest
   performance closeout for this runtime plan.
   Date: 2026-08-10
+
+- Decision: Use default statistical tolerance for latency comparisons and
+  `--stdev Infinity` for RTS allocation/residency ownership checks.
+  Rationale: Latency gates need repeated samples, while heap ownership asks how
+  much remains live during one completed dispatch. Allowing tasty-bench to
+  repeat a database-mutating action until a timing deviation converges measures
+  the cumulative benchmark campaign instead of the one-dispatch retention
+  contract and produced the same apparent growth without any router involved.
+  Date: 2026-08-11
 
 
 ## Outcomes & Retrospective
@@ -647,11 +676,11 @@ cabal bench keiro-bench \
   --benchmark-options="-p command.legacy --time-mode wall \
     --baseline bench-command-before.csv --fail-if-slower 25"
 cabal bench keiro-bench \
-  --benchmark-options="-p command.domain.accepted-large --time-mode wall +RTS -s -RTS"
+  --benchmark-options="-p command.domain.accepted-large --time-mode wall --stdev Infinity +RTS -s -RTS"
 cabal bench keiro-bench \
-  --benchmark-options="-p command.domain.router-fanout --time-mode wall +RTS -s -RTS"
+  --benchmark-options="-p command.domain.router-fanout --time-mode wall --stdev Infinity +RTS -s -RTS"
 cabal bench keiro-bench \
-  --benchmark-options="-p command.domain.process-manager-fanout --time-mode wall +RTS -s -RTS"
+  --benchmark-options="-p command.domain.process-manager-fanout --time-mode wall --stdev Infinity +RTS -s -RTS"
 just bench-regression
 ```
 
@@ -958,3 +987,10 @@ per-target 1 KiB event payloads, and recorded bounded relaxed-tolerance heap
 diagnostics through fan-out 1000. Kept all default-tolerance latency gates,
 baseline creation, and `just bench-regression` pending the user-requested
 machine reboot after contradictory combined-run timings.
+
+Revision note (2026-08-11): Recorded the post-reboot latency and legacy guards,
+investigated an apparent router residency leak, and separated adaptive latency
+sampling from one-dispatch heap ownership evidence. The non-router control
+showed the same cumulative RTS growth under repeated database mutation, while
+single-dispatch router and process-manager runs remained bounded through 1000
+distinct accepted payloads.

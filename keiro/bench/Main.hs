@@ -151,17 +151,32 @@ benchmarks store runner metrics =
       "command"
       [ bgroup
           "legacy"
-          [ commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne,
-            commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge,
-            commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp
-          ],
+          [commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne],
+        bgroup
+          "control"
+          [commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne],
+        bgroup
+          "domain-warmup"
+          [domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne],
         bgroup
           "domain"
-          [ bcompareWithin 0 1.25 legacyAcceptedOnePattern $
-              domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne,
-            bcompareWithin 0 1.25 legacyAcceptedLargePattern $
-              domainCommandScenarioBench store "accepted-large" domainAcceptedLargeHandler domainAcceptedLargeTarget EmitLarge,
-            bcompareWithin 0 1.25 legacyNoOpPattern $
+          [ bcompareWithin 0 1.25 acceptedOneControlPattern $
+              domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne
+          ],
+        bgroup
+          "legacy"
+          [commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge],
+        bgroup
+          "domain"
+          [ bcompareWithin 0 1.25 legacyAcceptedLargePattern $
+              domainCommandScenarioBench store "accepted-large" domainAcceptedLargeHandler domainAcceptedLargeTarget EmitLarge
+          ],
+        bgroup
+          "legacy"
+          [commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp],
+        bgroup
+          "domain"
+          [ bcompareWithin 0 1.25 legacyNoOpPattern $
               domainCommandScenarioBench store "rejected" domainRejectedHandler domainRejectedTarget SelectNoOp,
             bcompareWithin 0 1.25 legacyNoOpPattern $
               domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp,
@@ -405,16 +420,16 @@ legacyNoOpTarget :: Stream BenchEventStream
 legacyNoOpTarget = stream "bench-command-legacy-no-op"
 
 domainAcceptedOneTarget :: Stream BenchEventStream
-domainAcceptedOneTarget = stream "bench-command-domain-accepted-1"
+domainAcceptedOneTarget = legacyAcceptedOneTarget
 
 domainAcceptedLargeTarget :: Stream BenchEventStream
-domainAcceptedLargeTarget = stream "bench-command-domain-accepted-large"
+domainAcceptedLargeTarget = legacyAcceptedLargeTarget
 
 domainRejectedTarget :: Stream BenchEventStream
-domainRejectedTarget = stream "bench-command-domain-rejected"
+domainRejectedTarget = legacyNoOpTarget
 
 domainNoOpTarget :: Stream BenchEventStream
-domainNoOpTarget = stream "bench-command-domain-no-op"
+domainNoOpTarget = legacyNoOpTarget
 
 legacyAcceptedOneStream :: ValidatedBenchEventStream
 legacyAcceptedOneStream = mkEventStreamOrThrow "bench-command-legacy-accepted-1" (benchEventStream oneTransducer)
@@ -453,8 +468,8 @@ domainNoOpHandler =
       classifySilent = \_ -> SilentNoOp "benchmark no-op"
     }
 
-legacyAcceptedOnePattern :: String
-legacyAcceptedOnePattern = "$NF == \"accepted-1\" && $(NF-1) == \"legacy\" && $(NF-2) == \"command\""
+acceptedOneControlPattern :: String
+acceptedOneControlPattern = "$NF == \"accepted-1\" && $(NF-1) == \"control\" && $(NF-2) == \"command\""
 
 legacyAcceptedLargePattern :: String
 legacyAcceptedLargePattern = "$NF == \"accepted-large\" && $(NF-1) == \"legacy\" && $(NF-2) == \"command\""

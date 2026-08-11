@@ -1299,7 +1299,7 @@ verifyAndSnapshot options mSpan eventStream current events appendResult
     Nothing <- eventStream ^. #stateCodec =
       pure ()
   | otherwise =
-      case Keiki.applyEventsEither (eventStream ^. #transducer) (current ^. #state, current ^. #registers) events of
+      case Keiki.applyEventsEither (eventStream ^. #transducer) (state current, registers current) events of
         Left failure -> do
           recordSnapshotApplyDivergence (options ^. #metrics) 1
           for_ mSpan $ \sp ->
@@ -1388,8 +1388,16 @@ evaluateCommand ::
   ci ->
   Either CommandError [co]
 evaluateCommand eventStream current command =
-  case Keiki.stepEither (eventStream ^. #transducer) (current ^. #state, current ^. #registers) command of
-    Left failure -> Left (commandStepFailure failure)
+  case Keiki.stepEither (eventStream ^. #transducer) (state current, registers current) command of
+    Left Keiki.NoOutgoingEdges {} -> Left CommandRejected
+    Left Keiki.NoMatchingEdge {} -> Left CommandRejected
+    Left (Keiki.AmbiguousEdges _ matches) ->
+      Left
+        ( CommandAmbiguous
+            [ Keiki.edgeIndex (Keiki.matchedEdge matched)
+            | matched <- matches
+            ]
+        )
     Right (_, _, events) -> Right events
 
 encodeEvents :: Codec co -> Maybe Value -> [co] -> Either CommandError [EventData]
