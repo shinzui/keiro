@@ -1060,6 +1060,41 @@ The mandatory `resolve stable` phrase acknowledges retry semantics: later
 attempts deduplicate targets already dispatched, but a resolver whose result
 changes can accumulate the union of targets seen across attempts.
 
+Candidate Language 5 also admits a checked, bounded selection:
+
+```text
+resolve declarative {
+  identity = "hospital-transfer-selection"
+  version = 1
+  query = read-model hospital_load with input
+  where = row.region == input.region && row.availableBeds > 0
+  recipient = row.hospitalId
+  order = target-stream
+  dedupe = target-stream
+  max-recipients = 64
+  empty => ack
+  failure => retry
+  redelivery = stable-union
+  partial = retain-successes
+}
+```
+
+The query input must be mapped structural and the query result must be a list of
+mapped structural rows. Check resolves and types the key, predicate, recipient,
+and every dispatch field; requires a positive recipient limit; and admits only
+the normalization and redelivery policies shown above. The application still
+owns the read-model SQL body. Generated code filters and maps its typed result,
+sorts commands by physical target stream, collapses exact duplicates, rejects
+unequal commands for one stream, and applies the cap after deduplication before
+performing any write.
+
+`empty` accepts `ack`, `retry`, `deadLetter`, or `halt`. `failure` accepts
+`retry`, `deadLetter`, or `halt`; failures include query/evaluation errors,
+target conflicts, and cap overflow. Dispatch itself remains one transaction per
+target and retains earlier successes. See
+[Routers And Effectful Fan-Out](../guides/routers-and-effectful-fan-out.md#declarative-selection-in-language-5)
+for the complete contract and evolution workflow.
+
 Dispatch binding values may be quoted literals, `input.*`, or `resolved.*`.
 Bare bindings copy an input field of the same name. Target aggregate, command,
 command fields, read model, and projection references are checked. The
@@ -2046,6 +2081,12 @@ semantic baseline. If the previous ledger predates that row, the report says
 does not guess that the old consumer set was empty. The successful run writes
 the baseline, so a later run can compare both sides.
 
+The ledgers also persist one router-selection snapshot per router. Declarative
+selections record `declarative-verified` identity, version, and fingerprint;
+custom resolver forms record `custom-unverified` with no fabricated metadata.
+An older ledger with no router-selection row remains readable and gains the row
+on the next successful scaffold.
+
 For historical comparison, compile the emitted module in a consumer-owned test
 and supply the old codec explicitly. The tool does not discover or fall back to
 an old application instance at runtime.
@@ -2078,6 +2119,17 @@ the detailed compatibility findings, rollout constraints, or replay report.
 `--report-out` appends the same sorted projection under
 `semanticImpact` while keeping schema `keiro-dsl/diff-report/1`. Source-only or
 ownership-only movement has no mapped semantic-impact entries.
+
+Declarative router changes also receive a separate `coordination impact` block.
+It reports old/current verification, identity, version, fingerprint, and mapped
+use sites. The JSON form appends the same sorted evidence as optional top-level
+`coordinationImpact`; legacy report constructors omit the key. Identity changes,
+version decreases, and semantic fingerprint changes without a version increase
+are breaking. A changed fingerprint with a version increase, a metadata-only
+version increase, a declarative/custom boundary crossing, or an affected mapped
+selection dependency is advisory. Coordination-breaking findings participate
+in the report headline and command exit status; aggregate `ReplayImpact` remains
+a separate unchanged contract.
 
 The headline is `ADDITIVE`, `WARNING`, or `BREAKING`. The default gate includes
 all surfaces except `old-binary-read-new-events`; repeat `--gate SURFACE` to add

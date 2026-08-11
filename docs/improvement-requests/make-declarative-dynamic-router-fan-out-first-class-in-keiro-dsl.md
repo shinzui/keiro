@@ -6,8 +6,9 @@ description: >-
   of leaving every dynamic router as an unconstrained effectful resolver hole.
 timestamp: 2026-07-31T15:03:57Z
 requestId: IR-9
-status: proposed
+status: completed
 origin: mori://shinzui/keiro
+plan: docs/plans/230-make-declarative-dynamic-router-fan-out-first-class-in-keiro-dsl.md
 reviews:
   - kind: model
     reviewer: codex
@@ -27,8 +28,17 @@ reviews:
 
 ## Status
 
-Proposed for later DSL/runtime integration. Existing typed resolver holes remain the general escape
-hatch.
+**Implemented.**
+[Plan 230](../plans/230-make-declarative-dynamic-router-fan-out-first-class-in-keiro-dsl.md)
+delivers the candidate Language 5 checked selection grammar, bounded runtime,
+generated router and harness, PostgreSQL conformance, mapped semantic and
+coordination impact, durable selection ledgers, and authoring/evolution
+guidance. Existing typed resolver holes remain the explicit
+`custom-unverified` escape hatch.
+
+[ADR 30](../adr/0030-declarative-router-selection-is-bounded-target-normalized-and-coordination-versioned.md)
+records the durable normalization, stable-union, frozen dispatch-identity, and
+selection-version decisions.
 
 ## Context
 

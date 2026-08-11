@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-10
+* **Implemented**: Close IR-9 after Plan 230 delivers checked bounded Language 5 router selection, generated runtime integration, stable-union PostgreSQL conformance, coordination-impact reporting, durable selection metadata, and the custom-unverified fallback.
 * **Addition**: IR-22 requests that read models become safely readable by out-of-process
 consumers — a fence a database-level reader observes, documented projection status metadata,
 zero-downtime versioned rebuild with atomic cutover, and targeted per-stream reprojection.

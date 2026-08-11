@@ -78,6 +78,159 @@ analytics, integration publishing, or broad denormalization work into this
 field; inline projections run inside the append transaction, so slow or failing
 projection SQL slows or fails the dispatch itself.
 
+## Declarative selection in Language 5
+
+Candidate `language keiro-dsl 5` can generate the common bounded read-model
+selection instead of requiring a `RouterHoles` resolver. The complete fixture is
+[`../../keiro-dsl/test/fixtures/declarative-router/valid.keiro`](../../keiro-dsl/test/fixtures/declarative-router/valid.keiro):
+
+```text
+router HospitalTransferRouter
+  name "hospital-transfer-router"
+  input AcceptedHospitalTransferNeed : TransferRouteInput
+  key input.transferNeedId
+  resolve declarative {
+    identity = "hospital-transfer-selection"
+    version = 1
+    query = read-model hospital_load with input
+    where = row.region == input.region && row.availableBeds > 0
+    recipient = row.hospitalId
+    order = target-stream
+    dedupe = target-stream
+    max-recipients = 64
+    empty => ack
+    failure => retry
+    redelivery = stable-union
+    partial = retain-successes
+  }
+  target Hospital
+  projections []
+  dispatch-each RouteAcceptedTransferNeed {
+    transferNeedId=input.transferNeedId
+    hospitalId=row.hospitalId
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+```
+
+The query input and list row must be mapped structural types. The checked
+selection admits typed scalar paths rooted at `input` and `row`, boolean
+predicates, a `Text` recipient, and a total mapping for every target-command
+field. It checks the referenced read model, types, paths, predicate, target,
+command, mapping, positive limit, and closed policy vocabulary before scaffold
+writes anything. Generated code invokes the normal create-once read-model query
+implementation and projects its typed rows; it does not generate SQL or claim to
+verify query ordering, isolation, completeness, or the contents of an arbitrary
+application query. Query and backend failures cross the generated boundary as a
+bounded `SelectionQueryFailed` value without exposing raw backend detail.
+
+The generated router uses `DeclarativeRouter` and
+`runDeclarativeRouterOnce`/`runDeclarativeRouterWorker`. Its selection contract
+contains the declared identity and version plus a SHA-256 fingerprint of checked
+semantics: query identity and types, key, predicate, recipient, command mapping,
+target and command, cap, and policies. Comments, formatting, source locations,
+selection identity, and declared version do not affect the fingerprint.
+
+### Normalization and boundedness
+
+Before the first target write, Keiro normalizes the query result as follows:
+
+1. Derive each command's physical target stream.
+2. Sort targets by that stream name.
+3. Collapse exact duplicate commands for one stream.
+4. Reject unequal commands for the same stream as a target conflict.
+5. Apply `max-recipients` to the distinct normalized targets.
+
+The limit is mandatory, positive, and applied after deduplication. Overflow and
+conflict fail before dispatch, so they produce no target writes. Once dispatch
+starts, each target still has its own transaction: if a later target fails,
+`partial = retain-successes` preserves earlier successful appends for safe
+redelivery. Keiro does not provide an all-target transaction.
+
+Only `order = target-stream`, `dedupe = target-stream`,
+`redelivery = stable-union`, and `partial = retain-successes` are currently
+admitted. This deliberately small vocabulary makes the normalization contract
+checkable instead of relying on application query order.
+
+### Empty and failure policy
+
+Empty selection and failed selection are different outcomes. In particular, a
+failed query is never mistaken for a successful query returning no rows.
+
+| DSL policy | Empty result | Query, evaluation, conflict, or overflow failure |
+| --- | --- | --- |
+| `ack` | `AckOk` | not admitted for failures |
+| `retry` | `AckRetry` | `AckRetry` |
+| `deadLetter` | `AckDeadLetter` with a stable application failure code | `AckDeadLetter` with a stable application failure code |
+| `halt` | `AckHalt` with the bounded application failure rendering | `AckHalt` with the bounded application failure rendering |
+
+The two declarations are independent: for example, `empty => ack` with
+`failure => retry` treats a legitimate zero-recipient query as success while a
+query error remains retryable. Failure dead letters use the stable
+`keiro.router.selection.*` codes. Their details name only bounded selection
+metadata; SQL, credentials, source payloads, and unrestricted backend errors do
+not enter the reason.
+
+### Stable union on redelivery
+
+Declarative routing retains the existing frozen dispatch identity:
+`(router name, key, source event id, target stream, occurrence)`. Selection
+identity, version, and fingerprint are coordination metadata and are not added
+to those seed bytes.
+
+Suppose the first attempt selects `{A, B}`, appends both, and the source is then
+redelivered after the read model changes to `{B, C}`. Normalization produces the
+new physical order; `B` has the same deterministic id and is confirmed as a
+duplicate, while `C` is appended for the first time. The durable result is the
+stable union `{A, B, C}`, once per target. Changing a selection version does not
+make old targets run again.
+
+### Evolving a selection
+
+Run `keiro-dsl diff` against the deployed source before changing a declarative
+selection:
+
+```bash
+cabal run -v0 keiro-dsl -- diff service.keiro --since DEPLOYED_REF --explain \
+  --report-out build/keiro-diff.json
+```
+
+The human report and optional top-level `coordinationImpact` JSON distinguish
+these cases:
+
+- Changing checked semantics without increasing `version` is breaking.
+- Increasing `version` with changed semantics is an advisory to drain and review
+  replay/redelivery effects before deployment.
+- Increasing only `version` is a metadata-only advisory.
+- Changing `identity` or decreasing `version` is breaking.
+- Crossing between declarative and custom selection is advisory because the
+  custom side cannot provide checked selection evidence.
+- A mapped type change that can affect membership, recipient identity, or
+  command content appears in both semantic and coordination impact.
+
+For a semantic change, increment `version`, pause the source subscription, let
+in-flight work finish, resolve or deliberately discard dead letters, deploy,
+and resume. The bump makes the coordination review explicit; it does not reset
+the frozen dispatch ids or turn stable-union behavior into exact-set replay.
+
+### Custom-unverified fallback
+
+Language 4 and Language 5 continue to accept the established custom forms:
+
+```text
+resolve stable via read-model hospital_load row { hospitalId }
+```
+
+or `resolve stable via hole`. Scaffolding keeps their typed implementation in
+the create-once `RouterHoles` module. These forms can run arbitrary effectful
+selection logic, but check cannot verify its predicate, bound, normalization,
+or failure semantics. Scaffold ledgers and diffs therefore label the boundary
+`custom-unverified`; they never invent a selection fingerprint. Use the
+declarative form when its bounded subset fits, and keep the custom form as the
+honest escape hatch for behavior outside that subset.
+
 ## The read model
 
 The router needs a queryable mapping from area to chapters. In `jitsurei` that is

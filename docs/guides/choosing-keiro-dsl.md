@@ -69,7 +69,7 @@ the DSL.
 | A refined value or consumer-authoritative JSON codec | `mapped opaque` | A named and versioned boundary, boundary round trips, coverage inventory, and diff visibility | `ToJSON`/`FromJSON` behavior and compatibility below the boundary |
 | An event-version conversion | An upcaster Hole | The contiguous version chain, codec dispatch, compatibility classification, and golden/replay checks | The conversion body and representative historical fixtures |
 | Read-model queries or event application | `ReadModelHoles` | Stable read-model identity, table/schema facts, consistency/feed configuration, and generated runtime wiring | Query and projection SQL/effects |
-| Dynamic router targets or callbacks | A typed resolver in `RouterHoles` | Router identity, target command contract, deterministic dispatch identity, and worker policy | Target resolution and declared callbacks |
+| Dynamic router behavior outside the declarative subset, or callbacks | A typed resolver in `RouterHoles` | Router identity, target command contract, deterministic dispatch identity, worker policy, and an honest `custom-unverified` boundary | Arbitrary target resolution and declared callbacks; candidate Language 5 instead generates checked bounded selection when its `resolve declarative` subset fits |
 | Process-manager reactions and timer behavior | `ProcessHoles` | Process/timer identity, categories, retry policy, and generated wiring | Reaction, deadline, and fire-command bodies |
 | A legacy version-1 aggregate transducer | The preserved whole-transducer Hole | Spec-visible types, codecs, evolution reports, and runtime validation | The full transducer and its manual fold-version discipline |
 

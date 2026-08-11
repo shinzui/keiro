@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-11
+* **Add**: Define checked bounded declarative router selection, physical-target normalization, stable-union redelivery, frozen dispatch identity, and versioned coordination evidence (plan 230).
+
 ## 2026-08-10
 * **Add**: Define typed domain decisions as successful additive command outcomes while preserving exact-edge authority, CommandError failures, legacy APIs, bounded telemetry, and worker retention (plan 231).
 * **Update**: Classify mapped queue evolution as WorkqueueHistory with workers-first drain or application-owned transitional-codec remediation, never event upcasters (plan 224).

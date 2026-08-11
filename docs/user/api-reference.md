@@ -509,11 +509,26 @@ Types and functions:
 
 - `Router (..)`
 - `RouterResult (..)`
+- `DeclarativeRouter (..)`
+- `DeclarativeRouterResult (..)`
+- `RouterSelectionContract (..)`
+- `RouterSelectionFailure (..)`
+- `RecipientLimit`, `mkRecipientLimit`, `recipientLimitValue`
+- `SelectionIdentity (..)`, `SelectionVersion`, `mkSelectionVersion`,
+  `selectionVersionValue`, `SelectionFingerprint (..)`
+- `SelectionOrder (..)`, `SelectionDedupe (..)`, `RedeliveryPolicy (..)`,
+  `PartialDispatchPolicy (..)`, `EmptySelectionPolicy (..)`,
+  `SelectionFailurePolicy (..)`
+- `normalizeRecipients`
+- `emptySelectionDeadLetterReason`, `selectionFailureDeadLetterReason`
 - `DomainRouter (..)`
 - `DomainRouterResult (..)`
 - `runRouterOnce`
 - `runRouterWorkerWith`
 - `runRouterWorker`
+- `runDeclarativeRouterOnce`
+- `runDeclarativeRouterWorkerWith`
+- `runDeclarativeRouterWorker`
 - `runDomainRouterOnce`
 - `runDomainRouterWorkerWith`
 - `runDomainRouterWorker`
@@ -534,6 +549,19 @@ bounded worker retention as the domain process manager. Target resolution
 order, target-identity deterministic ids, legacy-id duplicate compatibility,
 and one transaction per target are unchanged. Eventless rejection/no-op leaves
 no event id, so redelivery evaluates it again.
+
+`DeclarativeRouter` places a closed selection contract around an
+application-owned typed query seam. `runDeclarativeRouterOnce` distinguishes
+failed, empty, and dispatched selection outcomes. Before dispatch it sorts by
+physical target stream, collapses exact duplicate commands, rejects conflicting
+commands for one stream, and enforces a positive post-deduplication
+`RecipientLimit`. The worker maps empty and selection-failure outcomes through
+their independent closed policies. Generated candidate Language 5 routers use
+this surface; the existing `Router` remains the arbitrary effectful fallback.
+
+See [Routers And Effectful Fan-Out](../guides/routers-and-effectful-fan-out.md)
+for the DSL syntax, failure-policy matrix, stable-union semantics, and rollout
+rules.
 
 ## `Keiro.Timer`
 

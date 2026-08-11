@@ -97,6 +97,16 @@ emits `RouterDecideSurfaceChanged` and `ProcessDecideSurfaceChanged` advisories
 for spec-visible edits. Hole-only decide changes remain invisible to the
 differ, so the drain rule still applies whenever hand-owned logic changes.
 
+Candidate Language 5 declarative routers add checked `coordinationImpact`.
+Increase the selection version for a semantic fingerprint change, then follow
+the same drain procedure. The bump records review intent but deliberately does
+not alter deterministic target-command ids: redelivery still forms a stable
+union of attempt outputs. An unbumped semantic change, identity change, or
+version decrease is breaking; a bumped semantic change, metadata-only version
+increase, mapped selection dependency change, or declarative/custom boundary
+crossing is an explicit advisory. Custom resolver behavior remains
+`custom-unverified`, so application-only edits still require manual review.
+
 The deterministic-id behavior is implemented in
 [`Keiro.Router`](../../keiro/src/Keiro/Router.hs) and
 [`Keiro.ProcessManager`](../../keiro/src/Keiro/ProcessManager.hs).
