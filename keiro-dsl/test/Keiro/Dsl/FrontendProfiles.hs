@@ -19,7 +19,7 @@ import Prelude hiding (span)
 
 frontendProfilesSpec :: SpecWith ()
 frontendProfilesSpec = do
-  describe "released language profiles" $ do
+  describe "FrontendProfiles: released language profiles" $ do
     it "pins each released syntax profile, predecessor, and runtime contract explicitly" $ do
       map definitionRow (NE.toList languageRegistry)
         `shouldBe` [ (1, Nothing, "keiro-dsl/syntax-profile/1", "keiro-dsl/runtime-semantics/1"),
@@ -69,6 +69,7 @@ frontendProfilesSpec = do
               ProjectionCatalogSyntax -> version 5
               MappedConsumerSurfaceSyntax -> version 5
               DomainCommandOutcomeSyntax -> version 5
+              DeclarativeRouterSelectionSyntax -> version 5
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -117,7 +118,7 @@ frontendProfilesSpec = do
         parseSurfaceSource ("inert-" <> show versionNumber <> ".keiro") (preamble versionNumber <> inertBody)
           `shouldSatisfy` isRight
 
-  describe "frontend diagnostics" $ do
+  describe "FrontendProfiles: frontend diagnostics" $ do
     it "classifies malformed and unsupported preambles at source selection with exact spans" $ do
       assertSourceSelection InvalidLanguageVersion "language keiro-dsl nope\ncontext malformed\n" "language keiro-dsl nope"
       assertSourceSelection UnsupportedLanguageVersion "language keiro-dsl 999999\ncontext unregistered\n" "language keiro-dsl 999999"
@@ -181,7 +182,8 @@ featureCases =
     FeatureCase DomainCommandOutcomeSyntax "domain-outcomes" (featureBody DomainCommandOutcomeSyntax),
     FeatureCase DomainCommandOutcomeSyntax "outcome" domainOutcomeClauseFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
-    FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody
+    FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody,
+    FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -235,9 +237,41 @@ featureBody = \case
         "  regs",
         "  states Open"
       ]
+  DeclarativeRouterSelectionSyntax -> declarativeRouterFeatureBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax]
+
+declarativeRouterFeatureBody :: Text
+declarativeRouterFeatureBody =
+  T.unlines
+    [ "context profile",
+      "router ProfileRouter",
+      "  name \"profile-router\"",
+      "  input ProfileInput : ProfileInput",
+      "  key input.profileId",
+      "  resolve declarative {",
+      "    identity = \"profile-selection\"",
+      "    version = 1",
+      "    query = read-model profiles with input",
+      "    where = row.enabled == true",
+      "    recipient = row.profileId",
+      "    order = target-stream",
+      "    dedupe = target-stream",
+      "    max-recipients = 1",
+      "    empty => ack",
+      "    failure => retry",
+      "    redelivery = stable-union",
+      "    partial = retain-successes",
+      "  }",
+      "  target Profile",
+      "  projections []",
+      "  dispatch-each RefreshProfile { profileId=row.profileId }",
+      "    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry",
+      "  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)",
+      "  rejected => deadLetter",
+      "  poison => halt"
+    ]
 
 domainOutcomeClauseFeatureBody :: Text
 domainOutcomeClauseFeatureBody =

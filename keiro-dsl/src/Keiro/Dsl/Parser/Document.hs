@@ -126,7 +126,7 @@ pTopItem context laterPreambleCode =
           pure (ParsedTopItem (SurfaceRule rule) elements),
         plain (pMappedTopItem context)
       ]
-        ++ [ plain (SurfaceNode . NRouter <$> pRouter),
+        ++ [ plain (SurfaceNode . NRouter <$> pRouter context),
              plain (SurfaceNode . NProcess <$> pProcess),
              plain (SurfaceNode . NContract <$> pContract context),
              plain (SurfaceNode . NIntake <$> pIntake),

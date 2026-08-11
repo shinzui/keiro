@@ -50,6 +50,7 @@ import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (LanguageVersion, RuntimeCapability (..), SourceLanguage (..), effectiveLanguageVersion, languageVersionText, runtimeProfileHasCapability, sourceFormText)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
+import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
@@ -494,6 +495,35 @@ data DiagnosticCode
     -- their complete lowering plans land.
     MappedQueueLoweringPending
   | MappedReadModelLoweringPending
+  | RouterSelectionNotDeclarative
+  | RouterSelectionCapabilityUnavailable
+  | RouterSelectionIdentityEmpty
+  | RouterSelectionVersionInvalid
+  | RouterSelectionQueryUnknown
+  | RouterSelectionQueryContractMissing
+  | RouterSelectionQueryInputBindingInvalid
+  | RouterSelectionQueryInputTypeMismatch
+  | RouterSelectionQueryResultNotList
+  | RouterSelectionQueryRowNotStructural
+  | RouterSelectionExpressionRootUnknown
+  | RouterSelectionExpressionFieldUnknown
+  | RouterSelectionExpressionFieldOptional
+  | RouterSelectionExpressionTypeMismatch
+  | RouterSelectionPredicateNotBool
+  | RouterSelectionRecipientNotText
+  | RouterSelectionOperatorUnsupported
+  | RouterSelectionRecipientLimitMissing
+  | RouterSelectionRecipientLimitInvalid
+  | RouterSelectionOrderUnsupported
+  | RouterSelectionDedupeUnsupported
+  | RouterSelectionFailureAckForbidden
+  | RouterSelectionRedeliveryUnsupported
+  | RouterSelectionPartialDispatchUnsupported
+  | RouterSelectionTargetAmbiguous
+  | RouterSelectionCommandUnknown
+  | RouterSelectionCommandMappingDuplicate
+  | RouterSelectionCommandMappingIncomplete
+  | RouterSelectionCommandMappingTypeMismatch
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -3406,6 +3436,7 @@ validateRouter languageContract spec router =
       bindingScope,
       commandReference,
       readModelReference,
+      selectionChecks,
       policyRules,
       duplicateNotice,
       onAppendedArm
@@ -3447,18 +3478,22 @@ validateRouter languageContract spec router =
              projection `notElem` projectionTables
            ]
 
-    keyField =
-      [ mkErr routerLine RouterKeyFieldUnknown $
-          "key references 'input." <> corrField (rtKey router) <> "' but input '" <> inName (rtInput router) <> "' does not declare that field"
-      | corrField (rtKey router) `notElem` inputFields
-      ]
+    keyField = case rvSource (rtResolve router) of
+      ResolveDeclarative {} -> []
+      _ ->
+        [ mkErr routerLine RouterKeyFieldUnknown $
+            "key references 'input." <> corrField (rtKey router) <> "' but input '" <> inName (rtInput router) <> "' does not declare that field"
+        | corrField (rtKey router) `notElem` inputFields
+        ]
 
-    bindingScope =
-      [ mkErr dispatchLine RouterBindingUnscoped $
-          "dispatch binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the router input and resolve-row scopes"
-      | binding <- rdFields dispatch,
-        not (bindingInScope binding)
-      ]
+    bindingScope = case rvSource (rtResolve router) of
+      ResolveDeclarative {} -> []
+      _ ->
+        [ mkErr dispatchLine RouterBindingUnscoped $
+            "dispatch binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the router input and resolve-row scopes"
+        | binding <- rdFields dispatch,
+          not (bindingInScope binding)
+        ]
       where
         bindingInScope binding = case fbValue binding of
           Nothing -> fbName binding `elem` inputFields
@@ -3485,6 +3520,7 @@ validateRouter languageContract spec router =
 
     readModelReference = case rvSource (rtResolve router) of
       ResolveHole -> []
+      ResolveDeclarative {} -> []
       ResolveReadModel name ->
         case [readModel | readModel <- readModels, rmName readModel == name] of
           [] ->
@@ -3499,6 +3535,14 @@ validateRouter languageContract spec router =
               column `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
             ]
 
+    selectionChecks = case rvSource (rtResolve router) of
+      ResolveDeclarative {} -> case resolveTypeGraph spec of
+        Left _ -> []
+        Right graph -> case RouterSelection.checkRouterSelection languageContract graph spec router of
+          Right _ -> []
+          Left diagnostics -> map routerSelectionDiagnostic (NE.toList diagnostics)
+      _ -> []
+
     policyRules =
       policyConsistency
         (rtId router)
@@ -3511,6 +3555,45 @@ validateRouter languageContract spec router =
           "router dispatch '" <> rdCommand dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
       | onDuplicate (rdDisposition dispatch) == DAckOk
       ]
+
+routerSelectionDiagnostic :: RouterSelection.RouterSelectionDiagnostic -> Diagnostic
+routerSelectionDiagnostic diagnostic =
+  mkErr
+    (locLine (RouterSelection.selectionDiagnosticLoc diagnostic))
+    (routerSelectionDiagnosticCode (RouterSelection.selectionDiagnosticCode diagnostic))
+    (RouterSelection.selectionDiagnosticMessage diagnostic)
+
+routerSelectionDiagnosticCode :: RouterSelection.RouterSelectionDiagnosticCode -> DiagnosticCode
+routerSelectionDiagnosticCode = \case
+  RouterSelection.SelectionNotDeclarative -> RouterSelectionNotDeclarative
+  RouterSelection.SelectionCapabilityUnavailable -> RouterSelectionCapabilityUnavailable
+  RouterSelection.SelectionIdentityEmpty -> RouterSelectionIdentityEmpty
+  RouterSelection.SelectionVersionInvalid -> RouterSelectionVersionInvalid
+  RouterSelection.SelectionQueryUnknown -> RouterSelectionQueryUnknown
+  RouterSelection.SelectionQueryContractMissing -> RouterSelectionQueryContractMissing
+  RouterSelection.SelectionQueryInputBindingInvalid -> RouterSelectionQueryInputBindingInvalid
+  RouterSelection.SelectionQueryInputTypeMismatch -> RouterSelectionQueryInputTypeMismatch
+  RouterSelection.SelectionQueryResultNotList -> RouterSelectionQueryResultNotList
+  RouterSelection.SelectionQueryRowNotStructural -> RouterSelectionQueryRowNotStructural
+  RouterSelection.SelectionExpressionRootUnknown -> RouterSelectionExpressionRootUnknown
+  RouterSelection.SelectionExpressionFieldUnknown -> RouterSelectionExpressionFieldUnknown
+  RouterSelection.SelectionExpressionFieldOptional -> RouterSelectionExpressionFieldOptional
+  RouterSelection.SelectionExpressionTypeMismatch -> RouterSelectionExpressionTypeMismatch
+  RouterSelection.SelectionPredicateNotBool -> RouterSelectionPredicateNotBool
+  RouterSelection.SelectionRecipientNotText -> RouterSelectionRecipientNotText
+  RouterSelection.SelectionOperatorUnsupported -> RouterSelectionOperatorUnsupported
+  RouterSelection.SelectionRecipientLimitMissing -> RouterSelectionRecipientLimitMissing
+  RouterSelection.SelectionRecipientLimitInvalid -> RouterSelectionRecipientLimitInvalid
+  RouterSelection.SelectionOrderUnsupported -> RouterSelectionOrderUnsupported
+  RouterSelection.SelectionDedupeUnsupported -> RouterSelectionDedupeUnsupported
+  RouterSelection.SelectionFailureAckForbidden -> RouterSelectionFailureAckForbidden
+  RouterSelection.SelectionRedeliveryUnsupported -> RouterSelectionRedeliveryUnsupported
+  RouterSelection.SelectionPartialDispatchUnsupported -> RouterSelectionPartialDispatchUnsupported
+  RouterSelection.SelectionTargetAmbiguous -> RouterSelectionTargetAmbiguous
+  RouterSelection.SelectionCommandUnknown -> RouterSelectionCommandUnknown
+  RouterSelection.SelectionCommandMappingDuplicate -> RouterSelectionCommandMappingDuplicate
+  RouterSelection.SelectionCommandMappingIncomplete -> RouterSelectionCommandMappingIncomplete
+  RouterSelection.SelectionCommandMappingTypeMismatch -> RouterSelectionCommandMappingTypeMismatch
 
 -- | Reconcile per-dispatch prose with the one node-level policy the runtime
 -- actually applies to a rejection-class failure group.

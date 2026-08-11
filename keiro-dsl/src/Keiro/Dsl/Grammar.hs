@@ -86,6 +86,8 @@ module Keiro.Dsl.Grammar
     ProcessNode (..),
 
     -- * The router node (EP-108)
+    RouterSelectionDecl (..),
+    SelectionDispositionSyntax (..),
     ResolveSource (..),
     ResolveDecl (..),
     RouterDispatchNode (..),
@@ -156,6 +158,7 @@ where
 
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Numeric.Natural (Natural)
 
 -- | An identifier in the notation: a type name, register name, command/event
 -- name, state name, enum constructor, etc. Always a non-empty 'Text'.
@@ -674,7 +677,9 @@ data FieldBinding = FieldBinding
 -- event shape (one field must be a @:Time@ field used by the timer deadline).
 data InputDecl = InputDecl
   { inName :: !Name,
-    inFields :: ![Field]
+    inFields :: ![Field],
+    inType :: !(Maybe TypeExpr),
+    inLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -821,7 +826,48 @@ data ProcessNode = ProcessNode
 
 -- EP-108: stateless, effectful content-based routing.
 
-data ResolveSource = ResolveReadModel !Name | ResolveHole
+data SelectionDispositionSyntax
+  = SelectionAck
+  | SelectionRetry
+  | SelectionDeadLetter
+  | SelectionHalt
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Candidate language-5 syntax for a bounded, generated router selection.
+-- Policy spellings that are not yet admitted remain raw names so validation,
+-- rather than parsing, owns stable diagnostics for future-looking values.
+data RouterSelectionDecl = RouterSelectionDecl
+  { rsIdentity :: !Text,
+    rsIdentityLoc :: !Loc,
+    rsVersion :: !Natural,
+    rsVersionLoc :: !Loc,
+    rsQuery :: !Name,
+    rsQueryLoc :: !Loc,
+    rsQueryInput :: !Name,
+    rsQueryInputLoc :: !Loc,
+    rsPredicate :: !Expr,
+    rsRecipient :: !Expr,
+    rsLimit :: !(Maybe (Natural, Loc)),
+    rsOrder :: !Name,
+    rsOrderLoc :: !Loc,
+    rsDedupe :: !Name,
+    rsDedupeLoc :: !Loc,
+    rsEmptyPolicy :: !SelectionDispositionSyntax,
+    rsEmptyPolicyLoc :: !Loc,
+    rsFailurePolicy :: !SelectionDispositionSyntax,
+    rsFailurePolicyLoc :: !Loc,
+    rsRedelivery :: !Name,
+    rsRedeliveryLoc :: !Loc,
+    rsPartial :: !Name,
+    rsPartialLoc :: !Loc,
+    rsLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ResolveSource
+  = ResolveReadModel !Name
+  | ResolveHole
+  | ResolveDeclarative !RouterSelectionDecl
   deriving stock (Eq, Show, Generic)
 
 data ResolveDecl = ResolveDecl

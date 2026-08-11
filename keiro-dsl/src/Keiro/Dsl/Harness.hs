@@ -162,6 +162,7 @@ routerHarnessFactValues router =
     resolveSource = case rvSource (rtResolve router) of
       ResolveReadModel name -> "read-model " <> name
       ResolveHole -> "hole"
+      ResolveDeclarative selection -> "declarative " <> rsIdentity selection
 
 -- | Emit runtime-free facts for a read-model node. Each row records the value
 -- expected directly from the notation next to the value produced by the shared

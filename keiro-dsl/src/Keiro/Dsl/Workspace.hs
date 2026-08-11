@@ -118,6 +118,7 @@ import Keiro.Dsl.SourceIndex
     unionSemanticSourceIndexes,
   )
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateService)
+import Numeric.Natural (Natural)
 import System.Directory (doesFileExist)
 import System.FilePath (takeBaseName, takeDirectory, takeFileName, (</>))
 import Text.Megaparsec hiding (ParseError)
@@ -476,6 +477,9 @@ instance HasLocs Int where
   traverseLocs _ = pure
 
 instance HasLocs Integer where
+  traverseLocs _ = pure
+
+instance HasLocs Natural where
   traverseLocs _ = pure
 
 instance HasLocs Double where
@@ -1512,6 +1516,10 @@ instance HasLocs RegInitial
 instance HasLocs ResolveDecl
 
 instance HasLocs ResolveSource
+
+instance HasLocs RouterSelectionDecl
+
+instance HasLocs SelectionDispositionSyntax
 
 instance HasLocs RmColumn
 

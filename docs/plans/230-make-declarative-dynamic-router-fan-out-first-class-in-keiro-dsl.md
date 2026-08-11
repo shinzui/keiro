@@ -51,7 +51,13 @@ silently treating them as ordinary source edits.
   intended Keiro selection reason-code literals, total projections, and canonical renderings.
   `cabal build keiro:lib:keiro` and `cabal test keiro-dsl-runtime-vocabulary-test` pass, and the
   resolved plan selects the two required released versions.
-- [ ] Milestone 1: parse and check the version-5 bounded declarative selection surface.
+- [x] (2026-08-11T02:32:01Z) Milestone 1: added the candidate-only declarative router AST and
+  grammar, mapped-type-backed checked representation, total scalar/path and command-mapping
+  checks, bounded policy validation, canonical SHA-256 fingerprint, append-only diagnostic
+  codes, source relocation, pretty-printing, and valid/unbounded fixtures.  Focused language
+  profile and declarative selection tests pass; 23 isolated rejection mutations prove the
+  dedicated diagnostics, the executable accepts the bounded fixture, and it refuses the
+  unbounded twin at line 79 with `RouterSelectionRecipientLimitMissing`.
 - [ ] Milestone 2: add the runtime selection contract, normalization, policy lowering, and safe
   dispatch runner.
 - [ ] Milestone 3: generate executable selection code and compiled/database-backed evidence.
@@ -96,6 +102,16 @@ silently treating them as ordinary source edits.
   `ApplicationFailure _ _` case.  Replacing that duplicate renderer with Shibuya's public total
   `renderDeadLetterReason` removed the warning and kept Keiro aligned with the dependency-owned
   wire vocabulary.
+
+- The workspace line-relocation walker makes AST source ownership compiler-enforced.  Adding
+  `RouterSelectionDecl` caused `Keiro.Dsl.Workspace` to fail until the new syntax and its
+  `Natural` leaves received `HasLocs` coverage; this gave direct evidence that selection policy
+  and expression locations survive multi-file composition.
+
+- Existing identifiers do not admit hyphens, while the selection policy vocabulary deliberately
+  uses values such as `target-stream` and `stable-union`.  The selection parser therefore owns a
+  small hyphenated-name parser and the checker, rather than the lexer, decides whether the parsed
+  value is one of the closed admitted policies.
 
 
 ## Decision Log
@@ -207,6 +223,27 @@ silently treating them as ordinary source edits.
   duplicating its constructors would drift on every future additive reason.
   Date: 2026-08-11
 
+- Decision: A typed router input is the declarative branch marker and omits the legacy `via`
+  clause; a field-list input plus explicit `via` remains the byte-compatible custom resolver
+  grammar.  The checker still resolves the declarative key as a required `Text` path.
+  Rationale: This preserves the released version-4 surface exactly while giving generated
+  selection an input type that is provably identical to the named read-model query contract.
+  Date: 2026-08-11
+
+- Decision: Keep selection checking in `Keiro.Dsl.RouterSelection`, with its located internal
+  error vocabulary exhaustively projected into append-only public `DiagnosticCode` constructors
+  by `Validate`.
+  Rationale: Downstream generation and impact analysis need one checked value and one field/type
+  model, while CLI consumers still require the repository's central stable diagnostic registry.
+  Date: 2026-08-11
+
+- Decision: Fingerprint checked semantic evidence with `cryptohash-sha256` and a local lowercase
+  hexadecimal rendering; do not add a base16 dependency.
+  Rationale: SHA-256 provides the required cryptographic identity, the direct dependency's
+  released API was verified through Mori and Hackage, and the 32-byte fixed output needs only a
+  total two-digit byte rendering.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -217,9 +254,11 @@ losing the legacy compatibility rendering.  Hackage preferred metadata and annot
 independently confirm both releases.
 
 Keiro has now adopted those releases across the local workspace, and the cross-package vocabulary
-proof validates the five planned selection reason codes through Shibuya's public API.  The grammar,
-runtime, generator, diff, conformance, and documentation acceptance items remain open, so the next
-contributor resumes at Milestone 1 and IR-9 remains open.
+proof validates the five planned selection reason codes through Shibuya's public API.  Candidate
+language version 5 now owns a bounded declarative selection grammar and a checked semantic value;
+version 4 refuses the feature at its marker and retains its custom-router syntax.  The runtime,
+generator, diff, conformance, and documentation acceptance items remain open, so implementation
+continues at Milestone 2 and IR-9 remains open.
 
 
 ## Context and Orientation
@@ -1073,3 +1112,8 @@ types.
   local `keiro-pgmq` and `jitsurei` upper bounds participate in the same solver plan.  Recorded the
   aligned direct constraints, replacement of the old exhaustive adapter-side renderer, public
   vocabulary proof, exact resolved versions, and the remaining Milestone 1 starting point.
+- 2026-08-11: Completed Milestone 1.  Recorded the typed declarative/custom grammar boundary,
+  checker-owned semantic IR and diagnostics, mapped-path totality rules, positive bound and fixed
+  policy checks, SHA-256 fingerprint choice, workspace location coverage, focused mutation tests,
+  and the bounded/unbounded executable evidence.  Milestone 2 now starts from a checked value and
+  does not need to reinterpret parser expressions.

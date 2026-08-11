@@ -275,10 +275,13 @@ profileV4 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/4"
     ( Set.insert
-        DomainCommandOutcomeSyntax
+        DeclarativeRouterSelectionSyntax
         ( Set.insert
-            MappedConsumerSurfaceSyntax
-            (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+            DomainCommandOutcomeSyntax
+            ( Set.insert
+                MappedConsumerSurfaceSyntax
+                (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+            )
         )
     )
 
@@ -352,6 +355,7 @@ data LanguageFeature
   | ProjectionCatalogSyntax
   | MappedConsumerSurfaceSyntax
   | DomainCommandOutcomeSyntax
+  | DeclarativeRouterSelectionSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

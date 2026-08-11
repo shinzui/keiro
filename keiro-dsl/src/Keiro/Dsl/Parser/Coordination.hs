@@ -8,8 +8,13 @@ where
 import Data.List (intersperse)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax))
 import Keiro.Dsl.Parser.Core
+import Keiro.Dsl.Parser.Expression (pExpr)
+import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
+import Keiro.Dsl.Source (SourceSpan)
 import Text.Megaparsec
 import Text.Megaparsec.Char (char)
 
@@ -50,16 +55,22 @@ pProcess = do
         procLoc = loc
       }
 
-pRouter :: P RouterNode
-pRouter = do
+pRouter :: FrontendContext -> P RouterNode
+pRouter context = do
   loc <- getLoc
   keyword "router"
   rid <- ident
   keyword "name"
   nm <- stringLit
-  inp <- pInputDecl
-  key <- pRouterKey
-  resolved <- pResolveDecl
+  (inp, typedInputSpan) <- pRouterInputDecl context
+  key <- pRouterKey (maybe False (const True) typedInputSpan)
+  resolved <- pResolveDecl context
+  case (typedInputSpan, rvSource resolved) of
+    (Just _, ResolveDeclarative {}) -> pure ()
+    (Nothing, ResolveReadModel {}) -> pure ()
+    (Nothing, ResolveHole) -> pure ()
+    (Just _, _) -> fail "typed router input requires declarative selection"
+    (Nothing, ResolveDeclarative {}) -> fail "declarative selection requires a typed router input"
   keyword "target"
   target <- ident
   projections <- keyword "projections" *> brackets (many ident)
@@ -82,25 +93,115 @@ pRouter = do
         rtLoc = loc
       }
 
-pRouterKey :: P CorrelateDecl
-pRouterKey = do
+pRouterKey :: Bool -> P CorrelateDecl
+pRouterKey declarative = do
   keyword "key"
   _ <- keyword "input" *> symbol "."
   field <- ident
-  keyword "via"
-  via <- ident
+  via <- if declarative then pure "idText" else keyword "via" *> ident
   pure CorrelateDecl {corrField = field, corrVia = via}
 
-pResolveDecl :: P ResolveDecl
-pResolveDecl = do
+pResolveDecl :: FrontendContext -> P ResolveDecl
+pResolveDecl context = do
   loc <- getLoc
   keyword "resolve"
+  choice [pDeclarativeResolve context loc, pCustomResolve loc]
+
+pCustomResolve :: Loc -> P ResolveDecl
+pCustomResolve loc = do
   keyword "stable"
   keyword "via"
   source <- choice [ResolveReadModel <$> (keyword "read-model" *> ident), ResolveHole <$ keyword "hole"]
   keyword "row"
   row <- braces (many ident)
   pure ResolveDecl {rvSource = source, rvRow = row, rvLoc = loc}
+
+pDeclarativeResolve :: FrontendContext -> Loc -> P ResolveDecl
+pDeclarativeResolve context loc = do
+  marker <- withOwnedSpan (keyword "declarative")
+  requireLanguageFeatureAt context DeclarativeRouterSelectionSyntax (spanOf marker)
+  selection <- braces (pRouterSelection context loc)
+  pure ResolveDecl {rvSource = ResolveDeclarative selection, rvRow = [], rvLoc = loc}
+
+pRouterSelection :: FrontendContext -> Loc -> P RouterSelectionDecl
+pRouterSelection context loc = do
+  (identity, identityLoc) <- locatedClause "identity" stringLit
+  (version, versionLoc) <- locatedClause "version" (fromIntegral <$> boundedDecimal)
+  queryLoc <- getLoc
+  keyword "query"
+  _ <- symbol "=" *> keyword "read-model"
+  query <- ident
+  keyword "with"
+  queryInputLoc <- getLoc
+  queryInput <- ident
+  keyword "where"
+  _ <- symbol "="
+  predicate <- pExpr context
+  keyword "recipient"
+  _ <- symbol "="
+  recipient <- pExpr context
+  (order, orderLoc) <- locatedClause "order" pSelectionPolicyName
+  (dedupe, dedupeLoc) <- locatedClause "dedupe" pSelectionPolicyName
+  recipientLimit <- optional $ try $ do
+    (limit, limitLoc) <- locatedClause "max-recipients" (fromIntegral <$> boundedDecimal)
+    pure (limit, limitLoc)
+  emptyPolicyLoc <- getLoc
+  keyword "empty"
+  _ <- symbol "=>"
+  emptyPolicy <- pSelectionDisposition
+  failurePolicyLoc <- getLoc
+  keyword "failure"
+  _ <- symbol "=>"
+  failurePolicy <- pSelectionDisposition
+  (redelivery, redeliveryLoc) <- locatedClause "redelivery" pSelectionPolicyName
+  (partial, partialLoc) <- locatedClause "partial" pSelectionPolicyName
+  pure
+    RouterSelectionDecl
+      { rsIdentity = identity,
+        rsIdentityLoc = identityLoc,
+        rsVersion = version,
+        rsVersionLoc = versionLoc,
+        rsQuery = query,
+        rsQueryLoc = queryLoc,
+        rsQueryInput = queryInput,
+        rsQueryInputLoc = queryInputLoc,
+        rsPredicate = predicate,
+        rsRecipient = recipient,
+        rsLimit = recipientLimit,
+        rsOrder = order,
+        rsOrderLoc = orderLoc,
+        rsDedupe = dedupe,
+        rsDedupeLoc = dedupeLoc,
+        rsEmptyPolicy = emptyPolicy,
+        rsEmptyPolicyLoc = emptyPolicyLoc,
+        rsFailurePolicy = failurePolicy,
+        rsFailurePolicyLoc = failurePolicyLoc,
+        rsRedelivery = redelivery,
+        rsRedeliveryLoc = redeliveryLoc,
+        rsPartial = partial,
+        rsPartialLoc = partialLoc,
+        rsLoc = loc
+      }
+
+locatedClause :: Text -> P a -> P (a, Loc)
+locatedClause clause parser = do
+  clauseLoc <- getLoc
+  keyword clause
+  _ <- symbol "="
+  value <- parser
+  pure (value, clauseLoc)
+
+pSelectionDisposition :: P SelectionDispositionSyntax
+pSelectionDisposition =
+  choice
+    [ SelectionAck <$ keyword "ack",
+      SelectionRetry <$ keyword "retry",
+      SelectionDeadLetter <$ keyword "deadLetter",
+      SelectionHalt <$ keyword "halt"
+    ]
+
+pSelectionPolicyName :: P Name
+pSelectionPolicyName = T.intercalate "-" <$> ((:) <$> ident <*> many (symbol "-" *> ident))
 
 pRouterDispatch :: P RouterDispatchNode
 pRouterDispatch = do
@@ -145,10 +246,26 @@ pPolicyChoice =
 
 pInputDecl :: P InputDecl
 pInputDecl = do
+  loc <- getLoc
   keyword "input"
   nm <- ident
   fs <- braces (many pField)
-  pure InputDecl {inName = nm, inFields = fs}
+  pure InputDecl {inName = nm, inFields = fs, inType = Nothing, inLoc = loc}
+
+pRouterInputDecl :: FrontendContext -> P (InputDecl, Maybe SourceSpan)
+pRouterInputDecl context = do
+  loc <- getLoc
+  keyword "input"
+  name <- ident
+  choice
+    [ do
+        marker <- withOwnedSpan (symbol ":")
+        inputType <- pMappedTypeExpr context
+        pure (InputDecl {inName = name, inFields = [], inType = Just inputType, inLoc = loc}, Just (spanOf marker)),
+      do
+        fields <- braces (many pField)
+        pure (InputDecl {inName = name, inFields = fields, inType = Nothing, inLoc = loc}, Nothing)
+    ]
 
 pCorrelate :: P CorrelateDecl
 pCorrelate = do

@@ -4804,6 +4804,7 @@ emitRouterHoles holePrefix router =
 resolveSourceText :: ResolveSource -> Text
 resolveSourceText (ResolveReadModel name) = "read-model " <> name <> " (typically Keiro.ReadModel.runQuery)"
 resolveSourceText ResolveHole = "typed resolver hole"
+resolveSourceText (ResolveDeclarative selection) = "declarative selection " <> rsIdentity selection
 
 workerPolicyImports :: PolicyChoice -> [Text]
 workerPolicyImports poison =

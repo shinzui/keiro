@@ -43,7 +43,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), Bind
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError (..))
 import Keiro.Dsl.FoldFingerprint qualified as CheckedFold
-import Keiro.Dsl.Frontend (LoweringFailure (..), LoweringFailureCode (..), lowerSurfaceDocument, parseSurfaceSource)
+import Keiro.Dsl.Frontend (FrontendErrorCode (..), FrontendFailure (..), LoweringFailure (..), LoweringFailureCode (..), lowerSurfaceDocument, parseSurfaceSource)
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
 import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
@@ -66,6 +66,7 @@ import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractI
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
+import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
@@ -5636,6 +5637,75 @@ main = hspec $ do
         `shouldNotContain` [ProcessKeyFieldUnknown, ProcessDispatchKeyUnresolved, ProcessBindingUnscoped]
 
   describe "router (EP-108)" $ do
+    it "RouterSelection parses, checks, fingerprints, and round-trips bounded declarative selection" $ do
+      source <- readTestText "test/fixtures/declarative-router/valid.keiro"
+      parsed <- case parseSource "declarative-router.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+      [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error] `shouldBe` []
+      parseSource "declarative-router-roundtrip.keiro" (renderSource parsed) `shouldBe` Right parsed
+      graph <- shouldResolveTypeGraph spec
+      case [router | NRouter router <- specNodes spec] of
+        [router] -> case RouterSelection.checkRouterSelection (checkedLanguageContract service) graph spec router of
+          Left diagnostics -> expectationFailure (show diagnostics)
+          Right selection -> do
+            RouterSelection.checkedIdentity selection `shouldBe` "hospital-transfer-selection"
+            RouterSelection.checkedVersion selection `shouldBe` 1
+            RouterSelection.checkedLimit selection `shouldBe` 64
+            RouterSelection.checkedUseSites selection `shouldSatisfy` (not . null)
+            T.length (RouterSelection.checkedFingerprint selection) `shouldBe` 64
+            RouterSelection.checkedFingerprint selection
+              `shouldSatisfy` T.all (`elem` ("0123456789abcdef" :: String))
+        routers -> expectationFailure ("expected one declarative router, got " <> show (length routers))
+
+    it "RouterSelection gates declarative selection at the version-5 marker" $ do
+      source <- readTestText "test/fixtures/declarative-router/valid.keiro"
+      let version4 = "language keiro-dsl 4\ncontext transfer-routing\n\n" <> snd (T.breakOn "router HospitalTransferRouter" source)
+      case parseSurfaceSource "declarative-router-v4.keiro" version4 of
+        Left FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}}} ->
+          T.take (endOffset - startOffset) (T.drop startOffset version4) `shouldBe` "declarative"
+        Left failure -> expectationFailure (show failure)
+        Right _ -> expectationFailure "language 4 unexpectedly accepted declarative selection"
+
+    it "RouterSelection rejects unbounded selection at its declaration" $ do
+      diagnostics <- diagnosticsOf "test/fixtures/declarative-router/unbounded.keiro"
+      [(line diagnostic, code diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
+        `shouldBe` [(79, RouterSelectionRecipientLimitMissing)]
+
+    it "RouterSelection assigns a dedicated diagnostic to every declarative selection rejection class" $ do
+      source <- readTestText "test/fixtures/declarative-router/valid.keiro"
+      let mutationCases =
+            [ ("empty-identity", T.replace "identity = \"hospital-transfer-selection\"" "identity = \"\"", RouterSelectionIdentityEmpty),
+              ("zero-version", T.replace "version = 1" "version = 0", RouterSelectionVersionInvalid),
+              ("unknown-query", T.replace "read-model hospital_load" "read-model missing_load", RouterSelectionQueryUnknown),
+              ("missing-query-contract", T.replace "  query input = TransferRouteInput\n  query result = List HospitalLoadRow\n" "", RouterSelectionQueryContractMissing),
+              ("input-mismatch", T.replace "input AcceptedHospitalTransferNeed : TransferRouteInput" "input AcceptedHospitalTransferNeed : HospitalLoadRow", RouterSelectionQueryInputTypeMismatch),
+              ("non-list-result", T.replace "query result = List HospitalLoadRow" "query result = HospitalLoadRow", RouterSelectionQueryResultNotList),
+              ("unknown-root", T.replace "recipient = row.hospitalId" "recipient = resolved.hospitalId", RouterSelectionExpressionRootUnknown),
+              ("unknown-field", T.replace "recipient = row.hospitalId" "recipient = row.missingHospitalId", RouterSelectionExpressionFieldUnknown),
+              ("nullable-recipient", T.replace ": Text required\n    region" ": Optional Text required\n    region", RouterSelectionExpressionFieldOptional),
+              ("predicate-type", T.replace "where = row.region == input.region && row.availableBeds > 0" "where = row.region", RouterSelectionPredicateNotBool),
+              ("recipient-type", T.replace "recipient = row.hospitalId" "recipient = row.availableBeds", RouterSelectionRecipientNotText),
+              ("operator", T.replace "recipient = row.hospitalId" "recipient = row.availableBeds + 1", RouterSelectionOperatorUnsupported),
+              ("zero-limit", T.replace "max-recipients = 64" "max-recipients = 0", RouterSelectionRecipientLimitInvalid),
+              ("order", T.replace "order = target-stream" "order = query-order", RouterSelectionOrderUnsupported),
+              ("dedupe", T.replace "dedupe = target-stream" "dedupe = none", RouterSelectionDedupeUnsupported),
+              ("failure-ack", T.replace "failure => retry" "failure => ack", RouterSelectionFailureAckForbidden),
+              ("redelivery", T.replace "redelivery = stable-union" "redelivery = replace", RouterSelectionRedeliveryUnsupported),
+              ("partial", T.replace "partial = retain-successes" "partial = rollback", RouterSelectionPartialDispatchUnsupported),
+              ("target", T.replace "target Hospital\n" "target MissingHospital\n", RouterSelectionTargetAmbiguous),
+              ("command", T.replace "dispatch-each RouteAcceptedTransferNeed" "dispatch-each MissingCommand", RouterSelectionCommandUnknown),
+              ("duplicate-field", T.replace "    hospitalId=row.hospitalId\n" "    hospitalId=row.hospitalId\n    hospitalId=row.hospitalId\n", RouterSelectionCommandMappingDuplicate),
+              ("incomplete-field", T.replace "    hospitalId=row.hospitalId\n" "", RouterSelectionCommandMappingIncomplete),
+              ("field-type", T.replace "hospitalId:Text" "hospitalId:Int", RouterSelectionCommandMappingTypeMismatch)
+            ]
+      forM_ mutationCases $ \(caseLabel, mutate, expected) -> do
+        service <- checkedServiceFromText ("declarative-router-" <> caseLabel <> ".keiro") (mutate source)
+        [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
+          `shouldContain` [expected]
+
     it "parses the incident-paging router shape" $ do
       input <- readTestText "test/fixtures/incident-paging/incident-paging.keiro"
       case parseSpec "test/fixtures/incident-paging/incident-paging.keiro" input of
@@ -12498,7 +12568,7 @@ processWithLiteral value =
   ProcessNode
     { procId = "Process",
       procName = "process",
-      procInput = InputDecl "Input" [],
+      procInput = InputDecl "Input" [] Nothing noLoc,
       procCorrelate = CorrelateDecl "key" "idText",
       procSaga = SagaRef "Saga" "saga",
       procTarget = "Target",
@@ -12735,7 +12805,7 @@ genProcess =
   ProcessNode
     <$> genName
     <*> genAdversarialText
-    <*> (InputDecl <$> genName <*> smallList genField)
+    <*> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
     <*> (CorrelateDecl <$> genName <*> genName)
     <*> (SagaRef <$> genName <*> genAdversarialText)
     <*> genName
@@ -12754,7 +12824,7 @@ genRouter =
   RouterNode
     <$> genName
     <*> genAdversarialText
-    <*> (InputDecl <$> genName <*> smallList genField)
+    <*> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
     <*> (CorrelateDecl <$> genName <*> genName)
     <*> (ResolveDecl <$> genResolveSource <*> smallList genName <*> pure noLoc)
     <*> genName

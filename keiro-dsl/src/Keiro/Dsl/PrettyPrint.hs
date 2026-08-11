@@ -600,7 +600,7 @@ docRouter r =
     [ "router" <+> pretty (rtId r),
       indent 2 ("name" <+> dquoted (rtName r)),
       indent 2 (docInput (rtInput r)),
-      indent 2 (docRouterKey (rtKey r)),
+      indent 2 (docRouterKey (isDeclarativeResolve (rtResolve r)) (rtKey r)),
       indent 2 (docResolve (rtResolve r)),
       indent 2 ("target" <+> pretty (rtTarget r)),
       indent 2 ("projections" <+> bracketed (map pretty (rtProjections r))),
@@ -610,19 +610,47 @@ docRouter r =
       indent 2 ("poison =>" <+> docPolicyChoice (rtPoison r))
     ]
 
-docRouterKey :: CorrelateDecl -> Doc ann
-docRouterKey key = "key" <+> ("input." <> pretty (corrField key)) <+> "via" <+> pretty (corrVia key)
+docRouterKey :: Bool -> CorrelateDecl -> Doc ann
+docRouterKey declarative key
+  | declarative = "key" <+> ("input." <> pretty (corrField key))
+  | otherwise = "key" <+> ("input." <> pretty (corrField key)) <+> "via" <+> pretty (corrVia key)
+
+isDeclarativeResolve :: ResolveDecl -> Bool
+isDeclarativeResolve resolve = case rvSource resolve of
+  ResolveDeclarative {} -> True
+  _ -> False
 
 docResolve :: ResolveDecl -> Doc ann
-docResolve resolve =
-  "resolve stable via"
-    <+> source
-    <+> "row"
-    <+> braced (map pretty (rvRow resolve))
+docResolve resolve = case rvSource resolve of
+  ResolveReadModel name -> custom ("read-model" <+> pretty name)
+  ResolveHole -> custom "hole"
+  ResolveDeclarative selection ->
+    vsep
+      ( [ "resolve declarative {",
+          indent 2 ("identity =" <+> dquoted (rsIdentity selection)),
+          indent 2 ("version =" <+> pretty (rsVersion selection)),
+          indent 2 ("query = read-model" <+> pretty (rsQuery selection) <+> "with" <+> pretty (rsQueryInput selection)),
+          indent 2 ("where =" <+> docExpr 0 (rsPredicate selection)),
+          indent 2 ("recipient =" <+> docExpr 0 (rsRecipient selection)),
+          indent 2 ("order =" <+> pretty (rsOrder selection)),
+          indent 2 ("dedupe =" <+> pretty (rsDedupe selection))
+        ]
+          ++ maybe [] (\(recipientLimit, _) -> [indent 2 ("max-recipients =" <+> pretty recipientLimit)]) (rsLimit selection)
+          ++ [ indent 2 ("empty =>" <+> docSelectionDisposition (rsEmptyPolicy selection)),
+               indent 2 ("failure =>" <+> docSelectionDisposition (rsFailurePolicy selection)),
+               indent 2 ("redelivery =" <+> pretty (rsRedelivery selection)),
+               indent 2 ("partial =" <+> pretty (rsPartial selection)),
+               "}"
+             ]
+      )
   where
-    source = case rvSource resolve of
-      ResolveReadModel name -> "read-model" <+> pretty name
-      ResolveHole -> "hole"
+    custom source = "resolve stable via" <+> source <+> "row" <+> braced (map pretty (rvRow resolve))
+
+docSelectionDisposition :: SelectionDispositionSyntax -> Doc ann
+docSelectionDisposition SelectionAck = "ack"
+docSelectionDisposition SelectionRetry = "retry"
+docSelectionDisposition SelectionDeadLetter = "deadLetter"
+docSelectionDisposition SelectionHalt = "halt"
 
 docRouterDispatch :: RouterDispatchNode -> Doc ann
 docRouterDispatch dispatch =
@@ -637,7 +665,9 @@ docPolicyChoice PolDeadLetter = "deadLetter"
 docPolicyChoice PolSkip = "skip"
 
 docInput :: InputDecl -> Doc ann
-docInput i = "input" <+> pretty (inName i) <+> braced (map docField (inFields i))
+docInput input = case inType input of
+  Just inputType -> "input" <+> pretty (inName input) <+> ":" <+> docTypeExpr inputType
+  Nothing -> "input" <+> pretty (inName input) <+> braced (map docField (inFields input))
 
 docCorrelate :: CorrelateDecl -> Doc ann
 docCorrelate c = "correlate" <+> ("input." <> pretty (corrField c)) <+> "via" <+> pretty (corrVia c)

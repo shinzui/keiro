@@ -1,0 +1,102 @@
+language keiro-dsl 5
+context transfer-routing
+
+mapped structural record TransferRouteInput {
+  haskell package=keiro-dsl module=Conformance.DeclarativeRouter.Domain type=TransferRouteInput
+  binding = "Conformance.DeclarativeRouter.Bindings.transferRouteInputBinding"
+  binding-version = "1"
+  canonical-type = "conformance.declarative-router.TransferRouteInput.v1"
+  fixtures = "Conformance.DeclarativeRouter.Bindings.transferRouteInputCases"
+  wire object constructor=TransferRouteInput unknown-fields=reject {
+    transferNeedId as "transfer_need_id" : Text required
+    region         as "region"           : Text required
+  }
+}
+
+mapped structural record HospitalLoadRow {
+  haskell package=keiro-dsl module=Conformance.DeclarativeRouter.Domain type=HospitalLoadRow
+  binding = "Conformance.DeclarativeRouter.Bindings.hospitalLoadRowBinding"
+  binding-version = "1"
+  canonical-type = "conformance.declarative-router.HospitalLoadRow.v1"
+  fixtures = "Conformance.DeclarativeRouter.Bindings.hospitalLoadRowCases"
+  wire object constructor=HospitalLoadRow unknown-fields=reject {
+    hospitalId    as "hospital_id"    : Text required
+    region        as "region"         : Text required
+    availableBeds as "available_beds" : Int  required
+  }
+}
+
+target hospital_load_table {
+  schema = "public"
+  table = "hospital_load"
+  reset = clear
+}
+
+rebuild-group reporting {
+  targets = [ hospital_load_table ]
+  order = [ hospital_load_table ]
+}
+
+projection-owner hospital_load_writer {
+  source = category "hospitalLoad"
+  feed = subscription
+  group = reporting
+  targets = [ hospital_load_table ]
+  order = 10
+  subscription = "declarative-router-hospital-load"
+  dedup = "declarative-router-hospital-load-v1"
+  replay = explicit
+}
+
+readmodel hospital_load {
+  columns {}
+  query input = TransferRouteInput
+  query result = List HospitalLoadRow
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  consistency = Eventual
+  feed = subscription
+  group = reporting
+  targets = [ hospital_load_table ]
+}
+
+aggregate Hospital
+  regs
+    routed Bool = False
+  states Open Routed!
+
+  command RouteAcceptedTransferNeed { transferNeedId:Text hospitalId:Text }
+  event TransferNeedRouted = fields(RouteAcceptedTransferNeed)
+
+  Open -- RouteAcceptedTransferNeed --> write routed := true ; emit TransferNeedRouted ; goto Routed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+router HospitalTransferRouter
+  name "hospital-transfer-router"
+  input AcceptedHospitalTransferNeed : TransferRouteInput
+  key input.transferNeedId
+  resolve declarative {
+    identity = "hospital-transfer-selection"
+    version = 1
+    query = read-model hospital_load with input
+    where = row.region == input.region && row.availableBeds > 0
+    recipient = row.hospitalId
+    order = target-stream
+    dedupe = target-stream
+    max-recipients = 64
+    empty => ack
+    failure => retry
+    redelivery = stable-union
+    partial = retain-successes
+  }
+  target Hospital
+  projections []
+  dispatch-each RouteAcceptedTransferNeed {
+    transferNeedId=input.transferNeedId
+    hospitalId=row.hospitalId
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
