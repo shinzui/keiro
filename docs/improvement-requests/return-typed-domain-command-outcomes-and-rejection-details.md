@@ -35,9 +35,9 @@ bounded-telemetry outcomes. [Plan 232](../plans/232-add-typed-domain-outcomes-to
 has now delivered candidate language-5 syntax, exhaustive checking, generated
 handlers, exact-reason conformance, mutation coverage, and fixed-size scaling
 fixtures. The request remains proposed rather than completed only because the
-shared quiet-host latency/allocation/residency acceptance and committed DSL
-generation baseline remain pending; no baseline was changed under the current
-host load.
+committed DSL generation baseline and its `bench-regression` wiring remain
+pending. Plan 231's quiet-host latency, allocation, one-dispatch residency,
+command baseline, and shared regression evidence are complete.
 
 ## Progress
 
@@ -62,9 +62,11 @@ host load.
 - Scaling: fixed 8/32/128/512 check/generation rows enforce one classifier arm
   per silent edge, forbid lookup/search dispatch, and keep each fourfold size
   increase below the sixfold cap.
-- Remaining: Plan 231's same-machine latency/allocation/maximum-residency
-  evidence and Plan 232's committed outcome-generation baseline plus
-  `bench-regression` wiring, both on a quiet host.
+- Runtime performance: Plan 231's matched latency gates, historical legacy
+  guards, 15-row command baseline, and bounded one-dispatch coordinator
+  residency through fan-out 1000 pass.
+- Remaining: Plan 232's committed outcome-generation baseline plus
+  `bench-regression` wiring.
 
 ## Context
 

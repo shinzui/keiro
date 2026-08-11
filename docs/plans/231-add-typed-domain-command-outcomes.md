@@ -109,12 +109,19 @@ the decision from the successful final evaluation.
   Keiro examples, all 674 core DSL examples plus every generated conformance
   executable, all 23 Jitsurei examples, strict ADR/IR validation, `nix fmt`,
   and `nix flake check -j1 --cores 1` pass.
-- [ ] Milestone 4 performance-coupled closeout: after the machine reboots, run
-  the default-tolerance command suite, create the finished command baseline,
-  extend and run `just bench-regression`, and accept the result only after the
-  Milestone 1 and 3 latency/allocation/residency checks pass. Keep IR-7 open for
-  Plan 232 regardless of this runtime closeout.
-- [ ] Follow-up: execute [the DSL plan](232-add-typed-domain-outcomes-to-the-dsl.md) after this runtime contract is stable.
+- [x] (2026-08-11T14:46:35Z) Milestone 4 performance-coupled closeout: created
+  the post-reboot command baseline, added it to `just bench-regression`, and
+  passed all 3 outbox, 4 inbox, and 15 command cases. The final command rerun
+  measured accepted-small at 1.01x its control, accepted-large at 1.08x,
+  rejection at 1.07x, and both coordinator families within the committed
+  25-percent baseline envelope. IR-7 remains open for Plan 232.
+- [x] (2026-08-11T15:03:14Z) Final repository validation and DSL handoff:
+  `cabal build all`, 463 Keiro examples, every DSL component plus the
+  686-example umbrella suite, 23 Jitsurei examples, generated-diagram checking,
+  strict ADR validation, `nix fmt`, and `nix flake check -j1 --cores 1` pass.
+  Updated [Plan 232](232-add-typed-domain-outcomes-to-the-dsl.md) to record that
+  its runtime prerequisite is closed; that plan remains open only for its own
+  committed DSL generation baseline and regression wiring.
 
 
 ## Surprises & Discoveries
@@ -347,6 +354,15 @@ the decision from the successful final evaluation.
   contract and produced the same apparent growth without any router involved.
   Date: 2026-08-11
 
+- Decision: Close this runtime plan without a new ADR for benchmark sampling,
+  and hand its completed dependency to Plan 232 while leaving the DSL plan's
+  benchmark milestone open.
+  Rationale: ADR 0029 already records the durable typed-outcome API, ownership,
+  coordinator, and telemetry contract. The tasty-bench sampling distinction is
+  task-local validation technique, while Plan 232 still owns its independent
+  generated-source baseline and regression gate.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -357,17 +373,24 @@ additive, and the Jitsurei proof demonstrates application-level exhaustive
 handling without projection effects for typed silent decisions. ADR 0029 now
 records the durable contract, while Plan 232 names the exact generated target.
 
-The remaining work is deliberately evidence-only and reboot-gated: stable
-default-tolerance latency measurements, the committed command baseline, its
-`Justfile` guard, and `just bench-regression`. Isolated heap diagnostics already
-show that the large accepted outcome adds only one typed batch and that the
-strict router/process-manager summaries remain bounded through fan-out 1000,
-including after strengthening the fixture to create distinct 1 KiB payloads.
-The user's machine nevertheless produced contradictory combined latency runs,
-and the user explicitly deferred every baseline creation or change until after
-a reboot. The scratch pre-refactor CSV remains unchanged and uncommitted. Until
-those post-reboot checks pass, this plan is not fully closed even though all
-functional, documentation, Cabal, OKF, formatting, and Nix validation succeeds.
+The reboot-gated evidence is now complete. The committed command baseline and
+`Justfile` guard pass alongside the existing outbox and inbox guards; matched
+domain paths remain below the 1.25x ratio limit; the legacy scenarios remain
+within their historical 25-percent envelope; and one-dispatch RTS evidence
+shows that strict router/process-manager workers remain bounded through fan-out
+1000 with distinct 1 KiB accepted payloads. The scratch pre-refactor CSV remains
+unchanged and uncommitted.
+
+The plan is complete. Final validation passed `cabal build all`, the 463-example
+Keiro suite, all DSL components and the 686-example umbrella suite, the
+23-example Jitsurei suite, generated-diagram checking, strict ADR validation,
+`nix fmt`, and both native `nix flake check` checks. The full strict
+improvement-request bundle currently reports only an unrelated repository-drift
+issue: IR-22 predates this closeout without the profile-recommended `reviews`
+field. IR-7 and this plan were not changed to invent review evidence. ADR 0029
+already contains the durable outcome contract, so the closeout adds no ADR.
+Plan 232 now records the satisfied runtime prerequisite and retains ownership of
+its remaining DSL benchmark baseline.
 
 
 ## Context and Orientation
@@ -994,3 +1017,9 @@ sampling from one-dispatch heap ownership evidence. The non-router control
 showed the same cumulative RTS growth under repeated database mutation, while
 single-dispatch router and process-manager runs remained bounded through 1000
 distinct accepted payloads.
+
+Revision note (2026-08-11): Closed the runtime plan after full Cabal, Jitsurei,
+generated-diagram, ADR, formatting, and Nix validation; recorded the unrelated
+IR-22 strict-profile drift; confirmed ADR 0029 needs no supplement; and handed
+the completed runtime/performance prerequisite to Plan 232 without claiming its
+independent DSL baseline is finished.

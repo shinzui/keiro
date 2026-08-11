@@ -46,9 +46,10 @@ unchanged.
   `SilentCommandContext`, `SilentDomainDecision`, `DomainCommandHandler`,
   `runDomainCommand`, and `forgetDomainDecision` names. It also delivered the
   exact SQL/projection and domain coordinator families recorded below.
-- [ ] Prerequisite closeout: Plan 231 still needs its same-machine latency,
-  allocation, and maximum-residency acceptance on a quiet host. Do not generate
-  or change a benchmark baseline under the current host load.
+- [x] (2026-08-11T15:03:14Z) Prerequisite closeout: Plan 231 passed its
+  same-machine latency gates, committed its 15-row command baseline and shared
+  regression wiring, and demonstrated bounded one-dispatch router and process-
+  manager residency through fan-out 1000. The runtime dependency is closed.
 - [x] (2026-08-10T23:35:51Z) Implementation preflight: reconciled the committed
   `Keiro.Command` exports, confirmed Keiki 0.9.0.0 against Hackage and upstream
   tag `v0.9.0.0`, and retained the existing `>=0.9 && <0.10` bounds. The DSL
@@ -221,6 +222,16 @@ unchanged.
   parse boundary without expanding the global reserved-word surface.
   Date: 2026-08-11
 
+- Decision: Treat Plan 231's completed latency, allocation, and one-dispatch
+  residency evidence as satisfying this plan's runtime prerequisite, while
+  keeping Milestone 3 open for the independent DSL generation baseline and
+  `bench-regression` wiring.
+  Rationale: The runtime baseline now protects handwritten and coordinator
+  paths. Generated-source size and generation time are separate DSL costs and
+  still require their own committed rows rather than being inferred from the
+  runtime evidence.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -244,21 +255,23 @@ existing candidate fixtures.
 Performance structure is implemented and bounded in the same run: 8/32/128/512
 silent-edge fixtures generated 40,202/66,467/171,656/593,480 bytes in
 0.855/2.65/10.8/59.2 ms, within the sixfold growth rule. The plan is not marked
-complete because its durable benchmark acceptance is deliberately environment
-bound. Plan 231 still needs quiet-host latency/allocation/residency evidence;
-this plan still needs the corresponding committed DSL baseline/regression
-wiring. The existing repository outbox/inbox regression gate passes after its
-schema-qualified cleanup fix. The improvement request therefore remains
-proposed rather than claiming both plans are accepted.
+complete because it still needs the corresponding committed DSL generation
+baseline and `bench-regression` wiring. Plan 231's quiet-host latency,
+allocation, and one-dispatch residency prerequisite is now complete, including
+the shared command regression gate. The existing repository outbox/inbox
+regression gate also passes after its schema-qualified cleanup fix. The
+improvement request therefore remains proposed only for this plan's independent
+DSL performance closeout rather than claiming both plans are accepted.
 
 
 ## Context and Orientation
 
 This plan is the DSL follow-up requested alongside
 [`docs/improvement-requests/return-typed-domain-command-outcomes-and-rejection-details.md`](../improvement-requests/return-typed-domain-command-outcomes-and-rejection-details.md).
-It must begin only after [Plan 231](231-add-typed-domain-command-outcomes.md) has delivered
-and named the runtime `DomainDecision`, `DomainCommandOutcome`, `SilentCommandContext`, and
-`DomainCommandHandler` interfaces. Those names landed unchanged, together with
+It began after [Plan 231](231-add-typed-domain-command-outcomes.md) delivered and named the
+runtime `DomainDecision`, `DomainCommandOutcome`, `SilentCommandContext`, and
+`DomainCommandHandler` interfaces; Plan 231's performance closeout is now also complete.
+Those names landed unchanged, together with
 `SilentDomainDecision`, `runDomainCommand`, and `forgetDomainDecision`.
 Outcome-aware integration uses `runDomainCommandWithSql`,
 `runDomainCommandWithSqlEvents`, `runDomainCommandWithProjections`,
@@ -843,3 +856,8 @@ repository validation evidence. Kept Milestone 3 open for the quiet-host
 baseline, fixed the stale schema qualification found by the repository
 regression gate, and recorded the contextual keyword compatibility correction
 found by the full DSL suite.
+
+Revision note (2026-08-11): Recorded Plan 231's completed latency, allocation,
+residency, command-baseline, and regression evidence as satisfying the runtime
+prerequisite. Kept this plan open only for its independent committed DSL
+generation baseline and regression wiring.
