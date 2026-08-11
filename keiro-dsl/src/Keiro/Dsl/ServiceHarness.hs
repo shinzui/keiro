@@ -14,7 +14,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValues, workflowHarnessFactValues)
+import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValuesForService, workflowHarnessFactValues)
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveContractLanguageVersion)
@@ -42,7 +42,7 @@ serviceConformanceFactKeys service =
 -- | The create-once expectation baseline for all facts-producing nodes.
 serviceConformanceFactValues :: CheckedService -> [(Text, Text)]
 serviceConformanceFactValues service =
-  surfaceFactValues service <> concatMap valuesForNode (serviceHarnessNodes service)
+  surfaceFactValues service <> concatMap (valuesForNode service) (serviceHarnessNodes service)
 
 -- | Emit exactly one facade, including an empty facade for a service with no
 -- harness-producing nodes. Duplicate normalized expectation keys are refused
@@ -198,14 +198,14 @@ producesFacts NRouter {} = True
 producesFacts NWorkflow {} = True
 producesFacts _ = False
 
-valuesForNode :: Node -> [(Text, Text)]
-valuesForNode node =
+valuesForNode :: CheckedService -> Node -> [(Text, Text)]
+valuesForNode service node =
   [(kindName <> "/" <> nodeName <> "/" <> factName, value) | (factName, value) <- factValues]
   where
     (kindName, nodeName, _) = nodeIdentity node
     factValues = case node of
       NProcess process -> processHarnessFactValues process
-      NRouter router -> routerHarnessFactValues router
+      NRouter router -> routerHarnessFactValuesForService service router
       NWorkflow workflow -> workflowHarnessFactValues workflow
       _ -> []
 

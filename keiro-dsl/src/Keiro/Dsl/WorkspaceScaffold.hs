@@ -70,7 +70,7 @@ import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellSourceMove (SourceMove (..), SourceMoveError, planSourceMoves)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
@@ -272,7 +272,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
     emittersFor node = case node of
       NAggregate aggregate -> scaffoldAggregateForService ctx service aggregate <> harnessForServiceWithGoldens goldens ctx service aggregate
       NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
-      NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
+      NRouter router -> scaffoldRouterForService ctx service router <> harnessRouterForService ctx service router
       NContract contract -> scaffoldContractForService ctx service contract
       NIntake intake -> scaffoldIntake ctx intake
       NPublisher publisher -> scaffoldPublisher ctx publisher

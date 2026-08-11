@@ -1,0 +1,74 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/declarative-router/valid.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+naming-edition idiomatic-v1
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing structural conformance","path":"Generated/TransferRouting/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing behavior source map","path":"Generated/TransferRouting/BehaviorSourceMap.hs"}
+module-role {"family":"HospitalLoadRow","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural HospitalLoadRow (line 16)","path":"Generated/TransferRouting/Structural/Shape/HospitalLoadRow.hs"}
+module-role {"family":"TransferRouteInput","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural TransferRouteInput (line 4)","path":"Generated/TransferRouting/Structural/Shape/TransferRouteInput.hs"}
+module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing mapped structural facade","path":"Generated/TransferRouting/StructuralProjections.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.DeclarativeRouter.Bindings","path":"Conformance/DeclarativeRouter/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing replay-audit assembly","path":"Generated/TransferRouting/ReplayAudit.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog transfer-routing","path":"Generated/TransferRouting/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog transfer-routing","path":"TransferRouting/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 51)","path":"Generated/TransferRouting/HospitalLoad/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 51)","path":"Generated/TransferRouting/HospitalLoad/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 51)","path":"Generated/TransferRouting/HospitalLoad/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 51)","path":"TransferRouting/HospitalLoad/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 51)","path":"Generated/TransferRouting/HospitalLoad/ReadModelHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Hospital (line 63)","path":"TransferRouting/Hospital/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Hospital (line 63)","path":"Generated/TransferRouting/Hospital/Harness.hs"}
+module-role {"family":"Router","kind":"generated","ownerKind":"router","ownerName":"router HospitalTransferRouter (line 75)","path":"Generated/TransferRouting/HospitalTransferRouter/Router.hs"}
+module-role {"family":"RouterHarness","kind":"generated","ownerKind":"router","ownerName":"router HospitalTransferRouter (line 75)","path":"Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs"}
+generated Generated/TransferRouting/StructuralConformance.hs
+generated Generated/TransferRouting/BehaviorSourceMap.hs
+generated Generated/TransferRouting/Structural/Shape/HospitalLoadRow.hs
+generated Generated/TransferRouting/Structural/Shape/TransferRouteInput.hs
+generated Generated/TransferRouting/StructuralProjections.hs
+hole Conformance/DeclarativeRouter/Bindings.hs
+generated Generated/TransferRouting/ReplayAudit.hs
+generated Generated/TransferRouting/ProjectionCatalog.hs
+hole TransferRouting/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModelTable.hs
+generated Generated/TransferRouting/HospitalLoad/QueryContract.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModel.hs
+hole TransferRouting/HospitalLoad/ReadModelHoles.hs
+generated Generated/TransferRouting/HospitalLoad/ReadModelHarness.hs
+generated Generated/TransferRouting/Hospital/Domain.hs
+generated Generated/TransferRouting/Hospital/Codec.hs
+generated Generated/TransferRouting/Hospital/Transducer.hs
+generated Generated/TransferRouting/Hospital/BehaviorContract.hs
+hole TransferRouting/Hospital/BehaviorHoles.hs
+generated Generated/TransferRouting/Hospital/EventStream.hs
+generated Generated/TransferRouting/Hospital/Projection.hs
+generated Generated/TransferRouting/Hospital/Harness.hs
+generated Generated/TransferRouting/HospitalTransferRouter/Router.hs
+generated Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs
+mapping {"bindingSymbol":"Conformance.DeclarativeRouter.Bindings.hospitalLoadRowBinding","bindingVersion":"1","canonicalType":"conformance.declarative-router.HospitalLoadRow.v1","mode":"structural","module":"Conformance.DeclarativeRouter.Domain","package":"keiro-dsl","schema":1,"specName":"HospitalLoadRow","type":"HospitalLoadRow"}
+mapping {"bindingSymbol":"Conformance.DeclarativeRouter.Bindings.transferRouteInputBinding","bindingVersion":"1","canonicalType":"conformance.declarative-router.TransferRouteInput.v1","mode":"structural","module":"Conformance.DeclarativeRouter.Domain","package":"keiro-dsl","schema":1,"specName":"TransferRouteInput","type":"TransferRouteInput"}
+binding {"kind":"binding","mappedName":"HospitalLoadRow","module":"Conformance.DeclarativeRouter.Bindings","path":"availableBeds","schema":1,"signature":"hospitalLoadRowBinding.availableBeds :: Int","symbol":"hospitalLoadRowBinding"}
+binding {"kind":"binding","mappedName":"HospitalLoadRow","module":"Conformance.DeclarativeRouter.Bindings","path":"hospitalId","schema":1,"signature":"hospitalLoadRowBinding.hospitalId :: Text","symbol":"hospitalLoadRowBinding"}
+binding {"kind":"binding","mappedName":"HospitalLoadRow","module":"Conformance.DeclarativeRouter.Bindings","path":"region","schema":1,"signature":"hospitalLoadRowBinding.region :: Text","symbol":"hospitalLoadRowBinding"}
+binding {"kind":"fixtures","mappedName":"HospitalLoadRow","module":"Conformance.DeclarativeRouter.Bindings","path":null,"schema":1,"signature":"hospitalLoadRowCases :: FixtureCases Conformance.DeclarativeRouter.Domain.HospitalLoadRow","symbol":"hospitalLoadRowCases"}
+binding {"kind":"binding","mappedName":"TransferRouteInput","module":"Conformance.DeclarativeRouter.Bindings","path":"region","schema":1,"signature":"transferRouteInputBinding.region :: Text","symbol":"transferRouteInputBinding"}
+binding {"kind":"binding","mappedName":"TransferRouteInput","module":"Conformance.DeclarativeRouter.Bindings","path":"transferNeedId","schema":1,"signature":"transferRouteInputBinding.transferNeedId :: Text","symbol":"transferRouteInputBinding"}
+binding {"kind":"fixtures","mappedName":"TransferRouteInput","module":"Conformance.DeclarativeRouter.Bindings","path":null,"schema":1,"signature":"transferRouteInputCases :: FixtureCases Conformance.DeclarativeRouter.Domain.TransferRouteInput","symbol":"transferRouteInputCases"}
+behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"generated-authoritative","key":"behavior-v1-51a443ca8bbb0eab","kind":"required-rejection","outputs":[],"source":"Routed"}
+behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"generated-authoritative","key":"behavior-v1-6dc56a81dec7fe2b","kind":"live-transition","outputs":[{"command":"RouteAcceptedTransferNeed","ownership":"generated-command-identity"}],"source":"Open"}
+projection-catalog-fact group|reporting|hospital_load_table|hospital_load_table|35
+projection-catalog-fact owner|hospital_load_writer|category:hospitalLoad|subscription|reporting|hospital_load_table|10|declarative-router-hospital-load|declarative-router-hospital-load-v1|explicit|40
+projection-catalog-fact query|hospital_load|reporting|hospital_load_table|51
+projection-catalog-fact target|hospital_load_table|public|hospital_load|clear||29
+query-contract-baseline v1
+query-contract {"mappedDependencies":["TransferRouteInput"],"position":"input","readModel":"hospital_load","typeExpression":"TransferRouteInput"}
+query-contract {"mappedDependencies":["HospitalLoadRow"],"position":"result","readModel":"hospital_load","typeExpression":"List HospitalLoadRow"}
+semantic-impact {"declarations":[{"consequences":[{"consumer":"read-model-query:hospital_load:result","kind":"consumer-build"},{"kind":"query-api","position":"result","readModel":"hospital_load"}],"consumerEvidence":[{"consumer":"read-model-query:hospital_load:result","operation":null,"path":"readmodel hospital_load query result : HospitalLoadRow []","surface":"read-model-query-result"}],"consumers":["read-model-query:hospital_load:result"],"declaration":"HospitalLoadRow","identity":"structural\u001fkeiro-dsl:Conformance.DeclarativeRouter.Domain:HospitalLoadRow\u001fConformance.DeclarativeRouter.Bindings.hospitalLoadRowBinding\u001f1\u001fconformance.declarative-router.HospitalLoadRow.v1\u001fConformance.DeclarativeRouter.Bindings.hospitalLoadRowCases\u001f\u001fd594e982a2e8d881\u001frecord:HospitalLoadRow:availableBeds=available_beds,hospitalId=hospital_id,region=region"},{"consequences":[{"consumer":"read-model-query:hospital_load:input","kind":"consumer-build"},{"kind":"query-api","position":"input","readModel":"hospital_load"}],"consumerEvidence":[{"consumer":"read-model-query:hospital_load:input","operation":null,"path":"readmodel hospital_load query input : TransferRouteInput","surface":"read-model-query-input"}],"consumers":["read-model-query:hospital_load:input"],"declaration":"TransferRouteInput","identity":"structural\u001fkeiro-dsl:Conformance.DeclarativeRouter.Domain:TransferRouteInput\u001fConformance.DeclarativeRouter.Bindings.transferRouteInputBinding\u001f1\u001fconformance.declarative-router.TransferRouteInput.v1\u001fConformance.DeclarativeRouter.Bindings.transferRouteInputCases\u001f\u001f5c14d7208f920522\u001frecord:TransferRouteInput:region=region,transferNeedId=transfer_need_id"}],"mappedSurfaceEvidenceVersion":1,"serviceInventory":["HospitalLoadRow","TransferRouteInput"]}

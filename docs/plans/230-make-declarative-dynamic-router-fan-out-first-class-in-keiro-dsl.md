@@ -65,7 +65,14 @@ silently treating them as ordinary source edits.
   22 router examples pass, including zero callbacks before conflict/overflow, exact-cap dispatch,
   partial target success, stable-union redelivery, the full empty/failure policy matrix, and the
   existing router runtime conformance component.
-- [ ] Milestone 3: generate executable selection code and compiled/database-backed evidence.
+- [x] (2026-08-11T03:14:58Z) Milestone 3: generated declarative router modules exclusively from
+  checked selection IR, including typed query invocation, structural field witnesses, normalized
+  target commands, the public runtime contract, and one shared fingerprint.  Generated harnesses
+  expose query/identity/version/fingerprint/limit/policy facts, while custom-unverified scaffolds
+  retain their existing `RouterHoles` bytes.  The new PostgreSQL conformance executable proves
+  raw `B,A,A` query order, normalized `A,B` dispatch, `{A,B}` to `{B,C}` redelivery with one
+  ledger event per target, and zero writes for a conflicting physical target; all four existing
+  custom/router conformance suites remain green.
 - [ ] Milestone 4: report mapped semantic and coordination impact.
 - [ ] Milestone 5: document, record the final ADR, and run complete qualification.
 
@@ -123,6 +130,17 @@ silently treating them as ordinary source edits.
   `Keiro.Stream.streamName` on `PMCommand.target`.  Extracting the dispatch helper initially made
   that distinction easy to erase.  The final helper retains the exact legacy resolver and
   positional-ID compatibility probe; normalization remains a separate pre-dispatch phase.
+
+- Generated structural projection modules already expose the canonical `FieldWitness` values
+  needed to evaluate checked scalar paths.  The generated-code firewall initially rejected the
+  public `Keiki.Core.fieldWitnessGet` accessor, so the declarative fixture failed before
+  compilation; admitting that one projection accessor kept evaluation on the checked structural
+  boundary without introducing an application-owned selection hole.
+
+- A deliberately unordered SQL query returned the expected physical row stream `B,A,A`, making
+  the distinction between application-owned query behavior and generated normalization directly
+  observable.  The runtime then produced `A,B`, and reprocessing the same source event after
+  reseeding `C,B` preserved `B` while adding only `C`.
 
 
 ## Decision Log
@@ -268,6 +286,20 @@ silently treating them as ordinary source edits.
   backend and payload text preserves the released Shibuya safety contract.
   Date: 2026-08-11
 
+- Decision: Generate declarative path evaluation through the existing structural
+  `FieldWitness` values and `fieldWitnessGet`, and keep the named read-model query implementation
+  as the only application-owned hole on that path.
+  Rationale: The checker and generated structural projections then share one mapped type graph;
+  generated selection cannot bypass checked paths, while SQL remains inside its documented
+  application boundary.
+  Date: 2026-08-11
+
+- Decision: Include the checked router key expression in the canonical selection fingerprint.
+  Rationale: The key participates in target-command identity derivation and can change routing
+  continuity even when query, predicate, recipient, mapping, limit, and policy declarations are
+  unchanged.  Locations and formatting remain excluded.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -282,8 +314,11 @@ proof validates the five planned selection reason codes through Shibuya's public
 language version 5 now owns a bounded declarative selection grammar and a checked semantic value;
 version 4 refuses the feature at its marker and retains its custom-router syntax.  The runtime now
 also exposes checked-contract normalization and additive declarative runners without changing the
-legacy router path.  Generator, new declarative conformance, diff, and documentation acceptance
-items remain open, so implementation continues at Milestone 3 and IR-9 remains open.
+legacy router path.  Declarative scaffolding now lowers that checked value into compiled executable
+selection without a selection-owned hole, and the generated database conformance proves ordering,
+deduplication, redelivery, and pre-dispatch conflict behavior against the public runtime.  Diff and
+documentation acceptance items remain open, so implementation continues at Milestone 4 and IR-9
+remains open.
 
 
 ## Context and Orientation
@@ -1147,3 +1182,8 @@ types.
   the byte-compatible legacy dispatch path, and database-backed evidence for the cap, conflict,
   partial-success, redelivery, and policy guarantees.  Milestone 3 can now generate only checked
   declarations into this public runtime surface.
+- 2026-08-11: Completed Milestone 3.  Recorded checked-IR code generation through structural field
+  witnesses, the application-owned query boundary, observable selection contract/fingerprint and
+  harness facts, the key expression's inclusion in canonical semantics, byte-stable custom router
+  scaffolds, and the database-backed `B,A,A`, `{A,B}` to `{B,C}`, and conflict/no-write proofs.
+  Milestone 4 now makes those same semantics visible to mapped impact and coordination review.

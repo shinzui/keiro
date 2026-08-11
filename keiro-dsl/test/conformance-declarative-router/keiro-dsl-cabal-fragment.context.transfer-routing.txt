@@ -1,0 +1,53 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/declarative-router/valid.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    OverloadedStrings
+
+other-modules:
+    Conformance.DeclarativeRouter.Bindings
+    Generated.TransferRouting.BehaviorSourceMap
+    Generated.TransferRouting.Hospital.BehaviorContract
+    Generated.TransferRouting.Hospital.Codec
+    Generated.TransferRouting.Hospital.Domain
+    Generated.TransferRouting.Hospital.EventStream
+    Generated.TransferRouting.Hospital.Harness
+    Generated.TransferRouting.Hospital.Projection
+    Generated.TransferRouting.Hospital.Transducer
+    Generated.TransferRouting.HospitalLoad.QueryContract
+    Generated.TransferRouting.HospitalLoad.ReadModel
+    Generated.TransferRouting.HospitalLoad.ReadModelHarness
+    Generated.TransferRouting.HospitalLoad.ReadModelTable
+    Generated.TransferRouting.HospitalTransferRouter.Router
+    Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.ProjectionCatalog
+    Generated.TransferRouting.ReplayAudit
+    Generated.TransferRouting.Structural.Shape.HospitalLoadRow
+    Generated.TransferRouting.Structural.Shape.TransferRouteInput
+    Generated.TransferRouting.StructuralConformance
+    Generated.TransferRouting.StructuralProjections
+    TransferRouting.Hospital.BehaviorHoles
+    TransferRouting.HospitalLoad.ReadModelHoles
+    TransferRouting.ProjectionCatalog.ProjectionCatalogHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-dsl
+    , kiroku-store
+    , shibuya-core
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.DeclarativeRouter.Bindings
+    Conformance.DeclarativeRouter.Domain

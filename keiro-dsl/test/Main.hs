@@ -5660,6 +5660,25 @@ main = hspec $ do
               `shouldSatisfy` T.all (`elem` ("0123456789abcdef" :: String))
         routers -> expectationFailure ("expected one declarative router, got " <> show (length routers))
 
+    it "generates the checked declarative selection without a selection-owned RouterHoles module" $ do
+      service <- checkedServiceOf "test/fixtures/declarative-router/valid.keiro"
+      let spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          routerModule = generatedTextEndingIn "HospitalTransferRouter/Router.hs" modules
+          routerHarness = generatedTextEndingIn "HospitalTransferRouter/RouterHarness.hs" modules
+      [modulePath generatedModule | generatedModule <- modules, "HospitalTransferRouter/Router.hs" `T.isSuffixOf` T.pack (modulePath generatedModule)]
+        `shouldBe` ["Generated/TransferRouting/HospitalTransferRouter/Router.hs"]
+      [modulePath hole | hole <- modules, "HospitalTransferRouter/RouterHoles.hs" `T.isSuffixOf` T.pack (modulePath hole)]
+        `shouldBe` []
+      routerModule `shouldSatisfy` T.isInfixOf "DeclarativeRouter"
+      routerModule `shouldSatisfy` T.isInfixOf "runQuery Nothing SelectionQuery.hospitalLoadReadModel input"
+      routerModule `shouldSatisfy` T.isInfixOf "fieldWitnessGet StructuralProjections.hospitalLoadRowHospitalIdWitness row"
+      routerModule `shouldSatisfy` T.isInfixOf "hospitalTransferRouterSelectionContract"
+      routerModule `shouldSatisfy` T.isInfixOf "hospitalTransferRouterSelectionFingerprint"
+      routerHarness `shouldSatisfy` T.isInfixOf "(\"resolverOwnership\", \"generated-declarative\")"
+      routerHarness `shouldSatisfy` T.isInfixOf "(\"maxRecipients\", \"64\")"
+      firewallBreaches modules `shouldBe` []
+
     it "RouterSelection gates declarative selection at the version-5 marker" $ do
       source <- readTestText "test/fixtures/declarative-router/valid.keiro"
       let version4 = "language keiro-dsl 4\ncontext transfer-routing\n\n" <> snd (T.breakOn "router HospitalTransferRouter" source)

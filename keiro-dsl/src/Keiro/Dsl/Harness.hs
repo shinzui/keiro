@@ -28,10 +28,12 @@ module Keiro.Dsl.Harness
     harnessForWithGoldens,
     harnessProcess,
     harnessRouter,
+    harnessRouterForService,
     harnessReadModel,
     harnessWorkflow,
     processHarnessFactValues,
     routerHarnessFactValues,
+    routerHarnessFactValuesForService,
     workflowHarnessFactValues,
   )
 where
@@ -51,6 +53,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (aggregateMappedClosure, semanticImpact)
@@ -132,8 +135,27 @@ harnessRouter ctx router =
   where
     genPrefix = genPrefixFor ctx (rtId router)
 
+-- | Add checked declarative-selection evidence without changing any legacy
+-- custom-router harness bytes.
+harnessRouterForService :: Context -> CheckedService -> RouterNode -> [ScaffoldModule]
+harnessRouterForService ctx service router = case rvSource (rtResolve router) of
+  ResolveDeclarative {} ->
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs"),
+          moduleText = emitRouterHarnessWithFacts genPrefix (routerHarnessFactValuesForService service router),
+          kind = Generated,
+          origin = "router " <> rtId router <> locSuffix (rtLoc router)
+        }
+    ]
+  _ -> harnessRouter ctx router
+  where
+    genPrefix = genPrefixFor ctx (rtId router)
+
 emitRouterHarness :: Text -> RouterNode -> Text
-emitRouterHarness genPrefix router =
+emitRouterHarness genPrefix router = emitRouterHarnessWithFacts genPrefix (routerHarnessFactValues router)
+
+emitRouterHarnessWithFacts :: Text -> [(Text, Text)] -> Text
+emitRouterHarnessWithFacts genPrefix facts =
   nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".RouterHarness (routerHarnessValues) where",
@@ -141,7 +163,7 @@ emitRouterHarness genPrefix router =
       "routerHarnessValues :: [(String, String)]",
       "routerHarnessValues ="
     ]
-      <> renderFactValues (routerHarnessFactValues router)
+      <> renderFactValues facts
 
 routerHarnessFactValues :: RouterNode -> [(Text, Text)]
 routerHarnessFactValues router =
@@ -163,6 +185,39 @@ routerHarnessFactValues router =
       ResolveReadModel name -> "read-model " <> name
       ResolveHole -> "hole"
       ResolveDeclarative selection -> "declarative " <> rsIdentity selection
+
+routerHarnessFactValuesForService :: CheckedService -> RouterNode -> [(Text, Text)]
+routerHarnessFactValuesForService service router = case rvSource (rtResolve router) of
+  ResolveDeclarative {} ->
+    routerHarnessFactValues router
+      <> [ ("resolverOwnership", "generated-declarative"),
+           ("queryIdentity", checkedQueryName (checkedQuery selection)),
+           ("selectionIdentity", checkedIdentity selection),
+           ("selectionVersion", T.pack (show (checkedVersion selection))),
+           ("selectionFingerprint", checkedFingerprint selection),
+           ("maxRecipients", T.pack (show (checkedLimit selection))),
+           ("selectionOrder", "target-stream"),
+           ("selectionDedupe", "target-stream"),
+           ("emptyPolicy", checkedEmptyPolicyText (checkedEmptyPolicy selection)),
+           ("failurePolicy", checkedFailurePolicyText (checkedFailurePolicy selection)),
+           ("redeliveryPolicy", "stable-union"),
+           ("partialPolicy", "retain-successes")
+         ]
+  _ -> routerHarnessFactValues router
+  where
+    graph = case resolveTypeGraph (checkedSpec service) of
+      Left errors -> error ("checked declarative router harness type graph failed: " <> show errors)
+      Right value -> value
+    selection = case checkRouterSelection (checkedLanguageContract service) graph (checkedSpec service) router of
+      Left diagnostics -> error ("checked declarative router harness selection failed: " <> show diagnostics)
+      Right value -> value
+    checkedEmptyPolicyText CheckedEmptyAck = "ack"
+    checkedEmptyPolicyText CheckedEmptyRetry = "retry"
+    checkedEmptyPolicyText CheckedEmptyDeadLetter = "deadLetter"
+    checkedEmptyPolicyText CheckedEmptyHalt = "halt"
+    checkedFailurePolicyText CheckedFailureRetry = "retry"
+    checkedFailurePolicyText CheckedFailureDeadLetter = "deadLetter"
+    checkedFailurePolicyText CheckedFailureHalt = "halt"
 
 -- | Emit runtime-free facts for a read-model node. Each row records the value
 -- expected directly from the notation next to the value produced by the shared

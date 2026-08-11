@@ -52,6 +52,7 @@ module Keiro.Dsl.Scaffold
     obsoleteGeneratedOutputHooks,
     scaffoldProcess,
     scaffoldRouter,
+    scaffoldRouterForService,
     scaffoldContract,
     scaffoldContractForService,
     scaffoldIntake,
@@ -131,6 +132,7 @@ import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint)
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
@@ -348,6 +350,7 @@ firewallSurface =
               "FieldWitness",
               "fieldWitness",
               "exactFieldWitness",
+              "fieldWitnessGet",
               "fieldWitnessAgrees",
               "applyEventsEither",
               "defaultValidationOptions",
@@ -4750,6 +4753,40 @@ scaffoldRouter ctx router =
     holePrefix = holePrefixFor ctx (rtId router)
     routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
 
+-- | Service-aware router generation preserves the historical custom resolver
+-- vertical byte-for-byte, while a checked declarative selection becomes one
+-- fully generated module and owns no selection hole.
+scaffoldRouterForService :: Context -> CheckedService -> RouterNode -> [ScaffoldModule]
+scaffoldRouterForService ctx service router = case rvSource (rtResolve router) of
+  ResolveDeclarative {} ->
+    [ ScaffoldModule
+        { modulePath = modulePathFor genPrefix "Router",
+          moduleText = emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCommand genPrefix router,
+          kind = Generated,
+          origin = routerOrigin
+        }
+    ]
+  _ -> scaffoldRouter ctx router
+  where
+    spec = checkedSpec service
+    genPrefix = genPrefixFor ctx (rtId router)
+    routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
+    graph = case resolveTypeGraph spec of
+      Left errors -> error ("checked declarative router type graph failed: " <> show errors)
+      Right value -> value
+    selection = case checkRouterSelection (checkedLanguageContract service) graph spec router of
+      Left diagnostics -> error ("checked declarative router selection failed: " <> show diagnostics)
+      Right value -> value
+    readModel = case [value | NReadModel value <- specNodes spec, rmName value == checkedQueryName (checkedQuery selection)] of
+      [value] -> value
+      _ -> error "checked declarative router read model disappeared"
+    targetAggregate = case [aggregate | NAggregate aggregate <- specNodes spec, aggName aggregate == checkedTarget selection] of
+      [aggregate] -> aggregate
+      _ -> error "checked declarative router target aggregate disappeared"
+    targetCommand = case [command | command <- aggCommands targetAggregate, cmdName command == checkedCommand selection] of
+      [command] -> command
+      _ -> error "checked declarative router target command disappeared"
+
 emitRouterGen :: Text -> RouterNode -> Text
 emitRouterGen genPrefix router =
   nl $
@@ -4777,6 +4814,200 @@ emitRouterGen genPrefix router =
       ++ workerOptionsLines (stem <> "WorkerOptions") (rtRejected router) (rtPoison router)
   where
     stem = lowerFirst (rtId router)
+
+emitDeclarativeRouterGen :: Context -> TypeGraph -> CheckedRouterSelection -> ReadModelNode -> Aggregate -> Command -> Text -> RouterNode -> Text
+emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCommand genPrefix router =
+  nl $
+    [ generatedBanner,
+      "module " <> genPrefix <> ".Router",
+      "  ( " <> stem <> "Name",
+      "  , " <> stem <> "WorkerOptions",
+      "  , " <> stem <> "SelectionFingerprint",
+      "  , " <> stem <> "SelectionContract",
+      "  , " <> stem <> "Select",
+      "  , " <> stem,
+      "  ) where",
+      "",
+      "import Data.Text (Text)",
+      "import Effectful (Eff, IOE, (:>))",
+      "import " <> structuralProjectionModule ctx <> " qualified as StructuralProjections",
+      "import " <> queryContractModule <> " (" <> queryInputType <> ")",
+      "import " <> readModelModule <> ".ReadModel qualified as SelectionQuery",
+      "import " <> targetModule <> ".Domain qualified as TargetDomain",
+      "import " <> targetModule <> ".EventStream qualified as TargetStream"
+    ]
+      <> ["import " <> targetModule <> ".Projection qualified as TargetProjection" | not (null (rtProjections router))]
+      <> [ "import Keiki.Core (HsPred, fieldWitnessGet)",
+           "import Keiro.ProcessManager (PMCommand (..), PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))",
+           "import Keiro.ReadModel (runQuery)",
+           "import Keiro.Router",
+           "  ( DeclarativeRouter (..)",
+           "  , EmptySelectionPolicy (..)",
+           "  , PartialDispatchPolicy (..)",
+           "  , RedeliveryPolicy (..)",
+           "  , RouterSelectionContract (..)",
+           "  , RouterSelectionFailure (..)",
+           "  , SelectionDedupe (..)",
+           "  , SelectionFailurePolicy (..)",
+           "  , SelectionFingerprint (..)",
+           "  , SelectionIdentity (..)",
+           "  , SelectionOrder (..)",
+           "  , mkRecipientLimit",
+           "  , mkSelectionVersion",
+           "  )",
+           "import Keiro.Stream (entityStream)",
+           "import Kiroku.Store.Effect (Store)",
+           "import Shibuya.Core.Ack (RetryDelay (..))"
+         ]
+      <> ["import Shibuya.Core.Types (Envelope)" | rtPoison router /= PolHalt]
+      <> [ "",
+           "-- The STABLE router name. It remains part of every target-keyed",
+           "-- deterministic router command id; selection metadata never re-keys dispatches.",
+           stem <> "Name :: Text",
+           stem <> "Name = " <> tshow (rtName router),
+           "",
+           "-- SHA-256 of the checked selection semantics (locations and formatting excluded).",
+           stem <> "SelectionFingerprint :: Text",
+           stem <> "SelectionFingerprint = " <> tshow (checkedFingerprint selection),
+           "",
+           stem <> "SelectionContract :: RouterSelectionContract",
+           stem <> "SelectionContract =",
+           "  RouterSelectionContract",
+           "    { identity = SelectionIdentity " <> tshow (checkedIdentity selection),
+           "    , version = checkedSelectionVersion",
+           "    , fingerprint = SelectionFingerprint " <> stem <> "SelectionFingerprint",
+           "    , limit = checkedRecipientLimit",
+           "    , order = OrderByTargetStream",
+           "    , dedupe = DedupeByTargetStream",
+           "    , emptyPolicy = " <> renderCheckedEmptyPolicy (checkedEmptyPolicy selection),
+           "    , failurePolicy = " <> renderCheckedFailurePolicy (checkedFailurePolicy selection),
+           "    , redeliveryPolicy = StableUnion",
+           "    , partialPolicy = RetainSuccesses",
+           "    }",
+           "  where",
+           "    checkedSelectionVersion = case mkSelectionVersion " <> T.pack (show (checkedVersion selection)) <> " of",
+           "      Right value -> value",
+           "      Left _ -> error \"keiro-dsl emitted a non-positive checked selection version\"",
+           "    checkedRecipientLimit = case mkRecipientLimit " <> T.pack (show (checkedLimit selection)) <> " of",
+           "      Right value -> value",
+           "      Left _ -> error \"keiro-dsl emitted a non-positive checked recipient limit\"",
+           "",
+           stem <> "Select ::",
+           "  (IOE :> es, Store :> es) =>",
+           "  " <> queryInputType <> " ->",
+           "  Eff es (Either RouterSelectionFailure [PMCommand TargetDomain." <> targetName <> "Command])",
+           stem <> "Select input = do",
+           "  queryResult <- runQuery Nothing SelectionQuery." <> readModelValue <> " input",
+           "  pure $ case queryResult of",
+           "    Left _ -> Left (SelectionQueryFailed " <> tshow ("read-model " <> checkedQueryName (checkedQuery selection) <> " query failed") <> ")",
+           "    Right rows ->",
+           "      Right",
+           "        [ PMCommand",
+           "            { target = entityStream TargetStream." <> targetCategory <> " (" <> renderCheckedScalar graph (checkedRecipient selection) <> ")",
+           "            , command = " <> renderSelectionCommand graph selection targetCommand,
+           "            }",
+           "        | row <- rows",
+           "        , " <> renderCheckedScalar graph (checkedPredicate selection),
+           "        ]",
+           "",
+           stem <> " ::",
+           "  (IOE :> es, Store :> es) =>",
+           "  DeclarativeRouter",
+           "    " <> queryInputType,
+           "    (HsPred TargetDomain." <> targetName <> "Regs TargetDomain." <> targetName <> "Command)",
+           "    TargetDomain." <> targetName <> "Regs",
+           "    TargetDomain." <> targetName <> "Vertex",
+           "    TargetDomain." <> targetName <> "Command",
+           "    TargetDomain." <> targetName <> "Event",
+           "    es",
+           stem <> " =",
+           "  DeclarativeRouter",
+           "    { name = " <> stem <> "Name",
+           "    , key = \\input -> " <> renderCheckedScalar graph (checkedKey selection),
+           "    , selectionContract = " <> stem <> "SelectionContract",
+           "    , select = " <> stem <> "Select",
+           "    , targetEventStream = TargetStream." <> targetEventStream,
+           "    , targetProjections = const " <> renderTargetProjections (rtProjections router),
+           "    }",
+           "",
+           "-- Node-level worker policy. Pair it with runDeclarativeRouterWorkerWith.",
+           "-- Selection empty/failure policy remains in the generated selection contract."
+         ]
+      <> workerOptionsLines (stem <> "WorkerOptions") (rtRejected router) (rtPoison router)
+  where
+    stem = lowerFirst (rtId router)
+    targetName = aggName targetAggregate
+    targetModule = genPrefixFor ctx targetName
+    targetCategory = lowerFirst targetName <> "CommandCategory"
+    targetEventStream = lowerFirst targetName <> "EventStream"
+    readModelStemValue = readModelStem readModel
+    queryInputType = pascal readModelStemValue <> "QueryInput"
+    queryNodeSegment = pascal (rmName readModel)
+    queryContractModule = genPrefixFor ctx queryNodeSegment <> ".QueryContract"
+    readModelModule = genPrefixFor ctx queryNodeSegment
+    readModelValue = readModelStemValue <> "ReadModel"
+    renderTargetProjections [] = "[]"
+    renderTargetProjections names = "[" <> T.intercalate ", " ["TargetProjection." <> lowerFirst name <> "Projection" | name <- names] <> "]"
+
+renderCheckedEmptyPolicy :: CheckedEmptySelectionPolicy -> Text
+renderCheckedEmptyPolicy = \case
+  CheckedEmptyAck -> "EmptyAck"
+  CheckedEmptyRetry -> "EmptyRetry"
+  CheckedEmptyDeadLetter -> "EmptyDeadLetter"
+  CheckedEmptyHalt -> "EmptyHalt"
+
+renderCheckedFailurePolicy :: CheckedSelectionFailurePolicy -> Text
+renderCheckedFailurePolicy = \case
+  CheckedFailureRetry -> "FailureRetry"
+  CheckedFailureDeadLetter -> "FailureDeadLetter"
+  CheckedFailureHalt -> "FailureHalt"
+
+renderCheckedScalar :: TypeGraph -> CheckedScalarExpr -> Text
+renderCheckedScalar graph expression = case checkedScalarNode expression of
+  CheckedPath root segments ->
+    "(fieldWitnessGet StructuralProjections."
+      <> witnessName segments
+      <> " "
+      <> rootName root
+      <> ")"
+  CheckedTextLiteral value -> tshow value
+  CheckedIntegralLiteral value -> T.pack (show value)
+  CheckedBoolLiteral value -> if value then "True" else "False"
+  CheckedCompare operator left right ->
+    "(" <> renderCheckedScalar graph left <> " " <> comparison operator <> " " <> renderCheckedScalar graph right <> ")"
+  CheckedAnd left right -> "(" <> renderCheckedScalar graph left <> " && " <> renderCheckedScalar graph right <> ")"
+  CheckedOr left right -> "(" <> renderCheckedScalar graph left <> " || " <> renderCheckedScalar graph right <> ")"
+  where
+    rootName SelectionInput = "input"
+    rootName SelectionRow = "row"
+    comparison OpEq = "=="
+    comparison OpNeq = "/="
+    comparison OpLt = "<"
+    comparison OpLe = "<="
+    comparison OpGt = ">"
+    comparison OpGe = ">="
+    witnessName [] = error "checked scalar path contained no fields"
+    witnessName path@(first : _) =
+      fromMaybe
+        (error "checked scalar path has no generated structural witness")
+        (projectionWitnessName graph (checkedPathOwner first) pointer)
+      where
+        pointer = T.concat ["/" <> escapePointer (checkedPathWireKey segment) | segment <- path]
+
+renderSelectionCommand :: TypeGraph -> CheckedRouterSelection -> Command -> Text
+renderSelectionCommand graph selection command =
+  "TargetDomain."
+    <> cmdName command
+    <> " (TargetDomain."
+    <> cmdName command
+    <> "Data"
+    <> T.concat [" (" <> renderCheckedScalar graph (commandExpression field) <> ")" | field <- cmdFields command]
+    <> ")"
+  where
+    commandExpression field =
+      fromMaybe
+        (error "checked declarative router command field disappeared")
+        (Map.lookup (aggregateFieldName field) (checkedCommandFields selection))
 
 emitRouterHoles :: Text -> RouterNode -> Text
 emitRouterHoles holePrefix router =

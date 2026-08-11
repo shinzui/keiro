@@ -93,7 +93,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), 
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), ProjectionTargetNode (..), ReadModelNode (..), Spec (..))
-import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.HaskellSourceMove
@@ -275,7 +275,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
       [ case node of
           NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
           NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
-          NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
+          NRouter router -> scaffoldRouterForService ctx service router <> harnessRouterForService ctx service router
           NContract contract -> scaffoldContractForService ctx service contract
           NIntake intake -> scaffoldIntake ctx intake
           NPublisher publisher -> scaffoldPublisher ctx publisher
