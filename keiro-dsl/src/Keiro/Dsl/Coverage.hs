@@ -602,6 +602,10 @@ rootKindSurface MappedRegisterRoot = SnapshotRegister
 rootKindSurface MappedWorkqueueFieldRoot = WorkqueuePayload
 rootKindSurface MappedReadModelQueryInputRoot = ReadModelQueryInput
 rootKindSurface MappedReadModelQueryResultRoot = ReadModelQueryResult
+rootKindSurface MappedRouterSelectionQueryInputRoot = ReadModelQueryInput
+rootKindSurface MappedRouterSelectionPredicateRoot = ReadModelQueryResult
+rootKindSurface MappedRouterSelectionRecipientRoot = ReadModelQueryResult
+rootKindSurface MappedRouterSelectionCommandFieldRoot = ReadModelQueryResult
 rootKindSurface MappedProjectionEventRoot = ProjectionTypedConsumer
 
 isWireSite :: UseSite -> Bool

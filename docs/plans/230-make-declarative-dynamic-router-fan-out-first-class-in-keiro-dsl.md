@@ -73,7 +73,14 @@ silently treating them as ordinary source edits.
   raw `B,A,A` query order, normalized `A,B` dispatch, `{A,B}` to `{B,C}` redelivery with one
   ledger event per target, and zero writes for a conflicting physical target; all four existing
   custom/router conformance suites remain green.
-- [ ] Milestone 4: report mapped semantic and coordination impact.
+- [x] (2026-08-11T03:50:02Z) Milestone 4: added checked-selection mapped consumers for query
+  input, predicate, recipient, and command fields; durable verified/custom selection snapshots;
+  scaffold reconciliation drift; and optional JSON/human coordination impact for all seven
+  identity/version/fingerprint/verification/mapped-dependency rules.  Exact tests prove each
+  reason and severity, coordination-breaking reports set the top-level gate and CLI exit status,
+  formatting preserves the fingerprint, and a changed `HospitalLoadRow` appears in both mapped
+  semantic and coordination evidence.  The formatted library/CLI build, focused report/baseline
+  suites, and regenerated PostgreSQL declarative conformance executable pass.
 - [ ] Milestone 5: document, record the final ADR, and run complete qualification.
 
 
@@ -141,6 +148,17 @@ silently treating them as ordinary source edits.
   the distinction between application-owned query behavior and generated normalization directly
   observable.  The runtime then produced `A,B`, and reprocessing the same source event after
   reseeding `C,B` preserved `B` while adding only `C`.
+
+- The existing checked read-model query input/result roots are sufficient source evidence for
+  selection-specific mapped consumers.  Reusing them while attaching the checked scalar path and
+  a distinct selection root kind avoided widening the global `TypeGraph.UseSite` vocabulary or
+  teaching coverage/replay code about parser-only router syntax.
+
+- The first complete DSL unit run after adding the conformance executable found two deliberate
+  inventory guards rather than behavioral failures: the new Cabal component was absent from
+  `conformance-baseline.json`, and the language-5 fixture whitelist predated the declarative
+  router directory.  Registering the candidate suite and both positive/unbounded fixtures made
+  the focused baseline guards pass.
 
 
 ## Decision Log
@@ -300,6 +318,27 @@ silently treating them as ordinary source edits.
   unchanged.  Locations and formatting remain excluded.
   Date: 2026-08-11
 
+- Decision: Derive router-selection mapped impact by augmenting the resolved graph projection
+  with checked query roots and checked scalar paths; do not add selection syntax to `TypeGraph`.
+  Rationale: The read-model contract already owns the mapped input/result roots, while
+  `CheckedRouterSelection` identifies which paths affect membership, target identity, and command
+  content.  This keeps parser AST and selection locations out of durable impact evidence.
+  Date: 2026-08-11
+
+- Decision: Keep coordination impact optional and orthogonal to ordinary compatibility findings
+  and aggregate `ReplayImpact`, but include coordination-breaking entries in the report's
+  top-level `breaking` flag and the CLI's exit decision.
+  Rationale: Old report constructors and replay JSON retain their bytes, while an unversioned
+  selection semantic change cannot pass CI merely because it has no wire-schema finding.
+  Date: 2026-08-11
+
+- Decision: Persist one append-only `router-selection` ledger row for every router, with
+  declarative identity/version/fingerprint or an explicit `custom-unverified` marker; missing rows
+  in old ledgers decode as an unavailable baseline.
+  Rationale: Reconciliation can report metadata changes without claiming ownership of query
+  implementation files, and custom/declarative crossings never fabricate a fingerprint.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -317,8 +356,9 @@ also exposes checked-contract normalization and additive declarative runners wit
 legacy router path.  Declarative scaffolding now lowers that checked value into compiled executable
 selection without a selection-owned hole, and the generated database conformance proves ordering,
 deduplication, redelivery, and pre-dispatch conflict behavior against the public runtime.  Diff and
-documentation acceptance items remain open, so implementation continues at Milestone 4 and IR-9
-remains open.
+scaffold history now expose the same checked fingerprint and distinguish semantic, coordination,
+and replay consequences without changing the aggregate replay contract.  Documentation and final
+qualification remain open, so implementation continues at Milestone 5 and IR-9 remains open.
 
 
 ## Context and Orientation
@@ -1187,3 +1227,8 @@ types.
   harness facts, the key expression's inclusion in canonical semantics, byte-stable custom router
   scaffolds, and the database-backed `B,A,A`, `{A,B}` to `{B,C}`, and conflict/no-write proofs.
   Milestone 4 now makes those same semantics visible to mapped impact and coordination review.
+- 2026-08-11: Completed Milestone 4.  Recorded checked-path mapped consumers, the seven-rule
+  coordination vocabulary, optional additive report encoding, breaking gate behavior, verified or
+  explicitly unverified ledger snapshots, scaffold reconciliation, candidate conformance registry
+  coverage, formatting neutrality, and the nested mapped dependency proof.  Aggregate replay
+  report bytes remain unchanged; Milestone 5 now documents and qualifies the finished surface.

@@ -11,18 +11,23 @@ module Keiro.Dsl.DiffReport
     DiffReport,
     diffReport,
     diffReportWithSemanticImpact,
+    diffReportWithCoordinationImpact,
+    diffReportWithImpacts,
     OwnedSite (..),
     WorkspaceChange (..),
     WorkspaceMeta (..),
     WorkspaceDiffReport,
     workspaceDiffReport,
     workspaceDiffReportWithSemanticImpact,
+    workspaceDiffReportWithCoordinationImpact,
+    workspaceDiffReportWithImpacts,
     remediationFor,
     renderRemedy,
     renderFinding,
     renderVectorLine,
     renderExplainBlock,
     renderSemanticImpact,
+    renderCoordinationImpact,
     surfaceName,
     parseSurfaceName,
     verdictName,
@@ -38,6 +43,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.CoordinationImpact (CoordinationImpact (..), CoordinationSeverity (..), renderCoordinationImpact)
 import Keiro.Dsl.Diff
 import Keiro.Dsl.SemanticImpact (MappedImpactDelta (..), MappedRootEvidence (..), mappedConsequenceIdentity, mappedConsumerIdentity, mappedRootKindIdentity)
 import Keiro.Dsl.TypeGraph (MappedKey (..))
@@ -67,17 +73,24 @@ data Remedy
 data DiffReport = DiffReport
   { reportGate :: !(Set CompatibilitySurface),
     reportFindings :: ![Change],
-    reportSemanticImpact :: !(Maybe [MappedImpactDelta])
+    reportSemanticImpact :: !(Maybe [MappedImpactDelta]),
+    reportCoordinationImpact :: !(Maybe [CoordinationImpact])
   }
   deriving stock (Eq, Show)
 
 diffReport :: Set CompatibilitySurface -> [Change] -> DiffReport
-diffReport gate findings = DiffReport gate findings Nothing
+diffReport gate findings = DiffReport gate findings Nothing Nothing
 
 -- | Add the append-only semantic-impact object used by current CLI reports.
 -- The older smart constructor intentionally omits it for source compatibility.
 diffReportWithSemanticImpact :: Set CompatibilitySurface -> [Change] -> [MappedImpactDelta] -> DiffReport
-diffReportWithSemanticImpact gate findings impact = DiffReport gate findings (Just impact)
+diffReportWithSemanticImpact gate findings impact = DiffReport gate findings (Just impact) Nothing
+
+diffReportWithCoordinationImpact :: Set CompatibilitySurface -> [Change] -> [CoordinationImpact] -> DiffReport
+diffReportWithCoordinationImpact gate findings impact = DiffReport gate findings Nothing (Just impact)
+
+diffReportWithImpacts :: Set CompatibilitySurface -> [Change] -> [MappedImpactDelta] -> [CoordinationImpact] -> DiffReport
+diffReportWithImpacts gate findings semantic coordination = DiffReport gate findings (Just semantic) (Just coordination)
 
 -- | One source location from a composed workspace's ownership index.
 data OwnedSite = OwnedSite
@@ -109,39 +122,51 @@ data WorkspaceDiffReport = WorkspaceDiffReport
   { workspaceReportMeta :: !WorkspaceMeta,
     workspaceReportGate :: !(Set CompatibilitySurface),
     workspaceReportFindings :: ![WorkspaceChange],
-    workspaceReportSemanticImpact :: !(Maybe [MappedImpactDelta])
+    workspaceReportSemanticImpact :: !(Maybe [MappedImpactDelta]),
+    workspaceReportCoordinationImpact :: !(Maybe [CoordinationImpact])
   }
   deriving stock (Eq, Show)
 
 workspaceDiffReport :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> WorkspaceDiffReport
-workspaceDiffReport meta gate findings = WorkspaceDiffReport meta gate findings Nothing
+workspaceDiffReport meta gate findings = WorkspaceDiffReport meta gate findings Nothing Nothing
 
 workspaceDiffReportWithSemanticImpact :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> [MappedImpactDelta] -> WorkspaceDiffReport
-workspaceDiffReportWithSemanticImpact meta gate findings impact = WorkspaceDiffReport meta gate findings (Just impact)
+workspaceDiffReportWithSemanticImpact meta gate findings impact = WorkspaceDiffReport meta gate findings (Just impact) Nothing
+
+workspaceDiffReportWithCoordinationImpact :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> [CoordinationImpact] -> WorkspaceDiffReport
+workspaceDiffReportWithCoordinationImpact meta gate findings impact = WorkspaceDiffReport meta gate findings Nothing (Just impact)
+
+workspaceDiffReportWithImpacts :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> [MappedImpactDelta] -> [CoordinationImpact] -> WorkspaceDiffReport
+workspaceDiffReportWithImpacts meta gate findings semantic coordination = WorkspaceDiffReport meta gate findings (Just semantic) (Just coordination)
 
 instance ToJSON DiffReport where
   toJSON report =
     object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
         "gate" .= map surfaceName (Set.toAscList (reportGate report)),
-        "breaking" .= any (gatedBreaking (reportGate report)) (reportFindings report),
+        "breaking" .= (any (gatedBreaking (reportGate report)) (reportFindings report) || coordinationBreaking (reportCoordinationImpact report)),
         "findings" .= map (findingValue (reportGate report)) (reportFindings report)
       ]
         <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [reportSemanticImpact report]]
+        <> ["coordinationImpact" .= impact | Just impact <- [reportCoordinationImpact report]]
 
 instance ToJSON WorkspaceDiffReport where
   toJSON report =
     object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
         "gate" .= map surfaceName (Set.toAscList (workspaceReportGate report)),
-        "breaking" .= any (gatedBreaking (workspaceReportGate report) . wcChange) (workspaceReportFindings report),
+        "breaking" .= (any (gatedBreaking (workspaceReportGate report) . wcChange) (workspaceReportFindings report) || coordinationBreaking (workspaceReportCoordinationImpact report)),
         "findings" .= map (workspaceFindingValue (workspaceReportGate report)) (workspaceReportFindings report),
         "workspace" .= workspaceMetaValue (workspaceReportMeta report)
       ]
         <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [workspaceReportSemanticImpact report]]
+        <> ["coordinationImpact" .= impact | Just impact <- [workspaceReportCoordinationImpact report]]
 
 semanticImpactValue :: [MappedImpactDelta] -> Value
 semanticImpactValue impact = object ["declarations" .= impact]
+
+coordinationBreaking :: Maybe [CoordinationImpact] -> Bool
+coordinationBreaking = maybe False (any ((== CoordinationBreaking) . coordinationSeverity))
 
 -- | Human-facing semantic dependency summary, kept separate from ordinary
 -- compatibility findings and generated-file evidence.

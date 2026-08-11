@@ -34,10 +34,11 @@ import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
 import Keiro.Dsl.ConformancePackage
 import Keiro.Dsl.ConsumerTypePlan
+import Keiro.Dsl.CoordinationImpact
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), MappedPersistedImpact (..), MappedPersistedSurface (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.Diff qualified as CheckedDiff
-import Keiro.Dsl.DiffReport (Remedy (..), diffReport, diffReportWithSemanticImpact, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding, renderSemanticImpact)
+import Keiro.Dsl.DiffReport (Remedy (..), diffReport, diffReportWithImpacts, diffReportWithSemanticImpact, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding, renderSemanticImpact)
 import Keiro.Dsl.EventOutput
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, bindingObligationsForService, renderBindingObligations)
 import Keiro.Dsl.Expression
@@ -507,6 +508,7 @@ main = hspec $ do
                   recProjectionCatalogFacts = [],
                   recQueryContractBaseline = False,
                   recQueryContracts = [],
+                  recRouterSelections = [],
                   recSemanticImpact = Nothing
                 }
           )
@@ -1750,6 +1752,8 @@ main = hspec $ do
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
             "contract-v1-compat.keiro",
+            "declarative-router/unbounded.keiro",
+            "declarative-router/valid.keiro",
             "domain-command-outcomes.keiro",
             "id-domain-migration-v3.keiro",
             "language-duplicate.keiro",
@@ -3259,6 +3263,7 @@ main = hspec $ do
                 recProjectionCatalogFacts = [],
                 recQueryContractBaseline = True,
                 recQueryContracts = [],
+                recRouterSelections = [],
                 recSemanticImpact = Nothing
               }
       T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
@@ -3291,6 +3296,7 @@ main = hspec $ do
                 wrProjectionCatalogFacts = [],
                 wrQueryContractBaseline = True,
                 wrQueryContracts = [],
+                wrRouterSelections = [],
                 wrAdopted = [],
                 wrSemanticImpact = Nothing
               }
@@ -3454,6 +3460,7 @@ main = hspec $ do
                 recProjectionCatalogFacts = [],
                 recQueryContractBaseline = True,
                 recQueryContracts = [],
+                recRouterSelections = [],
                 recSemanticImpact = Nothing
               }
           encoded = renderRecord record
@@ -4085,6 +4092,7 @@ main = hspec $ do
                 recProjectionCatalogFacts = [],
                 recQueryContractBaseline = True,
                 recQueryContracts = either (const []) id (queryContractIdentities spec),
+                recRouterSelections = [],
                 recSemanticImpact = Just snapshot
               }
           encoded = renderRecord singleRecord
@@ -4566,6 +4574,7 @@ main = hspec $ do
                   recProjectionCatalogFacts = [],
                   recQueryContractBaseline = False,
                   recQueryContracts = [],
+                  recRouterSelections = [],
                   recSemanticImpact = Nothing
                 }
             recordPath = out </> recordFileName (specContext spec)
@@ -5678,6 +5687,64 @@ main = hspec $ do
       routerHarness `shouldSatisfy` T.isInfixOf "(\"resolverOwnership\", \"generated-declarative\")"
       routerHarness `shouldSatisfy` T.isInfixOf "(\"maxRecipients\", \"64\")"
       firewallBreaches modules `shouldBe` []
+
+    it "classifies every declarative selection coordination transition" $ do
+      source <- readTestText "test/fixtures/declarative-router/valid.keiro"
+      baseline <- checkedServiceFromText "selection-baseline.keiro" source
+      identityChanged <- checkedServiceFromText "selection-identity.keiro" (T.replace "identity = \"hospital-transfer-selection\"" "identity = \"hospital-transfer-selection-v2\"" source)
+      versionTwo <- checkedServiceFromText "selection-version-two.keiro" (T.replace "version = 1" "version = 2" source)
+      fingerprintChanged <- checkedServiceFromText "selection-fingerprint.keiro" (T.replace "max-recipients = 64" "max-recipients = 32" source)
+      versionedFingerprintChanged <- checkedServiceFromText "selection-versioned-fingerprint.keiro" (T.replace "version = 1" "version = 2" (T.replace "max-recipients = 64" "max-recipients = 32" source))
+      let custom =
+            baseline
+              { checkedSpec =
+                  modifyRouter
+                    "HospitalTransferRouter"
+                    ( \router ->
+                        router
+                          { rtInput = (rtInput router) {inType = Nothing, inFields = [Field "transferNeedId" Nothing, Field "region" Nothing]},
+                            rtResolve = ResolveDecl ResolveHole ["hospitalId"] (rvLoc (rtResolve router))
+                          }
+                    )
+                    (checkedSpec baseline)
+              }
+          classifyCoordination old new = [(coordinationReason impact, coordinationSeverity impact) | impact <- coordinationImpact old new []]
+      case routerSelectionSnapshots baseline of
+        [snapshot] -> do
+          selectionVerification snapshot `shouldBe` DeclarativeVerified
+          selectionIdentity snapshot `shouldBe` Just "hospital-transfer-selection"
+          selectionVersion snapshot `shouldBe` Just 1
+          fmap T.length (selectionFingerprint snapshot) `shouldBe` Just 64
+          Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
+        snapshots -> expectationFailure ("expected one router selection ledger snapshot, got " <> show snapshots)
+      classifyCoordination baseline identityChanged `shouldBe` [(SelectionIdentityChanged, CoordinationBreaking)]
+      classifyCoordination versionTwo baseline `shouldBe` [(SelectionVersionDecreased, CoordinationBreaking)]
+      classifyCoordination baseline fingerprintChanged `shouldBe` [(SelectionFingerprintChangedWithoutVersionBump, CoordinationBreaking)]
+      classifyCoordination baseline versionedFingerprintChanged `shouldBe` [(SelectionFingerprintChangedWithVersionBump, CoordinationAdvisory)]
+      classifyCoordination baseline versionTwo `shouldBe` [(SelectionVersionMetadataOnly, CoordinationAdvisory)]
+      classifyCoordination baseline custom `shouldBe` [(SelectionVerificationBoundaryChanged, CoordinationAdvisory)]
+      let breakingReport = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReportWithImpacts defaultGate [] [] (coordinationImpact baseline fingerprintChanged []))))
+      breakingReport `shouldSatisfy` T.isInfixOf "\"breaking\":true"
+
+    it "keeps formatting out of the fingerprint and reports mapped selection dependencies in both sections" $ do
+      source <- readTestText "test/fixtures/declarative-router/valid.keiro"
+      baseline <- checkedServiceFromText "selection-semantic-baseline.keiro" source
+      formatted <- checkedServiceFromText "selection-semantic-formatted.keiro" (T.replace "context transfer-routing\n" "context transfer-routing\n\n" source)
+      coordinationImpact baseline formatted [] `shouldBe` []
+      let changed = baseline {checkedSpec = mapMappedStructural "HospitalLoadRow" changeMappedCanonical (checkedSpec baseline)}
+          semantic = CheckedDiff.mappedSemanticImpactForServices baseline changed
+          coordination = coordinationImpact baseline changed semantic
+          rowDelta = find ((== MappedKey "HospitalLoadRow") . impactDeclaration) semantic
+          rendered = T.unlines (renderCoordinationImpact coordination)
+          encoded = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReportWithImpacts defaultGate [] semantic coordination)))
+          isSelectionConsumer = \case RouterSelectionConsumer {} -> True; _ -> False
+      rowDelta `shouldSatisfy` maybe False (any isSelectionConsumer . Set.toList . impactCurrentConsumers)
+      map coordinationReason coordination `shouldContain` [SelectionMappedDependencyChanged]
+      rendered `shouldSatisfy` T.isInfixOf "selection-mapped-dependency-changed"
+      encoded `shouldSatisfy` T.isInfixOf "\"coordinationImpact\""
+      encoded `shouldSatisfy` T.isInfixOf "router-selection:HospitalTransferRouter:recipient"
+      LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReport defaultGate [])))
+        `shouldNotSatisfy` T.isInfixOf "coordinationImpact"
 
     it "RouterSelection gates declarative selection at the version-5 marker" $ do
       source <- readTestText "test/fixtures/declarative-router/valid.keiro"
@@ -8734,6 +8801,7 @@ main = hspec $ do
                   recProjectionCatalogFacts = [],
                   recQueryContractBaseline = False,
                   recQueryContracts = either (const []) id (queryContractIdentities spec),
+                  recRouterSelections = [],
                   recSemanticImpact = Just (semanticImpactSnapshotForSpec spec)
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
@@ -11208,6 +11276,7 @@ sampleWorkspaceRecord workspace =
       wrProjectionCatalogFacts = [],
       wrQueryContractBaseline = True,
       wrQueryContracts = either (const []) id (queryContractIdentities (wsMergedSpec workspace)),
+      wrRouterSelections = [],
       wrAdopted =
         [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-ledger.context.demo-project.txt") (Just "project.keiro"),
           AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing

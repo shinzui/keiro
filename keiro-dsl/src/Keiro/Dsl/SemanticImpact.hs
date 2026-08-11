@@ -11,6 +11,7 @@ module Keiro.Dsl.SemanticImpact
   ( DerivedMappedConsumer (..),
     UnsupportedProjectionSource (..),
     MappedQueryPosition (..),
+    RouterSelectionPosition (..),
     MappedConsumer (..),
     MappedRootKind (..),
     MappedRoot (..),
@@ -21,6 +22,7 @@ module Keiro.Dsl.SemanticImpact
     MappedImpactDelta (..),
     SemanticImpactReport (..),
     semanticImpact,
+    semanticImpactForService,
     semanticImpactSnapshot,
     diffSemanticImpact,
     mappedImpactForDeclarations,
@@ -48,7 +50,9 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
-import Keiro.Dsl.Grammar (HaskellSource (..), Name, WireEnum (..))
+import Keiro.Dsl.Grammar
+import Keiro.Dsl.RouterSelection
+import Keiro.Dsl.SemanticContract (CheckedService (..))
 import Keiro.Dsl.TypeGraph
 
 -- | A checked generated consumer of mapped declarations. Projection consumers
@@ -59,10 +63,18 @@ data MappedQueryPosition
   | MappedQueryResult
   deriving stock (Eq, Ord, Show, Generic)
 
+data RouterSelectionPosition
+  = SelectionQueryInput
+  | SelectionPredicate
+  | SelectionRecipient
+  | SelectionCommandField !Name
+  deriving stock (Eq, Ord, Show, Generic)
+
 data MappedConsumer
   = AggregateConsumer !Name
   | WorkqueueConsumer !Name
   | ReadModelQueryConsumer !Name !MappedQueryPosition
+  | RouterSelectionConsumer !Name !RouterSelectionPosition
   | DerivedProjectionConsumer !DerivedMappedConsumer
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -76,6 +88,10 @@ data MappedRootKind
   | MappedWorkqueueFieldRoot
   | MappedReadModelQueryInputRoot
   | MappedReadModelQueryResultRoot
+  | MappedRouterSelectionQueryInputRoot
+  | MappedRouterSelectionPredicateRoot
+  | MappedRouterSelectionRecipientRoot
+  | MappedRouterSelectionCommandFieldRoot
   | MappedProjectionEventRoot
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -108,6 +124,8 @@ data MappedConsequence
   | MappedSnapshotHydration !Name
   | MappedWorkqueueHistory !Name
   | MappedQueryApi !Name !MappedQueryPosition
+  | MappedRouterSelectionBuild !Name
+  | MappedRouterSelectionCoordinationReview !Name
   | MappedProjectionHandlerReview !DerivedMappedConsumer
   | MappedProjectionRebuild !DerivedMappedConsumer !Name
   deriving stock (Eq, Ord, Show, Generic)
@@ -296,6 +314,8 @@ instance ToJSON MappedConsequence where
     MappedSnapshotHydration aggregate -> object ["kind" .= ("snapshot-hydration" :: Text), "aggregate" .= aggregate]
     MappedWorkqueueHistory workqueue -> object ["kind" .= ("workqueue-history" :: Text), "workqueue" .= workqueue]
     MappedQueryApi readModel position -> object ["kind" .= ("query-api" :: Text), "readModel" .= readModel, "position" .= mappedQueryPositionIdentity position]
+    MappedRouterSelectionBuild router -> object ["kind" .= ("router-selection-build" :: Text), "router" .= router]
+    MappedRouterSelectionCoordinationReview router -> object ["kind" .= ("router-selection-coordination-review" :: Text), "router" .= router]
     MappedProjectionHandlerReview consumer -> object ["kind" .= ("projection-handler-review" :: Text), "consumer" .= mappedConsumerIdentity (DerivedProjectionConsumer consumer)]
     MappedProjectionRebuild consumer groupName -> object ["kind" .= ("projection-rebuild" :: Text), "consumer" .= mappedConsumerIdentity (DerivedProjectionConsumer consumer), "group" .= groupName]
 
@@ -308,6 +328,8 @@ instance FromJSON MappedConsequence where
       "snapshot-hydration" -> MappedSnapshotHydration <$> fields .: "aggregate"
       "workqueue-history" -> MappedWorkqueueHistory <$> fields .: "workqueue"
       "query-api" -> MappedQueryApi <$> fields .: "readModel" <*> (fields .: "position" >>= parseMappedQueryPosition)
+      "router-selection-build" -> MappedRouterSelectionBuild <$> fields .: "router"
+      "router-selection-coordination-review" -> MappedRouterSelectionCoordinationReview <$> fields .: "router"
       "projection-handler-review" -> MappedProjectionHandlerReview <$> (fields .: "consumer" >>= parseDerivedConsumer)
       "projection-rebuild" -> MappedProjectionRebuild <$> (fields .: "consumer" >>= parseDerivedConsumer) <*> fields .: "group"
       _ -> fail "unknown semantic-impact consequence kind"
@@ -426,9 +448,147 @@ semanticImpact graph =
               derivedAuthority derived == aggregate
             ]
        in direct : projections
-    consequencesForEvidence evidence =
-      Set.fromList (MappedConsumerBuild (evidenceConsumer evidence) : surfaceConsequences evidence)
-    surfaceConsequences evidence = case evidenceRootKind evidence of
+    consequencesForEvidence = consequencesForMappedEvidence graph
+
+-- | Add the checked declarative selection consumers to the ordinary type-graph
+-- projection. The parser AST is intentionally absent: every expression path and
+-- query root comes from 'CheckedRouterSelection'.
+semanticImpactForService :: CheckedService -> TypeGraph -> SemanticImpact
+semanticImpactForService service graph =
+  base
+    { impactRoots = sort (impactRoots base <> map selectionEvidenceRoot extraEvidence),
+      impactAggregateDeclarations = Map.unionWith Set.union (impactAggregateDeclarations base) declarationsByConsumer,
+      impactDeclarationConsumers = Map.unionWith Set.union (impactDeclarationConsumers base) consumersByDeclaration,
+      impactDeclarationEvidence = Map.unionWith Set.union (impactDeclarationEvidence base) evidenceByDeclaration,
+      impactDeclarationConsequences = Map.unionWith Set.union (impactDeclarationConsequences base) consequencesByDeclaration
+    }
+  where
+    base = semanticImpact graph
+    extraEvidence = concatMap checkedRouterEvidence checkedSelections
+    checkedSelections =
+      [ (rtId router, checked)
+      | NRouter router <- specNodes (checkedSpec service),
+        ResolveDeclarative {} <- [rvSource (rtResolve router)],
+        let checked = case checkRouterSelection (checkedLanguageContract service) graph (checkedSpec service) router of
+              Right value -> value
+              Left failures -> error ("validated declarative router selection did not check: " <> show failures)
+      ]
+    declarationsByConsumer =
+      Map.fromListWith
+        Set.union
+        [ (mappedRootConsumer root, declarationClosure graph (mappedRootDeclaration root))
+        | SelectionEvidence root _ <- extraEvidence
+        ]
+    consumersByDeclaration =
+      Map.fromListWith
+        Set.union
+        [ (declaration, Set.singleton (mappedRootConsumer root))
+        | SelectionEvidence root _ <- extraEvidence,
+          declaration <- Set.toList (declarationClosure graph (mappedRootDeclaration root))
+        ]
+    evidenceByDeclaration =
+      Map.fromListWith
+        Set.union
+        [ ( declaration,
+            Set.singleton
+              MappedRootEvidence
+                { evidenceConsumer = mappedRootConsumer root,
+                  evidenceRootKind = mappedRootKind root,
+                  evidencePath = path,
+                  evidenceOperation = Nothing
+                }
+          )
+        | SelectionEvidence root path <- extraEvidence,
+          declaration <- Set.toList (declarationClosure graph (mappedRootDeclaration root))
+        ]
+    consequencesByDeclaration =
+      Map.map
+        (Set.unions . map (consequencesForMappedEvidence graph) . Set.toAscList)
+        evidenceByDeclaration
+
+data SelectionEvidence = SelectionEvidence
+  { selectionEvidenceRoot :: !MappedRoot,
+    selectionEvidencePath :: !Text
+  }
+
+checkedRouterEvidence :: (Name, CheckedRouterSelection) -> [SelectionEvidence]
+checkedRouterEvidence (router, selection) = queryInputEvidence <> expressionEvidence
+  where
+    queryInputEvidence =
+      [ selectionEvidence router SelectionQueryInput MappedRouterSelectionQueryInputRoot site ("router " <> router <> " selection query input")
+      | site@RootReadModelQueryInput {} <- checkedUseSites selection
+      ]
+    expressionEvidence =
+      checkedExpressionEvidence router selection SelectionPredicate MappedRouterSelectionPredicateRoot "predicate" (checkedPredicate selection)
+        <> checkedExpressionEvidence router selection SelectionRecipient MappedRouterSelectionRecipientRoot "recipient" (checkedRecipient selection)
+        <> concat
+          [ checkedExpressionEvidence router selection (SelectionCommandField field) MappedRouterSelectionCommandFieldRoot ("command field " <> field) expression
+          | (field, expression) <- Map.toAscList (checkedCommandFields selection)
+          ]
+
+checkedExpressionEvidence :: Name -> CheckedRouterSelection -> RouterSelectionPosition -> MappedRootKind -> Text -> CheckedScalarExpr -> [SelectionEvidence]
+checkedExpressionEvidence router selection position rootKind label expression =
+  [ selectionEvidence router position rootKind site ("router " <> router <> " selection " <> label <> " " <> renderCheckedPath root segments)
+  | (root, segments@(_ : _)) <- checkedScalarPaths expression,
+    site <- selectionRootSites root selection
+  ]
+
+selectionEvidence :: Name -> RouterSelectionPosition -> MappedRootKind -> UseSite -> Text -> SelectionEvidence
+selectionEvidence router position rootKind site path =
+  SelectionEvidence
+    { selectionEvidenceRoot =
+        MappedRoot
+          { mappedRootConsumer = RouterSelectionConsumer router position,
+            mappedRootKind = rootKind,
+            mappedRootUseSite = site,
+            mappedRootDeclaration = useSiteDeclaration site
+          },
+      selectionEvidencePath = path
+    }
+
+selectionRootSites :: SelectionRoot -> CheckedRouterSelection -> [UseSite]
+selectionRootSites root selection =
+  [ site
+  | site <- checkedUseSites selection,
+    case (root, site) of
+      (SelectionInput, RootReadModelQueryInput {}) -> True
+      (SelectionRow, RootReadModelQueryResult {}) -> True
+      _ -> False
+  ]
+
+checkedScalarPaths :: CheckedScalarExpr -> [(SelectionRoot, [CheckedSelectionPathSegment])]
+checkedScalarPaths expression = case checkedScalarNode expression of
+  CheckedPath root segments -> [(root, segments)]
+  CheckedTextLiteral _ -> []
+  CheckedIntegralLiteral _ -> []
+  CheckedBoolLiteral _ -> []
+  CheckedCompare _ left right -> checkedScalarPaths left <> checkedScalarPaths right
+  CheckedAnd left right -> checkedScalarPaths left <> checkedScalarPaths right
+  CheckedOr left right -> checkedScalarPaths left <> checkedScalarPaths right
+
+renderCheckedPath :: SelectionRoot -> [CheckedSelectionPathSegment] -> Text
+renderCheckedPath root segments =
+  rootLabel <> T.concat ["." <> checkedPathField segment <> wireLabel segment | segment <- segments]
+  where
+    rootLabel = case root of SelectionInput -> "input"; SelectionRow -> "row"
+    wireLabel segment
+      | checkedPathField segment == checkedPathWireKey segment = ""
+      | otherwise = " as '" <> checkedPathWireKey segment <> "'"
+
+useSiteDeclaration :: UseSite -> MappedKey
+useSiteDeclaration = \case
+  RootCommandField _ _ _ declaration -> declaration
+  RootEventField _ _ _ declaration -> declaration
+  RootRegister _ _ declaration -> declaration
+  RootWorkqueueField _ _ declaration -> declaration
+  RootReadModelQueryInput _ declaration -> declaration
+  RootReadModelQueryResult _ declaration -> declaration
+
+consequencesForMappedEvidence :: TypeGraph -> MappedRootEvidence -> Set MappedConsequence
+consequencesForMappedEvidence graph evidence =
+  Set.fromList (MappedConsumerBuild (evidenceConsumer evidence) : surfaceConsequences)
+  where
+    surfaceConsequences = case evidenceRootKind evidence of
       MappedCommandFieldRoot -> []
       MappedEventFieldRoot -> case evidenceConsumer evidence of
         AggregateConsumer aggregate -> [MappedPrivateEventHistory aggregate]
@@ -445,11 +605,18 @@ semanticImpact graph =
       MappedReadModelQueryResultRoot -> case evidenceConsumer evidence of
         ReadModelQueryConsumer readModel MappedQueryResult -> [MappedQueryApi readModel MappedQueryResult]
         _ -> []
+      MappedRouterSelectionQueryInputRoot -> selectionConsequences
+      MappedRouterSelectionPredicateRoot -> selectionConsequences
+      MappedRouterSelectionRecipientRoot -> selectionConsequences
+      MappedRouterSelectionCommandFieldRoot -> selectionConsequences
       MappedProjectionEventRoot -> case evidenceConsumer evidence of
         DerivedProjectionConsumer derived ->
           MappedProjectionHandlerReview derived
             : [MappedProjectionRebuild derived groupName | groupName <- maybeToList (Map.lookup derived (tgReplayableProjectionGroups graph))]
         _ -> []
+    selectionConsequences = case evidenceConsumer evidence of
+      RouterSelectionConsumer router _ -> [MappedRouterSelectionBuild router, MappedRouterSelectionCoordinationReview router]
+      _ -> []
 
 -- | Freeze the checked dependency projection in canonical map/set form.
 semanticImpactSnapshot :: SemanticImpact -> SemanticImpactSnapshot
@@ -564,6 +731,8 @@ mappedConsumerIdentity (AggregateConsumer aggregate) = aggregate
 mappedConsumerIdentity (WorkqueueConsumer workqueue) = "workqueue:" <> workqueue
 mappedConsumerIdentity (ReadModelQueryConsumer readModel position) =
   "read-model-query:" <> readModel <> ":" <> mappedQueryPositionIdentity position
+mappedConsumerIdentity (RouterSelectionConsumer router position) =
+  "router-selection:" <> router <> ":" <> routerSelectionPositionIdentity position
 mappedConsumerIdentity (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection)) =
   "aggregate-projection:" <> aggregate <> ":" <> projection
 mappedConsumerIdentity (DerivedProjectionConsumer (CatalogProjectionConsumer owner aggregate)) =
@@ -574,6 +743,10 @@ parseConsumerName raw = case T.splitOn ":" raw of
   ["workqueue", workqueue] -> pure (WorkqueueConsumer workqueue)
   ["read-model", readModel] -> pure (ReadModelQueryConsumer readModel MappedQueryInput)
   ["read-model-query", readModel, position] -> ReadModelQueryConsumer readModel <$> parseMappedQueryPosition position
+  ["router-selection", router, "query-input"] -> pure (RouterSelectionConsumer router SelectionQueryInput)
+  ["router-selection", router, "predicate"] -> pure (RouterSelectionConsumer router SelectionPredicate)
+  ["router-selection", router, "recipient"] -> pure (RouterSelectionConsumer router SelectionRecipient)
+  ["router-selection", router, "command-field", field] -> pure (RouterSelectionConsumer router (SelectionCommandField field))
   ["aggregate-projection", aggregate, projection] ->
     pure (DerivedProjectionConsumer (AggregateInlineProjectionConsumer aggregate projection))
   ["catalog-projection", owner, aggregate] ->
@@ -597,6 +770,12 @@ parseMappedQueryPosition "input" = pure MappedQueryInput
 parseMappedQueryPosition "result" = pure MappedQueryResult
 parseMappedQueryPosition _ = fail "unknown semantic-impact read-model query position"
 
+routerSelectionPositionIdentity :: RouterSelectionPosition -> Text
+routerSelectionPositionIdentity SelectionQueryInput = "query-input"
+routerSelectionPositionIdentity SelectionPredicate = "predicate"
+routerSelectionPositionIdentity SelectionRecipient = "recipient"
+routerSelectionPositionIdentity (SelectionCommandField field) = "command-field:" <> field
+
 mappedRootKindIdentity :: MappedRootKind -> Text
 mappedRootKindIdentity MappedCommandFieldRoot = "aggregate-command"
 mappedRootKindIdentity MappedEventFieldRoot = "private-event-payload"
@@ -604,6 +783,10 @@ mappedRootKindIdentity MappedRegisterRoot = "snapshot-register"
 mappedRootKindIdentity MappedWorkqueueFieldRoot = "workqueue-payload"
 mappedRootKindIdentity MappedReadModelQueryInputRoot = "read-model-query-input"
 mappedRootKindIdentity MappedReadModelQueryResultRoot = "read-model-query-result"
+mappedRootKindIdentity MappedRouterSelectionQueryInputRoot = "router-selection-query-input"
+mappedRootKindIdentity MappedRouterSelectionPredicateRoot = "router-selection-predicate"
+mappedRootKindIdentity MappedRouterSelectionRecipientRoot = "router-selection-recipient"
+mappedRootKindIdentity MappedRouterSelectionCommandFieldRoot = "router-selection-command-field"
 mappedRootKindIdentity MappedProjectionEventRoot = "projection-event-consumer"
 
 parseMappedRootKind :: (MonadFail m) => Text -> m MappedRootKind
@@ -613,6 +796,10 @@ parseMappedRootKind "snapshot-register" = pure MappedRegisterRoot
 parseMappedRootKind "workqueue-payload" = pure MappedWorkqueueFieldRoot
 parseMappedRootKind "read-model-query-input" = pure MappedReadModelQueryInputRoot
 parseMappedRootKind "read-model-query-result" = pure MappedReadModelQueryResultRoot
+parseMappedRootKind "router-selection-query-input" = pure MappedRouterSelectionQueryInputRoot
+parseMappedRootKind "router-selection-predicate" = pure MappedRouterSelectionPredicateRoot
+parseMappedRootKind "router-selection-recipient" = pure MappedRouterSelectionRecipientRoot
+parseMappedRootKind "router-selection-command-field" = pure MappedRouterSelectionCommandFieldRoot
 parseMappedRootKind "projection-event-consumer" = pure MappedProjectionEventRoot
 parseMappedRootKind _ = fail "unknown semantic-impact root surface"
 
@@ -623,6 +810,8 @@ mappedConsequenceIdentity consequence = case consequence of
   MappedSnapshotHydration aggregate -> "snapshot-hydration:" <> aggregate
   MappedWorkqueueHistory workqueue -> "workqueue-history:" <> workqueue
   MappedQueryApi readModel position -> "query-api:" <> readModel <> ":" <> mappedQueryPositionIdentity position
+  MappedRouterSelectionBuild router -> "router-selection-build:" <> router
+  MappedRouterSelectionCoordinationReview router -> "router-selection-coordination-review:" <> router
   MappedProjectionHandlerReview consumer -> "projection-handler-review:" <> mappedConsumerIdentity (DerivedProjectionConsumer consumer)
   MappedProjectionRebuild consumer groupName -> "projection-rebuild:" <> mappedConsumerIdentity (DerivedProjectionConsumer consumer) <> ":" <> groupName
 

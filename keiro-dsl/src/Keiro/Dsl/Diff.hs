@@ -44,6 +44,7 @@ module Keiro.Dsl.Diff
     sourceLanguageChange,
     diffServices,
     mappedSemanticImpact,
+    mappedSemanticImpactForServices,
     DiffEnv (..),
     NodeFamily (..),
     familyOf,
@@ -88,7 +89,7 @@ import Keiro.Dsl.PrettyPrint
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
-import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactSnapshot)
+import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
 import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -956,14 +957,22 @@ mappedProjectionFindingChanges env finding = case (projectionImpactFor (deOld en
 -- a finding. The compatibility findings remain unchanged; this projection adds
 -- the checked before/after aggregate consumer sets and service-conformance role.
 mappedSemanticImpact :: Spec -> Spec -> [MappedImpactDelta]
-mappedSemanticImpact oldSpec newSpec = case (resolveTypeGraph oldSpec, resolveTypeGraph newSpec) of
+mappedSemanticImpact oldSpec newSpec = mappedSemanticImpactForServices (legacyCheckedService oldSpec) (legacyCheckedService newSpec)
+
+-- | Service-aware mapped impact adds checked declarative selection consumers;
+-- the legacy Spec-only entry point retains its historical language contract.
+mappedSemanticImpactForServices :: CheckedService -> CheckedService -> [MappedImpactDelta]
+mappedSemanticImpactForServices oldService newService = case (resolveTypeGraph oldSpec, resolveTypeGraph newSpec) of
   (Right oldGraph, Right newGraph) ->
-    let oldSnapshot = semanticImpactSnapshot (semanticImpact oldGraph)
-        newSnapshot = semanticImpactSnapshot (semanticImpact newGraph)
+    let oldSnapshot = semanticImpactSnapshot (semanticImpactForService oldService oldGraph)
+        newSnapshot = semanticImpactSnapshot (semanticImpactForService newService newGraph)
         declarationChanges = [MappedKey (mfDeclaration finding) | finding <- diffMapped oldSpec newSpec]
         relationChanges = map impactDeclaration (diffSemanticImpact oldSnapshot newSnapshot)
      in mappedImpactForDeclarations (declarationChanges <> relationChanges) oldSnapshot newSnapshot
   _ -> []
+  where
+    oldSpec = checkedSpec oldService
+    newSpec = checkedSpec newService
 
 mappedFindingChanges :: MappedFinding -> [Change]
 mappedFindingChanges finding

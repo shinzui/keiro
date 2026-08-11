@@ -18,7 +18,7 @@ import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValuesForSe
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveContractLanguageVersion)
-import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpact)
+import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpactForService)
 import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
 import Keiro.Dsl.TypeGraph (resolveTypeGraph)
 import Keiro.Dsl.Validate (nodeIdentity)
@@ -219,4 +219,4 @@ surfaceFactValues service
       []
   | otherwise = case resolveTypeGraph (checkedSpec service) of
       Left _ -> []
-      Right graph -> mappedSurfaceFactValues (semanticImpact graph)
+      Right graph -> mappedSurfaceFactValues (semanticImpactForService service graph)

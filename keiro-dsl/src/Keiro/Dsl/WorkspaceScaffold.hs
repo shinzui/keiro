@@ -67,6 +67,7 @@ import Keiro.Dsl.ConformancePackage
     preflightConformancePackage,
     renderConformancePackageReport,
   )
+import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
@@ -424,6 +425,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     wsrQueryContractDrift :: ![QueryContractDrift],
     wsrQueryContractMigrations :: ![QueryContractMigration],
     wsrSemanticImpact :: !SemanticImpactReport,
+    wsrRouterSelectionDrift :: ![RouterSelectionDrift],
     wsrProjectionMappedImpact :: !(Maybe ProjectionMappedImpact),
     wsrGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift],
@@ -534,8 +536,10 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
         Nothing -> adoptionReport out (wsContext workspace) service modules
       let currentPlan = consumerPlan merged
           drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
-          currentSemanticImpact = checkedSemanticImpactSnapshot merged
+          currentSemanticImpact = checkedSemanticImpactSnapshot (wpCheckedService plan)
           semanticReport = semanticImpactForMappingDrift (previous >>= wrSemanticImpact) currentSemanticImpact drift
+          currentRouterSelections = routerSelectionSnapshots (wpCheckedService plan)
+          selectionDrift = maybe [] (\record -> routerSelectionDrift (wrRouterSelections record) currentRouterSelections) previous
           languageDrift = workspaceSourceLanguageDrift workspace previous
           currentQueryContracts = either (const []) id (queryContractIdentities merged)
           queryHistoryBaseline =
@@ -594,6 +598,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrQueryContractDrift = queryDrift,
               wsrQueryContractMigrations = queryMigrations,
               wsrSemanticImpact = semanticReport,
+              wsrRouterSelectionDrift = selectionDrift,
               wsrProjectionMappedImpact = projectionMappedImpactForService (wpCheckedService plan),
               wsrGeneratedArtifactImpact = generatedArtifactImpact [(scaffoldModule, disposition) | (scaffoldModule, _, disposition) <- dispositions],
               wsrSourceLanguageDrift = languageDrift,
@@ -660,6 +665,7 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
       wrProjectionCatalogFacts = projectionCatalogFacts merged,
       wrQueryContractBaseline = queryHistoryBaseline,
       wrQueryContracts = either (const []) id (queryContractIdentities merged),
+      wrRouterSelections = routerSelectionSnapshots checkedService,
       wrAdopted = adopted,
       wrSemanticImpact = Just currentSemanticImpact
     }
@@ -775,6 +781,7 @@ renderWorkspaceScaffoldReport report =
     <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (wsrSemanticImpact report)
+    <> renderRouterSelectionDrift (wsrRouterSelectionDrift report)
     <> maybe [] renderProjectionMappedImpact (wsrProjectionMappedImpact report)
     <> renderGeneratedArtifactImpact (wsrSemanticImpact report) (wsrGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection

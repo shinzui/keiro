@@ -63,6 +63,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
+import Keiro.Dsl.CoordinationImpact (RouterSelectionSnapshot (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
@@ -211,6 +212,7 @@ data WorkspaceRecord = WorkspaceRecord
     wrProjectionCatalogFacts :: ![Text],
     wrQueryContractBaseline :: !Bool,
     wrQueryContracts :: ![QueryContractIdentity],
+    wrRouterSelections :: ![RouterSelectionSnapshot],
     wrAdopted :: ![AdoptedRow],
     wrSemanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
@@ -242,6 +244,7 @@ renderWorkspaceRecord record =
       <> ["projection-catalog-fact " <> fact | fact <- wrProjectionCatalogFacts record]
       <> ["query-contract-baseline v1" | wrQueryContractBaseline record]
       <> ["query-contract " <> encodeRow identity | identity <- wrQueryContracts record]
+      <> ["router-selection " <> encodeRow selection | selection <- wrRouterSelections record]
       <> ["semantic-impact " <> encodeRow snapshot | Just snapshot <- [wrSemanticImpact record]]
       <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
   where
@@ -278,6 +281,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
         queryContractBaseline <- parseQueryContractBaseline rows
         queryContracts <- traverse (decodeRow "query-contract ") (rowsWith "query-contract " rows)
+        routerSelections <- traverse (decodeRow "router-selection ") (rowsWith "router-selection " rows)
         semanticImpact <- parseSemanticImpact rows
         adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
         checkedAdopted <- traverse checkedAdoption adopted
@@ -290,6 +294,7 @@ parseWorkspaceRecord contents = case T.lines contents of
           || hasDuplicates (map behaviorRecordKey behaviorRequirements)
           || hasDuplicates catalogFacts
           || hasDuplicates (map queryContractIdentityKey queryContracts)
+          || hasDuplicates (map selectionRouter routerSelections)
           then Nothing
           else
             pure
@@ -312,6 +317,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   wrProjectionCatalogFacts = catalogFacts,
                   wrQueryContractBaseline = queryContractBaseline,
                   wrQueryContracts = queryContracts,
+                  wrRouterSelections = routerSelections,
                   wrAdopted = checkedAdopted,
                   wrSemanticImpact = semanticImpact
                 }

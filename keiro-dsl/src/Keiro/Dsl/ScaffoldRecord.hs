@@ -21,6 +21,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.BehaviorCoverage (BehaviorRecordRow (..))
+import Keiro.Dsl.CoordinationImpact (RouterSelectionSnapshot (..))
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
@@ -50,6 +51,7 @@ data ScaffoldRecord = ScaffoldRecord
     recProjectionCatalogFacts :: ![Text],
     recQueryContractBaseline :: !Bool,
     recQueryContracts :: ![QueryContractIdentity],
+    recRouterSelections :: ![RouterSelectionSnapshot],
     recSemanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
@@ -112,6 +114,7 @@ renderRecord record =
       <> map ("projection-catalog-fact " <>) (recProjectionCatalogFacts record)
       <> ["query-contract-baseline v1" | recQueryContractBaseline record]
       <> map ("query-contract " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recQueryContracts record))
+      <> map ("router-selection " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recRouterSelections record))
       <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [recSemanticImpact record]]
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
@@ -149,8 +152,9 @@ parseRecord contents = case T.lines contents of
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
         queryContractBaseline <- parseQueryContractBaseline rows
         queryContracts <- traverse parseQueryContract (filter ("query-contract " `T.isPrefixOf`) rows)
+        routerSelections <- traverse parseRouterSelection (filter ("router-selection " `T.isPrefixOf`) rows)
         semanticImpact <- parseSemanticImpact rows
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts)
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map selectionRouter routerSelections)
           then Nothing
           else
             pure
@@ -171,6 +175,7 @@ parseRecord contents = case T.lines contents of
                   recProjectionCatalogFacts = catalogFacts,
                   recQueryContractBaseline = queryContractBaseline,
                   recQueryContracts = queryContracts,
+                  recRouterSelections = routerSelections,
                   recSemanticImpact = semanticImpact
                 }
   _ -> Nothing
@@ -199,6 +204,9 @@ parseRecord contents = case T.lines contents of
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseQueryContract row = do
       payload <- T.stripPrefix "query-contract " row
+      Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseRouterSelection row = do
+      payload <- T.stripPrefix "router-selection " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseQueryContractBaseline rows = case filter ("query-contract-baseline " `T.isPrefixOf`) rows of
       [] -> Just False

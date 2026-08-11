@@ -37,6 +37,7 @@ module Keiro.Dsl.ScaffoldRun
     generatedArtifactImpact,
     renderSemanticImpactReport,
     renderGeneratedArtifactImpact,
+    renderRouterSelectionDrift,
 
     -- * Shared with whole-workspace scaffolding ("Keiro.Dsl.WorkspaceScaffold")
 
@@ -89,6 +90,7 @@ import Keiro.Dsl.ConformancePackage
     renderConformancePackageFailure,
     renderConformancePackageReport,
   )
+import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
@@ -117,7 +119,7 @@ import Keiro.Dsl.SemanticImpact
     mappedConsequenceIdentity,
     mappedConsumerIdentity,
     mappedRootKindIdentity,
-    semanticImpact,
+    semanticImpactForService,
     semanticImpactReport,
     semanticImpactSnapshot,
   )
@@ -235,6 +237,7 @@ data ScaffoldReport = ScaffoldReport
     reportQueryContractDrift :: ![QueryContractDrift],
     reportQueryContractMigrations :: ![QueryContractMigration],
     reportSemanticImpact :: !SemanticImpactReport,
+    reportRouterSelectionDrift :: ![RouterSelectionDrift],
     reportProjectionMappedImpact :: !(Maybe ProjectionMappedImpact),
     reportGeneratedArtifactImpact :: ![GeneratedArtifactImpact],
     reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift),
@@ -930,8 +933,10 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                               queryDrift = case previousRecord of
                                 Just previous | recQueryContractBaseline previous -> queryContractDrift currentQueryContracts (recQueryContracts previous)
                                 _ -> []
-                              currentSemanticImpact = checkedSemanticImpactSnapshot spec
+                              currentSemanticImpact = checkedSemanticImpactSnapshot service
                               semanticReport = semanticImpactForMappingDrift (previousRecord >>= recSemanticImpact) currentSemanticImpact drift
+                              currentRouterSelections = routerSelectionSnapshots service
+                              selectionDrift = maybe [] (\previous -> routerSelectionDrift (recRouterSelections previous) currentRouterSelections) previousRecord
                               languageDrift = do
                                 previous <- previousRecord
                                 if recSourceLanguage previous == sourceLanguage
@@ -966,6 +971,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportQueryContractDrift = queryDrift,
                                   reportQueryContractMigrations = queryMigrations,
                                   reportSemanticImpact = semanticReport,
+                                  reportRouterSelectionDrift = selectionDrift,
                                   reportProjectionMappedImpact = projectionMappedImpactForService service,
                                   reportGeneratedArtifactImpact = generatedArtifactImpact dispositions,
                                   reportSourceLanguageDrift = languageDrift,
@@ -1179,10 +1185,12 @@ mappingDrift current previous =
     oldByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- previous]
     newByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- current]
 
-checkedSemanticImpactSnapshot :: Spec -> SemanticImpactSnapshot
-checkedSemanticImpactSnapshot spec = case resolveTypeGraph spec of
+checkedSemanticImpactSnapshot :: CheckedService -> SemanticImpactSnapshot
+checkedSemanticImpactSnapshot service = case resolveTypeGraph spec of
   Left failures -> error ("validated scaffold type graph did not resolve: " <> show failures)
-  Right graph -> semanticImpactSnapshot (semanticImpact graph)
+  Right graph -> semanticImpactSnapshot (semanticImpactForService service graph)
+  where
+    spec = checkedSpec service
 
 semanticImpactForMappingDrift :: Maybe SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappingDrift] -> SemanticImpactReport
 semanticImpactForMappingDrift previous current drifts =
@@ -1323,6 +1331,7 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       recProjectionCatalogFacts = projectionCatalogFacts spec,
       recQueryContractBaseline = queryHistoryBaseline,
       recQueryContracts = either (const []) id (queryContractIdentities spec),
+      recRouterSelections = routerSelectionSnapshots service,
       recSemanticImpact = Just currentSemanticImpact
     }
   where
@@ -1551,6 +1560,7 @@ renderScaffoldReport report =
     <> queryContractMigrationSection
     <> mappingDriftSection
     <> renderSemanticImpactReport (reportSemanticImpact report)
+    <> renderRouterSelectionDrift (reportRouterSelectionDrift report)
     <> maybe [] renderProjectionMappedImpact (reportProjectionMappedImpact report)
     <> renderGeneratedArtifactImpact (reportSemanticImpact report) (reportGeneratedArtifactImpact report)
     <> sourceLanguageDriftSection
