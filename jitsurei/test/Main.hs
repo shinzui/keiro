@@ -306,6 +306,12 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
         runner $
           Store.runTransaction
             (applyAsyncProjectionFromCatalog jitsureiProjectionCatalog orderAuditProjectionId orderAuditAsyncProjection placed)
+      Right (Right _) <-
+        runner $
+          Store.initializeSubscriptionCheckpoint
+            (Store.SubscriptionName "jitsurei-order-audit-subscription")
+            0
+            Store.FromBeginning
       Right () <- runner $ Store.runTransaction seedBrownfieldRoot
       Right beforeFacts <- runner $ Store.runTransaction (Tx.statement () orderCatalogFactsStmt)
       beforeFacts `shouldBe` (2, 1, 1, 1)
