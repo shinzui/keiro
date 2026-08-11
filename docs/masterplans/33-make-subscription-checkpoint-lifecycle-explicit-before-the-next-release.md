@@ -4,6 +4,7 @@ slug: make-subscription-checkpoint-lifecycle-explicit-before-the-next-release
 title: "Make subscription checkpoint lifecycle explicit before the next release"
 kind: master-plan
 created_at: 2026-08-09T17:50:18Z
+intention: intention_01kzrnkgtcey6a8ar7xqn9tjxx
 ---
 
 # Make subscription checkpoint lifecycle explicit before the next release
