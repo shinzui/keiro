@@ -61,7 +61,7 @@ criteria are recorded in `mori://shinzui/mori/okf/adrs/concepts/ADR-20` and
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Adopt explicit checkpoint lifecycle semantics in the projection catalog | [Plan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md) | `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit` | None | Complete |
-| 2 | Generate and classify missing-checkpoint policy in candidate Language 5 | [Plan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md) | EP-1 | None | In Progress |
+| 2 | Generate and classify missing-checkpoint policy in candidate Language 5 | [Plan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md) | EP-1 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -111,9 +111,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: consume the completed Kiroku source contract and extend catalog/inventory identity.
 - [x] EP-1: validate lifecycle combinations and replace private rebuild SQL with the public reset.
 - [x] EP-1: prove operator, rollback, example, documentation, and runtime-source acceptance.
-- [ ] EP-2: require and round-trip `checkpoint-on-missing` in candidate Language 5.
-- [ ] EP-2: generate the runtime policy and reject replay-unsafe combinations before scaffolding.
-- [ ] EP-2: classify policy diffs, update conformance/docs/patterns, and pass full acceptance.
+- [x] EP-2: require and round-trip `checkpoint-on-missing` in candidate Language 5.
+- [x] EP-2: generate the runtime policy and reject replay-unsafe combinations before scaffolding.
+- [x] EP-2: classify policy diffs, update conformance/docs/patterns, and pass full acceptance.
 
 
 ## Surprises & Discoveries
@@ -139,6 +139,17 @@ interactions between child plans. Provide concise evidence.
   catalogs still call the old positional `SubscriptionDeclaration` constructor. The runtime,
   operator, and example cohorts pass first, so EP-2 can now update syntax, lowering, generation,
   baselines, and diff semantics from a stable EP-1 contract instead of patching fixtures alone.
+- Candidate Language 5 can express all three Kiroku policies without a default, and the generated
+  catalog imports the public Kiroku type only when a projection catalog needs it. A policy-only
+  diff keeps persisted identity compatible while making consumer build and stop-the-world rollout
+  consequences explicit.
+- Full clean-tree acceptance exposed two unrelated conformance inventory gaps after the feature
+  tests had passed: the domain-outcomes suite lacked tracked scaffold provenance, and the
+  declarative-router Cabal component omitted live generated modules. Closing both gaps made all 39
+  corpus invocations and the complete generated router/catalog surface policy-clean.
+- The Jitsurei rebuild test confirmed that direct projection application does not invent an exact
+  durable subscription-member row. Explicit initialization through Kiroku's public API preserves
+  the production invariant that coordinated reset condemns a genuinely missing member.
 
 
 ## Decision Log
@@ -191,15 +202,24 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-EP-1 is complete. Keiro now records Kiroku's explicit missing-checkpoint policy as catalog
-identity, rejects current-head initialization when replay must reconstruct a cleared target, and
-uses Kiroku's public transaction API for both grouped and unmanaged rebuild resets. Operator
-reports expose the policy, grouped preparation returns exact persisted member keys, and a missing
-declared subscription condemns the full fence/target/dedup/checkpoint transaction. ADR-31 records
-the durable ownership and replay-safety boundary.
+The initiative is complete. Kiroku owns atomic absent-row initialization and explicit checkpoint
+reset; Keiro records the policy as catalog identity, validates replay safety, exposes it to
+operators, and composes the public reset transaction with target, fence, and dedup preparation.
+Candidate Language 5 requires one of `from-beginning`, `from-current-head`, or `fail` for every
+subscription owner, generates Kiroku's exact public constructors, and has no compatibility default.
 
-The runtime, operations, Jitsurei, documentation, Haddock, formatting, ADR, capability, and SQL
-audits pass against published `kiroku-store` 0.5.0.0. The remaining red whole-repository check is
-the expected generated Language 5 constructor gap, now the first concrete acceptance fixture for
-EP-2. The MasterPlan remains in progress until EP-2 makes the language and generated artifacts
-express the completed runtime contract.
+Changing only the policy now produces a dedicated structural diff with exact old/new values. The
+result preserves persisted subscription identity and existing rows, while correctly marking the
+generated consumer build breaking and requiring stop-the-world operational review. ADR 31 records
+the durable ownership, no-default, dual-validation, and evolution semantics. The canonical
+`mori://shinzui/keiro-runtime-patterns/docs/kiroku-subscriptions` guidance now matches the shipped
+Kiroku contract and Keiro's generated catalog model.
+
+Final acceptance passes `just verify`, all 39 conformance-corpus invocations, the external
+runtime-patterns 81-concept check, `nix fmt`, `nix flake check`, and `git diff --check`. No Keiro or
+Language 5 release, tag, package publication, or final version selection was performed; those
+remain intentionally deferred to the later coordinated release.
+
+
+Revision note (2026-08-11): Closed EP-2 and the MasterPlan after recording the candidate-language,
+generated-catalog, diff, documentation, and clean-tree acceptance outcomes.

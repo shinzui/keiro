@@ -45,8 +45,9 @@ This section must always reflect the actual current state of the work.
   dedicated diagnostics before scaffolding or runtime startup.
 - [x] (2026-08-11T20:14:23Z) Milestone 3: generate Plan 215's runtime policy in catalogs,
   conformance facades, and hole helpers, then compile every projection-catalog conformance fixture.
-- [ ] Milestone 4: classify policy changes in structural diff/replay impact, update ledgers,
-  docs/examples/runtime patterns, and pass full source acceptance without releasing Language 5.
+- [x] (2026-08-11T20:56:09Z) Milestone 4: classify policy changes in structural diff/replay
+  impact, update ledgers, docs/examples/runtime patterns, and pass full source acceptance without
+  releasing Language 5.
 
 
 ## Surprises & Discoveries
@@ -63,10 +64,14 @@ implementation. Provide concise evidence.
   rename the persisted subscription/member key. Diff must express both facts instead of reporting
   an identity replacement.
 - The corpus regeneration driver completed all three selected candidate-Language-5 scaffold
-  invocations, then its repository-wide inventory audit reported the pre-existing untracked
-  `keiro-dsl-conformance-domain-outcomes` ledger gap. The generated catalog and ledger deltas were
-  still written and are independently testable; this unrelated corpus-manifest gap must not be
-  mistaken for a checkpoint-policy generation failure.
+  invocations, then its repository-wide audit exposed two latent inventory gaps: the compiled
+  domain-outcomes suite lacked tracked scaffold provenance, and the declarative-router component
+  omitted seven live generated modules. Registering the generated ledger/fragment and compiling
+  the complete router output advanced the final corpus gate to 39 of 39 clean invocations.
+- The Jitsurei rebuild fixture applied an async projection directly and therefore had no exact
+  durable subscription-member row for the rebuild reset to find. Provisioning that row through
+  Kiroku's public `initializeSubscriptionCheckpoint` API made the test express the same lifecycle
+  precondition as production instead of weakening the new condemnation rule.
 
 
 ## Decision Log
@@ -117,7 +122,32 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Candidate Language 5 now requires exactly one `checkpoint-on-missing` clause on every subscription
+owner and rejects the clause on inline owners. The parser, canonical formatter, inspection model,
+workspace snapshots, scaffold ledger, and mutation/equality paths preserve the closed
+`from-beginning`, `from-current-head`, and `fail` vocabulary. Dedicated diagnostics cover missing,
+duplicate, unknown, misplaced, and replay-unsafe policy declarations; the complete policy by
+preserve/clear matrix is tested before scaffolding.
+
+Generated projection catalogs lower the three source values directly to Kiroku's public
+`FromBeginning`, `FromCurrentHead`, and `FailIfMissing` constructors. All three repository
+conformance cohorts compile the generated policy and retain it in facade and ledger facts. A
+policy-only diff now emits `CatalogCheckpointPolicyChanged`, reports the old and new values,
+preserves persisted subscription identity, marks the generated consumer build breaking, requires
+stop-the-world coordination, and names the affected replay group, targets, source, and adapter.
+
+The user and capability documentation, ADR 31, and
+`mori://shinzui/keiro-runtime-patterns/docs/kiroku-subscriptions` now agree on absent-row policy,
+existing-row precedence, and atomic initialization/reset behavior. The runtime-patterns corpus
+passes all 81 concept checks. No Language 5 release, package publication, tag, or release metadata
+was created.
+
+Final acceptance passed `just verify`, including 466 Keiro, 58 PGMQ, 30 operations, 686 DSL, 23
+Jitsurei, and 28 migration examples; all generated DSL conformance components; the 39-entry
+conformance corpus; and ADR, research, capability, extension, and generated-name gates. `nix fmt`,
+`nix flake check`, and `git diff --check` also pass. This checkout has no `just check-adr` recipe;
+its actual `adr-validate` repository gate ran through `just verify` and validated all 31 ADR
+concepts strictly.
 
 
 ## Context and Orientation
@@ -330,3 +360,8 @@ three independent facts: generated-catalog compatibility is breaking, operationa
 stop-the-world, and persisted subscription identity remains compatible. This plan is EP-2 of
 [MasterPlan 33](../masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md)
 and cannot complete before EP-1.
+
+
+Revision note (2026-08-11): Completed implementation, recorded the full acceptance evidence, and
+captured the exact-checkpoint fixture and conformance-inventory discoveries from the clean-tree
+verification run.
