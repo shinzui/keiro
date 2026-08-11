@@ -288,10 +288,12 @@ data SourceDeclaration = SourceDeclaration
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | Catalog identity and startup lifecycle for one async subscription.
 data SubscriptionDeclaration = SubscriptionDeclaration
   { subscriptionId :: !SubscriptionId,
     subscriptionName :: !Text,
     subscriptionSource :: !SourceId,
+    -- | Kiroku policy used only when the exact durable member row is absent.
     checkpointOnMissing :: !MissingCheckpointPolicy,
     claimSite :: !ClaimSite
   }
@@ -575,6 +577,7 @@ data InventoryQueryModel = InventoryQueryModel
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | Operator-visible subscription identity, source, and absent-row policy.
 data InventorySubscription = InventorySubscription
   { subscriptionId :: !SubscriptionId,
     subscriptionName :: !Text,
@@ -649,6 +652,7 @@ data CatalogRegistration = CatalogRegistration
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | Runtime async registration projected from a validated catalog.
 data AsyncProjectionRegistration = AsyncProjectionRegistration
   { projectionId :: !ProjectionId,
     projectionName :: !Text,

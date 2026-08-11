@@ -21,7 +21,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   Kiroku 0.4 durable checkpoint inventory. Both preserve member rows and report
   `global_position_distance`; neither queries Kiroku's private schema or claims
   a relevant-event lag.
+- Projection catalog inventory and rebuild JSON expose each subscription's
+  stable `checkpointOnMissing` value from the same validated catalog used by
+  runtime registration and rebuild planning.
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.4 && <0.5` for the released durable inventory API.
+- Requires `kiroku-store >=0.5 && <0.6` for explicit checkpoint lifecycle and
+  the public transaction-composable reset API used across the workspace.

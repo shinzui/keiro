@@ -15,9 +15,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   snapshot, and behavior-key identities remain stable.
 - **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
   **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
-  `kiroku-store >=0.4 && <0.5`. Kiroku 0.4 adds the durable subscription
-  checkpoint inventory operation to the exported `Store` effect; exhaustive
-  third-party interpreters must handle its new constructor.
+  `kiroku-store >=0.5 && <0.6`. Kiroku 0.5 adds explicit missing-checkpoint
+  policy and the public transaction-composable checkpoint reset operation;
+  exhaustive third-party interpreters and direct constructors must adopt the
+  corresponding API changes.
 - **keiro-dsl**: candidate language 5 extends the exported semantic graph with
   projection target, rebuild group, and projection owner nodes and adds catalog
   bindings to `ReadModelNode`. `DiagnosticCode` gains the corresponding
@@ -26,6 +27,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   retain their published parse and runtime meaning.
 
 ### New Features
+
+- **keiro**: make absent subscription checkpoints explicit catalog identity.
+  `SubscriptionDeclaration`, inventory, async registration, fingerprints, and
+  operator JSON carry `FromBeginning`, `FromCurrentHead`, or `FailIfMissing`.
+  Validation rejects future-only initialization for a replayable owner that
+  clears its target before replay.
+- **keiro**: replace private Kiroku checkpoint updates during rebuild with the
+  public reset transaction. Group rebuild reports exact persisted member keys
+  and rolls back its fence, target preparation, dedup deletion, and matched
+  resets if any declared subscription has no durable member.
 
 - **keiro**: add typed domain command outcomes for handwritten aggregates.
   `DomainCommandHandler` classifies an exact selected silent edge as typed

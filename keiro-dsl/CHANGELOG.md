@@ -101,7 +101,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   conformance target after reconciling the Cabal fragment. Unrelated aggregate files are now
   byte-stable when a declaration outside their semantic closure changes, and source-only movement
   rewrites the source map rather than behavior contracts or create-once witnesses.
-- Requires `kiroku-store >=0.4 && <0.5`, keeping generated conformance and
+- Requires `kiroku-store >=0.5 && <0.6`, keeping generated conformance and
   runtime fixtures on the same Kiroku effect surface as Keiro 0.11.
 
 ## [0.11.0.0] - 2026-08-05

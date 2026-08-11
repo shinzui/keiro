@@ -8,9 +8,9 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.4 && <0.5`. The independent
+- Requires `kiroku-store >=0.5 && <0.6`. The independent
   `kiroku-store-migrations ^>=0.3.0.0` dependency is unchanged because the
-  durable checkpoint inventory adds no Kiroku schema migration.
+  explicit checkpoint lifecycle and reset API add no Kiroku schema migration.
 
 ### Added
 

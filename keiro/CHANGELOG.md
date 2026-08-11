@@ -36,17 +36,27 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   `keiro.projection.global_position_distance` gauge and the deprecated
   compatibility `keiro.projection.lag` gauge from the same inventory snapshot.
   Both use `{position}` and neither claims to count relevant events.
+- Projection catalog subscriptions now carry Kiroku's
+  `MissingCheckpointPolicy` through registration, inventory, stable rendering,
+  ordering, fingerprints, and operator JSON. Validation rejects
+  `FromCurrentHead` for replayable clear-before-replay ownership.
+- Group rebuild uses `resetSubscriptionCheckpointsTx`, returns the exact reset
+  member keys, and reports `RebuildSubscriptionCheckpointsMissing` while
+  condemning the entire preparation transaction if a declared subscription has
+  no persisted member. The legacy unmanaged rebuild also uses the public API.
 - `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.4 && <0.5`. `KeiroMetrics` gains the
+- Requires `kiroku-store >=0.5 && <0.6`. Direct constructors of
+  `SubscriptionDeclaration` and exhaustive matches on grouped
+  `RebuildStartError` must adopt the explicit checkpoint lifecycle surface.
+  `KeiroMetrics` gains the
   `projectionGlobalPositionDistance` gauge field; code constructing that record
-  directly must initialize it. Kiroku 0.4 also adds an operation to its exported
-  `Store` effect, so exhaustive custom interpreters must add the corresponding
-  arm.
+  directly must initialize it. Exhaustive custom Kiroku interpreters must also
+  implement the 0.5 effect surface.
 - `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
   constructor. The journal-append transaction now declines an ordinary
   `StepRecorded` append into a workflow generation that already carries a

@@ -26,6 +26,28 @@ replay path. This distinction allows a live handler to omit external effects
 from its explicit replay adapter and allows brownfield tables to be reconciled
 without claiming complete historical reconstruction.
 
+Every async subscription also declares `checkpointOnMissing`, the policy Kiroku
+uses only when the exact durable member row does not exist:
+
+```haskell
+SubscriptionDeclaration
+  { subscriptionId = ordersSubscriptionId
+  , subscriptionName = "orders-summary"
+  , subscriptionSource = ordersSourceId
+  , checkpointOnMissing = FromBeginning
+  , claimSite = ordersSubscriptionClaim
+  }
+```
+
+Choose `FromBeginning` for a consumer that must process existing history,
+`FromCurrentHead` for a future-only consumer, or `FailIfMissing` when missing
+worker state is an operational error. An existing member row always wins and is
+never moved by this policy. The value is part of registration, inventory,
+fingerprints, human output, and JSON. A replayable owner of a
+`ClearBeforeReplay` target cannot use `FromCurrentHead`, because clearing the
+target and then skipping history could never reconstruct it. Preserve/reconcile
+and live-only ownership retain all three choices.
+
 Build `SourceDeclaration`, `TargetDeclaration`,
 `RebuildGroupDeclaration`, subscription/dedup declarations, query-model
 bindings, and typed `ProjectionSet event` values, then combine them in a
@@ -198,8 +220,14 @@ Preparation holds the exclusive group lock while it:
 - clears every `ClearBeforeReplay` target through one quoted multi-table
   `TRUNCATE` without `CASCADE`;
 - leaves every `PreserveAndReconcile` target untouched; and
-- resets only the replayable async dedup and subscription identities derived
-  from that group in the validated catalog.
+- resets replayable async dedup identities and every persisted member of the
+  catalog-declared subscriptions through Kiroku's public transaction API.
+
+The reset report records the exact member keys that moved. If any declared
+subscription has no persisted member, preparation returns a typed error and
+condemns the transaction: the fence, target clear, dedup deletion, and any
+already matched checkpoint resets all roll back together. Keiro never invents
+consumer-group members or updates Kiroku's private table directly.
 
 An undeclared foreign-key reference therefore rejects and rolls back the whole
 preparation instead of erasing external data. `abandonGroupRebuild` records
@@ -302,6 +330,10 @@ versioned JSON envelopes:
 - `keiro/catalog-registered-rebuild-preview/v1`; and
 - `keiro/catalog-rebuild-run/v1`.
 
+Every subscription in inventory and rebuild JSON includes
+`checkpointOnMissing` with one of the stable values `FromBeginning`,
+`FromCurrentHead`, or `FailIfMissing`.
+
 The adapter intentionally has no parser, text renderer, confirmation policy, or
 database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
@@ -335,14 +367,17 @@ Do not flip a preamble or replace all paths at once. Use this sequence:
 2. Group targets that must fence, reset, verify, and promote atomically.
 3. Choose `ClearBeforeReplay` or `PreserveAndReconcile` for every target and
    `Replayable` or `LiveOnly` for every owner independently.
-4. Add replay-specific transactional adapters that omit live-only effects and
+4. Choose `FromBeginning`, `FromCurrentHead`, or `FailIfMissing` for every
+   subscription, accounting for whether its exact durable member rows already
+   exist.
+5. Add replay-specific transactional adapters that omit live-only effects and
    add application-owned verification for brownfield assumptions.
-5. Build and validate the catalog while compatibility runners still operate;
+6. Build and validate the catalog while compatibility runners still operate;
    compare its inventory with the recorded fleet.
-6. Switch startup registration and live selection to the catalog, then switch
+7. Switch startup registration and live selection to the catalog, then switch
    rebuild/operations, and adopt candidate language-5 generation only after the
    hand-written inventory is understood.
-7. Retire unmanaged compatibility calls only after inventory and persisted
+8. Retire unmanaged compatibility calls only after inventory and persisted
    baseline/diff evidence agree.
 
 Validation is deliberately closed-world. It cannot discover an undeclared
@@ -586,7 +621,8 @@ The supported offline workflow in `Keiro.ReadModel.Rebuild` is:
 1. Register the model at projection startup.
 2. Call `startRebuild model projectionNames replayFrom`. One transaction marks
    the model `Rebuilding`, fences normal writers, truncates the model table,
-   clears only those projections' dedup keys, and resets the subscription cursor.
+   clears only those projections' dedup keys, and uses Kiroku's public reset API
+   to move all existing members of each named subscription to the replay point.
 3. Replay events through `applyAsyncProjectionUnfenced`. Do not use that entry
    point in normal workers.
 4. After replay and application-specific verification, call

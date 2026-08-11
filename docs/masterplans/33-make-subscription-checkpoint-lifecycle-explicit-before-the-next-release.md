@@ -42,12 +42,15 @@ validation, and coordinated rebuild. EP-2 then makes the unreleased candidate La
 and generate the EP-1 types and classify later policy changes. This ordering makes each boundary
 independently testable and prevents the DSL from inventing runtime semantics.
 
-Putting Kiroku SQL directly in Keiro was rejected because [ADR 28](../adr/0028-library-owned-operator-commands.md)
+Putting Kiroku SQL directly in Keiro was rejected because
+[ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md)
 requires operator commands to use the owning library's public API. Treating the policy as an
-unfingerprinted worker-only option was rejected because [ADR 26](../adr/0026-projection-catalog-identities.md)
+unfingerprinted worker-only option was rejected because
+[ADR 26](../adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md)
 makes catalog identity the shared authority for startup, planning, and operations. Adding an
 optional Language 5 field or postponing it to Language 6 was rejected because Language 5 is still
-unreleased; [ADR 4](../adr/0004-versioned-api-evolution-gates.md) permits correcting that candidate
+unreleased;
+[ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md) permits correcting that candidate
 now and avoids preserving an unsafe default as public language. The Mori ownership and write-path
 criteria are recorded in `mori://shinzui/mori/okf/adrs/concepts/ADR-20` and
 `mori://shinzui/mori/okf/adrs/concepts/ADR-21`.
@@ -57,7 +60,7 @@ criteria are recorded in `mori://shinzui/mori/okf/adrs/concepts/ADR-20` and
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Adopt explicit checkpoint lifecycle semantics in the projection catalog | [Plan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md) | `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit` | None | In Progress |
+| 1 | Adopt explicit checkpoint lifecycle semantics in the projection catalog | [Plan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md) | `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit` | None | Complete |
 | 2 | Generate and classify missing-checkpoint policy in candidate Language 5 | [Plan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md) | EP-1 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -107,7 +110,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1: consume the completed Kiroku source contract and extend catalog/inventory identity.
 - [x] EP-1: validate lifecycle combinations and replace private rebuild SQL with the public reset.
-- [ ] EP-1: prove operator, rollback, example, documentation, and full-repository acceptance.
+- [x] EP-1: prove operator, rollback, example, documentation, and runtime-source acceptance.
 - [ ] EP-2: require and round-trip `checkpoint-on-missing` in candidate Language 5.
 - [ ] EP-2: generate the runtime policy and reject replay-unsafe combinations before scaffolding.
 - [ ] EP-2: classify policy diffs, update conformance/docs/patterns, and pass full acceptance.
@@ -121,9 +124,10 @@ interactions between child plans. Provide concise evidence.
 - The omission is two related but distinct contracts. Kiroku needs atomic behavior for a missing
   exact member row; Keiro needs domain rules about which behavior is valid for a projection. A
   single default at either layer cannot substitute for both.
-- Kiroku's released 0.4.0.0 checkpoint inventory is intentionally read-only, while Keiro's current
-  grouped rebuild updates the private table and silently accepts zero affected rows. The repair
-  therefore requires a new owning-library mutation API and an explicit caller-side refusal rule.
+- Kiroku's released 0.4.0.0 checkpoint inventory was intentionally read-only, while Keiro's
+  pre-EP-1 grouped rebuild updated the private table and silently accepted zero affected rows. The
+  repair therefore requires a new owning-library mutation API and an explicit caller-side refusal
+  rule.
 - Kiroku EP-70 completed and was published as `kiroku-store` 0.5.0.0 before EP-1 began. Hackage,
   upstream tag `kiroku-store-v0.5.0.0`, and the sibling source exports agree, so EP-1 can consume
   the released owning-library contract rather than relying on an unpublished source override.
@@ -131,6 +135,10 @@ interactions between child plans. Provide concise evidence.
   transaction. A focused two-member test resets both rows, while a second test proves that one
   absent declared name rolls back the target clear, group fence, dedup deletion, and already
   matched member resets together.
+- Whole-repository verification reaches the intended EP-2 boundary: generated candidate-Language-5
+  catalogs still call the old positional `SubscriptionDeclaration` constructor. The runtime,
+  operator, and example cohorts pass first, so EP-2 can now update syntax, lowering, generation,
+  baselines, and diff semantics from a stable EP-1 contract instead of patching fixtures alone.
 
 
 ## Decision Log
@@ -168,6 +176,13 @@ plan.
   compatible dependency series without deciding the later Keiro release version.
   Date: 2026-08-11
 
+- Decision: Treat the generated catalog compilation failure as EP-2 work and complete EP-1 at the
+  hand-written runtime boundary.
+  Rationale: EP-2 is the registered hard dependency for candidate-Language-5 syntax, scaffold
+  output, baselines, and policy-change classification. Updating only generated constructor calls
+  in EP-1 would split one language contract across plans.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -176,4 +191,15 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. Keiro now records Kiroku's explicit missing-checkpoint policy as catalog
+identity, rejects current-head initialization when replay must reconstruct a cleared target, and
+uses Kiroku's public transaction API for both grouped and unmanaged rebuild resets. Operator
+reports expose the policy, grouped preparation returns exact persisted member keys, and a missing
+declared subscription condemns the full fence/target/dedup/checkpoint transaction. ADR-31 records
+the durable ownership and replay-safety boundary.
+
+The runtime, operations, Jitsurei, documentation, Haddock, formatting, ADR, capability, and SQL
+audits pass against published `kiroku-store` 0.5.0.0. The remaining red whole-repository check is
+the expected generated Language 5 constructor gap, now the first concrete acceptance fixture for
+EP-2. The MasterPlan remains in progress until EP-2 makes the language and generated artifacts
+express the completed runtime contract.

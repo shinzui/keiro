@@ -46,8 +46,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-11T18:44:58Z) Milestone 3: replaced raw checkpoint SQL with Kiroku's reset
   transaction, condemned missing declarations, returned exact reset keys, and proved
   commit/rollback behavior in PostgreSQL.
-- [ ] Milestone 4: update examples, operator docs, changelogs, capability evidence, ADRs, and all
-  source-cohort validation while leaving release versions and public bounds unchanged.
+- [x] (2026-08-11T19:02:22Z) Milestone 4: updated examples, operator docs, changelogs,
+  capability evidence, Haddocks, and ADR-31; the EP-1 source cohort passes against released
+  Kiroku 0.5, with generated candidate-Language-5 adoption left to dependent EP-2.
 
 
 ## Surprises & Discoveries
@@ -75,6 +76,12 @@ implementation. Provide concise evidence.
   weakening transactionality. The grouped path additionally treats `missingSubscriptionNames` as
   a typed failure and exposes the exact two-member `resetCheckpointKeys`; the 466-example Keiro
   suite proves the failure rolls back targets, fence state, dedup rows, and matched checkpoints.
+- The repository has no `just check-adr` recipe; its strict profile-governed gate is
+  `just adr-validate`. The latter validates all 31 ADR concepts, including new ADR-31.
+- A clean `just verify` passes the Jitsurei rehearsal, workspace build, 466-example Keiro suite,
+  PGMQ suite, and operations suite before the generated mapped-readmodel catalog fails to compile:
+  its positional `SubscriptionDeclaration` lacks the new policy argument. This is the exact
+  generator/syntax/diff seam owned by dependent EP-2, not a hand-written EP-1 declaration gap.
 
 
 ## Decision Log
@@ -118,6 +125,12 @@ Record every decision made while working on the plan.
   still belong to the later coordinated release.
   Date: 2026-08-11
 
+- Decision: Complete EP-1 after its hand-written runtime, operator, example, documentation, and
+  dependency cohort passes; carry the generated-constructor failure into EP-2 acceptance.
+  Rationale: Patching generated fixtures alone would bypass the required Language 5 syntax,
+  lowering, scaffold, persisted baseline, and diff contract that EP-2 owns as one change.
+  Date: 2026-08-11
+
 
 ## Outcomes & Retrospective
 
@@ -126,7 +139,21 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-1 now consumes published `kiroku-store` 0.5.0.0 with direct bounds `>=0.5 && <0.6`. Every
+hand-written subscription makes absent-row behavior explicit; registration, inventory,
+fingerprints, human rendering, and JSON share the same stable policy. Startup rejects the one
+history-skipping combination before effects begin. Grouped rebuild uses Kiroku's public reset
+transaction, reports exact member keys, and rolls back all preparation when a declared name is
+missing; unmanaged rebuild no longer owns checkpoint SQL either.
+
+The user guide, changelogs, capability CAP-6, public Haddocks, and
+[ADR-31](../adr/0031-subscription-checkpoint-policy-is-catalog-identity-and-replay-safety.md)
+record the contract. `cabal build keiro jitsurei`, `cabal test keiro:keiro-test` (466 examples),
+`cabal haddock keiro`, `nix fmt`, `just adr-validate`, `just capabilities-validate`, and
+`git diff --check` pass. The production SQL audit finds no Kiroku subscription-table update and
+there is no `cabal.project.local` override. Full `just verify` deliberately remains red at the
+generated candidate-Language-5 catalog constructor until EP-2 supplies the required syntax,
+lowering, generation, and evolution classification together.
 
 
 ## Context and Orientation
@@ -134,8 +161,8 @@ this section into docs/adr/. Keep task-local execution details here.
 Keiro's projection catalog is the typed runtime description shared by application startup,
 coordinated rebuilds, and operators. `keiro/src/Keiro/Projection/Catalog.hs` defines
 `SubscriptionDeclaration`, `InventorySubscription`, `AsyncProjectionRegistration`, validation,
-the deterministic catalog fingerprint, and JSON/operator rendering. A subscription declaration
-currently contains its catalog ID, Kiroku subscription name, source, and claim site. It does not
+the deterministic catalog fingerprint, and JSON/operator rendering. Before EP-1, a subscription
+declaration contained its catalog ID, Kiroku subscription name, source, and claim site but did not
 state missing-checkpoint behavior.
 
 In this plan, a **missing checkpoint** means no Kiroku row for the exact subscription/member key.
@@ -146,8 +173,8 @@ it also establishes that an existing row always wins. `FromBeginning` materializ
 `FromCurrentHead` atomically captures and stores the current event-store head, and `FailIfMissing`
 refuses startup before invoking the handler.
 
-`keiro/src/Keiro/ReadModel/Rebuild/Group.hs` prepares coordinated rebuilds. It acquires the fence,
-prepares every target, and currently issues Kiroku-schema SQL itself to set matching subscription
+`keiro/src/Keiro/ReadModel/Rebuild/Group.hs` prepares coordinated rebuilds. Before EP-1 it acquired
+the fence, prepared every target, and issued Kiroku-schema SQL itself to set matching subscription
 rows to position zero. A **condemned transaction** is a Hasql transaction deliberately marked for
 rollback after a semantic check fails. The Kiroku prerequisite exposes
 `resetSubscriptionCheckpointsTx`, which returns exact affected member keys and requested names for
@@ -159,11 +186,12 @@ which no rows existed. Use that result inside the existing preparation transacti
 `jitsurei/` contains executable examples and exhaustive declaration sites. Search for record
 construction rather than assuming `defaultSubscriptionConfig` reaches every registration.
 
-[ADR 26](../adr/0026-projection-catalog-identities.md) establishes catalog identities and their
-shared runtime/operations role. [ADR 28](../adr/0028-library-owned-operator-commands.md) forbids
+[ADR 26](../adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md)
+establishes catalog identities and their shared runtime/operations role.
+[ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md) forbids
 private dependency-table SQL when the owning library can provide a public operator API.
-[ADR 4](../adr/0004-versioned-api-evolution-gates.md) governs the later version/bounds gate; this
-plan changes source contracts but does not cross the release gate. The ownership and write-path
+[ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md) governs the later
+Keiro version gate; this plan changes source contracts but does not publish. The ownership and write-path
 evidence principles in `mori://shinzui/mori/okf/adrs/concepts/ADR-20` and
 `mori://shinzui/mori/okf/adrs/concepts/ADR-21` reinforce those local decisions. The motivating
 request is `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-3`.
@@ -173,7 +201,8 @@ request is `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-3`.
 
 Milestone 1 establishes one inspectable runtime contract. First confirm the completed exports of
 `mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit`
-from sibling source and make them available to Cabal through an untracked local project override.
+against the published `kiroku-store` 0.5 package, the upstream release tag, and the Mori-located
+source.
 In `Keiro.Projection.Catalog`, add `checkpointOnMissing :: MissingCheckpointPolicy` to
 `SubscriptionDeclaration` and carry it into `AsyncProjectionRegistration` and
 `InventorySubscription`. Include the stable constructor spelling in fingerprint input, human
@@ -202,9 +231,9 @@ checkpoint rows must match their pre-attempt values.
 Milestone 4 completes source adoption. Update projection/rebuild guides, public Haddocks,
 operations output examples, `CHANGELOG.md`, and capability evidence. Add or amend an ADR for the
 durable replay-safety rule and the Kiroku/Keiro ownership boundary. Audit for private table SQL and
-for declarations missing the new field. Run the full source cohort against the sibling Kiroku
-package, then remove the local override. Do not bump Keiro or Kiroku package versions, edit final
-dependency bounds, tag, upload, or mark the Kiroku request completed.
+for declarations missing the new field. Run the EP-1 source cohort against published Kiroku 0.5;
+the generated candidate-Language-5 cohort remains EP-2's hard downstream responsibility. Do not
+bump Keiro package versions, tag, upload, or alter the completed Kiroku request.
 
 
 ## Concrete Steps
@@ -227,11 +256,9 @@ rg -n 'SubscriptionDeclaration|InventorySubscription|AsyncProjectionRegistration
   keiro jitsurei docs
 ```
 
-The released baseline should still be `kiroku-store` 0.4.0.0. After
-`mori://shinzui/kiroku/plans/70-make-subscription-checkpoint-initialization-and-reset-semantics-explicit`
-is complete, use an untracked `cabal.project.local` entry for
-`../kiroku-project/kiroku/kiroku-store` if the normal workspace overlay does not already select it.
-Confirm with `git status --short` that the override is not staged and remove it before acceptance.
+The released baseline is `kiroku-store` 0.5.0.0. Resolve it from Hackage with direct bounds
+`>=0.5 && <0.6`; no source override is needed. The Mori-located checkout remains useful for API
+and behavioral verification, but the acceptance build must consume the published package.
 
 During milestones 1 and 2, run:
 
@@ -250,19 +277,22 @@ cabal test keiro:keiro-test \
 cabal test keiro:keiro-test
 ```
 
-At final source acceptance, run:
+At final EP-1 source acceptance, run:
 
 ```bash
-just verify
-just check-adr
+cabal build keiro jitsurei
+cabal test keiro:keiro-test
+cabal haddock keiro
+just adr-validate
+just capabilities-validate
 nix fmt
-nix flake check
 git diff --check
 git status --short
 ```
 
 Expected output contains no test or format failures, no private Kiroku checkpoint SQL in Keiro,
-and no tracked source override, release tag, or version/bounds-only release change.
+and no tracked source override, release tag, or Keiro version change. Whole-MasterPlan acceptance
+runs `just verify` and `nix flake check` after EP-2 updates the generated Language 5 cohort.
 
 
 ## Validation and Acceptance
@@ -286,8 +316,10 @@ Kiroku contains an update against its `subscriptions` table.
 
 The operator preview and JSON expose `checkpointOnMissing` for each subscription. At least one
 future-only example uses `FromCurrentHead`, a replayable projection uses `FromBeginning`, and a
-strict operational example uses `FailIfMissing`. The complete `cabal test`, `just verify`, ADR, and
-flake checks pass against sibling Kiroku source without publishing artifacts.
+strict operational example uses `FailIfMissing`. The EP-1 build, test, Haddock, ADR, capability,
+format, and audit checks pass against published Kiroku 0.5 without publishing artifacts. EP-2
+supplies the generated candidate-Language-5 declarations before whole-repository `just verify`
+and flake acceptance.
 
 
 ## Idempotence and Recovery
@@ -302,8 +334,8 @@ failure, condemn the complete transaction and retry only after the operator repa
 worker state or changes the declared group. Never recover by issuing private SQL or synthesizing
 consumer-group rows.
 
-If sibling-source compilation is interrupted, remove only the untracked local Cabal override and
-re-run the released build. Do not revert unrelated work, move public tags, or publish an
+If dependency resolution is interrupted, refresh the Cabal index and re-run the released build.
+Do not add a lasting source override, revert unrelated work, move public tags, or publish an
 intermediate package. Preserve the plan and request as evidence if implementation is backed out.
 
 
@@ -348,6 +380,6 @@ layout may follow existing Keiro naming conventions, but errors must remain stru
 do not reduce them to strings.
 
 EP-2, [Plan 216](216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md),
-generates these declarations and is a hard downstream dependency. Hackage 0.4.0.0 and upstream tag
-`kiroku-store-v0.4.0.0` remain the released dependency baseline until the later release workflow
-selects versions and bounds.
+generates these declarations and is a hard downstream dependency. Hackage 0.5.0.0 and upstream tag
+`kiroku-store-v0.5.0.0` are the accepted dependency baseline; the later release workflow still
+selects Keiro's package version and publishes its artifacts.

@@ -141,7 +141,8 @@ data RebuildStartError
   | RebuildGroupUnregistered !RebuildGroupId
   | RebuildCatalogFingerprintDrift !RebuildGroupId !Text !Text
   | RebuildGroupNotLive !RebuildGroupId !GroupLifecycleStatus !(Maybe RebuildRunId)
-  | RebuildSubscriptionCheckpointsMissing !RebuildGroupId ![SubscriptionName]
+  | -- | At least one catalog-declared subscription had no persisted member to reset.
+    RebuildSubscriptionCheckpointsMissing !RebuildGroupId ![SubscriptionName]
   deriving stock (Eq, Show, Generic)
 
 data GroupTransitionError

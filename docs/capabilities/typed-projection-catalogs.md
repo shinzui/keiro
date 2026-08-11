@@ -1,7 +1,7 @@
 ---
 title: "Typed projection catalogs and coordinated rebuilds"
 type: Capability
-description: "Declare a pure typed inventory of query models, physical targets, atomic rebuild groups, and projection owners, then rebuild a whole group atomically behind one writer fence."
+description: "Declare a pure typed inventory of query models, physical targets, atomic rebuild groups, projection owners, and missing-checkpoint policy, then rebuild a whole group atomically behind one writer fence."
 generated:
   by: claude-code/sonnet-4.5
   at: "2026-08-08T00:00:00Z"
@@ -19,16 +19,16 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/CatalogSpec.hs
-    proves: "Catalog validation accumulates stable multi-site diagnostics, separates query models / physical targets / rebuild groups / owners, and produces deterministic inventory rendering and SHA-256 fingerprints."
+    proves: "Catalog validation accumulates stable multi-site diagnostics, carries explicit missing-checkpoint policy into inventory and registration, fingerprints policy changes, and rejects future-only initialization for replayable clear-before-replay targets."
   - kind: test
     resource: keiro/test/GroupRebuildSpec.hs
-    proves: "'beginGroupRebuild' atomically fences a rebuild group, TRUNCATEs its declared clear-before-replay tables together, preserves reconcile targets, and returns typed fenced outcomes without committing append/dedup/target writes on failure."
+    proves: "'beginGroupRebuild' uses Kiroku's public transaction API to reset every persisted subscription member, reports exact keys, and rolls back the fence, target clear, dedup deletion, and matched resets when a declared name is missing."
   - kind: test
     resource: keiro/test/ProjectionReplaySpec.hs
     proves: "The catalog history runner captures an immutable Kiroku head, k-way merges category history in global order, resumes only an exact replay contract, and promotes only after complete source exhaustion and catalog verification."
   - kind: module
     resource: keiro/src/Keiro/Projection/Catalog.hs
-    proves: "The pure catalog type: query models, physical targets, atomic rebuild groups, ordered owners, reset-policy-independent-from-replay-policy, and unmanaged compatibility wrappers for legacy read-model/projection values."
+    proves: "The pure catalog type projects missing-checkpoint policy into registration and inventory with stable rendering, ordering, and fingerprint input beside independent target-reset and replay policies."
 ---
 
 # Typed projection catalogs and coordinated rebuilds
@@ -44,6 +44,14 @@ async dedup/checkpoint resets from the catalog — and the catalog history runne
 rebuilds by k-way merging category history in global order, resuming an exact
 `keiro/projection-replay/v1` contract and promoting only after complete source
 exhaustion and verification.
+
+Each async declaration makes absent-row behavior explicit as `FromBeginning`,
+`FromCurrentHead`, or `FailIfMissing`. Existing durable member rows always take
+precedence. The policy is catalog identity and operator-visible inventory, and
+validation refuses `FromCurrentHead` when a replayable owner clears its target
+before replay. Coordinated rebuilds call Kiroku's public reset transaction,
+return the exact member keys moved, and condemn the whole preparation when any
+declared subscription has no persisted member.
 
 This is recorded as its own capability rather than an advance of
 [CAP-5](read-models-and-projections.md)'s `since`, because it arrived in a later
@@ -67,10 +75,10 @@ beginGroupRebuild catalog groupName …   -- fence and rebuild the whole group
 - **This capability is unreleased** — it exists only on the default branch and
   is in no published release. Its `since` is `unreleased` for exactly that
   reason; do not depend on it from a Hackage pin.
-- Its evidence is the test suite and the module itself; there is no user guide
-  for the catalog yet, so its adoption story is weaker than the released
-  capabilities in this catalog. The durable migration it needs (native migration
-  0023) ships with it.
+- The [read-model and projection guide](../user/read-models-and-projections.md)
+  covers hand-written adoption, missing-checkpoint policy, coordinated rebuild,
+  and staged migration. The durable migration it needs (native migration 0023)
+  ships with it.
 - The catalog runner's target writes are committed by consumer-owned SQL at the
   physical-target boundary; the catalog validates structure and ordering but does
   not check the SQL a consumer supplies for a target.
