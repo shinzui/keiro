@@ -87,6 +87,7 @@ library
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.ProjectionMappedImpact
+    Keiro.Dsl.ProjectionSupply
     Keiro.Dsl.ReadModelQueryContract
     Keiro.Dsl.ReadModelShape
     Keiro.Dsl.ReplayImpact

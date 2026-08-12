@@ -42,7 +42,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] 2026-08-12T12:41:56Z — M1: added the normalized `ResolvedQuerySupply`/handler-capability view, validated empty/split supplier diagnostics, and positive/negative `keiro-test` coverage. `cabal test keiro-test --test-option=--match --test-option="Keiro.Projection.Catalog"` passed 15 examples with 0 failures.
-- [ ] M2: make Language 5 catalog-managed read-model validation consume the authoritative target-owner relation; version-gate legacy standalone aggregate behavior and reject double ownership.
+- [x] 2026-08-12T13:04:36Z — M2: added the shared `Keiro.Dsl.ProjectionSupply` analysis, made Language 5 catalog-bound read models resolve exactly one owner/group from their complete observed-target set, preserved the legacy aggregate reference rule outside catalog-bound Language 5, and added deterministic split-owner/legacy-conflict diagnostics. The focused language-5 projection-catalog suite passed 13 examples with 0 failures.
 - [ ] M3: update generated catalog selection, scaffold plans/ledgers, diff facts, harness facts, workspace composition, and compiled conformance for one owner supplying several queries.
 - [ ] M4: update guides, API reference, changelogs, ADR 0026, and ADR 0032 identity notes; run repository-wide verification and update MasterPlan 38.
 
@@ -68,6 +68,11 @@ implementation. Provide concise evidence.
   to that canonical identity contract. The new supply resolver is order-independent, but
   the fingerprint correction is deferred to Plan 244's already-planned format bump rather
   than silently changing v2/v1 identity in this plan.
+- Milestone 2 (2026-08-12): the existing candidate fixture declared both a top-level
+  `projection-owner order_summary_writer` and an aggregate-local `projection order_inline`
+  for the same catalog-bound query. Removing the legacy clause also removed the duplicate
+  mapped-consumer fact; the catalog owner remains the sole mapped projection consumer and
+  supplies the generated inline handler independently.
 
 
 ## Decision Log
@@ -104,6 +109,14 @@ Record every decision made while working on the plan.
   owner target order. It does not. Correcting that preimage without a prefix would violate
   ADR 0032; Plan 244 already owns the next catalog/slice/contract/replay formats and can
   include the correction with explicit adoption evidence.
+  Date: 2026-08-12
+- Decision: Publish the pure DSL supply analysis as `Keiro.Dsl.ProjectionSupply` and map
+  only relation-owned failures to new query diagnostics.
+  Rationale: validation, scaffold planning, workspace planning, diff, and harness code all
+  need the same normalized owner/query record. Existing target/group validators remain the
+  primary source for missing/multiple owner and malformed group claims, which avoids
+  redundant query-level noise while split valid owners and legacy double ownership receive
+  precise query diagnostics with related owner/clause locations.
   Date: 2026-08-12
 
 

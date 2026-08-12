@@ -1,0 +1,71 @@
+language keiro-dsl 5
+context projection-supply-demo
+
+target catalog_state {
+  schema = "catalog"
+  table = "catalog_state"
+  reset = preserve
+}
+
+target catalog_layouts {
+  schema = "catalog"
+  table = "catalog_layouts"
+  reset = preserve
+}
+
+target catalog_keys {
+  schema = "catalog"
+  table = "catalog_keys"
+  reset = preserve
+}
+
+rebuild-group catalog_group {
+  targets = [ catalog_state catalog_layouts catalog_keys ]
+  order = [ catalog_state catalog_layouts catalog_keys ]
+}
+
+projection-owner catalog_writer {
+  source = aggregate Catalog
+  feed = inline
+  group = catalog_group
+  targets = [ catalog_state catalog_layouts catalog_keys ]
+  order = 10
+  replay = explicit
+}
+
+readmodel catalog_validation {
+  columns {
+    valid bool required
+  }
+  version = 1
+  shape = "fnv1a:56db3cd756d16223"
+  consistency = Eventual
+  feed = inline
+  group = catalog_group
+  targets = [ catalog_state catalog_layouts ]
+  backing = catalog_state
+}
+
+readmodel catalog_administration {
+  columns {
+    key_id text required
+  }
+  version = 1
+  shape = "fnv1a:da61428fca9d41b3"
+  consistency = Eventual
+  feed = inline
+  group = catalog_group
+  targets = [ catalog_keys ]
+}
+
+aggregate Catalog
+  regs
+    version Natural = 0
+  states Empty Active!
+
+  command Activate { version:Natural }
+  event Activated = fields(Activate)
+
+  Empty -- Activate --> write version := cmd.version ; emit Activated ; goto Active
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

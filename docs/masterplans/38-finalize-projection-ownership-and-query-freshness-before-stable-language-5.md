@@ -168,7 +168,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [x] EP-1 (243) M1: runtime owner/query resolution type, capability matrix, and deterministic catalog diagnostics
-- [ ] EP-1 (243) M2: Language 5 catalog-managed read-model validation uses owner/target resolution; legacy standalone behavior remains version-gated
+- [x] EP-1 (243) M2: Language 5 catalog-managed read-model validation uses owner/target resolution; legacy standalone behavior remains version-gated
 - [ ] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
 - [ ] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
 - [ ] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types

@@ -205,9 +205,6 @@ aggregate Orders
 
   wire kind=ctorName fields=camelCase schemaVersion=1
 
-  projection order_inline key=total
-    status-map { OrderRecorded=>recorded }
-
 aggregate Shipments
   regs
     accepted Bool = False

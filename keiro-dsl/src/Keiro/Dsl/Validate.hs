@@ -50,6 +50,7 @@ import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (LanguageVersion, RuntimeCapability (..), SourceLanguage (..), effectiveLanguageVersion, languageVersionText, runtimeProfileHasCapability, sourceFormText)
 import Keiro.Dsl.NominalType qualified as Nominal
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
@@ -237,6 +238,9 @@ data DiagnosticCode
   | CatalogReadModelPhysicalOverride
   | CatalogReadModelBackingRequired
   | CatalogReadModelBackingUnobserved
+  | CatalogReadModelSupplierMissing
+  | CatalogReadModelMultipleSuppliers
+  | CatalogReadModelLegacyProjectionConflict
   | CatalogTargetAdded
   | CatalogTargetRemoved
   | CatalogTargetLocationChanged
@@ -2295,7 +2299,7 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   ]
 
 validateProjectionCatalogFleet :: Spec -> [Diagnostic]
-validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders
+validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> supplyDiagnostics
   where
     targets = [target | NProjectionTarget target <- specNodes spec]
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
@@ -2353,6 +2357,62 @@ validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> pr
           "projection owner '" <> poName owner <> "' reuses handler order " <> T.pack (show (poOrder owner)) <> " in group '" <> poGroup owner <> "'"
       | owner <- duplicatesBy (\owner -> (poGroup owner, poOrder owner)) owners
       ]
+    supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics (projectionSupplyIssues (analyzeProjectionSupplies spec))
+
+projectionSupplyIssueDiagnostics :: ProjectionSupplyIssue -> [Diagnostic]
+projectionSupplyIssueDiagnostics = \case
+  SupplyObservedTargetsEmpty readModel ->
+    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelBindingMissing $
+        "readmodel '" <> rmName readModel <> "' must observe at least one target in its projection catalog group"
+    ]
+  SupplyObservedTargetUnknown readModel targetName ->
+    [ mkErr (locLine (rmLoc readModel)) CatalogTargetUnknown $
+        "readmodel '" <> rmName readModel <> "' observes undeclared target '" <> targetName <> "'"
+    ]
+  SupplyObservedTargetOutsideGroup readModel targetName ->
+    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelTargetOutsideGroup $
+        "readmodel '" <> rmName readModel <> "' observes target '" <> targetName <> "' outside its bound group"
+    ]
+  SupplyObservedTargetWithoutOwner _ _ -> []
+  SupplyObservedTargetWithMultipleOwners _ _ _ -> []
+  SupplyOwnerGroupMismatch _ _ _ -> []
+  SupplyQueryWithoutOwner readModel ->
+    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelSupplierMissing $
+        "readmodel '" <> rmName readModel <> "' does not resolve to one projection owner through its observed targets"
+    ]
+  SupplyQueryWithMultipleOwners readModel owners ->
+    [ Diagnostic
+        { line = locLine (rmLoc readModel),
+          severity = Error,
+          code = CatalogReadModelMultipleSuppliers,
+          relatedLocations =
+            [ (locLine (poLoc owner), "projection owner '" <> poName owner <> "' supplies part of the observed target set")
+            | owner <- sortOn poName owners
+            ],
+          message =
+            "readmodel '"
+              <> rmName readModel
+              <> "' spans several projection owners ("
+              <> T.intercalate ", " (map poName (sortOn poName owners))
+              <> "); split the query or declare one owner for the complete observed target set"
+        }
+    ]
+  SupplyLegacyProjectionConflict readModel aggregate projection ->
+    [ Diagnostic
+        { line = locLine (rmLoc readModel),
+          severity = Error,
+          code = CatalogReadModelLegacyProjectionConflict,
+          relatedLocations =
+            [ ( locLine (projLoc projection),
+                "aggregate '" <> aggName aggregate <> "' also names this readmodel in its legacy projection clause"
+              )
+            ],
+          message =
+            "catalog-bound readmodel '"
+              <> rmName readModel
+              <> "' derives its supplier from projection-owner target ownership; remove the legacy aggregate projection clause"
+        }
+    ]
 
 validateProjectionTarget :: EffectiveLanguageContract -> ProjectionTargetNode -> [Diagnostic]
 validateProjectionTarget languageContract target =
@@ -2461,9 +2521,8 @@ validateProjectionOwner languageContract spec owner
       | poFeed owner == RmSubscription,
         null
           [ ()
-          | NReadModel readModel <- specNodes spec,
-            rmGroup readModel == Just (poGroup owner),
-            any (`elem` poTargets owner) (rmObservedTargets readModel)
+          | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+            supplyProjectionOwner supply == poName owner
           ]
       ]
     replayRules =
@@ -2534,12 +2593,16 @@ validateReadModel languageContract spec readModel =
       | rmFeed readModel == RmInline,
         rmSubscription readModel /= Nothing
       ]
-    inlineReference =
-      [ mkErr readModelLine RmInlineFeedUnreferenced $
-          "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
-      | rmFeed readModel == RmInline,
-        rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
-      ]
+    inlineReference
+      | hasProjectionCatalog languageContract,
+        rmGroup readModel /= Nothing =
+          []
+      | otherwise =
+          [ mkErr readModelLine RmInlineFeedUnreferenced $
+              "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
+          | rmFeed readModel == RmInline,
+            rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
+          ]
     versionFloor =
       [ mkErr readModelLine ReadModelVersionBelowMinimum $
           "readmodel '" <> rmName readModel <> "' version must be at least 1"
@@ -2579,7 +2642,7 @@ validateReadModel languageContract spec readModel =
       ]
     catalogBinding
       | not (hasProjectionCatalog languageContract) = []
-      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup <> physicalOverride <> backingRequired <> backingUnobserved
+      | otherwise = missingGroup <> unknownGroup <> physicalOverride <> backingRequired <> backingUnobserved
       where
         groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
         missingGroup =
@@ -2592,20 +2655,6 @@ validateReadModel languageContract spec readModel =
               "readmodel '" <> rmName readModel <> "' references undeclared rebuild group '" <> groupName <> "'"
           | Just groupName <- [rmGroup readModel],
             groupName `notElem` map rgName groups
-          ]
-        missingTargets =
-          [ mkErr readModelLine CatalogReadModelBindingMissing $
-              "readmodel '" <> rmName readModel <> "' must observe at least one target in its projection catalog group"
-          | null (rmObservedTargets readModel)
-          ]
-        groupTargets = case [rgTargets groupNode | groupNode <- groups, Just (rgName groupNode) == rmGroup readModel] of
-          targets : _ -> targets
-          [] -> []
-        targetOutsideGroup =
-          [ mkErr readModelLine CatalogReadModelTargetOutsideGroup $
-              "readmodel '" <> rmName readModel <> "' observes target '" <> targetName <> "' outside its bound group"
-          | targetName <- rmObservedTargets readModel,
-            targetName `notElem` groupTargets
           ]
         physicalOverride =
           [ mkErr readModelLine CatalogReadModelPhysicalOverride $

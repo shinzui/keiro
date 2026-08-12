@@ -63,6 +63,7 @@ import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalid
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
@@ -2082,6 +2083,102 @@ main = hspec $ do
       map poName owners `shouldBe` ["order_summary_writer", "shipment_writer", "audit_writer"]
       map poCheckpointOnMissing owners `shouldBe` [[], [], [CheckpointFromCurrentHead]]
 
+    it "resolves one inline owner for several query models without legacy aggregate clauses" $ do
+      source <- readTestText "test/fixtures/projection-owner-multi-query.keiro"
+      service <- checkedServiceFromText "projection-owner-multi-query.keiro" source
+      validateService service `shouldBe` []
+      let analysis = analyzeProjectionSupplies (checkedSpec service)
+          supplies = resolvedProjectionSupplies analysis
+      projectionSupplyIssues analysis `shouldBe` []
+      map supplyQueryModel supplies
+        `shouldBe` ["catalog_administration", "catalog_validation"]
+      map supplyProjectionOwner supplies
+        `shouldBe` ["catalog_writer", "catalog_writer"]
+      map (NE.toList . supplyObservedTargets) supplies
+        `shouldBe` [["catalog_keys"], ["catalog_layouts", "catalog_state"]]
+
+      reordered <-
+        checkedServiceFromText
+          "projection-owner-multi-query-reordered.keiro"
+          ( T.replace
+              "targets = [ catalog_state catalog_layouts ]"
+              "targets = [ catalog_layouts catalog_state ]"
+              ( T.replace
+                  "targets = [ catalog_state catalog_layouts catalog_keys ]\n  order = 10"
+                  "targets = [ catalog_keys catalog_layouts catalog_state ]\n  order = 10"
+                  source
+              )
+          )
+      validateService reordered `shouldBe` []
+      resolvedProjectionSupplies (analyzeProjectionSupplies (checkedSpec reordered))
+        `shouldBe` supplies
+
+    it "diagnoses invalid query supply and catalog/legacy double ownership deterministically" $ do
+      source <- readTestText "test/fixtures/projection-owner-multi-query.keiro"
+      let diagnosticsForSource caseName mutated = do
+            service <- checkedServiceFromText caseName mutated
+            pure (validateService service)
+          codesForSource caseName mutated = map code <$> diagnosticsForSource caseName mutated
+          splitOwnerMutation =
+            T.replace
+              "targets = [ catalog_state catalog_layouts ]\n  backing = catalog_state"
+              "targets = [ catalog_state catalog_layouts catalog_keys ]\n  backing = catalog_state"
+              . T.replace
+                "  replay = explicit\n}\n\nreadmodel catalog_validation"
+                "  replay = explicit\n}\n\nprojection-owner catalog_keys_writer {\n  source = aggregate Catalog\n  feed = inline\n  group = catalog_group\n  targets = [ catalog_keys ]\n  order = 20\n  replay = explicit\n}\n\nreadmodel catalog_validation"
+              . T.replace
+                "targets = [ catalog_state catalog_layouts catalog_keys ]\n  order = 10"
+                "targets = [ catalog_state catalog_layouts ]\n  order = 10"
+      emptyCodes <- codesForSource "projection-owner-empty-query.keiro" (T.replace "targets = [ catalog_keys ]" "targets = [ ]" source)
+      emptyCodes `shouldContain` [CatalogReadModelBindingMissing]
+      unknownCodes <- codesForSource "projection-owner-unknown-query-target.keiro" (T.replace "targets = [ catalog_keys ]" "targets = [ missing_target ]" source)
+      unknownCodes `shouldContain` [CatalogTargetUnknown]
+      missingCodes <- codesForSource "projection-owner-missing-query-owner.keiro" (T.replace "targets = [ catalog_state catalog_layouts catalog_keys ]\n  order = 10" "targets = [ catalog_state catalog_layouts ]\n  order = 10" source)
+      missingCodes `shouldContain` [CatalogTargetUnowned]
+
+      splitDiagnostics <- diagnosticsForSource "projection-owner-split-query.keiro" (splitOwnerMutation source)
+      map code splitDiagnostics `shouldContain` [CatalogReadModelMultipleSuppliers]
+      let splitSupplyDiagnostics = filter ((== CatalogReadModelMultipleSuppliers) . code) splitDiagnostics
+      map (map snd . relatedLocations) splitSupplyDiagnostics
+        `shouldBe` [ [ "projection owner 'catalog_keys_writer' supplies part of the observed target set",
+                       "projection owner 'catalog_writer' supplies part of the observed target set"
+                     ]
+                   ]
+      reorderedSplitDiagnostics <-
+        diagnosticsForSource
+          "projection-owner-split-query-reordered.keiro"
+          ( T.replace
+              "targets = [ catalog_state catalog_layouts catalog_keys ]"
+              "targets = [ catalog_keys catalog_layouts catalog_state ]"
+              (splitOwnerMutation source)
+          )
+      map (\diagnostic -> (code diagnostic, map snd (relatedLocations diagnostic))) reorderedSplitDiagnostics
+        `shouldContain` map (\diagnostic -> (code diagnostic, map snd (relatedLocations diagnostic))) splitSupplyDiagnostics
+
+      groupMismatchCodes <-
+        codesForSource
+          "projection-owner-group-mismatch.keiro"
+          ( T.replace
+              "targets = [ catalog_state catalog_layouts catalog_keys ]\n  order = [ catalog_state catalog_layouts catalog_keys ]\n}"
+              "targets = [ catalog_state catalog_layouts ]\n  order = [ catalog_state catalog_layouts ]\n}\n\nrebuild-group catalog_keys_group {\n  targets = [ catalog_keys ]\n  order = [ catalog_keys ]\n}"
+              source
+          )
+      groupMismatchCodes `shouldContain` [CatalogReadModelTargetOutsideGroup]
+      groupMismatchCodes `shouldContain` [CatalogProjectionTargetOutsideGroup]
+
+      conflictDiagnostics <-
+        diagnosticsForSource
+          "projection-owner-legacy-conflict.keiro"
+          ( T.replace
+              "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              "  wire kind=ctorName fields=camelCase schemaVersion=1\n\n  projection catalog_validation key=version\n    status-map { Activated=>active }"
+              source
+          )
+      let conflicts = filter ((== CatalogReadModelLegacyProjectionConflict) . code) conflictDiagnostics
+      length conflicts `shouldBe` 1
+      conflicts `shouldSatisfy` all ((== 1) . length . relatedLocations)
+      conflicts `shouldSatisfy` all (T.isInfixOf "remove the legacy aggregate projection clause" . message)
+
     it "derives and restores mapped projection impact for the compiled A/B catalog fixture" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
       service <- checkedServiceFromText "projection-catalog.keiro" source
@@ -2089,14 +2186,10 @@ main = hspec $ do
         Nothing -> expectationFailure "projection fixture type graph did not resolve" >> fail "unreachable"
         Just value -> pure value
       ProjectionImpact.projectionConsumersFor baseImpact (MappedKey "OrderPayload")
-        `shouldBe` Set.fromList
-          [ AggregateInlineProjectionConsumer "Orders" "order_inline",
-            CatalogProjectionConsumer "order_summary_writer" "Orders"
-          ]
+        `shouldBe` Set.singleton (CatalogProjectionConsumer "order_summary_writer" "Orders")
       ProjectionImpact.projectionConsumersFor baseImpact (MappedKey "SharedReference")
         `shouldBe` Set.fromList
-          [ AggregateInlineProjectionConsumer "Orders" "order_inline",
-            CatalogProjectionConsumer "order_summary_writer" "Orders",
+          [ CatalogProjectionConsumer "order_summary_writer" "Orders",
             CatalogProjectionConsumer "shipment_writer" "Shipments"
           ]
       ProjectionImpact.unsupported baseImpact
@@ -2134,7 +2227,7 @@ main = hspec $ do
       operationFingerprint <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") eventImpact
         `shouldNotBe` operationFingerprint <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") baseImpact
       ProjectionImpact.projectionConsumersFor sourceImpact (MappedKey "OrderPayload")
-        `shouldBe` Set.singleton (AggregateInlineProjectionConsumer "Orders" "order_inline")
+        `shouldBe` Set.empty
       operationReplay <$> findOperation (CatalogProjectionConsumer "shipment_writer" "Shipments") replayImpact
         `shouldBe` Just True
       operationObservers <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") observationImpact
