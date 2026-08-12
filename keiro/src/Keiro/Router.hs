@@ -55,6 +55,7 @@ where
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.Coerce (coerce)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
@@ -80,10 +81,9 @@ import Keiro.ProcessManager
     WorkerOptions (..),
     ackForCommandError,
     ackForDomainSummary,
-    confirmBenignDuplicate,
     decideForFailures,
     defaultWorkerOptions,
-    firstExistingEventId,
+    dispatchDeduplicatedCommand,
     legacyDeterministicCommandId,
     summarizeDomainCommandResult,
   )
@@ -237,6 +237,32 @@ deterministicRouterCommandId routerName correlationId sourceEventId targetStream
               bytes
             ]
 
+routerCommandIdProbes ::
+  Text ->
+  Text ->
+  EventId ->
+  Int ->
+  StreamName ->
+  Int ->
+  NonEmpty EventId
+routerCommandIdProbes routerName correlationId sourceEventId legacyIndex targetStreamName occurrence =
+  deterministicRouterCommandId routerName correlationId sourceEventId targetStreamName occurrence
+    :| [legacyDeterministicCommandId routerName correlationId sourceEventId legacyIndex]
+
+annotateRouterOccurrences ::
+  (PMCommand targetCi -> StreamName) ->
+  [PMCommand targetCi] ->
+  [(Int, Int, StreamName, PMCommand targetCi)]
+annotateRouterOccurrences streamNameOf commands =
+  snd (mapAccumL occurrenceStep Map.empty (zip [0 ..] commands))
+  where
+    occurrenceStep seen (legacyIndex, command) =
+      let targetStreamName = streamNameOf command
+          occurrence = Map.findWithDefault 0 targetStreamName seen
+       in ( Map.insert targetStreamName (occurrence + 1) seen,
+            (legacyIndex, occurrence, targetStreamName, command)
+          )
+
 -- | Resolve the targets for one source event, then dispatch one command per
 -- target with crash-safe, target-identity idempotency.
 --
@@ -295,20 +321,10 @@ dispatchRouterCommands ::
   [PMCommand targetCi] ->
   Eff es (RouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
 dispatchRouterCommands options routerName targetEventStream targetProjections correlationId sourceEventId commands = do
-  let named =
-        [ (streamNameOf command, command)
-        | command <- commands
-        ]
-      annotated = snd (mapAccumL occurrenceStep Map.empty (zip [0 ..] named))
-      occurrenceStep seen (legacyIndex, (targetStreamName, command)) =
-        let occurrence = Map.findWithDefault 0 targetStreamName seen
-         in ( Map.insert targetStreamName (occurrence + 1) seen,
-              (legacyIndex, occurrence, targetStreamName, command)
-            )
   results <-
     traverse
       dispatchCommand
-      annotated
+      (annotateRouterOccurrences streamNameOf commands)
   pure (RouterResult results)
   where
     streamNameOf command =
@@ -316,41 +332,31 @@ dispatchRouterCommands options routerName targetEventStream targetProjections co
         (retarget (command ^. #target))
 
     dispatchCommand (legacyIndex, occurrence, targetStreamName, command) = do
-      let commandId =
-            deterministicRouterCommandId
-              routerName
-              correlationId
-              sourceEventId
-              targetStreamName
-              occurrence
-          -- Transition: dispatches written by keiro versions that derived
-          -- positional ids must still dedup across the upgrade. ADR 0024 makes
-          -- this one window with the pre-UTF-8 process-manager probe and gives
-          -- the operator-attested removal criteria.
-          legacyCommandId =
-            legacyDeterministicCommandId
+      let commandProbes =
+            routerCommandIdProbes
               routerName
               correlationId
               sourceEventId
               legacyIndex
+              targetStreamName
+              occurrence
+          commandId = NonEmpty.head commandProbes
           targetOptions = options & #eventIds .~ [commandId]
           targetStream = retarget (command ^. #target)
-      existingCommandId <- firstExistingEventId options targetStreamName (commandId :| [legacyCommandId])
-      case existingCommandId of
-        Just matchedId -> pure (PMCommandDuplicate matchedId)
-        Nothing -> do
-          outcome <-
-            runCommandWithProjections
-              targetOptions
-              targetEventStream
-              targetStream
-              (command ^. #command)
-              (targetProjections (command ^. #target))
-          case outcome of
-            Right result -> pure (PMCommandAppended result)
-            Left err -> do
-              benign <- confirmBenignDuplicate targetStreamName commandId err
-              pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed targetStreamName err
+      dispatchDeduplicatedCommand
+        options
+        targetStreamName
+        commandProbes
+        PMCommandDuplicate
+        (PMCommandFailed targetStreamName)
+        PMCommandAppended
+        ( runCommandWithProjections
+            targetOptions
+            targetEventStream
+            targetStream
+            (command ^. #command)
+            (targetProjections (command ^. #target))
+        )
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -425,18 +431,8 @@ resolveDomainRouterCommands ::
   Eff es [(Int, Int, StreamName, PMCommand targetCi)]
 resolveDomainRouterCommands router input = do
   commands <- (router ^. #resolve) input
-  let named =
-        [ (streamNameOf command, command)
-        | command <- commands
-        ]
-  pure (snd (mapAccumL occurrenceStep Map.empty (zip [0 ..] named)))
+  pure (annotateRouterOccurrences streamNameOf commands)
   where
-    occurrenceStep seen (legacyIndex, (targetStreamName, command)) =
-      let occurrence = Map.findWithDefault 0 targetStreamName seen
-       in ( Map.insert targetStreamName (occurrence + 1) seen,
-            (legacyIndex, occurrence, targetStreamName, command)
-          )
-
     streamNameOf command =
       let targetEventStream = (router ^. #targetHandler) ^. #eventStream
        in ((unvalidated targetEventStream) ^. #resolveStreamName)
@@ -462,42 +458,32 @@ dispatchDomainRouterCommand ::
   (Int, Int, StreamName, PMCommand targetCi) ->
   Eff es (DomainPMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp)
 dispatchDomainRouterCommand options router correlationId sourceEventId (legacyIndex, occurrence, targetStreamName, command) = do
-  let commandId =
-        deterministicRouterCommandId
-          (router ^. #name)
-          correlationId
-          sourceEventId
-          targetStreamName
-          occurrence
-      legacyCommandId =
-        legacyDeterministicCommandId
+  let commandProbes =
+        routerCommandIdProbes
           (router ^. #name)
           correlationId
           sourceEventId
           legacyIndex
+          targetStreamName
+          occurrence
+      commandId = NonEmpty.head commandProbes
       targetOptions = options & #eventIds .~ [commandId]
       handler = router ^. #targetHandler
       targetStream = retarget (command ^. #target)
-  existingCommandId <- firstExistingEventId options targetStreamName (commandId :| [legacyCommandId])
-  case existingCommandId of
-    Just matchedId -> pure (DomainPMCommandDuplicate matchedId)
-    Nothing -> do
-      outcome <-
-        runDomainCommandWithProjections
-          targetOptions
-          handler
-          targetStream
-          (command ^. #command)
-          ((router ^. #targetProjections) (command ^. #target))
-      case outcome of
-        Right result -> pure (DomainPMCommandHandled result)
-        Left err -> do
-          benign <- confirmBenignDuplicate targetStreamName commandId err
-          pure
-            ( if benign
-                then DomainPMCommandDuplicate commandId
-                else DomainPMCommandFailed targetStreamName err
-            )
+  dispatchDeduplicatedCommand
+    options
+    targetStreamName
+    commandProbes
+    DomainPMCommandDuplicate
+    (DomainPMCommandFailed targetStreamName)
+    DomainPMCommandHandled
+    ( runDomainCommandWithProjections
+        targetOptions
+        handler
+        targetStream
+        (command ^. #command)
+        ((router ^. #targetProjections) (command ^. #target))
+    )
   where
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce

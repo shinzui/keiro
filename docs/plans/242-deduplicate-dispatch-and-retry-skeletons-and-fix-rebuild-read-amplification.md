@@ -66,13 +66,21 @@ telemetry.
 - [x] Milestone 1: focused 46-example command and 2-example catalog-fence suites plus
       `just haskell-test` are green with zero test edits; the existing `command`
       baseline and 25% regression gate pass (2026-08-12T20:00:44Z).
-- [ ] Milestone 2 (blocked until `docs/plans/240-…` lands): re-read the post-240 dispatch
-      code and record the exact probe chain per site in this plan.
-- [ ] Milestone 2: add `dispatchDeduplicatedCommand` to `keiro/src/Keiro/ProcessManager.hs`
-      and `annotateRouterOccurrences` to `keiro/src/Keiro/Router.hs`; convert all four
-      dispatch sites.
-- [ ] Milestone 2: full suite green with zero test edits (including plan 240's bridge
-      tests); fan-out bench parity recorded.
+- [x] Milestone 2 prerequisite: re-read all four post-240 dispatch sites. Both router
+      sites probe the target-keyed, length-prefixed UTF-8 ID first and the frozen
+      pre-UTF-8 positional ID second; both process-manager sites use
+      `deterministicCommandIdProbes`, whose current UTF-8 ID is first and whose frozen
+      pre-UTF-8 ID is present second only for a seed that moved across encodings. Every
+      first hit reports the ID that hit; append-race confirmation uses and reports only
+      the primary ID (2026-08-12T20:02:31Z).
+- [x] Milestone 2: add `dispatchDeduplicatedCommand` to `keiro/src/Keiro/ProcessManager.hs`
+      and `annotateRouterOccurrences` plus `routerCommandIdProbes` to
+      `keiro/src/Keiro/Router.hs`; convert all four dispatch sites
+      (2026-08-12T20:06:23Z).
+- [x] Milestone 2: Router 24/24, ProcessManager 25/25, and deterministic-ID 5/5
+      focused examples plus `just haskell-test` are green with zero test edits; plan
+      240's bridge cases execute the shared helper and the existing command/fan-out
+      benchmark gate passes (2026-08-12T20:06:23Z).
 - [ ] Milestone 3 (blocked until `docs/plans/237-…` lands): rebase over the canonicalized
       `rebuildContract`; confirm the contract computation is untouched.
 - [ ] Milestone 3: add the read-counting spec example and record the pre-fix counts here.
@@ -117,6 +125,11 @@ Findings from plan research (2026-08-11), recorded because they shaped the desig
   preparation path became dead code. Removing it leaves `stepDetailedEither` as the one
   command-selection authority while preserving the public legacy result and telemetry
   adapters; the focused suites, full Haskell gate, and command benchmark gate all pass.
+- Milestone 2 verification (2026-08-12): three concurrent `cabal test` invocations
+  raced on Cabal's shared `dist-newstyle` package cache and temporary object files; one
+  completed while two failed with missing-file errors. Serial reruns of every affected
+  group passed. Repository-local Cabal builds therefore remain serialized for the rest
+  of this plan.
 
 
 ## Decision Log

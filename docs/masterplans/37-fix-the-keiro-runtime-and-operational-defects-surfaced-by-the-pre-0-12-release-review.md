@@ -178,7 +178,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-5 (241) M3: executable-level no-DB-contact rejection test, ADR 0028 distillation, and full 38-example keiro-ops suite (2026-08-12T19:52:30Z)
 - [ ] EP-6 (242): implementation started after complete child-plan read; EP-1/EP-4 soft dependencies satisfied (2026-08-12T19:54:01Z)
 - [x] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged; full Haskell and command benchmark gates pass (2026-08-12T20:00:44Z)
-- [ ] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper, benign-duplicate tests green
+- [x] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper; bridge, benign-duplicate, full Haskell, and fan-out benchmark gates green (2026-08-12T20:06:23Z)
 - [ ] EP-6 (242) M3 (after EP-1): rebuild paging reads each event once (interpose-counted), `rebuild` bench group added
 
 

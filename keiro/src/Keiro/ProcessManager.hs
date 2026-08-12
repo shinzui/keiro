@@ -135,6 +135,7 @@ module Keiro.ProcessManager
     deterministicCommandId,
     legacyDeterministicCommandId,
     deterministicCommandIdProbes,
+    dispatchDeduplicatedCommand,
     firstExistingEventId,
     eventAlreadyIn,
     confirmBenignDuplicate,
@@ -598,22 +599,20 @@ runProcessManagerOnce options manager sourceEvent input = do
           targetOptions = options & #eventIds .~ [commandId]
           targetStream = retarget (command ^. #target)
           targetStreamName = ((unvalidated (manager ^. #targetEventStream)) ^. #resolveStreamName) targetStream
-      existingCommandId <- firstExistingEventId options targetStreamName commandProbes
-      case existingCommandId of
-        Just matchedId -> pure (PMCommandDuplicate matchedId)
-        Nothing -> do
-          outcome <-
-            runCommandWithProjections
-              targetOptions
-              (manager ^. #targetEventStream)
-              targetStream
-              (command ^. #command)
-              ((manager ^. #targetProjections) (command ^. #target))
-          case outcome of
-            Right result -> pure (PMCommandAppended result)
-            Left err -> do
-              benign <- confirmBenignDuplicate targetStreamName commandId err
-              pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed targetStreamName err
+      dispatchDeduplicatedCommand
+        options
+        targetStreamName
+        commandProbes
+        PMCommandDuplicate
+        (PMCommandFailed targetStreamName)
+        PMCommandAppended
+        ( runCommandWithProjections
+            targetOptions
+            (manager ^. #targetEventStream)
+            targetStream
+            (command ^. #command)
+            ((manager ^. #targetProjections) (command ^. #target))
+        )
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -790,26 +789,20 @@ dispatchDomainProcessManagerCommand options manager correlationId sourceEventId 
       targetEventStream = handler ^. #eventStream
       targetStream = retarget (command ^. #target)
       targetStreamName = ((unvalidated targetEventStream) ^. #resolveStreamName) targetStream
-  existingCommandId <- firstExistingEventId options targetStreamName commandProbes
-  case existingCommandId of
-    Just matchedId -> pure (DomainPMCommandDuplicate matchedId)
-    Nothing -> do
-      outcome <-
-        runDomainCommandWithProjections
-          targetOptions
-          handler
-          targetStream
-          (command ^. #command)
-          ((manager ^. #targetProjections) (command ^. #target))
-      case outcome of
-        Right result -> pure (DomainPMCommandHandled result)
-        Left err -> do
-          benign <- confirmBenignDuplicate targetStreamName commandId err
-          pure
-            ( if benign
-                then DomainPMCommandDuplicate commandId
-                else DomainPMCommandFailed targetStreamName err
-            )
+  dispatchDeduplicatedCommand
+    options
+    targetStreamName
+    commandProbes
+    DomainPMCommandDuplicate
+    (DomainPMCommandFailed targetStreamName)
+    DomainPMCommandHandled
+    ( runDomainCommandWithProjections
+        targetOptions
+        handler
+        targetStream
+        (command ^. #command)
+        ((manager ^. #targetProjections) (command ^. #target))
+    )
   where
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -1149,6 +1142,31 @@ firstExistingEventId options streamName = go . NonEmpty.toList
       candidate : rest -> do
         exists <- eventAlreadyIn options streamName candidate
         if exists then pure (Just candidate) else go rest
+
+-- | Probe deterministic identities in order, dispatch only when none exists,
+-- and fold a concurrent append of the primary identity into a duplicate.
+dispatchDeduplicatedCommand ::
+  (Store :> es) =>
+  RunCommandOptions ->
+  StoreTypes.StreamName ->
+  NonEmpty EventId ->
+  (EventId -> result) ->
+  (CommandError -> result) ->
+  (value -> result) ->
+  Eff es (Either CommandError value) ->
+  Eff es result
+dispatchDeduplicatedCommand options streamName probes duplicate failure success dispatch = do
+  existing <- firstExistingEventId options streamName probes
+  case existing of
+    Just matchedId -> pure (duplicate matchedId)
+    Nothing -> do
+      outcome <- dispatch
+      case outcome of
+        Right value -> pure (success value)
+        Left err -> do
+          let primaryId = NonEmpty.head probes
+          benign <- confirmBenignDuplicate streamName primaryId err
+          pure (if benign then duplicate primaryId else failure err)
 
 -- | Decide whether a failed append is a benign duplicate of the write just
 -- attempted: whether @ourId@ is genuinely present in @streamName@.
