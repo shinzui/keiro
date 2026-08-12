@@ -1770,6 +1770,8 @@ main = hspec $ do
             "mapped-readmodel.keiro",
             "mapped-workqueue.keiro",
             "nominal-v1.keiro",
+            "outcome-identifier-legacy.keiro",
+            "outcome-identifier-v5.keiro",
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro"
           ]

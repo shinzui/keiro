@@ -77,7 +77,7 @@ ADR applies.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | In Progress |
+| 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | Complete |
 | 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | Not Started |
 | 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | Not Started |
 | 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | Not Started |
@@ -138,9 +138,9 @@ it establishes a durable API policy (indexed-only planning), a short ADR update 
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 (233) M1: red regression fixtures covering `outcome` as an identifier in every affected position across legacy + declared languages 1–4, plus the language-5 clause-boundary coexistence fixture
-- [ ] EP-1 (233) M2: contextual-keyword fix (drop the two reserved words, `try`/lookahead-guard the clause marker) turns the fixtures green with the v4 feature-gating test untouched
-- [ ] EP-1 (233) M3: corpus zero-drift proof, full gates, changelog, ADR-0016 distillation
+- [x] EP-1 (233) M1: red regression fixtures covering `outcome` as an identifier in every affected position across legacy + declared languages 1–4, plus the language-5 clause-boundary coexistence fixture
+- [x] EP-1 (233) M2: contextual-keyword fix (drop the two reserved words, `try`/lookahead-guard the clause marker) turns the fixtures green with the v4 feature-gating test untouched
+- [x] EP-1 (233) M3: corpus zero-drift proof, full gates, changelog, ADR-0016 distillation
 - [ ] EP-2 (234) M1: `CatalogReadModelPhysicalOverride` diagnostic forbids explicit table/schema on catalog-bound read models
 - [ ] EP-2 (234) M2: explicit order-insensitive `backing = <target>` binding; name-based resolution deduplicated across ScaffoldRun and WorkspaceScaffold; reorder diffs as nothing
 - [ ] EP-2 (234) M3: real grouped-harness facts against the generated ProjectionCatalog exports, with mutation-test proof
@@ -177,6 +177,11 @@ interactions between child plans. Provide concise evidence.
   duplicated copy in `keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs`; EP-2 deduplicates the
   resolution into one name-based implementation, or the workspace path would retain the
   targets[0] bug after the single-source path is fixed.
+- EP-1 completion (2026-08-12): the all-suites gate enforces two explicit fixture inventories
+  beyond the focused parser tests. A legacy compatibility fixture must be registered in
+  `keiro-dsl/test/conformance-baseline.json`, and any legacy or candidate-language fixture must
+  appear in the non-stable fixture list in `keiro-dsl/test/Main.hs`. EP-2 should account for
+  both policies when it adds or changes candidate-language-5 conformance evidence.
 
 
 ## Decision Log
@@ -210,4 +215,7 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. It restored `outcome` as an identifier in published languages and retained
+typed domain outcomes through contextual clause parsing in candidate language 5. Regression,
+compiled conformance, corpus-policy, and full repository gates pass, and ADR-16 now records the
+general rule. EP-2, EP-3, and EP-4 remain before the language-5 publication gate can move.

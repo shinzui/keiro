@@ -55,11 +55,13 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-12T00:27:20Z) M2: targeted suite green, including the untouched "gates the syntax to candidate language 5" example.
 - [x] (2026-08-12T00:27:20Z) M2: `cabal test -v0 keiro-dsl:keiro-dsl-conformance-domain-outcomes --test-show-details=direct` green (language-5 outcome corpus still compiles and its runtime facts hold).
 - [x] (2026-08-12T00:27:20Z) M2: before/after CLI transcripts captured for the language-4 fixture (failing exit 1 before, `OK` exit 0 after).
-- [ ] M3: changelog entry under `Unreleased` in `keiro-dsl/CHANGELOG.md`.
-- [ ] M3: `just conformance-corpus-policy` passes with zero corpus drift (coordinate with plan 234 per the MasterPlan if it landed first).
-- [ ] M3: `cabal test keiro-dsl:tests` green; `just verify` green.
-- [ ] M3: ADR distillation — record the contextual-keyword principle in `docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md`.
-- [ ] M3: update the MasterPlan registry row (EP-1 status) and its two EP-1 progress checkboxes in `docs/masterplans/36-fix-the-keiro-dsl-language-surface-defects-before-publishing-stable-language-5.md`.
+- [x] (2026-08-12T00:42:43Z) M3: changelog entry under `Unreleased` in `keiro-dsl/CHANGELOG.md`.
+- [x] (2026-08-12T00:42:43Z) M3: `just conformance-corpus-policy` passes with zero corpus drift (coordinate with plan 234 per the MasterPlan if it landed first).
+- [x] (2026-08-12T00:42:43Z) M3: `cabal test keiro-dsl:tests` green (43 suites; main suite reports 691 examples, 0 failures).
+- [x] (2026-08-12T00:51:57Z) M3: `just verify` green.
+- [x] (2026-08-12T00:42:43Z) M3: account for the new legacy/candidate fixtures in the explicit conformance-baseline and stable-language fixture inventories discovered by the full suite.
+- [x] (2026-08-12T00:42:43Z) M3: ADR distillation — record the contextual-keyword principle in `docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md`.
+- [x] (2026-08-12T00:51:57Z) M3: update the MasterPlan registry row (EP-1 status) and its three EP-1 progress checkboxes in `docs/masterplans/36-fix-the-keiro-dsl-language-surface-defects-before-publishing-stable-language-5.md`.
 
 
 ## Surprises & Discoveries
@@ -77,6 +79,12 @@ implementation. Provide concise evidence.
   including the candidate-language feature-gate assertion. The compiled outcome conformance
   suite exited 0, the language-4 CLI check printed `OK`, and diffing the committed fixture
   against `HEAD` succeeded with `replay-neutral: stored-data replay is unchanged by this diff`.
+- Milestone 3 (2026-08-12): the first all-suites run found two fixture-inventory policy
+  failures, not parser failures. `outcome-identifier-legacy.keiro` was absent from
+  `keiro-dsl/test/conformance-baseline.json`, while the legacy and candidate fixtures were absent
+  from the explicit non-stable fixture list in `keiro-dsl/test/Main.hs`. Adding those exact entries preserved
+  both policies; the focused checks then passed and `cabal test keiro-dsl:tests` completed with
+  the main suite at `691 examples, 0 failures`.
 
 
 ## Decision Log
@@ -143,6 +151,14 @@ Record every decision made while working on the plan.
   `keiro-dsl check` during planning, but pinning full-diagnostic emptiness across
   compatibility-only languages adds fragility without adding evidence about this defect.
   Date: 2026-08-11
+- Decision: Register the legacy fixture as a named compatibility proof and list both the legacy
+  and candidate fixtures in the existing non-stable fixture inventory rather than exempting the
+  new fixture names from either policy.
+  Rationale: The repository deliberately requires every source outside the stable/authoring
+  baseline to state its role and every fixture outside stable language 4 to be review-visible.
+  These regression fixtures are intentional evidence for exactly those contracts, so explicit
+  inventory entries preserve the gates' meaning.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -152,7 +168,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-1 restored the published grammar contract without weakening candidate-language-5 domain
+outcomes. `domain-outcomes` and `outcome` are no longer global reservations; the outcome clause
+marker is recognized contextually at the aggregate clause boundary, and its existing language-5
+feature gate still owns the new syntax. Regression fixtures prove that `outcome` remains usable in
+every affected identifier position across legacy and declared languages 1--4, while a language-5
+fixture proves identifier/clause coexistence.
+
+The focused parser, compiled conformance, CLI, diff, corpus-policy, all-suite, and repository-wide
+verification gates pass. The full suite also demonstrated that compatibility and candidate fixtures
+must be registered explicitly in both fixture inventories; those entries now document the fixtures'
+roles instead of bypassing either policy. The durable contextual-keyword rule has been distilled
+into ADR-16. No EP-1 work remains.
 
 
 ## Context and Orientation
@@ -718,3 +745,7 @@ to the living sections after the focused suite failed in all five intended examp
 
 Plan revision note (2026-08-12): Milestone 2 parser changes and focused green evidence were
 recorded after compatibility, feature-gating, compiled conformance, CLI, and diff checks passed.
+
+Plan revision note (2026-08-12): Milestone 3 completed after documentation, ADR, corpus,
+fixture-inventory, all-suite, and repository-wide verification evidence passed; EP-1 and its
+MasterPlan bookkeeping were closed.

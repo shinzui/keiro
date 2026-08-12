@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-12
+* **Update**: Require successor-language syntax to use feature-gated contextual keywords without globally reserving identifiers from published languages (plan 233).
+
 ## 2026-08-11
 * **Update**: Extend ADR-31 with the required candidate-Language-5 policy syntax, direct lowering, earliest-boundary validation, and identity-compatible stop-the-world evolution classification
 * **Add**: Record subscription checkpoint policy as catalog identity and replay safety

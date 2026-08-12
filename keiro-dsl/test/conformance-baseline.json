@@ -16,7 +16,8 @@
     {"path": "test/fixtures/language-misplaced.keiro", "sourceForm": "legacy-unversioned", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
     {"path": "test/fixtures/language-v1.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
     {"path": "test/fixtures/language-zero.keiro", "sourceForm": "declared", "effectiveVersion": null, "role": "compatibility-proof", "reason": "released source-selection compatibility vector"},
-    {"path": "test/fixtures/nominal-v1.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 nominal-syntax rejection vector"}
+    {"path": "test/fixtures/nominal-v1.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 nominal-syntax rejection vector"},
+    {"path": "test/fixtures/outcome-identifier-legacy.keiro", "sourceForm": "legacy-unversioned", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "released outcome-identifier compatibility proof"}
   ],
   "compiledSuites": [
     {"component": "keiro-dsl-conformance", "directory": "test/conformance", "source": "test/fixtures/reservation.keiro", "generation": "source", "role": "stable-primary", "reason": "canonical reservation aggregate proof"},

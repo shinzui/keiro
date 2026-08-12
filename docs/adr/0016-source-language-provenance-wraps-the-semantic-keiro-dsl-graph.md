@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-10T04:36:00Z
+timestamp: 2026-08-12T00:28:14Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -220,6 +220,12 @@ fleet planning remain in
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
+- Syntax introduced by a successor language uses contextual keywords claimed only in the owning
+  grammatical position and behind its feature gate; it must not add a globally reserved word that
+  retroactively narrows an immutable published language. Typed domain outcomes established this
+  precedent in [ExecPlan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md), and
+  [ExecPlan 233](../plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md)
+  completed it by restoring `outcome` as an identifier in every language.
 - Candidate-5 queue and query type clauses are atomic, located feature surfaces. Registering them
   does not widen languages 1–4 or permit scaffolding before their full lowerers land.
 - A higher language version does not inherit a predecessor's feature set or runtime semantics by

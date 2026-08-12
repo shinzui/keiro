@@ -63,6 +63,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   measuring the complete remaining `Text` suffix. Exact half-open spans, parser compatibility, and
   generated service behavior are unchanged; the effect is limited to DSL parse-time tooling.
 
+### Fixed
+
+- Published languages 1–4 once again accept `outcome` as an ordinary identifier, restoring the
+  0.11.0.0 grammar that candidate-language-5 outcome syntax accidentally narrowed. Outcome clause
+  words are contextual rather than globally reserved, so language-5 sources may also use
+  `outcome` as an identifier while retaining typed accepted, rejected, and no-op clauses.
+
 ### Breaking Changes
 
 - The public DSL AST adds `DomainOutcomeTypes`, `TransitionOutcome`, outcome
