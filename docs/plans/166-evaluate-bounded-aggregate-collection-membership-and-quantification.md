@@ -18,14 +18,16 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 This ExecPlan is a product and formal-semantics gate, not a commitment to ship collection syntax.
 It determines whether bounded collection membership and quantification provide enough correctness,
 reuse, and review value over an explicit Hole-owned transition to justify expanding Keiro's public
-DSL and Keiki's symbolic term API.
+DSL and Keiki's symbolic term API. Because Keiro 0.12.0.0 is the first stable release and candidate
+language 5 remains unpublished, complete the gate before release and, if the evidence says GO,
+ship the accepted subset in language 5.
 
 The plan has two equally valid successful outcomes. A GO names an exact, deliberately narrow
-feature subset and then implements it under a new successor language version. A NO-GO records why
-Hole ownership remains the better boundary, leaves all collection syntax rejected, makes no
-production Keiki or Keiro collection API, and completes the plan. Missing evidence, an opaque or
-approximate symbolic model, unenforceable bounds, unacceptable solver cost, or insufficient real
-consumer demand all produce NO-GO by default.
+feature subset and implements it before 0.12.0.0. A NO-GO records why Hole ownership remains the
+better boundary, leaves all collection syntax rejected, makes no production Keiki or Keiro
+collection API, and completes the release gate. Missing evidence, an opaque or approximate
+symbolic model, unenforceable bounds, unacceptable solver cost, or insufficient reusable demand
+produce NO-GO after the planned survey and prototype have run.
 
 If the result is GO, an aggregate can eventually express a bounded predicate such as:
 
@@ -45,23 +47,42 @@ new syntax is an opt-in verified path, never the only way to express behavior.
 
 ## Progress
 
+- [x] 2026-08-11: made the completed gate and any GO implementation prerequisites for 0.12.0.0
+  while candidate language 5 remains unpublished.
+- [x] 2026-08-12: verified the production dependency boundary against released Keiki 0.9.0.0.
+  Its collection spike is a test-local mini-AST and its public `Term`, `Update`, `HsPred`, and
+  symbolic translator still lack structural collection operations. A production GO therefore
+  requires an upstream Keiki implementation and release.
 - [ ] Milestone 1: collect real consumer cases and compare the proposed language with explicit
-  Hole-owned transitions across correctness, maintenance, review, diff, replay, and migration costs.
+  Hole-owned transitions across correctness, maintenance, review, diff, replay, and migration
+  costs, surveying the registered Keiro dependents rather than waiting for cases to arrive.
 - [ ] Milestone 2: build a non-production Keiki/Keiro prototype, measure exactness and solver cost,
   and produce the gate report with a GO or NO-GO verdict.
 - [ ] Gate: record the verdict in the Decision Log and Outcomes. On NO-GO, mark later milestones
-  not applicable and complete without a production collection implementation.
+  not applicable, document the evidence-backed alternative, and complete without a production
+  collection implementation.
 - [ ] GO only — Milestone 3: freeze the accepted syntax, bounds, symbolic encoding, diagnostics,
-  compatibility behavior, and next available language version.
+  compatibility behavior, and candidate-language-5 capability/profile changes before publication.
 - [ ] GO only — Milestone 4: implement the released Keiki capability and authoritative generated
   Keiro lowering with compiled, property, mutation, replay, and performance evidence.
 - [ ] Complete the appropriate outcome: document the Hole fallback after NO-GO, or document and
-  release the accepted feature after GO; distill any durable decision into ADRs.
+  release the accepted feature after GO; distill any durable decision into ADRs; and clear the
+  0.12.0.0 release gate.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Release-timing review on 2026-08-11 found Keiro 0.11.0.0 published, 0.12.0.0 planned as the first
+  stable release, and language 5 still unpublished. A GO can therefore amend candidate language 5
+  without widening a published parser; a later execution must recheck all three facts.
+- Mori's reverse-dependency inventory on 2026-08-11 listed fourteen registered projects depending
+  on Keiro and twelve depending on Keiki. Registry membership does not itself prove a qualifying
+  collection predicate, but it supplies a concrete survey population and makes passive demand
+  discovery inappropriate for a pre-release gate.
+- Hackage and the matching upstream tag show Keiki 0.9.0.0, not the plan's stale 0.5.0.0 snapshot.
+  Its production API still lowers `TApp1`/`TApp2` to fresh symbolic values. The included
+  `test/Keiki/CollectionSpike.hs` is a local mini-AST whose `SkippedCollectionGuard` result fails
+  this plan's exact, zero-skipped GO gate.
 
 
 ## Decision Log
@@ -69,14 +90,17 @@ new syntax is an opt-in verified path, never the only way to express behavior.
 - Decision: Treat this ExecPlan as a reversible design gate. NO-GO with no production feature is a
   complete and successful outcome, not a blocked or partially completed implementation.
   Rationale: Collection syntax creates a permanent language, schema, runtime-bound, and symbolic
-  maintenance obligation. The absence of sufficient evidence should preserve the smaller API.
-  Date: 2026-07-31
+  maintenance obligation. Executed evidence may preserve the smaller API, but an unrun gate is
+  incomplete work rather than an evidence-backed NO-GO.
+  Date: 2026-07-31; clarified 2026-08-11 for the pre-release gate.
 
-- Decision: Require at least two independently useful collection predicates from real or committed
-  aggregates before GO. A synthetic conformance aggregate or a hypothetical example does not count.
-  Rationale: The prior upstream collection proposal lacked a real consumer. One-off behavior is the
-  use case for an explicit Hole, not sufficient reason to enlarge the core language.
-  Date: 2026-07-31
+- Decision: Require at least two independently useful collection predicates from at least two
+  independently designed real or committed aggregates before GO. No named consumer qualifies in
+  advance or receives a custom acceptance path. A synthetic conformance aggregate or hypothetical
+  example does not count.
+  Rationale: One aggregate can expose several variants of the same modeling choice. A public core
+  operator needs evidence of reuse beyond one consumer topology.
+  Date: 2026-07-31; strengthened 2026-08-12 to prevent consumer-specific overfitting.
 
 - Decision: Compare the feature against plan 161's explicit per-transition ownership boundary.
   Generated mode owns checked scalar behavior; `implementation hole` owns arbitrary predicates and
@@ -92,11 +116,14 @@ new syntax is an opt-in verified path, never the only way to express behavior.
   Date: 2026-07-31
 
 - Decision: Allocate no language version, parser entry, schema annotation, diagnostic namespace,
-  dependency bound, or production module until the gate records GO. A GO uses the next version
-  available at that time rather than assuming version 3.
+  dependency bound, or production module until the gate records GO. If GO is recorded before
+  0.12.0.0 publishes candidate language 5, amend language 5 and its exact syntax/runtime profiles
+  in place. If an external compatibility boundary has already published language 5, do not widen
+  it; use the next available successor and record that the pre-release gate was missed.
   Rationale: Reserving public surface before ratification turns a research idea into accidental
-  compatibility debt and can collide with other successor syntax plans.
-  Date: 2026-07-31
+  compatibility debt. Conversely, allocating language 6 while language 5 is still an amendable
+  candidate would freeze a known pain point into the first stable contract unnecessarily.
+  Date: 2026-08-11 (revises the 2026-07-31 next-version rule for the unpublished candidate).
 
 - Decision: GO requires an exact structural Keiki encoding used by both concrete evaluation and
   symbolic translation. Opaque applications, free Booleans, truncation, skipped verification,
@@ -105,13 +132,22 @@ new syntax is an opt-in verified path, never the only way to express behavior.
   maintenance cost.
   Date: 2026-07-31
 
-- Decision: The widest candidate scope is read-only expressions over required structural outer
-  `List a` and `Map Text a` fields with executable positive `max-items` bounds. Optional or nested
-  collections, unions, JSON, opaque values, direct collection registers, and collection writes are
-  outside the candidate. The gate may approve a smaller named subset or reject all of it.
-  Rationale: This is the smallest shape with total structural access and finite symbolic expansion.
-  It avoids inventing null, recursive-bound, mutation, or collection-register semantics.
-  Date: 2026-07-31
+- Decision: A production GO requires a new released Keiki capability with structural bounded
+  collection terms and predicates sharing concrete and exact finite symbolic semantics. A
+  Keiro-only lowering through `TApp1`/`TApp2` does not satisfy the gate.
+  Rationale: Keiki 0.9.0.0 has only a test-local collection mini-AST; its production term,
+  predicate, evaluator, symbolic translator, and structural walkers have no collection vocabulary.
+  Date: 2026-08-12
+
+- Decision: The widest candidate scope is read-only membership and single-level quantification
+  over required structural outer `List a` and `Map Text a` fields with executable positive
+  `max-items` bounds. Optional or nested collections, unions, JSON, opaque values, direct
+  collection registers, lookups into aggregate collection state, and collection writes are
+  outside this plan. The gate may approve a smaller named subset or reject all of it.
+  Rationale: This is the smallest shape with total structural access and finite symbolic
+  expansion. Stateful collections introduce a separate aggregate-modeling, replay, inversion,
+  update-order, and concurrency problem that requires its own evidence and plan.
+  Date: 2026-07-31; restored and clarified 2026-08-12.
 
 - Decision: A bound is sound only when generated JSON decoding, fixtures, direct Haskell command
   construction, events, and every other introduction path reject over-bound values before user
@@ -122,7 +158,7 @@ new syntax is an opt-in verified path, never the only way to express behavior.
 
 - Decision: Require the upstream Keiki design gate to revisit, not silently override, the NO-GO in
   `mori://shinzui/keiki/plans/60-first-class-collection-registers-design-gated`.
-  Rationale: A narrower downstream consumer justifies a fresh evaluation but does not erase a
+  Rationale: New downstream demand justifies a fresh evaluation but does not erase a
   deliberate upstream formalism decision.
   Date: 2026-07-31
 
@@ -133,17 +169,46 @@ new syntax is an opt-in verified path, never the only way to express behavior.
   work.
   Date: 2026-07-31
 
+- Decision: Complete this gate before publishing Keiro 0.12.0.0. If it records GO, complete and
+  release the accepted Keiki and Keiro implementation in 0.12.0.0; if it records NO-GO, the
+  evidence-backed rejection and documented fallback clear the release gate.
+  Rationale: The unpublished language-5 window avoids a later source and fold-identity migration.
+  Date: 2026-08-11
+
+- Decision: Proactively survey Mori-registered Keiro dependents during Milestone 1. Lack of two
+  qualifying cases is a NO-GO only after the report records which reachable consumers were
+  inspected, which were unavailable, and why near-miss cases did not qualify.
+  Rationale: Missing execution must not masquerade as missing demand.
+  Date: 2026-08-11
+
+- Decision: Supersede, for this plan, MasterPlan 36's scheduling assumption that collection syntax
+  necessarily rides language 6, but amend the MasterPlan and language registry only after GO.
+  Rationale: Candidate language 5 remains amendable under ADR 16.
+  Date: 2026-08-11
+
+- Decision: Consumer cases are evidence for the generic feature matrix, not requirements that the
+  public DSL reproduce a particular consumer's aggregate topology. Stateful collection-register
+  work, if later justified, must use a separate ExecPlan and revisit the Keiki plan-60 gate.
+  Rationale: Stateful aggregate design is a separate formalism and evidence problem.
+  Date: 2026-08-12
+
 
 ## Outcomes & Retrospective
 
 (To be filled at the gate and again after any GO implementation. For NO-GO, record which required
-evidence failed, what prototype or benchmark was run, why Hole ownership remains preferable, and confirm
-that no language version or production collection API was allocated. For GO, record the accepted
-subset, real consumers, released dependency/tag, measured budget, migration experience, and
-concrete/symbolic agreement evidence.)
+evidence failed, the survey and prototype results, why Hole ownership remains preferable, and
+confirm that no public collection API was allocated. For GO, record the accepted subset, released
+dependency/tag, measured budget, migration evidence, and candidate-language-5 profile. In either
+branch, record the evidence that cleared the release gate.)
 
 
 ## Context and Orientation
+
+The repository targets Keiro 0.12.0.0 from published 0.11.0.0. Candidate language 5 remains
+unpublished. The pre-release language-surface review in
+[MasterPlan 36](../masterplans/36-fix-the-keiro-dsl-language-surface-defects-before-publishing-stable-language-5.md)
+scheduled collection syntax for language 6. This plan reopens only that schedule: finish the gate
+before 0.12.0.0, amend language 5 only after GO, and leave languages 1–4 unchanged.
 
 [Plan 161](161-add-authoritative-typed-scalar-aggregate-expressions.md) establishes the baseline.
 Its version-2 transitions select exactly one behavior owner. Generated ownership necessarily
@@ -161,9 +226,11 @@ boundaries. `FoldFingerprint.hs`, `Diff.hs`, `MappedDiff.hs`, `ReplayImpact.hs`,
 workspace relocation, generated records, codecs, harnesses, and transducers all consume syntax or
 schema facts that a GO would change.
 
-The symbolic dependency is `mori://shinzui/keiki/packages/keiki`. Released Keiki `0.5.0.0` has one
+The symbolic dependency is `mori://shinzui/keiki/packages/keiki`. Released Keiki `0.9.0.0` has one
 structural `Term` AST, one concrete evaluator, and a symbolic translator, but no public bounded
-collection term contract. The prior first-class collection experiment was ratified NO-GO in
+collection term contract. Its `TApp1` and `TApp2` remain raw-function escape hatches whose symbolic
+translation produces fresh opaque values. The prior first-class collection experiment was
+ratified NO-GO in
 `mori://shinzui/keiki/plans/60-first-class-collection-registers-design-gated`; the follow-up
 `mori://shinzui/keiki/plans/67-collection-slot-opaque-mutation-signpost-validatetransducer-warning-and-guidance`
 reports opaque guards rather than proving them. Mori currently locates the project source but does
@@ -180,34 +247,47 @@ path syntax must execute what the checker validates.
 [ADR 13](../adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md)
 requires opacity to remain honestly visible rather than forcing a dishonest structural claim.
 [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md) freezes
-released parsers and requires any accepted syntax to use a successor language version.
+published parsers, permits an unpublished candidate to be corrected in place, and requires a
+successor only after publication.
 [ADR 17](../adr/0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
 keeps explicit Hole ownership available before and after any GO implementation.
+[ADR 18](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md) requires
+any accepted collection behavior to be an explicit language capability whose fold contribution is
+decided and covered by the frozen canonical encoder.
 
 A “bounded collection” is a concrete list or map whose declared maximum item count is enforced
 before evaluation and participates in schema, fingerprint, diff, and symbolic identity. A “gate
 report” is the checked-in research result that maps evidence to every GO criterion and records the
 verdict. “GO” means the report justifies a specific public subset. “NO-GO” means Keiro deliberately
-keeps the feature out of production and directs the use case to `implementation hole`.
-
+keeps the rejected feature out of production and directs each use case to `implementation hole`.
 
 ## Plan of Work
 
-Milestone 1 gathers demand evidence before building a formalism. Identify at least two independent
-collection predicates from real or committed aggregates. For each, record the aggregate and
-command, concrete input shape and realistic maximum size, present or proposed Hole-owned implementation,
-why scalar plan 161 cannot express it, frequency of change, replay and diff consequences, and the
-specific symbolic question a built-in operator would answer. A generated-only conformance fixture
-does not count. Write this comparison as a research document under `docs/research/` using that
-bundle's profile and stable ID workflow.
+Milestone 1 gathers demand evidence before building a formalism. Start with
+`mori registry dependents shinzui/keiro --packages`, resolve every reachable registered project
+through `mori registry show <qualified-name> --full`, and inspect its committed aggregate sources
+and open improvement requests for collection predicates currently expressed outside the DSL or
+through Hole ownership. Record projects that cannot be inspected separately from projects that
+contain no qualifying case. Add cases supplied directly by maintainers or committed for the
+0.12.0.0 adoption cohort.
+
+Identify at least two independent collection predicates from at least two independently designed
+real or committed aggregates. For each, record the canonical owning-project URI, aggregate and
+command, concrete input shape and realistic maximum size, present or proposed Hole-owned
+implementation, why scalar plan 161 cannot express it, frequency of change, replay and diff
+consequences, and the specific symbolic question a built-in operator would answer. A generated-only
+conformance fixture or hypothetical example does not count. Write this comparison as a research
+document under `docs/research/` using that bundle's profile and stable ID workflow.
 
 The research must compare three choices: retain Hole ownership; add only membership over bounded
 lists/map keys; or add membership plus single-level `any`/`all`. Nested quantification is a
 separate optional row and cannot be smuggled into the base scope. Compare authoring size, generated
 code, manual fold-version burden, symbolic status, diff/replay visibility, migration cost, and
-long-term parser/Keiki maintenance. If fewer than two qualifying predicates exist, or the verified
-status would not change an operational decision, record NO-GO immediately and skip all production
-work.
+long-term parser/Keiki maintenance. If the completed survey finds fewer than two qualifying
+predicates from independent aggregates, or the verified status would not change an operational
+decision, record NO-GO and skip all production work. Uninspected reachable consumers, a missing
+report, or time pressure before release are incomplete evidence and cannot be converted into
+NO-GO.
 
 Milestone 2 is a disposable, non-production prototype. In the Mori-resolved Keiki checkout, open a
 focused successor to
@@ -215,7 +295,10 @@ focused successor to
 required list of scalar values, a required list of records with one scalar projection, and a
 `Map Text value`. Include empty collections, list duplicates, map key distinctness, repeated reads
 of one path, an over-bound input, membership, and single-level `any`/`all`. Prototype nested
-quantification separately so it cannot determine the base result.
+quantification separately so it cannot determine the base result. Reuse the released
+`test/Keiki/CollectionSpike.hs` as design evidence, but do not count its local constructors or
+`SkippedCollectionGuard` result as production capability or as satisfaction of this plan's exact
+symbolic gate.
 
 The candidate symbolic list representation has a length in `[0,N]` plus `N` element slots; slot
 `i` is present exactly when `i < length`. A map has at most `N` present key/value slots and requires
@@ -234,23 +317,30 @@ The supported bound and static expansion budget must be derived from the passing
 with the eventual language version. If no useful bound satisfies this criterion, record NO-GO.
 
 At the end of Milestone 2, write one gate report whose conclusion is either NO-GO or GO for an
-exact feature matrix. GO requires all of the following: two qualifying real predicates; a total
-runtime bound at every introduction path; one exact concrete/symbolic term model; mutation evidence
-for each known unsound shortcut; acceptable measured cost for the real bounds; a material reduction
-in opacity/manual versioning over Hole ownership; and an explicit upstream Keiki GO. Any missing item is
-NO-GO. A smaller GO may approve membership while rejecting quantification, but every rejected form
-remains explicitly listed and unsupported.
+exact feature matrix. GO requires all of the following: two qualifying real predicates from
+independent aggregates; a total runtime bound at every introduction path; one exact concrete/
+symbolic term model; mutation evidence for each known unsound shortcut; acceptable measured cost
+for the real bounds; a material reduction in opacity/manual versioning over Hole ownership; and an
+explicit upstream Keiki GO. Any missing item is NO-GO. A smaller GO may approve membership while
+rejecting quantification, but every rejected form remains explicitly listed and unsupported.
+
+The gate report is required before the 0.12.0.0 release decision. GO blocks the release until
+Milestones 3 and 4 are complete. NO-GO clears this plan's release condition only after the report,
+Hole guidance, rejection fixture, prototype cleanup, living-plan updates, and any durable ADR
+distillation are complete. “Defer until after release” is not a third verdict.
 
 On NO-GO, update Progress, Decision Log, Outcomes, and the research record. Promote the durable
 exclusion to an ADR if it is intended to survive beyond this experiment. Confirm plan 161's
 version-2 rejection fixture still fails before scaffolding. Remove production-facing prototype
 modules, parser entries, schema fields, and dependency changes; research-only benchmark fixtures
 may remain when the research profile and upstream repository convention permit them. Mark GO-only
-milestones not applicable and complete the plan. Do not ask for permission to implement a fallback
-subset that failed the written gate.
+milestones not applicable, synchronize MasterPlan 36, and complete the plan. Do not implement a
+fallback subset that failed the written gate.
 
-Milestone 3 runs only after GO. Allocate the next available successor language version through the
-registry established by plan 160. Freeze only the accepted syntax. The widest candidate spelling is:
+Milestone 3 runs only after GO. Synchronize MasterPlan 36 and the 0.12.0.0 release checklist. If
+language 5 is still unpublished, amend its syntax and runtime profiles through the registry from
+plan 160; otherwise leave it immutable and allocate the next successor. Freeze only the accepted
+syntax. The widest candidate spelling is:
 
 ```keiro
 lines as "lines" : List Line max-items=16 required
@@ -266,9 +356,9 @@ at or below the frozen per-collection limit. List membership uses element equali
 duplicate multiplicity. Map membership is explicitly key membership through `keys(map)`; value
 iteration uses `values(map)`. `any` over empty is false and `all` is true. The parentheses after
 `where` are mandatory. Map literals, collection writes, optional/nested collection paths, unions,
-JSON, opaque values, and direct aggregate collection registers remain rejected. If the gate did
-not approve quantification, omit its syntax and binder types entirely rather than parsing them
-behind a disabled capability.
+JSON, opaque values, direct aggregate collection registers, and aggregate collection lookup remain
+rejected. If the gate did not approve quantification, omit its syntax and binder types entirely
+rather than parsing them behind a disabled capability.
 
 The checked schema bound is enforced by generated JSON decoding, fixtures, direct Haskell command
 execution, event decoding, and every value-introduction path before user predicates execute.
@@ -288,7 +378,7 @@ transitions and future unsupported behavior.
 Update collection/path traversal, pretty printing, complement, workspace relocation, generated
 records/codecs/transducers, diff, replay impact, and fingerprints exhaustively. Classical
 complement exchanges `in`/`not in` and exchanges `all`/`any` while complementing the predicate.
-Build a compiled consumer based on the real gate cases plus a test-only reference interpreter.
+Build compiled consumers based on the real gate cases plus a test-only reference interpreter.
 Property tests compare reference, Keiki concrete execution, symbolic formulas, encoded-event
 replay, and snapshot-invalidated replay. Mutation and performance tests preserve the gate's
 exactness and budget claims.
@@ -296,8 +386,8 @@ exactness and budget claims.
 Complete either branch by documenting the result. For NO-GO, document how to select, implement,
 version, and test a Hole-owned transition and what verification is lost. For GO, document syntax,
 bounds, empty/duplicate/map semantics, cost limits, optional Hole-to-generated migration,
-compatibility vectors, unsupported forms, and the continuing Hole escape hatch. Update ADRs
-3, 4, 12, 13, and 16 only where the evidence changes their durable contracts.
+compatibility vectors, unsupported forms, and the continuing Hole escape hatch. Update ADRs 3, 4,
+12, 13, 16, 17, and 18 only where the evidence changes their durable contracts.
 
 
 ## Concrete Steps
@@ -310,9 +400,28 @@ mori registry list
 mori registry search keiki
 mori registry show shinzui/keiki --full
 mori registry docs shinzui/keiki
+mori registry dependents shinzui/keiro --packages
 mori registry dependents shinzui/keiki --packages
 mori path mori://shinzui/keiki/packages/keiki
 ```
+
+For each reachable Keiro dependent returned by Mori, run
+`mori registry show <qualified-project-name> --full`, inspect the resolved checkout rather than a
+guessed path, and record the canonical project URI and survey result. Before using release timing
+or dependency versions as evidence, verify the authoritative registries and upstream tags:
+
+```bash
+curl -fsSL https://hackage.haskell.org/package/keiro/preferred.json
+curl -fsSL https://hackage.haskell.org/package/keiki/preferred.json
+git ls-remote --tags https://github.com/shinzui/keiro.git
+git ls-remote --tags https://github.com/shinzui/keiki.git
+rg -n 'version5|CandidateLanguage|currentStableLanguageVersion|currentAuthoringLanguageVersion' \
+  keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs
+```
+
+At plan revision time these checks showed Keiro 0.11.0.0, Keiki 0.9.0.0, published stable
+language 4, and unpublished candidate language 5. Re-run them at execution time; do not copy those
+values into dependency bounds or mutate candidate language 5 if the evidence has changed.
 
 Inspect the current Hole baseline and the version-2 rejection surface:
 
@@ -325,9 +434,11 @@ cabal run -v0 keiro-dsl -- check \
   keiro-dsl/test/fixtures/aggregate-collection-expressions-v2-rejects.keiro
 ```
 
-The second command exits non-zero with `CollectionExpressionUnsupported`. Record the two real
-consumer cases and prototype results in the profile-governed research document. Allocate its
-stable handle and validate the bundle with:
+The second command exits non-zero with `CollectionExpressionUnsupported`. Record the qualifying
+cases from at least two independent aggregates, the full registered-dependent survey disposition,
+and prototype results in the profile-governed research document. Use canonical `mori://` project
+or artifact URIs for every cross-repository case. Allocate its stable handle and validate the
+bundle with:
 
 ```bash
 okf id list docs/research --profile docs/research/profile.dhall
@@ -405,23 +516,27 @@ The gate itself is accepted only when the research document maps concrete eviden
 criterion and records one unambiguous verdict. It may not say “promising,” “defer,” or “implement
 and see.” The two valid terminal branches are:
 
-1. NO-GO: fewer than two qualifying predicates exist, bounds cannot be enforced everywhere, the
-   symbolic model is approximate/opaque, known unsound mutations survive, useful bounds exceed the
-   cost criterion, the API does not materially improve on Hole ownership, or upstream Keiki rejects it.
+1. NO-GO: fewer than two qualifying predicates from independent aggregates exist, bounds cannot be
+   enforced everywhere, the symbolic model is approximate/opaque, known unsound mutations survive,
+   useful bounds exceed the cost criterion, the API does not materially improve on Hole ownership,
+   or upstream Keiki rejects it.
    The plan records the failing evidence and finishes without production collection syntax,
    schema fields, Keiki API, release, or dependency update.
 2. NO-GO keeps the plan-161 collection fixture failing with `CollectionExpressionUnsupported`,
-   documents `implementation hole` and its manual fold version, and confirms generated-owned
-   scalar transitions remain authoritative.
-3. GO: at least two real predicates pass an exact shared concrete/symbolic prototype at realistic
-   bounds with zero unknown/timeout/opaque results, every bound-entry path rejects over-bound data,
-   all unsound mutations fail, performance has the required timeout headroom, the Hole comparison
-   shows material correctness or maintenance benefit, and upstream Keiki records GO.
+   documents `implementation hole` and its manual fold version, and confirms generated-owned scalar
+   transitions remain authoritative.
+3. GO: at least two real predicates from independent aggregates pass an exact shared concrete/
+   symbolic prototype at realistic bounds with zero unknown/timeout/opaque results, every
+   bound-entry path rejects over-bound data, all unsound mutations fail, performance has the
+   required timeout headroom, the Hole comparison shows material correctness or maintenance
+   benefit, and upstream Keiki records GO.
 4. A GO report names the exact approved operator/scope matrix. Unapproved membership,
-   quantification, nesting, map/value, or element-projection forms stay rejected and are not
-   parsed into dormant nodes.
-5. GO implementation allocates the then-next language version; every earlier released parser
-   rejects the new syntax and retains byte-identical generated behavior.
+   quantification, nesting, map/value, element-projection, register, or update forms stay rejected
+   and are not parsed into dormant nodes.
+5. If language 5 is still unpublished, GO implementation amends its exact syntax/runtime profiles
+   in place; languages 1–4 reject the new syntax and retain byte-identical generated behavior. If
+   language 5 was already published, it remains immutable and the plan records the missed gate
+   before allocating a successor.
 6. A declared bound enters checked schema identity and is enforced by decoding, fixtures, direct
    commands, events, fingerprinting, and diff. No path truncates an over-bound value.
 7. Accepted list membership, map key/value operations, empty quantifiers, duplicate handling, and
@@ -434,6 +549,9 @@ and see.” The two valid terminal branches are:
    coverage detects a bypass, and `implementation hole` remains available for other behavior.
 10. The final dependency floor, if any, names a published Keiki release with matching Hackage
     metadata and upstream tag/commit. A NO-GO has no collection-driven dependency-floor change.
+11. Keiro 0.12.0.0 is not published while the gate is missing a verdict. GO clears the release
+    after accepted implementation and conformance complete; NO-GO clears it after evidence,
+    cleanup, rejection-fixture, fallback-guidance, and plan/ADR distillation complete.
 
 
 ## Idempotence and Recovery
@@ -454,11 +572,11 @@ applicable after NO-GO” with a date. This is completion, not blocked status. A
 consumer or dependency capability may reopen the decision through a new plan or an explicit plan
 revision; it does not retroactively change this verdict.
 
-On GO, keep schema, language registration, dependency release, and generated lowering in separate
-checkpoints. If concrete and symbolic results disagree or a required bound fails, disable the
-candidate and return the gate to NO-GO before release. Mutation scripts must install traps that
-restore exact files and run `git diff --check`; never use destructive Git reset or checkout for
-recovery.
+On GO, keep schema, language-profile amendment, dependency release, and generated lowering in
+separate checkpoints. If concrete and symbolic results disagree or a required bound fails, disable
+the candidate and return the gate to NO-GO before release. Mutation scripts must install
+traps that restore exact files and run `git diff --check`; never use destructive Git reset or
+checkout for recovery.
 
 
 ## Interfaces and Dependencies
@@ -531,13 +649,26 @@ The exact indices follow the approved feature matrix. Rejected constructors must
 present behind runtime failure. Quantifier bodies stay first-order trees with explicit variable
 identity, never opaque Haskell closures.
 
-The only potential external production dependency is a future released version of
+A production GO depends on a future released version of
 `mori://shinzui/keiki/packages/keiki` exposing exactly the approved bounded term model, coherent
 collection projections, finite predicates, bound validation, and verified-versus-unknown status.
-A NO-GO adds no dependency. A GO cannot name PVP bounds until the exact Hackage release and matching
-tag are inspected.
+Keiro owns grammar, checking, schema-bound enforcement, lowering, generated bindings/codecs, diff,
+and fingerprints; Keiki owns the structural executable and analyzable core. A NO-GO adds no
+dependency. A GO cannot name PVP bounds until the exact Hackage release and matching tag are
+inspected.
 
 Plan 161 and plan 160 are prerequisites for a GO implementation but not for running the research
 gate. Plan 161's unsupported diagnostic and explicit Hole ownership are the NO-GO terminal
-behavior and remain an escape hatch after GO. No language version is reserved by this plan until
-the verdict is GO.
+behavior and remain an escape hatch after GO. Candidate language 5 is amended only after GO and
+only while it remains unpublished; no collection capability is reserved by this plan before the
+verdict.
+
+Revision note (2026-08-11): Made the completed gate and any GO implementation prerequisites for
+Keiro 0.12.0.0, updated the released Keiki baseline to 0.9.0.0, made the registered-dependent survey
+proactive, and recorded candidate language 5 as the pre-publication implementation target.
+
+Revision note (2026-08-12): Restored the original generic, read-only scope after review found that
+a stateful tier overfit one consumer's unratified aggregate topology. Collection registers,
+lookups, and writes now require a separate future ExecPlan. This revision also requires reusable
+evidence from independent aggregates and retains the verified Keiki dependency boundary without
+consumer-specific acceptance criteria.
