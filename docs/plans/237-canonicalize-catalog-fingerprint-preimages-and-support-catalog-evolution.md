@@ -76,9 +76,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 here, even if it requires splitting a partially completed task into two ("done" vs.
 "remaining"). This section must always reflect the actual current state of the work.
 
-- [ ] M1 (prototyping): reproduce both defects with concrete fixtures; validate the
+- [x] M1 (prototyping): reproduce both defects with concrete fixtures; validate the
       canonical encoder and the slice-scoped lifecycle joins against the real schema;
-      record evidence in Surprises & Discoveries.
+      record evidence in Surprises & Discoveries. Completed 2026-08-12T11:04:39Z.
 - [ ] M2: `Keiro.Projection.Catalog.Preimage` canonical encoder; v2 catalog
       fingerprint; new `GroupSliceFingerprint`; pure regression tests (collision
       fixtures now distinct, order-insensitivity retained, slice stability under
@@ -104,7 +104,18 @@ here, even if it requires splitting a partially completed task into two ("done" 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The focused M1 probe passed with four examples on 2026-08-12: both malformed
+  inventory pairs compare equal under the current renderer, the additive catalog
+  is refused by both registration and rebuild begin, and all adversarial
+  canonical trees render distinctly. Evidence: `cabal test keiro-test
+  --test-option=--match --test-option=probe` reported `4 examples, 0 failures`.
+- The lifecycle join inventory matched the plan's M3 edit list. The group
+  fingerprint column is read or written by `Group.hs` and `Schema.hs`; the run
+  epoch equality is enforced by `resumeRunStmt`, `lockActiveRunStmt`, and
+  `completionProofStmt` in `Runner.hs`; migrations 0022/0023 and the native schema
+  snapshot are the only schema definitions. The DB-backed probe additionally
+  proved that `beginGroupRebuild` reaches the stored-fingerprint refusal before
+  any target-table preparation after registration drift.
 
 
 ## Decision Log

@@ -60,6 +60,7 @@ library
     Keiro.Projection
     Keiro.Projection.Catalog
     Keiro.Projection.Catalog.Operations
+    Keiro.Projection.Catalog.Preimage
     Keiro.ReadModel
     Keiro.ReadModel.Rebuild
     Keiro.ReadModel.Schema
@@ -158,6 +159,7 @@ test-suite keiro-test
   hs-source-dirs: test
   main-is:        Main.hs
   other-modules:
+    CanonicalPreimageProbeSpec
     CatalogOperationsSpec
     CatalogSpec
     GroupRebuildSpec

@@ -83,7 +83,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Not Started |
+| 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | In Progress |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Not Started |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Not Started |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
@@ -151,7 +151,7 @@ EP-3's honest pass-reporting shape extends
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 (237) M1: prototyping — both defects reproduced, encoder injectivity and lifecycle-join map validated against the real schema
+- [x] EP-1 (237) M1: prototyping — both defects reproduced, encoder injectivity and lifecycle-join map validated against the real schema (2026-08-12T11:04:39Z)
 - [ ] EP-1 (237) M2: pure canonical encoding (`Keiro.Projection.Catalog.Preimage`, `catalog-v2:`/`contract-v2:`) with the two collision fixtures as regressions
 - [ ] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors
 - [ ] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API

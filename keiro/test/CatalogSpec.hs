@@ -2,6 +2,7 @@ module CatalogSpec
   ( spec,
     CatalogEvent (..),
     validCatalog,
+    additiveCatalog,
     validProjectionSet,
     catalogWithMissingSubscription,
     catalogAsyncProjection,
@@ -292,6 +293,80 @@ validCatalog =
       projectionSets = [SomeProjectionSet validProjectionSet]
     }
 
+-- | A catalog extension that adds one completely independent read-side slice.
+-- Existing declarations are byte-for-byte unchanged.
+additiveCatalog :: ProjectionCatalog
+additiveCatalog =
+  validCatalog
+    { sources = validCatalog ^. #sources <> [additiveSource],
+      targets = validCatalog ^. #targets <> [additiveTarget],
+      rebuildGroups = validCatalog ^. #rebuildGroups <> [additiveGroup],
+      queryModels = validCatalog ^. #queryModels <> [SomeQueryModelBinding additiveBinding],
+      projectionSets = validCatalog ^. #projectionSets <> [SomeProjectionSet additiveProjectionSet]
+    }
+
+additiveSource :: SourceDeclaration
+additiveSource =
+  SourceDeclaration
+    { sourceId = additiveSourceId,
+      sourceScope = CategorySource (CategoryName "catalog-additive"),
+      codecFingerprint = "catalog-additive-codec-v1",
+      claimSite = site "catalog:additive-source"
+    }
+
+additiveTarget :: TargetDeclaration
+additiveTarget =
+  TargetDeclaration
+    { targetId = additiveTargetId,
+      qualifiedTable = QualifiedTable "app" "catalog_additive",
+      resetPolicy = ClearBeforeReplay,
+      dependsOn = [],
+      claimSite = site "catalog:additive-target"
+    }
+
+additiveGroup :: RebuildGroupDeclaration
+additiveGroup =
+  RebuildGroupDeclaration
+    { rebuildGroupId = additiveGroupId,
+      orderedTargets = [additiveTargetId],
+      verificationHooks = [],
+      claimSite = site "catalog:additive-group"
+    }
+
+additiveProjectionSet :: ProjectionSet CatalogEvent
+additiveProjectionSet =
+  ProjectionSet
+    { projectionSource = additiveSourceId,
+      projectionDefinitions =
+        ProjectionDefinition
+          { projectionId = additiveProjectionId,
+            rebuildGroup = additiveGroupId,
+            ownedTargets = additiveTargetId :| [],
+            replayPolicy = replayablePolicy,
+            handlers =
+              InlineHandler
+                InlineProjection
+                  { name = "catalog-additive-inline",
+                    apply = \_ _ -> pure ()
+                  }
+                (site "catalog:additive-handler")
+                :| [],
+            claimSite = site "catalog:additive-projection"
+          }
+          :| [],
+      claimSite = site "catalog:additive-set"
+    }
+
+additiveBinding :: QueryModelBinding Text ()
+additiveBinding =
+  QueryModelBinding
+    { queryModelId = additiveQueryId,
+      readModel = readModelDefinition "catalog-additive-query" "catalog_additive",
+      rebuildGroup = additiveGroupId,
+      observedTargets = [additiveTargetId],
+      claimSite = site "catalog:additive-query"
+    }
+
 validProjectionSet :: ProjectionSet CatalogEvent
 validProjectionSet =
   ProjectionSet
@@ -579,26 +654,31 @@ readModelDefinition registryName tableName =
       query = \_ -> pure ()
     }
 
-inlineProjectionId, asyncProjectionId :: ProjectionId
+inlineProjectionId, asyncProjectionId, additiveProjectionId :: ProjectionId
 inlineProjectionId = projection "counter-owner"
 asyncProjectionId = projection "audit-owner"
+additiveProjectionId = projection "catalog-additive-owner"
 
-counterTargetId, auditTargetId, unknownTargetId :: TargetId
+counterTargetId, auditTargetId, unknownTargetId, additiveTargetId :: TargetId
 counterTargetId = target "counter-target"
 auditTargetId = target "audit-target"
 unknownTargetId = target "unknown-target"
+additiveTargetId = target "catalog-additive-target"
 
-mainGroupId, otherGroupId, unknownGroupId :: RebuildGroupId
+mainGroupId, otherGroupId, unknownGroupId, additiveGroupId :: RebuildGroupId
 mainGroupId = group "counter-group"
 otherGroupId = group "other-group"
 unknownGroupId = group "unknown-group"
+additiveGroupId = group "catalog-additive-group"
 
-headSourceId :: SourceId
+headSourceId, additiveSourceId :: SourceId
 headSourceId = source "counter-source"
+additiveSourceId = source "catalog-additive-source"
 
-counterQueryId, auditQueryId :: QueryModelId
+counterQueryId, auditQueryId, additiveQueryId :: QueryModelId
 counterQueryId = queryModel "counter-query"
 auditQueryId = queryModel "audit-query"
+additiveQueryId = queryModel "catalog-additive-query"
 
 asyncSubscriptionId, unknownSubscriptionId :: SubscriptionId
 asyncSubscriptionId = subscription "counter-subscription"
