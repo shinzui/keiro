@@ -1,0 +1,40 @@
+language keiro-dsl 5
+context binding-demo
+
+target ledger_entries {
+  schema = "billing"
+  table = "ledger_entries"
+  reset = preserve
+}
+
+rebuild-group billing {
+  targets = [ ledger_entries ]
+  order = [ ledger_entries ]
+}
+
+projection-owner ledger_writer {
+  source = category "ledger"
+  feed = subscription
+  group = billing
+  targets = [ ledger_entries ]
+  order = 10
+  subscription = "binding-demo-ledger"
+  dedup = "binding-demo-ledger-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel ledger_view {
+  table = "somewhere_else"
+  schema = "elsewhere"
+  columns {
+    entry_id text required
+  }
+  version = 1
+  shape = "fnv1a:3c7266b20dc71b04"
+  consistency = Eventual
+  feed = subscription
+  subscription = "binding-demo-ledger-view"
+  group = billing
+  targets = [ ledger_entries ]
+}

@@ -1752,6 +1752,7 @@ main = hspec $ do
         `shouldBe` sort
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
+            "catalog-readmodel-physical-override.keiro",
             "contract-v1-compat.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
@@ -2008,6 +2009,10 @@ main = hspec $ do
         Right parsed -> validateService (checkedSource parsed) `shouldBe` []
 
   describe "language-5 projection catalogs" $ do
+    it "rejects explicit physical coordinates on a catalog-bound read model" $ do
+      errorCodesOf "test/fixtures/catalog-readmodel-physical-override.keiro"
+        `shouldReturn` [CatalogReadModelPhysicalOverride]
+
     it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
       parsed <- case parseSource "projection-catalog.keiro" source of

@@ -65,10 +65,10 @@ demonstrably fail when fed a perturbed registration list.
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] M1: Add `CatalogReadModelPhysicalOverride` to `DiagnosticCode` in `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
-- [ ] M1: Emit the diagnostic from `validateReadModel`'s `catalogBinding` block when `rmGroup` is set and `rmTable` or `rmSchema` is non-empty.
-- [ ] M1: Create fixture `keiro-dsl/test/fixtures/catalog-readmodel-physical-override.keiro` and a spec test asserting the code.
-- [ ] M1: Confirm the diagnostic-code round-trip test (`test/Main.hs`, "round-trips every stable diagnostic code spelling") passes with the new constructor.
+- [x] (2026-08-11 19:02 PDT) M1: Add `CatalogReadModelPhysicalOverride` to `DiagnosticCode` in `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
+- [x] (2026-08-11 19:02 PDT) M1: Emit the diagnostic from `validateReadModel`'s `catalogBinding` block when `rmGroup` is set and `rmTable` or `rmSchema` is non-empty.
+- [x] (2026-08-11 19:02 PDT) M1: Create fixture `keiro-dsl/test/fixtures/catalog-readmodel-physical-override.keiro` and a spec test asserting the code.
+- [x] (2026-08-11 19:02 PDT) M1: Confirm the diagnostic-code round-trip test (`test/Main.hs`, "round-trips every stable diagnostic code spelling") passes with the new constructor.
 - [ ] M2: Add `rmBackingTarget :: !(Maybe Name)` to `ReadModelNode` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs` and fix all record construction sites compiler-first.
 - [ ] M2: Parse optional `backing = <ident>` after `targets` in `keiro-dsl/src/Keiro/Dsl/Parser/ReadModel.hs` (inside the `group` branch only).
 - [ ] M2: Render `backing` in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` so `parse . render` round-trips.
@@ -94,7 +94,18 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The first full `keiro-dsl-test` run passed all 691 semantic examples and failed only
+  the explicit non-stable-fixture inventory after the new language-5 fixture appeared.
+  Adding `catalog-readmodel-physical-override.keiro` to that inventory made the focused
+  policy test pass. This is the same corpus bookkeeping constraint EP-1 surfaced, and
+  M2 must register its four additional candidate-language fixtures at creation time.
+
+  ```text
+  Finished in 227.4155 seconds
+  692 examples, 1 failure
+  ...
+  keeps only the named source-version compatibility fixtures outside stable v4
+  ```
 
 
 ## Decision Log

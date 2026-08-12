@@ -234,6 +234,7 @@ data DiagnosticCode
   | CatalogDuplicateHandlerOrder
   | CatalogReadModelBindingMissing
   | CatalogReadModelTargetOutsideGroup
+  | CatalogReadModelPhysicalOverride
   | CatalogTargetAdded
   | CatalogTargetRemoved
   | CatalogTargetLocationChanged
@@ -2572,7 +2573,7 @@ validateReadModel languageContract spec readModel =
       ]
     catalogBinding
       | not (hasProjectionCatalog languageContract) = []
-      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup
+      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup <> physicalOverride
       where
         groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
         missingGroup =
@@ -2599,6 +2600,16 @@ validateReadModel languageContract spec readModel =
               "readmodel '" <> rmName readModel <> "' observes target '" <> targetName <> "' outside its bound group"
           | targetName <- rmObservedTargets readModel,
             targetName `notElem` groupTargets
+          ]
+        physicalOverride =
+          [ mkErr readModelLine CatalogReadModelPhysicalOverride $
+              "readmodel '"
+                <> rmName readModel
+                <> "' binds to group '"
+                <> groupName
+                <> "' but declares explicit table/schema; physical coordinates belong to the target declaration — remove table/schema and name the intended target in 'targets' (and 'backing' when observing several)"
+          | Just groupName <- [rmGroup readModel],
+            rmTable readModel /= "" || rmSchema readModel /= ""
           ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
