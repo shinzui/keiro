@@ -280,7 +280,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
       NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
       NReadModel readModel ->
         let resolved = resolveCatalogReadModel merged readModel
-         in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx resolved
+         in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx merged resolved
       NProjectionTarget _ -> []
       NRebuildGroup _ -> []
       NProjectionOwner _ -> []

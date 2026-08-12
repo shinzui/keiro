@@ -2047,6 +2047,22 @@ main = hspec $ do
       map (ckCode . kindOfChange) (diffServices serviceA serviceB)
         `shouldNotContain` [CatalogQueryBindingChanged]
 
+    it "emits grouped harness facts against the generated projection catalog" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      service <- checkedServiceFromText "projection-catalog.keiro" source
+      let spec = checkedSpec service
+          modules = scaffoldServiceModules (defaultContext (specContext spec)) service
+          auditHarness = generatedTextEndingIn "Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs" modules
+          shipmentHarness = generatedTextEndingIn "Generated/CatalogDemo/ShipmentLookup/ReadModelHarness.hs" modules
+      auditHarness `shouldSatisfy` T.isInfixOf "import Generated.CatalogDemo.ProjectionCatalog qualified as ProjectionCatalog"
+      auditHarness `shouldSatisfy` T.isInfixOf "ProjectionCatalog.projectionCatalogAsyncRegistrations"
+      auditHarness `shouldSatisfy` T.isInfixOf "catalog-demo-catalogAudit|1|fnv1a:9682af3ada04bf50|reporting"
+      auditHarness `shouldSatisfy` T.isInfixOf "asyncRegistration:audit_writer"
+      auditHarness `shouldSatisfy` T.isInfixOf "catalog-demo-audit|catalog-demo-audit-v1"
+      auditHarness `shouldNotSatisfy` T.isInfixOf "\"catalog-managed\", \"catalog-managed\""
+      shipmentHarness `shouldSatisfy` T.isInfixOf "catalogRegistration"
+      shipmentHarness `shouldNotSatisfy` T.isInfixOf "asyncRegistration:"
+
     it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
       parsed <- case parseSource "projection-catalog.keiro" source of
@@ -6468,7 +6484,7 @@ main = hspec $ do
       spec <- specOf "test/fixtures/readmodel.keiro"
       case [readModel | NReadModel readModel <- specNodes spec] of
         (subscriptionModel : _) -> do
-          let modules = harnessReadModel (defaultContext (specContext spec)) subscriptionModel
+          let modules = harnessReadModel (defaultContext (specContext spec)) spec subscriptionModel
               harnessText = generatedTextEndingIn "ReadModelHarness.hs" modules
           length modules `shouldBe` 1
           firewallBreaches modules `shouldBe` []

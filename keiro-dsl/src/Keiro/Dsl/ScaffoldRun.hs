@@ -285,7 +285,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
           NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
           NReadModel readModel ->
             let resolved = resolveCatalogReadModel spec readModel
-             in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx resolved
+             in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx spec resolved
           NProjectionTarget _ -> []
           NRebuildGroup _ -> []
           NProjectionOwner _ -> []

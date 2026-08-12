@@ -38,7 +38,7 @@ module Keiro.Dsl.Harness
   )
 where
 
-import Data.List (find)
+import Data.List (find, sortOn)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
@@ -53,6 +53,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
@@ -223,11 +224,11 @@ routerHarnessFactValuesForService service router = case rvSource (rtResolve rout
 -- expected directly from the notation next to the value produced by the shared
 -- derivation helpers. Committed conformance expectations pin the lowered values,
 -- while a shape-fixture drift makes the generated harness itself fail.
-harnessReadModel :: Context -> ReadModelNode -> [ScaffoldModule]
-harnessReadModel ctx readModel =
+harnessReadModel :: Context -> Spec -> ReadModelNode -> [ScaffoldModule]
+harnessReadModel ctx spec readModel =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs"),
-        moduleText = emitReadModelHarness genPrefix ctx readModel,
+        moduleText = emitReadModelHarness genPrefix ctx spec readModel,
         kind = Generated,
         origin = "readmodel " <> rmName readModel <> locSuffix (rmLoc readModel)
       }
@@ -235,17 +236,18 @@ harnessReadModel ctx readModel =
   where
     genPrefix = genPrefixFor ctx (pascal (rmName readModel))
 
-emitReadModelHarness :: Text -> Context -> ReadModelNode -> Text
-emitReadModelHarness genPrefix ctx readModel =
+emitReadModelHarness :: Text -> Context -> Spec -> ReadModelNode -> Text
+emitReadModelHarness genPrefix ctx spec readModel =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedRecordDot]
       <> [ generatedBanner,
-           "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, readModelFactResults, runReadModelFacts) where",
+           "module " <> genPrefix <> ".ReadModelHarness (" <> T.intercalate ", " moduleExports <> ") where",
            "",
            "import " <> genPrefix <> ".ReadModel (" <> T.intercalate ", " readModelImports <> ")",
-           "import Data.Text qualified as T",
-           "import Keiro.ReadModel (ReadModel (..), StrongScope (..))"
+           "import Data.Text qualified as T"
          ]
+      <> catalogImports
+      <> ["import Keiro.ReadModel (ReadModel (..), StrongScope (..))"]
       <> ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
       <> [ "",
            "-- | (fact, expected from notation, actual generated runtime value).",
@@ -253,16 +255,21 @@ emitReadModelHarness genPrefix ctx readModel =
            "readModelFacts =",
            "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
            "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", T.unpack " <> readModelName <> ".subscriptionName)",
-           "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)",
-           asyncFactRow,
-           "  , (\"consistency\", " <> tshow consistency <> ", show " <> readModelName <> ".defaultConsistency)",
+           "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+         ]
+      <> [asyncFactRow | not catalogManaged]
+      <> [ "  , (\"consistency\", " <> tshow consistency <> ", show " <> readModelName <> ".defaultConsistency)",
            "  , (\"strongScope\", " <> tshow scope <> ", renderStrongScope " <> readModelName <> ".strongScope)",
-           "  ]",
-           "",
+           "  ]"
+         ]
+      <> ["    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations" | catalogManaged]
+      <> [ "",
            "renderStrongScope :: StrongScope -> String",
            "renderStrongScope EntireLog = \"EntireLog\"",
-           "renderStrongScope (CategoryHead categoryName) = \"CategoryHead \" <> T.unpack categoryName",
-           "",
+           "renderStrongScope (CategoryHead categoryName) = \"CategoryHead \" <> T.unpack categoryName"
+         ]
+      <> catalogHelpers
+      <> [ "",
            "readModelFactResults :: [(String, Bool)]",
            "readModelFactResults =",
            "  [(fact, expected == actual) | (fact, expected, actual) <- readModelFacts]",
@@ -278,19 +285,86 @@ emitReadModelHarness genPrefix ctx readModel =
     readModelName = stem <> "ReadModel"
     asyncProjectionName = stem <> "AsyncProjection"
     readModelImports = readModelName : [asyncProjectionName | emitsLegacyAsync]
-    expectedRegistry = contextName ctx <> "-" <> T.replace "_" "-" (rmName readModel)
+    moduleExports = ["readModelFacts", "readModelFactResults", "runReadModelFacts"] <> ["catalogFactsAgainst" | catalogManaged]
+    expectedRegistry = registryNameFor (contextName ctx) readModel
     expectedSubscription = case rmSubscription readModel of
       Just name -> name
       Nothing -> expectedRegistry <> "-sub"
     expectedAsync = case rmFeed readModel of
       RmInline -> "none"
       RmSubscription -> expectedRegistry <> "-async"
-    asyncFactRow
-      | rmGroup readModel /= Nothing = "  , (\"asyncProjectionName\", \"catalog-managed\", \"catalog-managed\")"
-      | otherwise = case rmFeed readModel of
-          RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
-          RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
-    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
+    asyncFactRow = case rmFeed readModel of
+      RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
+      RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
+    catalogManaged = rmGroup readModel /= Nothing
+    emitsLegacyAsync = not catalogManaged && rmFeed readModel == RmSubscription
+    catalogImports
+      | catalogManaged =
+          [ "import " <> contextGeneratedPrefix ctx <> ".ProjectionCatalog qualified as ProjectionCatalog",
+            "import Keiro.Projection.Catalog qualified as Catalog"
+          ]
+      | otherwise = []
+    feedingOwners = case rmGroup readModel of
+      Nothing -> []
+      Just groupName ->
+        sortOn
+          poOrder
+          [ owner
+          | NProjectionOwner owner <- specNodes spec,
+            poFeed owner == RmSubscription,
+            poGroup owner == groupName,
+            any (`elem` poTargets owner) (rmObservedTargets readModel)
+          ]
+    expectedCatalogRegistration =
+      T.intercalate
+        "|"
+        [ expectedRegistry,
+          T.pack (show (rmVersion readModel)),
+          rmShape readModel,
+          fromMaybe "" (rmGroup readModel)
+        ]
+    catalogHelpers
+      | not catalogManaged = []
+      | otherwise =
+          [ "",
+            "catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [(String, String, String)]",
+            "catalogFactsAgainst registrations " <> asyncParameter <> " ="
+          ]
+            <> catalogFactRows
+            <> [ "",
+                 "renderRegistration :: [Catalog.CatalogRegistration] -> String",
+                 "renderRegistration [entry] = T.unpack entry.registryName <> \"|\" <> show entry.version <> \"|\" <> T.unpack entry.shapeHash <> \"|\" <> T.unpack (Catalog.rebuildGroupIdText entry.rebuildGroupId)",
+                 "renderRegistration _ = \"missing\""
+               ]
+            <> asyncRenderHelper
+    asyncRenderHelper
+      | null feedingOwners = []
+      | otherwise =
+          [ "",
+            "renderAsync :: [Catalog.AsyncProjectionRegistration] -> String",
+            "renderAsync [entry] = T.unpack entry.subscriptionName <> \"|\" <> T.unpack entry.dedupName",
+            "renderAsync _ = \"missing\""
+          ]
+    asyncParameter
+      | null feedingOwners = "_asyncRegistrations"
+      | otherwise = "asyncRegistrations"
+    catalogFactRows =
+      [ "  [ (\"catalogRegistration\", "
+          <> tshow expectedCatalogRegistration
+          <> ", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "
+          <> tshow (rmName readModel)
+          <> "])"
+      ]
+        <> [ "  , (\"asyncRegistration:"
+               <> poName owner
+               <> "\", "
+               <> tshow (T.intercalate "|" [fromMaybe "" (poSubscription owner), fromMaybe "" (poDedup owner)])
+               <> ", renderAsync [entry | entry <- asyncRegistrations, Catalog.projectionIdText entry.projectionId == "
+               <> tshow (poName owner)
+               <> "])"
+           | owner <- feedingOwners
+           ]
+        <> ["  ]"]
     consistency = case rmConsistency readModel of
       Strong -> "Strong"
       Eventual -> "Eventual"

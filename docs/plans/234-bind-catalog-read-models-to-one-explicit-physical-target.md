@@ -78,11 +78,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-08-11 19:15 PDT) M2: Make `readModelPairDiff` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` compare `(group, target set, effective backing)` instead of `(group, target list)`.
 - [x] (2026-08-11 19:15 PDT) M2: Create fixtures `catalog-readmodel-backing-required.keiro`, `catalog-readmodel-backing-unobserved.keiro`, and the reorder pair `catalog-readmodel-reorder-a.keiro` / `catalog-readmodel-reorder-b.keiro`, with tests.
 - [x] (2026-08-11 19:15 PDT) M2: Test that scaffolding the reorder pair yields identical module sets, and that a real target-set change still reports `CatalogQueryBindingChanged`.
-- [ ] M3: Extend `harnessReadModel` / `emitReadModelHarness` in `keiro-dsl/src/Keiro/Dsl/Harness.hs` to take the `Spec` and emit real grouped facts (`catalogRegistration` row plus per-feeding-owner `asyncRegistration` rows via a `catalogFactsAgainst` helper).
-- [ ] M3: Update the three `harnessReadModel` call sites (`ScaffoldRun.hs`, `WorkspaceScaffold.hs`, `test/Main.hs`).
-- [ ] M3: Add textual emitter tests: grouped harness imports the generated `ProjectionCatalog` module, pins the spec-derived expected identities, and no longer contains the constant `"catalog-managed", "catalog-managed"` row.
-- [ ] M3: Add the runtime mutation test to `keiro-dsl/test/conformance-projection-catalog/Main.hs` (hand-owned): `catalogFactsAgainst` fails on a perturbed registration list and passes as generated.
-- [ ] M4: Run `just corpus-regen`; commit regenerated `conformance-projection-catalog` and `conformance-mapped-readmodel` modules; run `just conformance-corpus-policy`.
+- [x] (2026-08-11 19:29 PDT) M3: Extend `harnessReadModel` / `emitReadModelHarness` in `keiro-dsl/src/Keiro/Dsl/Harness.hs` to take the `Spec` and emit real grouped facts (`catalogRegistration` row plus per-feeding-owner `asyncRegistration` rows via a `catalogFactsAgainst` helper).
+- [x] (2026-08-11 19:29 PDT) M3: Update the three `harnessReadModel` call sites (`ScaffoldRun.hs`, `WorkspaceScaffold.hs`, `test/Main.hs`).
+- [x] (2026-08-11 19:29 PDT) M3: Add textual emitter tests: grouped harness imports the generated `ProjectionCatalog` module, pins the spec-derived expected identities, and no longer contains the constant `"catalog-managed", "catalog-managed"` row.
+- [x] (2026-08-11 19:29 PDT) M3: Add the runtime mutation test to `keiro-dsl/test/conformance-projection-catalog/Main.hs` (hand-owned): `catalogFactsAgainst` fails on a perturbed registration list and passes as generated.
+- [ ] M4: Run `just corpus-regen`; commit regenerated `conformance-projection-catalog`, `conformance-mapped-readmodel`, and `conformance-declarative-router` modules; run `just conformance-corpus-policy`.
 - [ ] M4: Run `just verify` clean.
 - [ ] M4: Update `CHANGELOG.md` (Unreleased, keiro-dsl entries: new codes, new clause, forbidden form, harness change).
 - [ ] M4: Extend `docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md` with the binding rule (see Decision Log) and update the MasterPlan-36 registry row and progress checkboxes.
@@ -106,6 +106,14 @@ implementation. Provide concise evidence.
   ...
   keeps only the named source-version compatibility fixtures outside stable v4
   ```
+
+- Regenerating the grouped harnesses changed five modules across three suites, not only
+  the two suites named in the original milestone: `conformance-declarative-router` also
+  contains the grouped `hospitalLoad` read model. All three affected suites compiled and
+  passed. The mutation test also showed that GHC 9.12 cannot disambiguate a qualified
+  `subscriptionName` record update because the catalog module exports three records with
+  that field; reconstructing `AsyncProjectionRegistration` makes the negative control
+  explicit and portable.
 
 
 ## Decision Log

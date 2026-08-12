@@ -31,6 +31,11 @@ main :: IO ()
 main = do
   readModelFactsPassed <- and <$> sequence [CatalogAudit.runReadModelFacts, OrderInline.runReadModelFacts, ShipmentLookup.runReadModelFacts]
   assert "generated read-model facts" readModelFactsPassed
+  let perturbed = map perturbSubscriptionName projectionCatalogAsyncRegistrations
+      mutated = CatalogAudit.catalogFactsAgainst projectionCatalogRegistrations perturbed
+  assert
+    "perturbed async registration identity is detected"
+    (any (\(fact, expected, actual) -> fact == "asyncRegistration:audit_writer" && expected /= actual) mutated)
   mapM_ (uncurry assert) Orders.harnessAssertions
   mapM_ (uncurry assert) Shipments.harnessAssertions
   mapM_ (uncurry assert) structuralConformanceAssertions
@@ -67,6 +72,10 @@ main = do
   assert "catalog-scoped rebuild group" (Catalog.rebuildGroupIdText reportingRebuildGroupId == "reporting")
   assert "disjoint catalog rebuild group" (Catalog.rebuildGroupIdText shippingRebuildGroupId == "shipping")
   putStrLn "projection catalog conformance: PASS"
+
+perturbSubscriptionName :: Catalog.AsyncProjectionRegistration -> Catalog.AsyncProjectionRegistration
+perturbSubscriptionName (Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId _ checkpointOnMissing dedupKeyId dedupName) =
+  Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId "catalog-demo-audit-WRONG" checkpointOnMissing dedupKeyId dedupName
 
 exerciseQualificationQueue :: IO ()
 exerciseQualificationQueue = do
