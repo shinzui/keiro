@@ -63,11 +63,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the cancel-lands-first interleaving test to `keiro/test/Main.hs` and observe it fail on current code (instance stays `suspended`)
-- [ ] M1: add the suspend-lands-first interleaving test (documents the order the current cancel upsert already wins)
-- [ ] M1: broaden the suspend re-check in `markInstanceSuspendedAwaiting` (`keiro/src/Keiro/Workflow/Instance.hs`) to consult the awakeable row's terminal status for `awk:`-prefixed awaited steps
-- [ ] M1: take the per-step advisory lock in `cancelAwakeable` (`keiro/src/Keiro/Workflow/Awakeable.hs`), deriving the lock key from the owner row and current generation
-- [ ] M1: both interleaving tests pass; full `cabal test keiro-test` green
+- [x] M1: add the cancel-lands-first interleaving test to `keiro/test/Main.hs` and observe it fail on current code (instance stays `suspended`) (2026-08-12T18:03:49Z)
+- [x] M1: add the suspend-lands-first interleaving test (documents the order the current cancel upsert already wins) (2026-08-12T18:06:52Z)
+- [x] M1: broaden the suspend re-check in `markInstanceSuspendedAwaiting` (`keiro/src/Keiro/Workflow/Instance.hs`) to consult the awakeable row's terminal status for `awk:`-prefixed awaited steps (2026-08-12T18:06:52Z)
+- [x] M1: take the per-step advisory lock in `cancelAwakeable` (`keiro/src/Keiro/Workflow/Awakeable.hs`), deriving the lock key from the owner row and current generation (2026-08-12T18:06:52Z)
+- [x] M1: both interleaving tests pass; full `cabal test keiro-test` green (496 examples, 2026-08-12T18:10:51Z)
 - [ ] M2: change `claimInstance` to return a `ClaimOutcome` that distinguishes acquired / lease-held / paced / unavailable
 - [ ] M2: extend `ResumeSummary` with `advanced`, `paced`, and `unregisteredNames`; update `emptyResumeSummary`, the `Semigroup` instance, and every bump site in `Resume.hs`
 - [ ] M2: rewrite the `resumeWorkflowsOnce` / `resumeWorkflowsOnceUpTo` haddock to state the honest drain contract
@@ -87,7 +87,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The reproduce-first cancel-before-suspend test fails at the intended status
+  assertion before the fix: `expected: WfRunning` but `got: WfSuspended` at
+  `keiro/test/Main.hs:10429`. Discovery and resume are therefore unreachable,
+  confirming that exact discovery turns the stale suspend overwrite into a
+  permanent strand rather than a transient delay. Evidence: `cabal test
+  keiro-test --test-options='--match "cancel lands before"'` reported one
+  example, one failure on 2026-08-12.
 
 
 ## Decision Log

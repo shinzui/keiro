@@ -10412,6 +10412,61 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
       completed finish `shouldBe` 1
 
+    it "stays discoverable when a cancel lands before the stale suspend write" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "race-cancel-first"
+          wid = WorkflowId "rcf-1"
+          opts = defaultWorkflowResumeOptions & #logEvent .~ const (pure ())
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      Right True <- Store.runStoreIO storeHandle $ cancelAwakeable aid
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Instance.markInstanceSuspendedAwaiting name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      Right (Just arbitrated) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      arbitrated ^. #status `shouldBe` Instance.WfRunning
+      wokenAt <- getCurrentTime
+      Right woken <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
+      woken `shouldBe` [("rcf-1", "race-cancel-first")]
+      Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+      (discovered summary, resumed summary, completed summary) `shouldBe` (1, 1, 0)
+      Right (Just crashed) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      crashed ^. #attempts `shouldBe` 1
+      fmap Text.unpack (crashed ^. #lastError)
+        `shouldSatisfy` maybe False (isInfixOf "WorkflowAwakeableCancelled")
+
+    it "flips a suspended instance to running when the cancel lands after the suspend write" $ \storeHandle -> do
+      aidRef <- newIORef Nothing
+      let name = WorkflowName "race-cancel-second"
+          wid = WorkflowId "rcs-1"
+          opts = defaultWorkflowResumeOptions & #logEvent .~ const (pure ())
+          registry = Map.singleton name (WorkflowDef (\_ -> approvalFlowWithId aidRef))
+      Right Suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+      aid <- readRequiredAwakeableId aidRef
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Instance.markInstanceSuspendedAwaiting name wid 0 (awakeableStepPrefix <> awakeableIdText aid)
+      Right (Just parked) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      parked ^. #status `shouldBe` Instance.WfSuspended
+      parkedAt <- getCurrentTime
+      Right invisible <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds parkedAt)
+      invisible `shouldBe` []
+      Right True <- Store.runStoreIO storeHandle $ cancelAwakeable aid
+      Right (Just woken) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      woken ^. #status `shouldBe` Instance.WfRunning
+      wokenAt <- getCurrentTime
+      Right discoveredNow <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds wokenAt)
+      discoveredNow `shouldBe` [("rcs-1", "race-cancel-second")]
+      Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+      (discovered summary, resumed summary, completed summary) `shouldBe` (1, 1, 0)
+      Right (Just crashed) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      crashed ^. #attempts `shouldBe` 1
+      fmap Text.unpack (crashed ^. #lastError)
+        `shouldSatisfy` maybe False (isInfixOf "WorkflowAwakeableCancelled")
+
     it "surfaces a due sleep through the wake hint and a fired sleep through running" $ \storeHandle -> do
       counter <- newIORef (0 :: Int)
       let name = WorkflowName "quiet-sleep"

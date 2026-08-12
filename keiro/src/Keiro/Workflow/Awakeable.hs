@@ -109,6 +109,7 @@ import Keiro.Workflow.Awakeable.Schema
     registerAwakeableTx,
   )
 import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
+import Keiro.Workflow.Schema (lockWorkflowStepTx, workflowStepLockKey)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -391,6 +392,12 @@ throwOnAppendConflict = \case
 -- already cancelled, or unknown). A workflow that later re-enters the awakeable's
 -- @await@ then throws 'WorkflowAwakeableCancelled'.
 --
+-- Cancellation and a concurrent stale suspend write are serialized under the
+-- same generation-scoped per-step advisory lock that protects wake delivery.
+-- If cancellation commits first, the suspend re-check observes the terminal
+-- awakeable row; if suspension commits first, cancellation's instance upsert
+-- restores @running@. Either order leaves the workflow discoverable.
+--
 -- Because there is no journal append, the same transaction flips the /owning
 -- workflow's/ @keiro_workflows@ row to @running@ — the status a wake delivery
 -- would have written. Cancellation is a wake-source lifecycle transition like
@@ -403,9 +410,22 @@ throwOnAppendConflict = \case
 -- instance is on, and it never revives a terminal instance.
 cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool
 cancelAwakeable aid =
-  runTransaction $
-    cancelAwakeableTx (awakeableIdToUuid aid) >>= \case
-      Nothing -> pure False
-      Just (ownerName, ownerId) -> do
-        upsertInstanceTx ownerId ownerName 0 WfRunning Nothing
-        pure True
+  lookupAwakeable (awakeableIdToUuid aid) >>= \case
+    Nothing -> pure False
+    Just row -> do
+      let ownerName = WorkflowName (row ^. #ownerWorkflowName)
+          ownerId = WorkflowId (row ^. #ownerWorkflowId)
+      gen <- currentGeneration ownerName ownerId
+      runTransaction $ do
+        lockWorkflowStepTx
+          ( workflowStepLockKey
+              (unWorkflowId ownerId)
+              (unWorkflowName ownerName)
+              gen
+              (awakeableStepPrefix <> awakeableIdText aid)
+          )
+        cancelAwakeableTx (awakeableIdToUuid aid) >>= \case
+          Nothing -> pure False
+          Just (ownerNameText, ownerIdText) -> do
+            upsertInstanceTx ownerIdText ownerNameText 0 WfRunning Nothing
+            pure True

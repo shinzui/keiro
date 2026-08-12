@@ -85,7 +85,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 |---|-------|------|-----------|-----------|--------|
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
-| 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Not Started |
+| 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | In Progress |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |

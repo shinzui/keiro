@@ -36,12 +36,18 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
+import Data.UUID (UUID)
+import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
+import Keiro.Workflow.Awakeable.Schema
+  ( AwakeableStatus (..),
+    lookupAwakeableStatusTx,
+  )
 import Keiro.Workflow.Child.Cancel (ensureChildCancelled)
 import Keiro.Workflow.Child.Schema
   ( ChildStatus (..),
@@ -71,6 +77,7 @@ import Keiro.Workflow.Types
     WorkflowId (..),
     WorkflowJournalEvent (..),
     WorkflowName (..),
+    awakeableStepPrefix,
     cancelledStepName,
     completedStepName,
     continuedAsNewStepName,
@@ -147,19 +154,23 @@ data CancelWorkflowOutcome
 -- The fix reuses the lock the append path already takes. Every wake delivery
 -- goes through @prepareJournalAppend@, which holds the per-step advisory lock
 -- ('lockWorkflowStepTx' on 'workflowStepLockKey') while it appends and upserts
--- the instance row. Taking the same lock here totally orders the two writers:
+-- the instance row. Awakeable cancellation takes that lock too, but writes no
+-- step row, so this transaction additionally consults the awakeable row's
+-- terminal lifecycle status. Taking the same lock here totally orders the
+-- writers:
 --
 -- * suspend wins the lock — it writes @suspended@; the wake, queued behind it,
 --   then writes @running@;
--- * wake wins the lock — this transaction sees the committed step-index row and
---   writes @running@ itself.
+-- * wake wins the lock — this transaction sees either the committed step-index
+--   row or the terminal awakeable row and writes @running@ itself.
 --
 -- Either way no resolved wake is left behind a @suspended@ status. The
 -- re-check reads the same authoritative @keiro_workflow_steps@ index the
 -- @Await@ miss path consults, which is written in the same transaction as every
--- journal append. This also covers the self-repair arms (an awakeable or child
--- whose arm appends the awaited result itself and then suspends): they observe
--- their own append and end @running@.
+-- journal append. For @awk:@ steps it also reads @keiro_awakeables@, whose row
+-- is the durable lifecycle authority for cancellation and completion. This
+-- covers cancellation (the only wake transition without a step row) and the
+-- self-repair arms whose append lands before their stale suspend write.
 markInstanceSuspendedAwaiting ::
   (Store :> es) =>
   WorkflowName ->
@@ -173,8 +184,17 @@ markInstanceSuspendedAwaiting (WorkflowName nameText) (WorkflowId widText) gen a
   runTransaction $ do
     lockWorkflowStepTx (workflowStepLockKey widText nameText gen awaitedStep)
     resolved <- lookupStepResultTx widText nameText gen awaitedStep
-    let status = maybe WfSuspended (const WfRunning) resolved
+    abandoned <- case resolved of
+      Just _ -> pure False
+      Nothing -> case awakeableUuidFromStep awaitedStep of
+        Nothing -> pure False
+        Just aid -> maybe False (/= Pending) <$> lookupAwakeableStatusTx aid
+    let status = if isJust resolved || abandoned then WfRunning else WfSuspended
     upsertInstanceTx widText nameText (fromIntegral gen) status Nothing
+
+awakeableUuidFromStep :: Text -> Maybe UUID
+awakeableUuidFromStep stepName =
+  UUID.fromText =<< Text.stripPrefix awakeableStepPrefix stepName
 
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =
