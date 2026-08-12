@@ -744,7 +744,11 @@ clockAtoms = Set.fromList ["now", "currentTime", "wallClock", "today", "utcNow"]
 -- An empty list means valid. Current released versions share this policy, but
 -- selecting it at this boundary prevents successor semantics from being lost.
 validateService :: CheckedService -> [Diagnostic]
-validateService service = validateCheckedSpec (checkedLanguageContract service) (checkedSpec service)
+validateService service =
+  validateCheckedSpec
+    (checkedLanguageContract service)
+    (checkedTypeGraph service)
+    (checkedSpec service)
 
 -- | Compatibility wrapper for callers that have only a normalized graph. It
 -- explicitly selects legacy/version-1 semantics; production source/workspace
@@ -752,9 +756,9 @@ validateService service = validateCheckedSpec (checkedLanguageContract service) 
 validateSpec :: Spec -> [Diagnostic]
 validateSpec = validateService . legacyCheckedService
 
-validateCheckedSpec :: EffectiveLanguageContract -> Spec -> [Diagnostic]
-validateCheckedSpec languageContract spec =
-  sortOn line (validateNames languageContract spec ++ validateMapped spec ++ validateNominal languageContract spec ++ validateAggregateTypes spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract spec) (specNodes spec))
+validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateCheckedSpec languageContract typeGraphResult spec =
+  sortOn line (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract typeGraphResult spec) (specNodes spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -808,12 +812,12 @@ nominalTypeDiagnostic nominalError = case nominalError of
     problem loc diagnosticCode detail = mkErr (locLine loc) diagnosticCode (detail <> "; GHC and conformance validate consumer function bodies")
 
 -- | Resolve every direct aggregate type once at the earliest semantic gate.
-validateAggregateTypes :: Spec -> [Diagnostic]
-validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
+validateAggregateTypes :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes spec of
   Left _ -> []
   Right _ -> concatMap aggregateRules aggregates
   where
-    symbols = aggregateSymbols spec
+    symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
 
     aggregateRules aggregate =
@@ -852,7 +856,7 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
 
     transitionRules aggregate transition = ownershipRules ++ outcomeExpressionRules
       where
-        environment = expressionEnvironment spec aggregate transition
+        environment = expressionEnvironmentFromGraphResult typeGraphResult spec aggregate transition
         ownershipRules = case tImplementation transition of
           LegacyHoleImplementation ->
             concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
@@ -1042,12 +1046,12 @@ renderAggregateUseSite useSite = case useSite of
 -- Haskell. Symbol-shaped facts are checked lexically here; GHC remains the
 -- authority for whether the named packages, modules, values, types, and
 -- instances actually exist with the promised types.
-validateMapped :: Spec -> [Diagnostic]
-validateMapped spec =
+validateMapped :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateMapped typeGraphResult spec =
   mappedLexicalRules spec
     ++ mappedIdentityRules spec
     ++ mappedConflictRules spec
-    ++ case resolveTypeGraph spec of
+    ++ case typeGraphResult of
       Left errors -> concatMap (typeGraphDiagnostic spec) (NE.toList errors)
       Right graph -> mappedGraphRules spec graph
 
@@ -1480,8 +1484,8 @@ headOr fallback = \case
 -- | Check every logical name before a renderer can turn it into Haskell.  The
 -- parser enforces the ASCII alphabet; 'HaskellName' owns word segmentation,
 -- casing, keywords, and normalized collision keys.
-validateNames :: EffectiveLanguageContract -> Spec -> [Diagnostic]
-validateNames languageContract spec =
+validateNames :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateNames languageContract typeGraphResult spec =
   concat
     [ concatMap idNames (specIds spec),
       concatMap enumNames (specEnums spec),
@@ -1741,7 +1745,7 @@ validateNames languageContract spec =
         initialState = case aggStates aggregate of
           state : _ -> stName state
           [] -> ""
-        symbols = aggregateSymbols spec
+        symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
         targetModule =
           "Generated."
             <> contextSegment
@@ -1994,22 +1998,22 @@ nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
-validateNode :: EffectiveLanguageContract -> Spec -> Node -> [Diagnostic]
-validateNode languageContract spec (NAggregate agg) = validateAggregate languageContract spec agg
-validateNode languageContract spec (NProcess p) = validateProcess languageContract spec p
-validateNode languageContract spec (NRouter router) = validateRouter languageContract spec router
-validateNode languageContract _spec (NContract contract) = validateContract languageContract contract
-validateNode languageContract spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
-validateNode languageContract spec (NEmit e) = validateEmit languageContract spec e
-validateNode languageContract spec (NPublisher p) = validatePublisher languageContract spec p
-validateNode languageContract _spec (NWorkqueue w) = validateWorkqueue languageContract w
-validateNode languageContract spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
-validateNode languageContract spec (NReadModel readModel) = validateReadModel languageContract spec readModel
-validateNode languageContract _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
-validateNode languageContract spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
-validateNode languageContract spec (NProjectionOwner owner) = validateProjectionOwner languageContract spec owner
-validateNode _languageContract _spec (NWorkflow w) = validateWorkflow w
-validateNode _languageContract spec (NOperation o) = validateOperation spec o
+validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> Node -> [Diagnostic]
+validateNode languageContract typeGraphResult spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
+validateNode languageContract _typeGraphResult spec (NProcess p) = validateProcess languageContract spec p
+validateNode languageContract typeGraphResult spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
+validateNode languageContract _typeGraphResult _spec (NContract contract) = validateContract languageContract contract
+validateNode languageContract _typeGraphResult spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
+validateNode languageContract _typeGraphResult spec (NEmit e) = validateEmit languageContract spec e
+validateNode languageContract _typeGraphResult spec (NPublisher p) = validatePublisher languageContract spec p
+validateNode languageContract _typeGraphResult _spec (NWorkqueue w) = validateWorkqueue languageContract w
+validateNode languageContract _typeGraphResult spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
+validateNode languageContract _typeGraphResult spec (NReadModel readModel) = validateReadModel languageContract spec readModel
+validateNode languageContract _typeGraphResult _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
+validateNode languageContract _typeGraphResult spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
+validateNode languageContract _typeGraphResult spec (NProjectionOwner owner) = validateProjectionOwner languageContract spec owner
+validateNode _languageContract _typeGraphResult _spec (NWorkflow w) = validateWorkflow w
+validateNode _languageContract _typeGraphResult spec (NOperation o) = validateOperation spec o
 
 validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
@@ -3492,8 +3496,8 @@ logicalFieldSelector raw =
         }
 
 -- | EP-108 rules for a stateless content-based router.
-validateRouter :: EffectiveLanguageContract -> Spec -> RouterNode -> [Diagnostic]
-validateRouter languageContract spec router =
+validateRouter :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> RouterNode -> [Diagnostic]
+validateRouter languageContract typeGraphResult spec router =
   concat
     [ references,
       keyField,
@@ -3600,7 +3604,7 @@ validateRouter languageContract spec router =
             ]
 
     selectionChecks = case rvSource (rtResolve router) of
-      ResolveDeclarative {} -> case resolveTypeGraph spec of
+      ResolveDeclarative {} -> case typeGraphResult of
         Left _ -> []
         Right graph -> case RouterSelection.checkRouterSelection languageContract graph spec router of
           Right _ -> []
@@ -3700,8 +3704,8 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
     isDeadLetter DDeadLetter {} = True
     isDeadLetter _ = False
 
-validateAggregate :: EffectiveLanguageContract -> Spec -> Aggregate -> [Diagnostic]
-validateAggregate languageContract spec agg =
+validateAggregate :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> [Diagnostic]
+validateAggregate languageContract typeGraphResult spec agg =
   concat
     [ emptyAggregate,
       duplicateMembers,
@@ -3891,7 +3895,7 @@ validateAggregate languageContract spec agg =
             <> "); generated identity output is legal only when the transition consumes that same command"
       | transition <- aggTransitions agg,
         (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
-        Left OutputCommandMismatch {declaredSourceCommand = declared, consumingTransitionCommand = consuming} <- [eventOutputMapping spec agg transition emitIndex eventName]
+        Left OutputCommandMismatch {declaredSourceCommand = declared, consumingTransitionCommand = consuming} <- [eventOutputMappingFromGraphResult typeGraphResult spec agg transition emitIndex eventName]
       ]
 
     registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)

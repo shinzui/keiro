@@ -140,7 +140,7 @@ bindingObligations = bindingObligationsForService . legacyCheckedService
 
 bindingObligationsForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingObligation]
 bindingObligationsForService service = do
-  graph <- first (fmap BindingTypeGraphError) (resolveTypeGraph spec)
+  graph <- first (fmap BindingTypeGraphError) (checkedTypeGraph service)
   nominalRegistry <- first (fmap BindingNominalTypeError) (resolveNominalTypes spec)
   pure . sortOn obligationSortKey $
     concat
@@ -156,7 +156,7 @@ bindingHoles = bindingHolesForService . legacyCheckedService
 
 bindingHolesForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingHole]
 bindingHolesForService service = do
-  graph <- first (fmap BindingTypeGraphError) (resolveTypeGraph spec)
+  graph <- first (fmap BindingTypeGraphError) (checkedTypeGraph service)
   obligations <- bindingObligationsForService service
   pure . sortOn holeSortKey $
     concat
@@ -174,8 +174,6 @@ bindingHolesForService service = do
          | obligation <- obligations,
            obligationCategory obligation /= "structural"
          ]
-  where
-    spec = checkedSpec service
 
 holesFor :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [BindingObligation] -> [BindingHole]
 holesFor _graph declaration shape obligations = bindingEntries <> auxiliaryEntries

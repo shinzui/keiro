@@ -10,6 +10,9 @@
 module Keiro.Dsl.Expression
   ( ExpressionEnvironment,
     expressionEnvironment,
+    expressionEnvironmentFromGraph,
+    expressionEnvironmentFromGraphResult,
+    expressionEnvironmentWith,
     ExpectedScalarType (..),
     ScalarRootProvenance (..),
     ResolvedScalarProjection (..),
@@ -47,13 +50,28 @@ data ExpressionEnvironment = ExpressionEnvironment
   }
 
 expressionEnvironment :: Spec -> Aggregate -> Transition -> ExpressionEnvironment
-expressionEnvironment spec aggregate transition =
+expressionEnvironment spec = expressionEnvironmentFromGraphResult (resolveTypeGraph spec) spec
+
+expressionEnvironmentFromGraph :: TypeGraph -> Spec -> Aggregate -> Transition -> ExpressionEnvironment
+expressionEnvironmentFromGraph graph = expressionEnvironmentFromGraphResult (Right graph)
+
+expressionEnvironmentFromGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> Transition -> ExpressionEnvironment
+expressionEnvironmentFromGraphResult typeGraphResult spec aggregate transition =
+  expressionEnvironmentWith
+    (aggregateSymbolsFromGraphResult typeGraphResult spec)
+    (either (const Nothing) Just typeGraphResult)
+    spec
+    aggregate
+    transition
+
+expressionEnvironmentWith :: AggregateSymbols -> Maybe TypeGraph -> Spec -> Aggregate -> Transition -> ExpressionEnvironment
+expressionEnvironmentWith symbols graph spec aggregate transition =
   ExpressionEnvironment
     { environmentSpec = spec,
       environmentAggregate = aggregate,
       environmentTransition = transition,
-      environmentSymbols = aggregateSymbols spec,
-      environmentTypeGraph = either (const Nothing) Just (resolveTypeGraph spec)
+      environmentSymbols = symbols,
+      environmentTypeGraph = graph
     }
 
 data ExpectedScalarType

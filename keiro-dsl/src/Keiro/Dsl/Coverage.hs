@@ -21,6 +21,7 @@ module Keiro.Dsl.Coverage
     CoverageDelta (..),
     CoverageReport (..),
     coverageReport,
+    coverageReportForService,
     coverageDiffReport,
     failOnOpaque,
     failOnOpaqueIncrease,
@@ -41,6 +42,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (DiagnosticCode (..), Severity (..))
@@ -182,8 +184,12 @@ data CoverageReport = CoverageReport
   deriving stock (Eq, Show)
 
 coverageReport :: FilePath -> Spec -> Either (NonEmpty TypeGraphError) CoverageReport
-coverageReport specPath spec = do
-  graph <- resolveTypeGraph spec
+coverageReport specPath = coverageReportForService specPath . legacyCheckedService
+
+coverageReportForService :: FilePath -> CheckedService -> Either (NonEmpty TypeGraphError) CoverageReport
+coverageReportForService specPath service = do
+  graph <- checkedTypeGraph service
+  let spec = checkedSpec service
   let impact = semanticImpact graph
       roots = sortOn (\root -> (rootPath root, rootConsumer root, rootSurface root)) (map (coverageRoot graph) (impactRoots impact))
       structural = structuralBoundaryInventory graph

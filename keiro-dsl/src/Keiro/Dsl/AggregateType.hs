@@ -11,6 +11,8 @@ module Keiro.Dsl.AggregateType
     ResolvedAggregateType (..),
     AggregateSymbols,
     aggregateSymbols,
+    aggregateSymbolsFromGraph,
+    aggregateSymbolsFromGraphResult,
     AggregateTypeErrorReason (..),
     AggregateTypeError (..),
     resolveAggregateType,
@@ -87,6 +89,17 @@ data AggregateSymbols = AggregateSymbols
 
 aggregateSymbols :: Spec -> AggregateSymbols
 aggregateSymbols spec =
+  aggregateSymbolsFromGraphResult (resolveTypeGraph spec) spec
+
+aggregateSymbolsFromGraph :: TypeGraph -> Spec -> AggregateSymbols
+aggregateSymbolsFromGraph graph = aggregateSymbolsFromDeclarations (tgDeclarations graph)
+
+aggregateSymbolsFromGraphResult :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> AggregateSymbols
+aggregateSymbolsFromGraphResult graphResult =
+  aggregateSymbolsFromDeclarations (either (const Map.empty) tgDeclarations graphResult)
+
+aggregateSymbolsFromDeclarations :: Map MappedKey ResolvedMappedDecl -> Spec -> AggregateSymbols
+aggregateSymbolsFromDeclarations mappedDeclarations spec =
   AggregateSymbols
     { symbolNominals = either (const Map.empty) nominalTypes (resolveNominalTypes spec),
       symbolVertices =
@@ -94,7 +107,7 @@ aggregateSymbols spec =
           [ (aggName aggregate <> "Vertex", map stName (aggStates aggregate))
           | NAggregate aggregate <- specNodes spec
           ],
-      symbolMapped = either (const Map.empty) tgDeclarations (resolveTypeGraph spec)
+      symbolMapped = mappedDeclarations
     }
 
 data AggregateTypeErrorReason

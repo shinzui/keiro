@@ -35,7 +35,7 @@ import Keiro.Dsl.SemanticContract (CheckedService (..), checkedSource, effective
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex, emptySemanticSourceIndex)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkWorkspaceForService, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReportWithImpacts)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
@@ -524,7 +524,7 @@ run (Check fp options) = do
       -- success-path artifact: its findings must reach the deny policy, the exit
       -- code, and the check report. It still runs only after semantic validation
       -- passes, because an unresolvable graph has nothing to cover.
-      coveragePlan <- planCheckCoverage fp spec (if semanticFailed then Nothing else checkCoverage options)
+      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else checkCoverage options)
       coverageOk <- emitPlannedCoverage coveragePlan
       let diags = semanticDiags <> plannedCoverageDiagnostics coveragePlan
           deniedWarningCodes = deniedSourceWarningCodes options diags
@@ -796,14 +796,14 @@ runWorkspaceCheck fp options = do
     Right workspace -> do
       let service = checkedWorkspace workspace
           floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) (checkMinLanguage options)
-          semanticDiags = floorDiags <> checkWorkspace workspace
+          semanticDiags = floorDiags <> checkWorkspaceForService workspace service
           spec = checkedSpec service
           semanticFailed = any ((== Error) . wdSeverity) semanticDiags
       emitWorkspaceLanguageContractNotice fp workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) semanticDiags
       -- Same contract as the single-spec path: coverage findings are gated
       -- diagnostics, not success-path output. See `run (Check …)` above.
-      coveragePlan <- planCheckCoverage fp spec (if semanticFailed then Nothing else checkCoverage options)
+      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else checkCoverage options)
       coverageOk <- emitPlannedCoverage coveragePlan
       let diags = semanticDiags <> map (workspaceCoverageDiagnostic fp) (plannedCoverageFindings coveragePlan)
           deniedWarningCodes = deniedWorkspaceWarningCodes options diags
@@ -1134,10 +1134,10 @@ data PlannedCoverage
   | -- | The mapped-type graph did not resolve; the pass cannot run.
     CoverageUnresolved !String
 
-planCheckCoverage :: FilePath -> Spec -> Maybe CheckCoverageOptions -> IO PlannedCoverage
+planCheckCoverage :: FilePath -> CheckedService -> Maybe CheckCoverageOptions -> IO PlannedCoverage
 planCheckCoverage _ _ Nothing = pure NoCoverage
-planCheckCoverage specPath spec (Just options) =
-  pure $ case Coverage.coverageReport specPath spec of
+planCheckCoverage specPath service (Just options) =
+  pure $ case Coverage.coverageReportForService specPath service of
     Left graphErrors -> CoverageUnresolved (show graphErrors)
     Right baseReport ->
       PlannedCoverage

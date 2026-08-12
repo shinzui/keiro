@@ -13,16 +13,20 @@ module Keiro.Dsl.EventOutput
     EventOutputMapping (..),
     EventOutputError (..),
     eventOutputMapping,
+    eventOutputMappingFromGraph,
+    eventOutputMappingFromGraphResult,
     eventOutputCanonical,
   )
 where
 
 import Data.List (find)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
+import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 
 -- | One field in a checked identity copy.  The selector and current wire name
 -- are retained separately so a future aggregate-field alias can change the wire
@@ -65,7 +69,13 @@ data EventOutputError
 -- only for a transition consuming that exact command.  Explicit event fields
 -- remain hand-owned even when their names happen to match command fields.
 eventOutputMapping :: Spec -> Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping
-eventOutputMapping spec aggregate transition emitIndex eventName = do
+eventOutputMapping spec = eventOutputMappingFromGraphResult (resolveTypeGraph spec) spec
+
+eventOutputMappingFromGraph :: TypeGraph -> Spec -> Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping
+eventOutputMappingFromGraph graph = eventOutputMappingFromGraphResult (Right graph)
+
+eventOutputMappingFromGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping
+eventOutputMappingFromGraphResult typeGraphResult spec aggregate transition emitIndex eventName = do
   event <- maybe (Left (OutputEventMissing eventName)) Right (find ((== eventName) . evName) (aggEvents aggregate))
   case (tImplementation transition, evBody event) of
     (LegacyHoleImplementation, _) -> pure handOwned
@@ -87,7 +97,7 @@ eventOutputMapping spec aggregate transition emitIndex eventName = do
                 outputFields = fields
               }
   where
-    symbols = aggregateSymbols spec
+    symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     handOwned =
       HandOwnedEventOutput
         { outputObligation =

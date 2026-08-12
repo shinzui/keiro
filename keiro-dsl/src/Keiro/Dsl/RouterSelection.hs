@@ -198,6 +198,8 @@ checkRouterSelection languageContract graph spec router = case rvSource (rtResol
   ResolveHole -> selectionFailure (rvLoc (rtResolve router)) SelectionNotDeclarative "custom-unverified router selection has no checked declarative contract"
   ResolveDeclarative declaration -> checkDeclaration declaration
   where
+    symbols = aggregateSymbolsFromGraph graph spec
+
     checkDeclaration declaration = do
       requireFeature declaration
       identity <- requireIdentity declaration
@@ -320,7 +322,7 @@ checkRouterSelection languageContract graph spec router = case rvSource (rtResol
         Just value -> Right value
         Nothing -> selectionFailure (rdLoc (rtDispatch router)) SelectionCommandMappingIncomplete ("missing dispatch mapping for field '" <> aggregateFieldName field <> "'")
       expression <- resolveBinding selectionGraph inputBinding rowBinding (rdLoc (rtDispatch router)) binding
-      expectedAggregateType <- case inferAggregateFieldType (aggregateSymbols spec) aggregate CommandFieldUse field of
+      expectedAggregateType <- case inferAggregateFieldType symbols aggregate CommandFieldUse field of
         Left _ -> selectionFailure (aggregateFieldLoc field) SelectionCommandMappingTypeMismatch ("command field '" <> aggregateFieldName field <> "' has no selection-compatible scalar type")
         Right value -> Right value
       expected <- maybe (selectionFailure (aggregateFieldLoc field) SelectionCommandMappingTypeMismatch ("command field '" <> aggregateFieldName field <> "' is not a supported scalar selection target")) Right (selectionTypeFromAggregate expectedAggregateType)

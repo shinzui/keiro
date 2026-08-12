@@ -68,6 +68,7 @@ module Keiro.Dsl.Workspace
     oneMemberParsedDocumentWorkspace,
     checkedWorkspace,
     checkWorkspace,
+    checkWorkspaceForService,
 
     -- * Multi-file diagnostics
     WorkspaceDiagnostic (..),
@@ -773,6 +774,10 @@ checkedWorkspace workspace =
 -- on what counts as valid.
 checkWorkspace :: WorkspaceSpec -> [WorkspaceDiagnostic]
 checkWorkspace workspace =
+  checkWorkspaceForService workspace (checkedWorkspace workspace)
+
+checkWorkspaceForService :: WorkspaceSpec -> CheckedService -> [WorkspaceDiagnostic]
+checkWorkspaceForService workspace service =
   [ WorkspaceDiagnostic
       { wdLocations =
           locationFor (line diagnostic)
@@ -784,7 +789,7 @@ checkWorkspace workspace =
         wdSourceLanguageCause = Nothing,
         wdMessage = message diagnostic
       }
-  | diagnostic <- validateService (checkedWorkspace workspace)
+  | diagnostic <- validateService service
   ]
   where
     locationFor n = case resolveWorkspaceLine workspace n of
@@ -1133,10 +1138,11 @@ composeWorkspace manifestPath manifest supplied
       -- Only ask the scaffold planner about a spec that already validates.
       -- An invalid merged spec is 'checkWorkspace''s report to make, and the
       -- planner is only designed to see specs that passed validation.
-      | any blocksCollisionPlanning (validateService (checkedWorkspace composed)) = []
-      | otherwise = case planIndexedServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) (wsSourceIndex composed) plannerContext (checkedWorkspace composed) of
+      | any blocksCollisionPlanning (validateService collisionService) = []
+      | otherwise = case planIndexedServiceScaffoldWithRuntimePackageAndGoldens [] (wmfRuntimePackage manifest) (wsSourceIndex composed) plannerContext collisionService of
           Right _ -> []
           Left plannerRefusals -> concatMap planningRefusal plannerRefusals
+    collisionService = checkedWorkspace composed
     planningRefusal refusal = case crossMemberCollision refusal of
       [] -> map liftPlanningDiagnostic (planningRefusalDiagnostics [refusal])
       workspaceDiagnostics -> workspaceDiagnostics

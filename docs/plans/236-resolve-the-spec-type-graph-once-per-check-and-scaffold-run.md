@@ -54,7 +54,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Record baseline benchmark timings and a baseline trace count in Surprises & Discoveries.
 - [x] M2: Add the lazy `checkedTypeGraph` field to `CheckedService` with hand-written Eq/Show; update all direct construction sites.
 - [x] M2: Full suite green, corpus zero drift with the field present but unconsumed.
-- [ ] M3: Thread the shared graph through the check pass (Validate.hs, RouterSelection.hs, ExplainBindings.hs, Coverage path).
+- [x] M3: Thread the shared graph through the check pass (Validate.hs, RouterSelection.hs, ExplainBindings.hs, Coverage path).
 - [ ] M3: Trace count for `keiro-dsl check` on the declarative-router fixture is exactly 1.
 - [ ] M4: Thread the shared graph through the scaffold run (Scaffold.hs, ScaffoldRun.hs, AggregateType symbols, FoldFingerprint, Harness, ServiceHarness, StructuralConformance, MappedConsumer, ReadModelQueryContract, CoordinationImpact, ProjectionMappedImpact, Goldens, Workspace hoist).
 - [ ] M4: Trace count for `keiro-dsl scaffold` on the declarative-router fixture is exactly 1.
@@ -146,6 +146,12 @@ Record every decision made while working on the plan.
   inventory matched this plan's classification after accounting for shifted line numbers.
   Therefore EP-4 can follow the planned service-sharing seam without any diagnostic-code or
   catalog-binding coordination change.
+  Date: 2026-08-12.
+- Decision: Add service-taking coverage and workspace-check entry points, while retaining the
+  public Spec-taking functions as compatibility wrappers.
+  Rationale: the CLI already owns one `CheckedService`; routing coverage and workspace checks
+  through it removes their otherwise independent whole-spec resolution without changing the
+  public API or the bytes returned to Spec-only callers.
   Date: 2026-08-12.
 
 
