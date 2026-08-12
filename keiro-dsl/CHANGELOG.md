@@ -8,6 +8,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Exposes `Keiro.Dsl.ProjectionSupply` as the shared order-independent authority for
+  catalog query-to-owner resolution. Candidate Language 5 accepts several query models
+  supplied by one owner without legacy aggregate projection clauses, rejects split or
+  double ownership with located diagnostics, generates source-selected inline handlers
+  once, and records separate backing-target and supplier facts in scaffold ledgers,
+  diffs, harnesses, workspaces, and compiled conformance.
+
 - Candidate language 5 adds exhaustive typed domain outcomes. Aggregates may
   declare rejection/no-op result types and label each live transition as
   accepted, rejected with a checked reason, or no-op with a checked reason.

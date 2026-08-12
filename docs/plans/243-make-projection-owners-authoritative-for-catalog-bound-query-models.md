@@ -44,7 +44,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-08-12T12:41:56Z — M1: added the normalized `ResolvedQuerySupply`/handler-capability view, validated empty/split supplier diagnostics, and positive/negative `keiro-test` coverage. `cabal test keiro-test --test-option=--match --test-option="Keiro.Projection.Catalog"` passed 15 examples with 0 failures.
 - [x] 2026-08-12T13:04:36Z — M2: added the shared `Keiro.Dsl.ProjectionSupply` analysis, made Language 5 catalog-bound read models resolve exactly one owner/group from their complete observed-target set, preserved the legacy aggregate reference rule outside catalog-bound Language 5, and added deterministic split-owner/legacy-conflict diagnostics. The focused language-5 projection-catalog suite passed 13 examples with 0 failures.
 - [x] 2026-08-12T13:27:28Z — M3: threaded resolved suppliers through service/workspace scaffolding, generated catalog exports and source-selected inline views, durable backing/supply ledger rows, diff classification, and compiled harness facts. The focused suite passed 13 examples; all three affected Language 5 conformance packages passed; full 39-entry corpus regeneration left Languages 1-4 byte-identical; and `projection-supply-mutation-test.sh` caught both per-query handler duplication and first-supplier truncation before restoring exact bytes.
-- [ ] M4: update guides, API reference, changelogs, ADR 0026, and ADR 0032 identity notes; run repository-wide verification and update MasterPlan 38.
+- [x] 2026-08-12T13:54:35Z — M4: updated the read-model guide, API and DSL references, diagnostics, both changelogs, and ADRs 0026/0032; corrected the broader mapped-surface expectations that the new sole-owner model intentionally changed; and completed repository-wide verification. `just verify` passed 480 `keiro` examples, 58 `keiro-pgmq` examples with 2 documented pending cases, 31 operations examples, 697 DSL examples plus every compiled conformance suite, 23 `jitsurei` examples, 28 migration examples, all 39 corpus regenerations with zero drift, and strict validation of all 32 ADR concepts.
 
 
 ## Surprises & Discoveries
@@ -78,6 +78,11 @@ implementation. Provide concise evidence.
   same supplier export and ledger/harness facts and remained compiled-green. A full
   39-entry regeneration changed only those three Language 5 catalog suites, providing
   direct zero-drift evidence for Languages 1-4.
+- Milestone 4 (2026-08-12): the plan's literal `--match "projection owner"` command
+  selected zero examples because Hspec matches the enclosing `language-5 projection
+  catalogs` group instead. The meaningful focused gate is that group (13 examples),
+  followed by the full 697-example DSL suite and compiled corpus; the stale filter is
+  retained below as execution history rather than presented as evidence.
 
 
 ## Decision Log
@@ -144,7 +149,24 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Plan 243 achieved its purpose. Runtime and Language 5 catalogs now derive one query
+supplier from the complete observed-target ownership set, and reject empty, missing,
+split, or legacy-double-owned relationships deterministically. One aggregate-sourced
+inline owner can supply several separately typed query models while generated command
+execution selects its handler exactly once. Query backing remains a distinct physical
+choice, so no query's selected table is mistaken for delivery authority.
+
+The relationship is consumed consistently by validation, generation, workspace
+planning, ledgers, diff, harness facts, and the public runtime accessor. The positive
+multi-query fixture, all affected compiled conformance packages, and mutation tests prove
+that adding a query neither duplicates the handler nor makes source order select a
+supplier. Languages 1-4 had zero generated drift.
+
+No catalog fingerprint prefix changed. Supply is derived from existing target-owner and
+observed-target facts. The audit did expose that current `catalog-v2`/`slice-v1` identity
+preserves projection-owned-target declaration order; Plan 244 owns correcting that
+set-valued normalization alongside its already-required format bump and adoption proof.
+ADRs 0026 and 0032 now carry the durable ownership and identity decisions.
 
 
 ## Context and Orientation

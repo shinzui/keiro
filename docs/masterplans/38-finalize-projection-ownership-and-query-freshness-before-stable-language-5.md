@@ -91,7 +91,7 @@ the canonical project URI `mori://tan/notification-render-service`.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | In Progress |
+| 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | Complete |
 | 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | Not Started |
 | 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | Not Started |
 
@@ -170,7 +170,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (243) M1: runtime owner/query resolution type, capability matrix, and deterministic catalog diagnostics
 - [x] EP-1 (243) M2: Language 5 catalog-managed read-model validation uses owner/target resolution; legacy standalone behavior remains version-gated
 - [x] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
-- [ ] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
+- [x] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
 - [ ] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
 - [ ] EP-2 (244) M2: query execution derives and validates wait capability; old names retain tested semantics
 - [ ] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
@@ -207,6 +207,11 @@ interactions between child plans. Provide concise evidence.
   candidate Language 5 catalog suites. Languages 1-4 remained byte-identical while all
   affected catalog conformance packages compiled and passed; mutation coverage proves
   query count cannot duplicate source-selected inline handlers or truncate suppliers.
+- EP-1 M4 (2026-08-12): repository-wide verification passed the runtime, operations,
+  PGMQ, DSL, integration, migration, ADR, and 39-entry corpus gates. The full DSL suite
+  also exposed five stale aggregate-consumer, coverage, compatibility, and fixture-
+  inventory expectations; correcting them confirmed that catalog ownership is now the
+  sole mapped projection authority rather than leaving hidden legacy ownership facts.
 
 
 ## Decision Log
@@ -253,4 +258,15 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. Programmatic and Language 5 catalogs now share an order-independent,
+validated query-supplier relation derived from target ownership. Generated code selects
+one source handler per owner even when that owner supplies several typed queries, while
+query backing stays independently explicit. The relation is visible in runtime
+inventory access, scaffold ledgers, diffs, and compiled harness facts; ambiguity and
+legacy double ownership fail before generation or execution.
+
+This completes IR-23's semantic foundation without changing Languages 1-4 or the current
+canonical fingerprint prefixes. EP-2 (Plan 244) is now the next implementable child. It
+will introduce truthful query freshness and cursor APIs, include owned-target
+normalization in the planned identity-format revision, and coordinate final wait
+behavior with Plan 238 before EP-3 changes Language 5 syntax.

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0032 so query suppliers are derived from existing owner/observed-target identity, while any owned-target normalization requires a future prefix revision (plan 243).
+* **Update**: Amend ADR 0026 so one projection owner may authoritatively supply several catalog-bound query models without duplicating handlers or legacy ownership clauses (plan 243).
 * **Update**: Amend ADR 0031 so checkpoint policy changes affect only owning group slices and require explicit metadata adoption (plan 237).
 * **Update**: Amend ADR 0028 with the compiled-catalog capability boundary and supported rebuild-adoption command (plan 237).
 * **Update**: Amend ADR 0026 with canonical group-slice lifecycle identity, replay format v2, and explicit catalog adoption (plan 237).

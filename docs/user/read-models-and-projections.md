@@ -59,6 +59,7 @@ case validateProjectionCatalog catalog of
     traverse_ (print . diagnosticCodeText . (^. #diagnosticCode)) diagnostics
   Success validated -> do
     let liveOrderHandlers = typedInlineProjections validated orderProjectionSet
+        querySuppliers = resolvedQuerySupplies validated
         inventory = catalogInventory validated
         fingerprint = catalogFingerprint validated
     registerApplicationReadSide inventory
@@ -68,8 +69,19 @@ case validateProjectionCatalog catalog of
 The `ValidatedProjectionCatalog` constructor is hidden. Use
 `useProjectionCatalogM` when registration is effectful; it does not invoke the
 callback after failed validation. Inventory rendering and SHA-256 fingerprints
-are stable for the same semantic declarations regardless of input-list order.
-Handler closures are excluded from the fingerprint.
+normalize top-level declaration and query observed-target order. The current
+`catalog-v2`/`slice-v1` identity still preserves each projection's declared owned-target
+order; changing that contract requires a future prefix revision. Handler closures are
+excluded from the fingerprint.
+
+Every validated query binding also resolves to exactly one supplying projection
+through target ownership. `resolvedQuerySupplies` returns query model, projection,
+group, sorted non-empty observed targets, source, and the owner's complete ordered
+handler-capability list. It never selects a handler by list position and contains no
+closures. A query that observes targets owned by different projections is invalid;
+several queries may observe different subsets of one owner's targets and all resolve to
+that same owner. The query's backing target remains a separate physical SQL choice and
+does not determine its supplier.
 
 Validation reports deterministic codes and every conflicting `ClaimSite`. It
 rejects duplicate logical or physical identities, unknown references, targets
@@ -111,6 +123,13 @@ readmodel orderSummary {
   feed = subscription
 }
 ```
+
+The `projection-owner` is sufficient authority for the catalog-bound read model; do
+not also add an aggregate-local `projection orderSummary` clause. One owner may supply
+several query contracts. For example, if the owner also owns `order_totals`, a second
+read model with `targets = [ order_totals ]` resolves to the same
+`order_summary_writer`. An inline owner is applied once per source event, not once per
+query model.
 
 The intentional language-5 form moves physical and lifecycle authority into
 the catalog and leaves the read model as a typed query binding:
@@ -167,7 +186,9 @@ not create or migrate the table.
 Scaffolding emits one generated
 `Generated.<Context>.ProjectionCatalog` facade. It validates the runtime
 catalog, exposes catalog inventory/registration, typed inline views, and
-group-scoped rebuild functions. The create-once
+group-scoped rebuild functions. `projectionCatalogQuerySupplies` exposes the checked
+query-to-owner relation, while source-level inline views such as
+`ordersInlineProjections` contain each owner handler once for command execution. The create-once
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles` module owns live and
 replay apply functions, category decoders, and async idempotency functions;
 regeneration preserves reviewed edits. An aggregate source reuses its generated

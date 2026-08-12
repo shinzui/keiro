@@ -1557,12 +1557,23 @@ explicit` generates distinct live and replay apply holes. `replay = live-only
 "reason"` generates no replay adapter
 and is invalid for a clear target.
 
+Target ownership is also query-supply authority. Every catalog-bound read model must
+name a non-empty observed-target set whose members all belong to one projection owner
+in the same rebuild group. Several read models may observe different subsets of one
+owner's targets and resolve to that same owner. The owner handler is generated and
+selected once per event source, independently of query count. Do not repeat the
+relationship with an aggregate-local `projection <readmodel>` clause; candidate
+language 5 reports that as conflicting legacy ownership. A multi-target query's
+`backing = <target>` still selects one physical SQL table and does not stand in for the
+complete supplier check.
+
 A catalog-bound `readmodel` is a typed query contract. It names its group and
 observed targets, and deliberately omits `schema` and `table`; those belong to
 the target declarations. The generated context-level
 `Generated.<Context>.ProjectionCatalog` validates one runtime catalog, exports
-typed inline views, registration/inventory functions, and group-scoped rebuild
-starters. `<Context>.ProjectionCatalog.ProjectionCatalogHoles` is create-once
+typed owner/source inline views, `projectionCatalogQuerySupplies`,
+registration/inventory functions, and group-scoped rebuild starters.
+`<Context>.ProjectionCatalog.ProjectionCatalogHoles` is create-once
 and owns live apply, replay apply, heterogeneous decoder, and idempotency
 bodies. Regeneration never overwrites reviewed hole code.
 
@@ -2241,6 +2252,23 @@ surfaces include:
 Diagnostics include a source line. Fix the specification first. If a generated
 harness later fails, fix the create-once behavior or evidence named by that
 harness; do not weaken the generated runtime boundary.
+
+Candidate catalog query-supply diagnostics are:
+
+- `CatalogReadModelBindingMissing` when no observed target is declared;
+- `CatalogTargetUnknown` or `CatalogReadModelTargetOutsideGroup` for an invalid
+  target prerequisite;
+- `CatalogReadModelSupplierMissing` when the complete valid target set has no
+  supplier;
+- `CatalogReadModelMultipleSuppliers` when valid observed targets span owners,
+  with every owner claim site attached; and
+- `CatalogReadModelLegacyProjectionConflict` when a catalog-bound query is also
+  named by an aggregate-local legacy projection clause.
+
+Existing missing/multiple target-owner diagnostics remain authoritative at target
+claims rather than producing duplicate query noise. `RmInlineFeedUnreferenced` retains
+its published Languages 1-4 and standalone-read-model meaning; it is not the ownership
+rule for a Language 5 catalog-bound query.
 
 ## Evolution workflow
 

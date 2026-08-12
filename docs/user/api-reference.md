@@ -304,7 +304,11 @@ registration or rebuild work. The public boundary includes:
 - `validateProjectionCatalog`, `useProjectionCatalog`, and
   `useProjectionCatalogM`;
 - `ValidatedProjectionCatalog`, whose constructor is hidden;
+- `ProjectionHandlerCapability` and `ResolvedQuerySupply`, the closure-free,
+  identity-sorted result of resolving every query's complete observed-target set to
+  one owner;
 - typed live selection through `typedInlineProjections`;
+- `resolvedQuerySupplies`, available only after successful catalog validation;
 - deterministic inventory, registration, replay-metadata, canonical
   whole-catalog and group-slice fingerprint, and rendering selectors; and
 - `compareCatalogBaseline`, which reports declarations present in an earlier
@@ -317,6 +321,14 @@ catalog. It cannot inspect a `Hasql.Transaction.Transaction`, discover an
 undeclared application table, or prove which table arbitrary SQL writes.
 Application DDL, migrations, codecs, and handler bodies remain application
 owned.
+
+`ResolvedQuerySupply` keeps query model, supplying projection, rebuild group, sorted
+non-empty observed targets, source, and every ordered inline/subscription capability.
+It deliberately omits the query's backing target and executable handler closures.
+Validation reports stable `catalog.query-model-empty-observed-targets`,
+`catalog.query-model-without-supplier`, or
+`catalog.query-model-with-multiple-suppliers` diagnostics when the relation cannot be
+formed; prerequisite target/group/owner errors remain at their existing claim sites.
 
 `unmanagedInlineProjections`, `unmanagedAsyncProjection`, and
 `unmanagedReadModel` are explicit compatibility labels for existing callers.
@@ -836,7 +848,11 @@ separate operational relation. `Keiro.Dsl.Scaffold` lowers the checked catalog i
 one `Generated.<Context>.ProjectionCatalog` facade backed by
 `Keiro.Projection.Catalog` and `Keiro.ReadModel.Rebuild`. The facade exports the
 validated catalog, deterministic inventory and registration views, typed
-inline projection sets, and group-scoped rebuild starters. Its paired
+inline projection sets, `projectionCatalogQuerySupplies`, source-selected inline views,
+and group-scoped rebuild starters. `Keiro.Dsl.ProjectionSupply` is the shared pure
+query-owner analysis used by validation, scaffold/workspace planning, diff, ledgers,
+and harness generation; consumers should not derive suppliers from backing targets or
+declaration order. Its paired
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles` file is create-once and
 contains application-owned live/replay apply, category decode, and idempotency
 functions. `Keiro.Dsl.Diff`, `Keiro.Dsl.ReplayImpact`, scaffold records, and

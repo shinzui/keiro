@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-12T11:51:04Z
+timestamp: 2026-08-12T13:30:39Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -65,6 +65,22 @@ generated `QueryContract` aliases are the compile-time API authority used by the
 group, registry, table-shape, and catalog fingerprints. Changing a query input or result therefore
 requires callers and consumers to rebuild, but does not imply target preparation, table migration,
 projection reset, or replay.
+
+For every catalog-bound query model, target ownership derives exactly one supplying
+projection. The observed-target set must be non-empty, every target must resolve to the
+same owner in the query's rebuild group, and the result is independent of declaration
+and target order. Several separately typed query models may observe different subsets
+of one owner's targets and resolve to that same projection. No query-to-projection name
+edge is added: it would duplicate authority and could drift from target ownership.
+
+The normalized supplier view retains the query, owner, group, sorted observed targets,
+source, and the owner's complete ordered handler capabilities, but no executable
+closures. It is distinct from the query's backing target. Backing selects the one
+physical table used by generated SQL; supply checks the complete observed-target set.
+Command-side inline selection is by resolved projection owner and event source, so one
+owner is applied once even when it supplies several queries. Candidate Language 5
+rejects a catalog-bound query that is also named by an aggregate-local legacy projection
+clause; published Languages 1-4 retain their standalone rule.
 
 Target reset policy and handler replay policy are independent. A target is
 either cleared before replay or preserved and reconciled. A projection is
@@ -190,6 +206,9 @@ dedup rows are not completion evidence.
 - One physical table has one projection owner. Several ordered handlers can be
   composed under that one owner, but two independent projection identities
   cannot both claim the table.
+- One projection owner may supply several query models. Query count does not duplicate
+  live handlers, and neither backing-target choice nor declaration order selects the
+  supplier.
 - Reordering a query model's observed targets changes neither its generated
   physical binding nor its catalog identity. Changing the observed set or its
   effective backing remains a persisted query-binding change.

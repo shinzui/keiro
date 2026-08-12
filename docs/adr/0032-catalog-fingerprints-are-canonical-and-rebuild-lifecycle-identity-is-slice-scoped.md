@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
 description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, retains whole-catalog provenance, and requires explicit transactional adoption of reviewed slice changes.
-timestamp: 2026-08-12T11:51:04Z
+timestamp: 2026-08-12T13:30:39Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -55,6 +55,19 @@ therefore compatible, while changing a source codec, target, projection,
 query-registration fact, reset identity, or verification in the selected group
 still produces typed drift.
 
+The query-to-supplying-projection relation is derived from facts already present in
+these preimages: each target's projection owner plus each query's rebuild group and
+observed-target set. The normalized `ResolvedQuerySupply` view is not serialized as a
+second fingerprint field. Changing an authoritative owner or observed-target fact still
+changes the owning catalog/group identity, while merely adding or reading the derived
+accessor changes no fingerprint or format prefix.
+
+The current `catalog-v2`/`slice-v1` contract preserves a projection declaration's owned
+target order even though supplier resolution treats that set order-independently.
+Normalizing that existing preimage is an identity-contract change and therefore requires
+a future prefix revision and explicit adoption evidence; it must not be repaired silently
+under the current prefixes.
+
 The complete catalog fingerprint remains useful provenance. A replay run stores
 both the whole catalog fingerprint and the group slice that owns its lifecycle.
 The persisted runner format is `keiro/projection-replay/v2`; its contract is
@@ -101,6 +114,8 @@ the current catalog slice.
   move as drift.
 - Catalog and slice prefixes, replay format, and migration evidence make future
   identity changes explicit rather than silently reinterpreting stored hashes.
+- Derived supplier lookup adds no independent identity field. Any future normalization
+  of existing owned-target ordering must advance the applicable prefixes.
 
 
 ## Alternatives considered

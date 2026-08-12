@@ -8,6 +8,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `ProjectionHandlerCapability`, `ResolvedQuerySupply`, and
+  `resolvedQuerySupplies` expose the closure-free relationship from each validated
+  query model to the single projection owner of its complete observed-target set.
+  Validation rejects empty, missing, and split suppliers with stable diagnostic codes;
+  several queries may resolve to one owner without duplicating its handler.
+
 - `DomainDecision`, `DomainCommandOutcome`, `SilentCommandContext`,
   `SilentDomainDecision`, and `DomainCommandHandler`, plus `runDomainCommand`
   and `forgetDomainDecision`. Accepted decisions carry the exact non-empty

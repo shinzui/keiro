@@ -632,8 +632,6 @@ main = hspec $ do
         `shouldBe` Set.fromList
           [ MappedConsumerBuild (AggregateConsumer "Orders"),
             MappedPrivateEventHistory "Orders",
-            MappedConsumerBuild (DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline")),
-            MappedProjectionHandlerReview (AggregateInlineProjectionConsumer "Orders" "order_inline"),
             MappedConsumerBuild (DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders")),
             MappedProjectionHandlerReview (CatalogProjectionConsumer "order_summary_writer" "Orders"),
             MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") "reporting"
@@ -653,7 +651,7 @@ main = hspec $ do
       Coverage.readModelQueryResults (Coverage.coverageSummary queryCoverage)
         `shouldBe` Coverage.CoverageCounts 1 1 0 0
       Coverage.projectionTypedConsumers (Coverage.coverageSummary projectionCoverage)
-        `shouldBe` Coverage.CoverageCounts 5 0 5 0
+        `shouldBe` Coverage.CoverageCounts 3 0 3 0
       map Coverage.rootConsumer [root | root <- Coverage.coverageRoots queryCoverage, Coverage.rootSurface root `elem` [Coverage.ReadModelQueryInput, Coverage.ReadModelQueryResult]]
         `shouldBe` ["read-model-query:account_summary:input", "read-model-query:account_summary:result"]
       map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces projectionCoverage)
@@ -752,9 +750,9 @@ main = hspec $ do
       cvSnapshotHydration (ckVector queryKind) `shouldBe` VNotApplicable
       ckMappedConsequences eventKind `shouldSatisfy` Set.member (MappedPrivateEventHistory "Alpha")
       ckMappedConsequences snapshotKind `shouldSatisfy` Set.member (MappedSnapshotHydration "Alpha")
-      ckMappedConsequences projectionKind `shouldSatisfy` Set.member (MappedProjectionHandlerReview (AggregateInlineProjectionConsumer "Orders" "order_inline"))
+      ckMappedConsequences projectionKind `shouldSatisfy` Set.member (MappedProjectionHandlerReview (CatalogProjectionConsumer "order_summary_writer" "Orders"))
       ckMappedConsequences projectionKind
-        `shouldSatisfy` (not . any (\case MappedProjectionRebuild {} -> True; _ -> False) . Set.toList)
+        `shouldSatisfy` Set.member (MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") "reporting")
 
   describe "mapped surface qualification" $ do
     it "selects every explicit and derived surface from one integrated candidate authority" $ do
@@ -777,7 +775,6 @@ main = hspec $ do
       consumers orderPayload
         `shouldBe` Set.fromList
           [ AggregateConsumer "Orders",
-            DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline"),
             DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders")
           ]
       Set.map evidenceRootKind (evidence orderPayload)
@@ -789,7 +786,6 @@ main = hspec $ do
           [ AggregateConsumer "Orders",
             AggregateConsumer "Shipments",
             WorkqueueConsumer "qualification_jobs",
-            DerivedProjectionConsumer (AggregateInlineProjectionConsumer "Orders" "order_inline"),
             DerivedProjectionConsumer (CatalogProjectionConsumer "order_summary_writer" "Orders"),
             DerivedProjectionConsumer (CatalogProjectionConsumer "shipment_writer" "Shipments")
           ]
@@ -812,7 +808,7 @@ main = hspec $ do
       Coverage.workqueuePayloads (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 4 1 3 1
       Coverage.readModelQueryInputs (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 1 0 1 0
       Coverage.readModelQueryResults (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 1 0 1 0
-      Coverage.projectionTypedConsumers (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 5 0 5 0
+      Coverage.projectionTypedConsumers (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 3 0 3 0
       map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces coverage)
         `shouldContain` ["projection-category:audit_writer:audit"]
 
@@ -1780,7 +1776,8 @@ main = hspec $ do
             "outcome-identifier-legacy.keiro",
             "outcome-identifier-v5.keiro",
             "projection-catalog-unrelated.keiro",
-            "projection-catalog.keiro"
+            "projection-catalog.keiro",
+            "projection-owner-multi-query.keiro"
           ]
 
     it "checks v1 and inspects legacy explicitly" $ do
