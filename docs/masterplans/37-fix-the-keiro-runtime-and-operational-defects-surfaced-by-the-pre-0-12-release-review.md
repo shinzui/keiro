@@ -84,7 +84,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
-| 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Not Started |
+| 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | In Progress |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Not Started |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
@@ -157,7 +157,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API (2026-08-12T11:46:09Z)
 - [x] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force (2026-08-12T11:47:46Z)
 - [x] EP-1 (237) M6: docs, changelogs, ADR 0032 and pointer amendments to ADRs 0026/0028/0031, full `just verify` (2026-08-12T12:05:34Z)
-- [ ] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression
+- [x] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression (2026-08-12T16:55:27Z)
 - [ ] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test
 - [ ] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test
 - [ ] EP-2 (238) M4: api-reference/CHANGELOG updates and the reachable-wait-targets ADR

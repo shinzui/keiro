@@ -266,8 +266,8 @@ qualifiedTableName readModel =
 
 -- | How fresh a read must be before the query runs.
 --
--- 'Strong' waits for the model's subscription to reach the store head captured
--- at query start according to the model's 'strongScope'. It is intended for
+-- 'Strong' waits for the model's subscription to reach the visible store head
+-- captured at query start according to the model's 'strongScope'. It is intended for
 -- asynchronous read models with a worker advancing that subscription cursor;
 -- inline-only models should use 'Eventual' because they have no subscription
 -- worker to advance while waiting.
@@ -281,8 +281,8 @@ data ConsistencyMode
 
 -- | Which log head a 'Strong' read must reach.
 --
--- 'EntireLog' preserves the original behavior and is live only when the model's
--- subscription observes every event. A category subscription should use
+-- 'EntireLog' captures the newest visible whole-store event and is live only
+-- when the model's subscription observes every event. A category subscription should use
 -- 'CategoryHead' with its Kiroku category, so unrelated categories cannot hold
 -- the read behind forever. A model fed by multiple categories should use
 -- 'PositionWait' for an explicit write position or 'EntireLog' with a matching
@@ -310,7 +310,7 @@ data PositionWaitOptions = PositionWaitOptions
   deriving stock (Generic, Eq, Show)
 
 -- | Default wait settings used by 'Strong': wait up to five seconds, polling
--- every 10ms, for the store head captured at query start.
+-- every 10ms, for the visible store head captured at query start.
 defaultStrongWaitOptions :: PositionWaitOptions
 defaultStrongWaitOptions = defaultHeadWaitOptions
 
@@ -591,11 +591,30 @@ subscriptionPositionFromInventory wanted inventory =
     minimumMay [] = Nothing
     minimumMay positions = Just (Prelude.minimum positions)
 
--- | The global position captured by Kiroku's durable checkpoint inventory.
--- This reads the authoritative @$all@ stream position even when no decodable
--- event is visible (for example after hard deletion).
+-- | The global position of the newest visible event in the @$all@ stream, or
+-- @GlobalPosition 0@ when no event is visible. This is deliberately not
+-- Kiroku's authoritative @$all@ append counter (the inventory's
+-- 'Kiroku.Store.Subscription.storePosition'), which counts hard-deleted
+-- events: subscription checkpoints advance only at delivered batch tails, so
+-- after tail hard-deletion (for example workflow GC) the authoritative
+-- counter is unreachable until an unrelated append lands, while the visible
+-- head is reachable by any caught-up subscription. Reads Kiroku's indexed
+-- @stream_events@ table because Kiroku 0.5 exports no visible-head query;
+-- @Keiro.ReadModel.Rebuild.finishRebuild@ guards on the same statement.
 storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
-storeHeadPosition = storePosition <$> subscriptionCheckpointInventory
+storeHeadPosition =
+  runTransaction $ Tx.statement () visibleStoreHeadPositionStmt
+
+visibleStoreHeadPositionStmt :: Statement () GlobalPosition
+visibleStoreHeadPositionStmt =
+  preparable
+    """
+    SELECT COALESCE(max(stream_version), 0)
+    FROM stream_events
+    WHERE stream_id = 0
+    """
+    E.noParams
+    (D.singleRow (GlobalPosition <$> D.column (D.nonNullable D.int8)))
 
 -- | The latest global position originating in a Kiroku category, or
 -- @GlobalPosition 0@ when that category has no events. This deliberately reads

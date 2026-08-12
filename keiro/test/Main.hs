@@ -3173,7 +3173,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       subscriptionPositionFromInventory (SubscriptionName "missing") inventory
         `shouldBe` Nothing
 
-    it "uses Kiroku's captured store head after a stream is hard deleted" $ \storeHandle -> do
+    it "returns the newest visible position after a stream is hard deleted" $ \storeHandle -> do
       let target = stream "read-model-captured-head" :: Stream CounterEventStream
       Right (Right commandResult) <-
         Store.runStoreIO storeHandle $
@@ -3185,7 +3185,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           Store.hardDeleteStream (StreamName "read-model-captured-head")
       observedHead <- Store.runStoreIO storeHandle storeHeadPosition
-      observedHead `shouldBe` Right capturedPosition
+      observedHead `shouldBe` Right (GlobalPosition 0)
+      Right (KirokuSub.SubscriptionCheckpointInventory authoritativePosition _) <-
+        Store.runStoreIO storeHandle Store.subscriptionCheckpointInventory
+      authoritativePosition `shouldBe` capturedPosition
 
     it "Strong returns immediately on an empty log" $ \storeHandle -> do
       Right () <-
@@ -3280,6 +3283,88 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.runStoreIO storeHandle $
             runQueryWith Nothing Strong counterReadModel "inline"
         queryResult `shouldBe` Right (Right 6)
+
+    it "Strong returns promptly after workflow GC hard-deletes the newest events" $ \_ ->
+      withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+        Right (Right commandResult) <-
+          runner $
+            runCommandWithProjections
+              defaultRunCommandOptions
+              counterEventStream
+              (stream "read-model-gc-strong" :: Stream CounterEventStream)
+              (Add 5)
+              [counterInlineProjection]
+        visiblePosition <- case commandResult ^. #globalPosition of
+          Just position -> pure position
+          Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Tx.statement
+                ("counter-read-model-sub", globalPositionToInt visiblePosition)
+                upsertSubscriptionCursorStmt
+
+        counter <- newIORef (0 :: Int)
+        Right (Completed _) <-
+          Store.runStoreIO storeHandle $
+            runWorkflowWith
+              (defaultWorkflowRunOptions & #snapshotPolicy .~ OnTerminal)
+              (WorkflowName "gc-strong-wf")
+              (WorkflowId "gsw-1")
+              (demoWorkflow counter)
+        now <- getCurrentTime
+        Right summary <-
+          Store.runStoreIO storeHandle $
+            WorkflowGc.gcWorkflowsOnce
+              (addUTCTime 1 now)
+              WorkflowGc.WorkflowGcPolicy {retention = 0, batchSize = 10}
+        summary `shouldBe` WorkflowGc.WorkflowGcSummary {scanned = 1, deleted = 1}
+
+        observedHead <- Store.runStoreIO storeHandle storeHeadPosition
+        observedHead `shouldBe` Right visiblePosition
+        Right (KirokuSub.SubscriptionCheckpointInventory authoritativePosition _) <-
+          Store.runStoreIO storeHandle Store.subscriptionCheckpointInventory
+        authoritativePosition `shouldSatisfy` (> visiblePosition)
+
+        startedAt <- getCurrentTime
+        queryResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWith Nothing Strong counterReadModel "inline"
+        finishedAt <- getCurrentTime
+        queryResult `shouldBe` Right (Right 5)
+        diffUTCTime finishedAt startedAt `shouldSatisfy` (< 2)
+
+    it "Strong still times out when visible events outrun the subscription" $ \_ ->
+      withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+        Right (Right commandResult) <-
+          runner $
+            runCommandWithProjections
+              defaultRunCommandOptions
+              counterEventStream
+              (stream "read-model-strong-visible-behind" :: Stream CounterEventStream)
+              (Add 5)
+              [counterInlineProjection]
+        visiblePosition <- case commandResult ^. #globalPosition of
+          Just position -> pure position
+          Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+        queryResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWith Nothing Strong counterReadModel "inline"
+        queryResult
+          `shouldBe` Right
+            ( Left
+                ( ReadModelWaitTimeout
+                    "counter-read-model"
+                    visiblePosition
+                    (GlobalPosition 0)
+                )
+            )
 
     it "Strong returns when its category is caught up despite another active category" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do

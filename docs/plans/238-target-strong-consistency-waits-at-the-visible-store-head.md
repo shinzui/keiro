@@ -48,11 +48,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the failing regression test "Strong returns promptly after workflow GC hard-deletes the newest events" to `keiro/test/Main.hs` and observe it fail with `ReadModelWaitTimeout` against current code.
-- [ ] M1: reimplement `storeHeadPosition` in `keiro/src/Keiro/ReadModel.hs` as the newest visible event's global position (keiro-owned `max(stream_version)` statement) and update its Haddock plus the module and `StrongScope` docs.
-- [ ] M1: rewrite the existing test "uses Kiroku's captured store head after a stream is hard deleted" to assert the new visible-head semantics (head falls back to `GlobalPosition 0`; the inventory's authoritative `storePosition` is unchanged).
-- [ ] M1: add the genuine-behind test "Strong still times out when visible events outrun the subscription" asserting the timeout error carries the visible-head target.
-- [ ] M1: run the `Keiro.ReadModel` test group and confirm all green, including the previously failing regression test.
+- [x] M1: add the failing regression test "Strong returns promptly after workflow GC hard-deletes the newest events" to `keiro/test/Main.hs` and observe the current inventory-based head fail the fixed-contract assertion (2026-08-12T16:52:22Z).
+- [x] M1: reimplement `storeHeadPosition` in `keiro/src/Keiro/ReadModel.hs` as the newest visible event's global position (keiro-owned `max(stream_version)` statement) and update its Haddock plus the module and `StrongScope` docs (2026-08-12T16:55:27Z).
+- [x] M1: rewrite the existing test "uses Kiroku's captured store head after a stream is hard deleted" to assert the new visible-head semantics (head falls back to `GlobalPosition 0`; the inventory's authoritative `storePosition` is unchanged) (2026-08-12T16:55:27Z).
+- [x] M1: add the genuine-behind test "Strong still times out when visible events outrun the subscription" asserting the timeout error carries the visible-head target (2026-08-12T16:55:27Z).
+- [x] M1: run the `Keiro.ReadModel` test group and confirm all green, including the previously failing regression test: 29 examples, 0 failures (2026-08-12T16:55:27Z).
 - [ ] M2: rebase `recordProjectionGlobalPositionDistance` in `keiro/src/Keiro/Projection.hs` on the visible head; keep the deprecated `recordProjectionLag` alias recording the identical value.
 - [ ] M2: add the gauge test "reports zero global position distance after the newest events are hard deleted" and confirm the existing gauge and timeout-counter tests still pass.
 - [ ] M3: add the visible head to `keiro-ops` `projection position` and `stream subscriptions` output and compute their distance columns against it; update `keiro-ops/test/Main.hs` expectations and add a hard-delete divergence test.
@@ -67,7 +67,19 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Reproduce-first run (2026-08-12): the production workflow-GC scenario failed before
+  entering the query wait because `storeHeadPosition` returned the authoritative
+  `GlobalPosition 4` after GC while the newest surviving event was `GlobalPosition 1`.
+  Evidence:
+
+  ```text
+  expected: Right (GlobalPosition 1)
+   but got: Right (GlobalPosition 4)
+  ```
+
+  This is the planned first assertion of the same defect: a caught-up cursor at position 1
+  cannot reach the inventory counter at position 4 after the three newer workflow journal
+  events have been hard-deleted.
 
 
 ## Decision Log
@@ -159,7 +171,11 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 1 restores `storeHeadPosition` to the newest visible `$all` event and pins
+both sides of the contract. A caught-up Strong query now returns promptly after the
+workflow collector deletes a newer journal tail, while a genuinely behind subscription
+still waits five seconds and reports `ReadModelWaitTimeout` with the visible target.
+The focused `Keiro.ReadModel` group passes all 29 examples.
 
 
 ## Context and Orientation
