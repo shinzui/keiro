@@ -6,18 +6,20 @@ module Generated.CatalogDemo.OrderTotalsLookup.ReadModel
 
 import Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable (orderTotalsLookupQualifiedTable)
 import CatalogDemo.OrderTotalsLookup.ReadModelHoles (OrderTotalsLookupQueryInput, OrderTotalsLookupQueryResult, orderTotalsLookupQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), immediateReadModel)
 
 orderTotalsLookupReadModel :: ReadModel OrderTotalsLookupQueryInput OrderTotalsLookupQueryResult
 orderTotalsLookupReadModel =
-  ReadModel
+  immediateReadModel orderTotalsLookupReadModelBlueprint
+
+orderTotalsLookupReadModelBlueprint :: ReadModelBlueprint OrderTotalsLookupQueryInput OrderTotalsLookupQueryResult
+orderTotalsLookupReadModelBlueprint =
+  ReadModelBlueprint
     { name = "catalog-demo-order-totals-lookup"
     , tableName = "order_totals"
     , schema = "sales"
-    , subscriptionName = "catalog-demo-order-totals-lookup-sub"
     , version = 1
     , shapeHash = "fnv1a:768a23d719dcb4d4"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = NoQueryCursor
     , query = orderTotalsLookupQuery
     }

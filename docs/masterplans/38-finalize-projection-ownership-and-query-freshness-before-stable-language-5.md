@@ -179,7 +179,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (244) M4b: record the external Plan-238 integration evidence from M2b (2026-08-12 21:03Z)
 - [x] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print (2026-08-12T21:51:03Z)
 - [x] EP-3 (245) M2: capability-based validation and generated runtime configuration (2026-08-12T21:51:03Z)
-- [ ] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts
+- [x] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts (2026-08-12T22:03:26Z)
 - [ ] EP-3 (245) M4: Languages 1-4 byte-compatibility proof, migration/reference docs, ADRs, changelog, and full verification
 
 
@@ -242,6 +242,12 @@ interactions between child plans. Provide concise evidence.
   regeneration. The 17-example Language 5 catalog group now passes with positive
   inline/immediate, subscription/immediate, category-head, and entire-head lowering plus
   deterministic inline, implicit-owner, missing-cursor, and unreachable-category refusals.
+- EP-3 M3 (2026-08-12): all 39 corpus entries regenerated with byte drift confined to
+  three candidate Language 5 suites. Those compiled suites cover all four positive
+  delivery/freshness rows, while hand-owned mutations independently detect freshness,
+  resolved cursor, and delivery fact drift. An attempted mixed all-stream/category group
+  exposed a DSL/runtime validation mismatch; `CatalogAmbiguousSourceOrdering` now rejects
+  it before generation with deterministic owner evidence.
 
 
 ## Decision Log

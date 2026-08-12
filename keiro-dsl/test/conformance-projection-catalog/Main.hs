@@ -40,6 +40,15 @@ main = do
   assert
     "perturbed async registration identity is detected"
     (any (\(fact, expected, actual) -> fact == "asyncRegistration:audit_writer" && expected /= actual) mutated)
+  let mutatedReadModelFacts factName =
+        [ if fact == factName then (fact, expected, actual <> "-WRONG") else row
+        | row@(fact, expected, actual) <- CatalogAudit.readModelFacts
+        ]
+      mutationFails factName =
+        any (\(fact, expected, actual) -> fact == factName && expected /= actual) (mutatedReadModelFacts factName)
+  assert "freshness fact mutation is detected" (mutationFails "freshness")
+  assert "cursor fact mutation is detected" (mutationFails "cursorAuthority")
+  assert "delivery fact mutation is detected" (mutationFails "projectionDelivery")
   mapM_ (uncurry assert) Orders.harnessAssertions
   mapM_ (uncurry assert) Shipments.harnessAssertions
   mapM_ (uncurry assert) structuralConformanceAssertions

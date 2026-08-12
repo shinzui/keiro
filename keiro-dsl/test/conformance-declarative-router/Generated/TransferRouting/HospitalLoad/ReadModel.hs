@@ -7,18 +7,22 @@ module Generated.TransferRouting.HospitalLoad.ReadModel
 import Generated.TransferRouting.HospitalLoad.ReadModelTable (hospitalLoadQualifiedTable)
 import Generated.TransferRouting.HospitalLoad.QueryContract (HospitalLoadQueryInput, HospitalLoadQueryResult)
 import TransferRouting.HospitalLoad.ReadModelHoles (hospitalLoadQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), HeadScope (..), headWaitingReadModel)
 
 hospitalLoadReadModel :: ReadModel HospitalLoadQueryInput HospitalLoadQueryResult
 hospitalLoadReadModel =
-  ReadModel
+  case headWaitingReadModel (CategoryVisibleHead "hospitalLoad") hospitalLoadReadModelBlueprint of
+    Left definitionError -> error ("keiro-dsl generated an invalid waiting read model: " <> show definitionError)
+    Right model -> model
+
+hospitalLoadReadModelBlueprint :: ReadModelBlueprint HospitalLoadQueryInput HospitalLoadQueryResult
+hospitalLoadReadModelBlueprint =
+  ReadModelBlueprint
     { name = "transfer-routing-hospital-load"
     , tableName = "hospital_load"
     , schema = "public"
-    , subscriptionName = "transfer-routing-hospital-load-sub"
     , version = 1
     , shapeHash = "fnv1a:3c07a19c552c3547"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = DurableQueryCursor "declarative-router-hospital-load"
     , query = hospitalLoadQuery
     }

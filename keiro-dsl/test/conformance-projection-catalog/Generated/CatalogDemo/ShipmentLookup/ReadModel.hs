@@ -6,18 +6,20 @@ module Generated.CatalogDemo.ShipmentLookup.ReadModel
 
 import Generated.CatalogDemo.ShipmentLookup.ReadModelTable (shipmentLookupQualifiedTable)
 import CatalogDemo.ShipmentLookup.ReadModelHoles (ShipmentLookupQueryInput, ShipmentLookupQueryResult, shipmentLookupQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), immediateReadModel)
 
 shipmentLookupReadModel :: ReadModel ShipmentLookupQueryInput ShipmentLookupQueryResult
 shipmentLookupReadModel =
-  ReadModel
+  immediateReadModel shipmentLookupReadModelBlueprint
+
+shipmentLookupReadModelBlueprint :: ReadModelBlueprint ShipmentLookupQueryInput ShipmentLookupQueryResult
+shipmentLookupReadModelBlueprint =
+  ReadModelBlueprint
     { name = "catalog-demo-shipmentLookup"
     , tableName = "shipment_summary"
     , schema = "sales"
-    , subscriptionName = "catalog-demo-shipment-lookup"
     , version = 1
     , shapeHash = "fnv1a:d0c39c966ea2f0b4"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = NoQueryCursor
     , query = shipmentLookupQuery
     }

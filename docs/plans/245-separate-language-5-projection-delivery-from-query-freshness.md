@@ -42,7 +42,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: add version-gated semantic types and parse/pretty-print Language 5 `delivery` and `freshness`; focused parser/profile/round-trip checks pass (2026-08-12T21:51:03Z); the final Languages 1-4 corpus drift gate remains part of M4.
 - [x] M2: replace keyword-pair validation with owner/cursor capability validation and generate Plan 244's honest runtime builders; the 17-example catalog group covers every positive and DSL-representable negative row (2026-08-12T21:51:03Z).
-- [ ] M3: diff, scaffold-ledger, harness, workspace, and fingerprint consumers now expose separate delivery/freshness/cursor facts; candidate corpus regeneration and compiled mutation proof remain.
+- [x] M3: diff, scaffold-ledger, harness, workspace, and fingerprint consumers expose separate delivery/freshness/cursor facts; all 39 corpus entries regenerated with drift confined to three candidate suites, and the four positive rows plus fact mutations compile and pass (2026-08-12T22:03:26Z).
 - [ ] M4: update references, migration/diagnostics guides, examples, changelogs, and ADRs; run full verification and close MasterPlan 38 when all gates pass.
 
 
@@ -65,6 +65,11 @@ implementation. Provide concise evidence.
   parsed as three arguments. Parenthesizing the `CategoryVisibleHead` value fixed the
   emitted Haskell before corpus regeneration, while the entire-log constructor remained
   atomic.
+- Implementation (2026-08-12): allocating the all-stream/entire-head row to a second
+  owner in the existing mixed-source `reporting` group passed DSL validation but failed
+  runtime catalog validation with `AmbiguousSourceOrdering`. The DSL now mirrors that
+  closed-world rule as `CatalogAmbiguousSourceOrdering`, so generated catalogs cannot
+  defer this invalid source combination until module initialization.
 
 
 ## Decision Log
@@ -94,8 +99,8 @@ Record every decision made while working on the plan.
   released rendering requires retaining which frozen surface produced them.
   Date: 2026-08-12
 - Decision: Pin the four positive capability rows across the existing compiled candidate
-  fixtures: projection-catalog owns inline/immediate and subscription/entire-head,
-  mapped-readmodel owns subscription/immediate, and declarative-router owns
+  fixtures: projection-catalog owns inline/immediate and subscription/immediate,
+  mapped-readmodel owns subscription/entire-head, and declarative-router owns
   subscription/category-head.
   Rationale: these are already primary candidate conformance packages, so the matrix is
   compiled without creating a synthetic grammar-only lane.
@@ -117,6 +122,16 @@ historical path. Checked generation uses only `ReadModelBlueprint`,
 resolved supplier. Focused validation proves compatible whole-store/category waits and
 rejects inline, implicit, missing-cursor, and unreachable-category waits before
 generation.
+
+M3 is complete. Separate `ProjectionDeliveryChanged` and `QueryFreshnessChanged` diff
+codes, ledger rows, harness facts, workspace facts, and canonical catalog/slice inputs now
+track the two policies independently. A 39-entry regeneration changed only
+`conformance-declarative-router`, `conformance-mapped-readmodel`, and
+`conformance-projection-catalog`; their compiled tests cover inline/immediate,
+subscription/immediate, subscription/category-head, and subscription/entire-head.
+Hand-owned conformance mutations prove freshness, resolved cursor authority, and delivery
+facts each fail independently, while the 17-example focused suite proves whitespace and
+declaration order do not alter normalized identity.
 
 
 ## Context and Orientation

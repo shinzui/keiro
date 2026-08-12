@@ -182,13 +182,13 @@ readmodel catalogAudit {
   }
   version = 1
   shape = "fnv1a:9682af3ada04bf50"
-  freshness = wait-for-head entire-log
+  freshness = immediate
   group = reporting
   targets = [ audit_log ]
 }
 
 projection-owner audit_writer {
-  source = all
+  source = category "audit"
   delivery = subscription
   group = reporting
   targets = [ audit_log ]

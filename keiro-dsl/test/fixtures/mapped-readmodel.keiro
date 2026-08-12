@@ -71,7 +71,7 @@ rebuild-group reporting {
 }
 
 projection-owner account_summary_writer {
-  source = category "account"
+  source = all
   delivery = subscription
   group = reporting
   targets = [ account_summary_table ]
@@ -88,7 +88,7 @@ readmodel account_summary {
   query result = Optional AccountSummary
   version = 1
   shape = "fnv1a:3c07a19c552c3547"
-  freshness = immediate
+  freshness = wait-for-head entire-log
   group = reporting
   targets = [ account_summary_table ]
 }

@@ -7,18 +7,20 @@ module Generated.CatalogDemo.OrderInline.ReadModel
 import Generated.CatalogDemo.OrderInline.ReadModelTable (orderInlineQualifiedTable)
 import Generated.CatalogDemo.OrderInline.QueryContract (OrderInlineQueryInput, OrderInlineQueryResult)
 import CatalogDemo.OrderInline.ReadModelHoles (orderInlineQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), immediateReadModel)
 
 orderInlineReadModel :: ReadModel OrderInlineQueryInput OrderInlineQueryResult
 orderInlineReadModel =
-  ReadModel
+  immediateReadModel orderInlineReadModelBlueprint
+
+orderInlineReadModelBlueprint :: ReadModelBlueprint OrderInlineQueryInput OrderInlineQueryResult
+orderInlineReadModelBlueprint =
+  ReadModelBlueprint
     { name = "catalog-demo-order-inline"
     , tableName = "order_summary"
     , schema = "sales"
-    , subscriptionName = "catalog-demo-order-inline-sub"
     , version = 1
     , shapeHash = "fnv1a:784e511a19f74c58"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = NoQueryCursor
     , query = orderInlineQuery
     }

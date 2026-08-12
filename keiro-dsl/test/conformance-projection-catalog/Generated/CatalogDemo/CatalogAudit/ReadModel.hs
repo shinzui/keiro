@@ -6,18 +6,20 @@ module Generated.CatalogDemo.CatalogAudit.ReadModel
 
 import Generated.CatalogDemo.CatalogAudit.ReadModelTable (catalogAuditQualifiedTable)
 import CatalogDemo.CatalogAudit.ReadModelHoles (CatalogAuditQueryInput, CatalogAuditQueryResult, catalogAuditQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), immediateReadModel)
 
 catalogAuditReadModel :: ReadModel CatalogAuditQueryInput CatalogAuditQueryResult
 catalogAuditReadModel =
-  ReadModel
+  immediateReadModel catalogAuditReadModelBlueprint
+
+catalogAuditReadModelBlueprint :: ReadModelBlueprint CatalogAuditQueryInput CatalogAuditQueryResult
+catalogAuditReadModelBlueprint =
+  ReadModelBlueprint
     { name = "catalog-demo-catalogAudit"
     , tableName = "audit_log"
     , schema = "sales"
-    , subscriptionName = "catalog-demo-catalogAudit-sub"
     , version = 1
     , shapeHash = "fnv1a:9682af3ada04bf50"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = DurableQueryCursor "catalog-demo-audit"
     , query = catalogAuditQuery
     }

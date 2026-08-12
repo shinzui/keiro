@@ -654,7 +654,7 @@ main = hspec $ do
       map Coverage.rootConsumer [root | root <- Coverage.coverageRoots queryCoverage, Coverage.rootSurface root `elem` [Coverage.ReadModelQueryInput, Coverage.ReadModelQueryResult]]
         `shouldBe` ["read-model-query:account_summary:input", "read-model-query:account_summary:result"]
       map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces projectionCoverage)
-        `shouldContain` ["projection-all:audit_writer"]
+        `shouldContain` ["projection-category:audit_writer:audit"]
 
     it "places one deterministic surface/consumer/root/path fact set behind the service facade" $ do
       services <- mapM checkedServiceOf ["test/fixtures/mapped-workqueue.keiro", "test/fixtures/mapped-readmodel.keiro", "test/fixtures/projection-catalog.keiro"]
@@ -809,7 +809,7 @@ main = hspec $ do
       Coverage.readModelQueryResults (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 1 0 1 0
       Coverage.projectionTypedConsumers (Coverage.coverageSummary coverage) `shouldBe` Coverage.CoverageCounts 3 0 3 0
       map Coverage.unsupportedSurface (Coverage.coverageUnsupportedSurfaces coverage)
-        `shouldContain` ["projection-all:audit_writer"]
+        `shouldContain` ["projection-category:audit_writer:audit"]
 
     it "aligns every mapping diff with the authority's exact consequence set" $ do
       service <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
@@ -2059,7 +2059,7 @@ main = hspec $ do
       auditHarness `shouldSatisfy` T.isInfixOf "asyncRegistration:audit_writer"
       auditHarness `shouldSatisfy` T.isInfixOf "querySupply"
       auditHarness `shouldSatisfy` T.isInfixOf "projectionDelivery"
-      auditHarness `shouldSatisfy` T.isInfixOf "(\"freshness\", \"WaitForHead EntireVisibleLog\""
+      auditHarness `shouldSatisfy` T.isInfixOf "(\"freshness\", \"Immediate\""
       auditHarness `shouldSatisfy` T.isInfixOf "(\"cursorAuthority\", \"DurableQueryCursor \\\"catalog-demo-audit\\\"\""
       auditHarness `shouldSatisfy` T.isInfixOf "catalog-demo-audit|catalog-demo-audit-v1"
       auditHarness `shouldNotSatisfy` T.isInfixOf "\"catalog-managed\", \"catalog-managed\""
@@ -2087,9 +2087,9 @@ main = hspec $ do
       map poCheckpointOnMissing owners `shouldBe` [[], [], [CheckpointFromCurrentHead]]
 
     it "validates and truthfully lowers every Language 5 delivery/freshness capability" $ do
-      entireSource <- readTestText "test/fixtures/projection-catalog.keiro"
+      entireSource <- readTestText "test/fixtures/mapped-readmodel.keiro"
       categorySource <- readTestText "test/fixtures/declarative-router/valid.keiro"
-      immediateSource <- readTestText "test/fixtures/mapped-readmodel.keiro"
+      immediateSource <- readTestText "test/fixtures/projection-catalog.keiro"
       entireService <- checkedServiceFromText "projection-freshness-entire.keiro" entireSource
       categoryService <- checkedServiceFromText "projection-freshness-category.keiro" categorySource
       immediateService <- checkedServiceFromText "projection-freshness-immediate.keiro" immediateSource
@@ -2099,16 +2099,16 @@ main = hspec $ do
       errorsOf immediateService `shouldBe` []
       let generatedReadModel suffix service =
             generatedTextEndingIn suffix (scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service)
-          entireReadModel = generatedReadModel "CatalogAudit/ReadModel.hs" entireService
+          entireReadModel = generatedReadModel "AccountSummary/ReadModel.hs" entireService
           categoryReadModel = generatedReadModel "HospitalLoad/ReadModel.hs" categoryService
-          immediateReadModelText = generatedReadModel "AccountSummary/ReadModel.hs" immediateService
-          inlineReadModel = generatedReadModel "OrderInline/ReadModel.hs" entireService
+          immediateReadModelText = generatedReadModel "CatalogAudit/ReadModel.hs" immediateService
+          inlineReadModel = generatedReadModel "OrderInline/ReadModel.hs" immediateService
       entireReadModel `shouldSatisfy` T.isInfixOf "headWaitingReadModel EntireVisibleLog"
-      entireReadModel `shouldSatisfy` T.isInfixOf "DurableQueryCursor \"catalog-demo-audit\""
+      entireReadModel `shouldSatisfy` T.isInfixOf "DurableQueryCursor \"mapped-readmodel-account-summary\""
       categoryReadModel `shouldSatisfy` T.isInfixOf "headWaitingReadModel (CategoryVisibleHead \"hospitalLoad\")"
       categoryReadModel `shouldSatisfy` T.isInfixOf "DurableQueryCursor \"declarative-router-hospital-load\""
-      immediateReadModelText `shouldSatisfy` T.isInfixOf "immediateReadModel accountSummaryReadModelBlueprint"
-      immediateReadModelText `shouldSatisfy` T.isInfixOf "DurableQueryCursor \"mapped-readmodel-account-summary\""
+      immediateReadModelText `shouldSatisfy` T.isInfixOf "immediateReadModel catalogAuditReadModelBlueprint"
+      immediateReadModelText `shouldSatisfy` T.isInfixOf "DurableQueryCursor \"catalog-demo-audit\""
       inlineReadModel `shouldSatisfy` T.isInfixOf "immediateReadModel orderInlineReadModelBlueprint"
       inlineReadModel `shouldSatisfy` T.isInfixOf "cursorAuthority = NoQueryCursor"
       forM_ [entireReadModel, categoryReadModel, immediateReadModelText, inlineReadModel] $ \generated -> do
@@ -2132,7 +2132,7 @@ main = hspec $ do
               "freshness = wait-for-head category \"hospitalLoad\""
               "freshness = wait-for-head category \"other\""
               categorySource
-          missingCursor = T.replace "  subscription = \"catalog-demo-audit\"\n" "" catalogSource
+          missingCursor = T.replace "  subscription = \"declarative-router-hospital-load\"\n" "" categorySource
       codesFor "projection-freshness-inline-wait.keiro" inlineWait
         `shouldReturn` [CatalogQueryWaitWithoutCompatibleCursor]
       codesFor "projection-freshness-mismatched-category.keiro" mismatchedCategory
@@ -2163,7 +2163,7 @@ main = hspec $ do
         failureText
           "projection-freshness-legacy-readmodel.keiro"
           ( T.replace
-              "  freshness = wait-for-head entire-log"
+              "  freshness = immediate"
               "  consistency = Strong\n  scope = entire-log\n  feed = subscription\n  subscription = \"catalog-demo-audit\""
               source
           )
@@ -2191,7 +2191,11 @@ main = hspec $ do
       changed <-
         checkedServiceFromText
           "projection-freshness-changed.keiro"
-          (T.replace "freshness = wait-for-head entire-log" "freshness = wait-for-head category \"audit\"" source)
+          ( T.replace
+              "shape = \"fnv1a:9682af3ada04bf50\"\n  freshness = immediate\n  group = reporting\n  targets = [ audit_log ]"
+              "shape = \"fnv1a:9682af3ada04bf50\"\n  freshness = wait-for-head category \"audit\"\n  group = reporting\n  targets = [ audit_log ]"
+              source
+          )
       validateService changed `shouldBe` []
       let changeCodes = map (ckCode . kindOfChange) (diffServices baseline changed)
           foldIdentities service =
@@ -2326,7 +2330,7 @@ main = hspec $ do
           ]
       ProjectionImpact.unsupported baseImpact
         `shouldBe` [ ProjectionImpact.UnsupportedProjectionImpact
-                       (UnsupportedCatalogAll "audit_writer")
+                       (UnsupportedCatalogCategory "audit_writer" "audit")
                        "reporting"
                        (Set.singleton "audit_log")
                        (Set.singleton "catalogAudit")
@@ -2336,13 +2340,13 @@ main = hspec $ do
       rendered `shouldContain` ["      inherited event roots: Orders event OrderRecorded .orderPayload : OrderPayload"]
       rendered
         `shouldContain` ["      operation: group=shipping; targets=shipment_summary; read-models=shipmentLookup; replayable=no; source-fingerprint=aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5"]
-      rendered `shouldContain` ["    catalog-all:audit_writer"]
+      rendered `shouldContain` ["    catalog-category:audit_writer:audit"]
 
       eventChanged <- checkedServiceFromText "projection-catalog-event-changed.keiro" (T.replace "version = \"1\"" "version = \"2\"" source)
       sourceChanged <- checkedServiceFromText "projection-catalog-source-changed.keiro" (T.replace "source = aggregate Orders" "source = aggregate Shipments" source)
       replayChanged <- checkedServiceFromText "projection-catalog-replay-changed.keiro" (T.replace "replay = live-only \"carrier events cannot be replayed\"" "replay = explicit" source)
       observationChanged <- checkedServiceFromText "projection-catalog-observation-changed.keiro" (T.replace "targets = [ order_summary ]" "targets = [ audit_log ]" source)
-      categoryChanged <- checkedServiceFromText "projection-catalog-category-changed.keiro" (T.replace "source = all" "source = category \"archive-audit\"" source)
+      categoryChanged <- checkedServiceFromText "projection-catalog-category-changed.keiro" (T.replace "source = category \"audit\"" "source = category \"archive-audit\"" source)
       let requireImpact caseLabel candidate = case ProjectionImpact.projectionMappedImpactForService candidate of
             Nothing -> expectationFailure (caseLabel <> " type graph did not resolve") >> fail "unreachable"
             Just value -> pure value
@@ -2419,6 +2423,8 @@ main = hspec $ do
       dependencyCycle `shouldContain` [CatalogTargetDependencyCycle]
       overlappingSource <- mutationCodes (T.replace "  source = aggregate Orders\n" "  source = aggregate Orders\n  source = category \"orders\"\n")
       overlappingSource `shouldContain` [CatalogSourceOverlap]
+      ambiguousSourceOrdering <- mutationCodes (T.replace "  source = category \"audit\"\n" "  source = all\n")
+      ambiguousSourceOrdering `shouldContain` [CatalogAmbiguousSourceOrdering]
       missingQueryBinding <- mutationCodes (T.replace "  targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "  targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
       missingQueryBinding `shouldContain` [CatalogAsyncQueryBindingMissing]
 
@@ -2449,7 +2455,7 @@ main = hspec $ do
       facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
       facts `shouldSatisfy` any (T.isPrefixOf "delivery|audit_writer|subscription|")
-      facts `shouldSatisfy` any (T.isPrefixOf "freshness|catalogAudit|wait-for-head:entire-log|")
+      facts `shouldSatisfy` any (T.isPrefixOf "freshness|catalogAudit|immediate|")
       facts `shouldSatisfy` any (T.isPrefixOf "cursor|catalogAudit|catalog-demo-audit|")
       facts `shouldSatisfy` any (T.isPrefixOf "query|order_totals_lookup|reporting|order_totals|order_totals|")
       facts `shouldSatisfy` any (T.isPrefixOf "supply|order_inline|order_summary_writer|reporting|order_summary|")
@@ -2484,7 +2490,7 @@ main = hspec $ do
                 `shouldContain` ["      inherited event roots: Orders event OrderRecorded .orderPayload : OrderPayload"]
               renderScaffoldReport report
                 `shouldContain` ["      operation: group=shipping; targets=shipment_summary; read-models=shipmentLookup; replayable=no; source-fingerprint=aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5"]
-              renderScaffoldReport report `shouldContain` ["    catalog-all:audit_writer"]
+              renderScaffoldReport report `shouldContain` ["    catalog-category:audit_writer:audit"]
 
     it "classifies every catalog evolution dimension and reports machine-readable replay impact" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -2493,7 +2499,7 @@ main = hspec $ do
           ownerBlock =
             T.unlines
               [ "projection-owner audit_writer {",
-                "  source = all",
+                "  source = category \"audit\"",
                 "  delivery = subscription",
                 "  group = reporting",
                 "  targets = [ audit_log ]",
@@ -2578,7 +2584,7 @@ main = hspec $ do
         CatalogReplayAffected groups targets sources adapters invalidates -> do
           groups `shouldBe` Set.singleton "reporting"
           targets `shouldBe` Set.singleton "audit_log"
-          sources `shouldBe` Set.singleton "all"
+          sources `shouldBe` Set.singleton "category:audit"
           adapters `shouldBe` Set.singleton "audit_writer"
           invalidates `shouldBe` True
         CatalogReplayNeutral -> expectationFailure "checkpoint-policy change was replay-neutral"

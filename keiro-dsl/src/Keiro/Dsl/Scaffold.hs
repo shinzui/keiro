@@ -4199,9 +4199,9 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
       ++ projectionImports
       ++ [ "import Keiro.Projection.Catalog qualified as Catalog",
            "import Keiro.ReadModel.Rebuild qualified as Rebuild",
-           "import Kiroku.Store.Effect (Store)",
-           "import Kiroku.Store.Types qualified as Kiroku"
+           "import Kiroku.Store.Effect (Store)"
          ]
+      ++ ["import Kiroku.Store.Types qualified as Kiroku" | any sourceUsesCategoryName sources]
       ++ ["import Kiroku.Store.Subscription.Types qualified as KirokuSubscription" | not (null asyncOwners)]
       ++ ["import " <> holesModule <> " qualified as Holes"]
       ++ map readModelImport readModels
@@ -4301,6 +4301,9 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     sourceFingerprint CatalogAll = "all-streams/generated-codec/v1"
     sourceFingerprint (CatalogCategory categoryName) = "category:" <> categoryName <> "/application-decoder/v1"
     sourceFingerprint (CatalogAggregate aggregateName) = aggregateFingerprint aggregateName
+    sourceUsesCategoryName CatalogAll = False
+    sourceUsesCategoryName CatalogCategory {} = True
+    sourceUsesCategoryName CatalogAggregate {} = True
     targetExpr target =
       "Catalog.TargetDeclaration "
         <> smart "mkTargetId" (ptName target)

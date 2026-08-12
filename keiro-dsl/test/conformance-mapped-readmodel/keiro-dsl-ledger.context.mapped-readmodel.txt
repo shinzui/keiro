@@ -53,8 +53,11 @@ binding {"kind":"binding","mappedName":"TenantKey","module":"Conformance.MappedR
 binding {"kind":"fixtures","mappedName":"TenantKey","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"tenantKeyCases :: FixtureCases Conformance.MappedReadModel.Domain.TenantKey","symbol":"tenantKeyCases"}
 binding {"kind":"binding","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":"prefix","schema":1,"signature":"unusedFilterBinding.prefix :: Text","symbol":"unusedFilterBinding"}
 binding {"kind":"fixtures","mappedName":"UnusedFilter","module":"Conformance.MappedReadModel.Bindings","path":null,"schema":1,"signature":"unusedFilterCases :: FixtureCases Conformance.MappedReadModel.Domain.UnusedFilter","symbol":"unusedFilterCases"}
+projection-catalog-fact cursor|account_summary|mapped-readmodel-account-summary|85
+projection-catalog-fact delivery|account_summary_writer|subscription|73
+projection-catalog-fact freshness|account_summary|wait-for-head:entire-log|85
 projection-catalog-fact group|reporting|account_summary_table|account_summary_table|68
-projection-catalog-fact owner|account_summary_writer|category:account|subscription|reporting|account_summary_table|10|mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1|from-beginning|explicit|73
+projection-catalog-fact owner|account_summary_writer|all|reporting|account_summary_table|10|mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1|from-beginning|explicit|73
 projection-catalog-fact query|account_summary|reporting|account_summary_table|account_summary_table|85
 projection-catalog-fact supply|account_summary|account_summary_writer|reporting|account_summary_table|85|73
 projection-catalog-fact target|account_summary_table|public|account_summary|clear||62

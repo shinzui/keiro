@@ -298,7 +298,7 @@ emitReadModelHarness genPrefix ctx spec readModel =
     catalogManaged = rmGroup readModel /= Nothing
     emitsLegacyAsync = not ownerDerived && not catalogManaged && legacyReadModelFeed readModel == Just RmSubscription
     runtimeImports
-      | ownerDerived = "HeadScope (..), QueryCursorAuthority (..), QueryFreshness (..), ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness"
+      | ownerDerived = "ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness"
       | otherwise = "ReadModel (..), StrongScope (..)"
     baseFactRows
       | ownerDerived =

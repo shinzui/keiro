@@ -7,27 +7,23 @@ import Data.Text qualified as T
 import Data.List.NonEmpty qualified as NE
 import Generated.CatalogDemo.ProjectionCatalog qualified as ProjectionCatalog
 import Keiro.Projection.Catalog qualified as Catalog
-import Keiro.ReadModel (ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness)
 
 -- | (fact, expected from notation, actual generated runtime value).
 readModelFacts :: [(String, String, String)]
 readModelFacts =
   [ ("registryName", "catalog-demo-order-inline", T.unpack orderInlineReadModel.name)
-  , ("subscriptionName", "catalog-demo-order-inline-sub", T.unpack orderInlineReadModel.subscriptionName)
   , ("shapeHash", "fnv1a:784e511a19f74c58", T.unpack orderInlineReadModel.shapeHash)
-  , ("consistency", "Eventual", show orderInlineReadModel.defaultConsistency)
-  , ("strongScope", "EntireLog", renderStrongScope orderInlineReadModel.strongScope)
+  , ("freshness", "Immediate", show (readModelDefaultFreshness orderInlineReadModel))
+  , ("cursorAuthority", "NoQueryCursor", show (readModelCursorAuthority orderInlineReadModel))
   ]
     <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies
-
-renderStrongScope :: StrongScope -> String
-renderStrongScope EntireLog = "EntireLog"
-renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
 
 catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]
 catalogFactsAgainst registrations _asyncRegistrations supplies =
   [ ("catalogRegistration", "catalog-demo-order-inline|1|fnv1a:784e511a19f74c58|reporting", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "order_inline"])
   , ("querySupply", "order_summary_writer|reporting|order_summary", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "order_inline"])
+  , ("projectionDelivery", "inline", renderDelivery [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "order_inline"])
   ]
 
 renderRegistration :: [Catalog.CatalogRegistration] -> String
@@ -37,6 +33,14 @@ renderRegistration _ = "missing"
 renderSupply :: [Catalog.ResolvedQuerySupply] -> String
 renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> "|" <> T.unpack (T.intercalate "," (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))
 renderSupply _ = "missing"
+
+renderDelivery :: [Catalog.ResolvedQuerySupply] -> String
+renderDelivery [entry] = T.unpack (T.intercalate "," (map renderCapability (NE.toList entry.resolvedHandlerCapabilities)))
+renderDelivery _ = "missing"
+
+renderCapability :: Catalog.ProjectionHandlerCapability -> T.Text
+renderCapability Catalog.InlineCapability {} = "inline"
+renderCapability Catalog.SubscriptionCapability {} = "subscription"
 
 readModelFactResults :: [(String, Bool)]
 readModelFactResults =

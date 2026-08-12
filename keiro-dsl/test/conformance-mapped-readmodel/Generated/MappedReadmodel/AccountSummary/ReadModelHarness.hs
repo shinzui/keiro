@@ -7,27 +7,23 @@ import Data.Text qualified as T
 import Data.List.NonEmpty qualified as NE
 import Generated.MappedReadmodel.ProjectionCatalog qualified as ProjectionCatalog
 import Keiro.Projection.Catalog qualified as Catalog
-import Keiro.ReadModel (ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness)
 
 -- | (fact, expected from notation, actual generated runtime value).
 readModelFacts :: [(String, String, String)]
 readModelFacts =
   [ ("registryName", "mapped-readmodel-account-summary", T.unpack accountSummaryReadModel.name)
-  , ("subscriptionName", "mapped-readmodel-account-summary-sub", T.unpack accountSummaryReadModel.subscriptionName)
   , ("shapeHash", "fnv1a:3c07a19c552c3547", T.unpack accountSummaryReadModel.shapeHash)
-  , ("consistency", "Eventual", show accountSummaryReadModel.defaultConsistency)
-  , ("strongScope", "EntireLog", renderStrongScope accountSummaryReadModel.strongScope)
+  , ("freshness", "WaitForHead EntireVisibleLog", show (readModelDefaultFreshness accountSummaryReadModel))
+  , ("cursorAuthority", "DurableQueryCursor \"mapped-readmodel-account-summary\"", show (readModelCursorAuthority accountSummaryReadModel))
   ]
     <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies
-
-renderStrongScope :: StrongScope -> String
-renderStrongScope EntireLog = "EntireLog"
-renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
 
 catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]
 catalogFactsAgainst registrations asyncRegistrations supplies =
   [ ("catalogRegistration", "mapped-readmodel-account-summary|1|fnv1a:3c07a19c552c3547|reporting", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "account_summary"])
   , ("querySupply", "account_summary_writer|reporting|account_summary_table", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "account_summary"])
+  , ("projectionDelivery", "subscription", renderDelivery [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "account_summary"])
   , ("asyncRegistration:account_summary_writer", "mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1", renderAsync [entry | entry <- asyncRegistrations, Catalog.projectionIdText entry.projectionId == "account_summary_writer"])
   ]
 
@@ -38,6 +34,14 @@ renderRegistration _ = "missing"
 renderSupply :: [Catalog.ResolvedQuerySupply] -> String
 renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> "|" <> T.unpack (T.intercalate "," (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))
 renderSupply _ = "missing"
+
+renderDelivery :: [Catalog.ResolvedQuerySupply] -> String
+renderDelivery [entry] = T.unpack (T.intercalate "," (map renderCapability (NE.toList entry.resolvedHandlerCapabilities)))
+renderDelivery _ = "missing"
+
+renderCapability :: Catalog.ProjectionHandlerCapability -> T.Text
+renderCapability Catalog.InlineCapability {} = "inline"
+renderCapability Catalog.SubscriptionCapability {} = "subscription"
 
 renderAsync :: [Catalog.AsyncProjectionRegistration] -> String
 renderAsync [entry] = T.unpack entry.subscriptionName <> "|" <> T.unpack entry.dedupName

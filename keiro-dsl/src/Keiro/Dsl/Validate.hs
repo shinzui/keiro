@@ -224,6 +224,7 @@ data DiagnosticCode
   | CatalogProjectionTargetOutsideGroup
   | CatalogSourceUnresolved
   | CatalogSourceOverlap
+  | CatalogAmbiguousSourceOrdering
   | CatalogAsyncIdentityMissing
   | CatalogAsyncQueryBindingMissing
   | CatalogInlineIdentityUnexpected
@@ -2307,7 +2308,7 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   ]
 
 validateProjectionCatalogFleet :: Spec -> [Diagnostic]
-validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> supplyDiagnostics
+validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> sourceOrdering <> supplyDiagnostics
   where
     targets = [target | NProjectionTarget target <- specNodes spec]
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
@@ -2365,6 +2366,33 @@ validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> pr
           "projection owner '" <> poName owner <> "' reuses handler order " <> T.pack (show (poOrder owner)) <> " in group '" <> poGroup owner <> "'"
       | owner <- duplicatesBy (\owner -> (poGroup owner, poOrder owner)) owners
       ]
+    sourceOrdering =
+      [ Diagnostic
+          { line = locLine (rgLoc groupNode),
+            severity = Error,
+            code = CatalogAmbiguousSourceOrdering,
+            relatedLocations =
+              [ (locLine (poLoc owner), "projection owner '" <> poName owner <> "' contributes " <> sourceScopeText owner <> " events")
+              | owner <- groupOwners
+              ],
+            message =
+              "rebuild group '"
+                <> rgName groupNode
+                <> "' cannot combine an all-stream source with category-scoped sources; split them into separate rebuild groups"
+          }
+      | groupNode <- groups,
+        let groupOwners = sortOn poName [owner | owner <- owners, poGroup owner == rgName groupNode],
+        any ownerUsesAllStreams groupOwners,
+        any ownerUsesCategoryScope groupOwners
+      ]
+    ownerUsesAllStreams owner = CatalogAll `elem` poSources owner
+    ownerUsesCategoryScope owner = any isCategoryScope (poSources owner)
+    isCategoryScope CatalogAll = False
+    isCategoryScope CatalogCategory {} = True
+    isCategoryScope CatalogAggregate {} = True
+    sourceScopeText owner
+      | ownerUsesAllStreams owner = "all-stream"
+      | otherwise = "category-scoped"
     supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics (projectionSupplyIssues (analyzeProjectionSupplies spec))
 
 projectionSupplyIssueDiagnostics :: ProjectionSupplyIssue -> [Diagnostic]

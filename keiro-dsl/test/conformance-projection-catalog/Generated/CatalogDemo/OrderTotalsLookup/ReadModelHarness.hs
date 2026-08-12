@@ -7,27 +7,23 @@ import Data.Text qualified as T
 import Data.List.NonEmpty qualified as NE
 import Generated.CatalogDemo.ProjectionCatalog qualified as ProjectionCatalog
 import Keiro.Projection.Catalog qualified as Catalog
-import Keiro.ReadModel (ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness)
 
 -- | (fact, expected from notation, actual generated runtime value).
 readModelFacts :: [(String, String, String)]
 readModelFacts =
   [ ("registryName", "catalog-demo-order-totals-lookup", T.unpack orderTotalsLookupReadModel.name)
-  , ("subscriptionName", "catalog-demo-order-totals-lookup-sub", T.unpack orderTotalsLookupReadModel.subscriptionName)
   , ("shapeHash", "fnv1a:768a23d719dcb4d4", T.unpack orderTotalsLookupReadModel.shapeHash)
-  , ("consistency", "Eventual", show orderTotalsLookupReadModel.defaultConsistency)
-  , ("strongScope", "EntireLog", renderStrongScope orderTotalsLookupReadModel.strongScope)
+  , ("freshness", "Immediate", show (readModelDefaultFreshness orderTotalsLookupReadModel))
+  , ("cursorAuthority", "NoQueryCursor", show (readModelCursorAuthority orderTotalsLookupReadModel))
   ]
     <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies
-
-renderStrongScope :: StrongScope -> String
-renderStrongScope EntireLog = "EntireLog"
-renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
 
 catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]
 catalogFactsAgainst registrations _asyncRegistrations supplies =
   [ ("catalogRegistration", "catalog-demo-order-totals-lookup|1|fnv1a:768a23d719dcb4d4|reporting", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "order_totals_lookup"])
   , ("querySupply", "order_summary_writer|reporting|order_totals", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "order_totals_lookup"])
+  , ("projectionDelivery", "inline", renderDelivery [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "order_totals_lookup"])
   ]
 
 renderRegistration :: [Catalog.CatalogRegistration] -> String
@@ -37,6 +33,14 @@ renderRegistration _ = "missing"
 renderSupply :: [Catalog.ResolvedQuerySupply] -> String
 renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> "|" <> T.unpack (T.intercalate "," (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))
 renderSupply _ = "missing"
+
+renderDelivery :: [Catalog.ResolvedQuerySupply] -> String
+renderDelivery [entry] = T.unpack (T.intercalate "," (map renderCapability (NE.toList entry.resolvedHandlerCapabilities)))
+renderDelivery _ = "missing"
+
+renderCapability :: Catalog.ProjectionHandlerCapability -> T.Text
+renderCapability Catalog.InlineCapability {} = "inline"
+renderCapability Catalog.SubscriptionCapability {} = "subscription"
 
 readModelFactResults :: [(String, Bool)]
 readModelFactResults =

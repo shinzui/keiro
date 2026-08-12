@@ -7,18 +7,22 @@ module Generated.MappedReadmodel.AccountSummary.ReadModel
 import Generated.MappedReadmodel.AccountSummary.ReadModelTable (accountSummaryQualifiedTable)
 import Generated.MappedReadmodel.AccountSummary.QueryContract (AccountSummaryQueryInput, AccountSummaryQueryResult)
 import MappedReadmodel.AccountSummary.ReadModelHoles (accountSummaryQuery)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (QueryCursorAuthority (..), ReadModel, ReadModelBlueprint (..), HeadScope (..), headWaitingReadModel)
 
 accountSummaryReadModel :: ReadModel AccountSummaryQueryInput AccountSummaryQueryResult
 accountSummaryReadModel =
-  ReadModel
+  case headWaitingReadModel EntireVisibleLog accountSummaryReadModelBlueprint of
+    Left definitionError -> error ("keiro-dsl generated an invalid waiting read model: " <> show definitionError)
+    Right model -> model
+
+accountSummaryReadModelBlueprint :: ReadModelBlueprint AccountSummaryQueryInput AccountSummaryQueryResult
+accountSummaryReadModelBlueprint =
+  ReadModelBlueprint
     { name = "mapped-readmodel-account-summary"
     , tableName = "account_summary"
     , schema = "public"
-    , subscriptionName = "mapped-readmodel-account-summary-sub"
     , version = 1
     , shapeHash = "fnv1a:3c07a19c552c3547"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
+    , cursorAuthority = DurableQueryCursor "mapped-readmodel-account-summary"
     , query = accountSummaryQuery
     }
