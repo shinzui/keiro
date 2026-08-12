@@ -106,7 +106,7 @@ import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSourceDocument, ren
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
 import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedServiceForContract, checkedSource, effectiveLanguageContract)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex
   ( ParsedSourceDocument (..),
@@ -765,10 +765,7 @@ oneMemberWithIndex path parsedSource sourceIndex =
 -- contract, so downstream consumers need not inspect member provenance.
 checkedWorkspace :: WorkspaceSpec -> CheckedService
 checkedWorkspace workspace =
-  CheckedService
-    { checkedLanguageContract = wsLanguageContract workspace,
-      checkedSpec = wsMergedSpec workspace
-    }
+  checkedServiceForContract (wsLanguageContract workspace) (wsMergedSpec workspace)
 
 -- | Validate a composed workspace. This runs the /existing/ whole-spec
 -- validator over the merged spec once and maps each diagnostic's line back

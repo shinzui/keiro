@@ -134,7 +134,7 @@ import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint)
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedServiceForContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -520,10 +520,7 @@ data ResolvedDomainOutcomeTypes = ResolvedDomainOutcomeTypes
 
 aggregateCheckedService :: Agg -> CheckedService
 aggregateCheckedService aggregate =
-  CheckedService
-    { checkedLanguageContract = aLanguageContract aggregate,
-      checkedSpec = aSpec aggregate
-    }
+  checkedServiceForContract (aLanguageContract aggregate) (aSpec aggregate)
 
 data ResolvedRegister = ResolvedRegister
   { rrName :: !Name,

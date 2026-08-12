@@ -1345,7 +1345,7 @@ main = hspec $ do
         let hasAggregateIdDomain = maybe False (const True) (idDomainContractFor contract "ord")
             hasContractIdDomain = maybe False (const True) (contractIdDomainContractFor contract "ord")
             nominalContract = equalityContractVersion <$> nominalEqualityContractForService contract nominal
-            strictService = CheckedService contract strictSpec
+            strictService = checkedServiceForContract contract strictSpec
             hasStrictValidation = any ((== AggregateDuplicateRegister) . code) (validateService strictService)
         pure
           ( number,
@@ -1397,18 +1397,18 @@ main = hspec $ do
           typeGraphSpec = baseSpec {specMapped = specMapped recursiveMapped}
           nominalSpec = baseSpec {specNominalScalars = specNominalScalars brokenNominal}
           cases =
-            [ (CheckedService contract typeGraphSpec, baseAggregate, \case FoldTypeGraphResolutionFailed {} -> True; _ -> False),
-              (CheckedService contract nominalSpec, baseAggregate, \case FoldNominalResolutionFailed {} -> True; _ -> False),
-              (CheckedService contract missingInitial, onlyAggregate missingInitial, \case FoldRegisterInitialResolutionFailed {} -> True; _ -> False),
-              (CheckedService contract guardSpec, onlyAggregate guardSpec, \case FoldGuardResolutionFailed {} -> True; _ -> False),
-              (CheckedService contract outputSpec, onlyAggregate outputSpec, \case FoldEventOutputResolutionFailed {} -> True; _ -> False)
+            [ (checkedServiceForContract contract typeGraphSpec, baseAggregate, \case FoldTypeGraphResolutionFailed {} -> True; _ -> False),
+              (checkedServiceForContract contract nominalSpec, baseAggregate, \case FoldNominalResolutionFailed {} -> True; _ -> False),
+              (checkedServiceForContract contract missingInitial, onlyAggregate missingInitial, \case FoldRegisterInitialResolutionFailed {} -> True; _ -> False),
+              (checkedServiceForContract contract guardSpec, onlyAggregate guardSpec, \case FoldGuardResolutionFailed {} -> True; _ -> False),
+              (checkedServiceForContract contract outputSpec, onlyAggregate outputSpec, \case FoldEventOutputResolutionFailed {} -> True; _ -> False)
             ]
       forM_ cases $ \(service, aggregate, matches) -> do
         CheckedFold.aggregateFoldSurfaceForService service aggregate
           `shouldSatisfy` either matches (const False)
         CheckedFold.aggregateFoldFingerprintForService service aggregate
           `shouldSatisfy` either matches (const False)
-      let brokenService = CheckedService contract guardSpec
+      let brokenService = checkedServiceForContract contract guardSpec
       CheckedDiff.diffServices brokenService baseService `shouldSatisfy` isLeft
       ReplayImpact.replayImpactServices brokenService baseService `shouldSatisfy` isLeft
       planTestServiceScaffold (defaultContext (specContext guardSpec)) brokenService
@@ -11089,7 +11089,7 @@ serviceErrorCodes versionNumber spec =
   where
     service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
       Nothing -> error ("unsupported test language version " <> show versionNumber)
-      Just languageContract -> CheckedService languageContract spec
+      Just languageContract -> checkedServiceForContract languageContract spec
 
 -- | Codes emitted at 'Warning' severity under the given released language.
 -- Pairs with 'serviceErrorCodes' to assert a surface's warn-then-error tiering
@@ -11100,7 +11100,7 @@ serviceWarningCodes versionNumber spec =
   where
     service = case languageVersion (fromIntegral versionNumber) >>= effectiveLanguageContractForVersion of
       Nothing -> error ("unsupported test language version " <> show versionNumber)
-      Just languageContract -> CheckedService languageContract spec
+      Just languageContract -> checkedServiceForContract languageContract spec
 
 duplicateFirst :: [a] -> [a]
 duplicateFirst = \case

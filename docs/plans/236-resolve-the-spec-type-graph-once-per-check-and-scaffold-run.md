@@ -52,8 +52,8 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Confirm plan 234 status; regenerate and reconcile the resolveTypeGraph call-site inventory against the tree at implementation time.
 - [x] M1: Add the `type-graph` fixture generator and `service-check` / `service-scaffold-plan` benchmark groups to `keiro-dsl/bench/parser-scaling/Main.hs`.
 - [x] M1: Record baseline benchmark timings and a baseline trace count in Surprises & Discoveries.
-- [ ] M2: Add the lazy `checkedTypeGraph` field to `CheckedService` with hand-written Eq/Show; update all direct construction sites.
-- [ ] M2: Full suite green, corpus zero drift with the field present but unconsumed.
+- [x] M2: Add the lazy `checkedTypeGraph` field to `CheckedService` with hand-written Eq/Show; update all direct construction sites.
+- [x] M2: Full suite green, corpus zero drift with the field present but unconsumed.
 - [ ] M3: Thread the shared graph through the check pass (Validate.hs, RouterSelection.hs, ExplainBindings.hs, Coverage path).
 - [ ] M3: Trace count for `keiro-dsl check` on the declarative-router fixture is exactly 1.
 - [ ] M4: Thread the shared graph through the scaffold run (Scaffold.hs, ScaffoldRun.hs, AggregateType symbols, FoldFingerprint, Harness, ServiceHarness, StructuralConformance, MappedConsumer, ReadModelQueryContract, CoordinationImpact, ProjectionMappedImpact, Goldens, Workspace hoist).
@@ -79,6 +79,12 @@ implementation. Provide concise evidence.
 - The reconciled post-plan-234 inventory retained every expected Class A/B/C site and added
   no new `resolveTypeGraph` consumer. Plan 235 had removed only the forecast Spec-only
   planning wrappers, so it reduced entry-point surface without changing the hot call graph.
+- M2 confirmed that `SemanticContract` can import `TypeGraph` without a cycle. One additional
+  direct construction seam existed in `Scaffold.aggregateCheckedService` beyond the original
+  inventory; routing it, workspace composition, compatibility bridges, and tests through
+  `checkedServiceForContract` leaves graph initialization in one implementation. The complete
+  test surface remained green (695 main examples plus every declared conformance suite), and
+  the 39-entry corpus policy reported zero drift while no consumer read the new field.
 
 
 ## Decision Log

@@ -18,11 +18,13 @@ module Keiro.Dsl.SemanticContract
     CheckedService (..),
     checkedSource,
     checkedService,
+    checkedServiceForContract,
     legacyCheckedService,
   )
 where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -45,6 +47,7 @@ import Keiro.Dsl.LanguageVersion
     runtimeProfileFoldSegments,
     runtimeProfileIdentifier,
   )
+import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 
 -- | One effective released-language selection plus the runtime-semantics
 -- generation it selects. Versions 1 and 2 differ in grammar capabilities but
@@ -151,9 +154,25 @@ runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . effectiveRunt
 -- on 'ParsedSource' or 'Keiro.Dsl.Workspace.WorkspaceMember'.
 data CheckedService = CheckedService
   { checkedLanguageContract :: !EffectiveLanguageContract,
-    checkedSpec :: !Spec
+    checkedSpec :: !Spec,
+    -- | Shared, lazily forced resolution of 'checkedSpec'. This derived value
+    -- is never serialized and is deliberately excluded from Eq and Show.
+    checkedTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph
   }
-  deriving stock (Eq, Show)
+
+instance Eq CheckedService where
+  left == right =
+    checkedLanguageContract left == checkedLanguageContract right
+      && checkedSpec left == checkedSpec right
+
+instance Show CheckedService where
+  showsPrec precedence service =
+    showParen (precedence >= 11) $
+      showString "CheckedService {checkedLanguageContract = "
+        . shows (checkedLanguageContract service)
+        . showString ", checkedSpec = "
+        . shows (checkedSpec service)
+        . showString "}"
 
 -- | Construct the semantic input for one parsed source without losing the
 -- selected contract.
@@ -166,9 +185,16 @@ checkedSource parsed =
 -- same effective version.
 checkedService :: SourceLanguage -> Spec -> CheckedService
 checkedService sourceLanguage spec =
+  checkedServiceForContract (effectiveLanguageContract sourceLanguage) spec
+
+-- | Construct a checked service when composition has already selected and
+-- verified the effective language contract.
+checkedServiceForContract :: EffectiveLanguageContract -> Spec -> CheckedService
+checkedServiceForContract languageContract spec =
   CheckedService
-    { checkedLanguageContract = effectiveLanguageContract sourceLanguage,
-      checkedSpec = spec
+    { checkedLanguageContract = languageContract,
+      checkedSpec = spec,
+      checkedTypeGraph = resolveTypeGraph spec
     }
 
 -- | Compatibility bridge for callers that historically supplied only 'Spec'.

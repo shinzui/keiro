@@ -26,9 +26,8 @@ import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
-import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
 data BindingResolutionError
@@ -137,7 +136,7 @@ instance FromJSON BindingHole where
           <*> value .: "signature"
 
 bindingObligations :: Spec -> Either (NonEmpty BindingResolutionError) [BindingObligation]
-bindingObligations spec = bindingObligationsForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
+bindingObligations = bindingObligationsForService . legacyCheckedService
 
 bindingObligationsForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingObligation]
 bindingObligationsForService service = do
@@ -153,7 +152,7 @@ bindingObligationsForService service = do
     spec = checkedSpec service
 
 bindingHoles :: Spec -> Either (NonEmpty BindingResolutionError) [BindingHole]
-bindingHoles spec = bindingHolesForService (CheckedService (effectiveLanguageContract LegacyUnversioned) spec)
+bindingHoles = bindingHolesForService . legacyCheckedService
 
 bindingHolesForService :: CheckedService -> Either (NonEmpty BindingResolutionError) [BindingHole]
 bindingHolesForService service = do
