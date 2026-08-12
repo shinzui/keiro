@@ -21,6 +21,7 @@ import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 import Keiro.Ops.Render
 import Keiro.Projection (countAsyncProjectionDedupForBefore, pruneAsyncProjectionDedupForBefore)
+import Keiro.ReadModel (storeHeadPosition)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Subscription
@@ -81,19 +82,22 @@ runCommand env = \case
 
 runPosition :: OpsEnv -> Text -> IO OpsOutcome
 runPosition env subscription =
-  runAction env subscriptionCheckpointInventory $ \inventory ->
-    Succeeded (positionResult subscription inventory)
+  runAction env action $ \(visibleHead, inventory) ->
+    Succeeded (positionResult subscription visibleHead inventory)
+  where
+    action = (,) <$> storeHeadPosition <*> subscriptionCheckpointInventory
 
-positionResult :: Text -> SubscriptionCheckpointInventory -> OpsResult
-positionResult requested inventory =
+positionResult :: Text -> GlobalPosition -> SubscriptionCheckpointInventory -> OpsResult
+positionResult requested visibleHead inventory =
   OpsResult
-    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "global_position_distance", "minimum_checkpoint_position", "maximum_global_position_distance"],
+    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "visible_store_head", "global_position_distance", "minimum_checkpoint_position", "maximum_global_position_distance"],
       rows = humanRows,
       jsonValue =
         object
           [ "subscription" .= requested,
             "store_position" .= positionInt captured,
-            "members" .= map (memberJson captured) members,
+            "visible_store_head" .= positionInt visibleHead,
+            "members" .= map (memberJson visibleHead) members,
             "minimum_checkpoint_position" .= fmap positionInt minimumCheckpoint,
             "maximum_global_position_distance" .= maximumDistance
           ]
@@ -107,34 +111,35 @@ positionResult requested inventory =
         name == requested
       ]
     minimumCheckpoint = minimumMay [position | SubscriptionCheckpoint _ _ position _ <- members]
-    maximumDistance = globalPositionDistance captured <$> minimumCheckpoint
+    maximumDistance = globalPositionDistance visibleHead <$> minimumCheckpoint
     summaryCells =
       [ maybe "" positionText minimumCheckpoint,
         maybe "" showText maximumDistance
       ]
     humanRows = case members of
-      [] -> [[requested, "", "", "", positionText captured, ""] <> summaryCells]
-      _ -> map (memberRow captured summaryCells) members
+      [] -> [[requested, "", "", "", positionText captured, positionText visibleHead, ""] <> summaryCells]
+      _ -> map (memberRow captured visibleHead summaryCells) members
 
-memberRow :: GlobalPosition -> [Text] -> SubscriptionCheckpoint -> [Text]
-memberRow captured summaryCells (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+memberRow :: GlobalPosition -> GlobalPosition -> [Text] -> SubscriptionCheckpoint -> [Text]
+memberRow captured visibleHead summaryCells (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
   [ name,
     showText member,
     positionText position,
     utcText updatedAt,
     positionText captured,
-    showText (globalPositionDistance captured position)
+    positionText visibleHead,
+    showText (globalPositionDistance visibleHead position)
   ]
     <> summaryCells
 
 memberJson :: GlobalPosition -> SubscriptionCheckpoint -> Value
-memberJson captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+memberJson visibleHead (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
   object
     [ "subscription" .= name,
       "member" .= member,
       "checkpoint_position" .= positionInt position,
       "checkpoint_updated_at" .= updatedAt,
-      "global_position_distance" .= globalPositionDistance captured position
+      "global_position_distance" .= globalPositionDistance visibleHead position
     ]
 
 minimumMay :: (Ord a) => [a] -> Maybe a

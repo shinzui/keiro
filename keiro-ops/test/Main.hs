@@ -63,6 +63,7 @@ import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Lifecycle (hardDeleteStream)
 import Kiroku.Store.Read (getStream, readStreamForward)
 import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
@@ -196,17 +197,19 @@ spec fixture = do
         streamResult.jsonValue
           `shouldBe` object
             [ "store_position" .= (0 :: Int),
+              "visible_store_head" .= (0 :: Int),
               "checkpoints" .= ([] :: [Aeson.Value])
             ]
 
         projectionOutcome <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "missing")
         Succeeded projectionResult <- pure projectionOutcome
         projectionResult.rows
-          `shouldBe` [["missing", "", "", "", "0", "", "", ""]]
+          `shouldBe` [["missing", "", "", "", "0", "0", "", "", ""]]
         projectionResult.jsonValue
           `shouldBe` object
             [ "subscription" .= ("missing" :: Text),
               "store_position" .= (0 :: Int),
+              "visible_store_head" .= (0 :: Int),
               "members" .= ([] :: [Aeson.Value]),
               "minimum_checkpoint_position" .= (Nothing :: Maybe Int64),
               "maximum_global_position_distance" .= (Nothing :: Maybe Int64)
@@ -218,13 +221,14 @@ spec fixture = do
         streamOutcome <- OpsStream.runCommand (opsEnv False store) OpsStream.Subscriptions
         Succeeded streamResult <- pure streamOutcome
         streamResult.rows
-          `shouldBe` [ ["billing", "0", "4", "2026-08-09T14:02:00Z", "5", "1"],
-                       ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "3"],
-                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "2"]
+          `shouldBe` [ ["billing", "0", "4", "2026-08-09T14:02:00Z", "5", "5", "1"],
+                       ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "5", "3"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "5", "2"]
                      ]
         streamResult.jsonValue
           `shouldBe` object
             [ "store_position" .= (5 :: Int),
+              "visible_store_head" .= (5 :: Int),
               "checkpoints"
                 .= [ checkpointJsonFixture "billing" 0 4 "2026-08-09T14:02:00Z" 1,
                      checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 3,
@@ -235,19 +239,61 @@ spec fixture = do
         projectionOutcome <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "orders")
         Succeeded projectionResult <- pure projectionOutcome
         projectionResult.rows
-          `shouldBe` [ ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "3", "2", "3"],
-                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "2", "2", "3"]
+          `shouldBe` [ ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "5", "3", "2", "3"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "5", "2", "2", "3"]
                      ]
         projectionResult.jsonValue
           `shouldBe` object
             [ "subscription" .= ("orders" :: Text),
               "store_position" .= (5 :: Int),
+              "visible_store_head" .= (5 :: Int),
               "members"
                 .= [ checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 3,
                      checkpointJsonFixture "orders" 1 3 "2026-08-09T14:01:00Z" 2
                    ],
               "minimum_checkpoint_position" .= (2 :: Int),
               "maximum_global_position_distance" .= (3 :: Int)
+            ]
+
+      it "diverges store_position from visible_store_head after a hard delete" $ \store -> do
+        seedCheckpointInventory store
+        Just _ <- expectStore store (hardDeleteStream (StreamName "checkpoint-inventory-5"))
+
+        streamOutcome <- OpsStream.runCommand (opsEnv False store) OpsStream.Subscriptions
+        Succeeded streamResult <- pure streamOutcome
+        streamResult.rows
+          `shouldBe` [ ["billing", "0", "4", "2026-08-09T14:02:00Z", "5", "4", "0"],
+                       ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "4", "2"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "4", "1"]
+                     ]
+        streamResult.jsonValue
+          `shouldBe` object
+            [ "store_position" .= (5 :: Int),
+              "visible_store_head" .= (4 :: Int),
+              "checkpoints"
+                .= [ checkpointJsonFixture "billing" 0 4 "2026-08-09T14:02:00Z" 0,
+                     checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 2,
+                     checkpointJsonFixture "orders" 1 3 "2026-08-09T14:01:00Z" 1
+                   ]
+            ]
+
+        projectionOutcome <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Position "orders")
+        Succeeded projectionResult <- pure projectionOutcome
+        projectionResult.rows
+          `shouldBe` [ ["orders", "0", "2", "2026-08-09T14:00:00Z", "5", "4", "2", "2", "2"],
+                       ["orders", "1", "3", "2026-08-09T14:01:00Z", "5", "4", "1", "2", "2"]
+                     ]
+        projectionResult.jsonValue
+          `shouldBe` object
+            [ "subscription" .= ("orders" :: Text),
+              "store_position" .= (5 :: Int),
+              "visible_store_head" .= (4 :: Int),
+              "members"
+                .= [ checkpointJsonFixture "orders" 0 2 "2026-08-09T14:00:00Z" 2,
+                     checkpointJsonFixture "orders" 1 3 "2026-08-09T14:01:00Z" 1
+                   ],
+              "minimum_checkpoint_position" .= (2 :: Int),
+              "maximum_global_position_distance" .= (2 :: Int)
             ]
 
   describe "selectConnectionString" do

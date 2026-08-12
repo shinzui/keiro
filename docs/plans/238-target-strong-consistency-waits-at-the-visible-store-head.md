@@ -55,7 +55,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: run the `Keiro.ReadModel` test group and confirm all green, including the previously failing regression test: 29 examples, 0 failures (2026-08-12T16:55:27Z).
 - [x] M2: rebase `recordProjectionGlobalPositionDistance` in `keiro/src/Keiro/Projection.hs` on the visible head; keep the deprecated `recordProjectionLag` alias recording the identical value (2026-08-12T17:00:29Z).
 - [x] M2: add the gauge test "reports zero global position distance after the newest events are hard deleted" and confirm the focused metric tests (2 examples) and full `keiro-test` suite (494 examples) pass with zero failures (2026-08-12T17:00:29Z).
-- [ ] M3: add the visible head to `keiro-ops` `projection position` and `stream subscriptions` output and compute their distance columns against it; update `keiro-ops/test/Main.hs` expectations and add a hard-delete divergence test.
+- [x] M3: add the visible head to `keiro-ops` `projection position` and `stream subscriptions` output and compute their distance columns against it; update `keiro-ops/test/Main.hs` expectations and add a hard-delete divergence test; `keiro-ops-test` passes 32 examples (2026-08-12T17:03:19Z).
 - [ ] M4: update `docs/user/api-reference.md` and the `CHANGELOG.md` Unreleased entries that describe the inventory-based head.
 - [ ] M4: distill the durable decision (wait targets must be reachable positions; the authoritative counter is not a wait target) into a new ADR in `docs/adr/` and run `just adr-validate`.
 - [ ] M4: run `just verify` from the repository root and record the result here.
@@ -182,6 +182,12 @@ preferred `keiro.projection.global_position_distance` gauge and deprecated
 `keiro.projection.lag` alias now both report zero when a checkpoint is at the newest
 surviving event after tail deletion. The focused metric tests and all 494 `keiro-test`
 examples pass.
+
+Milestone 3 exposes both notions of head in `keiro-ops`. `store_position` remains
+the authoritative append counter, `visible_store_head` reports the newest surviving
+event, and member plus summary distances use the visible value. The hard-delete
+fixture proves the columns diverge from 5 to 4 while the orders floor distance becomes
+2; all 32 `keiro-ops-test` examples pass.
 
 
 ## Context and Orientation

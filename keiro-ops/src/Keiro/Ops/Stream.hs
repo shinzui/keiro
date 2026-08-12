@@ -28,6 +28,7 @@ import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 import Keiro.Ops.Render
 import Keiro.Ops.Snapshot qualified as Snapshot
+import Keiro.ReadModel (storeHeadPosition)
 import Kiroku.Store.Causation (findCausationAncestors, findCausationDescendants)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
@@ -148,41 +149,46 @@ runCommand env = \case
 
 runSubscriptions :: OpsEnv -> IO OpsOutcome
 runSubscriptions env =
-  runAction env subscriptionCheckpointInventory (Succeeded . subscriptionInventoryResult)
+  runAction env action $ \(visibleHead, inventory) ->
+    Succeeded (subscriptionInventoryResult visibleHead inventory)
+  where
+    action = (,) <$> storeHeadPosition <*> subscriptionCheckpointInventory
 
-subscriptionInventoryResult :: SubscriptionCheckpointInventory -> OpsResult
-subscriptionInventoryResult inventory =
+subscriptionInventoryResult :: GlobalPosition -> SubscriptionCheckpointInventory -> OpsResult
+subscriptionInventoryResult visibleHead inventory =
   OpsResult
-    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "global_position_distance"],
-      rows = map (checkpointRow captured) durableCheckpoints,
+    { headers = ["subscription", "member", "checkpoint_position", "checkpoint_updated_at", "store_position", "visible_store_head", "global_position_distance"],
+      rows = map (checkpointRow captured visibleHead) durableCheckpoints,
       jsonValue =
         object
           [ "store_position" .= positionInt captured,
-            "checkpoints" .= map (checkpointJson captured) durableCheckpoints
+            "visible_store_head" .= positionInt visibleHead,
+            "checkpoints" .= map (checkpointJson visibleHead) durableCheckpoints
           ]
     }
   where
     captured = storePosition inventory
     durableCheckpoints = Vector.toList (checkpoints inventory)
 
-checkpointRow :: GlobalPosition -> SubscriptionCheckpoint -> [Text]
-checkpointRow captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+checkpointRow :: GlobalPosition -> GlobalPosition -> SubscriptionCheckpoint -> [Text]
+checkpointRow captured visibleHead (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
   [ name,
     showText member,
     positionText position,
     utcText updatedAt,
     positionText captured,
-    showText (globalPositionDistance captured position)
+    positionText visibleHead,
+    showText (globalPositionDistance visibleHead position)
   ]
 
 checkpointJson :: GlobalPosition -> SubscriptionCheckpoint -> Value
-checkpointJson captured (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
+checkpointJson visibleHead (SubscriptionCheckpoint (SubscriptionName name) member position updatedAt) =
   object
     [ "subscription" .= name,
       "member" .= member,
       "checkpoint_position" .= positionInt position,
       "checkpoint_updated_at" .= updatedAt,
-      "global_position_distance" .= globalPositionDistance captured position
+      "global_position_distance" .= globalPositionDistance visibleHead position
     ]
 
 globalPositionDistance :: GlobalPosition -> GlobalPosition -> Int64
