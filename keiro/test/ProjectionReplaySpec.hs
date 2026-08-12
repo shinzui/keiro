@@ -11,9 +11,14 @@ import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.Either (isRight)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Int (Int32)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
-import Effectful (Eff, IOE)
+import Data.Vector qualified as Vector
+import Effectful (Eff, IOE, (:>))
+import Effectful.Dispatch.Dynamic (interpose, passthrough)
 import Effectful.Error.Static (Error)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -26,6 +31,7 @@ import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types
   ( CategoryName (..),
@@ -63,6 +69,29 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     map (^. #applyCount) (report ^. #adapters) `shouldBe` [2, 2, 2]
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 5, 6]
+
+  it "reads each source event once while draining a multi-source rebuild" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
+    appendCountingFixture store
+    validated <- expectValid (replayCatalog goodDecoder passingVerification)
+    _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+    reads <- newIORef emptyStoreReadCounts
+
+    report <-
+      expectStore
+        store
+        ( countStoreReads reads
+            $ startCatalogRebuild validated replayGroupId (options "counted-run" 2)
+        )
+        >>= shouldBeRight
+    counts <- readIORef reads
+
+    report ^. #runStatus `shouldBe` RebuildRunPromoted
+    Map.size (counts ^. #categoryPageReads) `shouldBe` 3
+    Prelude.sum (Prelude.map Prelude.snd (Map.elems (counts ^. #categoryPageReads)))
+      `shouldSatisfy` (<= 18 Prelude.+ 3 Prelude.* 2)
+    Prelude.map Prelude.fst (Map.elems (counts ^. #categoryPageReads))
+      `shouldSatisfy` Prelude.all (<= 6 `Prelude.div` 2 Prelude.+ 1)
 
   it "counts irrelevant adapter participation even when no event applies" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
@@ -370,6 +399,61 @@ appendInterleaved store =
       (StreamName "customers-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (50 :: Int64)),
       (StreamName "billing-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (60 :: Int64))
     ]
+
+appendCountingFixture :: Store.KirokuStore -> IO ()
+appendCountingFixture store =
+  traverse_ (appendRaw store) (Prelude.concatMap eventsForRound ([1 .. 6] :: [Int]))
+  where
+    eventsForRound roundNo =
+      [ event "orders" 10,
+        event "customers" 20,
+        event "billing" 30
+      ]
+      where
+        event category offset =
+          ( StreamName (category <> "-counted"),
+            if roundNo == 1 then NoStream else AnyVersion,
+            EventType "ReplayEvent",
+            Aeson.toJSON (Prelude.fromIntegral (roundNo Prelude.* 100 Prelude.+ offset) :: Int64)
+          )
+
+data StoreReadCounts = StoreReadCounts
+  { categoryPageReads :: !(Map CategoryName (Int, Int)),
+    allPageReads :: !(Int, Int)
+  }
+  deriving stock (Eq, Show, Generic)
+
+emptyStoreReadCounts :: StoreReadCounts
+emptyStoreReadCounts = StoreReadCounts Map.empty (0, 0)
+
+countStoreReads ::
+  (Store :> es, IOE :> es) =>
+  IORef StoreReadCounts ->
+  Eff es value ->
+  Eff es value
+countStoreReads reads = interpose @Store $ \environment operation ->
+  case operation of
+    StoreEffect.ReadCategoryForward category _ _ -> do
+      events <- passthrough environment operation
+      liftIO
+        $ modifyIORef' reads
+        $ \counts ->
+          counts
+            { categoryPageReads =
+                Map.insertWith addReads category (1, Vector.length events) (counts ^. #categoryPageReads)
+            }
+      pure events
+    StoreEffect.ReadAllForward {} -> do
+      events <- passthrough environment operation
+      liftIO
+        $ modifyIORef' reads
+        $ \counts ->
+          counts {allPageReads = addReads (1, Vector.length events) (counts ^. #allPageReads)}
+      pure events
+    _ -> passthrough environment operation
+  where
+    addReads (newCalls, newEvents) (oldCalls, oldEvents) =
+      (newCalls Prelude.+ oldCalls, newEvents Prelude.+ oldEvents)
 
 appendRaw :: Store.KirokuStore -> (StreamName, ExpectedVersion, EventType, Aeson.Value) -> IO ()
 appendRaw store (streamName, expectedVersion, eventType, payload) = do

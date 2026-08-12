@@ -362,59 +362,122 @@ driveCatalogRebuild ::
   Text ->
   Maybe KeiroMetrics ->
   Eff es (Either CatalogRebuildError RebuildRunReport)
-driveCatalogRebuild catalog groupId runId pageSize contract metrics = go
+driveCatalogRebuild catalog groupId runId pageSize contract metrics =
+  inspectCatalogRebuildMaybe runId >>= continueFromReport
   where
     fleet = catalogReplayAdapters catalog groupId
 
-    go = do
-      inspectCatalogRebuildMaybe runId >>= \case
-        Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
-        Just report
-          | report ^. #runStatus == RebuildRunPromoted -> pure (Right report)
-          | report ^. #runStatus /= RebuildRunRunning ->
+    continueFromReport = \case
+      Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
+      Just report
+        | report ^. #runStatus == RebuildRunPromoted -> pure (Right report)
+        | report ^. #runStatus /= RebuildRunRunning ->
+            pure (Left (CatalogRebuildRunNotActive runId))
+        | all sourceComplete (report ^. #sources) ->
+            verifyAndPromote catalog groupId runId contract metrics
+        | otherwise ->
+            go
+              [ emptySourcePage source
+              | source <- report ^. #sources,
+                not (sourceComplete source)
+              ]
+
+    go buffers = do
+      pages <- traverse refillSourcePage buffers
+      let ordered = orderedCandidates pages
+      case duplicatePosition ordered of
+        Just duplicate -> do
+          let detail = "duplicate global position in merged category history: " <> renderPosition duplicate
+          recordFailure runId "replay.global-position-duplicate" detail Nothing Nothing (Just duplicate)
+          Telemetry.recordProjectionRebuildFailures metrics 1
+          pure (Left (CatalogRebuildInvariantFailed runId detail))
+        Nothing -> do
+          let chunk = Prelude.take (Prelude.fromIntegral pageSize) ordered
+          startedAt <- liftIO getCurrentTime
+          applied <- runTransaction (applyChunkTx runId contract fleet pages chunk)
+          case applied of
+            Left ChunkInactive ->
               pure (Left (CatalogRebuildRunNotActive runId))
-          | all sourceComplete (report ^. #sources) -> verifyAndPromote catalog groupId runId contract metrics
-          | otherwise -> do
-              pages <- traverse (readSourcePage pageSize) (filter (not . sourceComplete) (report ^. #sources))
-              let ordered = orderedCandidates pages
-              case duplicatePosition ordered of
-                Just duplicate -> do
-                  let detail = "duplicate global position in merged category history: " <> renderPosition duplicate
-                  recordFailure runId "replay.global-position-duplicate" detail Nothing Nothing (Just duplicate)
-                  Telemetry.recordProjectionRebuildFailures metrics 1
-                  pure (Left (CatalogRebuildInvariantFailed runId detail))
-                Nothing -> do
-                  let chunk = Prelude.take (Prelude.fromIntegral pageSize) ordered
-                  startedAt <- liftIO getCurrentTime
-                  applied <- runTransaction (applyChunkTx runId contract fleet pages chunk)
-                  case applied of
-                    Left ChunkInactive ->
-                      pure (Left (CatalogRebuildRunNotActive runId))
-                    Left (ChunkDecode failure) -> do
-                      recordFailure
+            Left ChunkInterfered ->
+              inspectCatalogRebuildMaybe runId >>= continueFromReport
+            Left (ChunkDecode failure) -> do
+              recordFailure
+                runId
+                "replay.decode-failure"
+                (failure ^. #decodeDetail)
+                (Just (failure ^. #decodeSource))
+                (Just (failure ^. #decodeProjection))
+                (Just (failure ^. #decodePosition))
+              Telemetry.recordProjectionRebuildFailures metrics 1
+              pure
+                ( Left
+                    ( CatalogRebuildDecodeFailed
                         runId
-                        "replay.decode-failure"
-                        (failure ^. #decodeDetail)
-                        (Just (failure ^. #decodeSource))
-                        (Just (failure ^. #decodeProjection))
-                        (Just (failure ^. #decodePosition))
-                      Telemetry.recordProjectionRebuildFailures metrics 1
-                      pure
-                        ( Left
-                            ( CatalogRebuildDecodeFailed
-                                runId
-                                (failure ^. #decodeSource)
-                                (failure ^. #decodeProjection)
-                                (failure ^. #decodePosition)
-                                (failure ^. #decodeError)
-                            )
-                        )
-                    Right () -> do
-                      finishedAt <- liftIO getCurrentTime
-                      Telemetry.recordProjectionRebuildPages metrics 1
-                      Telemetry.recordProjectionRebuildEvents metrics (Prelude.fromIntegral (Prelude.length chunk))
-                      Telemetry.recordProjectionRebuildPageDuration metrics (Prelude.realToFrac (diffUTCTime finishedAt startedAt) * 1000)
-                      go
+                        (failure ^. #decodeSource)
+                        (failure ^. #decodeProjection)
+                        (failure ^. #decodePosition)
+                        (failure ^. #decodeError)
+                    )
+                )
+            Right () -> do
+              finishedAt <- liftIO getCurrentTime
+              Telemetry.recordProjectionRebuildPages metrics 1
+              Telemetry.recordProjectionRebuildEvents metrics (Prelude.fromIntegral (Prelude.length chunk))
+              Telemetry.recordProjectionRebuildPageDuration metrics (Prelude.realToFrac (diffUTCTime finishedAt startedAt) * 1000)
+              let advanced = advanceSourcePages pages chunk
+                  incomplete = filter (not . sourceComplete . (^. #pageSource)) advanced
+              if null incomplete
+                then verifyAndPromote catalog groupId runId contract metrics
+                else go incomplete
+
+    refillSourcePage page
+      | null (page ^. #pageEvents) = readSourcePage pageSize (page ^. #pageSource)
+      | otherwise = pure page
+
+emptySourcePage :: RebuildSourceProgress -> SourcePage
+emptySourcePage source =
+  SourcePage
+    { pageSource = source,
+      pageEvents = [],
+      pageProvesExhaustion = False
+    }
+
+advanceSourcePages :: [SourcePage] -> [RoutedEvent] -> [SourcePage]
+advanceSourcePages pages chunk = Prelude.map advance pages
+  where
+    advances =
+      Map.fromListWith
+        combine
+        [ ( routed ^. #routedSourceId,
+            (routed ^. #routedEvent . #globalPosition, 1 :: Int)
+          )
+        | routed <- chunk
+        ]
+
+    combine (leftPosition, leftCount) (rightPosition, rightCount) =
+      (Prelude.max leftPosition rightPosition, leftCount + rightCount)
+
+    advance page =
+      let source = page ^. #pageSource
+          (cursor, consumed) =
+            Map.findWithDefault
+              (source ^. #cursorPosition, 0)
+              (source ^. #sourceId)
+              advances
+          remaining = Prelude.drop consumed (page ^. #pageEvents)
+          advancedSource =
+            source
+              { cursorPosition = cursor,
+                eventCount = source ^. #eventCount + Prelude.fromIntegral consumed,
+                exhaustedThrough =
+                  if null remaining && page ^. #pageProvesExhaustion
+                    then Just (source ^. #targetPosition)
+                    else source ^. #exhaustedThrough
+              }
+       in page
+            { pageSource = advancedSource,
+              pageEvents = remaining
+            }
 
 sourceComplete :: RebuildSourceProgress -> Bool
 sourceComplete source = source ^. #exhaustedThrough == Just (source ^. #targetPosition)
@@ -473,6 +536,7 @@ data DecodeFailure = DecodeFailure
 
 data ChunkFailure
   = ChunkInactive
+  | ChunkInterfered
   | ChunkDecode !DecodeFailure
 
 applyChunkTx ::
@@ -490,10 +554,13 @@ applyChunkTx runId contract fleet pages chunk = do
       applyEvents Map.empty chunk >>= \case
         Left failure -> Tx.condemn >> pure (Left (ChunkDecode failure))
         Right counts -> do
-          traverse_ updateSource (Map.toList sourceAdvances)
-          traverse_ updateAdapter (Map.toList counts)
-          traverse_ completeSource completedSources
-          pure (Right ())
+          advanced <- traverse updateSource (Map.toList sourceAdvances)
+          if not (all id advanced)
+            then Tx.condemn >> pure (Left ChunkInterfered)
+            else do
+              traverse_ updateAdapter (Map.toList counts)
+              traverse_ completeSource completedSources
+              pure (Right ())
   where
     applyEvents counts = \case
       [] -> pure (Right counts)
@@ -549,27 +616,33 @@ applyChunkTx runId contract fleet pages chunk = do
       (Prelude.max leftPosition rightPosition, leftCount + rightCount)
 
     updateSource (sourceId, (GlobalPosition cursor, count)) =
-      Tx.statement (rebuildRunIdText runId, sourceId, cursor, count) advanceSourceStmt
+      case Map.lookup sourceId expectedSourceCursors of
+        Nothing -> pure False
+        Just (GlobalPosition expected) ->
+          Tx.statement
+            (rebuildRunIdText runId, sourceId, expected, cursor, count)
+            advanceSourceStmt
 
     updateAdapter ((sourceId, projectionId), AdapterCounts evaluationDelta applyDelta) =
       Tx.statement
         (rebuildRunIdText runId, sourceId, projectionId, evaluationDelta, applyDelta)
         advanceAdapterStmt
 
+    expectedSourceCursors =
+      Map.fromList
+        [ (sourceIdText (page ^. #pageSource . #sourceId), page ^. #pageSource . #cursorPosition)
+        | page <- pages
+        ]
+
+    consumedCounts = fmap Prelude.snd sourceAdvances
+
     completedSources =
       [ page ^. #pageSource
       | page <- pages,
         page ^. #pageProvesExhaustion,
-        all (eventConsumed page) (page ^. #pageEvents)
+        Map.findWithDefault 0 (sourceIdText (page ^. #pageSource . #sourceId)) consumedCounts
+          == Prelude.fromIntegral (Prelude.length (page ^. #pageEvents))
       ]
-
-    eventConsumed page event =
-      any
-        ( \routed ->
-            routed ^. #routedSourceId == page ^. #pageSource . #sourceId
-              && routed ^. #routedEvent . #globalPosition == event ^. #globalPosition
-        )
-        chunk
 
     completeSource source =
       let GlobalPosition target = source ^. #targetPosition
@@ -1041,23 +1114,25 @@ lockActiveRunStmt =
     (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)))
     (isJust <$> D.rowMaybe (D.column (D.nonNullable D.text)))
 
-advanceSourceStmt :: Statement (Text, Text, Int64, Int64) ()
+advanceSourceStmt :: Statement (Text, Text, Int64, Int64, Int64) Bool
 advanceSourceStmt =
   preparable
     """
     UPDATE keiro.keiro_projection_rebuild_sources
-    SET cursor_position = GREATEST(cursor_position, $3),
-        event_count = event_count + $4,
+    SET cursor_position = $4,
+        event_count = event_count + $5,
         updated_at = now()
-    WHERE run_id = $1 AND source_id = $2
+    WHERE run_id = $1 AND source_id = $2 AND cursor_position = $3
+    RETURNING source_id
     """
-    ( contrazip4
+    ( contrazip5
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
         (E.param (E.nonNullable E.int8))
         (E.param (E.nonNullable E.int8))
     )
-    D.noResult
+    (isJust <$> D.rowMaybe (D.column (D.nonNullable D.text)))
 
 advanceAdapterStmt :: Statement (Text, Text, Text, Int64, Int64) ()
 advanceAdapterStmt =

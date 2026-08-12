@@ -81,14 +81,22 @@ telemetry.
       focused examples plus `just haskell-test` are green with zero test edits; plan
       240's bridge cases execute the shared helper and the existing command/fan-out
       benchmark gate passes (2026-08-12T20:06:23Z).
-- [ ] Milestone 3 (blocked until `docs/plans/237-…` lands): rebase over the canonicalized
-      `rebuildContract`; confirm the contract computation is untouched.
-- [ ] Milestone 3: add the read-counting spec example and record the pre-fix counts here.
-- [ ] Milestone 3: implement buffered paging in
+- [x] Milestone 3 prerequisite: confirmed plan 237 is complete and the current
+      `rebuildContract`/fingerprint comparisons are outside the paging edit; no contract
+      computation will change (2026-08-12T20:08:02Z).
+- [x] Milestone 3: added the red read-counting example. For 3 categories × 6 events at
+      page size 2, the pre-fix loop made 26 category reads and fetched 48 rows for 18
+      distinct events: billing 9 calls/17 rows, customers 9/16, orders 8/15
+      (2026-08-12T20:13:19Z).
+- [x] Milestone 3: implemented buffered paging in
       `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs`; hoist per-chunk inspection; guard
-      cursor advancement.
-- [ ] Milestone 3: read-counting example asserts single-read behavior; new `rebuild` bench
-      group added and before/after wall times recorded here.
+      cursor advancement. The post-fix counter made 11 category reads and fetched
+      exactly 18 rows: billing 3 calls/6 rows, customers 4/6, orders 4/6
+      (2026-08-12T20:24:41Z).
+- [x] Milestone 3: read-counting example asserts single-read behavior.
+- [x] Milestone 3: added `rebuild/three-categories-200`. The identical fixture measured
+      61.7 ms ± 2.0 ms on the pre-fix runner and 45.9 ms ± 2.7 ms on the buffered runner,
+      about 26% faster (2026-08-12T20:25:36Z).
 - [ ] ADR distillation pass; masterplan Progress and Status updated.
 
 
@@ -130,6 +138,11 @@ Findings from plan research (2026-08-11), recorded because they shaped the desig
   completed while two failed with missing-file errors. Serial reruns of every affected
   group passed. Repository-local Cabal builds therefore remain serialized for the rest
   of this plan.
+- Milestone 3 benchmark verification (2026-08-12): committing the benchmark fixture
+  alone first made commit `bbc8a483` an exact pre-fix benchmark snapshot. A detached
+  worktree at that commit measured the old runner, while the primary worktree measured
+  the same fixture with only the buffered-runner changes present; the temporary
+  worktree was removed after the comparison.
 
 
 ## Decision Log
