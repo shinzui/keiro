@@ -140,6 +140,7 @@ data RuntimeCapability
   | StrictSpecSurfaceValidation
   | ProjectionCatalogRuntime
   | TypedDomainCommandOutcomes
+  | SeparatedProjectionQueryPolicy
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -168,6 +169,7 @@ capabilityFoldSegment ContractIdDomainTypeIdV7 = Nothing
 capabilityFoldSegment StrictSpecSurfaceValidation = Nothing
 capabilityFoldSegment ProjectionCatalogRuntime = Just "semantic-contract:keiro-dsl/projection-catalog/1"
 capabilityFoldSegment TypedDomainCommandOutcomes = Nothing
+capabilityFoldSegment SeparatedProjectionQueryPolicy = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities} =
@@ -275,12 +277,15 @@ profileV4 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/4"
     ( Set.insert
-        DeclarativeRouterSelectionSyntax
+        SeparatedProjectionQueryPolicySyntax
         ( Set.insert
-            DomainCommandOutcomeSyntax
+            DeclarativeRouterSelectionSyntax
             ( Set.insert
-                MappedConsumerSurfaceSyntax
-                (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+                DomainCommandOutcomeSyntax
+                ( Set.insert
+                    MappedConsumerSurfaceSyntax
+                    (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+                )
             )
         )
     )
@@ -313,7 +318,10 @@ runtimeProfileV4 :: RuntimeSemanticsProfile
 runtimeProfileV4 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/4"
-    (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3)))
+    ( Set.insert
+        SeparatedProjectionQueryPolicy
+        (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3)))
+    )
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -356,6 +364,7 @@ data LanguageFeature
   | MappedConsumerSurfaceSyntax
   | DomainCommandOutcomeSyntax
   | DeclarativeRouterSelectionSyntax
+  | SeparatedProjectionQueryPolicySyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

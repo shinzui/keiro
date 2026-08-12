@@ -26,7 +26,7 @@ rebuild-group billing {
 
 projection-owner ledger_writer {
   source = category "ledger"
-  feed = subscription
+  delivery = subscription
   group = billing
   targets = [ ledger_entries ledger_totals ledger_archive ]
   order = 10
@@ -42,9 +42,7 @@ readmodel ledger_view {
   }
   version = 1
   shape = "fnv1a:3c7266b20dc71b04"
-  consistency = Eventual
-  feed = subscription
-  subscription = "binding-demo-ledger-view"
+  freshness = immediate
   group = billing
   targets = [ ledger_entries ledger_totals ]
   backing = ledger_archive

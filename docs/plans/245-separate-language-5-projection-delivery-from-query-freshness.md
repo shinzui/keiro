@@ -40,9 +40,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add version-gated semantic types and parse/pretty-print Language 5 `delivery` and `freshness`; pin Languages 1-4 zero-drift fixtures.
-- [ ] M2: replace keyword-pair validation with owner/cursor capability validation and generate Plan 244's honest runtime builders.
-- [ ] M3: separate delivery/freshness diff, scaffold-ledger, harness, workspace, fingerprint, and compiled-conformance facts; regenerate candidate corpus.
+- [x] M1: add version-gated semantic types and parse/pretty-print Language 5 `delivery` and `freshness`; focused parser/profile/round-trip checks pass (2026-08-12T21:51:03Z); the final Languages 1-4 corpus drift gate remains part of M4.
+- [x] M2: replace keyword-pair validation with owner/cursor capability validation and generate Plan 244's honest runtime builders; the 17-example catalog group covers every positive and DSL-representable negative row (2026-08-12T21:51:03Z).
+- [ ] M3: diff, scaffold-ledger, harness, workspace, and fingerprint consumers now expose separate delivery/freshness/cursor facts; candidate corpus regeneration and compiled mutation proof remain.
 - [ ] M4: update references, migration/diagnostics guides, examples, changelogs, and ADRs; run full verification and close MasterPlan 38 when all gates pass.
 
 
@@ -60,6 +60,11 @@ implementation. Provide concise evidence.
   inline and predates the catalog. For Language 5 it can act as an implicit standalone
   inline owner, but it cannot satisfy `wait-for-head`; subscription-maintained models must
   use a top-level catalog owner so cursor identity has one authority.
+- Implementation (2026-08-12): the first category-head generation test exposed an
+  application-precedence bug: `headWaitingReadModel CategoryVisibleHead "category"`
+  parsed as three arguments. Parenthesizing the `CategoryVisibleHead` value fixed the
+  emitted Haskell before corpus regeneration, while the entire-log constructor remained
+  atomic.
 
 
 ## Decision Log
@@ -88,6 +93,13 @@ Record every decision made while working on the plan.
   Rationale: downstream validation/generation needs truthful concepts, but byte-compatible
   released rendering requires retaining which frozen surface produced them.
   Date: 2026-08-12
+- Decision: Pin the four positive capability rows across the existing compiled candidate
+  fixtures: projection-catalog owns inline/immediate and subscription/entire-head,
+  mapped-readmodel owns subscription/immediate, and declarative-router owns
+  subscription/category-head.
+  Rationale: these are already primary candidate conformance packages, so the matrix is
+  compiled without creating a synthetic grammar-only lane.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -97,7 +109,14 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+M1 and M2 are complete. Language 5 now has one delivery authority on each projection
+owner and one freshness policy on each query model. Released syntax lowers through an
+explicit legacy supply value, allowing old parsing/rendering/generation to remain on its
+historical path. Checked generation uses only `ReadModelBlueprint`,
+`immediateReadModel`, or `headWaitingReadModel`, with cursor identity derived from the
+resolved supplier. Focused validation proves compatible whole-store/category waits and
+rejects inline, implicit, missing-cursor, and unreachable-category waits before
+generation.
 
 
 ## Context and Orientation

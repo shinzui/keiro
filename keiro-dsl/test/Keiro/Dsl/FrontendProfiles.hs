@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy]
                    ]
       map (runtimeProfileFoldSegments . definitionRuntimeSemanticsProfile) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -70,6 +70,7 @@ frontendProfilesSpec = do
               MappedConsumerSurfaceSyntax -> version 5
               DomainCommandOutcomeSyntax -> version 5
               DeclarativeRouterSelectionSyntax -> version 5
+              SeparatedProjectionQueryPolicySyntax -> version 5
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -183,7 +184,8 @@ featureCases =
     FeatureCase DomainCommandOutcomeSyntax "outcome" domainOutcomeClauseFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody,
-    FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody
+    FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody,
+    FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -238,9 +240,24 @@ featureBody = \case
         "  states Open"
       ]
   DeclarativeRouterSelectionSyntax -> declarativeRouterFeatureBody
+  SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax]
+
+separatedProjectionQueryPolicyBody :: Text
+separatedProjectionQueryPolicyBody =
+  T.unlines
+    [ "context profile",
+      "readmodel profiles {",
+      "  table = \"profiles\"",
+      "  schema = \"public\"",
+      "  columns {}",
+      "  version = 1",
+      "  shape = \"fixture\"",
+      "  freshness = immediate",
+      "}"
+    ]
 
 declarativeRouterFeatureBody :: Text
 declarativeRouterFeatureBody =
@@ -319,8 +336,7 @@ mappedQueryFeatureBody =
       "  query result = Optional ProfileSummary",
       "  version = 1",
       "  shape = \"fixture\"",
-      "  consistency = Eventual",
-      "  feed = subscription",
+      "  freshness = immediate",
       "}"
     ]
 

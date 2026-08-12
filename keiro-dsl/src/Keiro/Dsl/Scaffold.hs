@@ -4056,11 +4056,20 @@ scaffoldReadModel ctx readModel =
 -- 'scaffoldReadModel' so their generated and create-once bytes remain exact.
 scaffoldReadModelForService :: Context -> CheckedService -> ReadModelNode -> [ScaffoldModule]
 scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
-  Nothing -> scaffoldReadModel ctx readModel
+  Nothing ->
+    [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
+      generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (ownerDerivedCursor service readModel) Nothing stem readModel),
+      ScaffoldModule
+        { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
+          moduleText = emitReadModelHoles tableModule readModelHolePrefix stem readModel,
+          kind = HoleStub,
+          origin = readModelOrigin
+        }
+    ]
   Just queryPair ->
     [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
       generated "QueryContract" (emitReadModelQueryContract queryContractModule graph stem readModel queryPair),
-      generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (Just queryContractModule) stem readModel),
+      generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (ownerDerivedCursor service readModel) (Just queryContractModule) stem readModel),
       ScaffoldModule
         { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
           moduleText = emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem readModel,
@@ -4086,6 +4095,21 @@ scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
           kind = Generated,
           origin = readModelOrigin
         }
+
+ownerDerivedCursor :: CheckedService -> ReadModelNode -> Maybe Text
+ownerDerivedCursor service readModel = do
+  ownerName <- case [ supplyProjectionOwner supply
+                    | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies (checkedSpec service)),
+                      supplyQueryModel supply == rmName readModel
+                    ] of
+    [name] -> Just name
+    _ -> Nothing
+  owner <- case [candidate | NProjectionOwner candidate <- specNodes (checkedSpec service), poName candidate == ownerName] of
+    [candidate] -> Just candidate
+    _ -> Nothing
+  case poDelivery owner of
+    DeliveryInline -> Nothing
+    DeliverySubscription -> poSubscription owner
 
 -- | Resolve a catalog-bound read model's physical binding to its backing
 -- target's coordinates, by name. An unbound or unresolvable model is returned
@@ -4229,7 +4253,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     -- sort here (rather than in the runtime) makes generated inventory and replay
     -- behavior agree even when declarations are arranged for readability.
     owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
-    inlineOwners = [owner | owner <- owners, poFeed owner == RmInline]
+    inlineOwners = [owner | owner <- owners, poDelivery owner == DeliveryInline]
     sources = nub (concatMap poSources owners)
     aggregateSources = nub [aggregateName | CatalogAggregate aggregateName <- sources]
     replayableAggregateSources =
@@ -4239,7 +4263,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
           poReplay owner == ProjectionReplayExplicit,
           CatalogAggregate aggregateName <- poSources owner
         ]
-    asyncOwners = [owner | owner <- owners, poFeed owner == RmSubscription]
+    asyncOwners = [owner | owner <- owners, poDelivery owner == DeliverySubscription]
     projectionImports = case (null asyncOwners, null inlineOwners) of
       (False, False) -> ["import Keiro.Projection (AsyncProjection (..), InlineProjection (..))"]
       (False, True) -> ["import Keiro.Projection (AsyncProjection (..))"]
@@ -4361,7 +4385,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         "      :| [])",
         "    " <> claim ("projection-owner " <> poName owner <> " source")
       ]
-        ++ if poFeed owner == RmInline
+        ++ if poDelivery owner == DeliveryInline
           then
             [ "",
               ownerInlineViewName owner <> " :: [InlineProjection " <> ownerEventType owner <> "]",
@@ -4393,15 +4417,15 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
             <> " Holes."
             <> ownerReplayApplyName owner
             <> "))"
-    handlerExpr owner = case poFeed owner of
-      RmInline ->
+    handlerExpr owner = case poDelivery owner of
+      DeliveryInline ->
         "Catalog.InlineHandler (InlineProjection "
           <> tshow (poName owner)
           <> " Holes."
           <> ownerLiveApplyName owner
           <> ") "
           <> claim ("projection-owner " <> poName owner <> " inline-handler")
-      RmSubscription ->
+      DeliverySubscription ->
         "Catalog.AsyncHandler (AsyncProjection "
           <> tshow (fromMaybe "" (poDedup owner))
           <> " "
@@ -4480,7 +4504,7 @@ emitProjectionCatalogHoles ctx owners =
     ownerExports owner =
       [pascal (poName owner) <> "Event" | not (isAggregateSource owner)]
         <> [ownerLiveApplyName owner]
-        <> [ownerIdempotencyName owner | poFeed owner == RmSubscription]
+        <> [ownerIdempotencyName owner | poDelivery owner == DeliverySubscription]
         <> case poReplay owner of
           ProjectionLiveOnly _ -> []
           ProjectionReplayExplicit -> [ownerReplayApplyName owner] <> [ownerReplayDecodeName owner | not (isAggregateSource owner)]
@@ -4488,7 +4512,7 @@ emitProjectionCatalogHoles ctx owners =
       ["-- Projection owner " <> poName owner <> " (order " <> T.pack (show (poOrder owner)) <> ")."]
         <> ["data " <> ownerEventType owner <> " = " <> ownerEventType owner | not (isAggregateSource owner)]
         <> [ownerLiveSignature owner, ownerLiveApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " live apply\""]
-        <> ( if poFeed owner == RmSubscription
+        <> ( if poDelivery owner == DeliverySubscription
                then
                  [ ownerIdempotencyName owner <> " :: RecordedEvent -> EventId",
                    ownerIdempotencyName owner <> " = error \"HOLE: return the durable event id for " <> poName owner <> "\""
@@ -4511,9 +4535,9 @@ emitProjectionCatalogHoles ctx owners =
                ownerReplayApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " replay apply without live-only side effects\""
              ]
     ownerLiveSignature owner =
-      ownerLiveApplyName owner <> " :: " <> case poFeed owner of
-        RmInline -> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()"
-        RmSubscription -> "RecordedEvent -> Tx.Transaction ()"
+      ownerLiveApplyName owner <> " :: " <> case poDelivery owner of
+        DeliveryInline -> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()"
+        DeliverySubscription -> "RecordedEvent -> Tx.Transaction ()"
     ownerEventType owner = case ownerPrimarySource owner of
       CatalogAggregate aggregateName -> pascal aggregateName <> "Event"
       _ -> pascal (poName owner) <> "Event"
@@ -4604,10 +4628,10 @@ emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
 
 emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
-  emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix Nothing stem readModel
+  emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix Nothing Nothing stem readModel
 
-emitReadModelGenWithContract :: Context -> Text -> Text -> Text -> Maybe Text -> Text -> ReadModelNode -> Text
-emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix queryContractModule stem readModel =
+emitReadModelGenWithContract :: Context -> Text -> Text -> Text -> Maybe Text -> Maybe Text -> Text -> ReadModelNode -> Text
+emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix resolvedCursor queryContractModule stem readModel =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | emitsLegacyAsync]
       <> [ generatedBanner,
@@ -4624,26 +4648,13 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
       ++ [ "import Keiro.ReadModel (" <> readModelImports <> ")"
          ]
       ++ (if not catalogManaged then ["import Keiro.ReadModel.Rebuild qualified as Rebuild", "import Kiroku.Store.Effect (Store)", "import Kiroku.Store.Types (" <> kirokuTypes <> ")"] else [])
-      ++ [ "",
-           readModelName <> " :: ReadModel " <> queryInputType <> " " <> queryResultType,
-           readModelName <> " =",
-           "  ReadModel",
-           "    { name = " <> tshow registryName,
-           "    , tableName = " <> tshow (rmTable readModel),
-           "    , schema = " <> tshow (rmSchema readModel),
-           "    , subscriptionName = " <> tshow subscriptionName,
-           "    , version = " <> tshow' (rmVersion readModel),
-           "    , shapeHash = " <> tshow (rmShape readModel),
-           "    , defaultConsistency = " <> consistencyExpr (rmConsistency readModel),
-           "    , strongScope = " <> scopeExpr (rmScope readModel),
-           "    , query = " <> queryName,
-           "    }"
-         ]
+      ++ readModelDefinition
       ++ legacyLifecycleDefinitions
       ++ asyncDefinition
   where
     catalogManaged = rmGroup readModel /= Nothing
-    emitsLegacyAsync = not catalogManaged && rmFeed readModel == RmSubscription
+    ownerDerived = rmSupply readModel == OwnerDerivedSupply
+    emitsLegacyAsync = not ownerDerived && not catalogManaged && legacyReadModelFeed readModel == Just RmSubscription
     registryName = registryNameFor (contextName ctx) readModel
     subscriptionName = subscriptionNameFor (contextName ctx) readModel
     asyncName = registryName <> "-async"
@@ -4667,16 +4678,76 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
     holeImports = (if queryContractModule == Nothing then [queryInputType, queryResultType] else []) ++ [queryName] ++ [applyName | emitsLegacyAsync]
     asyncImports = ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
     readModelImports =
-      "ConsistencyMode (..), ReadModel (..)"
-        <> if catalogManaged
-          then ", StrongScope (..)"
-          else ", ReadModelMetadata, StrongScope (..), registerReadModel"
-    kirokuTypes = case rmFeed readModel of
-      RmInline -> "GlobalPosition"
-      RmSubscription -> "GlobalPosition, RecordedEvent (..)"
-    projectionNames = case rmFeed readModel of
-      RmInline -> "[]"
-      RmSubscription -> "[" <> tshow asyncName <> "]"
+      if ownerDerived
+        then
+          T.intercalate
+            ", "
+            ( ["QueryCursorAuthority (..)", "ReadModel", "ReadModelBlueprint (..)"]
+                <> ( case rmFreshness readModel of
+                       FreshnessImmediate -> ["immediateReadModel"]
+                       FreshnessWaitForHead {} -> ["HeadScope (..)", "headWaitingReadModel"]
+                   )
+                <> if not catalogManaged then ["ReadModelMetadata", "registerReadModel"] else []
+            )
+        else
+          "ConsistencyMode (..), ReadModel (..)"
+            <> if catalogManaged
+              then ", StrongScope (..)"
+              else ", ReadModelMetadata, StrongScope (..), registerReadModel"
+    kirokuTypes = case legacyReadModelFeed readModel of
+      Just RmSubscription -> "GlobalPosition, RecordedEvent (..)"
+      _ -> "GlobalPosition"
+    projectionNames = case legacyReadModelFeed readModel of
+      Just RmSubscription -> "[" <> tshow asyncName <> "]"
+      _ -> "[]"
+    readModelDefinition =
+      [ "",
+        readModelName <> " :: ReadModel " <> queryInputType <> " " <> queryResultType,
+        readModelName <> " ="
+      ]
+        <> if ownerDerived
+          then truthfulDefinition
+          else legacyDefinition
+    truthfulDefinition =
+      ( case rmFreshness readModel of
+          FreshnessImmediate -> ["  immediateReadModel " <> readModelBlueprintName]
+          FreshnessWaitForHead scope ->
+            [ "  case headWaitingReadModel " <> headScopeExpr scope <> " " <> readModelBlueprintName <> " of",
+              "    Left definitionError -> error (\"keiro-dsl generated an invalid waiting read model: \" <> show definitionError)",
+              "    Right model -> model"
+            ]
+      )
+        <> [ "",
+             readModelBlueprintName <> " :: ReadModelBlueprint " <> queryInputType <> " " <> queryResultType,
+             readModelBlueprintName <> " =",
+             "  ReadModelBlueprint",
+             "    { name = " <> tshow registryName,
+             "    , tableName = " <> tshow (rmTable readModel),
+             "    , schema = " <> tshow (rmSchema readModel),
+             "    , version = " <> tshow' (rmVersion readModel),
+             "    , shapeHash = " <> tshow (rmShape readModel),
+             "    , cursorAuthority = " <> maybe "NoQueryCursor" (("DurableQueryCursor " <>) . tshow) resolvedCursor,
+             "    , query = " <> queryName,
+             "    }"
+           ]
+    legacyDefinition =
+      [ "  ReadModel",
+        "    { name = " <> tshow registryName,
+        "    , tableName = " <> tshow (rmTable readModel),
+        "    , schema = " <> tshow (rmSchema readModel),
+        "    , subscriptionName = " <> tshow subscriptionName,
+        "    , version = " <> tshow' (rmVersion readModel),
+        "    , shapeHash = " <> tshow (rmShape readModel),
+        "    , defaultConsistency = " <> consistencyExpr legacyConsistency,
+        "    , strongScope = " <> scopeExpr legacyScope,
+        "    , query = " <> queryName,
+        "    }"
+      ]
+    readModelBlueprintName = stem <> "ReadModelBlueprint"
+    legacyConsistency = fromMaybe Eventual (legacyReadModelConsistency readModel)
+    legacyScope = legacyReadModelScope readModel
+    headScopeExpr RmEntireLog = "EntireVisibleLog"
+    headScopeExpr (RmCategory categoryName) = "(CategoryVisibleHead " <> tshow categoryName <> ")"
     legacyLifecycleDefinitions
       | not catalogManaged =
           [ "",
@@ -4748,7 +4819,7 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
     queryResultType = pascal stem <> "QueryResult"
     queryName = stem <> "Query"
     applyName = "apply" <> pascal stem
-    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
+    emitsLegacyAsync = rmGroup readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
     exports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
     applyStub
       | emitsLegacyAsync =
@@ -4788,7 +4859,7 @@ emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem
     queryResultType = pascal stem <> "QueryResult"
     queryName = stem <> "Query"
     applyName = "apply" <> pascal stem
-    emitsLegacyAsync = rmGroup readModel == Nothing && rmFeed readModel == RmSubscription
+    emitsLegacyAsync = rmGroup readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
     exports = [queryName] ++ [applyName | emitsLegacyAsync]
     applyStub
       | emitsLegacyAsync =

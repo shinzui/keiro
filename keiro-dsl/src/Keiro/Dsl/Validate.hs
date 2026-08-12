@@ -28,7 +28,7 @@ module Keiro.Dsl.Validate
 where
 
 import Data.Bits (xor)
-import Data.Char (isControl, isSpace, ord)
+import Data.Char (isControl, isSpace, ord, toLower)
 import Data.Graph (SCC (..), stronglyConnComp)
 import Data.List (sortOn)
 import Data.List.NonEmpty qualified as NE
@@ -241,6 +241,8 @@ data DiagnosticCode
   | CatalogReadModelSupplierMissing
   | CatalogReadModelMultipleSuppliers
   | CatalogReadModelLegacyProjectionConflict
+  | CatalogQueryWaitWithoutCompatibleCursor
+  | CatalogQueryWaitWithAmbiguousCursor
   | CatalogTargetAdded
   | CatalogTargetRemoved
   | CatalogTargetLocationChanged
@@ -255,6 +257,8 @@ data DiagnosticCode
   | CatalogCheckpointPolicyChanged
   | CatalogReplayPolicyChanged
   | CatalogQueryBindingChanged
+  | ProjectionDeliveryChanged
+  | QueryFreshnessChanged
   | -- EP-107 diff-only read-model evolution rules.
     ReadModelVersionDecreased
   | ReadModelShapeChangedWithoutBump
@@ -774,6 +778,10 @@ enforcesSpecSurfaceClosures languageContract =
 hasProjectionCatalog :: EffectiveLanguageContract -> Bool
 hasProjectionCatalog languageContract =
   runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) ProjectionCatalogRuntime
+
+hasSeparatedProjectionQueryPolicy :: EffectiveLanguageContract -> Bool
+hasSeparatedProjectionQueryPolicy languageContract =
+  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) SeparatedProjectionQueryPolicy
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors
@@ -2489,36 +2497,36 @@ validateProjectionOwner languageContract spec owner
            | CatalogCategory categoryName <- poSources owner,
              Just reason <- [runtimeIdentityError False categoryName]
            ]
-    identityRules = case poFeed owner of
-      RmSubscription ->
+    identityRules = case poDelivery owner of
+      DeliverySubscription ->
         [ mkErr (locLine (poLoc owner)) CatalogAsyncIdentityMissing $
-            "projection owner '" <> poName owner <> "' with subscription feed requires both subscription and dedup identities"
+            "projection owner '" <> poName owner <> "' with subscription delivery requires both subscription and dedup identities"
         | poSubscription owner == Nothing || poDedup owner == Nothing
         ]
-      RmInline ->
+      DeliveryInline ->
         [ mkErr (locLine (poLoc owner)) CatalogInlineIdentityUnexpected $
-            "projection owner '" <> poName owner <> "' with inline feed cannot declare subscription or dedup identities"
+            "projection owner '" <> poName owner <> "' with inline delivery cannot declare subscription or dedup identities"
         | poSubscription owner /= Nothing || poDedup owner /= Nothing
         ]
-    checkpointRules = case poFeed owner of
-      RmSubscription ->
+    checkpointRules = case poDelivery owner of
+      DeliverySubscription ->
         [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyMissing $
-            "projection owner '" <> poName owner <> "' with subscription feed requires exactly one checkpoint-on-missing policy"
+            "projection owner '" <> poName owner <> "' with subscription delivery requires exactly one checkpoint-on-missing policy"
         | null (poCheckpointOnMissing owner)
         ]
           <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyDuplicate $
                  "projection owner '" <> poName owner <> "' declares checkpoint-on-missing more than once; choose exactly one of from-beginning, from-current-head, or fail"
              | length (poCheckpointOnMissing owner) > 1
              ]
-      RmInline ->
+      DeliveryInline ->
         [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyUnexpected $
-            "projection owner '" <> poName owner <> "' with inline feed cannot declare checkpoint-on-missing because inline delivery has no durable subscription checkpoint"
+            "projection owner '" <> poName owner <> "' with inline delivery cannot declare checkpoint-on-missing because inline delivery has no durable subscription checkpoint"
         | not (null (poCheckpointOnMissing owner))
         ]
     asyncQueryBinding =
       [ mkErr (locLine (poLoc owner)) CatalogAsyncQueryBindingMissing $
           "projection owner '" <> poName owner <> "' has no query model in group '" <> poGroup owner <> "' observing one of its targets"
-      | poFeed owner == RmSubscription,
+      | poDelivery owner == DeliverySubscription,
         null
           [ ()
           | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
@@ -2535,7 +2543,7 @@ validateProjectionOwner languageContract spec owner
       ]
         <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyReplayUnsafe $
                "projection owner '" <> poName owner <> "' uses from-current-head for subscription '" <> fromMaybe "" (poSubscription owner) <> "' while replayable target '" <> ptName target <> "' is cleared before replay; use from-beginning or fail"
-           | poFeed owner == RmSubscription,
+           | poDelivery owner == DeliverySubscription,
              poCheckpointOnMissing owner == [CheckpointFromCurrentHead],
              poReplay owner == ProjectionReplayExplicit,
              target <- targets,
@@ -2546,7 +2554,7 @@ validateProjectionOwner languageContract spec owner
 -- | Validate captured identity, feed semantics, and the declared column surface.
 validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
 validateReadModel languageContract spec readModel =
-  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
+  shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ freshnessCapability ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
   where
     readModelLine = locLine (rmLoc readModel)
     expectedShape = deriveShapeHash readModel
@@ -2573,14 +2581,14 @@ validateReadModel languageContract spec readModel =
           "readmodel '"
             <> rmName readModel
             <> "': consistency = Strong with feed = inline; an inline-only model has no subscription worker to advance the cursor a Strong read waits on. Use consistency = Eventual, or feed = subscription"
-      | rmFeed readModel == RmInline,
-        rmConsistency readModel == Strong
+      | legacyReadModelFeed readModel == Just RmInline,
+        legacyReadModelConsistency readModel == Just Strong
       ]
     scopeMode =
       [ mkErr readModelLine RmScopeWithoutStrong $
           "readmodel '" <> rmName readModel <> "': scope is meaningful only with consistency = Strong"
-      | rmScope readModel /= Nothing,
-        rmConsistency readModel /= Strong
+      | legacyReadModelScope readModel /= Nothing,
+        legacyReadModelConsistency readModel /= Just Strong
       ]
     inlineSubscription =
       [ Diagnostic
@@ -2590,8 +2598,8 @@ validateReadModel languageContract spec readModel =
             relatedLocations = [],
             message = "readmodel '" <> rmName readModel <> "': subscription override is ignored when feed = inline; remove it or select feed = subscription"
           }
-      | rmFeed readModel == RmInline,
-        rmSubscription readModel /= Nothing
+      | legacyReadModelFeed readModel == Just RmInline,
+        legacyReadModelSubscription readModel /= Nothing
       ]
     inlineReference
       | hasProjectionCatalog languageContract,
@@ -2600,9 +2608,98 @@ validateReadModel languageContract spec readModel =
       | otherwise =
           [ mkErr readModelLine RmInlineFeedUnreferenced $
               "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
-          | rmFeed readModel == RmInline,
+          | legacyReadModelFeed readModel == Just RmInline,
             rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
           ]
+    freshnessCapability
+      | not (hasSeparatedProjectionQueryPolicy languageContract) = []
+      | otherwise = case rmFreshness readModel of
+          FreshnessImmediate -> []
+          requested@(FreshnessWaitForHead requestedScope) ->
+            case resolvedOwner of
+              Nothing
+                | not (null implicitProjectionOwners) ->
+                    [ waitError
+                        CatalogQueryWaitWithoutCompatibleCursor
+                        requested
+                        "implicit aggregate projection"
+                        "inline"
+                        []
+                        "move the projection into a subscription projection-owner or use freshness = immediate"
+                    ]
+                | otherwise -> []
+              Just owner ->
+                case compatibleCursorCandidates requestedScope owner of
+                  [] ->
+                    [ waitError
+                        CatalogQueryWaitWithoutCompatibleCursor
+                        requested
+                        ("projection-owner '" <> poName owner <> "'")
+                        (deliveryText (poDelivery owner))
+                        (allCursorCandidates owner)
+                        "use freshness = immediate or give the supplying owner one compatible subscription cursor"
+                    ]
+                  [_] -> []
+                  candidates ->
+                    [ waitError
+                        CatalogQueryWaitWithAmbiguousCursor
+                        requested
+                        ("projection-owner '" <> poName owner <> "'")
+                        (deliveryText (poDelivery owner))
+                        candidates
+                        "leave exactly one compatible subscription cursor or use freshness = immediate"
+                    ]
+      where
+        resolvedOwner = do
+          ownerName <- case [ supplyProjectionOwner supply
+                            | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+                              supplyQueryModel supply == rmName readModel
+                            ] of
+            [name] -> Just name
+            _ -> Nothing
+          case [owner | NProjectionOwner owner <- specNodes spec, poName owner == ownerName] of
+            [owner] -> Just owner
+            _ -> Nothing
+        implicitProjectionOwners =
+          [ aggregate
+          | NAggregate aggregate <- specNodes spec,
+            Just projection <- [aggProjection aggregate],
+            projTable projection == rmName readModel
+          ]
+        compatibleCursorCandidates scope owner
+          | poDelivery owner /= DeliverySubscription = []
+          | not (any (sourceReaches scope) (poSources owner)) = []
+          | otherwise = allCursorCandidates owner
+        allCursorCandidates owner = case poSubscription owner of
+          Just subscription -> [subscription]
+          Nothing -> []
+        sourceReaches RmEntireLog CatalogAll = True
+        sourceReaches RmEntireLog _ = False
+        sourceReaches (RmCategory _) CatalogAll = True
+        sourceReaches (RmCategory wanted) (CatalogCategory actual) = wanted == actual
+        sourceReaches (RmCategory wanted) (CatalogAggregate aggregateName) = wanted == lowerInitial aggregateName
+        lowerInitial value = case T.uncons value of
+          Nothing -> value
+          Just (first, rest) -> T.cons (toLower first) rest
+        deliveryText DeliveryInline = "inline"
+        deliveryText DeliverySubscription = "subscription"
+        freshnessText FreshnessImmediate = "immediate"
+        freshnessText (FreshnessWaitForHead RmEntireLog) = "wait-for-head entire-log"
+        freshnessText (FreshnessWaitForHead (RmCategory category)) = "wait-for-head category " <> T.pack (show category)
+        waitError diagnosticCode requested ownerText delivery candidates remedy =
+          mkErr readModelLine diagnosticCode $
+            "readmodel '"
+              <> rmName readModel
+              <> "' requests "
+              <> freshnessText requested
+              <> " but its supplying "
+              <> ownerText
+              <> " has delivery capabilities "
+              <> delivery
+              <> " and compatible cursor candidates "
+              <> (if null candidates then "none" else T.intercalate ", " (sortOn id candidates))
+              <> "; remedy: "
+              <> remedy
     versionFloor =
       [ mkErr readModelLine ReadModelVersionBelowMinimum $
           "readmodel '" <> rmName readModel <> "' version must be at least 1"
@@ -2625,15 +2722,20 @@ validateReadModel languageContract spec readModel =
       [ mkErr readModelLine RuntimeIdentityInvalid $
           "readmodel '" <> rmName readModel <> "' subscription " <> T.pack (show subscription) <> " " <> reason
       | enforcesSpecSurfaceClosures languageContract,
-        Just subscription <- [rmSubscription readModel],
+        Just subscription <- [legacyReadModelSubscription readModel],
         Just reason <- [stableIdentityError subscription]
       ]
         ++ [ mkErr readModelLine RuntimeIdentityInvalid $
                "readmodel '" <> rmName readModel <> "' scope category " <> T.pack (show category) <> " " <> reason
            | enforcesSpecSurfaceClosures languageContract,
-             Just (RmCategory category) <- [rmScope readModel],
+             Just (RmCategory category) <- [readModelScopeForIdentity readModel],
              Just reason <- [runtimeIdentityError False category]
            ]
+    readModelScopeForIdentity model = case rmSupply model of
+      LegacyReadModelSupply {legacyScope} -> legacyScope
+      OwnerDerivedSupply -> case rmFreshness model of
+        FreshnessImmediate -> Nothing
+        FreshnessWaitForHead scope -> Just scope
     duplicateColumns =
       [ mkErr readModelLine ReadModelDuplicateColumn $
           "readmodel '" <> rmName readModel <> "' declares column '" <> rmcName columnDecl <> "' more than once"
@@ -2647,8 +2749,14 @@ validateReadModel languageContract spec readModel =
         groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
         missingGroup =
           [ mkErr readModelLine CatalogReadModelBindingMissing $
-              "readmodel '" <> rmName readModel <> "' must bind to a projection catalog group"
-          | rmGroup readModel == Nothing
+              "readmodel '" <> rmName readModel <> "' must bind to a projection catalog group or be referenced by one legacy aggregate projection"
+          | rmGroup readModel == Nothing,
+            null
+              [ ()
+              | NAggregate aggregate <- specNodes spec,
+                Just projection <- [aggProjection aggregate],
+                projTable projection == rmName readModel
+              ]
           ]
         unknownGroup =
           [ mkErr readModelLine CatalogGroupUnknown $
@@ -4103,9 +4211,10 @@ validateAggregate languageContract typeGraphResult spec agg =
                ]
         (readModel : _) ->
           [ mkErr (locLine (projLoc projection)) RmConsistencyConflict $
-              "projection '" <> projTable projection <> "' declares consistency " <> T.pack (show projectionConsistency) <> " but its readmodel node declares " <> T.pack (show (rmConsistency readModel))
+              "projection '" <> projTable projection <> "' declares consistency " <> T.pack (show projectionConsistency) <> " but its readmodel node declares " <> T.pack (show readModelConsistency)
           | Just projectionConsistency <- [projConsistency projection],
-            projectionConsistency /= rmConsistency readModel
+            Just readModelConsistency <- [legacyReadModelConsistency readModel],
+            projectionConsistency /= readModelConsistency
           ]
 
     -- Rule 6 (hole-kind 3, mapping): keys are exact event names, never suffixes;

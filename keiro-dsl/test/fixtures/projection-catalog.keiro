@@ -100,7 +100,7 @@ rebuild-group shipping {
 
 projection-owner order_summary_writer {
   source = aggregate Orders
-  feed = inline
+  delivery = inline
   group = reporting
   targets = [ order_summary order_totals ]
   order = 10
@@ -109,7 +109,7 @@ projection-owner order_summary_writer {
 
 projection-owner shipment_writer {
   source = aggregate Shipments
-  feed = inline
+  delivery = inline
   group = shipping
   targets = [ shipment_summary ]
   order = 10
@@ -124,8 +124,7 @@ readmodel order_inline {
   query result = Optional QualificationResult
   version = 1
   shape = "fnv1a:784e511a19f74c58"
-  consistency = Eventual
-  feed = inline
+  freshness = immediate
   group = reporting
   targets = [ order_summary ]
 }
@@ -136,8 +135,7 @@ readmodel order_totals_lookup {
   }
   version = 1
   shape = "fnv1a:768a23d719dcb4d4"
-  consistency = Eventual
-  feed = inline
+  freshness = immediate
   group = reporting
   targets = [ order_totals ]
 }
@@ -173,9 +171,7 @@ readmodel shipmentLookup {
   }
   version = 1
   shape = "fnv1a:d0c39c966ea2f0b4"
-  consistency = Eventual
-  feed = subscription
-  subscription = "catalog-demo-shipment-lookup"
+  freshness = immediate
   group = shipping
   targets = [ shipment_summary ]
 }
@@ -186,15 +182,14 @@ readmodel catalogAudit {
   }
   version = 1
   shape = "fnv1a:9682af3ada04bf50"
-  consistency = Eventual
-  feed = subscription
+  freshness = wait-for-head entire-log
   group = reporting
   targets = [ audit_log ]
 }
 
 projection-owner audit_writer {
-  source = category "audit"
-  feed = subscription
+  source = all
+  delivery = subscription
   group = reporting
   targets = [ audit_log ]
   order = 20

@@ -15,7 +15,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
-import Keiro.Dsl.Grammar (Name, ReadModelNode (..), RmColumn (..))
+import Keiro.Dsl.Grammar (Name, ReadModelNode (..), RmColumn (..), legacyReadModelSubscription)
 import Numeric (showHex)
 
 -- | The ordered query-row identity hashed into 'deriveShapeHash'. Legacy read
@@ -57,7 +57,7 @@ registryNameFor contextName readModel =
 -- | The explicit subscription override or its deterministic default.
 subscriptionNameFor :: Name -> ReadModelNode -> Text
 subscriptionNameFor contextName readModel =
-  fromMaybe (registryNameFor contextName readModel <> "-sub") (rmSubscription readModel)
+  fromMaybe (registryNameFor contextName readModel <> "-sub") (legacyReadModelSubscription readModel)
 
 offsetBasis :: Word64
 offsetBasis = 0xcbf29ce484222325

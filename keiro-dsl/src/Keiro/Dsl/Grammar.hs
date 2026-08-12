@@ -131,6 +131,13 @@ module Keiro.Dsl.Grammar
     RmColumn (..),
     RmFeed (..),
     RmScope (..),
+    ProjectionDelivery (..),
+    QueryFreshnessNode (..),
+    ReadModelSupply (..),
+    legacyReadModelConsistency,
+    legacyReadModelScope,
+    legacyReadModelFeed,
+    legacyReadModelSubscription,
     ReadModelQueryTypes (..),
     ReadModelNode (..),
 
@@ -1181,6 +1188,31 @@ data RmFeed = RmInline | RmSubscription
 data RmScope = RmEntireLog | RmCategory !Text
   deriving stock (Eq, Show, Generic)
 
+-- | When a projection owner applies events to its targets.
+data ProjectionDelivery
+  = DeliveryInline
+  | DeliverySubscription
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | What, if anything, a query waits for before reading its target.
+data QueryFreshnessNode
+  = FreshnessImmediate
+  | FreshnessWaitForHead !RmScope
+  deriving stock (Eq, Show, Generic)
+
+-- | How a read model finds its projection supply. Released Languages 1-4 keep
+-- their original clauses here as source provenance; candidate Language 5
+-- derives delivery and cursor identity from the validated projection owner.
+data ReadModelSupply
+  = LegacyReadModelSupply
+      { legacyConsistency :: !Consistency,
+        legacyScope :: !(Maybe RmScope),
+        legacyFeed :: !RmFeed,
+        legacySubscription :: !(Maybe Text)
+      }
+  | OwnerDerivedSupply
+  deriving stock (Eq, Show, Generic)
+
 -- | The two type parameters of the generated @ReadModel q r@ API. The pair is
 -- atomic because accepting only one side could not be lowered completely.
 data ReadModelQueryTypes = ReadModelQueryTypes
@@ -1200,10 +1232,8 @@ data ReadModelNode = ReadModelNode
     rmColumns :: ![RmColumn],
     rmVersion :: !Int,
     rmShape :: !Text,
-    rmConsistency :: !Consistency,
-    rmScope :: !(Maybe RmScope),
-    rmFeed :: !RmFeed,
-    rmSubscription :: !(Maybe Text),
+    rmFreshness :: !QueryFreshnessNode,
+    rmSupply :: !ReadModelSupply,
     rmGroup :: !(Maybe Name),
     rmObservedTargets :: ![Name],
     rmBackingTarget :: !(Maybe Name),
@@ -1211,6 +1241,26 @@ data ReadModelNode = ReadModelNode
     rmLoc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
+
+legacyReadModelConsistency :: ReadModelNode -> Maybe Consistency
+legacyReadModelConsistency readModel = case rmSupply readModel of
+  LegacyReadModelSupply {legacyConsistency} -> Just legacyConsistency
+  OwnerDerivedSupply -> Nothing
+
+legacyReadModelScope :: ReadModelNode -> Maybe RmScope
+legacyReadModelScope readModel = case rmSupply readModel of
+  LegacyReadModelSupply {legacyScope} -> legacyScope
+  OwnerDerivedSupply -> Nothing
+
+legacyReadModelFeed :: ReadModelNode -> Maybe RmFeed
+legacyReadModelFeed readModel = case rmSupply readModel of
+  LegacyReadModelSupply {legacyFeed} -> Just legacyFeed
+  OwnerDerivedSupply -> Nothing
+
+legacyReadModelSubscription :: ReadModelNode -> Maybe Text
+legacyReadModelSubscription readModel = case rmSupply readModel of
+  LegacyReadModelSupply {legacySubscription} -> legacySubscription
+  OwnerDerivedSupply -> Nothing
 
 -- | Destructive preparation clears a target; preserve retains brownfield rows
 -- for an application-owned reconciliation adapter.
@@ -1264,7 +1314,7 @@ data ProjectionReplayPolicy
 data ProjectionOwnerNode = ProjectionOwnerNode
   { poName :: !Name,
     poSources :: ![CatalogSource],
-    poFeed :: !RmFeed,
+    poDelivery :: !ProjectionDelivery,
     poGroup :: !Name,
     poTargets :: ![Name],
     poOrder :: !Int,

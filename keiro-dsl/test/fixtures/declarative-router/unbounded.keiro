@@ -39,7 +39,7 @@ rebuild-group reporting {
 
 projection-owner hospital_load_writer {
   source = category "hospitalLoad"
-  feed = subscription
+  delivery = subscription
   group = reporting
   targets = [ hospital_load_table ]
   order = 10
@@ -55,8 +55,7 @@ readmodel hospital_load {
   query result = List HospitalLoadRow
   version = 1
   shape = "fnv1a:3c07a19c552c3547"
-  consistency = Eventual
-  feed = subscription
+  freshness = wait-for-head category "hospitalLoad"
   group = reporting
   targets = [ hospital_load_table ]
 }

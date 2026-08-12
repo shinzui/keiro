@@ -93,7 +93,7 @@ the canonical project URI `mori://tan/notification-render-service`.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | Complete |
 | 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | Complete |
-| 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | Not Started |
+| 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -177,8 +177,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
 - [x] EP-2 (244) M4a: registered dependent audit, API/ADR documentation, changelog, and full repository verification
 - [x] EP-2 (244) M4b: record the external Plan-238 integration evidence from M2b (2026-08-12 21:03Z)
-- [ ] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print
-- [ ] EP-3 (245) M2: capability-based validation and generated runtime configuration
+- [x] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print (2026-08-12T21:51:03Z)
+- [x] EP-3 (245) M2: capability-based validation and generated runtime configuration (2026-08-12T21:51:03Z)
 - [ ] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts
 - [ ] EP-3 (245) M4: Languages 1-4 byte-compatibility proof, migration/reference docs, ADRs, changelog, and full verification
 
@@ -237,6 +237,11 @@ interactions between child plans. Provide concise evidence.
   11.7392 seconds, proving prompt tail-GC completion, honest genuinely-behind timeout, and
   category-bounded waiting through `WaitForHead`; the subsequent full `just verify` passed
   508 runtime examples and every repository gate without a second head implementation.
+- EP-3 M2 (2026-08-12): category-head scaffold testing caught and fixed missing
+  parentheses around the generated `CategoryVisibleHead` constructor before corpus
+  regeneration. The 17-example Language 5 catalog group now passes with positive
+  inline/immediate, subscription/immediate, category-head, and entire-head lowering plus
+  deterministic inline, implicit-owner, missing-cursor, and unreachable-category refusals.
 
 
 ## Decision Log

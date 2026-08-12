@@ -286,8 +286,10 @@ projectionCatalogFactsForService service =
   projectionCatalogFactsWith (checkedSpec service) (analyzeProjectionSupplies (checkedSpec service))
 
 projectionCatalogFactsWith :: Spec -> ProjectionSupplyAnalysis -> [Text]
-projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (specNodes spec) <> map supplyFact (resolvedProjectionSupplies supplyAnalysis))
+projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (specNodes spec) <> map supplyFact supplies)
   where
+    supplies = resolvedProjectionSupplies supplyAnalysis
+    owners = [owner | NProjectionOwner owner <- specNodes spec]
     nodeFacts (NProjectionTarget target) =
       [T.intercalate "|" ["target", ptName target, ptSchema target, ptTable target, resetText (ptReset target), T.intercalate "," (ptDependsOn target), lineText (ptLoc target)]]
     nodeFacts (NRebuildGroup groupNode) =
@@ -298,7 +300,6 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
           [ "owner",
             poName owner,
             T.intercalate "," (map sourceText (poSources owner)),
-            feedText (poFeed owner),
             poGroup owner,
             T.intercalate "," (sort (poTargets owner)),
             T.pack (show (poOrder owner)),
@@ -306,6 +307,13 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
             maybe "" id (poDedup owner),
             T.intercalate "," (map checkpointOnMissingText (poCheckpointOnMissing owner)),
             replayText (poReplay owner),
+            lineText (poLoc owner)
+          ],
+        T.intercalate
+          "|"
+          [ "delivery",
+            poName owner,
+            deliveryText (poDelivery owner),
             lineText (poLoc owner)
           ]
       ]
@@ -318,6 +326,20 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
                 groupName,
                 T.intercalate "," (sort (rmObservedTargets readModel)),
                 fromMaybe "" (effectiveBacking readModel),
+                lineText (rmLoc readModel)
+              ],
+            T.intercalate
+              "|"
+              [ "freshness",
+                rmName readModel,
+                freshnessText (rmFreshness readModel),
+                lineText (rmLoc readModel)
+              ],
+            T.intercalate
+              "|"
+              [ "cursor",
+                rmName readModel,
+                fromMaybe "none" (resolvedCursor readModel),
                 lineText (rmLoc readModel)
               ]
           ]
@@ -343,8 +365,24 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
     sourceText CatalogAll = "all"
     sourceText (CatalogCategory categoryName) = "category:" <> categoryName
     sourceText (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
-    feedText RmInline = "inline"
-    feedText RmSubscription = "subscription"
+    deliveryText DeliveryInline = "inline"
+    deliveryText DeliverySubscription = "subscription"
+    freshnessText FreshnessImmediate = "immediate"
+    freshnessText (FreshnessWaitForHead RmEntireLog) = "wait-for-head:entire-log"
+    freshnessText (FreshnessWaitForHead (RmCategory categoryName)) = "wait-for-head:category:" <> categoryName
+    resolvedCursor readModel = do
+      ownerName <- case [ supplyProjectionOwner supply
+                        | supply <- supplies,
+                          supplyQueryModel supply == rmName readModel
+                        ] of
+        [name] -> Just name
+        _ -> Nothing
+      owner <- case [candidate | candidate <- owners, poName candidate == ownerName] of
+        [candidate] -> Just candidate
+        _ -> Nothing
+      case poDelivery owner of
+        DeliveryInline -> Nothing
+        DeliverySubscription -> poSubscription owner
     checkpointOnMissingText CheckpointFromBeginning = "from-beginning"
     checkpointOnMissingText CheckpointFromCurrentHead = "from-current-head"
     checkpointOnMissingText CheckpointFail = "fail"

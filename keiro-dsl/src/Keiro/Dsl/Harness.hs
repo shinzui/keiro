@@ -253,27 +253,19 @@ emitReadModelHarness genPrefix ctx spec readModel =
            "import Data.Text qualified as T"
          ]
       <> catalogImports
-      <> ["import Keiro.ReadModel (ReadModel (..), StrongScope (..))"]
+      <> ["import Keiro.ReadModel (" <> runtimeImports <> ")"]
       <> ["import Keiro.Projection (AsyncProjection (..))" | emitsLegacyAsync]
       <> [ "",
            "-- | (fact, expected from notation, actual generated runtime value).",
            "readModelFacts :: [(String, String, String)]",
-           "readModelFacts =",
-           "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
-           "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", T.unpack " <> readModelName <> ".subscriptionName)",
-           "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+           "readModelFacts ="
          ]
+      <> baseFactRows
       <> [asyncFactRow | not catalogManaged]
-      <> [ "  , (\"consistency\", " <> tshow consistency <> ", show " <> readModelName <> ".defaultConsistency)",
-           "  , (\"strongScope\", " <> tshow scope <> ", renderStrongScope " <> readModelName <> ".strongScope)",
-           "  ]"
-         ]
+      <> policyFactRows
+      <> ["  ]"]
       <> ["    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies" | catalogManaged]
-      <> [ "",
-           "renderStrongScope :: StrongScope -> String",
-           "renderStrongScope EntireLog = \"EntireLog\"",
-           "renderStrongScope (CategoryHead categoryName) = \"CategoryHead \" <> T.unpack categoryName"
-         ]
+      <> policyHelpers
       <> catalogHelpers
       <> [ "",
            "readModelFactResults :: [(String, Bool)]",
@@ -293,17 +285,48 @@ emitReadModelHarness genPrefix ctx spec readModel =
     readModelImports = readModelName : [asyncProjectionName | emitsLegacyAsync]
     moduleExports = ["readModelFacts", "readModelFactResults", "runReadModelFacts"] <> ["catalogFactsAgainst" | catalogManaged]
     expectedRegistry = registryNameFor (contextName ctx) readModel
-    expectedSubscription = case rmSubscription readModel of
+    ownerDerived = rmSupply readModel == OwnerDerivedSupply
+    expectedSubscription = case legacyReadModelSubscription readModel of
       Just name -> name
       Nothing -> expectedRegistry <> "-sub"
-    expectedAsync = case rmFeed readModel of
-      RmInline -> "none"
-      RmSubscription -> expectedRegistry <> "-async"
-    asyncFactRow = case rmFeed readModel of
-      RmInline -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
-      RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
+    expectedAsync = case legacyReadModelFeed readModel of
+      Just RmSubscription -> expectedRegistry <> "-async"
+      _ -> "none"
+    asyncFactRow = case legacyReadModelFeed readModel of
+      Just RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
+      _ -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
     catalogManaged = rmGroup readModel /= Nothing
-    emitsLegacyAsync = not catalogManaged && rmFeed readModel == RmSubscription
+    emitsLegacyAsync = not ownerDerived && not catalogManaged && legacyReadModelFeed readModel == Just RmSubscription
+    runtimeImports
+      | ownerDerived = "HeadScope (..), QueryCursorAuthority (..), QueryFreshness (..), ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness"
+      | otherwise = "ReadModel (..), StrongScope (..)"
+    baseFactRows
+      | ownerDerived =
+          [ "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
+            "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+          ]
+      | otherwise =
+          [ "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
+            "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", T.unpack " <> readModelName <> ".subscriptionName)",
+            "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+          ]
+    policyFactRows
+      | ownerDerived =
+          [ "  , (\"freshness\", " <> tshow expectedFreshness <> ", show (readModelDefaultFreshness " <> readModelName <> "))",
+            "  , (\"cursorAuthority\", " <> tshow expectedCursor <> ", show (readModelCursorAuthority " <> readModelName <> "))"
+          ]
+      | otherwise =
+          [ "  , (\"consistency\", " <> tshow consistency <> ", show " <> readModelName <> ".defaultConsistency)",
+            "  , (\"strongScope\", " <> tshow scope <> ", renderStrongScope " <> readModelName <> ".strongScope)"
+          ]
+    policyHelpers
+      | ownerDerived = []
+      | otherwise =
+          [ "",
+            "renderStrongScope :: StrongScope -> String",
+            "renderStrongScope EntireLog = \"EntireLog\"",
+            "renderStrongScope (CategoryHead categoryName) = \"CategoryHead \" <> T.unpack categoryName"
+          ]
     catalogImports
       | catalogManaged =
           [ "import Data.List.NonEmpty qualified as NE",
@@ -315,6 +338,21 @@ emitReadModelHarness genPrefix ctx spec readModel =
       find
         ((== rmName readModel) . supplyQueryModel)
         (resolvedProjectionSupplies (analyzeProjectionSupplies spec))
+    resolvedOwner = do
+      resolved <- supply
+      find
+        ((== supplyProjectionOwner resolved) . poName)
+        [owner | NProjectionOwner owner <- specNodes spec]
+    expectedCursor = case resolvedOwner of
+      Just owner
+        | poDelivery owner == DeliverySubscription,
+          Just subscription <- poSubscription owner ->
+            "DurableQueryCursor " <> T.pack (show subscription)
+      _ -> "NoQueryCursor"
+    expectedFreshness = case rmFreshness readModel of
+      FreshnessImmediate -> "Immediate"
+      FreshnessWaitForHead RmEntireLog -> "WaitForHead EntireVisibleLog"
+      FreshnessWaitForHead (RmCategory categoryName) -> "WaitForHead (CategoryVisibleHead " <> T.pack (show categoryName) <> ")"
     feedingOwners =
       sortOn
         poOrder
@@ -322,7 +360,7 @@ emitReadModelHarness genPrefix ctx spec readModel =
         | Just resolved <- [supply],
           NProjectionOwner owner <- specNodes spec,
           poName owner == supplyProjectionOwner resolved,
-          poFeed owner == RmSubscription
+          poDelivery owner == DeliverySubscription
         ]
     expectedCatalogRegistration =
       T.intercalate
@@ -356,7 +394,15 @@ emitReadModelHarness genPrefix ctx spec readModel =
                  "",
                  "renderSupply :: [Catalog.ResolvedQuerySupply] -> String",
                  "renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> \"|\" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> \"|\" <> T.unpack (T.intercalate \",\" (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))",
-                 "renderSupply _ = \"missing\""
+                 "renderSupply _ = \"missing\"",
+                 "",
+                 "renderDelivery :: [Catalog.ResolvedQuerySupply] -> String",
+                 "renderDelivery [entry] = T.unpack (T.intercalate \",\" (map renderCapability (NE.toList entry.resolvedHandlerCapabilities)))",
+                 "renderDelivery _ = \"missing\"",
+                 "",
+                 "renderCapability :: Catalog.ProjectionHandlerCapability -> T.Text",
+                 "renderCapability Catalog.InlineCapability {} = \"inline\"",
+                 "renderCapability Catalog.SubscriptionCapability {} = \"subscription\""
                ]
             <> asyncRenderHelper
     asyncRenderHelper
@@ -380,6 +426,11 @@ emitReadModelHarness genPrefix ctx spec readModel =
           <> tshow expectedCatalogSupply
           <> ", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "
           <> tshow (rmName readModel)
+          <> "])",
+        "  , (\"projectionDelivery\", "
+          <> tshow expectedDelivery
+          <> ", renderDelivery [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "
+          <> tshow (rmName readModel)
           <> "])"
       ]
         <> [ "  , (\"asyncRegistration:"
@@ -392,10 +443,15 @@ emitReadModelHarness genPrefix ctx spec readModel =
            | owner <- feedingOwners
            ]
         <> ["  ]"]
-    consistency = case rmConsistency readModel of
-      Strong -> "Strong"
-      Eventual -> "Eventual"
-    scope = case rmScope readModel of
+    expectedDelivery = case resolvedOwner of
+      Just owner -> case poDelivery owner of
+        DeliveryInline -> "inline"
+        DeliverySubscription -> "subscription"
+      Nothing -> "missing"
+    consistency = case legacyReadModelConsistency readModel of
+      Just Strong -> "Strong"
+      _ -> "Eventual"
+    scope = case legacyReadModelScope readModel of
       Nothing -> "EntireLog"
       Just RmEntireLog -> "EntireLog"
       Just (RmCategory categoryName) -> "CategoryHead " <> categoryName

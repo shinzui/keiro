@@ -1504,6 +1504,8 @@ instance HasLocs CheckpointOnMissingNode
 
 instance HasLocs ProjectionReplayPolicy
 
+instance HasLocs ProjectionDelivery
+
 instance HasLocs ProjectionOwnerNode
 
 instance HasLocs TargetResetPolicy
@@ -1511,6 +1513,10 @@ instance HasLocs TargetResetPolicy
 instance HasLocs PublisherNode
 
 instance HasLocs ReadModelNode
+
+instance HasLocs QueryFreshnessNode
+
+instance HasLocs ReadModelSupply
 
 instance HasLocs ReadModelQueryTypes
 

@@ -147,7 +147,7 @@ pBodyItem context =
     [ uncurry BICommand <$> pCommand context,
       uncurry BIEvent <$> pEvent context,
       BIWire <$> pWire,
-      BIProjection <$> pProjection,
+      BIProjection <$> pProjection context,
       BISnapshot <$> pSnapshot,
       do
         located <- withOwnedSpan (pTransition context)
@@ -258,12 +258,20 @@ pWire = do
   v <- boundedDecimal
   pure WireSpec {wireKind = k, wireFields = f, wireSchemaVersion = v}
 
-pProjection :: P ProjectionSpec
-pProjection = do
+pProjection :: FrontendContext -> P ProjectionSpec
+pProjection context = do
   loc <- getLoc
   keyword "projection"
   table <- ident
-  cons <- optional (symbol "consistency" *> symbol "=" *> pConsistency)
+  cons <-
+    if frontendSupportsFeature context SeparatedProjectionQueryPolicySyntax
+      then do
+        startOffset <- getOffset
+        legacyConsistency <- optional (lookAhead (keyword "consistency"))
+        case legacyConsistency of
+          Just _ -> failAt startOffset "Language 5 aggregate projections do not declare consistency; put `freshness` on the referenced readmodel"
+          Nothing -> pure Nothing
+      else optional (symbol "consistency" *> symbol "=" *> pConsistency)
   _ <- symbol "key"
   _ <- symbol "="
   k <- ident

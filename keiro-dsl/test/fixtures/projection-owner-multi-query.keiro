@@ -26,7 +26,7 @@ rebuild-group catalog_group {
 
 projection-owner catalog_writer {
   source = aggregate Catalog
-  feed = inline
+  delivery = inline
   group = catalog_group
   targets = [ catalog_state catalog_layouts catalog_keys ]
   order = 10
@@ -39,8 +39,7 @@ readmodel catalog_validation {
   }
   version = 1
   shape = "fnv1a:56db3cd756d16223"
-  consistency = Eventual
-  feed = inline
+  freshness = immediate
   group = catalog_group
   targets = [ catalog_state catalog_layouts ]
   backing = catalog_state
@@ -52,8 +51,7 @@ readmodel catalog_administration {
   }
   version = 1
   shape = "fnv1a:da61428fca9d41b3"
-  consistency = Eventual
-  feed = inline
+  freshness = immediate
   group = catalog_group
   targets = [ catalog_keys ]
 }

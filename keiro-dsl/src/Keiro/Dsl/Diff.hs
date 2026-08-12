@@ -336,6 +336,7 @@ classifyCompatibility context code
   | code `elem` catalogIdentityCodes = persistedIdentityBreakingVector
   | code `elem` catalogReplayCodes = privateDecodeBreakingVector
   | code == CatalogCheckpointPolicyChanged = catalogCheckpointPolicyVector
+  | code `elem` [ProjectionDeliveryChanged, QueryFreshnessChanged] = persistedIdentityBreakingVector
   | code == CatalogHandlerOrderChanged =
       (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
   | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
@@ -415,7 +416,9 @@ classifyCompatibility context code
         CatalogGroupChanged,
         CatalogOwnerRemoved,
         CatalogFeedIdentityChanged,
-        CatalogQueryBindingChanged
+        CatalogQueryBindingChanged,
+        ProjectionDeliveryChanged,
+        QueryFreshnessChanged
       ]
     catalogReplayCodes = [CatalogSourceChanged, CatalogReplayPolicyChanged]
     additiveCodes =
@@ -1193,9 +1196,7 @@ readModelPairDiff env oldReadModel newReadModel =
   versionChanges
     ++ shapeChanges
     ++ identityChanges
-    ++ feedChanges
-    ++ consistencyChanges
-    ++ scopeChanges
+    ++ policyChanges
     ++ bindingChanges
     ++ queryContractChanges
   where
@@ -1229,19 +1230,27 @@ readModelPairDiff env oldReadModel newReadModel =
         ++ [ breaking nodeName "read-model-subscription" nodeName DerivedIdentityChanged ("subscription changed '" <> oldSubscription <> "' -> '" <> newSubscription <> "'; the worker cursor remains under the old identity")
            | oldSubscription /= newSubscription
            ]
-    feedChanges =
-      [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed (rmFeed oldReadModel) <> " -> " <> renderFeed (rmFeed newReadModel) <> "; projection wiring and rebuild identities changed")
-      | rmFeed oldReadModel /= rmFeed newReadModel
+    policyChanges
+      | rmSupply oldReadModel == OwnerDerivedSupply && rmSupply newReadModel == OwnerDerivedSupply =
+          [ breaking nodeName "query-freshness" nodeName QueryFreshnessChanged ("query freshness changed " <> renderFreshness (rmFreshness oldReadModel) <> " -> " <> renderFreshness (rmFreshness newReadModel) <> "; catalog and owning-group query policy identity changed")
+          | rmFreshness oldReadModel /= rmFreshness newReadModel
+          ]
+      | otherwise = legacyFeedChanges <> legacyConsistencyChanges <> legacyScopeChanges
+    legacyFeedChanges =
+      [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed oldFeed <> " -> " <> renderFeed newFeed <> "; projection wiring and rebuild identities changed")
+      | Just oldFeed <- [legacyReadModelFeed oldReadModel],
+        Just newFeed <- [legacyReadModelFeed newReadModel],
+        oldFeed /= newFeed
       ]
-    consistencyChanges = case (rmConsistency oldReadModel, rmConsistency newReadModel) of
-      (Strong, Eventual) ->
+    legacyConsistencyChanges = case (legacyReadModelConsistency oldReadModel, legacyReadModelConsistency newReadModel) of
+      (Just Strong, Just Eventual) ->
         [breaking nodeName "read-model-consistency" nodeName ReadModelConsistencyWeakened "default consistency changed Strong -> Eventual; callers lose the cursor-wait guarantee"]
-      (Eventual, Strong) ->
+      (Just Eventual, Just Strong) ->
         [additive nodeName "read-model-consistency" nodeName CompatibilityStrengthened "default consistency changed Eventual -> Strong; callers gain a cursor-wait guarantee"]
       _ -> []
-    oldScope = effectiveScope (rmScope oldReadModel)
-    newScope = effectiveScope (rmScope newReadModel)
-    scopeChanges
+    oldScope = effectiveScope (legacyReadModelScope oldReadModel)
+    newScope = effectiveScope (legacyReadModelScope newReadModel)
+    legacyScopeChanges
       | oldScope == newScope = []
       | scopeStrengthened oldScope newScope =
           [additive nodeName "read-model-scope" nodeName CompatibilityStrengthened ("Strong scope widened " <> renderScope oldScope <> " -> " <> renderScope newScope)]
@@ -1375,9 +1384,12 @@ projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> so
       | poSources oldOwner /= poSources newOwner
       ]
     feedIdentityChange =
-      [ breaking ownerName "projection-owner-feed-identity" ownerName CatalogFeedIdentityChanged "feed, subscription, or dedup identity changed; cursors or dedup evidence remain under the old identity"
-      | (poFeed oldOwner, poSubscription oldOwner, poDedup oldOwner) /= (poFeed newOwner, poSubscription newOwner, poDedup newOwner)
+      [ breaking ownerName "projection-delivery" ownerName ProjectionDeliveryChanged "projection delivery changed; handler lifecycle, cursor, and dedup identity require coordinated review"
+      | poDelivery oldOwner /= poDelivery newOwner
       ]
+        <> [ breaking ownerName "projection-owner-delivery-identity" ownerName CatalogFeedIdentityChanged "subscription or dedup identity changed; cursors or dedup evidence remain under the old identity"
+           | (poSubscription oldOwner, poDedup oldOwner) /= (poSubscription newOwner, poDedup newOwner)
+           ]
     checkpointPolicyChange =
       [ breaking ownerName "projection-owner-checkpoint-on-missing" ownerName CatalogCheckpointPolicyChanged $
           "checkpoint-on-missing changed " <> renderCheckpointOnMissing oldPolicy <> " -> " <> renderCheckpointOnMissing newPolicy <> "; the generated catalog and next absent-row startup behavior change, while persisted subscription identity and existing checkpoint rows remain unchanged"
@@ -1409,6 +1421,10 @@ qualifiedIdentity readModel = rmSchema readModel <> "." <> rmTable readModel
 renderFeed :: RmFeed -> Text
 renderFeed RmInline = "inline"
 renderFeed RmSubscription = "subscription"
+
+renderFreshness :: QueryFreshnessNode -> Text
+renderFreshness FreshnessImmediate = "immediate"
+renderFreshness (FreshnessWaitForHead scope) = "wait-for-head " <> renderScope scope
 
 effectiveScope :: Maybe RmScope -> RmScope
 effectiveScope Nothing = RmEntireLog
@@ -2893,7 +2909,9 @@ contextFor label root facet subject code =
         ReadModelVersionDecreased,
         ReadModelShapeChangedWithoutBump,
         ReadModelFeedChanged,
-        ReadModelConsistencyWeakened
+        ReadModelConsistencyWeakened,
+        ProjectionDeliveryChanged,
+        QueryFreshnessChanged
       ]
     privateCodes =
       [ EvtFieldAddedWithoutBump,

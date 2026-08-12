@@ -14,7 +14,7 @@ rebuild-group auxiliary_support {
 
 projection-owner auxiliary_writer {
   source = category "auxiliary"
-  feed = subscription
+  delivery = subscription
   group = auxiliary_support
   targets = [ auxiliary_target ]
   order = 30
@@ -30,9 +30,7 @@ readmodel auxiliaryLookup {
   }
   version = 1
   shape = "fnv1a:9e47caadf66af824"
-  consistency = Eventual
-  feed = subscription
-  subscription = "catalog-demo-auxiliary-lookup"
+  freshness = immediate
   group = auxiliary_support
   targets = [ auxiliary_target ]
 }

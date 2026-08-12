@@ -399,12 +399,9 @@ docReadModel readModel =
       ++ [indent 2 "}"]
       ++ maybe [] docQueryTypes (queryTypes readModel)
       ++ [ indent 2 ("version =" <+> pretty (rmVersion readModel)),
-           indent 2 ("shape =" <+> dquoted (rmShape readModel)),
-           indent 2 ("consistency =" <+> docConsistency (rmConsistency readModel))
+           indent 2 ("shape =" <+> dquoted (rmShape readModel))
          ]
-      ++ maybe [] (pure . indent 2 . ("scope =" <+>) . docScope) (rmScope readModel)
-      ++ [indent 2 ("feed =" <+> docFeed (rmFeed readModel))]
-      ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (rmSubscription readModel)
+      ++ policyLines
       ++ maybe [] (pure . indent 2 . ("group =" <+>) . pretty) (rmGroup readModel)
       ++ [indent 2 ("targets =" <+> bracketed (map pretty (rmObservedTargets readModel))) | rmGroup readModel /= Nothing]
       ++ maybe [] (pure . indent 2 . ("backing =" <+>) . pretty) (rmBackingTarget readModel)
@@ -418,6 +415,16 @@ docReadModel readModel =
     docScope (RmCategory categoryName) = "category" <+> dquoted categoryName
     docFeed RmInline = "inline"
     docFeed RmSubscription = "subscription"
+    policyLines = case rmSupply readModel of
+      LegacyReadModelSupply {legacyConsistency, legacyScope, legacyFeed, legacySubscription} ->
+        [indent 2 ("consistency =" <+> docConsistency legacyConsistency)]
+          ++ maybe [] (pure . indent 2 . ("scope =" <+>) . docScope) legacyScope
+          ++ [indent 2 ("feed =" <+> docFeed legacyFeed)]
+          ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) legacySubscription
+      OwnerDerivedSupply ->
+        [indent 2 ("freshness =" <+> docFreshness (rmFreshness readModel))]
+    docFreshness FreshnessImmediate = "immediate"
+    docFreshness (FreshnessWaitForHead scope) = "wait-for-head" <+> docScope scope
     docQueryTypes ReadModelQueryTypes {input, result} =
       [ indent 2 ("query input =" <+> docTypeExpr input),
         indent 2 ("query result =" <+> docTypeExpr result)
@@ -448,7 +455,7 @@ docProjectionOwner owner =
   vsep $
     ["projection-owner" <+> pretty (poName owner) <+> "{"]
       ++ map (indent 2 . ("source =" <+>) . docSource) (poSources owner)
-      ++ [ indent 2 ("feed =" <+> case poFeed owner of RmInline -> "inline"; RmSubscription -> "subscription"),
+      ++ [ indent 2 ("delivery =" <+> case poDelivery owner of DeliveryInline -> "inline"; DeliverySubscription -> "subscription"),
            indent 2 ("group =" <+> pretty (poGroup owner)),
            indent 2 ("targets =" <+> bracketed (map pretty (poTargets owner))),
            indent 2 ("order =" <+> pretty (poOrder owner))

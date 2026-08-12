@@ -6,9 +6,9 @@ module Keiro.Dsl.Parser.ProjectionCatalog
   )
 where
 
-import Keiro.Dsl.Frontend.Internal (FrontendContext)
+import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (ProjectionCatalogSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (ProjectionCatalogSyntax, SeparatedProjectionQueryPolicySyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
@@ -48,7 +48,7 @@ pProjectionOwner context = do
   name <- ident
   _ <- symbol "{"
   sources <- some pSource
-  feed <- symbol "feed" *> symbol "=" *> pFeed
+  delivery <- pDeliveryClause
   group <- symbol "group" *> symbol "=" *> ident
   targets <- symbol "targets" *> symbol "=" *> brackets (many ident)
   ownerOrder <- symbol "order" *> symbol "=" *> boundedDecimal
@@ -61,7 +61,7 @@ pProjectionOwner context = do
     ProjectionOwnerNode
       { poName = name,
         poSources = sources,
-        poFeed = feed,
+        poDelivery = delivery,
         poGroup = group,
         poTargets = targets,
         poOrder = ownerOrder,
@@ -73,7 +73,17 @@ pProjectionOwner context = do
       }
   where
     pSource = symbol "source" *> symbol "=" *> choice [CatalogAggregate <$> (keyword "aggregate" *> ident), CatalogCategory <$> (keyword "category" *> stringLit), CatalogAll <$ keyword "all"]
-    pFeed = choice [RmInline <$ keyword "inline", RmSubscription <$ keyword "subscription"]
+    pDeliveryClause
+      | frontendSupportsFeature context SeparatedProjectionQueryPolicySyntax = do
+          startOffset <- getOffset
+          legacyFeed <- optional (lookAhead (keyword "feed"))
+          case legacyFeed of
+            Just _ -> failAt startOffset "Language 5 projection owners use `delivery = inline | subscription`; replace legacy `feed`"
+            Nothing -> symbol "delivery" *> symbol "=" *> pDelivery
+      | otherwise = do
+          _ <- symbol "feed" *> symbol "="
+          choice [DeliveryInline <$ keyword "inline", DeliverySubscription <$ keyword "subscription"]
+    pDelivery = choice [DeliveryInline <$ keyword "inline", DeliverySubscription <$ keyword "subscription"]
     pCheckpointOnMissing = do
       startOffset <- getOffset
       choice
