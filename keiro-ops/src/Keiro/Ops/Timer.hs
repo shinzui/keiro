@@ -21,7 +21,7 @@ import Data.UUID qualified as UUID
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader)
+import Keiro.Ops.Parse (durationReader, nonNegativeIntReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Timer
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -119,18 +119,6 @@ timerIdArgument = TimerId <$> argument uuidReader (metavar "TIMER_ID")
 uuidReader :: ReadM UUID
 uuidReader = eitherReader $ \raw ->
   maybe (Left "expected a UUID timer id") Right (UUID.fromString raw)
-
-nonNegativeIntReader :: ReadM Int
-nonNegativeIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value >= 0 -> Right value
-    _ -> Left "expected a non-negative integer"
-
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value > 0 -> Right value
-    _ -> Left "expected a positive integer"
 
 isMutation :: Command -> Bool
 isMutation = \case

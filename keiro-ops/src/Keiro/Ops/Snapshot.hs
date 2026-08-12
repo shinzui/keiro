@@ -22,6 +22,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import Keiro.Ops.Parse (nonNegativeIntReader, readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.Snapshot.Schema
 import Keiro.Workflow.Snapshot (workflowStateCodecVersion, workflowStateShapeHash)
@@ -83,16 +84,10 @@ streamOption = textOption "stream" "NAME" "Kiroku stream name"
 textOption :: String -> String -> String -> Parser Text
 textOption name metavarText helpText = Text.pack <$> strOption (long name <> metavar metavarText <> help helpText)
 
-nonNegativeIntReader :: ReadM Int
-nonNegativeIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n >= 0 -> Right n
-    _ -> Left "expected a non-negative integer"
-
 nonNegativeInt64Reader :: ReadM Int64
 nonNegativeInt64Reader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n >= 0 -> Right n
+  case readBoundedIntegral raw of
+    Just n | n >= 0 -> Right n
     _ -> Left "expected a non-negative stream version"
 
 isMutation :: Command -> Bool

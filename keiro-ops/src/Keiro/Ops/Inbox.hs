@@ -24,7 +24,7 @@ import Effectful.Error.Static (Error)
 import Keiro.Inbox
 import Keiro.Integration.Event (IntegrationEvent (..))
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader)
+import Keiro.Ops.Parse (durationReader, positiveIntReader)
 import Keiro.Ops.Render
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
@@ -83,12 +83,6 @@ textOption name metavarText helpText = Text.pack <$> strOption (long name <> met
 
 statusReader :: ReadM InboxStatus
 statusReader = eitherReader (either (Left . Text.unpack) Right . parseInboxStatus . Text.pack)
-
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n > 0 -> Right n
-    _ -> Left "expected a positive integer"
 
 isMutation :: Command -> Bool
 isMutation = \case

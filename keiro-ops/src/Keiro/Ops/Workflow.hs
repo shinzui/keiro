@@ -36,7 +36,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Codec (decodeRecorded)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader)
+import Keiro.Ops.Parse (durationReader, positiveIntReader, readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.Workflow.Awakeable (AwakeableId (..), cancelAwakeable, signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
@@ -172,7 +172,7 @@ listOptionsParser =
           <$> (Text.pack <$> strOption (long "after" <> metavar "NAME" <> help "Keyset cursor workflow name; followed by ID"))
           <*> (Text.pack <$> argument str (metavar "ID"))
       )
-    <*> option auto (long "limit" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum rows to return")
+    <*> option positiveIntReader (long "limit" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum rows to return")
 
 inspectOptionsParser :: Parser InspectOptions
 inspectOptionsParser =
@@ -213,7 +213,7 @@ gcCommandParser =
             ( GcRunOnce
                 <$> ( GcOptions
                         <$> option durationReader (long "retention" <> metavar "DURATION" <> help "Minimum terminal age, such as 30d or 12h")
-                        <*> option auto (long "batch" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum workflows to collect")
+                        <*> option positiveIntReader (long "batch" <> metavar "N" <> Optparse.value 100 <> showDefault <> help "Maximum workflows to collect")
                     )
             )
             (progDesc "Preview or run one bounded garbage-collection pass")
@@ -236,15 +236,9 @@ payloadReader = eitherReader $ \raw ->
 
 generationReader :: ReadM Int
 generationReader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value >= 0 -> Right value
+  case readBoundedIntegral raw of
+    Just value | value >= 0 -> Right value
     _ -> Left "expected a non-negative generation"
-
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value > 0 -> Right value
-    _ -> Left "expected a positive integer"
 
 workflowStatusReader :: ReadM Instance.WorkflowStatus
 workflowStatusReader = eitherReader $ \case

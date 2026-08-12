@@ -23,6 +23,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import Keiro.Ops.Parse (readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.Projection.Catalog
   ( CatalogInventory (..),
@@ -153,14 +154,14 @@ firstText = either (Left . Text.unpack) Right
 
 nonNegativeInt64Reader :: ReadM Int64
 nonNegativeInt64Reader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value >= 0 -> Right value
+  case readBoundedIntegral raw of
+    Just value | value >= 0 -> Right value
     _ -> Left "expected a non-negative global position"
 
 positiveInt32Reader :: ReadM Int32
 positiveInt32Reader = eitherReader $ \raw ->
-  case reads raw of
-    [(value, "")] | value > 0 -> Right value
+  case readBoundedIntegral raw of
+    Just value | value > 0 -> Right value
     _ -> Left "expected a positive 32-bit integer"
 
 isMutation :: Command -> Bool

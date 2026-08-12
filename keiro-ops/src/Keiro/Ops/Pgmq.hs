@@ -19,6 +19,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import Keiro.Ops.Parse (positiveIntReader, readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.PGMQ
 import Kiroku.Store.Connection (KirokuStore (..))
@@ -66,16 +67,10 @@ queueOption = Text.pack <$> strOption (long "queue" <> metavar "QUEUE" <> help "
 limitOption :: Int -> Parser Int
 limitOption defaultLimit = option positiveIntReader (long "limit" <> metavar "N" <> Opt.value defaultLimit <> showDefault <> help "Maximum entries")
 
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n > 0 -> Right n
-    _ -> Left "expected a positive integer"
-
 int64Reader :: ReadM Int64
 int64Reader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n > 0 -> Right n
+  case readBoundedIntegral raw of
+    Just n | n > 0 -> Right n
     _ -> Left "expected a positive message id"
 
 isMutation :: Command -> Bool

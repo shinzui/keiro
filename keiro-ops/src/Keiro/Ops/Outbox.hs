@@ -25,7 +25,7 @@ import Effectful.Error.Static (Error)
 import Keiro.DeadLetter
 import Keiro.Integration.Event (IntegrationEvent (..))
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader)
+import Keiro.Ops.Parse (durationReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Outbox
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -101,12 +101,6 @@ statusReader :: ReadM OutboxStatus
 statusReader = eitherReader (firstText . parseStatus . Text.pack)
   where
     firstText = either (Left . Text.unpack) Right
-
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n > 0 -> Right n
-    _ -> Left "expected a positive integer"
 
 isMutation :: Command -> Bool
 isMutation = \case

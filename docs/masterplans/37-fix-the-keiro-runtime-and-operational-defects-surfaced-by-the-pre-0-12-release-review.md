@@ -174,7 +174,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 (240) M4: ADR 0024 window contract, CHANGELOG note, comment/window unification, and full Haskell gate (2026-08-12T19:43:22Z)
 - [ ] EP-5 (241): implementation started; complete child plan read before changing CLI parsing (2026-08-12T19:44:48Z)
 - [x] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix (2026-08-12T19:46:50Z)
-- [ ] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies)
+- [x] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies) (2026-08-12T19:49:52Z)
 - [ ] EP-5 (241) M3: executable-level no-DB-contact rejection test and closeout
 - [ ] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged
 - [ ] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper, benign-duplicate tests green

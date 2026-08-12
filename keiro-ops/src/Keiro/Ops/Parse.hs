@@ -1,6 +1,9 @@
 module Keiro.Ops.Parse
   ( durationReader,
     parseDuration,
+    readBoundedIntegral,
+    positiveIntReader,
+    nonNegativeIntReader,
   )
 where
 
@@ -45,6 +48,30 @@ parseDuration input = do
 -- legitimate retention.
 maxDurationSeconds :: Double
 maxDurationSeconds = 9.0e12
+
+-- | Parse through unbounded 'Integer' and admit the value only when it fits the
+-- requested bounded integral type. Reading directly at a bounded type silently
+-- wraps oversized literals.
+readBoundedIntegral :: forall a. (Integral a, Bounded a) => String -> Maybe a
+readBoundedIntegral raw =
+  case reads raw :: [(Integer, String)] of
+    [(value, "")]
+      | value >= toInteger (minBound :: a),
+        value <= toInteger (maxBound :: a) ->
+          Just (fromInteger value)
+    _ -> Nothing
+
+positiveIntReader :: ReadM Int
+positiveIntReader = eitherReader $ \raw ->
+  case readBoundedIntegral raw of
+    Just n | n > 0 -> Right n
+    _ -> Left "expected a positive integer"
+
+nonNegativeIntReader :: ReadM Int
+nonNegativeIntReader = eitherReader $ \raw ->
+  case readBoundedIntegral raw of
+    Just n | n >= 0 -> Right n
+    _ -> Left "expected a non-negative integer"
 
 durationFactor :: Char -> Maybe Double
 durationFactor = \case

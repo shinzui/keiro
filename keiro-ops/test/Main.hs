@@ -122,6 +122,23 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["rebuild", "list"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
 
+  describe "numeric option rejection" do
+    it "rejects non-finite durations on every duration flag" do
+      isParseFailure (parseOps embeddedHooks ["outbox", "gc-sent", "--older-than", "NaN"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["outbox", "requeue-stuck", "--older-than", "Infinity"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["inbox", "gc", "--older-than", "NaN"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["timer", "stuck", "list", "--min-age", "NaNd"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["wf", "gc", "run-once", "--retention", "NaN", "--batch", "100"]) `shouldBe` True
+
+    it "rejects non-positive and wrapped integer options at parse time" do
+      isParseFailure (parseOps embeddedHooks ["wf", "gc", "run-once", "--retention", "30d", "--batch", "0"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["wf", "gc", "run-once", "--retention", "30d", "--batch=-5"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["wf", "list", "--limit", "0"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["replay-audit", "--full", "--resume-from", "-1"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["outbox", "list", "--source", "s", "--limit", "18446744073709551716"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["wf", "gc", "run-once", "--retention", "30d", "--batch", "100"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full", "--resume-from", "0"]) `shouldBe` True
+
   describe "catalog rebuild adoption" $ around (withFreshStore fixture) do
     it "previews exact slice changes and adopts them only with force" $ \store -> do
       expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")

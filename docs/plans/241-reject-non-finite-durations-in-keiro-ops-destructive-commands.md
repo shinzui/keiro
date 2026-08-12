@@ -55,15 +55,16 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 1: the `parseDuration` unit matrix in `keiro-ops/test/Main.hs` covers
       every rejected spelling and every preserved accepted form; the full keiro-ops
       suite passes with 35 examples and zero failures (2026-08-12T19:46:50Z).
-- [ ] Milestone 2: the three unguarded `option auto` call sites
+- [x] Milestone 2: the three unguarded `option auto` call sites
       (`wf list --limit`, `wf gc run-once --batch`, `replay-audit --resume-from`)
-      use guarded readers.
-- [ ] Milestone 2: `readBoundedIntegral` is added to `Keiro.Ops.Parse`; every
+      use guarded readers (2026-08-12T19:49:52Z).
+- [x] Milestone 2: `readBoundedIntegral` is added to `Keiro.Ops.Parse`; every
       `reads`-based integer reader parses through it (no silent 2^64 wraparound);
       the exact-duplicate `positiveIntReader`/`nonNegativeIntReader` copies are
-      consolidated into `Keiro.Ops.Parse`.
-- [ ] Milestone 2: pure command-tree rejection specs (via `execParserPure`) pass for
-      every duration flag and the newly guarded integer flags.
+      consolidated into `Keiro.Ops.Parse` (2026-08-12T19:49:52Z).
+- [x] Milestone 2: pure command-tree rejection specs (via `execParserPure`) pass for
+      every duration flag and the newly guarded integer flags; the full suite passes
+      with 37 examples and zero failures (2026-08-12T19:49:52Z).
 - [ ] Milestone 3: executable-level test proves `outbox gc-sent --older-than NaN`
       fails with the documented message and exit code 2 before any database contact.
 - [ ] Milestone 3: `cabal test keiro-ops-test` fully green; MasterPlan 37 progress row

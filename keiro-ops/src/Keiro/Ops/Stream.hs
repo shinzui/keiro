@@ -26,6 +26,7 @@ import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import Keiro.Ops.Parse (nonNegativeIntReader, positiveIntReader, readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.ReadModel (storeHeadPosition)
@@ -109,22 +110,10 @@ eventIdArgument = EventId <$> argument uuidReader (metavar "EVENT_ID")
 uuidReader :: ReadM UUID
 uuidReader = eitherReader $ \raw -> maybe (Left "expected a UUID event id") Right (UUID.fromString raw)
 
-positiveIntReader :: ReadM Int
-positiveIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n > 0 -> Right n
-    _ -> Left "expected a positive integer"
-
-nonNegativeIntReader :: ReadM Int
-nonNegativeIntReader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n >= 0 -> Right n
-    _ -> Left "expected a non-negative integer"
-
 nonNegativeInt64Reader :: ReadM Int64
 nonNegativeInt64Reader = eitherReader $ \raw ->
-  case reads raw of
-    [(n, "")] | n >= 0 -> Right n
+  case readBoundedIntegral raw of
+    Just n | n >= 0 -> Right n
     _ -> Left "expected a non-negative stream version"
 
 isMutation :: Command -> Bool
