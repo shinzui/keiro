@@ -321,19 +321,10 @@ resumePreviewResult limit candidates =
 resumeSummaryResult :: ResumeSummary -> OpsResult
 resumeSummaryResult summary =
   OpsResult
-    { headers = ["discovered", "resumed", "completed", "suspended", "unknown", "failed", "errors", "lease_skipped"],
+    { headers = ["discovered", "resumed", "completed", "suspended", "unknown", "failed", "errors", "lease_skipped", "advanced", "paced", "unregistered"],
       rows =
-        [ map
-            (Text.pack . show)
-            [ summary.discovered,
-              summary.resumed,
-              summary.completed,
-              summary.stillSuspended,
-              summary.unknownName,
-              summary.failed,
-              summary.transientErrors,
-              summary.leaseSkipped
-            ]
+        [ map (Text.pack . show) counts
+            <> [renderUnregistered summary.unregisteredNames]
         ],
       jsonValue =
         object
@@ -344,9 +335,28 @@ resumeSummaryResult summary =
             "unknown_name" .= summary.unknownName,
             "failed" .= summary.failed,
             "transient_errors" .= summary.transientErrors,
-            "lease_skipped" .= summary.leaseSkipped
+            "lease_skipped" .= summary.leaseSkipped,
+            "advanced" .= summary.advanced,
+            "paced" .= summary.paced,
+            "unregistered_names" .= Set.toAscList summary.unregisteredNames
           ]
     }
+  where
+    counts =
+      [ summary.discovered,
+        summary.resumed,
+        summary.completed,
+        summary.stillSuspended,
+        summary.unknownName,
+        summary.failed,
+        summary.transientErrors,
+        summary.leaseSkipped,
+        summary.advanced,
+        summary.paced
+      ]
+    renderUnregistered names
+      | Set.null names = "-"
+      | otherwise = Text.intercalate "," (Set.toAscList names)
 
 runList :: OpsEnv -> ListOptions -> IO OpsOutcome
 runList env options =

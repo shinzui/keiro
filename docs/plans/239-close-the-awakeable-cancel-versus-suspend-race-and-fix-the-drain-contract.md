@@ -74,8 +74,8 @@ This section must always reflect the actual current state of the work.
 - [x] M2: update the existing full-record `ResumeSummary` assertions and `claimInstance` call sites in `keiro/test/Main.hs` (2026-08-12T18:20:18Z)
 - [x] M2: add the drain-termination test (one crashed + one unregistered workflow; loop on `advanced > 0` terminates; `discovered` provably never reaches zero) (2026-08-12T18:20:18Z)
 - [x] M2: add claim-classification assertions (paced after a recorded crash; lease-held under a live foreign lease); focused resume tests and full `cabal test keiro-test` green (497 examples) (2026-08-12T18:20:18Z)
-- [ ] M3: extend `resumeSummaryResult` in `keiro-ops/src/Keiro/Ops/Workflow.hs` with the new columns and JSON keys
-- [ ] M3: extend the keiro-ops resume test in `keiro-ops/test/Main.hs` to cover `advanced` and `unregistered_names`
+- [x] M3: extend `resumeSummaryResult` in `keiro-ops/src/Keiro/Ops/Workflow.hs` with the new columns and JSON keys (2026-08-12T18:23:05Z)
+- [x] M3: extend the keiro-ops resume test in `keiro-ops/test/Main.hs` to cover `advanced` and `unregistered_names`; `cabal test keiro-ops-test` green (33 examples) (2026-08-12T18:23:05Z)
 - [ ] M4: CHANGELOG entries (breaking API change + bug fixes) under Unreleased
 - [ ] M4: amend `docs/adr/0023` (cancel joins the per-step lock discipline; suspend arbitration consults the awakeable row) and `docs/adr/0025` (pass summaries distinguish advanced from blocked; drain termination), record both in `docs/adr/log.md`, run `just adr-validate`
 - [ ] M4: tick EP-3 checkboxes and registry status in `docs/masterplans/37-...md`

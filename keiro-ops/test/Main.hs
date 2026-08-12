@@ -393,7 +393,27 @@ spec fixture = do
       applied <- OpsWorkflow.runCommandWithResume hook (opsEnv True store) command
       applied `shouldSatisfy` isSucceeded
       jsonInteger "completed" applied `shouldBe` Just 1
+      jsonInteger "advanced" applied `shouldBe` Just 1
+      jsonStringArray "unregistered_names" applied `shouldBe` Just []
       workflowStatus store ref `shouldReturn` Just Instance.WfCompleted
+
+    it "reports advanced work and the exact unregistered workflow names" $ \store -> do
+      let registered = OpsWorkflow.WorkflowRef "approval" "wf-resume-registered"
+          unregistered = OpsWorkflow.WorkflowRef "retired-approval" "wf-resume-unregistered"
+          registry = Map.singleton (WorkflowName "approval") (WorkflowDef (\_ -> pure ("done" :: Text)))
+          hook = Just (registry, defaultWorkflowResumeOptions)
+          command = OpsWorkflow.ResumeOnce (OpsWorkflow.ResumeOptions 2)
+      seedStep store registered "received" Aeson.Null
+      seedStep store unregistered "received" Aeson.Null
+
+      applied <- OpsWorkflow.runCommandWithResume hook (opsEnv True store) command
+      applied `shouldSatisfy` isSucceeded
+      jsonInteger "discovered" applied `shouldBe` Just 2
+      jsonInteger "advanced" applied `shouldBe` Just 1
+      jsonInteger "unknown_name" applied `shouldBe` Just 1
+      jsonStringArray "unregistered_names" applied `shouldBe` Just ["retired-approval"]
+      workflowStatus store registered `shouldReturn` Just Instance.WfCompleted
+      workflowStatus store unregistered `shouldReturn` Just Instance.WfRunning
 
     it "lists and decodes a real journal without mutating it" $ \store -> do
       let ref = OpsWorkflow.WorkflowRef "approval" "wf-1"
@@ -1136,6 +1156,18 @@ resultCount = fmap fromIntegral . jsonInteger "count"
 jsonInteger :: Key -> OpsOutcome -> Maybe Int64
 jsonInteger key = \case
   Succeeded OpsResult {jsonValue = Aeson.Object value} -> numberAt key value
+  _ -> Nothing
+
+jsonStringArray :: Key -> OpsOutcome -> Maybe [Text]
+jsonStringArray key = \case
+  Succeeded OpsResult {jsonValue = Aeson.Object value} -> do
+    Aeson.Array values <- KeyMap.lookup key value
+    traverse
+      ( \case
+          Aeson.String item -> Just item
+          _ -> Nothing
+      )
+      (Vector.toList values)
   _ -> Nothing
 
 jsonIntegerFromPreview :: Key -> OpsOutcome -> Maybe Int64
