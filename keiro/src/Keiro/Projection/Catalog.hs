@@ -87,6 +87,8 @@ module Keiro.Projection.Catalog
     InventorySubscription (..),
     InventoryDedupKey (..),
     InventoryHandler (..),
+    ProjectionHandlerCapability (..),
+    ResolvedQuerySupply (..),
     CatalogFingerprint,
     catalogFingerprintText,
     GroupSliceFingerprint,
@@ -104,6 +106,7 @@ module Keiro.Projection.Catalog
     typedInlineProjections,
     typedProjectionRebuildGroups,
     asyncProjectionRebuildGroup,
+    resolvedQuerySupplies,
     catalogInventory,
     catalogFingerprint,
     groupSliceFingerprint,
@@ -457,6 +460,9 @@ data CatalogDiagnosticCode
   | DuplicateSourceId
   | DuplicateQueryModelId
   | DuplicateQueryModelRegistryName
+  | EmptyQueryObservedTargets
+  | QueryModelWithoutSupplier
+  | QueryModelWithMultipleSuppliers
   | DuplicateSubscriptionId
   | DuplicateSubscriptionName
   | DuplicateDedupKeyId
@@ -495,6 +501,9 @@ diagnosticCodeText = \case
   DuplicateSourceId -> "catalog.duplicate-source-id"
   DuplicateQueryModelId -> "catalog.duplicate-query-model-id"
   DuplicateQueryModelRegistryName -> "catalog.duplicate-query-model-registry-name"
+  EmptyQueryObservedTargets -> "catalog.query-model-empty-observed-targets"
+  QueryModelWithoutSupplier -> "catalog.query-model-without-supplier"
+  QueryModelWithMultipleSuppliers -> "catalog.query-model-with-multiple-suppliers"
   DuplicateSubscriptionId -> "catalog.duplicate-subscription-id"
   DuplicateSubscriptionName -> "catalog.duplicate-subscription-name"
   DuplicateDedupKeyId -> "catalog.duplicate-dedup-key-id"
@@ -619,6 +628,37 @@ data CatalogInventory = CatalogInventory
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+-- | One live-handler capability retained by the supplying projection. This
+-- normalized view contains identities and policies only; executable closures
+-- stay in the original typed catalog.
+data ProjectionHandlerCapability
+  = InlineCapability
+      { capabilityHandlerName :: !Text
+      }
+  | SubscriptionCapability
+      { capabilityHandlerName :: !Text,
+        capabilitySubscriptionId :: !SubscriptionId,
+        capabilitySubscriptionName :: !Text,
+        capabilitySourceId :: !SourceId,
+        capabilityCheckpointOnMissing :: !MissingCheckpointPolicy,
+        capabilityDedupKeyId :: !DedupKeyId,
+        capabilityDedupName :: !Text
+      }
+  deriving stock (Eq, Show, Generic)
+
+-- | The single catalog projection that supplies a typed query model. Target
+-- ownership is authoritative: all observed targets must resolve to this owner
+-- in the same rebuild group before validation succeeds.
+data ResolvedQuerySupply = ResolvedQuerySupply
+  { resolvedQueryModelId :: !QueryModelId,
+    resolvedProjectionId :: !ProjectionId,
+    resolvedRebuildGroupId :: !RebuildGroupId,
+    resolvedObservedTargets :: !(NonEmpty TargetId),
+    resolvedSourceId :: !SourceId,
+    resolvedHandlerCapabilities :: !(NonEmpty ProjectionHandlerCapability)
+  }
+  deriving stock (Eq, Show, Generic)
+
 newtype CatalogFingerprint = CatalogFingerprint Text
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -636,7 +676,8 @@ data ValidatedProjectionCatalog = ValidatedProjectionCatalog
   { originalCatalog :: !ProjectionCatalog,
     validatedInventory :: !CatalogInventory,
     validatedFingerprint :: !CatalogFingerprint,
-    projectionFacts :: ![ProjectionFacts]
+    projectionFacts :: ![ProjectionFacts],
+    validatedQuerySupplies :: ![ResolvedQuerySupply]
   }
   deriving stock (Generic)
 
@@ -771,12 +812,14 @@ validateProjectionCatalog catalog =
     Just errors -> Failure errors
     Nothing ->
       let inventory = buildInventory catalog facts queryFacts
+          querySupplies = buildResolvedQuerySupplies inventory
        in Success
             ValidatedProjectionCatalog
               { originalCatalog = catalog,
                 validatedInventory = inventory,
                 validatedFingerprint = fingerprintInventory inventory,
-                projectionFacts = facts
+                projectionFacts = facts,
+                validatedQuerySupplies = querySupplies
               }
   where
     facts = collectProjectionFacts (catalog ^. #projectionSets)
@@ -787,6 +830,7 @@ validateProjectionCatalog catalog =
             <> referenceDiagnostics catalog facts queryFacts
             <> ownershipDiagnostics catalog facts
             <> groupDiagnostics catalog facts queryFacts
+            <> querySupplyDiagnostics catalog facts queryFacts
             <> replayDiagnostics catalog facts
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
@@ -869,6 +913,12 @@ asyncProjectionRebuildGroup validated wantedProjectionId wantedProjectionName = 
       ((== registration ^. #projectionId) . (^. #projectionId))
       (validated ^. #validatedInventory . #inventoryProjections)
   pure (projection ^. #rebuildGroupId)
+
+-- | Resolve every query model to its sole projection owner. Results are sorted
+-- by query-model identity and are available only after whole-catalog
+-- validation has established the ownership and rebuild-group invariants.
+resolvedQuerySupplies :: ValidatedProjectionCatalog -> [ResolvedQuerySupply]
+resolvedQuerySupplies = validatedQuerySupplies
 
 projectionSetBelongs ::
   ValidatedProjectionCatalog ->
@@ -1337,6 +1387,89 @@ groupDiagnostics catalog facts queryFacts =
         any (`Set.notMember` covered) (factObservedTargets query)
       ]
 
+-- | Validate the relation later exposed by 'resolvedQuerySupplies'. Existing
+-- declaration/reference/ownership diagnostics remain the primary errors for
+-- malformed identities, so this layer stays quiet until those prerequisites
+-- are individually valid.
+querySupplyDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [QueryFacts] -> [CatalogDiagnostic]
+querySupplyDiagnostics catalog facts queryFacts = concatMap diagnosticsForQuery queryFacts
+  where
+    declaredTargets = Set.fromList [target ^. #targetId | target <- catalog ^. #targets]
+    declaredGroups = Set.fromList [group ^. #rebuildGroupId | group <- catalog ^. #rebuildGroups]
+    ownersByTarget =
+      Map.fromListWith
+        (<>)
+        [ (targetId, [fact])
+        | fact <- facts,
+          targetId <- factTargets fact
+        ]
+    groupsByTarget =
+      Map.fromListWith
+        (<>)
+        [ (targetId, [group ^. #rebuildGroupId])
+        | group <- catalog ^. #rebuildGroups,
+          targetId <- group ^. #orderedTargets
+        ]
+    projectionCounts = Map.fromListWith (+) [(factProjectionId fact, 1 :: Int) | fact <- facts]
+    queryCounts = Map.fromListWith (+) [(factQueryModelId query, 1 :: Int) | query <- queryFacts]
+
+    diagnosticsForQuery query
+      | Map.findWithDefault 0 (factQueryModelId query) queryCounts /= 1 = []
+      | null targets =
+          [ diagnostic
+              EmptyQueryObservedTargets
+              queryIdentity
+              [factQuerySite query]
+              "catalog-bound query model must observe at least one target"
+          ]
+      | not prerequisitesValid = []
+      | otherwise =
+          case List.sort (Set.toList supplierIds) of
+            [] ->
+              [ diagnostic
+                  QueryModelWithoutSupplier
+                  queryIdentity
+                  [factQuerySite query]
+                  "query model's observed targets do not resolve to one projection supplier"
+              ]
+            [_] -> []
+            suppliers ->
+              [ diagnostic
+                  QueryModelWithMultipleSuppliers
+                  queryIdentity
+                  (factQuerySite query : map factSite supplierFacts)
+                  ( "query model's observed targets span several projection suppliers: "
+                      <> Text.intercalate ", " (map projectionIdText suppliers)
+                  )
+              ]
+      where
+        targets = factObservedTargets query
+        queryIdentity = queryModelIdText (factQueryModelId query)
+        targetOwners = [owners | targetId <- targets, let owners = Map.findWithDefault [] targetId ownersByTarget]
+        supplierFacts = List.nubBy (\left right -> factProjectionId left == factProjectionId right) (concat targetOwners)
+        supplierIds = Set.fromList (map factProjectionId supplierFacts)
+        prerequisitesValid =
+          factQueryGroup query `Set.member` declaredGroups
+            && all (`Set.member` declaredTargets) targets
+            && all ((== 1) . List.length) targetOwners
+            && all
+              ( \targetId ->
+                  Map.findWithDefault [] targetId groupsByTarget == [factQueryGroup query]
+              )
+              targets
+            && all
+              ( \case
+                  [owner] -> factGroupId owner == factQueryGroup query
+                  _ -> False
+              )
+              targetOwners
+            && all
+              ( \case
+                  [owner] -> Map.findWithDefault 0 (factProjectionId owner) projectionCounts == 1
+                  _ -> False
+              )
+              targetOwners
+
 replayDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [CatalogDiagnostic]
 replayDiagnostics catalog facts =
   clearRequiresReplay <> currentHeadAfterClear <> mixedGroupReplay
@@ -1557,6 +1690,82 @@ buildInventory catalog facts queryFacts =
       case [factProjectionId fact | fact <- facts, targetId `List.elem` factTargets fact] of
         owner : _ -> owner
         [] -> error "buildInventory: validated target has no owner"
+
+buildResolvedQuerySupplies :: CatalogInventory -> [ResolvedQuerySupply]
+buildResolvedQuerySupplies inventory =
+  List.sortOn
+    (^. #resolvedQueryModelId)
+    [ ResolvedQuerySupply
+        { resolvedQueryModelId = query ^. #queryModelId,
+          resolvedProjectionId = ownerId,
+          resolvedRebuildGroupId = query ^. #rebuildGroupId,
+          resolvedObservedTargets = requireNonEmpty "query observed targets" (query ^. #observedTargets),
+          resolvedSourceId = projection ^. #sourceId,
+          resolvedHandlerCapabilities =
+            requireNonEmpty
+              "projection handler capabilities"
+              (map (handlerCapability projection) (projection ^. #handlers))
+        }
+    | query <- inventory ^. #inventoryQueryModels,
+      let ownerId = ownerForQuery query,
+      let projection = requireLookup "query projection owner" ownerId projectionById
+    ]
+  where
+    ownerByTarget =
+      Map.fromList
+        [ (target ^. #targetId, target ^. #owner)
+        | target <- inventory ^. #inventoryTargets
+        ]
+    projectionById =
+      Map.fromList
+        [ (projection ^. #projectionId, projection)
+        | projection <- inventory ^. #inventoryProjections
+        ]
+    subscriptionById =
+      Map.fromList
+        [ (subscription ^. #subscriptionId, subscription)
+        | subscription <- inventory ^. #inventorySubscriptions
+        ]
+    dedupById =
+      Map.fromList
+        [ (dedupKey ^. #dedupKeyId, dedupKey)
+        | dedupKey <- inventory ^. #inventoryDedupKeys
+        ]
+
+    ownerForQuery query =
+      case Set.toList . Set.fromList $ map ownerForTarget (query ^. #observedTargets) of
+        [ownerId] -> ownerId
+        _ -> error "buildResolvedQuerySupplies: validated query does not have one owner"
+
+    ownerForTarget targetId = requireLookup "observed target owner" targetId ownerByTarget
+
+    handlerCapability projection = \case
+      InventoryInlineHandler name ->
+        InlineCapability
+          { capabilityHandlerName = name
+          }
+      InventoryAsyncHandler name subscriptionId dedupKeyId ->
+        let subscription = requireLookup "handler subscription" subscriptionId subscriptionById
+            dedupKey = requireLookup "handler dedup key" dedupKeyId dedupById
+         in SubscriptionCapability
+              { capabilityHandlerName = name,
+                capabilitySubscriptionId = subscriptionId,
+                capabilitySubscriptionName = subscription ^. #subscriptionName,
+                capabilitySourceId = projection ^. #sourceId,
+                capabilityCheckpointOnMissing = subscription ^. #checkpointOnMissing,
+                capabilityDedupKeyId = dedupKeyId,
+                capabilityDedupName = dedupKey ^. #dedupName
+              }
+
+    requireLookup label key values =
+      fromMaybe
+        (error ("buildResolvedQuerySupplies: missing " <> label))
+        (Map.lookup key values)
+
+    requireNonEmpty label values =
+      fromMaybe
+        (error ("buildResolvedQuerySupplies: empty " <> label))
+        (NonEmpty.nonEmpty values)
 
 inventoryProjection :: ProjectionFacts -> InventoryProjection
 inventoryProjection fact =

@@ -1,5 +1,36 @@
 # Bundle Update Log
 
+## 2026-08-12
+* **Planning**: IR-23 and IR-24 are release-gating work under
+[MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md).
+[Plan 243](../plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md)
+makes target ownership authoritative for query supply;
+[Plan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
+adds the runtime compatibility layer and canonical identity revision; and
+[Plan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
+finalizes the Language 5 surface. Completed MasterPlan 36 remains closed. IR-25 is intentionally
+deferred beyond 0.12 because it expands generated aggregate behavior rather than repairing this
+projection contract.
+* **Addition**: IR-25 requests total typed field mappings at Language 5 aggregate emit sites,
+including deterministic derived values, mapped constructors, and conditional field expressions.
+It preserves Keiki's static per-edge event vector and hidden-input replay invariant: conditional
+event presence remains disjoint guarded edges, and a derived field cannot be the only carrier of
+a command input. Raised by `mori://tan/notification-render-service`; generalizes IR-13 without
+reopening the separate collection-register gate in Plan 166.
+* **Addition**: IR-24 separates projection delivery from query freshness. Language 5 catalog
+projection owners become the sole source of inline/subscription delivery, while query models use
+truthful immediate/head-wait/position-wait terminology instead of the confusing
+`feed = inline` plus `consistency = Eventual` combination. It preserves Languages 1–4 and requires
+a compatibility path for the released `ConsistencyMode` API. Raised by
+`mori://tan/notification-render-service`; depends conceptually on IR-23's authoritative owner/query
+relationship but remains a separate runtime and language migration.
+* **Addition**: IR-23 requests that Language 5 let one catalogued inline projection owner supply
+several separately typed query models over its targets. It replaces the misleading requirement
+that every inline model be named by the aggregate's single standalone `projection` clause, while
+preserving Languages 1–4 and keeping the broader `feed`/`consistency` vocabulary redesign separate.
+Raised by `mori://tan/notification-render-service`, whose boot-time Catalog activation must update
+three validation targets atomically without collapsing independent queries into one tagged union.
+
 ## 2026-08-11
 * **Runtime closeout**: Plan 231 completes IR-7's handwritten runtime latency,
 allocation, one-dispatch residency, committed command baseline, and shared

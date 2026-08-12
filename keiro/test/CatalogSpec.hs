@@ -50,6 +50,94 @@ spec = describe "Keiro.Projection.Catalog" $ do
     catalogFingerprint reordered `shouldBe` catalogFingerprint validated
     renderCatalogInventory reordered `shouldBe` renderCatalogInventory validated
 
+  it "resolves several query models to one multi-target owner without list-order dependence" $ do
+    validated <- expectValid sharedOwnerCatalog
+    let supplies = resolvedQuerySupplies validated
+    map (^. #resolvedQueryModelId) supplies
+      `shouldBe` [auditQueryId, counterQueryId]
+    map (^. #resolvedProjectionId) supplies
+      `shouldBe` [sharedProjectionId, sharedProjectionId]
+    map (^. #resolvedRebuildGroupId) supplies
+      `shouldBe` [mainGroupId, mainGroupId]
+    map (NonEmpty.toList . (^. #resolvedObservedTargets)) supplies
+      `shouldBe` [[auditTargetId, counterTargetId], [counterTargetId]]
+    for_ supplies $ \supply -> do
+      supply ^. #resolvedSourceId `shouldBe` headSourceId
+      case NonEmpty.toList (supply ^. #resolvedHandlerCapabilities) of
+        [ InlineCapability inlineName,
+          SubscriptionCapability asyncName subscriptionId subscriptionName sourceId policy dedupKeyId dedupName
+          ] -> do
+            inlineName `shouldBe` "catalog-inline"
+            asyncName `shouldBe` "catalog-async"
+            subscriptionId `shouldBe` asyncSubscriptionId
+            subscriptionName `shouldBe` "catalog-async-subscription"
+            sourceId `shouldBe` headSourceId
+            policy `shouldBe` FromBeginning
+            dedupKeyId `shouldBe` asyncDedupId
+            dedupName `shouldBe` "catalog-async"
+        capabilities -> expectationFailure ("unexpected capabilities: " <> show capabilities)
+
+    outerReordered <- expectValid (reverseCatalog sharedOwnerCatalog)
+    resolvedQuerySupplies outerReordered `shouldBe` supplies
+    catalogInventory outerReordered `shouldBe` catalogInventory validated
+    catalogFingerprint outerReordered `shouldBe` catalogFingerprint validated
+    groupSliceFingerprint outerReordered mainGroupId
+      `shouldBe` groupSliceFingerprint validated mainGroupId
+
+    ownedTargetsReordered <- expectValid reorderedSharedOwnerCatalog
+    resolvedQuerySupplies ownedTargetsReordered `shouldBe` supplies
+
+  it "rejects empty and split-owner query target sets with stable derived diagnostics" $ do
+    let emptyObserved =
+          sharedOwnerCatalog
+            { queryModels =
+                [ SomeQueryModelBinding (counterBinding & #observedTargets .~ []),
+                  SomeQueryModelBinding (auditBinding & #observedTargets .~ [auditTargetId, counterTargetId])
+                ]
+            }
+        splitOwners =
+          validCatalog
+            { queryModels =
+                [ SomeQueryModelBinding counterBinding,
+                  SomeQueryModelBinding (auditBinding & #observedTargets .~ [auditTargetId, counterTargetId])
+                ]
+            }
+        emptyDiagnostics = diagnosticsFor emptyObserved
+        splitDiagnostics = diagnosticsFor splitOwners
+    emptyDiagnostics
+      `shouldSatisfy` hasDiagnostic EmptyQueryObservedTargets (queryModelIdText counterQueryId)
+    map (^. #diagnosticCode) splitDiagnostics
+      `shouldSatisfy` (== [QueryModelWithMultipleSuppliers])
+    map claimSiteText (splitDiagnostics ^?! ix 0 . #diagnosticSites)
+      `shouldBe` ["catalog:async", "catalog:audit-query", "catalog:inline"]
+
+    let missingOwnerDiagnostics = diagnosticsFor (catalogWithDefinitions (inlineDefinition :| []))
+    missingOwnerDiagnostics
+      `shouldSatisfy` hasDiagnostic TargetWithoutOwner (targetIdText auditTargetId)
+    missingOwnerDiagnostics
+      `shouldSatisfy` all ((/= QueryModelWithoutSupplier) . (^. #diagnosticCode))
+
+  it "keeps supply derived from canonical owner and observed-target facts" $ do
+    shared <- expectValid sharedOwnerCatalog
+    split <- expectValid validCatalog
+    observedSubset <-
+      expectValid
+        sharedOwnerCatalog
+          { queryModels =
+              [ SomeQueryModelBinding counterBinding,
+                SomeQueryModelBinding auditBinding
+              ]
+          }
+    catalogFingerprint shared `shouldNotBe` catalogFingerprint split
+    groupSliceFingerprint shared mainGroupId
+      `shouldNotBe` groupSliceFingerprint split mainGroupId
+    catalogFingerprint shared `shouldNotBe` catalogFingerprint observedSubset
+    groupSliceFingerprint shared mainGroupId
+      `shouldNotBe` groupSliceFingerprint observedSubset mainGroupId
+    let beforeAccessor = catalogFingerprint shared
+    resolvedQuerySupplies shared `shouldSatisfy` (not . null)
+    catalogFingerprint shared `shouldBe` beforeAccessor
+
   it "fingerprints and renders checkpoint policy without changing subscription identity" $ do
     fromBeginning <- expectValid validCatalog
     failIfMissing <- expectValid (catalogWithCheckpointPolicy FailIfMissing PreserveAndReconcile)
@@ -292,6 +380,38 @@ validCatalog =
           SomeQueryModelBinding auditBinding
         ],
       projectionSets = [SomeProjectionSet validProjectionSet]
+    }
+
+sharedOwnerCatalog :: ProjectionCatalog
+sharedOwnerCatalog = sharedOwnerCatalogWithOrders (counterTargetId :| [auditTargetId]) [auditTargetId, counterTargetId]
+
+reorderedSharedOwnerCatalog :: ProjectionCatalog
+reorderedSharedOwnerCatalog =
+  reverseCatalog
+    (sharedOwnerCatalogWithOrders (auditTargetId :| [counterTargetId]) [counterTargetId, auditTargetId])
+
+sharedOwnerCatalogWithOrders :: NonEmpty TargetId -> [TargetId] -> ProjectionCatalog
+sharedOwnerCatalogWithOrders owned observed =
+  validCatalog
+    { queryModels =
+        [ SomeQueryModelBinding counterBinding,
+          SomeQueryModelBinding (auditBinding & #observedTargets .~ observed)
+        ],
+      projectionSets =
+        [ SomeProjectionSet
+            validProjectionSet
+              { projectionDefinitions =
+                  inlineDefinition
+                    { projectionId = sharedProjectionId,
+                      ownedTargets = owned,
+                      handlers =
+                        InlineHandler catalogInlineProjection (site "catalog:inline-handler")
+                          :| [AsyncHandler catalogAsyncProjection asyncSubscriptionId asyncDedupId (site "catalog:async-handler")],
+                      claimSite = site "catalog:shared-owner"
+                    }
+                    :| []
+              }
+        ]
     }
 
 -- | A catalog extension that adds one completely independent read-side slice.
@@ -655,10 +775,11 @@ readModelDefinition registryName tableName =
       query = \_ -> pure ()
     }
 
-inlineProjectionId, asyncProjectionId, additiveProjectionId :: ProjectionId
+inlineProjectionId, asyncProjectionId, additiveProjectionId, sharedProjectionId :: ProjectionId
 inlineProjectionId = projection "counter-owner"
 asyncProjectionId = projection "audit-owner"
 additiveProjectionId = projection "catalog-additive-owner"
+sharedProjectionId = projection "shared-owner"
 
 counterTargetId, auditTargetId, unknownTargetId, additiveTargetId :: TargetId
 counterTargetId = target "counter-target"
