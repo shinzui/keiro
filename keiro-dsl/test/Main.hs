@@ -70,7 +70,7 @@ import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planServiceScaffold, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.ServiceHarness
@@ -3163,9 +3163,16 @@ main = hspec $ do
       contracts `shouldSatisfy` all (not . T.isInfixOf "requirementLine")
       contracts `shouldSatisfy` all (not . T.isInfixOf "spec line")
       witnesses `shouldSatisfy` all (not . T.isInfixOf "spec line")
-      case planServiceScaffold ctx service of
-        Left refusals -> refusals `shouldSatisfy` any (\case BehaviorSourceRefusal failures -> all ((== BehaviorSource.BehaviorSourceAnchorInexact) . BehaviorSource.failureCode) failures; _ -> False)
-        Right _ -> expectationFailure "semantic-only planner fabricated exact behavior columns"
+      compatibility <-
+        either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure $
+          compatibilitySemanticSourceIndex "<semantic-only>" (checkedSpec service)
+      requirements <-
+        either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure $
+          Behavior.deriveBehaviorRequirements (checkedSpec service)
+      case BehaviorSource.planBehaviorSourceMap requirements compatibility of
+        Left failures ->
+          failures `shouldSatisfy` all ((== BehaviorSource.BehaviorSourceAnchorInexact) . BehaviorSource.failureCode)
+        Right _ -> expectationFailure "compatibility line-only provenance fabricated exact behavior columns"
 
     it "omits the context source map when no behavior contract can import it" $ do
       spec <- parseInlineSpec "<no-behavior>" "language keiro-dsl 4\ncontext no-behavior\n"

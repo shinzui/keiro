@@ -59,10 +59,11 @@ This section must always reflect the actual current state of the work.
       `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`, relocated their still-true Haddock prose to
       the indexed variants, tightened the now-partial imports, and verified that
       `cabal build keiro-dsl` compiles cleanly.
-- [ ] Milestone 2: remove the one remaining test reference (`keiro-dsl/test/Main.hs`
-      import at line 73 and the guard assertion at lines 3069–3071), replacing the guard
-      with a direct `planBehaviorSourceMap`-over-compatibility-index assertion;
-      `cabal test keiro-dsl-test` and `cabal test keiro-dsl:tests` pass.
+- [x] (2026-08-12T03:00:07Z) Milestone 2: removed the one remaining test reference from
+      `keiro-dsl/test/Main.hs`, replaced the guard with a direct
+      `planBehaviorSourceMap`-over-compatibility-index assertion, verified that no live Haskell
+      reference remains, and passed both `cabal test keiro-dsl-test` and
+      `cabal test keiro-dsl:tests`.
 - [ ] Milestone 3: add the Breaking Changes migration bullet to `keiro-dsl/CHANGELOG.md`
       (Unreleased), amend `docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md`
       to record indexed-only planning as API policy, update the MasterPlan 36 registry row
