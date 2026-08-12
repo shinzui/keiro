@@ -1,7 +1,7 @@
 ---
 title: "Registered read models and fenced projections"
 type: Capability
-description: "Register read models, fold events into them with inline or async projections, take category-scoped strong reads, and rebuild a read model behind an atomic writer fence."
+description: "Register read models, fold events into them with inline or async projections, choose explicit immediate or cursor-waiting query freshness, and rebuild behind an atomic writer fence."
 generated:
   by: claude-code/sonnet-4.5
   at: "2026-08-08T00:00:00Z"
@@ -22,7 +22,7 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
-    proves: "The 'Keiro.ReadModel', 'Keiro.Connection projection schema', and 'catalog-fenced inline projections' describe blocks exercise registration, inline and async projection folds, category-scoped strong reads, and atomically fenced rebuilds."
+    proves: "The 'Keiro.ReadModel', 'Keiro.Connection projection schema', and 'catalog-fenced inline projections' describe blocks exercise registration, inline and async projection folds, immediate/category-head/position query policies, and atomically fenced rebuilds."
   - kind: guide
     resource: docs/user/read-models-and-projections.md
     proves: "How to register a read model, choose inline versus async projection, and rebuild safely."
@@ -36,9 +36,11 @@ evidence:
 A read model is an explicitly registered query surface backed by a Postgres
 table. A projection folds a category's events into it — *inline*, committed in
 the same transaction as the command ([CAP-3](transactional-command-cycle.md)) so
-the read model is immediately consistent, or *async*, applied by a subscription
-worker with its own checkpoint. Strong reads are scoped to a category so a
-consumer can read its own writes deterministically. A rebuild replays history
+the target is updated before the command returns, or *async*, applied by a
+subscription worker with its own checkpoint. Query freshness is independent:
+`Immediate` runs without polling, `WaitForHead` waits for a compatible durable
+cursor to reach one captured visible head, and caller-selected `WaitForPosition`
+can target the command's returned position. A rebuild replays history
 into the read model behind an atomic writer fence: readers keep seeing the old
 contents until the rebuild is promoted, and concurrent writers cannot interleave
 into a half-rebuilt table.
@@ -47,11 +49,25 @@ into a half-rebuilt table.
 
 ```haskell
 import Keiro.ReadModel
-import Keiro.Projection
 
-registerReadModel orderSummary
-projectInline orderSummary fromOrderEvent   -- or projectAsync … with a checkpoint
+orderSummary =
+  immediateReadModel $
+    ReadModelBlueprint
+      { cursorAuthority = NoQueryCursor
+      , ...
+      }
+
+registerReadModel
+  (orderSummary ^. #name)
+  (orderSummary ^. #version)
+  (orderSummary ^. #shapeHash)
 ```
+
+An async model uses `DurableQueryCursor subscription`. It may still choose
+`immediateReadModel` and explicitly tolerate lag, or use `headWaitingReadModel`
+when the cursor's event source can reach the requested whole-store/category
+head. Per-call read-your-write uses `runQueryWithFreshness` and
+`WaitForPosition` with a concrete position.
 
 ## Limits
 

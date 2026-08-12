@@ -153,3 +153,6 @@ abandon it before upgrading, then preview and adopt the live group metadata.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
   implements and verifies the v3/v2 freshness, cursor, and owned-target normalization
   revision.
+- [ExecPlan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
+  populates those normalized freshness/cursor facts from checked Language 5 source and proves
+  delivery and freshness evolution remain distinct.

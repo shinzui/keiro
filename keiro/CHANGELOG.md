@@ -11,7 +11,9 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - `QueryFreshness`, `HeadScope`, `QueryCursorAuthority`, `ReadModelBlueprint`, truthful
   read-model builders, and `runQueryWithFreshness`. Immediate reads need no cursor;
   captured-head and caller-position waits require one durable cursor and fail with typed
-  missing-cursor or missing-position errors before polling.
+  missing-cursor or missing-position errors before polling. Candidate Language 5 generated
+  code now constructs only through `immediateReadModel` or `headWaitingReadModel`, deriving
+  cursor authority from its validated projection owner.
 - Catalog query inventory now records normalized freshness and the optional cursor derived
   from the validated projection owner. Validation rejects waiting queries with zero or
   several compatible durable cursors, and canonical identity normalizes set-valued owned

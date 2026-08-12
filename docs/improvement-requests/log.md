@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Implemented**: MasterPlan 38 completes IR-23 and IR-24. Candidate Language 5 now derives
+query supply from target ownership, puts `delivery` only on projection owners and `freshness`
+only on query models, generates truthful cursor-aware runtime builders, and distinguishes the
+two policies in diagnostics, identity, diff, ledger, workspace, and compiled conformance facts.
+Languages 1–4 remain frozen; the runtime compatibility names remain deprecated through 0.12.
 * **Planning**: IR-23 and IR-24 are release-gating work under
 [MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md).
 [Plan 243](../plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md)

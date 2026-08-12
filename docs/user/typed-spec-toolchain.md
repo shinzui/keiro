@@ -35,7 +35,7 @@ declarations and any combination of these node families:
 | `publisher` | Outbox ordering, retry, and stable identity policy. |
 | `workqueue` | PGMQ payload, ordering, provisioning, retry, and DLQ policy. |
 | `dispatch` | Read-model-driven fan-out and deduplicated queue enqueueing. |
-| `readmodel` | Registered SQL read-model identity, shape, feed, and consistency. |
+| `readmodel` | Registered SQL query identity and shape; released languages retain feed/consistency, while candidate Language 5 owns query freshness only. |
 | `workflow` | Durable named steps, waits, sleeps, children, patches, and rotation. |
 | `operation` | Named command, query, signal, or workflow-run entry point. |
 
@@ -923,11 +923,15 @@ keys are exact event names. They must be unique and resolve to events in the
 aggregate. The map is total by default; use `status-map partial { ... }` when
 some events intentionally do not change projected status.
 
-Prefer declaring a matching `readmodel` node. It then owns schema identity,
-feed, consistency, and rebuild metadata. An optional
+In Languages 1–4, prefer declaring a matching `readmodel` node. It then owns
+schema identity, feed, consistency, and rebuild metadata. An optional
 `consistency=Strong|Eventual` on `projection` must agree with the read model.
 A projection without a read-model node remains usable but produces a warning
-and has no registered schema or rebuild authority.
+and has no registered schema or rebuild authority. In Language 5 this is a
+standalone implicit-inline compatibility form: the referenced read model owns
+`freshness`, only `immediate` is reachable, and a projection-level
+`consistency` clause is rejected. Catalog-managed queries should use a
+top-level projection owner instead.
 
 ### Snapshots
 
@@ -1411,6 +1415,11 @@ with the declared wire key and read-model check.
 
 ## Read models
 
+The first form below is the published Languages 1–4 compatibility grammar. It
+keeps physical coordinates, delivery feed, and the historical consistency
+vocabulary on the read model. Candidate Language 5 uses the catalog form later
+in this section and does not accept those delivery/consistency fields.
+
 ```text
 readmodel transfer_decisions {
   table = "transfer_decisions"
@@ -1439,7 +1448,7 @@ readmodel transfer_decisions {
 the table and ordered column surface. If it drifts, `check` prints the expected
 value. Update the hash and bump `version` when the real table shape changes.
 
-Consistency is `Strong` or `Eventual`. A strong model requires
+In Languages 1–4, consistency is `Strong` or `Eventual`. A strong model requires
 `feed = subscription`; it cannot be inline-only because a strong read waits for
 a subscription cursor. `scope` is legal only for a strong model and is either
 `entire-log` or `category "name"`; omitted strong scope defaults to the entire
@@ -1512,7 +1521,7 @@ rebuild-group reporting {
 
 projection-owner order_summary_writer {
   source = aggregate Orders
-  feed = subscription
+  delivery = subscription
   group = reporting
   targets = [ order_summary order_totals ]
   order = 10
@@ -1528,8 +1537,7 @@ readmodel orderSummary {
   }
   version = 1
   shape = "fnv1a:784e511a19f74c58"
-  consistency = Eventual
-  feed = subscription
+  freshness = immediate
   group = reporting
   targets = [ order_summary ]
 }
@@ -1544,12 +1552,12 @@ and their deterministic preparation order.
 Each `projection-owner` selects exactly one typed source: `aggregate Name`,
 `category "name"`, or `all`. Split independent sources into separate owners.
 It owns at least one target in one group and has a globally unique numeric
-handler order. Subscription feeds also require `subscription` and `dedup`
-identities and a query model that observes one of their targets. Inline feeds
+handler order. Subscription delivery also requires `subscription` and `dedup`
+identities and a query model that observes one of its targets. Inline delivery
 must omit those identities. A subscription must also choose exactly one
 `checkpoint-on-missing` policy: `from-beginning` replays retained history,
 `from-current-head` starts with future events when no row exists, and `fail`
-refuses startup until an operator provisions the checkpoint. Inline feeds must
+refuses startup until an operator provisions the checkpoint. Inline owners must
 omit this policy because they have no durable checkpoint. A replayable owner of
 a `reset = clear` target cannot choose `from-current-head`, because clearing the
 target and skipping retained history cannot reconstruct it. `replay =
@@ -1567,9 +1575,35 @@ language 5 reports that as conflicting legacy ownership. A multi-target query's
 `backing = <target>` still selects one physical SQL table and does not stand in for the
 complete supplier check.
 
+Projection delivery and query freshness are separate Language 5 axes:
+
+```text
+delivery = inline
+delivery = subscription
+
+freshness = immediate
+freshness = wait-for-head entire-log
+freshness = wait-for-head category "orders"
+```
+
+`immediate` performs no cursor wait and is valid for either owner delivery; an
+immediate query supplied by a subscription owner may observe lag. `wait-for-head`
+requires one compatible durable subscription cursor derived from the supplying
+owner. Entire-log waits require an all-stream source. Category waits accept an
+all-stream source or the same category. Inline/implicit owners, missing cursors,
+several compatible cursors, or unreachable scopes fail checking as
+`CatalogQueryWaitWithoutCompatibleCursor` or
+`CatalogQueryWaitWithAmbiguousCursor`. A rebuild group mixing an all-stream owner
+with category-scoped owners fails as `CatalogAmbiguousSourceOrdering`, matching
+runtime catalog validation. Static Language 5 has no position-wait form; callers
+use `runQueryWithFreshness (WaitForPosition options)` with a concrete append
+position.
+
 A catalog-bound `readmodel` is a typed query contract. It names its group and
-observed targets, and deliberately omits `schema` and `table`; those belong to
-the target declarations. The generated context-level
+observed targets, declares `freshness = immediate | wait-for-head ...`, and
+deliberately omits `schema`, `table`, `feed`, `subscription`, `consistency`, and
+`scope`. Physical coordinates belong to target declarations; delivery and cursor
+identity derive from the resolved owner. The generated context-level
 `Generated.<Context>.ProjectionCatalog` validates one runtime catalog, exports
 typed owner/source inline views, `projectionCatalogQuerySupplies`,
 registration/inventory functions, and group-scoped rebuild starters.

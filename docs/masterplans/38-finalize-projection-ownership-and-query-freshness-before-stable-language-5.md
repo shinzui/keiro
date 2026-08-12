@@ -93,7 +93,7 @@ the canonical project URI `mori://tan/notification-render-service`.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | Complete |
 | 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | Complete |
-| 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | In Progress |
+| 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -180,7 +180,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print (2026-08-12T21:51:03Z)
 - [x] EP-3 (245) M2: capability-based validation and generated runtime configuration (2026-08-12T21:51:03Z)
 - [x] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts (2026-08-12T22:03:26Z)
-- [ ] EP-3 (245) M4: Languages 1-4 byte-compatibility proof, migration/reference docs, ADRs, changelog, and full verification
+- [x] EP-3 (245) M4: Languages 1-4 byte-compatibility proof, migration/reference docs, ADRs, changelog, and full verification (2026-08-12T22:19:52Z)
 
 
 ## Surprises & Discoveries
@@ -248,6 +248,11 @@ interactions between child plans. Provide concise evidence.
   resolved cursor, and delivery fact drift. An attempted mixed all-stream/category group
   exposed a DSL/runtime validation mismatch; `CatalogAmbiguousSourceOrdering` now rejects
   it before generation with deterministic owner evidence.
+- EP-3 M4 (2026-08-12): the full repository gate passed 508 runtime examples, all 43
+  DSL suites including 701 core examples, every compiled candidate matrix row, strict
+  documentation and source-policy checks, and the 39-entry corpus gate with zero drift.
+  Research and request-time old terminology is now explicitly historical; current guides,
+  ADRs, authoring material, capabilities, and changelogs use delivery/freshness terms.
 
 
 ## Decision Log
@@ -318,4 +323,17 @@ and the external Plan-238 visible-tail integration proof are all in place. The f
 repository rerun passed 508 runtime examples, the full 43-suite DSL wave, strict ADR and
 bundle validation, and the 39-entry corpus gate. ADRs 0026, 0032, and 0033 already contain
 the durable decisions distilled from the child plan, so its evidence-only closeout needed
-no new ADR. EP-3 is now dependency-ready and remains Not Started.
+no new ADR.
+
+EP-3 is complete. Candidate Language 5 now puts event application on one projection owner
+as `delivery`, puts waiting policy on each query as `freshness`, derives supply and cursor
+authority from target ownership, and lowers only to the truthful runtime façade. Diffs,
+ledgers, workspaces, harnesses, and canonical identity carry the policies separately, while
+the compiled capability matrix proves every positive row and deterministic refusals cover
+unreachable or ambiguous waits. Languages 1–4 remained byte-stable across the full corpus.
+
+MasterPlan 38 is complete. IR-23 and IR-24 are marked implemented; all three child plans
+and the external reachable-head integration gate are closed. The final `just verify` run
+passed the runtime, PGMQ, operations, 43-suite DSL, Jitsurei, migrations, generated-name,
+extension, documentation-bundle, and 39-entry conformance-corpus gates. No scoped work or
+known release blocker remains in this initiative.

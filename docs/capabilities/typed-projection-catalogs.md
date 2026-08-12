@@ -33,7 +33,7 @@ evidence:
     proves: "The pure catalog type projects missing-checkpoint policy into registration and inventory with stable rendering, ordering, and fingerprint input beside independent target-reset and replay policies."
   - kind: test
     resource: keiro-dsl/test/Main.hs
-    proves: "Candidate Language 5 requires one closed checkpoint-on-missing policy per subscription owner, rejects inline or replay-unsafe placement, round-trips workspace facts, generates the runtime policy, and classifies a change as build-breaking and stop-the-world without re-keying persisted subscription identity."
+    proves: "Candidate Language 5 separates owner delivery from query freshness, derives cursor authority from target ownership, requires one closed checkpoint-on-missing policy per subscription owner, rejects invalid waits or replay-unsafe placement, and classifies delivery and freshness changes independently."
   - kind: test
     resource: keiro-dsl/test/conformance-projection-catalog/Main.hs
     proves: "The generated candidate-Language-5 catalog compiles and exposes FromCurrentHead unchanged through runtime inventory; companion conformance catalogs compile FromBeginning and FailIfMissing."
@@ -50,7 +50,7 @@ entire group atomically — clearing every declared clear-before-replay table wi
 one foreign-key-compatible `TRUNCATE`, preserving reconcile targets, and deriving
 async dedup/checkpoint resets from the catalog — and the catalog history runner
 rebuilds by k-way merging category history in global order, resuming an exact
-`keiro/projection-replay/v1` contract and promoting only after complete source
+`keiro/projection-replay/v3` contract and promoting only after complete source
 exhaustion and verification.
 
 Each async declaration makes absent-row behavior explicit as `FromBeginning`,
@@ -67,6 +67,13 @@ forbids it on inline owners. Generated catalogs lower the choice directly to
 Kiroku. Structural diff reports a policy change as a breaking generated-catalog
 change with stop-the-world coordination while explicitly preserving the
 persisted subscription/member identity and every existing checkpoint row.
+
+The same source puts `delivery = inline | subscription` only on the projection
+owner and `freshness = immediate | wait-for-head ...` only on each query model.
+Immediate queries require no cursor and may explicitly tolerate subscription
+lag. Head waits derive one compatible durable cursor from the validated owner;
+inline owners, unreachable scopes, ambiguity, and mixed all-stream/category
+groups fail before generated code can initialize a runtime catalog.
 
 This is recorded as its own capability rather than an advance of
 [CAP-5](read-models-and-projections.md)'s `since`, because it arrived in a later

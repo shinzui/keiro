@@ -50,7 +50,15 @@ edit a `-- @generated` module.
    acknowledging it. If you handle duplicates by hand, call that function, fold `True` into
    the duplicate result, and surface `False` as the original failure; never treat a bare
    `DuplicateEvent` as success because event-id uniqueness is global.
-6. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
+6. **Projection delivery and query freshness have one owner each.** In Language 5, put
+   `delivery = inline | subscription` on the catalog `projection-owner` and
+   `freshness = immediate | wait-for-head ...` on the `readmodel`. Never repeat `feed`,
+   `subscription`, `consistency`, or `scope` on a catalog-bound Language 5 read model;
+   the checked target-owner relation derives any durable cursor. Use `immediate` when no
+   wait is required, including an explicit tolerance for async lag. A head wait requires
+   a compatible subscription source; caller-specific read-your-write uses the runtime
+   position override rather than static DSL.
+7. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
    differently but correctly and both pass; one wrong guard/mapping/disposition fails a
    specific named harness test. Run it. The harness also proves **replay-safety**: the
    generated `EventStream` module now emits two bindings — a raw `xEventStreamDef ::

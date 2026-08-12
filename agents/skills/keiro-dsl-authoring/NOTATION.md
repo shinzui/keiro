@@ -460,6 +460,8 @@ readmodel/field references resolve.
 
 ## readmodel (EP-107)
 
+Languages 1–4 retain this compatibility form:
+
 ```text
 readmodel transfer_decisions {
   table = "transfer_decisions"
@@ -505,6 +507,55 @@ Maps to generated `ReadModelTable`, `ReadModel`, and facts-harness modules plus 
 `ReadModelHoles` module for inline apply, async apply, and query behavior. Checked: captured
 shape, column types, feed/consistency/scope combinations, inline projection ownership, and
 query/dispatch references agree.
+
+Candidate Language 5 separates the writer from the query policy. A catalog projection
+owner declares delivery, and a catalog-bound read model declares freshness without its own
+feed, subscription, consistency, schema, or table:
+
+```text
+target transfer_decisions_table {
+  schema = "hospital_capacity"
+  table = "transfer_decisions"
+  reset = clear
+}
+
+rebuild-group transfer_reporting {
+  targets = [ transfer_decisions_table ]
+  order = [ transfer_decisions_table ]
+}
+
+projection-owner transfer_decisions_writer {
+  source = category "reservation"
+  delivery = subscription
+  group = transfer_reporting
+  targets = [ transfer_decisions_table ]
+  order = 10
+  subscription = "hospital-capacity-transfer-decisions-sub"
+  dedup = "hospital-capacity-transfer-decisions-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel transfer_decisions {
+  columns {
+    reservation_id text required
+    hospital_id text required
+    status text required
+    decided_at timestamptz
+  }
+  version = 1
+  shape = "fnv1a:3717f6d9e3c44bd6"
+  freshness = wait-for-head category "reservation"
+  group = transfer_reporting
+  targets = [ transfer_decisions_table ]
+}
+```
+
+Use `freshness = immediate` to run without polling; this is valid for inline or
+subscription delivery, and the subscription form may observe lag. A head wait requires one
+compatible durable cursor derived from the owner: entire-log requires `source = all`, while
+a category wait accepts `all` or the same category. Static Language 5 does not encode a
+caller position; use the runtime `WaitForPosition` override for read-your-write.
 
 ## workflow / operation (EP-6)
 

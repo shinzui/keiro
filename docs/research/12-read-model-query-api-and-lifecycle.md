@@ -20,6 +20,15 @@ This document fixes how applications *query* state derived from events: the type
 > `docs/user/read-models-and-projections.md` and the
 > `Keiro.ReadModel.Rebuild` module Haddock for the current contract.
 
+> **Terminology correction (2026-08-12).** The `Strong`/`Eventual` taxonomy and
+> its coupling to inline/async lifecycle below are preserved as research history,
+> not current authoring guidance. The 0.12 runtime separates projection delivery
+> from query freshness as `Immediate`, `WaitForHead`, and `WaitForPosition` with
+> optional durable cursor authority. Candidate DSL Language 5 likewise puts
+> `delivery` on a projection owner and `freshness` on a query model. Languages
+> 1–4 and deprecated runtime names retain their historical behavior only for the
+> compatibility window. See ADR 0026 and the current user guide.
+
 This is a research document produced by ExecPlan EP-8 of the research-foundation MasterPlan (`docs/masterplans/1-keiro-research-foundation.md`). The accompanying spike at `spikes/read-model/` originally validated the typed API, all three consistency modes, and the position-wait failure mode.
 
 > **Retirement note (2026-05-19).** The spike at `spikes/read-model/` has been removed. Its validation has since been absorbed into the live keiro library — the typed wrapper now lives at `src/Keiro/ReadModel.hs`, the lifecycle metadata table at `src/Keiro/ReadModel/Schema.hs`, and the consistency-mode behaviour is exercised by the `Keiro.ReadModel` group in `test/Main.hs`. References to `spikes/read-model/src/Spike/Command.hs` elsewhere in the research corpus (in the 2026-05-10 corrections notes of docs 06, 08, and 11) point at code that no longer exists — those passages are preserved as historical record of the first in-tree consumer of `runTransactionAppending`, not as live citations.

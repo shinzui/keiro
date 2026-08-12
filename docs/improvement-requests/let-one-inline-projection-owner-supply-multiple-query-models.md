@@ -7,7 +7,7 @@ description: >-
   models without one legacy aggregate projection clause per model.
 timestamp: 2026-08-12T02:15:20Z
 requestId: IR-23
-status: proposed
+status: completed
 plan: docs/masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md
 origin: mori://tan/notification-render-service
 reviews:
@@ -32,12 +32,18 @@ reviews:
 
 ## Status
 
-Proposed and planned by
-[MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md),
-principally
-[Plan 243](../plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md).
-Raised by `mori://tan/notification-render-service` during its pre-implementation review against
-the imminent Keiro 0.12 runtime and stable DSL Language 5. That service has one Catalog
+**Implemented.** [MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md),
+principally [Plan 243](../plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md),
+delivered order-independent target-owner resolution, one generated handler per
+owner, several separately typed queries per owner, and deterministic missing,
+split, and legacy-double-ownership diagnostics.
+
+The request-time examples below preserve the former candidate `feed` and
+`consistency` spellings to document the defect as reported. Current Language 5
+uses owner `delivery` and query `freshness`; see IR-24 and the user guide.
+This request was raised by `mori://tan/notification-render-service` during its
+pre-implementation review against the imminent Keiro 0.12 runtime and stable
+DSL Language 5. That service has one Catalog
 aggregate whose inline projection owner atomically materializes three physical targets, with
 several separately typed validation and administration queries over those targets. Existing fleet
 services use an older Keiro release and are not evidence for the new surface.

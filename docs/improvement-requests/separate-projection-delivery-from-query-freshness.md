@@ -7,7 +7,7 @@ description: >-
   immediate, head-wait, or position-wait freshness policy.
 timestamp: 2026-08-12T02:19:21Z
 requestId: IR-24
-status: proposed
+status: completed
 plan: docs/masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md
 origin: mori://tan/notification-render-service
 reviews:
@@ -32,14 +32,20 @@ reviews:
 
 ## Status
 
-Proposed and planned by
-[MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md),
-with the runtime migration in
-[Plan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
-and the candidate-language migration in
-[Plan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md).
-Raised by `mori://tan/notification-render-service` while reviewing the imminent Keiro 0.12 runtime
-and stable DSL Language 5. The review exposed a valid but misleading declaration:
+**Implemented.** [MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md)
+delivered owner-only Language 5 `delivery`, query-only `freshness`, truthful
+runtime builders and wait policies, deterministic cursor-capability validation,
+separate evolution/conformance facts, and the 0.12-to-0.13 compatibility path.
+Plans [244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
+and [245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
+record the runtime and candidate-language evidence.
+
+The request-time examples and analysis below preserve the misleading candidate
+surface that motivated the change. They are historical evidence, not current
+Language 5 authoring syntax. The request was raised by
+`mori://tan/notification-render-service` while reviewing the imminent Keiro
+0.12 runtime and stable DSL Language 5. The review exposed this then-valid
+declaration:
 
 ```keiro
 readmodel catalog_query {

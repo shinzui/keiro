@@ -884,6 +884,15 @@ functions. `Keiro.Dsl.Diff`, `Keiro.Dsl.ReplayImpact`, scaffold records, and
 workspace records expose the same stable catalog identities; consumers should
 not reconstruct a second inventory from generated module names.
 
+Language 5 projection owners declare `delivery = inline | subscription`.
+Catalog-bound read models declare `freshness = immediate`,
+`freshness = wait-for-head entire-log`, or
+`freshness = wait-for-head category "name"`; they do not declare `feed`,
+`subscription`, `consistency`, or `scope`. The checked supplier relation derives
+the optional durable cursor and rejects an unreachable or ambiguous head wait.
+`ProjectionDeliveryChanged` and `QueryFreshnessChanged` report the two evolution
+axes independently. Languages 1–4 retain their frozen historical grammar.
+
 Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --since`, and `new <kind>`. The newer opt-in workflows include
 `check --explain-bindings`, `check|diff --coverage-report`,

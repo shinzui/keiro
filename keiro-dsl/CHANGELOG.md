@@ -8,6 +8,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Candidate Language 5 separates projection delivery from query freshness.
+  Projection owners declare `delivery = inline | subscription`; catalog-bound
+  read models declare `freshness = immediate | wait-for-head ...` and derive any
+  durable cursor from their validated owner. Capability diagnostics reject
+  missing, ambiguous, or unreachable waits before generation. Generated code
+  uses the truthful read-model builders, while diffs, ledgers, workspaces,
+  harnesses, fingerprints, and compiled conformance expose delivery, freshness,
+  and cursor facts independently. Languages 1–4 retain byte-compatible
+  `feed`/`consistency`/`scope` behavior.
 - Exposes `Keiro.Dsl.ProjectionSupply` as the shared order-independent authority for
   catalog query-to-owner resolution. Candidate Language 5 accepts several query models
   supplied by one owner without legacy aggregate projection clauses, rejects split or
@@ -79,6 +88,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- The public DSL AST replaces read-model `rmConsistency`/`rmScope`/`rmFeed`/
+  `rmSubscription` with `rmFreshness` and `rmSupply`, replaces projection-owner
+  `poFeed` with `poDelivery`, and adds `ProjectionDelivery`,
+  `QueryFreshnessNode`, and `ReadModelSupply`. `DiagnosticCode` gains the
+  catalog cursor/source-ordering and delivery/freshness evolution cases.
+  Exhaustive consumers and direct record construction must migrate; released
+  source-language behavior is unchanged.
 - Removes the semantic-only planning and check entry points from
   `Keiro.Dsl.ScaffoldRun`: `planServiceScaffold`, `planServiceScaffoldWithGoldens`,
   `planServiceScaffoldWithRuntimePackage`,

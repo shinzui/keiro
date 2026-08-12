@@ -87,6 +87,14 @@ version number therefore enables neither syntax nor runtime behavior until its r
 chooses both values explicitly. The historical minimum-version query remains documentation and
 compatibility metadata only.
 
+Candidate syntax profile 4 also freezes the pre-publication projection/query split:
+projection owners use `delivery = inline | subscription`, while catalog-bound read models use
+`freshness = immediate | wait-for-head entire-log | wait-for-head category "name"`. A Language 5
+read model cannot repeat `feed`, `subscription`, `consistency`, or `scope`; any durable cursor is
+derived from its validated target owner. Static source has no caller-specific position wait.
+Languages 1–4 continue to parse and render their historical fields through an explicit legacy
+supply representation, so normalization does not rewrite or reinterpret their published bytes.
+
 **Version 2 is the first successor contract.** It registers consumer-owned
 direct ID/enum/nominal bindings, `Integer`, typed scalar roots, literals,
 required structural paths and arithmetic, plus explicit generated-or-Hole

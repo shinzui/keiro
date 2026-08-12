@@ -1,7 +1,7 @@
 # Read Models And Projections
 
 Read models are query-optimized views derived from the event log. Keiro provides
-metadata, consistency helpers, inline projection support, and at-least-once async
+metadata, query-freshness helpers, inline projection support, and at-least-once async
 projection helpers.
 
 ## Declare One Projection Catalog
@@ -155,7 +155,7 @@ rebuild-group reporting {
 
 projection-owner order_summary_writer {
   source = aggregate Orders
-  feed = subscription
+  delivery = subscription
   group = reporting
   targets = [ order_summary ]
   order = 10
@@ -169,12 +169,22 @@ readmodel orderSummary {
   columns { order_id text required }
   version = 1
   shape = "fnv1a:784e511a19f74c58"
-  consistency = Eventual
-  feed = subscription
+  freshness = immediate
   group = reporting
   targets = [ order_summary ]
 }
 ```
+
+`delivery` says when the owner applies events. `freshness` says what the query
+does before executing SQL. The example deliberately chooses an asynchronous
+subscription with `freshness = immediate`: it does not wait and may observe lag.
+Choose `freshness = wait-for-head entire-log` only for an all-stream owner, or
+`freshness = wait-for-head category "orders"` for an all-stream or matching
+category owner. A head wait resolves the one compatible durable subscription
+cursor from target ownership; inline owners and ambiguous cursor candidates are
+rejected before generation. Caller-specific read-your-write remains a Haskell
+`WaitForPosition` override with the command's returned position, not static DSL
+source.
 
 Candidate Language 5 requires exactly one `checkpoint-on-missing` choice for
 each subscription owner and forbids the field on inline owners. Use
@@ -187,6 +197,19 @@ Changing only the preamble does not invent ownership and will fail checking:
 the author or a future upgrade tool must add the target, group, owner, source,
 reset/replay policies, handler order, and query binding. Target declarations do
 not create or migrate the table.
+
+Migrate candidate sources mechanically:
+
+| Previous candidate spelling | Language 5 spelling |
+|---|---|
+| projection-owner `feed = inline | subscription` | `delivery = inline | subscription` |
+| read model `consistency = Eventual` plus either feed | `freshness = immediate`; remove read-model `feed` and `subscription` |
+| read model `consistency = Strong` plus `scope` | `freshness = wait-for-head <scope>`; derive the cursor from its owner |
+| standalone async read model | declare its target, group, and subscription projection owner |
+| inner projection `consistency = ...` | put `freshness` on its read model; the implicit inline owner supports only `immediate` |
+
+These are candidate-only rewrites. Languages 1–4 retain their published
+`feed`, `consistency`, and `scope` grammar and generated behavior.
 
 Scaffolding emits one generated
 `Generated.<Context>.ProjectionCatalog` facade. It validates the runtime

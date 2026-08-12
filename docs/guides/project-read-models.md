@@ -28,9 +28,13 @@ orderSummaryReadModel :: ReadModel OrderSummaryQuery (Maybe OrderSummary)
 stored metadata disagree. `ReadModel.schema` names the PostgreSQL schema the
 read-model *data* table lives in — see
 [Choosing Your Projection Schema](../user/read-models-and-projections.md#choosing-your-projection-schema).
-This model uses `defaultConsistency = Eventual` and `strongScope = EntireLog`:
-its inline projection commits with the command, so there is no asynchronous
-subscription cursor for a `Strong` query to wait on.
+The hand-written Jitsurei value still exercises the 0.12 source-compatibility
+record. New code expresses the same truthful contract with
+`immediateReadModel (ReadModelBlueprint { cursorAuthority = NoQueryCursor, ... })`:
+its inline projection commits with the command, and the query executes without
+polling because there is no asynchronous subscription cursor. The deprecated
+`defaultConsistency = Eventual` and `strongScope = EntireLog` fields are retained
+only so 0.11 direct-record callers compile during the 0.12 migration window.
 
 The live handler is an `InlineProjection OrderEvent`, but it is not assembled
 through an independent startup list:
@@ -78,7 +82,10 @@ resumes the same run, and verifies the live-only side effect was not replayed.
 Candidate language 5 supplies the generated counterpart in
 `keiro-dsl/test/conformance-projection-catalog`: its program imports one
 `Generated.CatalogDemo.ProjectionCatalog` facade and checks the same inventory
-dimensions instead of reconstructing lists from generated leaf modules.
+dimensions instead of reconstructing lists from generated leaf modules. Its
+projection owners declare `delivery = inline | subscription`; its query models
+declare `freshness = immediate | wait-for-head ...`. Generated code derives any
+durable cursor from the validated owner instead of accepting one on the query.
 
 Local tests initialize framework and application tables through
 [`../../jitsurei/src/Jitsurei/Database.hs`](../../jitsurei/src/Jitsurei/Database.hs):

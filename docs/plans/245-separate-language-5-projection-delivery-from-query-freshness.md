@@ -40,10 +40,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [x] M1: add version-gated semantic types and parse/pretty-print Language 5 `delivery` and `freshness`; focused parser/profile/round-trip checks pass (2026-08-12T21:51:03Z); the final Languages 1-4 corpus drift gate remains part of M4.
+- [x] M1: add version-gated semantic types and parse/pretty-print Language 5 `delivery` and `freshness`; focused parser/profile/round-trip checks passed (2026-08-12T21:51:03Z), and M4's final Languages 1-4 corpus gate later confirmed zero drift.
 - [x] M2: replace keyword-pair validation with owner/cursor capability validation and generate Plan 244's honest runtime builders; the 17-example catalog group covers every positive and DSL-representable negative row (2026-08-12T21:51:03Z).
 - [x] M3: diff, scaffold-ledger, harness, workspace, and fingerprint consumers expose separate delivery/freshness/cursor facts; all 39 corpus entries regenerated with drift confined to three candidate suites, and the four positive rows plus fact mutations compile and pass (2026-08-12T22:03:26Z).
-- [ ] M4: update references, migration/diagnostics guides, examples, changelogs, and ADRs; run full verification and close MasterPlan 38 when all gates pass.
+- [x] M4: updated references, migration/diagnostics guides, examples, research annotations, changelogs, improvement requests, and ADRs; all documentation checks and `just verify` passed, closing MasterPlan 38 (2026-08-12T22:19:52Z).
 
 
 ## Surprises & Discoveries
@@ -132,6 +132,17 @@ subscription/immediate, subscription/category-head, and subscription/entire-head
 Hand-owned conformance mutations prove freshness, resolved cursor authority, and delivery
 facts each fail independently, while the 17-example focused suite proves whitespace and
 declaration order do not alter normalized identity.
+
+M4 and this ExecPlan are complete. ADRs 0016 and 0026 now freeze the candidate syntax and
+single-owner semantics, while ADR 0032 records how checked Language 5 populates the
+already-revised canonical freshness/cursor identity. The API, typed-spec, read-model,
+capability, authoring, migration, research-history, improvement-request, and changelog
+surfaces distinguish delivery from freshness and label every retained old term as released
+compatibility or history. `just verify` passed 508 runtime examples, 58 PGMQ examples (two
+pre-existing pending), 38 operations examples, all 43 DSL suites including 701 core DSL
+examples, 23 Jitsurei examples, 28 migration examples, strict documentation/policy gates,
+and the 39-entry zero-drift conformance corpus. The plan leaves no remaining implementation
+or release-documentation gap.
 
 
 ## Context and Orientation

@@ -92,6 +92,15 @@ category head accepts an all-stream source or the same category. Zero or several
 compatible cursors are closed-world catalog errors that name the query, owner,
 capabilities, and requested wait before any polling can begin.
 
+Candidate Language 5 spells these authorities directly. A projection owner declares
+`delivery = inline | subscription`; a catalog-bound query declares
+`freshness = immediate`, `freshness = wait-for-head entire-log`, or
+`freshness = wait-for-head category "name"`. It cannot declare its own delivery or cursor.
+The former candidate `feed`/`consistency` spelling is migrated in place because Language 5 is
+unpublished. Published Languages 1–4 retain their frozen `feed`, `subscription`, `consistency`,
+and `scope` source and generated behavior. Caller-targeted read-your-write remains the runtime
+`WaitForPosition` override rather than a targetless static default.
+
 Target reset policy and handler replay policy are independent. A target is
 either cleared before replay or preserved and reconciled. A projection is
 either replayable through an explicit replay adapter or live-only with a
@@ -266,3 +275,5 @@ dedup rows are not completion evidence.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
   implements truthful query freshness, derived cursor authority, and the 0.12
   compatibility window.
+- [ExecPlan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
+  implements the owner-only delivery and query-only freshness Language 5 surface.

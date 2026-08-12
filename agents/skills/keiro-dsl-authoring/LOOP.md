@@ -124,10 +124,16 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   `WqGroupKeyWithoutFifo`, `WqGroupKeyUnresolved`, `WqPartitionSpecEmpty`,
   `DispatchEnqueueUnresolved`, `DispatchDedupQueueUnresolved`, and
   `DispatchDedupFieldUnresolved`. `WqUnloggedDurability` is a warning.
-- Read models: `RmShapeHashDrift`, `RmStrongInlineOnly`, `RmScopeWithoutStrong`,
-  `RmUnknownColumnType`, `RmInlineFeedUnreferenced`, `RmConsistencyConflict`,
-  `QueryUnresolvedReadModel`, `QueryConsistencyInvalid`, `DispatchReadModelUnresolved`, and
-  `DispatchReadModelFieldUnknown`; `RmProjectionWithoutNode` is a warning.
+- Read models: `RmShapeHashDrift`, `RmUnknownColumnType`,
+  `CatalogReadModelSupplierMissing`, `CatalogReadModelMultipleSuppliers`,
+  `CatalogReadModelLegacyProjectionConflict`,
+  `CatalogQueryWaitWithoutCompatibleCursor`,
+  `CatalogQueryWaitWithAmbiguousCursor`, and
+  `CatalogAmbiguousSourceOrdering`, plus `QueryUnresolvedReadModel`,
+  `QueryConsistencyInvalid`, `DispatchReadModelUnresolved`, and
+  `DispatchReadModelFieldUnknown`. Released-language compatibility checks retain
+  `RmStrongInlineOnly`, `RmScopeWithoutStrong`, `RmInlineFeedUnreferenced`, and
+  `RmConsistencyConflict`; `RmProjectionWithoutNode` is a warning.
 - Workflow and operations: `WorkflowDuplicateLabel`, `WorkflowSleepDelayUnresolved`,
   `WorkflowIdFieldUnresolved`, `AwaitSignalMismatch`, `AwaitSignalValueMismatch`,
   `RunWorkflowUnresolved`, `OperationUnresolvedRef`, `WorkflowPatchDuplicate`,
