@@ -87,7 +87,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Complete |
-| 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | In Progress |
+| 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Complete |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -172,10 +172,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first (2026-08-12T19:29:46Z)
 - [x] EP-4 (240) M3: awakeable adoption bridge (2026-08-12T19:32:44Z)
 - [x] EP-4 (240) M4: ADR 0024 window contract, CHANGELOG note, comment/window unification, and full Haskell gate (2026-08-12T19:43:22Z)
-- [ ] EP-5 (241): implementation started; complete child plan read before changing CLI parsing (2026-08-12T19:44:48Z)
+- [x] EP-5 (241): implementation complete (2026-08-12T19:52:30Z)
 - [x] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix (2026-08-12T19:46:50Z)
 - [x] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies) (2026-08-12T19:49:52Z)
-- [ ] EP-5 (241) M3: executable-level no-DB-contact rejection test and closeout
+- [x] EP-5 (241) M3: executable-level no-DB-contact rejection test, ADR 0028 distillation, and full 38-example keiro-ops suite (2026-08-12T19:52:30Z)
 - [ ] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged
 - [ ] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper, benign-duplicate tests green
 - [ ] EP-6 (242) M3 (after EP-1): rebuild paging reads each event once (interpose-counted), `rebuild` bench group added
@@ -295,17 +295,26 @@ EP-4 is complete. The frozen pre-UTF-8 encoder is independently pinned, all six 
 preflights and generation-0 awakeable adoption consult historical identity, and ADR 0024
 defines the unified operator-attested removal window; full Haskell verification passed.
 
-The MasterPlan remains in progress: EP-5 and EP-6 are not started. EP-1 removes
+EP-5 is complete. Destructive duration arguments are rejected before database access
+when non-finite, negative, or outside the PostgreSQL timestamp wire range, and every
+bounded integral argument is protected from machine-integer wraparound. Pure parser
+coverage and an executable-level unreachable-database proof pass, the full 38-example
+`keiro-ops-test` suite is green, and ADR 0028 records the durable safety boundary.
+
+The MasterPlan remains in progress: EP-6 is not started. EP-1 removes
 the release-critical catalog lockout and fingerprint-forgery defects and clears
 EP-6's soft dependency on its rebuild-runner identity changes; EP-2 removes the
 release-critical unreachable consistency target and permanent false-distance defect;
 EP-3 removes the workflow-stranding race and non-terminating drain contract; EP-4 removes
-the deploy-boundary double-dispatch and orphaned-awakeable defects for non-ASCII identity.
+the deploy-boundary double-dispatch and orphaned-awakeable defects for non-ASCII identity;
+EP-5 removes destructive numeric argument corruption before it can reach an operational
+preview or mutation.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
 and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
 reachable consistency targets in ADR 0033, amended ADR 0028, and adopted Kiroku 0.6's
 public visible-head API; completed EP-3 and amended ADRs 0023 and 0025 with wake
 arbitration and bounded-drain progress; completed EP-4 and amended ADR 0024 with the
-golden-pinned compatibility bridge and its operator-attested removal criteria; left EP-5
-and EP-6 eligible for subsequent execution.
+golden-pinned compatibility bridge and its operator-attested removal criteria; completed
+EP-5 with total duration and bounded integer parsing, an executable no-database-contact
+proof, and the ADR 0028 amendment; left EP-6 eligible for subsequent execution.

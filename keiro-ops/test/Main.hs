@@ -374,6 +374,25 @@ spec fixture = do
       renderHuman result
         `shouldBe` "name    status \n------  -------\nshort   running\nlonger  failed \n"
 
+  describe "keiro-ops numeric argument rejection" do
+    it "refuses a NaN duration before any preview or database contact" do
+      executable <- keiroOpsExecutable
+      (exit, _, errText) <-
+        readProcessWithExitCode
+          executable
+          [ "--database-url",
+            "postgresql://nobody@127.0.0.1:1/unreachable",
+            "outbox",
+            "gc-sent",
+            "--older-than",
+            "NaN"
+          ]
+          ""
+      exit `shouldBe` ExitFailure 2
+      errText `shouldSatisfy` Text.isInfixOf "invalid duration \"NaN\"" . Text.pack
+      errText `shouldSatisfy` not . Text.isInfixOf "preview only" . Text.pack
+      errText `shouldSatisfy` not . Text.isInfixOf "schema verification" . Text.pack
+
   describe "keiro-ops executable" $ around (withFreshDatabase fixture) do
     it "emits parseable JSON and refuses a mutation after schema drift" $ \connectionString -> do
       executable <- keiroOpsExecutable

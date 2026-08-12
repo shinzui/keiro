@@ -65,10 +65,12 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 2: pure command-tree rejection specs (via `execParserPure`) pass for
       every duration flag and the newly guarded integer flags; the full suite passes
       with 37 examples and zero failures (2026-08-12T19:49:52Z).
-- [ ] Milestone 3: executable-level test proves `outbox gc-sent --older-than NaN`
-      fails with the documented message and exit code 2 before any database contact.
-- [ ] Milestone 3: `cabal test keiro-ops-test` fully green; MasterPlan 37 progress row
-      for EP-5 updated; ADR distillation pass done (ADR 0028 consequence added).
+- [x] Milestone 3: executable-level test proves `outbox gc-sent --older-than NaN`
+      fails with the documented message and exit code 2 before any database contact
+      (2026-08-12T19:52:30Z).
+- [x] Milestone 3: `cabal test keiro-ops-test` fully green with 38 examples and zero
+      failures; MasterPlan 37 progress row updated; ADR distillation pass done (ADR
+      0028 consequence added and `just adr-validate` green) (2026-08-12T19:52:30Z).
 
 
 ## Surprises & Discoveries
@@ -124,6 +126,10 @@ number. Milestone 2 closes this.
   `NominalDiffTime`, and `1e13` was admitted unchanged; the preserved ordinary and
   existing malformed-input rows were already green. This confirmed the guard was the
   only missing boundary before applying it to the scaled product.
+- Milestone 3 process proof (2026-08-12): with an unreachable port-1 database URL,
+  `outbox gc-sent --older-than NaN` exited 2 with the frozen parse error and without
+  either schema-verification or preview output. Argument parsing therefore closes
+  the defect before any operational side effect or misleading preview can occur.
 
 
 ## Decision Log
@@ -185,7 +191,15 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The operational parser now rejects non-finite, negative, and PostgreSQL
+`timestamptz`-unrepresentable durations before database access. Every bounded
+integral option parses through an unbounded `Integer` first, so oversized literals
+cannot wrap into a different machine value, and the exact duplicate positive and
+non-negative readers have one implementation. Pure command-tree coverage exercises
+every duration flag and the previously unguarded integer options; an executable-level
+test against an unreachable database proves the safety boundary occurs before schema
+verification and preview. The complete `keiro-ops-test` suite passes with 38 examples
+and zero failures, and ADR 0028 records the durable parse-before-database invariant.
 
 
 ## Context and Orientation

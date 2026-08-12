@@ -104,6 +104,10 @@ preview and mutation call the supported slice-adoption operations from
   is deliberate evidence that the invariant has one owner.
 - JSON and human table output are alternative renderings of the same structured
   handler result, so scripts do not depend on terminal formatting.
+- Destructive numeric parameters are validated before database access. A preview
+  computed from an unrepresentable cutoff is a lie, so non-finite, negative, and
+  PostgreSQL `timestamptz`-unrepresentable durations never reach either the preview
+  or mutation phase.
 - `stream subscriptions` and `projection position` remain database-only and
   read-only. They expose stopped-worker checkpoint rows and both store heads
   without consulting the process-local subscription registry, scanning category
