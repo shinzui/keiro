@@ -88,7 +88,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Complete |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Complete |
-| 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
+| 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -176,7 +176,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix (2026-08-12T19:46:50Z)
 - [x] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies) (2026-08-12T19:49:52Z)
 - [x] EP-5 (241) M3: executable-level no-DB-contact rejection test, ADR 0028 distillation, and full 38-example keiro-ops suite (2026-08-12T19:52:30Z)
-- [ ] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged
+- [ ] EP-6 (242): implementation started after complete child-plan read; EP-1/EP-4 soft dependencies satisfied (2026-08-12T19:54:01Z)
+- [x] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged; full Haskell and command benchmark gates pass (2026-08-12T20:00:44Z)
 - [ ] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper, benign-duplicate tests green
 - [ ] EP-6 (242) M3 (after EP-1): rebuild paging reads each event once (interpose-counted), `rebuild` bench group added
 

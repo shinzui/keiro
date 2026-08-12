@@ -52,12 +52,20 @@ telemetry.
 - [x] Research complete: all duplicated sites read in full, test-name coupling enumerated,
       bench targets identified, wrapper design type-checked against `forgetDomainDecision`
       and `SilentDomainDecision` (2026-08-11, plan drafting).
-- [ ] Milestone 1: extract the two shared attempt loops in `keiro/src/Keiro/Command.hs`.
-- [ ] Milestone 1: rewrite `runCommand` and `runCommandWithSqlEventsControlled` as
-      wrappers; add `silentNoOpHandler` and `forgetDomainSqlOutcome`.
-- [ ] Milestone 1: factor the duplicated `applyCatalogProjections` callback in
-      `keiro/src/Keiro/Projection.hs` into one top-level helper.
-- [ ] Milestone 1: full suite green with zero test edits; `command` bench parity recorded.
+- [x] Implementation started after reading the complete ExecPlan; EP-1 and EP-4 soft
+      dependencies are complete (2026-08-12T19:54:01Z).
+- [x] Milestone 1: extract the two shared attempt loops in `keiro/src/Keiro/Command.hs`
+      (2026-08-12T20:00:44Z).
+- [x] Milestone 1: rewrite `runCommand` and `runCommandWithSqlEventsControlled` as
+      wrappers; add `silentNoOpHandler` and `forgetDomainSqlOutcome`; delete the now-dead
+      `CommandPlan`, `prepareCommandPlan`, and `evaluateCommand` legacy evaluation path
+      (2026-08-12T20:00:44Z).
+- [x] Milestone 1: factor the duplicated `applyCatalogProjections` callback in
+      `keiro/src/Keiro/Projection.hs` into one top-level helper
+      (2026-08-12T20:00:44Z).
+- [x] Milestone 1: focused 46-example command and 2-example catalog-fence suites plus
+      `just haskell-test` are green with zero test edits; the existing `command`
+      baseline and 25% regression gate pass (2026-08-12T20:00:44Z).
 - [ ] Milestone 2 (blocked until `docs/plans/240-…` lands): re-read the post-240 dispatch
       code and record the exact probe chain per site in this plan.
 - [ ] Milestone 2: add `dispatchDeduplicatedCommand` to `keiro/src/Keiro/ProcessManager.hs`
@@ -103,6 +111,12 @@ Findings from plan research (2026-08-11), recorded because they shaped the desig
   suite is straightforward — no higher-order delegation needed.
 
 (Implementation surprises go here as they occur.)
+
+- Milestone 1 implementation (2026-08-12): after both legacy entry points were routed
+  through the shared domain-typed attempt loops, the entire `CommandPlan` / `stepEither`
+  preparation path became dead code. Removing it leaves `stepDetailedEither` as the one
+  command-selection authority while preserving the public legacy result and telemetry
+  adapters; the focused suites, full Haskell gate, and command benchmark gate all pass.
 
 
 ## Decision Log

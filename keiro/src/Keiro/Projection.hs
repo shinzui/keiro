@@ -223,25 +223,11 @@ runCommandWithCatalogProjections options eventStream targetStream command catalo
           eventStream
           targetStream
           command
-          applyCatalogProjections
+          (\pairs _appendResult -> applyCatalogProjectionsTx projections groups pairs)
       pure (fmap toProjectionOutcome outcome)
   where
     projections = typedInlineProjections catalog projectionSet
     groups = typedProjectionRebuildGroups catalog projectionSet
-
-    applyCatalogProjections pairs _appendResult = do
-      fence <- lockProjectionGroupsTx groups
-      case fence of
-        ProjectionWritesAllowed -> do
-          traverse_
-            ( \projection ->
-                traverse_
-                  (\(event, recorded) -> (projection ^. #apply) event recorded)
-                  pairs
-            )
-            projections
-          pure (CommitSqlTransaction fence)
-        _ -> pure (RollbackSqlTransaction fence)
 
     toProjectionOutcome = \case
       SqlCommandNoOp result -> ProjectionCommandApplied result
@@ -278,25 +264,11 @@ runDomainCommandWithCatalogProjections options handler targetStream command cata
           handler
           targetStream
           command
-          applyCatalogProjections
+          (\pairs _appendResult -> applyCatalogProjectionsTx projections groups pairs)
       pure (fmap toProjectionOutcome outcome)
   where
     projections = typedInlineProjections catalog projectionSet
     groups = typedProjectionRebuildGroups catalog projectionSet
-
-    applyCatalogProjections pairs _appendResult = do
-      fence <- lockProjectionGroupsTx groups
-      case fence of
-        ProjectionWritesAllowed -> do
-          traverse_
-            ( \projection ->
-                traverse_
-                  (\(event, recorded) -> (projection ^. #apply) event recorded)
-                  pairs
-            )
-            projections
-          pure (CommitSqlTransaction fence)
-        _ -> pure (RollbackSqlTransaction fence)
 
     toProjectionOutcome = \case
       DomainSqlCommandSilent outcome -> DomainProjectionCommandApplied outcome
@@ -308,6 +280,25 @@ runDomainCommandWithCatalogProjections options handler targetStream command cata
         error "runDomainCommandWithCatalogProjections: rolled back with writes allowed"
       ProjectionWriteFenced groupId runId -> DomainProjectionCommandFenced groupId runId
       ProjectionWriteGroupUnregistered groupId -> DomainProjectionCommandGroupUnregistered groupId
+
+applyCatalogProjectionsTx ::
+  [InlineProjection co] ->
+  [RebuildGroupId] ->
+  [(co, RecordedEvent)] ->
+  Tx.Transaction (SqlTransactionDecision ProjectionWriteFence)
+applyCatalogProjectionsTx projections groups pairs = do
+  fence <- lockProjectionGroupsTx groups
+  case fence of
+    ProjectionWritesAllowed -> do
+      traverse_
+        ( \projection ->
+            traverse_
+              (\(event, recorded) -> (projection ^. #apply) event recorded)
+              pairs
+        )
+        projections
+      pure (CommitSqlTransaction fence)
+    _ -> pure (RollbackSqlTransaction fence)
 
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
