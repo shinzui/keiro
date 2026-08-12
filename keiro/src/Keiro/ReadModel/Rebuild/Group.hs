@@ -19,7 +19,7 @@ module Keiro.ReadModel.Rebuild.Group
     GroupRebuildHandle,
     groupRebuildHandleGroup,
     groupRebuildHandleRun,
-    groupRebuildHandleFingerprint,
+    groupRebuildHandleSliceFingerprint,
     groupRebuildHandlePreparation,
     groupRebuildHandleResetCheckpointKeys,
     GroupCompletionToken,
@@ -51,21 +51,21 @@ import Hasql.Statement (Statement, preparable)
 import Keiro.Connection (qualifyTable)
 import Keiro.Prelude
 import Keiro.Projection.Catalog
-  ( CatalogFingerprint,
-    CatalogRegistration (..),
+  ( CatalogRegistration (..),
+    GroupSliceFingerprint,
     QualifiedTable (..),
     RebuildGroupId,
     TargetResetPolicy (..),
     ValidatedProjectionCatalog,
     asyncProjectionRegistrations,
-    catalogFingerprintText,
     catalogInventory,
     catalogRegistrations,
+    groupSliceFingerprint,
+    groupSliceFingerprintText,
     mkRebuildGroupId,
     rebuildGroupIdText,
     replayAdapterMetadata,
   )
-import Keiro.Projection.Catalog qualified as Catalog
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Subscription.Checkpoint
   ( SubscriptionCheckpointResetReport (..),
@@ -117,7 +117,7 @@ data GroupLifecycleStatus
 
 data GroupRebuildMetadata = GroupRebuildMetadata
   { rebuildGroupId :: !RebuildGroupId,
-    catalogFingerprint :: !Text,
+    sliceFingerprint :: !Text,
     status :: !GroupLifecycleStatus,
     activeRunId :: !(Maybe RebuildRunId),
     requestedBy :: !(Maybe Text),
@@ -131,7 +131,8 @@ data GroupRebuildMetadata = GroupRebuildMetadata
   deriving stock (Eq, Show, Generic)
 
 data CatalogRegistrationError
-  = RegisteredGroupFingerprintDrift !RebuildGroupId !Text !Text
+  = RegisteredGroupSliceDrift !RebuildGroupId !Text !Text
+  | RegisteredGroupStaleFingerprint !RebuildGroupId !Text
   | RegisteredQueryModelDrift !Text !Text
   | RegisteredQueryModelNotLive !Text
   deriving stock (Eq, Show, Generic)
@@ -139,7 +140,7 @@ data CatalogRegistrationError
 data RebuildStartError
   = RebuildGroupNotInCatalog !RebuildGroupId
   | RebuildGroupUnregistered !RebuildGroupId
-  | RebuildCatalogFingerprintDrift !RebuildGroupId !Text !Text
+  | RebuildGroupSliceDrift !RebuildGroupId !Text !Text
   | RebuildGroupNotLive !RebuildGroupId !GroupLifecycleStatus !(Maybe RebuildRunId)
   | -- | At least one catalog-declared subscription had no persisted member to reset.
     RebuildSubscriptionCheckpointsMissing !RebuildGroupId ![SubscriptionName]
@@ -167,7 +168,7 @@ data GroupPreparation = GroupPreparation
 data GroupRebuildHandle = GroupRebuildHandle
   { handleGroup :: !RebuildGroupId,
     handleRun :: !RebuildRunId,
-    handleFingerprint :: !CatalogFingerprint,
+    handleSliceFingerprint :: !GroupSliceFingerprint,
     handlePreparation :: !GroupPreparation,
     handleResetCheckpointKeys :: ![SubscriptionCheckpointKey]
   }
@@ -179,8 +180,8 @@ groupRebuildHandleGroup = handleGroup
 groupRebuildHandleRun :: GroupRebuildHandle -> RebuildRunId
 groupRebuildHandleRun = handleRun
 
-groupRebuildHandleFingerprint :: GroupRebuildHandle -> CatalogFingerprint
-groupRebuildHandleFingerprint = handleFingerprint
+groupRebuildHandleSliceFingerprint :: GroupRebuildHandle -> GroupSliceFingerprint
+groupRebuildHandleSliceFingerprint = handleSliceFingerprint
 
 groupRebuildHandlePreparation :: GroupRebuildHandle -> GroupPreparation
 groupRebuildHandlePreparation = handlePreparation
@@ -195,7 +196,7 @@ groupRebuildHandleResetCheckpointKeys = handleResetCheckpointKeys
 data GroupCompletionToken = GroupCompletionToken
   { completionGroup :: !RebuildGroupId,
     completionRun :: !RebuildRunId,
-    completionFingerprint :: !CatalogFingerprint
+    completionSliceFingerprint :: !GroupSliceFingerprint
   }
 
 completionTokenForHandle :: GroupRebuildHandle -> GroupCompletionToken
@@ -203,7 +204,7 @@ completionTokenForHandle handle =
   GroupCompletionToken
     { completionGroup = handleGroup handle,
       completionRun = handleRun handle,
-      completionFingerprint = handleFingerprint handle
+      completionSliceFingerprint = handleSliceFingerprint handle
     }
 
 -- | Reconstruct the opaque authorization for a persisted run. The replay
@@ -216,11 +217,12 @@ groupRebuildHandleFor ::
   Maybe GroupRebuildHandle
 groupRebuildHandleFor catalog groupId runId = do
   preparation <- preparationFor catalog groupId
+  slice <- groupSliceFingerprint catalog groupId
   pure
     GroupRebuildHandle
       { handleGroup = groupId,
         handleRun = runId,
-        handleFingerprint = Catalog.catalogFingerprint catalog,
+        handleSliceFingerprint = slice,
         handlePreparation = preparation,
         handleResetCheckpointKeys = []
       }
@@ -247,29 +249,30 @@ registerProjectionCatalogTx catalog = do
           Tx.statement () deleteOrphanLegacyGroupsStmt
           pure (Right (List.sortOn (rebuildGroupIdText . (^. #rebuildGroupId)) groups))
   where
-    fingerprint = Catalog.catalogFingerprint catalog
-    fingerprintText = catalogFingerprintText fingerprint
     groupIds = (^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups)
     queryRegistrations = catalogRegistrations catalog
 
     registerGroups accumulated = \case
       [] -> pure (Right (Prelude.reverse accumulated))
       groupId : rest -> do
+        let currentSlice = sliceFor groupId
+            currentText = groupSliceFingerprintText currentSlice
         metadata <-
           Tx.statement
-            (rebuildGroupIdText groupId, fingerprintText)
+            (rebuildGroupIdText groupId, currentText)
             registerGroupStmt
-        if metadata ^. #catalogFingerprint == fingerprintText
+        let stored = metadata ^. #sliceFingerprint
+        if stored == currentText
           then registerGroups (metadata : accumulated) rest
           else
-            pure
-              ( Left
-                  ( RegisteredGroupFingerprintDrift
-                      groupId
-                      (metadata ^. #catalogFingerprint)
-                      fingerprintText
-                  )
-              )
+            if not ("slice-v1:" `Text.isPrefixOf` stored) && stored /= "$legacy-unmanaged"
+              then pure (Left (RegisteredGroupStaleFingerprint groupId stored))
+              else pure (Left (RegisteredGroupSliceDrift groupId stored currentText))
+
+    sliceFor groupId =
+      fromMaybe
+        (error "registerProjectionCatalogTx: inventory group has no slice")
+        (groupSliceFingerprint catalog groupId)
 
     registerQueries = \case
       [] -> pure (Right ())
@@ -339,13 +342,13 @@ beginGroupRebuild catalog groupId request =
         case registered of
           Nothing -> Tx.condemn $> Left (RebuildGroupUnregistered groupId)
           Just metadata
-            | metadata ^. #catalogFingerprint /= expectedFingerprintText ->
+            | metadata ^. #sliceFingerprint /= expectedSliceText ->
                 Tx.condemn
                   $> Left
-                    ( RebuildCatalogFingerprintDrift
+                    ( RebuildGroupSliceDrift
                         groupId
-                        (metadata ^. #catalogFingerprint)
-                        expectedFingerprintText
+                        (metadata ^. #sliceFingerprint)
+                        expectedSliceText
                     )
             | metadata ^. #status /= GroupLive ->
                 Tx.condemn
@@ -376,7 +379,7 @@ beginGroupRebuild catalog groupId request =
                           GroupRebuildHandle
                             { handleGroup = groupId,
                               handleRun = request ^. #rebuildRunId,
-                              handleFingerprint = expectedFingerprint,
+                              handleSliceFingerprint = expectedSlice,
                               handlePreparation = preparation,
                               handleResetCheckpointKeys = Vector.toList (resetReport ^. #resetCheckpointKeys)
                             }
@@ -385,8 +388,11 @@ beginGroupRebuild catalog groupId request =
                     Tx.condemn
                       $> Left (RebuildSubscriptionCheckpointsMissing groupId missingNames)
   where
-    expectedFingerprint = Catalog.catalogFingerprint catalog
-    expectedFingerprintText = catalogFingerprintText expectedFingerprint
+    expectedSlice =
+      fromMaybe
+        (error "beginGroupRebuild: prepared group has no catalog slice")
+        (groupSliceFingerprint catalog groupId)
+    expectedSliceText = groupSliceFingerprintText expectedSlice
 
 resetDeclaredSubscriptions :: GroupPreparation -> GlobalPosition -> Tx.Transaction SubscriptionCheckpointResetReport
 resetDeclaredSubscriptions preparation replayFrom =
@@ -421,7 +427,7 @@ finishGroupRebuildTx handle token
         Tx.statement
           ( rebuildGroupIdText (handleGroup handle),
             rebuildRunIdText (handleRun handle),
-            catalogFingerprintText (handleFingerprint handle)
+            groupSliceFingerprintText (handleSliceFingerprint handle)
           )
           finishGroupStmt
       case promoted of
@@ -443,7 +449,7 @@ abandonGroupRebuild handle failure =
       Tx.statement
         ( rebuildGroupIdText (handleGroup handle),
           rebuildRunIdText (handleRun handle),
-          catalogFingerprintText (handleFingerprint handle),
+          groupSliceFingerprintText (handleSliceFingerprint handle),
           failure ^. #failureCode,
           failure ^. #failureDetail
         )
@@ -542,18 +548,18 @@ tokenMatchesHandle :: GroupRebuildHandle -> GroupCompletionToken -> Bool
 tokenMatchesHandle handle token =
   completionGroup token == handleGroup handle
     && completionRun token == handleRun handle
-    && completionFingerprint token == handleFingerprint handle
+    && completionSliceFingerprint token == handleSliceFingerprint handle
 
 registerGroupStmt :: Statement (Text, Text) GroupRebuildMetadata
 registerGroupStmt =
   preparable
     """
     INSERT INTO keiro.keiro_projection_rebuild_groups
-      (group_id, catalog_fingerprint, status)
+      (group_id, slice_fingerprint, status)
     VALUES ($1, $2, 'live')
     ON CONFLICT (group_id) DO UPDATE
       SET group_id = EXCLUDED.group_id
-    RETURNING group_id, catalog_fingerprint, status, active_run_id,
+    RETURNING group_id, slice_fingerprint, status, active_run_id,
               requested_by, request_reason, started_at, completed_at, failed_at,
               failure_code, failure_detail
     """
@@ -567,7 +573,7 @@ lookupGroupStmt :: Statement Text (Maybe GroupRebuildMetadata)
 lookupGroupStmt =
   preparable
     """
-    SELECT group_id, catalog_fingerprint, status, active_run_id,
+    SELECT group_id, slice_fingerprint, status, active_run_id,
            requested_by, request_reason, started_at, completed_at, failed_at,
            failure_code, failure_detail
     FROM keiro.keiro_projection_rebuild_groups
@@ -580,7 +586,7 @@ lockGroupForUpdateStmt :: Statement Text (Maybe GroupRebuildMetadata)
 lockGroupForUpdateStmt =
   preparable
     """
-    SELECT group_id, catalog_fingerprint, status, active_run_id,
+    SELECT group_id, slice_fingerprint, status, active_run_id,
            requested_by, request_reason, started_at, completed_at, failed_at,
            failure_code, failure_detail
     FROM keiro.keiro_projection_rebuild_groups
@@ -629,9 +635,9 @@ finishGroupStmt =
         updated_at = now()
     WHERE group_id = $1
       AND active_run_id = $2
-      AND catalog_fingerprint = $3
+      AND slice_fingerprint = $3
       AND status = 'rebuilding'
-    RETURNING group_id, catalog_fingerprint, status, active_run_id,
+    RETURNING group_id, slice_fingerprint, status, active_run_id,
               requested_by, request_reason, started_at, completed_at, failed_at,
               failure_code, failure_detail
     """
@@ -654,9 +660,9 @@ abandonGroupStmt =
         updated_at = now()
     WHERE group_id = $1
       AND active_run_id = $2
-      AND catalog_fingerprint = $3
+      AND slice_fingerprint = $3
       AND status = 'rebuilding'
-    RETURNING group_id, catalog_fingerprint, status, active_run_id,
+    RETURNING group_id, slice_fingerprint, status, active_run_id,
               requested_by, request_reason, started_at, completed_at, failed_at,
               failure_code, failure_detail
     """
@@ -741,7 +747,7 @@ deleteOrphanLegacyGroupsStmt =
   preparable
     """
     DELETE FROM keiro.keiro_projection_rebuild_groups AS groups
-    WHERE groups.catalog_fingerprint = '$legacy-unmanaged'
+    WHERE groups.slice_fingerprint = '$legacy-unmanaged'
       AND groups.status = 'live'
       AND NOT EXISTS (
         SELECT 1

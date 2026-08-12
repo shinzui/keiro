@@ -11,6 +11,7 @@ module CatalogSpec
     counterTargetId,
     auditTargetId,
     mainGroupId,
+    additiveGroupId,
   )
 where
 

@@ -83,11 +83,12 @@ here, even if it requires splitting a partially completed task into two ("done" 
       fingerprint; new `GroupSliceFingerprint`; pure regression tests (collision
       fixtures now distinct, order-insensitivity retained, slice stability under
       additive change). Completed 2026-08-12T11:11:51Z.
-- [ ] M3: migration `0024` (rename `catalog_fingerprint` → `slice_fingerprint` on
+- [x] M3: migration `0024` (rename `catalog_fingerprint` → `slice_fingerprint` on
       groups; add `group_slice_fingerprint` to runs); regenerate expected schema;
       convert registration, begin, resume, finish, abandon, fence-lifecycle and
       completion-proof statements to slice-scoped identity; renamed error
       constructors; DB tests for additive re-registration and slice-drift refusal.
+      Completed 2026-08-12T11:27:41Z.
 - [ ] M4: adoption API (`previewCatalogAdoption`, `adoptCatalogGroups`) in the
       rebuild library and `Keiro.Projection.Catalog.Operations`; DB tests for the
       full changed-slice adoption path, read-model reconciliation, and stale-format
@@ -123,6 +124,16 @@ implementation. Provide concise evidence.
   byte length, and hashes the strict builder result. The full `keiro-test` suite
   passed with `473 examples, 0 failures`, including seven permanent preimage and
   slice regressions.
+- The migration checker takes the manifest through `--manifest`; the positional
+  command sketched in the plan is not accepted by the current executable.
+  Migration `0024` also required the native checksum lock, native/Codd migration
+  counts, and expected-schema snapshot to advance together. After regeneration,
+  `keiro-migrations-test` passed with `28 examples, 0 failures`.
+- Persisting the group slice on each rebuild run was sufficient to keep an active
+  run resumable after an unrelated catalog addition while retaining drift fences
+  for genuine codec changes. The full `keiro-test` suite passed with `474
+  examples, 0 failures`, including the additive registration and active-run
+  regression fixtures.
 
 
 ## Decision Log

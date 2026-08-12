@@ -51,7 +51,7 @@ module Keiro.ReadModel.Rebuild
     GroupRebuildHandle,
     groupRebuildHandleGroup,
     groupRebuildHandleRun,
-    groupRebuildHandleFingerprint,
+    groupRebuildHandleSliceFingerprint,
     groupRebuildHandlePreparation,
     groupRebuildHandleResetCheckpointKeys,
     GroupCompletionToken,

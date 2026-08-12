@@ -89,7 +89,6 @@ column	keiro_projection_rebuild_adapters.run_id	text not null
 column	keiro_projection_rebuild_adapters.source_id	text not null
 column	keiro_projection_rebuild_adapters.updated_at	timestamp with time zone not null default now()
 column	keiro_projection_rebuild_groups.active_run_id	text
-column	keiro_projection_rebuild_groups.catalog_fingerprint	text not null
 column	keiro_projection_rebuild_groups.completed_at	timestamp with time zone
 column	keiro_projection_rebuild_groups.created_at	timestamp with time zone not null default now()
 column	keiro_projection_rebuild_groups.failed_at	timestamp with time zone
@@ -98,6 +97,7 @@ column	keiro_projection_rebuild_groups.failure_detail	text
 column	keiro_projection_rebuild_groups.group_id	text not null
 column	keiro_projection_rebuild_groups.request_reason	text
 column	keiro_projection_rebuild_groups.requested_by	text
+column	keiro_projection_rebuild_groups.slice_fingerprint	text not null
 column	keiro_projection_rebuild_groups.started_at	timestamp with time zone
 column	keiro_projection_rebuild_groups.status	text not null
 column	keiro_projection_rebuild_groups.updated_at	timestamp with time zone not null default now()
@@ -111,6 +111,7 @@ column	keiro_projection_rebuild_runs.failure_position	bigint
 column	keiro_projection_rebuild_runs.failure_projection_id	text
 column	keiro_projection_rebuild_runs.failure_source_id	text
 column	keiro_projection_rebuild_runs.group_id	text not null
+column	keiro_projection_rebuild_runs.group_slice_fingerprint	text not null
 column	keiro_projection_rebuild_runs.page_size	integer not null
 column	keiro_projection_rebuild_runs.promoted_at	timestamp with time zone
 column	keiro_projection_rebuild_runs.run_id	text not null
@@ -263,7 +264,7 @@ constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_r
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_source_id_not_null	NOT NULL source_id
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_updated_at_not_null	NOT NULL updated_at
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_active_run_chk	CHECK ((((status = 'live'::text) AND (active_run_id IS NULL)) OR ((status = ANY (ARRAY['rebuilding'::text, 'failed'::text])) AND (active_run_id IS NOT NULL))))
-constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_catalog_fingerprint_not_null	NOT NULL catalog_fingerprint
+constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_catalog_fingerprint_not_null	NOT NULL slice_fingerprint
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_created_at_not_null	NOT NULL created_at
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_group_id_not_null	NOT NULL group_id
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_pkey	PRIMARY KEY (group_id)
@@ -276,6 +277,7 @@ constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_contract_
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_failure_chk	CHECK ((((status = 'failed'::text) AND (failure_code IS NOT NULL) AND (failed_at IS NOT NULL)) OR ((status <> 'failed'::text) AND (failure_code IS NULL) AND (failed_at IS NULL))))
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_id_fkey	FOREIGN KEY (group_id) REFERENCES keiro.keiro_projection_rebuild_groups(group_id)
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_id_not_null	NOT NULL group_id
+constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_slice_fingerprint_not_null	NOT NULL group_slice_fingerprint
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_head_chk	CHECK ((captured_head >= 0))
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_page_size_chk	CHECK ((page_size > 0))
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_page_size_not_null	NOT NULL page_size

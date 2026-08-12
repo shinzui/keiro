@@ -24,16 +24,13 @@ import Contravariant.Extras
     contrazip4,
     contrazip5,
     contrazip6,
-    contrazip7,
+    contrazip8,
   )
-import Crypto.Hash.SHA256 qualified as SHA256
-import Data.ByteString.Base16 qualified as Base16
 import Data.Int (Int32)
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
 import Data.Time (diffUTCTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
@@ -56,12 +53,14 @@ import Keiro.Projection.Catalog
     catalogReplayAdapterProjectionId,
     catalogReplayAdapterSourceId,
     catalogReplayAdapters,
+    groupSliceFingerprintText,
     projectionIdText,
     rebuildGroupIdText,
     runCatalogReplayAdapter,
     sourceIdText,
   )
 import Keiro.Projection.Catalog qualified as Catalog
+import Keiro.Projection.Catalog.Preimage (Preimage (..), hashPreimage)
 import Keiro.ReadModel.Rebuild.Group
   ( GroupTransitionError,
     RebuildFailure (..),
@@ -87,7 +86,7 @@ import Prelude (all, any, concatMap, const, filter, id, not, null, (&&), (*), (+
 import Prelude qualified
 
 runnerFormat :: Text
-runnerFormat = "keiro/projection-replay/v1"
+runnerFormat = "keiro/projection-replay/v2"
 
 data RebuildOptions = RebuildOptions
   { rebuildRequest :: !RebuildRequest,
@@ -169,6 +168,7 @@ data RebuildRunReport = RebuildRunReport
   { rebuildRunId :: !RebuildRunId,
     rebuildGroupId :: !RebuildGroupId,
     catalogFingerprint :: !Text,
+    groupSliceFingerprint :: !Text,
     contractFingerprint :: !Text,
     runnerFormatVersion :: !Text,
     capturedHead :: !GlobalPosition,
@@ -183,8 +183,7 @@ data RebuildRunReport = RebuildRunReport
 
 data SourceSpec = SourceSpec
   { specSourceId :: !SourceId,
-    specScope :: !SourceScope,
-    specCodecFingerprint :: !Text
+    specScope :: !SourceScope
   }
   deriving stock (Generic)
 
@@ -222,41 +221,42 @@ startCatalogRebuild catalog groupId options
       existing <- inspectCatalogRebuildMaybe runId
       case existing of
         Just _ -> pure (Left (CatalogRebuildRunAlreadyExists runId))
-        Nothing -> do
-          started <- beginGroupRebuild catalog groupId request
-          case started of
-            Left err -> pure (Left (CatalogRebuildStartFailed err))
-            Right handle -> do
-              headPosition <- captureHead
-              if request ^. #replayFrom > headPosition
-                then do
-                  _ <-
-                    abandonGroupRebuild
-                      handle
-                      RebuildFailure
-                        { failureCode = "replay.start-after-head",
-                          failureDetail =
-                            "requested replay cursor is beyond the captured store head"
-                        }
-                  pure
-                    ( Left
-                        ( CatalogRebuildStartAfterCapturedHead
-                            (request ^. #replayFrom)
-                            headPosition
-                        )
-                    )
-                else do
-                  let contract = rebuildContract catalog groupId
-                  runTransaction
-                    ( initializeRunTx
-                        catalog
-                        groupId
-                        options
-                        headPosition
-                        contract
-                    )
-                  Telemetry.recordProjectionRebuildStarts (options ^. #rebuildMetrics) 1
-                  driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) contract (options ^. #rebuildMetrics)
+        Nothing -> case rebuildContract catalog groupId of
+          Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+          Just contract -> do
+            started <- beginGroupRebuild catalog groupId request
+            case started of
+              Left err -> pure (Left (CatalogRebuildStartFailed err))
+              Right handle -> do
+                headPosition <- captureHead
+                if request ^. #replayFrom > headPosition
+                  then do
+                    _ <-
+                      abandonGroupRebuild
+                        handle
+                        RebuildFailure
+                          { failureCode = "replay.start-after-head",
+                            failureDetail =
+                              "requested replay cursor is beyond the captured store head"
+                          }
+                    pure
+                      ( Left
+                          ( CatalogRebuildStartAfterCapturedHead
+                              (request ^. #replayFrom)
+                              headPosition
+                          )
+                      )
+                  else do
+                    runTransaction
+                      ( initializeRunTx
+                          catalog
+                          groupId
+                          options
+                          headPosition
+                          contract
+                      )
+                    Telemetry.recordProjectionRebuildStarts (options ^. #rebuildMetrics) 1
+                    driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) contract (options ^. #rebuildMetrics)
 
 resumeCatalogRebuild ::
   (IOE :> es, Store :> es) =>
@@ -272,17 +272,19 @@ resumeCatalogRebuild catalog runId options
         Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
         Just report -> do
           let groupId = report ^. #rebuildGroupId
-              actual = rebuildContract catalog groupId
               expected = report ^. #contractFingerprint
-          if expected /= actual
-            then pure (Left (CatalogRebuildContractMismatch runId expected actual))
-            else do
-              resumed <- runTransaction (resumeRunTx runId (options ^. #replayPageSize) actual)
-              if resumed
-                then do
-                  Telemetry.recordProjectionRebuildResumes (options ^. #rebuildMetrics) 1
-                  driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) actual (options ^. #rebuildMetrics)
-                else pure (Left (CatalogRebuildRunNotActive runId))
+          case rebuildContract catalog groupId of
+            Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+            Just actual ->
+              if expected /= actual
+                then pure (Left (CatalogRebuildContractMismatch runId expected actual))
+                else do
+                  resumed <- runTransaction (resumeRunTx runId (options ^. #replayPageSize) actual)
+                  if resumed
+                    then do
+                      Telemetry.recordProjectionRebuildResumes (options ^. #rebuildMetrics) 1
+                      driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) actual (options ^. #rebuildMetrics)
+                    else pure (Left (CatalogRebuildRunNotActive runId))
 
 inspectCatalogRebuild ::
   (Store :> es) =>
@@ -324,25 +326,27 @@ abandonCatalogRebuild catalog runId failure =
     Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
     Just report -> do
       let groupId = report ^. #rebuildGroupId
-          actual = rebuildContract catalog groupId
           expected = report ^. #contractFingerprint
-      if expected /= actual
-        then pure (Left (CatalogRebuildContractMismatch runId expected actual))
-        else case groupRebuildHandleFor catalog groupId runId of
-          Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
-          Just handle -> do
-            abandoned <- abandonGroupRebuild handle failure
-            case abandoned of
-              Left err -> pure (Left (CatalogRebuildAbandonFailed err))
-              Right _ -> do
-                recordFailure
-                  runId
-                  (failure ^. #failureCode)
-                  (failure ^. #failureDetail)
-                  Nothing
-                  Nothing
-                  Nothing
-                inspectCatalogRebuild runId
+      case rebuildContract catalog groupId of
+        Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+        Just actual ->
+          if expected /= actual
+            then pure (Left (CatalogRebuildContractMismatch runId expected actual))
+            else case groupRebuildHandleFor catalog groupId runId of
+              Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
+              Just handle -> do
+                abandoned <- abandonGroupRebuild handle failure
+                case abandoned of
+                  Left err -> pure (Left (CatalogRebuildAbandonFailed err))
+                  Right _ -> do
+                    recordFailure
+                      runId
+                      (failure ^. #failureCode)
+                      (failure ^. #failureDetail)
+                      Nothing
+                      Nothing
+                      Nothing
+                    inspectCatalogRebuild runId
 
 captureHead :: (Store :> es) => Eff es GlobalPosition
 captureHead = do
@@ -687,6 +691,7 @@ initializeRunTx catalog groupId options headPosition contract = do
     ( rebuildRunIdText runId,
       rebuildGroupIdText groupId,
       catalogFingerprintText (Catalog.catalogFingerprint catalog),
+      groupSliceFingerprintText currentSlice,
       contract,
       runnerFormat,
       globalPositionToInt headPosition,
@@ -701,6 +706,10 @@ initializeRunTx catalog groupId options headPosition contract = do
     runId = request ^. #rebuildRunId
     startCursor = globalPositionToInt (request ^. #replayFrom)
     target = globalPositionToInt headPosition
+    currentSlice =
+      fromMaybe
+        (error "initializeRunTx: rebuild contract exists without a group slice")
+        (Catalog.groupSliceFingerprint catalog groupId)
 
     insertSource source =
       let (scope, category) = encodeScope (source ^. #specScope)
@@ -735,51 +744,20 @@ sourceSpecs catalog groupId =
       listToMaybe
         [ SourceSpec
             { specSourceId = source ^. #sourceId,
-              specScope = source ^. #sourceScope,
-              specCodecFingerprint = source ^. #codecFingerprint
+              specScope = source ^. #sourceScope
             }
         | source <- catalogInventory catalog ^. #inventorySources,
           source ^. #sourceId == wanted
         ]
 
-rebuildContract :: ValidatedProjectionCatalog -> RebuildGroupId -> Text
-rebuildContract catalog groupId =
-  Text.decodeUtf8
-    . Base16.encode
-    . SHA256.hash
-    . Text.encodeUtf8
-    . Text.unlines
-    $ [ runnerFormat,
-        catalogFingerprintText (Catalog.catalogFingerprint catalog),
-        "group|" <> rebuildGroupIdText groupId
-      ]
-    <> [ Text.intercalate
-           "|"
-           [ "source",
-             sourceIdText (source ^. #specSourceId),
-             renderScope (source ^. #specScope),
-             source ^. #specCodecFingerprint
-           ]
-       | source <- sourceSpecs catalog groupId
-       ]
-    <> [ Text.intercalate
-           "|"
-           [ "adapter",
-             Text.pack (show (catalogReplayAdapterOrder adapter)),
-             sourceIdText (catalogReplayAdapterSourceId adapter),
-             projectionIdText (catalogReplayAdapterProjectionId adapter)
-           ]
-       | adapter <- catalogReplayAdapters catalog groupId
-       ]
-    <> [ Text.intercalate
-           "|"
-           ["verification", hook ^. #verificationId, hook ^. #verificationVersion]
-       | hook <- catalogRebuildVerifications catalog groupId
-       ]
-
-renderScope :: SourceScope -> Text
-renderScope AllStreams = "$all"
-renderScope (CategorySource (CategoryName category)) = "category:" <> category
+rebuildContract :: ValidatedProjectionCatalog -> RebuildGroupId -> Maybe Text
+rebuildContract catalog groupId = do
+  slice <- Catalog.groupSliceFingerprint catalog groupId
+  pure
+    ( hashPreimage
+        "contract-v2"
+        (PRecord runnerFormat [PText (groupSliceFingerprintText slice)])
+    )
 
 encodeScope :: SourceScope -> (Text, Maybe Text)
 encodeScope AllStreams = ("all", Nothing)
@@ -829,8 +807,8 @@ inspectRunStmt :: Statement Text (Maybe RebuildRunReport)
 inspectRunStmt =
   preparable
     """
-    SELECT run_id, group_id, catalog_fingerprint, contract_fingerprint,
-           runner_format, captured_head, page_size, status,
+    SELECT run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
+           contract_fingerprint, runner_format, captured_head, page_size, status,
            failure_code, failure_detail, failure_source_id,
            failure_projection_id, failure_position
     FROM keiro.keiro_projection_rebuild_runs
@@ -847,6 +825,7 @@ runReportDecoder =
     <*> D.column (D.nonNullable D.text)
     <*> D.column (D.nonNullable D.text)
     <*> D.column (D.nonNullable D.text)
+    <*> D.column (D.nonNullable D.text)
     <*> (GlobalPosition <$> D.column (D.nonNullable D.int8))
     <*> D.column (D.nonNullable D.int4)
     <*> (runStatusFromText <$> D.column (D.nonNullable D.text))
@@ -856,11 +835,12 @@ runReportDecoder =
     <*> D.column (D.nullable D.text)
     <*> (fmap GlobalPosition <$> D.column (D.nullable D.int8))
   where
-    makeReport runId groupId fingerprint contract format headPosition pageSize status failureCode failureDetail failureSource failureProjection failurePosition =
+    makeReport runId groupId fingerprint sliceFingerprint contract format headPosition pageSize status failureCode failureDetail failureSource failureProjection failurePosition =
       RebuildRunReport
         { rebuildRunId = runId,
           rebuildGroupId = groupId,
           catalogFingerprint = fingerprint,
+          groupSliceFingerprint = sliceFingerprint,
           contractFingerprint = contract,
           runnerFormatVersion = format,
           capturedHead = headPosition,
@@ -942,16 +922,17 @@ inspectVerificationsStmt =
         )
     )
 
-insertRunStmt :: Statement (Text, Text, Text, Text, Text, Int64, Int32) ()
+insertRunStmt :: Statement (Text, Text, Text, Text, Text, Text, Int64, Int32) ()
 insertRunStmt =
   preparable
     """
     INSERT INTO keiro.keiro_projection_rebuild_runs
-      (run_id, group_id, catalog_fingerprint, contract_fingerprint,
-       runner_format, captured_head, page_size, status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, 'running')
+      (run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
+       contract_fingerprint, runner_format, captured_head, page_size, status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'running')
     """
-    ( contrazip7
+    ( contrazip8
+        (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
@@ -1031,7 +1012,7 @@ resumeRunStmt =
       AND groups.group_id = runs.group_id
       AND groups.status = 'rebuilding'
       AND groups.active_run_id = runs.run_id
-      AND groups.catalog_fingerprint = runs.catalog_fingerprint
+      AND groups.slice_fingerprint = runs.group_slice_fingerprint
     RETURNING runs.contract_fingerprint
     """
     ( contrazip3
@@ -1054,7 +1035,7 @@ lockActiveRunStmt =
       AND runs.status = 'running'
       AND groups.status = 'rebuilding'
       AND groups.active_run_id = runs.run_id
-      AND groups.catalog_fingerprint = runs.catalog_fingerprint
+      AND groups.slice_fingerprint = runs.group_slice_fingerprint
     FOR UPDATE OF runs, groups
     """
     (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)))
@@ -1179,7 +1160,7 @@ completionProofStmt =
       runs.status = 'running'
       AND groups.status = 'rebuilding'
       AND groups.active_run_id = runs.run_id
-      AND groups.catalog_fingerprint = runs.catalog_fingerprint
+      AND groups.slice_fingerprint = runs.group_slice_fingerprint
       AND (SELECT count(*) FROM keiro.keiro_projection_rebuild_sources sources
            WHERE sources.run_id = runs.run_id) = $3
       AND NOT EXISTS (

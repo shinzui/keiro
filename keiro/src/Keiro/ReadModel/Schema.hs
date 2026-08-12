@@ -200,7 +200,7 @@ ensureLegacyGroupStmt =
   preparable
     """
     INSERT INTO keiro.keiro_projection_rebuild_groups
-      (group_id, catalog_fingerprint, status)
+      (group_id, slice_fingerprint, status)
     VALUES ($1, '$legacy-unmanaged', 'live')
     ON CONFLICT (group_id) DO NOTHING
     """
@@ -212,7 +212,7 @@ transitionLegacyGroupStmt =
   preparable
     """
     INSERT INTO keiro.keiro_projection_rebuild_groups
-      (group_id, catalog_fingerprint, status, active_run_id, failure_code, failure_detail)
+      (group_id, slice_fingerprint, status, active_run_id, failure_code, failure_detail)
     VALUES (
       $1,
       '$legacy-unmanaged',

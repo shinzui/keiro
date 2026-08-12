@@ -153,7 +153,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1 (237) M1: prototyping — both defects reproduced, encoder injectivity and lifecycle-join map validated against the real schema (2026-08-12T11:04:39Z)
 - [x] EP-1 (237) M2: pure canonical encoding (`Keiro.Projection.Catalog.Preimage`, `catalog-v2:`/`slice-v1:`) with the two collision fixtures as regressions (2026-08-12T11:11:51Z)
-- [ ] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors
+- [x] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors (2026-08-12T11:27:41Z)
 - [ ] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API
 - [ ] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force
 - [ ] EP-1 (237) M6: docs, changelogs, ADR distillation (0026/0031)
@@ -206,6 +206,11 @@ interactions between child plans. Provide concise evidence.
   `contract-v2:` as an M2 output. The child plan correctly assigns the rebuild
   contract switch to M3, where its persisted run schema and epoch joins change;
   the checklist now names M2's actual `slice-v1:` output.
+- EP-1 M3 implementation (2026-08-12): `Runner.hs` now persists and joins on the
+  group slice independently from whole-catalog provenance. This is the surface
+  EP-6 M3 must preserve while removing the rebuild paging rescan; additive catalog
+  registration and active-run resume now pass without weakening genuine slice
+  drift fences.
 
 
 ## Decision Log

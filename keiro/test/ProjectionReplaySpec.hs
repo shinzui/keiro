@@ -21,6 +21,7 @@ import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
 import Keiro.Projection (InlineProjection (..))
 import Keiro.Projection.Catalog
+import Keiro.Projection.Catalog qualified as CatalogApi
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
@@ -166,8 +167,11 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
       _ -> False
 
     repaired <- expectValid (replayCatalog goodDecoder passingVerification)
+    additive <- expectValid (addUnrelatedReplaySource (replayCatalog goodDecoder passingVerification))
+    CatalogApi.groupSliceFingerprint additive replayGroupId
+      `shouldBe` CatalogApi.groupSliceFingerprint repaired replayGroupId
     resumed <-
-      expectStore store (resumeCatalogRebuild repaired (runId "verify-run") (options "ignored" 3))
+      expectStore store (resumeCatalogRebuild additive (runId "verify-run") (options "ignored" 3))
         >>= shouldBeRight
     resumed ^. #runStatus `shouldBe` RebuildRunPromoted
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
@@ -299,6 +303,21 @@ replayCatalog decoder verification =
               :| [],
           claimSite = site ("test:set:" <> label)
         }
+
+addUnrelatedReplaySource :: ProjectionCatalog -> ProjectionCatalog
+addUnrelatedReplaySource catalog =
+  catalog
+    { sources =
+        catalog
+          ^. #sources
+          <> [ SourceDeclaration
+                 { sourceId = identity mkSourceId "unrelated-source",
+                   sourceScope = CategorySource (CategoryName "unrelated"),
+                   codecFingerprint = "unrelated-v1",
+                   claimSite = site "test:source:unrelated"
+                 }
+             ]
+    }
 
 applyReplay :: Text -> Statement (Int64, Int64) () -> ReplayEvent -> RecordedEvent -> Tx.Transaction ()
 applyReplay sourceLabel insertTarget (ReplayEvent value) recorded = do

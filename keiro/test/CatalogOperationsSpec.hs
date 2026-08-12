@@ -87,18 +87,18 @@ spec fixture = do
       let operations = Operations.projectionCatalogOperations validated
       beforePreview <- expectStore store (Operations.previewRegisteredGroupRebuild operations Catalog.mainGroupId) >>= shouldBeRight
       beforePreview ^. #registeredState `shouldBe` Nothing
-      beforePreview ^. #registeredFingerprintMatches `shouldBe` Nothing
+      beforePreview ^. #registeredSliceMatches `shouldBe` Nothing
       _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
       registered <- expectStore store (Operations.previewRegisteredGroupRebuild operations Catalog.mainGroupId) >>= shouldBeRight
       registered ^? #registeredState . _Just . #status `shouldBe` Just GroupLive
-      registered ^. #registeredFingerprintMatches `shouldBe` Just True
+      registered ^. #registeredSliceMatches `shouldBe` Just True
       different <- expectValid Catalog.validCatalog
       mismatchedPreview <-
         expectStore
           store
           (Operations.previewRegisteredGroupRebuild (Operations.projectionCatalogOperations different) Catalog.mainGroupId)
           >>= shouldBeRight
-      mismatchedPreview ^. #registeredFingerprintMatches `shouldBe` Just False
+      mismatchedPreview ^. #registeredSliceMatches `shouldBe` Just False
       started <-
         expectStore
           store
@@ -127,7 +127,7 @@ spec fixture = do
               (runId "operations-resume")
           )
       foreignInspection `shouldSatisfy` \case
-        Left (Operations.CatalogOpsRunCatalogMismatch mismatchedRun _ _) -> mismatchedRun == runId "operations-resume"
+        Left (Operations.CatalogOpsRunSliceMismatch mismatchedRun _ _) -> mismatchedRun == runId "operations-resume"
         _ -> False
 
       repaired <- expectValid (operationsCatalog passingVerification)

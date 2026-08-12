@@ -69,6 +69,7 @@ data RebuildPreview = RebuildPreview
   { reportSchema :: !Text,
     rebuildGroupId :: !RebuildGroupId,
     catalogFingerprint :: !Text,
+    sliceFingerprint :: !Text,
     targets :: ![InventoryTarget],
     sources :: ![InventorySource],
     projections :: ![InventoryProjection],
@@ -88,7 +89,7 @@ data RegisteredRebuildPreview = RegisteredRebuildPreview
   { reportSchema :: !Text,
     preview :: !RebuildPreview,
     registeredState :: !(Maybe GroupRebuildMetadata),
-    registeredFingerprintMatches :: !(Maybe Bool)
+    registeredSliceMatches :: !(Maybe Bool)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -102,7 +103,7 @@ data CatalogRunReport = CatalogRunReport
 
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
-  | CatalogOpsRunCatalogMismatch !RebuildRunId !Text !Text
+  | CatalogOpsRunSliceMismatch !RebuildRunId !Text !Text
   | CatalogOpsRebuildError !CatalogRebuildError
   deriving stock (Eq, Show, Generic)
 
@@ -129,6 +130,11 @@ previewGroupRebuild (ProjectionCatalogOperations catalog) wantedGroup = do
       { reportSchema = "keiro/catalog-rebuild-preview/v1",
         rebuildGroupId = wantedGroup,
         catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
+        sliceFingerprint =
+          maybe
+            (error "previewGroupRebuild: inventory group has no slice")
+            groupSliceFingerprintText
+            (Keiro.Projection.Catalog.groupSliceFingerprint catalog wantedGroup),
         targets = groupTargets,
         sources = groupSources,
         projections = groupProjections,
@@ -170,14 +176,14 @@ previewRegisteredGroupRebuild operations wantedGroup =
     Left err -> pure (Left err)
     Right purePreview -> do
       state <- lookupProjectionRebuildGroup wantedGroup
-      let expectedFingerprint = purePreview ^. #catalogFingerprint
+      let expectedSlice = purePreview ^. #sliceFingerprint
       pure
         ( Right
             RegisteredRebuildPreview
               { reportSchema = "keiro/catalog-registered-rebuild-preview/v1",
                 preview = purePreview,
                 registeredState = state,
-                registeredFingerprintMatches = ((== expectedFingerprint) . (^. #catalogFingerprint)) <$> state
+                registeredSliceMatches = ((== expectedSlice) . (^. #sliceFingerprint)) <$> state
               }
         )
 
@@ -201,11 +207,14 @@ inspectGroupRebuild (ProjectionCatalogOperations catalog) runId =
   inspectCatalogRebuild runId <&> \case
     Left err -> Left (CatalogOpsRebuildError err)
     Right report ->
-      let expected = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog)
-          actual = report ^. #catalogFingerprint
-       in if actual == expected
-            then Right (catalogRunReport report)
-            else Left (CatalogOpsRunCatalogMismatch runId expected actual)
+      case Keiro.Projection.Catalog.groupSliceFingerprint catalog (report ^. #rebuildGroupId) of
+        Nothing -> Left (CatalogOpsUnknownGroup (report ^. #rebuildGroupId))
+        Just currentSlice ->
+          let expected = groupSliceFingerprintText currentSlice
+              actual = report ^. #groupSliceFingerprint
+           in if actual == expected
+                then Right (catalogRunReport report)
+                else Left (CatalogOpsRunSliceMismatch runId expected actual)
 
 resumeGroupRebuild ::
   (IOE :> es, Store :> es) =>
@@ -251,6 +260,7 @@ instance Aeson.ToJSON RebuildPreview where
       [ "schema" Aeson..= (report ^. #reportSchema),
         "groupId" Aeson..= rebuildGroupIdText (report ^. #rebuildGroupId),
         "catalogFingerprint" Aeson..= (report ^. #catalogFingerprint),
+        "sliceFingerprint" Aeson..= (report ^. #sliceFingerprint),
         "targets" Aeson..= map targetValue (report ^. #targets),
         "sources" Aeson..= map sourceValue (report ^. #sources),
         "projections" Aeson..= map projectionValue (report ^. #projections),
@@ -269,7 +279,7 @@ instance Aeson.ToJSON RegisteredRebuildPreview where
       [ "schema" Aeson..= (report ^. #reportSchema),
         "preview" Aeson..= (report ^. #preview),
         "registeredState" Aeson..= fmap groupMetadataValue (report ^. #registeredState),
-        "registeredFingerprintMatches" Aeson..= (report ^. #registeredFingerprintMatches)
+        "registeredSliceMatches" Aeson..= (report ^. #registeredSliceMatches)
       ]
 
 instance Aeson.ToJSON CatalogRunReport where
@@ -402,7 +412,7 @@ groupMetadataValue :: GroupRebuildMetadata -> Aeson.Value
 groupMetadataValue metadata =
   Aeson.object
     [ "groupId" Aeson..= rebuildGroupIdText (metadata ^. #rebuildGroupId),
-      "catalogFingerprint" Aeson..= (metadata ^. #catalogFingerprint),
+      "sliceFingerprint" Aeson..= (metadata ^. #sliceFingerprint),
       "status" Aeson..= lifecycleStatusText (metadata ^. #status),
       "activeRunId" Aeson..= fmap rebuildRunIdText (metadata ^. #activeRunId),
       "requestedBy" Aeson..= (metadata ^. #requestedBy),
@@ -427,6 +437,7 @@ runValue report =
     [ "runId" Aeson..= rebuildRunIdText (report ^. #rebuildRunId),
       "groupId" Aeson..= rebuildGroupIdText (report ^. #rebuildGroupId),
       "catalogFingerprint" Aeson..= (report ^. #catalogFingerprint),
+      "groupSliceFingerprint" Aeson..= (report ^. #groupSliceFingerprint),
       "contractFingerprint" Aeson..= (report ^. #contractFingerprint),
       "runnerFormat" Aeson..= (report ^. #runnerFormatVersion),
       "capturedHead" Aeson..= globalPositionValue (report ^. #capturedHead),

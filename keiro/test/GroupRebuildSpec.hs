@@ -26,7 +26,7 @@ import Keiro.Projection
     applyAsyncProjectionFromCatalog,
   )
 import Keiro.Projection.Catalog
-import Keiro.Projection.Catalog qualified as ProjectionCatalog
+import Keiro.Projection.Catalog qualified as CatalogApi
 import Keiro.ReadModel (lookupReadModel)
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
@@ -50,7 +50,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 spec :: Fixture -> Spec
 spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixture) $ do
-  it "registers a validated fleet atomically and refuses fingerprint drift" $ \store -> do
+  it "registers a validated fleet atomically and refuses group-slice drift" $ \store -> do
     validated <- expectValid Catalog.validCatalog
     groups <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
     map (^. #rebuildGroupId) groups `shouldBe` [Catalog.mainGroupId]
@@ -64,11 +64,43 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     drifted <- expectValid (catalogWithCodecFingerprint "counter-codec-v2")
     drift <- expectStore store (registerProjectionCatalog drifted)
     drift `shouldSatisfy` \case
-      Left RegisteredGroupFingerprintDrift {} -> True
+      Left RegisteredGroupSliceDrift {} -> True
+      _ -> False
+    beginDrift <-
+      expectStore
+        store
+        (beginGroupRebuild drifted Catalog.mainGroupId (request "drifted-run" (GlobalPosition 0)))
+    beginDrift `shouldSatisfy` \case
+      Left RebuildGroupSliceDrift {} -> True
       _ -> False
     stored <- expectStore store (lookupProjectionRebuildGroup Catalog.mainGroupId)
-    stored ^? _Just . #catalogFingerprint
-      `shouldBe` Just (catalogFingerprintText (ProjectionCatalog.catalogFingerprint validated))
+    stored ^? _Just . #sliceFingerprint
+      `shouldBe` fmap groupSliceFingerprintText (CatalogApi.groupSliceFingerprint validated Catalog.mainGroupId)
+
+  it "registers an additive catalog without disturbing the existing group slice" $ \store -> do
+    current <- expectValid Catalog.validCatalog
+    additive <- expectValid Catalog.additiveCatalog
+    originalGroups <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    originalSlice <-
+      maybe
+        (expectationFailure "expected main-group slice" >> error "unreachable")
+        pure
+        (CatalogApi.groupSliceFingerprint current Catalog.mainGroupId)
+
+    groups <- expectStore store (registerProjectionCatalog additive) >>= shouldBeRight
+    map (^. #rebuildGroupId) groups
+      `shouldBe` [Catalog.additiveGroupId, Catalog.mainGroupId]
+    map (^. #rebuildGroupId) originalGroups `shouldBe` [Catalog.mainGroupId]
+    stored <- expectStore store (lookupProjectionRebuildGroup Catalog.mainGroupId)
+    stored ^? _Just . #sliceFingerprint
+      `shouldBe` Just (groupSliceFingerprintText originalSlice)
+    stored ^? _Just . #status `shouldBe` Just GroupLive
+    existingQuery <- expectStore store (lookupReadModel "catalog-counter-query")
+    newQuery <- expectStore store (lookupReadModel "catalog-additive-query")
+    existingQuery ^? _Just . #rebuildGroupId
+      `shouldBe` Just (rebuildGroupIdText Catalog.mainGroupId)
+    newQuery ^? _Just . #rebuildGroupId
+      `shouldBe` Just (rebuildGroupIdText Catalog.additiveGroupId)
 
   it "prepares a mixed preserve-parent/clear-child group and derives reset state" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql mixedFixtureSql))
