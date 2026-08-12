@@ -7,6 +7,7 @@ module Keiro.Ops.Rebuild
     StartOptions (..),
     ResumeOptions (..),
     AbandonOptions (..),
+    AdoptOptions (..),
     commandParser,
     isMutation,
     runCommand,
@@ -15,6 +16,8 @@ where
 
 import Data.Aeson qualified as Aeson
 import Data.Int (Int32, Int64)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE)
@@ -30,7 +33,10 @@ import Keiro.Projection.Catalog
   )
 import Keiro.Projection.Catalog.Operations
 import Keiro.ReadModel.Rebuild
-  ( RebuildFailure (..),
+  ( GroupAdoptionClass (..),
+    GroupLifecycleStatus (..),
+    GroupRebuildMetadata (..),
+    RebuildFailure (..),
     RebuildOptions (..),
     RebuildRequest (..),
     RebuildRunId,
@@ -52,6 +58,7 @@ data Command
   | Status !RebuildRunId
   | Resume !ResumeOptions
   | Abandon !AbandonOptions
+  | Adopt !AdoptOptions
   deriving stock (Eq, Show)
 
 data StartOptions = StartOptions
@@ -77,6 +84,11 @@ data AbandonOptions = AbandonOptions
   }
   deriving stock (Eq, Show)
 
+data AdoptOptions = AdoptOptions
+  { groups :: !(NonEmpty RebuildGroupId)
+  }
+  deriving stock (Eq, Show)
+
 commandParser :: Parser Command
 commandParser =
   hsubparser
@@ -86,6 +98,7 @@ commandParser =
         <> command "status" (info (Status <$> runArgument) (progDesc "Inspect one catalog rebuild run"))
         <> command "resume" (info (Resume <$> resumeOptionsParser) (progDesc "Preview or resume one catalog rebuild run"))
         <> command "abandon" (info (Abandon <$> abandonOptionsParser) (progDesc "Preview or abandon one catalog rebuild run"))
+        <> command "adopt" (info (Adopt <$> adoptOptionsParser) (progDesc "Preview or adopt catalog slice changes for the named groups"))
     )
 
 startOptionsParser :: Parser StartOptions
@@ -110,6 +123,9 @@ abandonOptionsParser =
     <$> runArgument
     <*> textOption "code" "CODE" "Stable failure code"
     <*> textOption "detail" "TEXT" "Operator-visible failure detail"
+
+adoptOptionsParser :: Parser AdoptOptions
+adoptOptionsParser = AdoptOptions . NonEmpty.fromList <$> some groupArgument
 
 groupArgument :: Parser RebuildGroupId
 groupArgument = argument groupReader (metavar "GROUP")
@@ -155,6 +171,7 @@ isMutation = \case
   Start {} -> True
   Resume {} -> True
   Abandon {} -> True
+  Adopt {} -> True
 
 runCommand :: OpsEnv -> ProjectionCatalogOperations -> Command -> IO OpsOutcome
 runCommand env operations = \case
@@ -184,6 +201,12 @@ runCommand env operations = \case
     | otherwise ->
         runCatalogAction env (inspectGroupRebuild operations options.runId) $ \report ->
           PreviewRequired (runResult report) (forceInvocation env (abandonArguments options))
+  Adopt options
+    | env.force ->
+        runCatalogAction env (adoptCatalogGroups operations options.groups) (Succeeded . adoptionOutcomeResult)
+    | otherwise ->
+        runCatalogAction env (Right <$> previewCatalogAdoption operations) $ \report ->
+          PreviewRequired (adoptionPreviewResult report) (forceInvocation env (adoptArguments options))
 
 startRebuildOptions :: StartOptions -> RebuildOptions
 startRebuildOptions options =
@@ -226,11 +249,12 @@ runCatalogAction env action onSuccess = do
 inventoryResult :: CatalogInventoryReport -> OpsResult
 inventoryResult report =
   OpsResult
-    { headers = ["group", "targets", "verifications", "catalog_fingerprint"],
+    { headers = ["group", "targets", "verifications", "slice_fingerprint", "catalog_fingerprint"],
       rows =
         [ [ rebuildGroupIdText group.rebuildGroupId,
             showText (length group.orderedTargets),
             showText (length group.verifications),
+            maybe "" id (lookup group.rebuildGroupId report.groupSlices),
             report.catalogFingerprint
           ]
         | group <- report.inventory.inventoryGroups
@@ -241,20 +265,73 @@ inventoryResult report =
 registeredPreviewResult :: RegisteredRebuildPreview -> OpsResult
 registeredPreviewResult report =
   OpsResult
-    { headers = ["group", "targets", "subscriptions", "dedup_keys", "destructive", "registered"],
+    { headers = ["group", "targets", "subscriptions", "dedup_keys", "destructive", "registered", "slice_fingerprint", "registered_slice_matches"],
       rows =
         [ [ rebuildGroupIdText preview.rebuildGroupId,
             showText (length preview.targets),
             showText (length preview.subscriptionResets),
             showText (length preview.dedupResets),
             boolText preview.destructive,
-            maybe "no" (const "yes") report.registeredState
+            maybe "no" (const "yes") report.registeredState,
+            preview.sliceFingerprint,
+            maybe "" boolText report.registeredSliceMatches
           ]
         ],
       jsonValue = Aeson.toJSON report
     }
   where
     preview = report.preview
+
+adoptionPreviewResult :: CatalogAdoptionReport -> OpsResult
+adoptionPreviewResult report =
+  OpsResult
+    { headers = ["group", "state", "stored_slice", "current_slice"],
+      rows =
+        [ [ rebuildGroupIdText group.rebuildGroupId,
+            adoptionStateText group.classification,
+            maybe "" id group.storedSlice,
+            group.currentSlice
+          ]
+        | group <- report.groups
+        ]
+          <> [ [rebuildGroupIdText groupId, "removed", "", ""]
+             | groupId <- report.removedGroups
+             ]
+          <> [["note", adoptionNote, "", ""]],
+      jsonValue = Aeson.toJSON report
+    }
+
+adoptionOutcomeResult :: CatalogAdoptionOutcome -> OpsResult
+adoptionOutcomeResult outcome =
+  OpsResult
+    { headers = ["group", "status", "slice_fingerprint"],
+      rows =
+        [ [ rebuildGroupIdText metadata.rebuildGroupId,
+            lifecycleStatusText metadata.status,
+            metadata.sliceFingerprint
+          ]
+        | metadata <- outcome.adoptedGroups
+        ],
+      jsonValue = Aeson.toJSON outcome
+    }
+
+adoptionStateText :: GroupAdoptionClass -> Text
+adoptionStateText = \case
+  AdoptionNew -> "new"
+  AdoptionUnchanged -> "unchanged"
+  AdoptionSliceChanged {} -> "slice-changed"
+  AdoptionStaleFormat {} -> "stale-format"
+
+lifecycleStatusText :: GroupLifecycleStatus -> Text
+lifecycleStatusText = \case
+  GroupLive -> "live"
+  GroupRebuilding -> "rebuilding"
+  GroupFailed -> "failed"
+  UnknownGroupStatus value -> value
+
+adoptionNote :: Text
+adoptionNote =
+  "adoption changes only keiro-owned registration metadata; run 'rebuild start' if the change invalidates persisted rows"
 
 runResult :: CatalogRunReport -> OpsResult
 runResult report =
@@ -306,6 +383,10 @@ abandonArguments options =
     "--detail",
     options.failureDetail
   ]
+
+adoptArguments :: AdoptOptions -> [Text]
+adoptArguments options =
+  "rebuild" : "adopt" : map rebuildGroupIdText (NonEmpty.toList options.groups)
 
 forceInvocation :: OpsEnv -> [Text] -> Text
 forceInvocation env arguments = Text.unwords (map shellQuote ("keiro-ops" : arguments <> globalFlags <> ["--force"]))

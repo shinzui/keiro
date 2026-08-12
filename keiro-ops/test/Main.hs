@@ -6,9 +6,11 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Char8 qualified as ByteString
+import Data.Either (isRight)
 import Data.Function qualified as Function
 import Data.Functor ((<&>))
 import Data.Int (Int64)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -34,6 +36,7 @@ import Keiro.Ops.Outbox qualified as OpsOutbox
 import Keiro.Ops.Parse (parseDuration)
 import Keiro.Ops.Pgmq qualified as OpsPgmq
 import Keiro.Ops.Projection qualified as OpsProjection
+import Keiro.Ops.Rebuild qualified as OpsRebuild
 import Keiro.Ops.Render
 import Keiro.Ops.ReplayAudit qualified as OpsReplayAudit
 import Keiro.Ops.Shard qualified as OpsShard
@@ -46,6 +49,7 @@ import Keiro.PGMQ
 import Keiro.Projection qualified as Projection
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
+import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Snapshot.Schema
 import Keiro.Subscription.Shard qualified as Shard
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore, withMigratedSuiteWith)
@@ -108,12 +112,73 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["timer", "drain-once"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["replay-audit", "--full"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "list"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
       isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["timer", "drain-once"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "list"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
+
+  describe "catalog rebuild adoption" $ around (withFreshStore fixture) do
+    it "previews exact slice changes and adopts them only with force" $ \store -> do
+      expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")
+      current <- expectValidatedCatalog (opsCatalog "ops-codec-v1")
+      changed <- expectValidatedCatalog (opsCatalog "ops-codec-v2")
+      registered <- expectStore store (Rebuild.registerProjectionCatalog current)
+      registered `shouldSatisfy` isRight
+      let operations = CatalogOperations.projectionCatalogOperations changed
+          command = OpsRebuild.Adopt (OpsRebuild.AdoptOptions (NonEmpty.singleton opsGroupId))
+          previewEnv =
+            OpsEnv
+              { store,
+                outputMode = HumanTable,
+                force = False,
+                schemaDrift = [],
+                allowSchemaDrift = False
+              }
+
+      preview <- OpsRebuild.runCommand previewEnv operations command
+      case preview of
+        PreviewRequired result invocation -> do
+          result.headers `shouldBe` ["group", "state", "stored_slice", "current_slice"]
+          case result.rows of
+            [group, state, stored, currentSlice] : _ -> do
+              group `shouldBe` "ops-group"
+              state `shouldBe` "slice-changed"
+              stored `shouldSatisfy` Text.isPrefixOf "slice-v1:"
+              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v1:"
+              stored `shouldNotBe` currentSlice
+            otherRows -> expectationFailure ("unexpected adoption preview rows: " <> show otherRows)
+          renderHuman result
+            `shouldSatisfy` Text.isInfixOf "adoption changes only keiro-owned registration metadata"
+          invocation
+            `shouldBe` "'keiro-ops' 'rebuild' 'adopt' 'ops-group' '--force'"
+        other -> expectationFailure ("expected adoption preview, got " <> show other)
+
+      applied <- OpsRebuild.runCommand (opsEnv True store) operations command
+      case applied of
+        Succeeded result -> do
+          result.headers `shouldBe` ["group", "status", "slice_fingerprint"]
+          map (take 2) result.rows `shouldBe` [["ops-group", "live"]]
+        other -> expectationFailure ("expected adoption outcome, got " <> show other)
+      registeredChanged <- expectStore store (Rebuild.registerProjectionCatalog changed)
+      registeredChanged `shouldSatisfy` isRight
+      begun <-
+        expectStore
+          store
+          ( Rebuild.beginGroupRebuild
+              changed
+              opsGroupId
+              Rebuild.RebuildRequest
+                { rebuildRunId = opsRunId,
+                  requestedBy = "keiro-ops-test",
+                  requestReason = "prove adopted slice can rebuild",
+                  replayFrom = GlobalPosition 0
+                }
+          )
+      begun `shouldSatisfy` isRight
 
   describe "durable checkpoint inventory" do
     it "mounts both read-only commands in the standalone tree without a lag alias" do
@@ -850,6 +915,101 @@ streamDeleted store name =
 streamTruncateBefore :: KirokuStore -> Text -> IO (Maybe StreamVersion)
 streamTruncateBefore store name =
   expectStore store (getStream (StreamName name)) <&> fmap (.truncateBefore)
+
+data OpsCatalogEvent
+
+opsCatalog :: Text -> Catalog.ProjectionCatalog
+opsCatalog codecFingerprint =
+  Catalog.ProjectionCatalog
+    { sources =
+        [ Catalog.SourceDeclaration
+            { sourceId = opsSourceId,
+              sourceScope = Catalog.CategorySource (CategoryName "ops-catalog"),
+              codecFingerprint,
+              claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:source"
+            }
+        ],
+      targets =
+        [ Catalog.TargetDeclaration
+            { targetId = opsTargetId,
+              qualifiedTable = Catalog.QualifiedTable "app" "ops_catalog",
+              resetPolicy = Catalog.ClearBeforeReplay,
+              dependsOn = [],
+              claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:target"
+            }
+        ],
+      rebuildGroups =
+        [ Catalog.RebuildGroupDeclaration
+            { rebuildGroupId = opsGroupId,
+              orderedTargets = [opsTargetId],
+              verificationHooks = [],
+              claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:group"
+            }
+        ],
+      subscriptions = [],
+      dedupKeys = [],
+      queryModels = [],
+      projectionSets = [Catalog.SomeProjectionSet opsProjectionSet]
+    }
+
+opsProjectionSet :: Catalog.ProjectionSet OpsCatalogEvent
+opsProjectionSet =
+  Catalog.ProjectionSet
+    { projectionSource = opsSourceId,
+      projectionDefinitions = NonEmpty.singleton opsProjectionDefinition,
+      claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:set"
+    }
+
+opsProjectionDefinition :: Catalog.ProjectionDefinition OpsCatalogEvent
+opsProjectionDefinition =
+  Catalog.ProjectionDefinition
+    { projectionId = catalogIdentity Catalog.mkProjectionId "ops-owner",
+      rebuildGroup = opsGroupId,
+      ownedTargets = NonEmpty.singleton opsTargetId,
+      replayPolicy =
+        Catalog.Replayable
+          Catalog.ReplayAdapter
+            { decodeForReplay = const Catalog.ReplayIrrelevant,
+              applyForReplay = \_ _ -> pure ()
+            },
+      handlers =
+        NonEmpty.singleton
+          ( Catalog.InlineHandler
+              Projection.InlineProjection
+                { name = "ops-inline",
+                  apply = \_ _ -> pure ()
+                }
+              (catalogIdentity Catalog.mkClaimSite "ops-test:inline-handler")
+          ),
+      claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:projection"
+    }
+
+opsGroupId :: Catalog.RebuildGroupId
+opsGroupId = catalogIdentity Catalog.mkRebuildGroupId "ops-group"
+
+opsSourceId :: Catalog.SourceId
+opsSourceId = catalogIdentity Catalog.mkSourceId "ops-source"
+
+opsTargetId :: Catalog.TargetId
+opsTargetId = catalogIdentity Catalog.mkTargetId "ops-target"
+
+opsRunId :: Rebuild.RebuildRunId
+opsRunId =
+  case Rebuild.mkRebuildRunId "ops-adoption-run" of
+    Left err -> error (Text.unpack err)
+    Right value -> value
+
+catalogIdentity :: (Show err) => (Text -> Either err value) -> Text -> value
+catalogIdentity constructor value =
+  case constructor value of
+    Left err -> error (show err)
+    Right identity -> identity
+
+expectValidatedCatalog :: Catalog.ProjectionCatalog -> IO Catalog.ValidatedProjectionCatalog
+expectValidatedCatalog catalog =
+  case Catalog.validateProjectionCatalog catalog of
+    Catalog.Failure diagnostics -> expectationFailure (show diagnostics) >> error "unreachable"
+    Catalog.Success validated -> pure validated
 
 opsEnv :: Bool -> KirokuStore -> OpsEnv
 opsEnv force store =

@@ -93,8 +93,9 @@ here, even if it requires splitting a partially completed task into two ("done" 
       rebuild library and `Keiro.Projection.Catalog.Operations`; DB tests for the
       full changed-slice adoption path, read-model reconciliation, and stale-format
       (hypothetical 0.11) row adoption. Completed 2026-08-12T11:46:09Z.
-- [ ] M5: `keiro-ops rebuild adopt` command with preview-then-`--force`; slice
-      fields in existing preview/list renderings; keiro-ops tests.
+- [x] M5: `keiro-ops rebuild adopt` command with preview-then-`--force`; slice
+      fields in existing preview/list renderings; keiro-ops tests. Completed
+      2026-08-12T11:47:46Z.
 - [ ] M6: docs (`docs/user/read-models-and-projections.md`, API reference),
       changelogs (keiro, keiro-migrations, keiro-ops), ADR distillation (new ADR +
       pointer updates in ADR 0026), full `just verify`, masterplan progress update.
@@ -140,6 +141,11 @@ implementation. Provide concise evidence.
   missing group cannot leave an earlier group adopted. The new full-path,
   atomic-refusal, and stale-format scenarios brought `keiro-test` to `477
   examples, 0 failures`.
+- The existing `OpsResult` shape has no separate human-only note channel. The
+  adoption preview therefore appends a labeled `note` row to the four-column
+  human table while keeping the structured JSON report limited to catalog
+  groups and removals. The exact preview/force invocation test and the full
+  `keiro-ops-test` suite passed with `31 examples, 0 failures`.
 
 
 ## Decision Log
