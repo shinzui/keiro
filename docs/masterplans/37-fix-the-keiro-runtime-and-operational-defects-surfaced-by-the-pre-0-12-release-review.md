@@ -83,7 +83,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | In Progress |
+| 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Not Started |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Not Started |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
@@ -156,7 +156,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors (2026-08-12T11:27:41Z)
 - [x] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API (2026-08-12T11:46:09Z)
 - [x] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force (2026-08-12T11:47:46Z)
-- [ ] EP-1 (237) M6: docs, changelogs, ADR distillation (0026/0031)
+- [x] EP-1 (237) M6: docs, changelogs, ADR 0032 and pointer amendments to ADRs 0026/0028/0031, full `just verify` (2026-08-12T12:05:34Z)
 - [ ] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression
 - [ ] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test
 - [ ] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test
@@ -211,6 +211,11 @@ interactions between child plans. Provide concise evidence.
   EP-6 M3 must preserve while removing the rebuild paging rescan; additive catalog
   registration and active-run resume now pass without weakening genuine slice
   drift fences.
+- EP-1 M6 verification (2026-08-12): the persistent Jitsurei development database
+  contained a real pre-canonical registration row. Migration 0024 deliberately
+  preserved it as stale evidence; the new supported adoption preview classified it,
+  `rebuild adopt --force` reconciled it, and the full `just verify` then passed.
+  This exercised the documented unreleased-snapshot cutover without direct SQL.
 
 
 ## Decision Log
@@ -248,4 +253,19 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. It replaced injectable catalog and replay-contract preimages with
+canonical versioned encodings, narrowed lifecycle equality gates from the whole
+catalog to each rebuild group's owned slice, and added explicit transactional
+metadata adoption through the library and `keiro-ops`. Unrelated additions no
+longer lock existing groups or interrupted runs, while genuine group drift remains
+refused until an operator previews and forces adoption. ADR 0032 and amendments to
+ADRs 0026, 0028, and 0031 capture the durable boundary, and full repository
+verification passed.
+
+The MasterPlan remains in progress: EP-2 through EP-6 are not started. EP-1 removes
+the release-critical catalog lockout and fingerprint-forgery defects and clears
+EP-6's soft dependency on its rebuild-runner identity changes.
+
+Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
+and adoption decisions in ADR 0032 and related amendments, and left EP-2 through
+EP-6 eligible for subsequent execution.

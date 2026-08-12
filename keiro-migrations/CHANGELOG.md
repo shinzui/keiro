@@ -14,6 +14,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Added
 
+- Migration `0024.sql` renames projection rebuild group
+  `catalog_fingerprint` to `slice_fingerprint` and records
+  `group_slice_fingerprint` on every rebuild run. This is a clean pre-0.12
+  cutover: complete or abandon active catalog rebuilds before upgrading; stale
+  group fingerprints are recovered through the library adoption API.
+
 - Migration `0021-keiro-workflows-exact-discovery.sql`. Widens
   `keiro_workflows_active_idx` to `(status, wake_after)` so both arms of keiro's
   exact workflow-discovery predicate are index-served, and returns every

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Subscription checkpoint policy is catalog identity and replay safety
 description: Keiro fingerprints every explicit missing-checkpoint policy, rejects current-head seeding after a replayable clear, and composes Kiroku-owned checkpoint resets with rebuild preparation.
-timestamp: 2026-08-11T20:10:15Z
+timestamp: 2026-08-12T11:51:04Z
 docId: ADR-31
 status: Accepted
 date: 2026-08-11
@@ -67,6 +67,11 @@ persisted subscription identity compatible. Text and JSON include the old and ne
 replay impact names the affected group, targets, source, and adapter. Existing rows remain
 authoritative and do not move merely because source policy changed.
 
+Under [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md),
+the policy changes the slice of every group that owns the subscription, but not unrelated groups.
+Registration refuses the changed slice until an operator reviews and explicitly adopts it; adoption
+does not itself reset a checkpoint or rebuild application data.
+
 
 ## Consequences
 
@@ -79,7 +84,8 @@ authoritative and do not move merely because source policy changed.
 - Renaming a subscription or losing a checkpoint remains operationally significant. Operators must
   repair missing state or change the declaration; Keiro does not synthesize topology.
 - Changing only `checkpointOnMissing` changes the catalog fingerprint even though the persisted
-  subscription/member identity is unchanged.
+  subscription/member identity is unchanged. More precisely, it changes the affected group slice
+  and whole-catalog provenance while leaving unrelated group slices stable.
 - Candidate Language 5 cannot omit or default the policy, and evolution tooling does not conflate a
   policy change with a subscription rename or checkpoint mutation.
 
@@ -104,6 +110,8 @@ authoritative and do not move merely because source policy changed.
   the catalog the shared runtime and operations authority.
 - [ADR 0028](0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md)
   requires Keiro operations to call the owning library's public API.
+- [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
+  defines canonical group-slice identity and explicit adoption of reviewed policy changes.
 - `mori://shinzui/kiroku/okf/adrs/concepts/ADR-4` owns absent-row initialization, existing-row
   precedence, monotonic save, and explicit reset semantics.
 - [ExecPlan 215](../plans/215-adopt-explicit-checkpoint-lifecycle-semantics-in-the-projection-catalog.md)

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-12T02:31:20Z
+timestamp: 2026-08-12T11:51:04Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -124,7 +124,10 @@ A rebuild group is also the durable database lifecycle and live-writer fence.
 It moves through `live -> rebuilding -> live` after verified promotion, or
 `live -> rebuilding -> failed` after abandonment. Both rebuilding and failed
 states keep ordinary writers fenced. The group row stores the active run and
-catalog fingerprint; query-model rows observe that group and transition with it.
+canonical group-slice fingerprint; query-model rows observe that group and
+transition with it. Whole-catalog fingerprints remain rebuild-run provenance,
+not lifecycle fences, under
+[ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md).
 No target or query model can return to service independently.
 
 Live inline and async paths acquire `FOR SHARE` locks on distinct group rows in
@@ -153,8 +156,8 @@ with bounded store primitives after those primitives are released.
 Every committed replay chunk contains application target writes, consumed
 source cursors, and adapter evaluation/apply counters in one transaction. A
 decode failure condemns the whole chunk. Resume accepts a different page size
-but requires the exact `keiro/projection-replay/v1` contract fingerprint, which
-combines the catalog fingerprint with normalized sources, codec fingerprints,
+but requires the exact `keiro/projection-replay/v2` contract fingerprint, which
+combines the group slice with normalized sources, codec fingerprints,
 adapter identities and order, verification identity/version, and runner format.
 Function closures and page size are excluded.
 
@@ -172,7 +175,9 @@ dedup rows are not completion evidence.
 - Database lifecycle and history replay code accept only a
   `ValidatedProjectionCatalog`, so invalid inventories cause no registration or
   rebuild effects.
-- Group registration is idempotent only for the same fingerprint. Existing
+- Group registration is idempotent for the same canonical slice. Reviewed
+  changes are accepted only through the transactional adoption path in ADR
+  0032. Existing
   single-read-model rows migrate to deterministic singleton legacy groups so
   compatibility calls keep their old behavior without inventing fake catalog
   targets.
@@ -221,3 +226,6 @@ dedup rows are not completion evidence.
 - [ADR 0020](0020-service-conformance-packages-import-one-runtime-owned-facade.md)
   requires generated conformance code to import one runtime-owned facade rather
   than restating service inventories.
+- [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
+  makes fingerprint preimages injective and scopes durable rebuild compatibility
+  to each group.

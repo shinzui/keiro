@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0031 so checkpoint policy changes affect only owning group slices and require explicit metadata adoption (plan 237).
+* **Update**: Amend ADR 0028 with the compiled-catalog capability boundary and supported rebuild-adoption command (plan 237).
+* **Update**: Amend ADR 0026 with canonical group-slice lifecycle identity, replay format v2, and explicit catalog adoption (plan 237).
+* **Add**: Define injective canonical catalog fingerprints, slice-scoped rebuild lifecycle identity, whole-catalog provenance, and explicit transactional adoption (plan 237).
 * **Update**: Make opaque CheckedService the lazy sharing point for whole-spec type-graph analysis and require cache-refreshing spec replacement (plan 236).
 * **Update**: Make scaffold planning and planning-backed checks indexed-only; retire the Spec-only wrappers with migration guidance (plan 235).
 * **Update**: Amend ADR 0026: catalog-bound read models observe an unordered target set and bind by name to one target-owned physical identity (plan 234).

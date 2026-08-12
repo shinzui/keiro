@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-08-09T16:55:05Z
+timestamp: 2026-08-12T11:51:04Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -34,6 +34,10 @@ application's compiled workflow registry, codecs, handlers, or replay-audit targ
 A standalone executable cannot discover those application values from the database.
 Timer draining is one such operation because the worker delegates dispatch and the
 fired event id to an application-supplied callback.
+
+Catalog adoption is another compiled-code operation. The database can expose a
+stored group slice but cannot reconstruct the application's current validated
+catalog or decide whether a changed slice is safe for application-owned rows.
 
 Kiroku 0.4.0.0 now exports `subscriptionCheckpointInventory`, a one-statement
 snapshot of the global store cursor and every durable, member-aware subscription
@@ -78,6 +82,9 @@ The `keiro-ops` package provides an embeddable command library and a thin standa
 binary. The standalone binary exposes only database-only commands. Commands that
 need application code are mounted through explicit application-supplied hooks in an
 embedding binary; the CLI never invents a database representation of those values.
+`rebuild adopt` is consequently mounted only with a validated catalog hook. Its
+preview and mutation call the supported slice-adoption operations from
+[ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md).
 
 
 ## Consequences
@@ -114,3 +121,6 @@ embedding binary; the CLI never invents a database representation of those value
 - [ExecPlan 214](../plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md)
   adopts Kiroku's released durable inventory and defines the position-distance
   operator and telemetry surfaces.
+- [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
+  defines the catalog adoption preview, transaction, and compiled-catalog
+  capability boundary.

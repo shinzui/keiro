@@ -24,6 +24,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 - Projection catalog inventory and rebuild JSON expose each subscription's
   stable `checkpointOnMissing` value from the same validated catalog used by
   runtime registration and rebuild planning.
+- Embedded catalog operations add `rebuild adopt GROUP...`. Without `--force`
+  it classifies every catalog group, shows stored/current slice fingerprints
+  and removed groups, and prints the exact force invocation. With `--force` it
+  calls the supported transactional adoption API and reports the adopted rows.
+  Existing rebuild list and preview tables also expose slice identity.
 
 ### Breaking Changes
 

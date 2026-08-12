@@ -305,8 +305,8 @@ registration or rebuild work. The public boundary includes:
   `useProjectionCatalogM`;
 - `ValidatedProjectionCatalog`, whose constructor is hidden;
 - typed live selection through `typedInlineProjections`;
-- deterministic inventory, registration, replay-metadata, fingerprint, and
-  rendering selectors; and
+- deterministic inventory, registration, replay-metadata, canonical
+  whole-catalog and group-slice fingerprint, and rendering selectors; and
 - `compareCatalogBaseline`, which reports declarations present in an earlier
   inventory but absent from a new one without conflating removal detection with
   single-catalog validity.
@@ -330,6 +330,9 @@ Types and functions:
 - `CatalogInventoryReport` and `catalogInventoryReport`;
 - `RebuildPreview` and `previewGroupRebuild`;
 - `RegisteredRebuildPreview` and `previewRegisteredGroupRebuild`;
+- `CatalogAdoptionGroupPreview`, `CatalogAdoptionReport`,
+  `CatalogAdoptionOutcome`, `previewCatalogAdoption`, and
+  `adoptCatalogGroups`;
 - `CatalogRunReport` and `CatalogOpsError`;
 - `startGroupRebuild`;
 - `inspectGroupRebuild`;
@@ -338,8 +341,10 @@ Types and functions:
 
 Inventory and pure preview derive every fact from one
 `ValidatedProjectionCatalog`; registered preview performs only a lifecycle
-read and reports whether its fingerprint matches. Inspection rejects runs owned
-by a different catalog. Start, resume, and abandon are explicit mutations over
+read and reports whether its group slice matches. Adoption preview is read-only;
+adoption atomically updates only reviewed, live group and query registration
+metadata. Inspection rejects runs owned by a different group slice. Start,
+resume, abandon, and adoption are explicit mutations over
 the catalog replay runner. The module exposes versioned JSON values but
 deliberately contains no CLI parser, renderer, confirmation rule, or connection
 configuration.
@@ -409,9 +414,12 @@ Types and functions:
 - `RebuildRunId`, `RebuildRequest`, and `RebuildFailure`
 - `GroupLifecycleStatus` and `GroupRebuildMetadata`
 - `CatalogRegistrationError`, `RebuildStartError`, and `GroupTransitionError`
+- `GroupAdoptionClass`, `CatalogAdoptionPlan`, and `CatalogAdoptionError`
 - opaque `GroupRebuildHandle` and `GroupCompletionToken`
 - `GroupPreparation`
 - `registerProjectionCatalog`
+- `previewCatalogAdoption`
+- `adoptCatalogGroups`
 - `lookupProjectionRebuildGroup`
 - `beginGroupRebuild`
 - `finishGroupRebuild`
@@ -435,7 +443,7 @@ The catalog group API is the managed rebuild boundary. Preparation derives its
 targets and framework reset identities only from a validated catalog, and
 promotion requires an opaque completion token from the replay runner. The
 runner captures an immutable Kiroku head, globally merges category pages,
-commits target writes with durable progress, enforces exact-fingerprint resume,
+commits target writes with durable progress, enforces exact group-slice resume,
 and promotes only complete source/adapter/verification evidence. The
 single-read-model functions are an unmanaged compatibility path;
 `rebuild` and `promote` are only low-level status transitions.

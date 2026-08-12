@@ -206,11 +206,29 @@ Success validated -> do
 ```
 
 Registration persists one row per rebuild group and binds each query model to
-that group in one transaction. Repeating the same fingerprint is idempotent; a
-different fingerprint for an existing group is a typed startup error. Existing
+that group in one transaction. Each group stores its canonical `slice-v1:`
+fingerprint, so an unrelated additive group leaves existing registrations
+unchanged. Repeating the same slice is idempotent; a changed or pre-canonical
+stored slice is a typed startup error. Existing
 unmanaged read models are migrated into deterministic
 `$legacy-read-model:<name>` singleton groups and a matching live row can be
 adopted by catalog registration.
+
+Catalog evolution is explicit. Call `previewCatalogAdoption validated` to
+classify catalog groups as new, unchanged, changed, or stale-format and to list
+registered groups missing from the new catalog. To accept reviewed metadata
+changes, call `adoptCatalogGroups validated groupIds`. Adoption locks every
+requested group in sorted order, requires all of them to be registered and
+`live`, then updates their slices and reconciles bound query-model version,
+shape, and group metadata in one transaction. It does not rebuild or migrate
+application-owned rows; start a rebuild separately when the catalog change
+invalidates persisted data.
+
+Before applying migration `0024`, complete or abandon every active catalog
+rebuild. This pre-0.12 clean break cannot infer the group slice used by an old
+active run. After upgrading, a database containing a pre-canonical group
+fingerprint must use the adoption preview and explicit adoption path before
+startup registration can succeed.
 
 Use `runCommandWithCatalogProjections` for inline application and
 `applyAsyncProjectionFromCatalog` for async application. Both acquire shared
@@ -297,7 +315,7 @@ group fenced. Replay adapters must contain database-transactional behavior only:
 never perform network calls or other external side effects from them.
 
 Resume a failed or interrupted run with `resumeCatalogRebuild validated runId
-options`. Page size may change. The catalog, source/codec facts, adapter order,
+options`. Page size may change. The group slice, source/codec facts, adapter order,
 target/reset/query facts, verification identity/version, and runner format must
 produce the exact stored contract fingerprint before any handler runs. Inspect
 durable state at any time with `inspectCatalogRebuild runId`.
@@ -309,7 +327,10 @@ and classified every event as irrelevant. Dedup rows are never substituted for
 missing participation evidence.
 
 The default page size is 500 and the persisted format is
-`keiro/projection-replay/v1`. Optional metrics expose rebuild starts, resumes,
+`keiro/projection-replay/v2`. A run retains the whole `catalog-v2:` fingerprint
+as provenance and separately stores the `slice-v1:` fingerprint used by its
+lifecycle fences. An unrelated catalog addition therefore does not strand an
+active run, while a genuine change to that group still refuses resume. Optional metrics expose rebuild starts, resumes,
 committed pages/events, failures, promotions, and page duration. Durable reports
 also expose captured head, per-source cursor/target, evaluation/apply counts,
 and verification evidence; neither surface contains raw event payloads.
@@ -323,12 +344,12 @@ the selected group's targets, clear/preserve policies, sources, projections,
 query models, subscription/dedup resets, verification hooks, lock scope, and
 destructive status without touching PostgreSQL. `previewRegisteredGroupRebuild`
 adds a read-only lifecycle lookup and an explicit
-`registeredFingerprintMatches` result but does not acquire a fence or create a
-run. Run inspection also rejects a run recorded for a different catalog
-fingerprint.
+`registeredSliceMatches` result but does not acquire a fence or create a run.
+Run inspection rejects a run recorded for a different current group slice.
 
-The effectful actions are `startGroupRebuild`, `inspectGroupRebuild`,
-`resumeGroupRebuild`, and `abandonGroupRebuild`. Their callers provide only the
+The effectful actions include `previewCatalogAdoption`, `adoptCatalogGroups`,
+`startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and
+`abandonGroupRebuild`. Their callers provide only the
 group or run identity and operational request; target, source, handler, reset,
 subscription, and dedup lists cannot be overridden. Reports have stable,
 versioned JSON envelopes:
@@ -336,6 +357,8 @@ versioned JSON envelopes:
 - `keiro/catalog-inventory/v1`;
 - `keiro/catalog-rebuild-preview/v1`;
 - `keiro/catalog-registered-rebuild-preview/v1`; and
+- `keiro/catalog-adoption-preview/v1`;
+- `keiro/catalog-adoption-outcome/v1`; and
 - `keiro/catalog-rebuild-run/v1`.
 
 Every subscription in inventory and rebuild JSON includes
@@ -345,7 +368,7 @@ Every subscription in inventory and rebuild JSON includes
 The adapter intentionally has no parser, text renderer, confirmation policy, or
 database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
-`rebuild list|preview|start|status|resume|abandon` renders the same reports and
+`rebuild list|preview|start|status|resume|abandon|adopt` renders the same reports and
 requires preview plus `--force` for mutations. Applications therefore do not
 maintain a second rebuild map. The
 [Jitsurei rebuild rehearsal](../guides/run-and-operate-jitsurei.md#rehearse-a-catalog-rebuild)

@@ -44,11 +44,25 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   member keys, and reports `RebuildSubscriptionCheckpointsMissing` while
   condemning the entire preparation transaction if a declared subscription has
   no persisted member. The legacy unmanaged rebuild also uses the public API.
+- Projection catalog fingerprints now use an injective, length-prefixed
+  canonical preimage and explicit `catalog-v2:` / `slice-v1:` prefixes. Group
+  registration and rebuild lifecycle fences use only the affected group slice,
+  while rebuild runs retain the whole catalog fingerprint as provenance.
+- `previewCatalogAdoption` and `adoptCatalogGroups` provide a read-only plan and
+  an all-or-nothing, live-group-only path for adopting reviewed slice changes
+  and reconciling query-model registration metadata.
 - `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
 ### Breaking Changes
+
+- Catalog fingerprints, group metadata, rebuild contracts, and grouped errors
+  use the new canonical slice identity. `GroupRebuildMetadata.catalogFingerprint`
+  is now `sliceFingerprint`; fingerprint-drift errors are slice-specific; and
+  `RebuildRunReport` adds `groupSliceFingerprint`. Persisted replay format is
+  `keiro/projection-replay/v2`. Complete or abandon active catalog rebuilds
+  before migration `0024`, then explicitly adopt any pre-canonical group rows.
 
 - Requires `kiroku-store >=0.5 && <0.6`. Direct constructors of
   `SubscriptionDeclaration` and exhaustive matches on grouped

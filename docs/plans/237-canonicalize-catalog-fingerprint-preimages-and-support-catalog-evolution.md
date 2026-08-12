@@ -96,9 +96,10 @@ here, even if it requires splitting a partially completed task into two ("done" 
 - [x] M5: `keiro-ops rebuild adopt` command with preview-then-`--force`; slice
       fields in existing preview/list renderings; keiro-ops tests. Completed
       2026-08-12T11:47:46Z.
-- [ ] M6: docs (`docs/user/read-models-and-projections.md`, API reference),
-      changelogs (keiro, keiro-migrations, keiro-ops), ADR distillation (new ADR +
-      pointer updates in ADR 0026), full `just verify`, masterplan progress update.
+- [x] M6: docs (`docs/user/read-models-and-projections.md`, API reference),
+      changelogs (keiro, keiro-migrations, keiro-ops), ADR distillation (ADR 0032 +
+      pointer updates in ADRs 0026, 0028, and 0031), full `just verify`, masterplan
+      progress update. Completed 2026-08-12T12:05:34Z.
 
 
 ## Surprises & Discoveries
@@ -146,6 +147,13 @@ implementation. Provide concise evidence.
   human table while keeping the structured JSON report limited to catalog
   groups and removals. The exact preview/force invocation test and the full
   `keiro-ops-test` suite passed with `31 examples, 0 failures`.
+- The persistent Jitsurei development database supplied a real upgrade probe after
+  migration 0024: its pre-canonical group row was classified as
+  `RegisteredGroupStaleFingerprint`, the supported `rebuild adopt` preview named
+  the stale format, and `rebuild adopt --force` reconciled it without direct SQL.
+  The subsequent full `just verify` completed successfully, including 477
+  `keiro-test`, 31 `keiro-ops-test`, 28 `keiro-migrations-test`, 695
+  `keiro-dsl-test`, the 39-entry conformance corpus, and Jitsurei.
 
 
 ## Decision Log
@@ -296,7 +304,27 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. Catalog and rebuild-contract fingerprints now use one injective,
+length-prefixed byte encoding with explicit format versions. Rebuild lifecycle
+identity is scoped to the owning group slice, so unrelated additive catalog changes
+register and interrupted runs resume, while changes inside the group retain typed
+registration, rebuild, and resume refusals. Whole-catalog identity remains recorded
+as operator-visible provenance rather than acting as a fleet-wide lifecycle gate.
+
+Catalog evolution now has a supported, transactional path from library API through
+`keiro-ops rebuild adopt`: preview classifies new, unchanged, changed, stale-format,
+and removed groups; force locks and validates the complete requested set before it
+updates group and query-model registration metadata. It never mutates application
+tables, and a rebuild remains an explicit second operation when persisted rows need
+replacement.
+
+The original collision and permanent-lockout cases are permanent tests, as are
+additive registration, additive active-run resume, genuine slice drift, atomic
+adoption refusal, and stale-format adoption. Migration 0024, user documentation,
+three package changelogs, ADR 0032, and pointer amendments to ADRs 0026, 0028, and
+0031 record the clean pre-0.12 cutover and durable policy. Full repository
+verification passed. No gap from this plan's stated purpose remains; the adjacent
+failed-group recovery limitation remains outside scope as already recorded.
 
 
 ## Context and Orientation
@@ -1181,3 +1209,8 @@ successor (the inventory preimage) and `rebuildContract`, per the masterplan's
 integration notes; plan 242 (EP-6) later edits `Runner.hs` for paging and must not
 alter the contract computation; plan 242's soft dependency on this plan is a
 rebase-order preference only.
+
+Revision note (2026-08-12): Completed all six milestones, recorded the verified
+canonical encoding and slice-scoped lifecycle design, added the supported adoption
+workflow, distilled ADR 0032 and related amendments, and closed the plan after full
+repository verification.
