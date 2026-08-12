@@ -167,11 +167,12 @@ executable keiro-dsl
     , text                  >=2.1  && <2.2
 
 test-suite keiro-dsl-test
-  import:          warnings, shared
-  type:            exitcode-stdio-1.0
-  hs-source-dirs:  test
-  main-is:         Main.hs
-  autogen-modules: Paths_keiro_dsl
+  import:             warnings, shared
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            Main.hs
+  build-tool-depends: keiro-dsl:keiro-dsl
+  autogen-modules:    Paths_keiro_dsl
   other-modules:
     Keiro.Dsl.ConformanceBaseline
     Keiro.Dsl.FrontendCompatibility

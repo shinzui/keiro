@@ -2698,6 +2698,8 @@ main = hspec $ do
               "-XOverloadedStrings",
               "-fno-code",
               "-fforce-recomp",
+              "-package",
+              "keiro-core",
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -11871,7 +11873,10 @@ shouldRefuseWorkspace path = do
 runKeiroDsl :: [String] -> IO (ExitCode, String, String)
 runKeiroDsl arguments = do
   resolved <- traverse resolveArgument arguments
-  readProcessWithExitCode "cabal" (["run", "-v0", "keiro-dsl", "--"] <> resolved) ""
+  -- Cabal places build-tool dependencies on PATH for the test process. Invoke the
+  -- exact packaged CLI directly so each example retains its process/stdio/exit-code
+  -- boundary without paying for a fresh `cabal run` planning pass.
+  readProcessWithExitCode "keiro-dsl" resolved ""
   where
     resolveArgument argument
       | "test/fixtures/" `isPrefixOfString` argument = resolveTestPath argument
