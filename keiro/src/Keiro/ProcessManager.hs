@@ -471,6 +471,9 @@ ackForCommandError delay err
 -- byte-identical to the original codepoint encoding for ASCII seeds and
 -- collision-free for the rest; see
 -- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
+-- During ADR 0024's operator-attested compatibility window, dispatch preflights
+-- also consult 'deterministicCommandIdProbes'; this function remains the only
+-- append identity.
 -- Unlike 'Keiro.Router.deterministicRouterCommandId' the fields are joined with
 -- a delimiter rather than length-prefixed, so a manager name or correlation id
 -- containing @\":\"@ can still alias; new derivations should follow the router's
@@ -481,7 +484,8 @@ deterministicCommandId managerName correlationId sourceEventId emitIndex =
 
 -- | Reproduce the deterministic command id written before Keiro switched its
 -- seed encoding to UTF-8. This exists only for compatibility probes; all new
--- writes continue to use 'deterministicCommandId'.
+-- writes continue to use 'deterministicCommandId'. It is removed together with
+-- the positional-router probe only under ADR 0024's operator-attested criteria.
 legacyDeterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
 legacyDeterministicCommandId managerName correlationId sourceEventId emitIndex =
   EventId

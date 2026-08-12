@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0024 with the frozen pre-UTF-8 dedup and awakeable-adoption bridge, residual collision ambiguity, and operator-attested unified removal window (plan 240).
 * **Update**: Adopt Kiroku 0.6's public visible-global-head effect and transactional statement while preserving ADR 0033's reachable-head semantics (plan 238).
 * **Update**: Amend ADR 0025 so bounded workflow drains continue on durable advances and report paced and unregistered blocked work (plan 239).
 * **Update**: Amend ADR 0023 so awakeable cancellation and suspend arbitration share the per-step lock and terminal awakeable rows keep owners discoverable (plan 239).

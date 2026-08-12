@@ -71,6 +71,15 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
+### Fixed
+
+- Upgrades with non-ASCII process-manager correlations, router keys, or
+  awakeable labels now deduplicate against IDs written before deterministic seed
+  encoding switched to UTF-8. The runtime probes the frozen historical identity
+  alongside the current one, with no extra database probe for ASCII seeds, and
+  adopts in-flight generation-0 awakeables rather than orphaning them. See ADR
+  0024 for the operator-attested removal criteria.
+
 ### Breaking Changes
 
 - `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of

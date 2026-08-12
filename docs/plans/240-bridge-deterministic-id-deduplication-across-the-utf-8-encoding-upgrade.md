@@ -81,14 +81,18 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
       (2026-08-12T19:29:46Z).
 - [x] M3: Bridge `allocateAwakeableId` adoption; the new non-ASCII-label scenario and
       existing ASCII adoption scenario both pass (2026-08-12T19:32:44Z).
-- [ ] M4: Update ADR 0024 (bridge, unified window, removal criteria, residual collision
-      ambiguity) and `docs/adr/log.md`; `just adr-validate` green.
-- [ ] M4: Add the `keiro/CHANGELOG.md` Unreleased upgrade note.
-- [ ] M4: Point the `Router.hs` transition comment and the `ProcessManager.hs` haddocks
-      at the unified window criteria in ADR 0024.
-- [ ] M4: Update MasterPlan 37 (registry row EP-4, progress checklist); run
-      `just haskell-test`; remove the capture worktree.
-- [ ] Completion: ADR distillation pass and Outcomes & Retrospective entry.
+- [x] M4: Update ADR 0024 (bridge, unified window, removal criteria, residual collision
+      ambiguity) and `docs/adr/log.md`; `just adr-validate` green
+      (2026-08-12T19:43:22Z).
+- [x] M4: Add the `keiro/CHANGELOG.md` Unreleased upgrade note
+      (2026-08-12T19:43:22Z).
+- [x] M4: Point the `Router.hs` transition comment and the `ProcessManager.hs` haddocks
+      at the unified window criteria in ADR 0024 (2026-08-12T19:43:22Z).
+- [x] M4: Update MasterPlan 37 (registry row EP-4, progress checklist); run
+      `just haskell-test`; remove the clean detached capture worktree
+      (2026-08-12T19:43:22Z).
+- [x] Completion: distilled the durable compatibility contract into ADR 0024 and
+      completed Outcomes & Retrospective (2026-08-12T19:43:22Z).
 
 
 ## Surprises & Discoveries
@@ -243,7 +247,27 @@ distill durable project context from the Decision Log, Surprises & Discoveries, 
 this section into docs/adr/ (this plan's distillation target is ADR 0024, updated in
 Milestone 4). Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Plan 240 is complete. The implementation preserves the UTF-8 derivation as the sole
+identity for new writes while retaining a golden-pinned, read-only reproduction of the
+pre-0.12 encoder. Four process-manager sites and two router sites now probe historical
+identity without changing append identity; generation-0 awakeables adopt historical rows
+after the current candidate misses. ASCII seeds retain one probe and byte-identical UUIDs.
+
+The tests demonstrated the defects before wiring: all four command scenarios appended a
+second event, and the non-ASCII awakeable scenario allocated a fresh v4 id instead of
+adopting the planted row. After wiring, those scenarios report the exact historical
+duplicate id and keep each stream at one event. Captured goldens cover Latin-1, CJK,
+emoji, ASCII, and two deliberate modulo-256 collisions. The final `just haskell-test`
+gate passed, including Keiro's 507 examples, PGMQ's 58 examples (two unchanged
+environment-dependent pending cases), keiro-ops' 33 examples, the full DSL conformance
+matrix, Jitsurei's 23 examples, and diagram freshness.
+
+ADR 0024 now owns the remaining lifecycle: the command and positional-router bridges are
+one compatibility unit, cannot be removed in 0.12.x, and require an operator attestation
+that Kafka, PGMQ, timer, and planned-replay horizons cannot redeliver pre-upgrade source
+events. The residual ambiguity of an already-collided historical id is explicit and
+bounded to that window. No implementation gap remains; removal is intentionally deferred
+until those operational criteria are satisfied.
 
 
 ## Context and Orientation

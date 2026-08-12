@@ -86,7 +86,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
-| 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | In Progress |
+| 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Complete |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
 
@@ -167,11 +167,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test (2026-08-12T18:20:18Z)
 - [x] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests (2026-08-12T18:23:05Z)
 - [x] EP-3 (239) M4: CHANGELOG, ADR 0023/0025 amendments, masterplan bookkeeping (2026-08-12T18:39:59Z)
-- [ ] EP-4 (240): implementation started; complete plan read and capture-first M1 underway (2026-08-12T19:09:47Z)
-- [ ] EP-4 (240) M1: frozen legacy encoder pinned by golden vectors captured at `f8ca7a16^`
-- [ ] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first
-- [ ] EP-4 (240) M3: awakeable adoption bridge
-- [ ] EP-4 (240) M4: ADR 0024 window contract, CHANGELOG note, comment/window unification
+- [x] EP-4 (240): implementation complete (2026-08-12T19:43:22Z)
+- [x] EP-4 (240) M1: frozen legacy encoder pinned by golden vectors captured at `f8ca7a16^` (2026-08-12T19:17:05Z)
+- [x] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first (2026-08-12T19:29:46Z)
+- [x] EP-4 (240) M3: awakeable adoption bridge (2026-08-12T19:32:44Z)
+- [x] EP-4 (240) M4: ADR 0024 window contract, CHANGELOG note, comment/window unification, and full Haskell gate (2026-08-12T19:43:22Z)
 - [ ] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix
 - [ ] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies)
 - [ ] EP-5 (241) M3: executable-level no-DB-contact rejection test and closeout
@@ -193,6 +193,11 @@ interactions between child plans. Provide concise evidence.
   the router's pre-existing `legacyCommandId` probe targets positional ids that all predate
   the UTF-8 change, so it switches to the frozen legacy encoder outright rather than
   gaining a third probe.
+- EP-4 implementation (2026-08-12): all four historical command-ID reproductions
+  doubled their planted streams before the bridge, and the historical awakeable row was
+  bypassed for a fresh v4 allocation. After the six dispatch probes and generation-0
+  adoption were bridged, the exact same scenarios retained one row and reported the
+  captured historical identities. ASCII probe lists remain singleton.
 - Plan-creation research (2026-08-11), EP-5: the defect is broader than one reader — 20
   numeric readers across keiro-ops include 3 unguarded `option auto` sites and 16 `reads`
   copies that wrap out-of-range literals mod 2^64; and the NaN cutoff collapses to exactly
@@ -285,15 +290,21 @@ durable advances and expose paced and unregistered blockers through the library
 and `keiro-ops`; bounded drains now terminate on honest progress. ADRs 0023 and
 0025 preserve both contracts, and full repository verification passed.
 
-The MasterPlan remains in progress: EP-4 through EP-6 are not started. EP-1 removes
+EP-4 is complete. The frozen pre-UTF-8 encoder is independently pinned, all six dispatch
+preflights and generation-0 awakeable adoption consult historical identity, and ADR 0024
+defines the unified operator-attested removal window; full Haskell verification passed.
+
+The MasterPlan remains in progress: EP-5 and EP-6 are not started. EP-1 removes
 the release-critical catalog lockout and fingerprint-forgery defects and clears
 EP-6's soft dependency on its rebuild-runner identity changes; EP-2 removes the
 release-critical unreachable consistency target and permanent false-distance defect;
-EP-3 removes the workflow-stranding race and non-terminating drain contract.
+EP-3 removes the workflow-stranding race and non-terminating drain contract; EP-4 removes
+the deploy-boundary double-dispatch and orphaned-awakeable defects for non-ASCII identity.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
 and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
 reachable consistency targets in ADR 0033, amended ADR 0028, and adopted Kiroku 0.6's
-public visible-head API; completed EP-3 and
-amended ADRs 0023 and 0025 with wake arbitration and bounded-drain progress; left
-EP-4 through EP-6 eligible for subsequent execution.
+public visible-head API; completed EP-3 and amended ADRs 0023 and 0025 with wake
+arbitration and bounded-drain progress; completed EP-4 and amended ADR 0024 with the
+golden-pinned compatibility bridge and its operator-attested removal criteria; left EP-5
+and EP-6 eligible for subsequent execution.

@@ -85,23 +85,64 @@ the freeze; their residual delimiter ambiguity is bounded by the identity
 constructors, which reject `:` in workflow names and ids.
 
 
+### Compatibility bridge for pre-UTF-8 identity
+
+The UTF-8 derivation remains the only identity used for new writes. During the
+upgrade window Keiro also retains `Keiro.DeterministicId.legacySeedBytes`, an
+immutable reproduction of the pre-0.12 codepoint-to-byte truncation. UUIDs
+captured by running the genuine pre-change implementation pin that artifact in
+`keiro/test/Main.hs`; it is not a general-purpose encoder and must never mint a
+new append id.
+
+Process-manager writes derive their ordered candidate set through
+`Keiro.ProcessManager.deterministicCommandIdProbes`: the current UTF-8 id first,
+then the legacy id only when the full seed contains non-ASCII text. ASCII seeds
+produce identical bytes, so they retain one database probe. Every manager-state
+and target-command preflight uses `firstExistingEventId` and reports whichever
+candidate matched, while a miss still appends only under the current id.
+Generation-0 awakeable adoption follows the same order through
+`legacyDeterministicAwakeableId`; fresh allocations remain random and journaled.
+
+The router has an additional, older compatibility identity: before 0.2.0.0 it
+used positional process-manager command ids rather than target-keyed router ids.
+Every released positional router write predates the UTF-8 switch, so the two
+router paths derive that candidate with `legacyDeterministicCommandId` and do
+not probe a nonexistent UTF-8 positional variant.
+
+The old encoding was non-injective. If two distinct historical seeds collided
+to one legacy id in the same target stream, a probe cannot know which command
+the row represents. The bridge therefore preserves the old suppression in
+that ambiguous case rather than risking a double application. This is accepted
+only for the bounded compatibility window; new UTF-8 identities do not create
+that ambiguity.
+
+The command-id bridge and the positional-router bridge form one compatibility
+unit and must be removed together. They may not be removed in 0.12.x; the
+earliest eligible release is 0.13.0.0, and even then removal requires an
+operator attestation that no pre-upgrade dispatch remains inside any dedup or
+redelivery horizon. Concretely, every at-least-once channel — Kafka consumer
+groups, PGMQ live queues and archives, durable timers, and planned operator
+replays — must be unable to redeliver a source event first delivered before the
+0.12 upgrade. Version age alone is not sufficient evidence.
+
+
 ## Consequences
 
 - ASCII deployments — every deployment we know of — see no identity change at
   all. This is what makes the change deployable as an ordinary upgrade.
 - Non-ASCII seeds derive different ids than they did before. The in-flight
-  consequences are bounded and accepted:
+  consequences are handled as follows:
   - A non-ASCII workflow journal still replays correctly, because replay reads
     the step index by full step-name text (ADR 5) and the append transaction's
     index check fires before the event id matters.
   - An in-flight non-ASCII sleep may arm one duplicate timer row; its fire
     collapses in the idempotent append.
-  - A generation-0 awakeable registered under an old non-ASCII derived id is no
-    longer adopted by `deterministicAwakeableId`. New allocations are random v4
-    UUIDs, so only the legacy adoption path is affected.
-  - A non-ASCII process-manager emission retried across the deploy boundary can
-    emit one duplicate command — at-least-once, which is the guarantee the
-    dispatch path already carries.
+  - A generation-0 awakeable registered under an old non-ASCII derived id is
+    adopted through the frozen legacy candidate after the current candidate
+    misses. New allocations remain random v4 UUIDs.
+  - A non-ASCII process-manager or router emission retried across the deploy
+    boundary probes its historical id and is reported as a duplicate without
+    appending a second command.
 - Workflows previously wedged by a non-ASCII step-name collision now run. This
   is the behavioral acceptance criterion, not an incidental improvement.
 - The defect class is closed only for these four derivations. Generated code

@@ -324,7 +324,9 @@ dispatchRouterCommands options routerName targetEventStream targetProjections co
               targetStreamName
               occurrence
           -- Transition: dispatches written by keiro versions that derived
-          -- positional ids must still dedup across the upgrade.
+          -- positional ids must still dedup across the upgrade. ADR 0024 makes
+          -- this one window with the pre-UTF-8 process-manager probe and gives
+          -- the operator-attested removal criteria.
           legacyCommandId =
             legacyDeterministicCommandId
               routerName
