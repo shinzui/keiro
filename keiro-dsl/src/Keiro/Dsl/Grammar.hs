@@ -1206,6 +1206,7 @@ data ReadModelNode = ReadModelNode
     rmSubscription :: !(Maybe Text),
     rmGroup :: !(Maybe Name),
     rmObservedTargets :: ![Name],
+    rmBackingTarget :: !(Maybe Name),
     queryTypes :: !(Maybe ReadModelQueryTypes),
     rmLoc :: !Loc
   }

@@ -94,7 +94,7 @@ import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelection
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
-import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), ProjectionTargetNode (..), ReadModelNode (..), Spec (..))
+import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
@@ -303,16 +303,6 @@ structuralConformanceModules ctx service = case structuralConformanceModule ctx 
   Left failures -> error ("checked structural conformance planning failed: " <> show failures)
   Right Nothing -> []
   Right (Just moduleValue) -> [moduleValue]
-
-resolveCatalogReadModel :: Spec -> ReadModelNode -> ReadModelNode
-resolveCatalogReadModel spec readModel =
-  case rmGroup readModel of
-    Nothing -> readModel
-    Just _ -> case rmObservedTargets readModel of
-      targetName : _ -> case [target | NProjectionTarget target <- specNodes spec, ptName target == targetName] of
-        target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
-        [] -> readModel
-      [] -> readModel
 
 -- | Compatibility wrapper that explicitly selects legacy/version-1 semantics.
 scaffoldModules :: Context -> Spec -> [ScaffoldModule]

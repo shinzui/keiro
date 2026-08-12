@@ -48,6 +48,9 @@ pReadModel context = do
   observedTargets <- case group of
     Nothing -> pure []
     Just _ -> symbol "targets" *> symbol "=" *> brackets (many ident)
+  backingTarget <- case group of
+    Nothing -> pure Nothing
+    Just _ -> optional (symbol "backing" *> symbol "=" *> ident)
   _ <- symbol "}"
   pure
     ReadModelNode
@@ -63,6 +66,7 @@ pReadModel context = do
         rmSubscription = subscription,
         rmGroup = group,
         rmObservedTargets = observedTargets,
+        rmBackingTarget = backingTarget,
         queryTypes,
         rmLoc = loc
       }

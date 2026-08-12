@@ -1247,9 +1247,19 @@ readModelPairDiff env oldReadModel newReadModel =
       | otherwise =
           [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
     bindingChanges =
-      [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group or observed target binding changed; persisted lifecycle identity and rebuild completeness changed"
-      | (rmGroup oldReadModel, rmObservedTargets oldReadModel) /= (rmGroup newReadModel, rmObservedTargets newReadModel)
+      [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group, observed target set, or backing target changed; persisted lifecycle identity and rebuild completeness changed"
+      | bindingIdentity oldReadModel /= bindingIdentity newReadModel
       ]
+    bindingIdentity readModel =
+      ( rmGroup readModel,
+        Set.fromList (rmObservedTargets readModel),
+        effectiveBacking readModel
+      )
+    effectiveBacking readModel = case rmBackingTarget readModel of
+      Just target -> Just target
+      Nothing -> case rmObservedTargets readModel of
+        [single] -> Just single
+        _ -> Nothing
     queryContractChanges =
       queryPositionChange
         "input"

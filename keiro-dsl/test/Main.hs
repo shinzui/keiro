@@ -285,6 +285,7 @@ main = hspec $ do
                   rmSubscription = Just "disjoint-lookup",
                   rmGroup = Just "disjoint_group",
                   rmObservedTargets = ["disjoint_target"],
+                  rmBackingTarget = Nothing,
                   queryTypes = Nothing,
                   rmLoc = noLoc
                 }
@@ -1752,7 +1753,11 @@ main = hspec $ do
         `shouldBe` sort
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
+            "catalog-readmodel-backing-required.keiro",
+            "catalog-readmodel-backing-unobserved.keiro",
             "catalog-readmodel-physical-override.keiro",
+            "catalog-readmodel-reorder-a.keiro",
+            "catalog-readmodel-reorder-b.keiro",
             "contract-v1-compat.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
@@ -2012,6 +2017,35 @@ main = hspec $ do
     it "rejects explicit physical coordinates on a catalog-bound read model" $ do
       errorCodesOf "test/fixtures/catalog-readmodel-physical-override.keiro"
         `shouldReturn` [CatalogReadModelPhysicalOverride]
+
+    it "requires an observed backing target for multi-target read models" $ do
+      errorCodesOf "test/fixtures/catalog-readmodel-backing-required.keiro"
+        `shouldReturn` [CatalogReadModelBackingRequired]
+      errorCodesOf "test/fixtures/catalog-readmodel-backing-unobserved.keiro"
+        `shouldReturn` [CatalogReadModelBackingUnobserved]
+
+    it "binds catalog read models by name and ignores observed-target order" $ do
+      sourceA <- readTestText "test/fixtures/catalog-readmodel-reorder-a.keiro"
+      sourceB <- readTestText "test/fixtures/catalog-readmodel-reorder-b.keiro"
+      parsedA <- case parseSource "catalog-readmodel-reorder-a.keiro" sourceA of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      case parseSource "catalog-readmodel-reorder-a-rendered.keiro" (renderSource parsedA) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right rendered -> parsedSpec rendered `shouldBe` parsedSpec parsedA
+      serviceA <- checkedServiceFromText "catalog-readmodel-reorder-a.keiro" sourceA
+      serviceB <- checkedServiceFromText "catalog-readmodel-reorder-b.keiro" sourceB
+      validateService serviceA `shouldBe` []
+      validateService serviceB `shouldBe` []
+      let ctx = defaultContext (specContext (checkedSpec serviceA))
+          modulesA = scaffoldServiceModules ctx serviceA
+          modulesB = scaffoldServiceModules ctx serviceB
+          generatedBytes modules = sort [(modulePath moduleValue, moduleText moduleValue) | moduleValue <- modules]
+          tableA = generatedTextEndingIn "Generated/BindingDemo/LedgerView/ReadModelTable.hs" modulesA
+      generatedBytes modulesA `shouldBe` generatedBytes modulesB
+      tableA `shouldSatisfy` T.isInfixOf "qualifyTable \"billing\" \"ledger_entries\""
+      map (ckCode . kindOfChange) (diffServices serviceA serviceB)
+        `shouldNotContain` [CatalogQueryBindingChanged]
 
     it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -13129,6 +13163,7 @@ genReadModel =
     <*> genMaybe genAdversarialText
     <*> pure Nothing
     <*> pure []
+    <*> pure Nothing
     <*> pure Nothing
     <*> pure noLoc
   where

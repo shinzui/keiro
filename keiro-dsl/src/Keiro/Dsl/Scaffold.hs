@@ -61,6 +61,7 @@ module Keiro.Dsl.Scaffold
     scaffoldWorkqueueForService,
     scaffoldReadModel,
     scaffoldReadModelForService,
+    resolveCatalogReadModel,
     scaffoldProjectionCatalog,
     scaffoldRefusals,
     windowSeconds,
@@ -4076,6 +4077,22 @@ scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
           origin = readModelOrigin
         }
 
+-- | Resolve a catalog-bound read model's physical binding to its backing
+-- target's coordinates, by name. An unbound or unresolvable model is returned
+-- unchanged; validation rejects those forms before scaffolding.
+resolveCatalogReadModel :: Spec -> ReadModelNode -> ReadModelNode
+resolveCatalogReadModel spec readModel = case rmGroup readModel of
+  Nothing -> readModel
+  Just _ ->
+    let backingName = case rmBackingTarget readModel of
+          Just name -> Just name
+          Nothing -> case rmObservedTargets readModel of
+            [single] -> Just single
+            _ -> Nothing
+     in case [target | NProjectionTarget target <- specNodes spec, Just (ptName target) == backingName] of
+          target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
+          [] -> readModel
+
 -- | Generate one service-level catalog facade and one create-once module that
 -- owns application handler/decoder bodies. The checked DSL graph owns every
 -- identity and relationship; the hole supplies only executable projection
@@ -4270,7 +4287,7 @@ emitProjectionCatalog ctx spec =
         <> "ReadModel "
         <> smart "mkRebuildGroupId" (fromMaybe "" (rmGroup readModel))
         <> " "
-        <> renderList (smart "mkTargetId") (rmObservedTargets readModel)
+        <> renderList (smart "mkTargetId") (sort (rmObservedTargets readModel))
         <> " "
         <> claim ("readmodel " <> rmName readModel)
         <> ")"

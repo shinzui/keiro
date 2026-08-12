@@ -69,15 +69,15 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-08-11 19:02 PDT) M1: Emit the diagnostic from `validateReadModel`'s `catalogBinding` block when `rmGroup` is set and `rmTable` or `rmSchema` is non-empty.
 - [x] (2026-08-11 19:02 PDT) M1: Create fixture `keiro-dsl/test/fixtures/catalog-readmodel-physical-override.keiro` and a spec test asserting the code.
 - [x] (2026-08-11 19:02 PDT) M1: Confirm the diagnostic-code round-trip test (`test/Main.hs`, "round-trips every stable diagnostic code spelling") passes with the new constructor.
-- [ ] M2: Add `rmBackingTarget :: !(Maybe Name)` to `ReadModelNode` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs` and fix all record construction sites compiler-first.
-- [ ] M2: Parse optional `backing = <ident>` after `targets` in `keiro-dsl/src/Keiro/Dsl/Parser/ReadModel.hs` (inside the `group` branch only).
-- [ ] M2: Render `backing` in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` so `parse . render` round-trips.
-- [ ] M2: Add `CatalogReadModelBackingRequired` and `CatalogReadModelBackingUnobserved` codes and their `validateReadModel` rules.
-- [ ] M2: Move `resolveCatalogReadModel` into `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, resolve by backing-target name, and delete the duplicate copies in `ScaffoldRun.hs` and `WorkspaceScaffold.hs`.
-- [ ] M2: Sort the observed-target list rendered into the generated `ProjectionCatalog` query binding (`queryExpr` in `Scaffold.hs`).
-- [ ] M2: Make `readModelPairDiff` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` compare `(group, target set, effective backing)` instead of `(group, target list)`.
-- [ ] M2: Create fixtures `catalog-readmodel-backing-required.keiro`, `catalog-readmodel-backing-unobserved.keiro`, and the reorder pair `catalog-readmodel-reorder-a.keiro` / `catalog-readmodel-reorder-b.keiro`, with tests.
-- [ ] M2: Test that scaffolding the reorder pair yields identical module sets, and that a real target-set change still reports `CatalogQueryBindingChanged`.
+- [x] (2026-08-11 19:15 PDT) M2: Add `rmBackingTarget :: !(Maybe Name)` to `ReadModelNode` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs` and fix all record construction sites compiler-first.
+- [x] (2026-08-11 19:15 PDT) M2: Parse optional `backing = <ident>` after `targets` in `keiro-dsl/src/Keiro/Dsl/Parser/ReadModel.hs` (inside the `group` branch only).
+- [x] (2026-08-11 19:15 PDT) M2: Render `backing` in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` so `parse . render` round-trips.
+- [x] (2026-08-11 19:15 PDT) M2: Add `CatalogReadModelBackingRequired` and `CatalogReadModelBackingUnobserved` codes and their `validateReadModel` rules.
+- [x] (2026-08-11 19:15 PDT) M2: Move `resolveCatalogReadModel` into `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, resolve by backing-target name, and delete the duplicate copies in `ScaffoldRun.hs` and `WorkspaceScaffold.hs`.
+- [x] (2026-08-11 19:15 PDT) M2: Sort the observed-target list rendered into the generated `ProjectionCatalog` query binding (`queryExpr` in `Scaffold.hs`).
+- [x] (2026-08-11 19:15 PDT) M2: Make `readModelPairDiff` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` compare `(group, target set, effective backing)` instead of `(group, target list)`.
+- [x] (2026-08-11 19:15 PDT) M2: Create fixtures `catalog-readmodel-backing-required.keiro`, `catalog-readmodel-backing-unobserved.keiro`, and the reorder pair `catalog-readmodel-reorder-a.keiro` / `catalog-readmodel-reorder-b.keiro`, with tests.
+- [x] (2026-08-11 19:15 PDT) M2: Test that scaffolding the reorder pair yields identical module sets, and that a real target-set change still reports `CatalogQueryBindingChanged`.
 - [ ] M3: Extend `harnessReadModel` / `emitReadModelHarness` in `keiro-dsl/src/Keiro/Dsl/Harness.hs` to take the `Spec` and emit real grouped facts (`catalogRegistration` row plus per-feeding-owner `asyncRegistration` rows via a `catalogFactsAgainst` helper).
 - [ ] M3: Update the three `harnessReadModel` call sites (`ScaffoldRun.hs`, `WorkspaceScaffold.hs`, `test/Main.hs`).
 - [ ] M3: Add textual emitter tests: grouped harness imports the generated `ProjectionCatalog` module, pins the spec-derived expected identities, and no longer contains the constant `"catalog-managed", "catalog-managed"` row.

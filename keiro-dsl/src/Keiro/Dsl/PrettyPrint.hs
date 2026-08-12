@@ -407,6 +407,7 @@ docReadModel readModel =
       ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (rmSubscription readModel)
       ++ maybe [] (pure . indent 2 . ("group =" <+>) . pretty) (rmGroup readModel)
       ++ [indent 2 ("targets =" <+> bracketed (map pretty (rmObservedTargets readModel))) | rmGroup readModel /= Nothing]
+      ++ maybe [] (pure . indent 2 . ("backing =" <+>) . pretty) (rmBackingTarget readModel)
       ++ ["}"]
   where
     docColumn columnDecl =

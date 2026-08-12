@@ -235,6 +235,8 @@ data DiagnosticCode
   | CatalogReadModelBindingMissing
   | CatalogReadModelTargetOutsideGroup
   | CatalogReadModelPhysicalOverride
+  | CatalogReadModelBackingRequired
+  | CatalogReadModelBackingUnobserved
   | CatalogTargetAdded
   | CatalogTargetRemoved
   | CatalogTargetLocationChanged
@@ -2573,7 +2575,7 @@ validateReadModel languageContract spec readModel =
       ]
     catalogBinding
       | not (hasProjectionCatalog languageContract) = []
-      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup <> physicalOverride
+      | otherwise = missingGroup <> unknownGroup <> missingTargets <> targetOutsideGroup <> physicalOverride <> backingRequired <> backingUnobserved
       where
         groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
         missingGroup =
@@ -2610,6 +2612,27 @@ validateReadModel languageContract spec readModel =
                 <> "' but declares explicit table/schema; physical coordinates belong to the target declaration — remove table/schema and name the intended target in 'targets' (and 'backing' when observing several)"
           | Just groupName <- [rmGroup readModel],
             rmTable readModel /= "" || rmSchema readModel /= ""
+          ]
+        backingRequired =
+          [ mkErr readModelLine CatalogReadModelBackingRequired $
+              "readmodel '"
+                <> rmName readModel
+                <> "' observes "
+                <> T.pack (show (length (rmObservedTargets readModel)))
+                <> " targets; name the physical backing target with 'backing = <target>'"
+          | rmGroup readModel /= Nothing,
+            length (rmObservedTargets readModel) > 1,
+            rmBackingTarget readModel == Nothing
+          ]
+        backingUnobserved =
+          [ mkErr readModelLine CatalogReadModelBackingUnobserved $
+              "readmodel '"
+                <> rmName readModel
+                <> "' names backing target '"
+                <> backingTarget
+                <> "' but does not observe it"
+          | Just backingTarget <- [rmBackingTarget readModel],
+            backingTarget `notElem` rmObservedTargets readModel
           ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef

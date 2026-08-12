@@ -293,15 +293,6 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
       let (kind', name, _) = nodeIdentity node
        in maybe ContextLevel (MemberOwned . fst) (nodeOwner ownership kind' name)
 
-    resolveCatalogReadModel spec readModel =
-      case rmGroup readModel of
-        Nothing -> readModel
-        Just _ -> case rmObservedTargets readModel of
-          targetName : _ -> case [target | NProjectionTarget target <- specNodes spec, ptName target == targetName] of
-            target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
-            [] -> readModel
-          [] -> readModel
-
     -- A structural module belongs to a member only when every declaration it
     -- was emitted for has the same owner. A binding skeleton shared by
     -- declarations from two members belongs to neither: attributing it to one
