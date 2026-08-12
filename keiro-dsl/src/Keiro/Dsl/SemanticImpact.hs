@@ -52,7 +52,7 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.TypeGraph
 
 -- | A checked generated consumer of mapped declarations. Projection consumers

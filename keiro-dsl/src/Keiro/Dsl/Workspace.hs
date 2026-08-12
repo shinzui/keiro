@@ -107,7 +107,7 @@ import Keiro.Dsl.Parser (ParseError, ParseFailure (..), parseSourceDocument, ren
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..))
 import Keiro.Dsl.ScaffoldRun (Refusal (..), originLine, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, planningRefusalDiagnostics)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedServiceForContract, checkedSource, effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedServiceForContract, checkedSource, effectiveLanguageContract)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex
   ( ParsedSourceDocument (..),

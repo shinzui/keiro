@@ -27,7 +27,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
 data BindingResolutionError

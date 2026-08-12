@@ -33,9 +33,9 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta (..))
-import Keiro.Dsl.TypeGraph (UsePath (..), UseSite, renderUsePath, resolveTypeGraph)
+import Keiro.Dsl.TypeGraph (UsePath (..), UseSite, renderUsePath)
 import Numeric.Natural (Natural)
 
 data SelectionVerification = DeclarativeVerified | CustomUnverified
@@ -209,7 +209,7 @@ stateMap :: CheckedService -> Map Name RouterSelectionState
 stateMap = Map.fromList . map (\state -> (selectionRouter (stateSnapshot state), state)) . routerSelectionStates
 
 routerSelectionStates :: CheckedService -> [RouterSelectionState]
-routerSelectionStates service = case resolveTypeGraph spec of
+routerSelectionStates service = case checkedTypeGraph service of
   Left failures -> error ("checked service type graph did not resolve for router coordination: " <> show failures)
   Right graph -> map (routerState graph) routers
   where

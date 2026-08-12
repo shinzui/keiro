@@ -45,10 +45,10 @@ import Keiro.Dsl.AggregateType
 import Keiro.Dsl.GeneratedHaskellLanguage (generatedHaskellDefaultExtensions, generatedHaskellDefaultLanguage)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor)
-import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlanForService)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
 
 -- | Render a Cabal-pasteable manifest from the modules a scaffold run produced
 -- plus the node kinds present (which imply the dependency set). The first argument
@@ -88,8 +88,7 @@ renderManifestForServiceWithFacade facadeModule specName mods service =
       ++ map ("    , " <>) (manifestDependenciesForService service)
       ++ consumerBlocks
   where
-    spec = checkedSpec service
-    plan = consumerPlan spec
+    plan = consumerPlanForService service
     moduleNames = sort (map (moduleNameOf . modulePath) mods)
     otherModules = case facadeModule of
       Nothing -> moduleNames
@@ -121,14 +120,14 @@ manifestDependencies = manifestDependenciesForService . legacyCheckedService
 
 manifestDependenciesForService :: CheckedService -> [Text]
 manifestDependenciesForService service =
-  sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap (depsForNode service spec) (specNodes spec)))
+  sort (nub ("base" : consumerPackages (consumerPlanForService service) <> concatMap (depsForNode service) (specNodes spec)))
   where
     spec = checkedSpec service
 
 -- | The dependencies a single node kind implies (see the module header table).
-depsForNode :: CheckedService -> Spec -> Node -> [Text]
-depsForNode service spec n = case n of
-  NAggregate aggregate -> ["aeson", "keiki", "keiro", "text"] <> aggregateDependencies spec aggregate
+depsForNode :: CheckedService -> Node -> [Text]
+depsForNode service n = case n of
+  NAggregate aggregate -> ["aeson", "keiki", "keiro", "text"] <> aggregateDependencies service aggregate
   NProcess {} -> ["aeson", "keiki", "keiro", "shibuya-core", "text", "time", "uuid"]
   NRouter {} -> ["effectful-core", "keiro", "shibuya-core", "text"]
   NContract contract -> ["aeson", "text"] <> [dependency | hasTypedContractId contract, dependency <- ["keiro-core", "mmzk-typeid"]]
@@ -194,8 +193,8 @@ readModelDependencies readModel =
           TMap value -> typeExprUses predicate value
           _ -> False
 
-aggregateDependencies :: Spec -> Aggregate -> [Text]
-aggregateDependencies spec aggregate =
+aggregateDependencies :: CheckedService -> Aggregate -> [Text]
+aggregateDependencies service aggregate =
   Set.toAscList
     ( Set.unions
         [ aggregatePackages symbols resolvedType
@@ -209,7 +208,8 @@ aggregateDependencies spec aggregate =
           ]
     )
   where
-    symbols = aggregateSymbols spec
+    spec = checkedSpec service
+    symbols = aggregateSymbolsFromGraphResult (checkedTypeGraph service) spec
     resolvedTypes =
       [ resolvedType
       | register <- aggRegs aggregate,

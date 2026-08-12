@@ -17,10 +17,9 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValuesForService, workflowHarnessFactValues)
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
-import Keiro.Dsl.SemanticContract (CheckedService (..), effectiveContractLanguageVersion)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion)
 import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpactForService)
 import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
-import Keiro.Dsl.TypeGraph (resolveTypeGraph)
 import Keiro.Dsl.Validate (nodeIdentity)
 
 -- | A fully qualified process, router, or workflow fact key that would occur
@@ -217,6 +216,6 @@ surfaceFactValues service
           MappedConsumerSurfaceSyntax
       ) =
       []
-  | otherwise = case resolveTypeGraph (checkedSpec service) of
+  | otherwise = case checkedTypeGraph service of
       Left _ -> []
       Right graph -> mappedSurfaceFactValues (semanticImpactForService service graph)

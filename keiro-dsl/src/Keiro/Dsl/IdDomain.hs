@@ -20,7 +20,7 @@ import Data.Text qualified as T
 import Keiro.Codec.IdDomain
 import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractType (..), IdDecl (..), Node (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, effectiveRuntimeProfile)
 
 -- | Versions 1 and 2 intentionally return 'Nothing': their generated IDs
 -- admitted arbitrary text. Runtime-semantics generation 2 is the first

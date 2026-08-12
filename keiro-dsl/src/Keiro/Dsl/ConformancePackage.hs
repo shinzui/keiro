@@ -42,7 +42,7 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..), isCabalPackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (ModuleKind (..), generatedBannerFor, isGeneratedBannerLine)
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract)
 import Keiro.Dsl.ServiceHarness (serviceConformanceFactValues)
 import Keiro.Dsl.SidecarNames (conformanceLedgerFileName)
 import Numeric (showHex)

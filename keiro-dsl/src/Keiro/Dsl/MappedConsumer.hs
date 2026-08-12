@@ -6,6 +6,7 @@ module Keiro.Dsl.MappedConsumer
   ( ConsumerPlan (..),
     MappingIdentity (..),
     consumerPlan,
+    consumerPlanForService,
   )
 where
 
@@ -17,6 +18,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar (HaskellSource (..), Spec)
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
 data ConsumerPlan = ConsumerPlan
@@ -141,7 +143,10 @@ instance FromJSON MappingIdentity where
           _ -> fail "unknown mapping identity mode"
 
 consumerPlan :: Spec -> ConsumerPlan
-consumerPlan spec = case (resolveTypeGraph spec, resolveNominalTypes spec) of
+consumerPlan = consumerPlanForService . legacyCheckedService
+
+consumerPlanForService :: CheckedService -> ConsumerPlan
+consumerPlanForService service = case (checkedTypeGraph service, resolveNominalTypes spec) of
   (Right graph, Right nominalRegistry) ->
     ConsumerPlan
       { consumerPackages = uniqueSorted ([hsPackage (mappedSource declaration) | declaration <- declarations] <> map nominalPackage nominalBindings),
@@ -156,6 +161,8 @@ consumerPlan spec = case (resolveTypeGraph spec, resolveNominalTypes spec) of
           ConsumerNominal binding <- [resolvedNominalOwnership nominal]
         ]
   _ -> ConsumerPlan [] [] []
+  where
+    spec = checkedSpec service
 
 mappedSource :: ResolvedMappedDecl -> HaskellSource
 mappedSource (ResolvedStructural declaration _) = sdHaskell declaration

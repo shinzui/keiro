@@ -24,7 +24,7 @@ import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (NominalEqualityV2), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, runtimeSemanticsFingerprintSegments)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
 
 -- | A checked service can retain language provenance before semantic
@@ -69,11 +69,12 @@ aggregateFoldFingerprintForService service = fmap foldFingerprint128 . aggregate
 -- source declaration provenance and grammar-only versions never enter it.
 aggregateFoldSurfaceForService :: CheckedService -> Aggregate -> Either FoldSurfaceError Text
 aggregateFoldSurfaceForService service aggregate = do
-  graph <- mapLeft (FoldTypeGraphResolutionFailed . showText) (resolveTypeGraph spec)
+  graph <- mapLeft (FoldTypeGraphResolutionFailed . showText) (checkedTypeGraph service)
+  let symbols = aggregateSymbolsFromGraph graph spec
   nominalRegistry <- mapLeft (FoldNominalResolutionFailed . showText) (resolveNominalTypes spec)
   registerSegments <- traverse (registerSegment symbols) (aggRegs aggregate)
-  equalityUses <- nominalEqualityUses service aggregate
-  transitionSegments <- traverse (transitionSegment spec aggregate) (aggTransitions aggregate)
+  equalityUses <- nominalEqualityUses graph service aggregate
+  transitionSegments <- traverse (transitionSegment graph spec aggregate) (aggTransitions aggregate)
   pure
     ( T.intercalate
         "\n"
@@ -89,7 +90,6 @@ aggregateFoldSurfaceForService service aggregate = do
     )
   where
     spec = checkedSpec service
-    symbols = aggregateSymbols spec
     referencedRules =
       [ rule
       | rule <- specRules spec,
@@ -112,8 +112,8 @@ aggregateFoldSurfaceForService service aggregate = do
 -- actually compares that declaration. This keeps unrelated binding metadata out
 -- of replay compatibility while ensuring a witness/domain change cannot silently
 -- retain the old fold fingerprint.
-nominalEqualityUses :: CheckedService -> Aggregate -> Either FoldSurfaceError (Set Text)
-nominalEqualityUses service aggregate =
+nominalEqualityUses :: TypeGraph -> CheckedService -> Aggregate -> Either FoldSurfaceError (Set Text)
+nominalEqualityUses graph service aggregate =
   if runtimeProfileHasCapability (effectiveRuntimeProfile (checkedLanguageContract service)) NominalEqualityV2
     then fmap (Set.fromList . concat) (traverse transitionIdentities (aggTransitions aggregate))
     else
@@ -122,7 +122,7 @@ nominalEqualityUses service aggregate =
             [ identity
             | transition <- aggTransitions aggregate,
               guardSyntax <- maybeToList (tGuard transition),
-              Right guardExpression <- [resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax],
+              Right guardExpression <- [resolveGuardExpr (expressionEnvironmentFromGraph graph spec aggregate transition) guardSyntax],
               identity <- equalityIdentities (checkedLanguageContract service) guardExpression
             ]
         )
@@ -134,7 +134,7 @@ nominalEqualityUses service aggregate =
         guardExpression <-
           mapLeft
             (FoldGuardResolutionFailed (aggName aggregate) (tCommand transition) . showText)
-            (resolveGuardExpr (expressionEnvironment spec aggregate transition) guardSyntax)
+            (resolveGuardExpr (expressionEnvironmentFromGraph graph spec aggregate transition) guardSyntax)
         pure (equalityIdentities (checkedLanguageContract service) guardExpression)
 
 equalityIdentities :: EffectiveLanguageContract -> TypedScalarExpr -> [Text]
@@ -248,8 +248,8 @@ registerSegment symbols register = do
         <> registerInitialCanonicalName resolvedInitial
     )
 
-transitionSegment :: Spec -> Aggregate -> Transition -> Either FoldSurfaceError Text
-transitionSegment spec aggregate transition = do
+transitionSegment :: TypeGraph -> Spec -> Aggregate -> Transition -> Either FoldSurfaceError Text
+transitionSegment graph spec aggregate transition = do
   outputOwnershipSegment <- case tImplementation transition of
     LegacyHoleImplementation -> Right []
     GeneratedImplementation -> fmap (pure . ("outputs=" <>) . T.intercalate ",") outputSegments
@@ -277,7 +277,7 @@ transitionSegment spec aggregate transition = do
       mapping <-
         mapLeft
           (FoldEventOutputResolutionFailed (aggName aggregate) (tCommand transition) eventName . showText)
-          (eventOutputMapping spec aggregate transition emitIndex eventName)
+          (eventOutputMappingFromGraph graph spec aggregate transition emitIndex eventName)
       pure (eventName <> "=" <> eventOutputCanonical mapping)
     implementationSegment = case tImplementation transition of
       LegacyHoleImplementation -> []

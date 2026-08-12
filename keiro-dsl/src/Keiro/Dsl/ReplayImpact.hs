@@ -37,7 +37,7 @@ import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForServi
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec)
 import Keiro.Dsl.SemanticImpact (semanticImpact)
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
 

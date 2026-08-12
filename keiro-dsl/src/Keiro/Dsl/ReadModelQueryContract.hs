@@ -8,6 +8,7 @@ module Keiro.Dsl.ReadModelQueryContract
     QueryContractIdentity (..),
     QueryContractDrift (..),
     queryContractIdentities,
+    queryContractIdentitiesForService,
     queryContractIdentityKey,
     queryContractDrift,
   )
@@ -22,6 +23,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderTypeExpr)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
 data QueryContractPosition
@@ -89,10 +91,14 @@ queryContractDrift current previous =
     newByKey = Map.fromList [(queryContractIdentityKey identity, identity) | identity <- current]
 
 queryContractIdentities :: Spec -> Either (NonEmpty TypeGraphError) [QueryContractIdentity]
-queryContractIdentities spec = do
-  graph <- resolveTypeGraph spec
+queryContractIdentities = queryContractIdentitiesForService . legacyCheckedService
+
+queryContractIdentitiesForService :: CheckedService -> Either (NonEmpty TypeGraphError) [QueryContractIdentity]
+queryContractIdentitiesForService service = do
+  graph <- checkedTypeGraph service
   fmap (sortOn queryContractIdentityKey . concat) (traverse (identitiesFor graph) readModels)
   where
+    spec = checkedSpec service
     readModels = [readModel | NReadModel readModel <- specNodes spec]
 
 identitiesFor :: TypeGraph -> ReadModelNode -> Either (NonEmpty TypeGraphError) [QueryContractIdentity]

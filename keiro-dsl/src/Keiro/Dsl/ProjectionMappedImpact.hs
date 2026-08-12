@@ -14,6 +14,7 @@ module Keiro.Dsl.ProjectionMappedImpact
     projectionConsumersFor,
     projectionOperationsFor,
     projectionAggregateSourceFingerprint,
+    projectionAggregateSourceFingerprintForService,
     renderProjectionMappedImpact,
   )
 where
@@ -28,7 +29,7 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (fnv1a64)
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.TypeGraph
 
@@ -91,6 +92,7 @@ projectionMappedImpact service semantic =
     }
   where
     spec = checkedSpec service
+    graph = either (const Nothing) Just (checkedTypeGraph service)
     derivedConsumers =
       Set.fromList
         [ derived
@@ -111,14 +113,14 @@ projectionMappedImpact service semantic =
         (Set.toAscList (Set.fromList [derived | ProjectionMappedRoot derived _ _ <- mappedRoots]))
     unsupportedSources = impactUnsupportedProjectionSources semantic
 
-    mapMaybeOperation = foldr (maybe id (:) . operationFor spec) []
+    mapMaybeOperation = foldr (maybe id (:) . operationFor graph spec) []
     mapMaybeUnsupported = foldr (maybe id (:) . unsupportedFor spec) []
 
 -- | Resolve and project a checked service without making callers reconstruct
 -- the shared type graph. A failed resolution remains explicit even though the
 -- scaffold admission gate normally prevents it from reaching report creation.
 projectionMappedImpactForService :: CheckedService -> Maybe ProjectionMappedImpact
-projectionMappedImpactForService service = case resolveTypeGraph (checkedSpec service) of
+projectionMappedImpactForService service = case checkedTypeGraph service of
   Left _ -> Nothing
   Right graph -> Just (projectionMappedImpact service (semanticImpact graph))
 
@@ -138,12 +140,22 @@ projectionOperationsFor impact declarationKey =
 -- transitive wire authority; command/register/query-only mappings are absent.
 projectionAggregateSourceFingerprint :: Spec -> Name -> Text
 projectionAggregateSourceFingerprint spec aggregate =
-  case resolveTypeGraph spec of
-    Left _ -> base
-    Right graph ->
-      case eventRows graph of
-        [] -> base
-        rows -> base <> "/mapped-" <> fnv1a64 (T.intercalate "\n" rows)
+  projectionAggregateSourceFingerprintWithGraph
+    (either (const Nothing) Just (resolveTypeGraph spec))
+    aggregate
+
+projectionAggregateSourceFingerprintForService :: CheckedService -> Name -> Text
+projectionAggregateSourceFingerprintForService service =
+  projectionAggregateSourceFingerprintWithGraph
+    (either (const Nothing) Just (checkedTypeGraph service))
+
+projectionAggregateSourceFingerprintWithGraph :: Maybe TypeGraph -> Name -> Text
+projectionAggregateSourceFingerprintWithGraph maybeGraph aggregate =
+  case maybeGraph of
+    Nothing -> base
+    Just graph -> case eventRows graph of
+      [] -> base
+      rows -> base <> "/mapped-" <> fnv1a64 (T.intercalate "\n" rows)
   where
     base = "aggregate:" <> aggregate <> "/generated-codec/v1"
     eventRows graph =
@@ -216,8 +228,8 @@ renderProjectionMappedImpact impact
     yesNo True = "yes"
     yesNo False = "no"
 
-operationFor :: Spec -> DerivedMappedConsumer -> Maybe ProjectionOperationalImpact
-operationFor spec derived = case derived of
+operationFor :: Maybe TypeGraph -> Spec -> DerivedMappedConsumer -> Maybe ProjectionOperationalImpact
+operationFor graph spec derived = case derived of
   AggregateInlineProjectionConsumer aggregate projection ->
     Just
       ProjectionOperationalImpact
@@ -226,7 +238,7 @@ operationFor spec derived = case derived of
           targets = Set.singleton projection,
           readModels = Set.fromList [rmName readModel | readModel <- readModelNodes spec, rmName readModel == projection],
           replayable = False,
-          sourceFingerprint = projectionAggregateSourceFingerprint spec aggregate
+          sourceFingerprint = projectionAggregateSourceFingerprintWithGraph graph aggregate
         }
   CatalogProjectionConsumer ownerName aggregate -> do
     owner <- find ((== ownerName) . poName) (projectionOwners spec)
@@ -237,7 +249,7 @@ operationFor spec derived = case derived of
           targets = Set.fromList (poTargets owner),
           readModels = observingReadModels spec owner,
           replayable = isReplayable owner,
-          sourceFingerprint = projectionAggregateSourceFingerprint spec aggregate
+          sourceFingerprint = projectionAggregateSourceFingerprintWithGraph graph aggregate
         }
 
 unsupportedFor :: Spec -> UnsupportedProjectionSource -> Maybe UnsupportedProjectionImpact

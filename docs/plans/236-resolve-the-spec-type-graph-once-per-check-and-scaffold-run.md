@@ -55,9 +55,9 @@ This section must always reflect the actual current state of the work.
 - [x] M2: Add the lazy `checkedTypeGraph` field to `CheckedService` with hand-written Eq/Show; update all direct construction sites.
 - [x] M2: Full suite green, corpus zero drift with the field present but unconsumed.
 - [x] M3: Thread the shared graph through the check pass (Validate.hs, RouterSelection.hs, ExplainBindings.hs, Coverage path).
-- [ ] M3: Trace count for `keiro-dsl check` on the declarative-router fixture is exactly 1.
-- [ ] M4: Thread the shared graph through the scaffold run (Scaffold.hs, ScaffoldRun.hs, AggregateType symbols, FoldFingerprint, Harness, ServiceHarness, StructuralConformance, MappedConsumer, ReadModelQueryContract, CoordinationImpact, ProjectionMappedImpact, Goldens, Workspace hoist).
-- [ ] M4: Trace count for `keiro-dsl scaffold` on the declarative-router fixture is exactly 1.
+- [x] M3: Trace count for `keiro-dsl check` on the declarative-router fixture is exactly 1.
+- [x] M4: Thread the shared graph through the scaffold run (Scaffold.hs, ScaffoldRun.hs, AggregateType symbols, FoldFingerprint, Harness, ServiceHarness, StructuralConformance, MappedConsumer, ReadModelQueryContract, CoordinationImpact, ProjectionMappedImpact, Goldens, Workspace hoist).
+- [x] M4: Trace count for `keiro-dsl scaffold` on the declarative-router fixture is exactly 1.
 - [ ] M5: Full `cabal test keiro-dsl:tests` green; `just conformance-corpus-policy` zero drift; regenerated corpus produces no git diff.
 - [ ] M5: After-timings recorded next to the baselines; resolution-count reduction documented with evidence.
 - [ ] M5: ADR distillation pass done; masterplan 36 registry row for this plan updated.
@@ -85,6 +85,16 @@ implementation. Provide concise evidence.
   `checkedServiceForContract` leaves graph initialization in one implementation. The complete
   test surface remained green (695 main examples plus every declared conformance suite), and
   the 39-entry corpus policy reported zero drift while no consumer read the new field.
+- M3/M4 trace reconciliation found two indirect Class-A amplifiers that the syntactic
+  `resolveTypeGraph` inventory could not expose: behavior-output derivation called the
+  Spec-only `eventOutputMapping` wrapper, and each structural module plan called the
+  Spec-only binding-obligation wrapper. Service-aware variants removed both. The final
+  temporary counter measured exactly one resolution for `check` and exactly one for
+  `scaffold`, down from 34 and 46 respectively; the instrumentation was then removed.
+- Existing tests used exported `checkedSpec` record updates to synthesize candidate services.
+  A derived cache field makes such updates capable of pairing a new spec with an old graph.
+  Making `CheckedService` opaque and adding `checkedServiceWithSpec` made that invalid state
+  unrepresentable; all seven repository update seams now rebuild the lazy cache explicitly.
 
 
 ## Decision Log
@@ -152,6 +162,15 @@ Record every decision made while working on the plan.
   Rationale: the CLI already owns one `CheckedService`; routing coverage and workspace checks
   through it removes their otherwise independent whole-spec resolution without changing the
   public API or the bytes returned to Spec-only callers.
+  Date: 2026-08-12.
+- Decision: Keep `CheckedService` opaque and expose `checkedServiceWithSpec` as the only
+  spec-replacement operation.
+  Rationale: a public record update can replace `checkedSpec` without refreshing derived
+  cached state. Opaqueness preserves the invariant that `checkedSpec` and `checkedTypeGraph`
+  describe the same graph, while the replacement helper retains the effective language
+  contract and creates one fresh lazy resolution. Pointer identity was evaluated and rejected:
+  GHC's documented unsafe pointer comparison admitted false negatives after optimization and
+  raised the trace count, so it is not a sound cache-validity mechanism.
   Date: 2026-08-12.
 
 

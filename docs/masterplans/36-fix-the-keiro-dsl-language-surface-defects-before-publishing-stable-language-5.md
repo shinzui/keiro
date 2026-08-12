@@ -151,7 +151,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 (236) M1: baseline evidence and the `type-graph` benchmark group
 - [x] EP-4 (236) M2: inert lazy `checkedTypeGraph` field on `CheckedService` (Eq/Show-invisible)
 - [x] EP-4 (236) M3: check-pass threading (Validate/RouterSelection/ExplainBindings)
-- [ ] EP-4 (236) M4: scaffold-run threading plus the workspace double-construction hoist
+- [x] EP-4 (236) M4: scaffold-run threading plus the workspace double-construction hoist
 - [ ] EP-4 (236) M5: equivalence proof (tests, corpus zero drift) and recorded before/after timings
 
 

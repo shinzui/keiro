@@ -56,7 +56,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.BehaviorCoverage (BehaviorKey (..), BehaviorRecordRow (..), attributeBehaviorOwner, behaviorRecordRows, deriveBehaviorRequirementsForService)
 import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.ConformancePackage
   ( ConformancePackagePlan,
@@ -77,7 +77,7 @@ import Keiro.Dsl.HaskellSourceMove (SourceMove (..), SourceMoveError, planSource
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage, effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
-import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlanForService)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappedImpactForService, renderProjectionMappedImpact)
 import Keiro.Dsl.ReadModelQueryContract
@@ -85,7 +85,7 @@ import Keiro.Dsl.ReadModelQueryContract
     QueryContractIdentity (..),
     QueryContractPosition (..),
     queryContractDrift,
-    queryContractIdentities,
+    queryContractIdentitiesForService,
   )
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
@@ -102,7 +102,7 @@ import Keiro.Dsl.ScaffoldRun
     applyPreparedSourceMoves,
     behaviorDrift,
     checkedSemanticImpactSnapshot,
-    constraintPlan,
+    constraintPlanForService,
     generatedArtifactImpact,
     inertNodesOf,
     mappingDrift,
@@ -121,7 +121,7 @@ import Keiro.Dsl.ScaffoldRun
     staleAgainst,
     withSidecarMovesApplied,
   )
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.SemanticImpact (SemanticImpactReport, SemanticImpactSnapshot)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
@@ -213,12 +213,12 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenR
   where
     service = checkedWorkspace workspace
     sourceEntries = do
-      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirements (checkedSpec service))
+      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirementsForService service)
       either (Left . pure . BehaviorSourceRefusal) Right (BehaviorSource.planBehaviorSourceMap requirements (wsSourceIndex workspace))
     taggedModules = do
       entries <- sourceEntries
-      either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage entries ctx workspace)
-    baseTaggedModules = either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage [] ctx workspace)
+      either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage entries ctx workspace service)
+    baseTaggedModules = either (Left . pure . DuplicateConformanceFactKeys) Right (workspaceModules goldens runtimePackage [] ctx workspace service)
     baseModulePlan = case baseTaggedModules of
       Left refusals -> Left refusals
       Right tagged -> Right (map fst tagged)
@@ -241,8 +241,8 @@ planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage goldenR
 -- ('scaffoldStructuralOwners') and nodes carry their own identity
 -- ('nodeIdentity'), both of which the workspace's ownership index resolves to a
 -- member file.
-workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> [BehaviorSource.BehaviorSourceEntry] -> Context -> WorkspaceSpec -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
-workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
+workspaceModules :: [GoldenPayload] -> Maybe RuntimePackageName -> [BehaviorSource.BehaviorSourceEntry] -> Context -> WorkspaceSpec -> CheckedService -> Either [DuplicateServiceFactKey] [(ScaffoldModule, ModuleProvenance)]
+workspaceModules goldens runtimePackage sourceEntries ctx workspace service = do
   structuralConformance <- case structuralConformanceModule ctx service of
     Left failures -> error ("checked workspace structural conformance planning failed: " <> show failures)
     Right Nothing -> Right []
@@ -255,14 +255,13 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace = do
       <> [attributedStamped ContextLevel moduleValue | moduleValue <- maybe [] pure (behaviorSourceMapModule ctx sourceEntries)]
       <> [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
       <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
-      <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalog ctx merged]
+      <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalogForService ctx service]
       <> concat
         [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
         | node <- specNodes merged
         ]
       <> facade
   where
-    service = checkedWorkspace workspace
     merged = checkedSpec service
     ownership = wsOwnership workspace
     stamp = stampGeneratedModule (checkedLanguageContract service)
@@ -525,14 +524,14 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
       migration <- case previous of
         Just _ -> pure Nothing
         Nothing -> adoptionReport out (wsContext workspace) service modules
-      let currentPlan = consumerPlan merged
+      let currentPlan = consumerPlanForService (wpCheckedService plan)
           drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
           currentSemanticImpact = checkedSemanticImpactSnapshot (wpCheckedService plan)
           semanticReport = semanticImpactForMappingDrift (previous >>= wrSemanticImpact) currentSemanticImpact drift
           currentRouterSelections = routerSelectionSnapshots (wpCheckedService plan)
           selectionDrift = maybe [] (\record -> routerSelectionDrift (wrRouterSelections record) currentRouterSelections) previous
           languageDrift = workspaceSourceLanguageDrift workspace previous
-          currentQueryContracts = either (const []) id (queryContractIdentities merged)
+          currentQueryContracts = either (const []) id (queryContractIdentitiesForService (wpCheckedService plan))
           queryHistoryBaseline =
             not (null currentQueryContracts)
               || maybe False wrQueryContractBaseline previous
@@ -544,7 +543,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
             _ -> []
           currentObligations = either (const []) id (bindingHolesForService (wpCheckedService plan))
           newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
-          currentBehavior = workspaceBehaviorRows workspace
+          currentBehavior = workspaceBehaviorRows (wpCheckedService plan) workspace
           (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . wrBehaviorRequirements) previous
       createDirectoryIfMissing True out
       dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
@@ -583,7 +582,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrStale = stale,
               wsrOwnershipMoves = ownershipMoves previous (wpModules plan),
               wsrConsumerPlan = currentPlan,
-              wsrConstraintPlan = constraintPlan merged currentPlan,
+              wsrConstraintPlan = constraintPlanForService (wpCheckedService plan) currentPlan,
               wsrMappingDrift = drift,
               wsrQueryContractBaselineUnavailable = queryBaselineUnavailable,
               wsrQueryContractDrift = queryDrift,
@@ -596,7 +595,7 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite sidecarMoves nameMoves 
               wsrNewHoles = newHoles,
               wsrAddedBehavior = addedBehavior,
               wsrRemovedBehavior = removedBehavior,
-              wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooks merged,
+              wsrObsoleteOutputHooks = obsoleteGeneratedOutputHooksForService (wpCheckedService plan),
               wsrInertNodes = inertNodesOf merged,
               wsrConformancePackage = packageReport,
               wsrNameMoves = nameMoves,
@@ -648,14 +647,14 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
             }
         | (m, provenance) <- wpModules plan
         ],
-      wrMappings = consumerMappings (consumerPlan merged),
+      wrMappings = consumerMappings (consumerPlanForService checkedService),
       wrIdDomains = idDomainIdentitiesForService checkedService,
       wrNominalEqualities = nominalEqualityIdentitiesForService checkedService,
       wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
-      wrBehaviorRequirements = workspaceBehaviorRows workspace,
+      wrBehaviorRequirements = workspaceBehaviorRows checkedService workspace,
       wrProjectionCatalogFacts = projectionCatalogFacts merged,
       wrQueryContractBaseline = queryHistoryBaseline,
-      wrQueryContracts = either (const []) id (queryContractIdentities merged),
+      wrQueryContracts = either (const []) id (queryContractIdentitiesForService checkedService),
       wrRouterSelections = routerSelectionSnapshots checkedService,
       wrAdopted = adopted,
       wrSemanticImpact = Just currentSemanticImpact
@@ -666,9 +665,9 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
     merged = checkedSpec checkedService
     ctx = wpContext plan
 
-workspaceBehaviorRows :: WorkspaceSpec -> [BehaviorRecordRow]
-workspaceBehaviorRows workspace =
-  either (const []) (behaviorRecordRows . map attribute) (deriveBehaviorRequirements (checkedSpec (checkedWorkspace workspace)))
+workspaceBehaviorRows :: CheckedService -> WorkspaceSpec -> [BehaviorRecordRow]
+workspaceBehaviorRows service workspace =
+  either (const []) (behaviorRecordRows . map attribute) (deriveBehaviorRequirementsForService service)
   where
     attribute = attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate")
 

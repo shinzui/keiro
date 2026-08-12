@@ -45,6 +45,7 @@ module Keiro.Dsl.ScaffoldRun
     withSidecarMovesApplied,
     originLine,
     pureRefusals,
+    pureRefusalsForService,
     auditGeneratedHaskell,
     missingGeneratedBanners,
     staleAgainst,
@@ -53,6 +54,7 @@ module Keiro.Dsl.ScaffoldRun
     preflightSourceMoves,
     applyPreparedSourceMoves,
     constraintPlan,
+    constraintPlanForService,
     mappingDrift,
     behaviorDrift,
     newBindingObligations,
@@ -69,7 +71,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirements)
+import Keiro.Dsl.BehaviorCoverage (BehaviorDerivationError, BehaviorKey (..), BehaviorRecordRow (..), behaviorRecordRows, deriveBehaviorRequirementsForService)
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.BehaviorSourceMap (BehaviorSourceFailure)
 import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
@@ -95,14 +97,14 @@ import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..), effectiveLanguageVersion, languageVersionText, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifestForServiceWithFacade)
-import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlanForService)
 import Keiro.Dsl.NominalType (nominalEqualityIdentitiesForService)
 import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappedImpactForService, renderProjectionMappedImpact)
 import Keiro.Dsl.ReadModelQueryContract
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
-import Keiro.Dsl.SemanticContract (CheckedService (..), checkedService, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedService, checkedSpec, checkedTypeGraph, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
   ( MappedImpactDelta (..),
     MappedRootEvidence (..),
@@ -122,7 +124,7 @@ import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex (SemanticSourceIndex)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
-import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
+import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..))
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.FilePath (takeDirectory, (</>))
@@ -266,7 +268,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
     <> maybe [] pure (behaviorSourceMapModule ctx sourceEntries)
     <> scaffoldStructuralForService ctx service
     <> scaffoldReplayAudit ctx spec
-    <> scaffoldProjectionCatalog ctx spec
+    <> scaffoldProjectionCatalogForService ctx service
     <> concat
       [ case node of
           NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
@@ -347,7 +349,7 @@ planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage so
               (checkedLanguageContract service)
               (scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service <> facades)
     behaviorSourcePlan = do
-      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirements (checkedSpec service))
+      requirements <- either (Left . pure . BehaviorRefusal) Right (deriveBehaviorRequirementsForService service)
       either (Left . pure . BehaviorSourceRefusal) Right (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
 
 -- | The one pure scaffold-planning gate sequence. Both scaffold planners and
@@ -362,13 +364,13 @@ planningGatePipeline ::
 planningGatePipeline ctx service modulePlan packagePlan =
   case traverse (aggregateFoldSurfaceForService service) [aggregate | NAggregate aggregate <- specNodes spec] of
     Left surfaceError -> Left [FoldSurfaceRefusal surfaceError]
-    Right _ -> case scaffoldRefusals spec of
+    Right _ -> case scaffoldRefusalsForService service of
       lowering@(_ : _) -> Left [LoweringRefusal lowering]
       [] -> case modulePlan of
         Left refusals -> Left refusals
         Right modules -> case packagePlan of
           Left refusals -> Left refusals
-          Right () -> case pureRefusals ctx spec modules of
+          Right () -> case pureRefusalsForService ctx service modules of
             [] -> Right modules
             refusals -> Left refusals
   where
@@ -523,13 +525,16 @@ originLine originText = do
 -- merged spec and then runs exactly this, so no gate can apply to one input shape
 -- and not the other.
 pureRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
-pureRefusals ctx spec modules =
+pureRefusals ctx spec = pureRefusalsForService ctx (legacyCheckedService spec)
+
+pureRefusalsForService :: Context -> CheckedService -> [ScaffoldModule] -> [Refusal]
+pureRefusalsForService ctx service modules =
   collisionRefusals modules
-    <> dependencyRefusals ctx spec modules
+    <> dependencyRefusalsForService ctx service modules
     <> [FirewallBreach breaches | not (null breaches)]
     <> [GeneratedNameInvariantViolation namingViolations | not (null namingViolations)]
-    <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
-    <> [BehaviorRefusal errors | Left errors <- [deriveBehaviorRequirements spec]]
+    <> [LoweringRefusal lowering | let lowering = scaffoldRefusalsForService service, not (null lowering)]
+    <> [BehaviorRefusal errors | Left errors <- [deriveBehaviorRequirementsForService service]]
   where
     breaches = firewallBreaches modules
     namingViolations = generatedNameInvariantViolations modules
@@ -724,10 +729,10 @@ maskNonCode = fmap T.pack . go AuditCode . T.unpack
       _character : '\'' : _ -> True
       _ -> False
 
-dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
-dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
+dependencyRefusalsForService :: Context -> CheckedService -> [ScaffoldModule] -> [Refusal]
+dependencyRefusalsForService ctx service modules = collisionWithConsumers <> namespaceCycles
   where
-    plan = consumerPlan spec
+    plan = consumerPlanForService service
     generatedByName = Map.fromList [(moduleNameOf (modulePath moduleValue), moduleValue) | moduleValue <- modules, kind moduleValue == Generated]
     collisionWithConsumers =
       [ PathCollision
@@ -843,7 +848,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
         (\packageName -> planConformancePackage (StandaloneConformanceService (contextName ctx)) packageName (serviceConformanceModuleName ctx) service)
         runtimePackage
     executeCheckedScaffold sidecarMoves preparedPackage =
-      case deriveBehaviorRequirements spec of
+      case deriveBehaviorRequirementsForService service of
         Left errors -> pure (Left [BehaviorRefusal errors])
         Right requirements -> do
           bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
@@ -865,9 +870,9 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                           applyPreparedSourceMoves out prepared
                           stale <- maybe (pure []) (existingStale out modules) previousRecord
                           queryMigrations <- queryContractMigrations out modules
-                          let currentConsumerPlan = consumerPlan spec
+                          let currentConsumerPlan = consumerPlanForService service
                               drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
-                              currentQueryContracts = either (const []) id (queryContractIdentities spec)
+                              currentQueryContracts = either (const []) id (queryContractIdentitiesForService service)
                               queryHistoryBaseline =
                                 not (null currentQueryContracts)
                                   || maybe False recQueryContractBaseline previousRecord
@@ -909,7 +914,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportPreviousSpecPath = recSpecPath <$> previousRecord,
                                   reportStale = stale,
                                   reportConsumerPlan = currentConsumerPlan,
-                                  reportConstraintPlan = constraintPlan spec currentConsumerPlan,
+                                  reportConstraintPlan = constraintPlanForService service currentConsumerPlan,
                                   reportMappingDrift = drift,
                                   reportQueryContractBaselineUnavailable = queryBaselineUnavailable,
                                   reportQueryContractDrift = queryDrift,
@@ -922,7 +927,7 @@ executeServiceScaffoldWithRuntimePackageAndNameMigrations runtimePackage applyNa
                                   reportNewHoles = newHoles,
                                   reportAddedBehavior = addedBehavior,
                                   reportRemovedBehavior = removedBehavior,
-                                  reportObsoleteOutputHooks = obsoleteGeneratedOutputHooks spec,
+                                  reportObsoleteOutputHooks = obsoleteGeneratedOutputHooksForService service,
                                   reportConformancePackage = packageReport,
                                   reportNameMoves = map preparedSourceMove prepared,
                                   reportSidecarMoves = sidecarMoves
@@ -1096,7 +1101,10 @@ renderSourceMoveState move =
     ]
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
-constraintPlan spec plan = case resolveTypeGraph spec of
+constraintPlan spec = constraintPlanForService (legacyCheckedService spec)
+
+constraintPlanForService :: CheckedService -> ConsumerPlan -> [Text]
+constraintPlanForService service plan = case checkedTypeGraph service of
   Left _ -> []
   Right graph ->
     let registerRoots =
@@ -1130,11 +1138,9 @@ mappingDrift current previous =
     newByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- current]
 
 checkedSemanticImpactSnapshot :: CheckedService -> SemanticImpactSnapshot
-checkedSemanticImpactSnapshot service = case resolveTypeGraph spec of
+checkedSemanticImpactSnapshot service = case checkedTypeGraph service of
   Left failures -> error ("validated scaffold type graph did not resolve: " <> show failures)
   Right graph -> semanticImpactSnapshot (semanticImpactForService service graph)
-  where
-    spec = checkedSpec service
 
 semanticImpactForMappingDrift :: Maybe SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappingDrift] -> SemanticImpactReport
 semanticImpactForMappingDrift previous current drifts =
@@ -1267,14 +1273,14 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       recNamingEdition = currentGeneratedHaskellNamingEdition,
       recModuleRoles = [ScaffoldModuleRoleRow (moduleRole m) (kind m) (modulePath m) | m <- modules],
       recFiles = [(kind m, modulePath m) | m <- modules],
-      recMappings = consumerMappings (consumerPlan spec),
+      recMappings = consumerMappings (consumerPlanForService service),
       recIdDomains = idDomainIdentitiesForService service,
       recNominalEqualities = nominalEqualityIdentitiesForService service,
       recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior,
       recProjectionCatalogFacts = projectionCatalogFacts spec,
       recQueryContractBaseline = queryHistoryBaseline,
-      recQueryContracts = either (const []) id (queryContractIdentities spec),
+      recQueryContracts = either (const []) id (queryContractIdentitiesForService service),
       recRouterSelections = routerSelectionSnapshots service,
       recSemanticImpact = Just currentSemanticImpact
     }

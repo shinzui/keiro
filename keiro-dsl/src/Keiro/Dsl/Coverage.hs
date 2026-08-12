@@ -42,7 +42,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (DiagnosticCode (..), Severity (..))

@@ -15,7 +15,11 @@ module Keiro.Dsl.SemanticContract
     effectiveLanguageContract,
     effectiveLanguageContractForVersion,
     runtimeSemanticsFingerprintSegments,
-    CheckedService (..),
+    CheckedService,
+    checkedLanguageContract,
+    checkedSpec,
+    checkedTypeGraph,
+    checkedServiceWithSpec,
     checkedSource,
     checkedService,
     checkedServiceForContract,
@@ -153,12 +157,26 @@ runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . effectiveRunt
 -- it was checked. Member-level declared/legacy provenance intentionally stays
 -- on 'ParsedSource' or 'Keiro.Dsl.Workspace.WorkspaceMember'.
 data CheckedService = CheckedService
-  { checkedLanguageContract :: !EffectiveLanguageContract,
-    checkedSpec :: !Spec,
-    -- | Shared, lazily forced resolution of 'checkedSpec'. This derived value
-    -- is never serialized and is deliberately excluded from Eq and Show.
-    checkedTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph
+  { serviceLanguageContract :: !EffectiveLanguageContract,
+    serviceSpec :: !Spec,
+    serviceTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph
   }
+
+checkedLanguageContract :: CheckedService -> EffectiveLanguageContract
+checkedLanguageContract = serviceLanguageContract
+
+checkedSpec :: CheckedService -> Spec
+checkedSpec = serviceSpec
+
+-- | Shared, lazily forced resolution of 'checkedSpec'. This derived value is
+-- never serialized and is deliberately excluded from Eq and Show.
+checkedTypeGraph :: CheckedService -> Either (NonEmpty TypeGraphError) TypeGraph
+checkedTypeGraph = serviceTypeGraph
+
+-- | Replace a service's spec while preserving its effective language contract
+-- and rebuilding the lazy whole-spec analysis cache for the replacement.
+checkedServiceWithSpec :: Spec -> CheckedService -> CheckedService
+checkedServiceWithSpec spec service = checkedServiceForContract (checkedLanguageContract service) spec
 
 instance Eq CheckedService where
   left == right =
@@ -192,9 +210,9 @@ checkedService sourceLanguage spec =
 checkedServiceForContract :: EffectiveLanguageContract -> Spec -> CheckedService
 checkedServiceForContract languageContract spec =
   CheckedService
-    { checkedLanguageContract = languageContract,
-      checkedSpec = spec,
-      checkedTypeGraph = resolveTypeGraph spec
+    { serviceLanguageContract = languageContract,
+      serviceSpec = spec,
+      serviceTypeGraph = resolveTypeGraph spec
     }
 
 -- | Compatibility bridge for callers that historically supplied only 'Spec'.

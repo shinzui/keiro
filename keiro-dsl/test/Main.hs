@@ -833,7 +833,7 @@ main = hspec $ do
           actualConsequences candidate =
             Set.unions
               [ ckMappedConsequences (kindOfChange change)
-              | change <- diffServices service service {checkedSpec = candidate}
+              | change <- diffServices service (checkedServiceWithSpec candidate service)
               ]
           expectedConsequences name = consequences (qualifyMappedSurface impact (MappedKey name))
       forM_ mutations $ \(name, candidate) ->
@@ -845,7 +845,7 @@ main = hspec $ do
       let spec = checkedSpec service
           ctx = defaultContext (specContext spec)
           baseline = scaffoldServiceModules ctx service
-          modulesFor candidate = scaffoldServiceModules ctx service {checkedSpec = candidate}
+          modulesFor candidate = scaffoldServiceModules ctx (checkedServiceWithSpec candidate service)
           deltaFor candidate = generatedTreeDelta baseline (modulesFor candidate)
           opaqueDelta name = deltaFor (mapMappedDeclaration name changeProjectionMappedWire spec)
           structuralDelta = deltaFor (addMappedOptionalTextField "QualificationPayload" "addedNote" spec)
@@ -5855,18 +5855,18 @@ main = hspec $ do
       fingerprintChanged <- checkedServiceFromText "selection-fingerprint.keiro" (T.replace "max-recipients = 64" "max-recipients = 32" source)
       versionedFingerprintChanged <- checkedServiceFromText "selection-versioned-fingerprint.keiro" (T.replace "version = 1" "version = 2" (T.replace "max-recipients = 64" "max-recipients = 32" source))
       let custom =
-            baseline
-              { checkedSpec =
-                  modifyRouter
-                    "HospitalTransferRouter"
-                    ( \router ->
-                        router
-                          { rtInput = (rtInput router) {inType = Nothing, inFields = [Field "transferNeedId" Nothing, Field "region" Nothing]},
-                            rtResolve = ResolveDecl ResolveHole ["hospitalId"] (rvLoc (rtResolve router))
-                          }
-                    )
-                    (checkedSpec baseline)
-              }
+            checkedServiceWithSpec
+              ( modifyRouter
+                  "HospitalTransferRouter"
+                  ( \router ->
+                      router
+                        { rtInput = (rtInput router) {inType = Nothing, inFields = [Field "transferNeedId" Nothing, Field "region" Nothing]},
+                          rtResolve = ResolveDecl ResolveHole ["hospitalId"] (rvLoc (rtResolve router))
+                        }
+                  )
+                  (checkedSpec baseline)
+              )
+              baseline
           classifyCoordination old new = [(coordinationReason impact, coordinationSeverity impact) | impact <- coordinationImpact old new []]
       case routerSelectionSnapshots baseline of
         [snapshot] -> do
@@ -5890,7 +5890,7 @@ main = hspec $ do
       baseline <- checkedServiceFromText "selection-semantic-baseline.keiro" source
       formatted <- checkedServiceFromText "selection-semantic-formatted.keiro" (T.replace "context transfer-routing\n" "context transfer-routing\n\n" source)
       coordinationImpact baseline formatted [] `shouldBe` []
-      let changed = baseline {checkedSpec = mapMappedStructural "HospitalLoadRow" changeMappedCanonical (checkedSpec baseline)}
+      let changed = checkedServiceWithSpec (mapMappedStructural "HospitalLoadRow" changeMappedCanonical (checkedSpec baseline)) baseline
           semantic = CheckedDiff.mappedSemanticImpactForServices baseline changed
           coordination = coordinationImpact baseline changed semantic
           rowDelta = find ((== MappedKey "HospitalLoadRow") . impactDeclaration) semantic
@@ -7846,13 +7846,13 @@ main = hspec $ do
       service <- checkedServiceOf "test/fixtures/consumer-types.keiro"
       let spec = checkedSpec service
           opaqueOnly =
-            service
-              { checkedSpec =
-                  spec
-                    { specMapped = [declaration | declaration@MappedOpaque {} <- specMapped spec],
-                      specNodes = []
-                    }
-              }
+            checkedServiceWithSpec
+              ( spec
+                  { specMapped = [declaration | declaration@MappedOpaque {} <- specMapped spec],
+                    specNodes = []
+                  }
+              )
+              service
           structural = generatedTextEndingIn "StructuralConformance.hs" (scaffoldServiceModules (defaultContext (specContext spec)) opaqueOnly)
       structural `shouldSatisfy` T.isInfixOf "import Keiro.Codec.Structural (FixtureCases (..))"
       structural `shouldSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
@@ -8223,7 +8223,7 @@ main = hspec $ do
               <> select (\case NRouter {} -> True; _ -> False) routerService
               <> select (\case NWorkflow {} -> True; _ -> False) workflowService
           baseSpec = checkedSpec processService
-          service = processService {checkedSpec = baseSpec {specNodes = factNodes}}
+          service = checkedServiceWithSpec (baseSpec {specNodes = factNodes}) processService
           ctx = defaultContext (specContext baseSpec)
       forM_
         [ "process/HospitalSurge/maxAttempts",
@@ -8278,7 +8278,7 @@ main = hspec $ do
       service <- checkedServiceOf "test/fixtures/hospital-surge.keiro"
       let spec = checkedSpec service
           processes = [node | node@NProcess {} <- specNodes spec]
-          duplicated = service {checkedSpec = spec {specNodes = processes <> processes}}
+          duplicated = checkedServiceWithSpec (spec {specNodes = processes <> processes}) service
       serviceHarnessModule (defaultContext (specContext spec)) duplicated `shouldSatisfy` isLeft
 
   describe "runnable service conformance package (plan 188 M3)" $ do

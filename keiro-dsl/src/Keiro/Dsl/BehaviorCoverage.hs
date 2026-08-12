@@ -19,6 +19,7 @@ module Keiro.Dsl.BehaviorCoverage
     BehaviorObligationsReport (..),
     deriveAggregateBehaviorRequirements,
     deriveBehaviorRequirements,
+    deriveBehaviorRequirementsForService,
     behaviorRecordRows,
     attributeBehaviorOwner,
     behaviorObligationsReport,
@@ -31,6 +32,7 @@ import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), 
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
 import Data.List (find, groupBy, sortOn)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -41,7 +43,9 @@ import Keiro.Dsl.EventOutput
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SourceIndex (TransitionOrdinal (..))
+import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 
 newtype BehaviorKey = BehaviorKey {unBehaviorKey :: Text}
   deriving stock (Eq, Ord, Show)
@@ -246,7 +250,14 @@ instance ToJSON BehaviorObligationsReport where
       )
 
 deriveBehaviorRequirements :: Spec -> Either [BehaviorDerivationError] [BehaviorRequirement]
-deriveBehaviorRequirements spec = case fmap concat (traverse (deriveAggregateBehaviorRequirements spec) aggregates) of
+deriveBehaviorRequirements spec = deriveBehaviorRequirementsWithGraphResult (resolveTypeGraph spec) spec
+
+deriveBehaviorRequirementsForService :: CheckedService -> Either [BehaviorDerivationError] [BehaviorRequirement]
+deriveBehaviorRequirementsForService service =
+  deriveBehaviorRequirementsWithGraphResult (checkedTypeGraph service) (checkedSpec service)
+
+deriveBehaviorRequirementsWithGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Either [BehaviorDerivationError] [BehaviorRequirement]
+deriveBehaviorRequirementsWithGraphResult typeGraphResult spec = case fmap concat (traverse (deriveAggregateBehaviorRequirementsWithGraphResult typeGraphResult spec) aggregates) of
   Left derivationError -> Left [derivationError]
   Right raw -> do
     rejectIdentityDefects raw
@@ -255,7 +266,10 @@ deriveBehaviorRequirements spec = case fmap concat (traverse (deriveAggregateBeh
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
 
 deriveAggregateBehaviorRequirements :: Spec -> Aggregate -> Either BehaviorDerivationError [BehaviorRequirement]
-deriveAggregateBehaviorRequirements spec aggregate = do
+deriveAggregateBehaviorRequirements spec = deriveAggregateBehaviorRequirementsWithGraphResult (resolveTypeGraph spec) spec
+
+deriveAggregateBehaviorRequirementsWithGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> Either BehaviorDerivationError [BehaviorRequirement]
+deriveAggregateBehaviorRequirementsWithGraphResult typeGraphResult spec aggregate = do
   let reachable = liveReachableStates aggregate
       indexedTransitions = zip (map TransitionOrdinal [0 ..]) (aggTransitions aggregate)
       liveTransitions =
@@ -274,7 +288,7 @@ deriveAggregateBehaviorRequirements spec aggregate = do
           tCommand transition == command
         ]
       transitionRows =
-        [ transitionRequirement spec aggregate (cellGuardCoverage (map snd siblings)) ordinal transition
+        [ transitionRequirement typeGraphResult spec aggregate (cellGuardCoverage (map snd siblings)) ordinal transition
         | (state, command) <- cells,
           let siblings = cellTransitions state command,
           (ordinal, transition) <- siblings
@@ -284,7 +298,7 @@ deriveAggregateBehaviorRequirements spec aggregate = do
         | (state, command) <- cells,
           null (cellTransitions state command)
         ]
-      replayRows = [transitionRequirement spec aggregate (replayGuardCoverage transition) ordinal transition | (ordinal, transition) <- replayTransitions]
+      replayRows = [transitionRequirement typeGraphResult spec aggregate (replayGuardCoverage transition) ordinal transition | (ordinal, transition) <- replayTransitions]
   sequence (transitionRows <> rejectionRows <> replayRows)
 
 behaviorRecordRows :: [BehaviorRequirement] -> [BehaviorRecordRow]
@@ -310,14 +324,14 @@ behaviorObligationsReport :: FilePath -> Spec -> Either [BehaviorDerivationError
 behaviorObligationsReport subject spec =
   BehaviorObligationsReport subject Nothing <$> deriveBehaviorRequirements spec
 
-transitionRequirement :: Spec -> Aggregate -> GuardCoverage -> TransitionOrdinal -> Transition -> Either BehaviorDerivationError BehaviorRequirement
-transitionRequirement spec aggregate guardCoverage ordinal transition = do
+transitionRequirement :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> GuardCoverage -> TransitionOrdinal -> Transition -> Either BehaviorDerivationError BehaviorRequirement
+transitionRequirement typeGraphResult spec aggregate guardCoverage ordinal transition = do
   if null (tEmits transition) && (tSource transition /= tGoto transition || not (null (tWrites transition)))
     then Left (EventlessStateChange (aggName aggregate) (tSource transition) (tCommand transition))
     else pure ()
   mappings <-
     traverse
-      (\(emitIndex, eventName) -> either (Left . InvalidEventOutput eventName) Right (eventOutputMapping spec aggregate transition emitIndex eventName))
+      (\(emitIndex, eventName) -> either (Left . InvalidEventOutput eventName) Right (eventOutputMappingFromGraphResult typeGraphResult spec aggregate transition emitIndex eventName))
       (zip [1 ..] (tEmits transition))
   let kind = if tMode transition == TmLive then LiveTransition else ReplayTransition
       outputs = map outputEvidence mappings

@@ -41,7 +41,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
 import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, effectiveRuntimeProfile)
 import Keiro.Dsl.TypeGraph
 
 data NominalScalarRepresentation

@@ -53,7 +53,7 @@ import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, effectiveRuntimeProfile, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Integration.Event qualified as Event
 import Numeric (showHex)

@@ -88,7 +88,7 @@ import Keiro.Dsl.PrettyPrint
   )
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedSource, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
 import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))

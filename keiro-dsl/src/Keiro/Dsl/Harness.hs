@@ -56,7 +56,7 @@ import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.SemanticContract (CheckedService (..), legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (aggregateMappedClosure, semanticImpact)
 import Keiro.Dsl.TypeGraph
 
@@ -206,7 +206,7 @@ routerHarnessFactValuesForService service router = case rvSource (rtResolve rout
          ]
   _ -> routerHarnessFactValues router
   where
-    graph = case resolveTypeGraph (checkedSpec service) of
+    graph = case checkedTypeGraph service of
       Left errors -> error ("checked declarative router harness type graph failed: " <> show errors)
       Right value -> value
     selection = case checkRouterSelection (checkedLanguageContract service) graph (checkedSpec service) router of

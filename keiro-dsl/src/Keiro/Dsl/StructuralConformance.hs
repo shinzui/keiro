@@ -28,7 +28,7 @@ import Keiro.Dsl.Scaffold
     projectionSpecs,
     resolveProjectionModules,
   )
-import Keiro.Dsl.SemanticContract (CheckedService (..))
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (semanticImpact, serviceMappedInventory)
 import Keiro.Dsl.TypeGraph
 
@@ -46,7 +46,7 @@ structuralConformanceModuleName ctx = contextStructuralPrefix ctx <> ".Structura
 
 -- | Whether the checked service owns any mapped declaration evidence.
 hasStructuralConformance :: CheckedService -> Bool
-hasStructuralConformance service = case resolveTypeGraph (checkedSpec service) of
+hasStructuralConformance service = case checkedTypeGraph service of
   Left _ -> False
   Right graph -> not (null (serviceMappedInventory (semanticImpact graph)))
 
@@ -54,7 +54,7 @@ hasStructuralConformance service = case resolveTypeGraph (checkedSpec service) o
 -- module otherwise.
 structuralConformanceModule :: Context -> CheckedService -> Either [StructuralConformanceFailure] (Maybe ScaffoldModule)
 structuralConformanceModule ctx service = do
-  graph <- case resolveTypeGraph (checkedSpec service) of
+  graph <- case checkedTypeGraph service of
     Left failures -> Left [StructuralConformanceGraphFailure (T.pack (show failures))]
     Right resolved -> Right resolved
   let inventory = serviceMappedInventory (semanticImpact graph)

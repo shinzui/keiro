@@ -50,6 +50,7 @@ module Keiro.Dsl.Scaffold
     scaffoldAggregateForService,
     scaffoldAggregate,
     obsoleteGeneratedOutputHooks,
+    obsoleteGeneratedOutputHooksForService,
     scaffoldProcess,
     scaffoldRouter,
     scaffoldRouterForService,
@@ -63,7 +64,9 @@ module Keiro.Dsl.Scaffold
     scaffoldReadModelForService,
     resolveCatalogReadModel,
     scaffoldProjectionCatalog,
+    scaffoldProjectionCatalogForService,
     scaffoldRefusals,
+    scaffoldRefusalsForService,
     windowSeconds,
 
     -- * Firewall self-check (M3)
@@ -118,7 +121,7 @@ import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
 import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (..))
 import Keiro.Dsl.ConsumerTypePlan
 import Keiro.Dsl.EventOutput
-import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
+import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations, bindingObligationsForService)
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprintForService, renderFoldSurfaceError)
@@ -131,10 +134,10 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned), languageVe
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
-import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint)
+import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint, projectionAggregateSourceFingerprintForService)
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService (..), EffectiveLanguageContract, checkedServiceForContract, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -481,6 +484,7 @@ hasAllowedExplicitImportList allowed line =
 -- | Resolved, denormalized view of an aggregate used by every emitter.
 data Agg = Agg
   { aContext :: !Context,
+    aCheckedService :: !CheckedService,
     aLanguageContract :: !EffectiveLanguageContract,
     aSpec :: !Spec,
     aAggregate :: !Aggregate,
@@ -519,8 +523,7 @@ data ResolvedDomainOutcomeTypes = ResolvedDomainOutcomeTypes
   deriving stock (Eq, Show)
 
 aggregateCheckedService :: Agg -> CheckedService
-aggregateCheckedService aggregate =
-  checkedServiceForContract (aLanguageContract aggregate) (aSpec aggregate)
+aggregateCheckedService = aCheckedService
 
 data ResolvedRegister = ResolvedRegister
   { rrName :: !Name,
@@ -553,6 +556,7 @@ resolveAggForService :: Context -> CheckedService -> Aggregate -> Agg
 resolveAggForService ctx service agg =
   Agg
     { aContext = ctx,
+      aCheckedService = service,
       aLanguageContract = checkedLanguageContract service,
       aSpec = spec,
       aAggregate = agg,
@@ -572,7 +576,7 @@ resolveAggForService ctx service agg =
       aOutputMappings =
         Map.fromList
           [ ( (transitionIndex, emitIndex),
-              orDieOutput (eventOutputMapping spec agg transition emitIndex eventName)
+              orDieOutput (eventOutputMappingFromGraphResult typeGraphResult spec agg transition emitIndex eventName)
             )
           | (transitionIndex, transition) <- zip [1 ..] (aggTransitions agg),
             (emitIndex, eventName) <- zip [1 ..] (tEmits transition)
@@ -582,7 +586,7 @@ resolveAggForService ctx service agg =
       aSnapshot = aggSnapshot agg,
       aFoldFingerprint = either (error . T.unpack . renderFoldSurfaceError) id (aggregateFoldFingerprintForService service agg),
       aReadModels = [readModel | NReadModel readModel <- specNodes spec],
-      aTypeGraph = either (const Nothing) Just (resolveTypeGraph spec),
+      aTypeGraph = either (const Nothing) Just typeGraphResult,
       aSymbols = symbols,
       aGenPrefix = genPrefixFor ctx nm,
       aHolePrefix = holePrefixFor ctx nm
@@ -590,7 +594,8 @@ resolveAggForService ctx service agg =
   where
     spec = checkedSpec service
     nm = aggName agg
-    symbols = aggregateSymbols spec
+    typeGraphResult = checkedTypeGraph service
+    symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     ctxPascal = pascalFromKebab (contextName ctx)
     vertexType = nm <> "Vertex"
     commandFieldTypes = [(cmdName c, cmdFields c) | c <- aggCommands agg]
@@ -738,7 +743,7 @@ scaffoldStructuralOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
 scaffoldStructuralOwners ctx spec = scaffoldStructuralOwnersForService ctx (legacyCheckedService spec)
 
 scaffoldStructuralOwnersForService :: Context -> CheckedService -> [(ScaffoldModule, [Name])]
-scaffoldStructuralOwnersForService ctx service = case resolveTypeGraph (checkedSpec service) of
+scaffoldStructuralOwnersForService ctx service = case checkedTypeGraph service of
   Left _ -> []
   Right graph ->
     [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
@@ -746,7 +751,7 @@ scaffoldStructuralOwnersForService ctx service = case resolveTypeGraph (checkedS
       <> generatedNominalOwners ctx service
       <> nominalRepresentationOwners ctx spec
       <> nominalProjectionOwners ctx service
-      <> bindingSkeletonOwners ctx spec graph
+      <> bindingSkeletonOwnersForService ctx service graph
     where
       structural =
         [ (declaration, shape)
@@ -999,7 +1004,14 @@ bindingSkeletonModules ctx spec graph = map fst (bindingSkeletonOwners ctx spec 
 -- is what lets whole-workspace scaffolding treat it as context-level rather than
 -- attributing it to an arbitrary member.
 bindingSkeletonOwners :: Context -> Spec -> TypeGraph -> [(ScaffoldModule, [Name])]
-bindingSkeletonOwners ctx spec graph = case bindingObligations spec of
+bindingSkeletonOwners ctx spec graph = bindingSkeletonOwnersWithObligations ctx spec graph (bindingObligations spec)
+
+bindingSkeletonOwnersForService :: Context -> CheckedService -> TypeGraph -> [(ScaffoldModule, [Name])]
+bindingSkeletonOwnersForService ctx service graph =
+  bindingSkeletonOwnersWithObligations ctx (checkedSpec service) graph (bindingObligationsForService service)
+
+bindingSkeletonOwnersWithObligations :: Context -> Spec -> TypeGraph -> Either errors [BindingObligation] -> [(ScaffoldModule, [Name])]
+bindingSkeletonOwnersWithObligations ctx spec graph obligationResult = case obligationResult of
   Left _ -> []
   Right obligations ->
     [ (emitBindingSkeleton ctx spec graph owner entries, nub (map obligationMappedName entries))
@@ -1755,7 +1767,7 @@ nominalProjectionModule ctx = case placement ctx of
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.NominalProjections"
 
 nominalProjectionOwners :: Context -> CheckedService -> [(ScaffoldModule, [Name])]
-nominalProjectionOwners ctx service = case nominalProjectionTypes spec of
+nominalProjectionOwners ctx service = case nominalProjectionTypes (checkedTypeGraph service) spec of
   [] -> []
   nominals ->
     [ ( ScaffoldModule
@@ -1770,8 +1782,8 @@ nominalProjectionOwners ctx service = case nominalProjectionTypes spec of
   where
     spec = checkedSpec service
 
-nominalProjectionTypes :: Spec -> [ResolvedNominalType]
-nominalProjectionTypes spec =
+nominalProjectionTypes :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [ResolvedNominalType]
+nominalProjectionTypes typeGraphResult spec =
   Map.elems . Map.fromList $
     [ (resolvedNominalName nominal, nominal)
     | aggregate <- [value | NAggregate value <- specNodes spec],
@@ -1780,7 +1792,7 @@ nominalProjectionTypes spec =
       ConsumerNominal {} <- [resolvedNominalOwnership nominal]
     ]
   where
-    symbols = aggregateSymbols spec
+    symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     registerTypes aggregate =
       [ resolved
       | register <- aggRegs aggregate,
@@ -3484,7 +3496,7 @@ scaffoldWorkqueueForService ctx service workqueue =
     genPrefix = genPrefixFor ctx (pascal (wqName workqueue))
     queueText
       | any isTypedQueueField (wqPayload workqueue) =
-          case resolveTypeGraph (checkedSpec service) of
+          case checkedTypeGraph service of
             Left errors -> error ("checked workqueue type graph failed: " <> show errors)
             Right graph -> emitMappedWorkqueueGen ctx genPrefix graph workqueue
       | otherwise = emitWorkqueueGen genPrefix workqueue
@@ -4063,7 +4075,7 @@ scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
     queryContractModule = readModelModule <> ".QueryContract"
     readModelHolePrefix = holePrefixFor ctx nodeSegment
     readModelOrigin = nodeOrigin "readmodel" (rmName readModel) (rmLoc readModel)
-    graph = case resolveTypeGraph (checkedSpec service) of
+    graph = case checkedTypeGraph service of
       Left errors -> error ("checked read-model type graph failed: " <> show errors)
       Right value -> value
     generated leaf body =
@@ -4095,12 +4107,26 @@ resolveCatalogReadModel spec readModel = case rmGroup readModel of
 -- identity and relationship; the hole supplies only executable projection
 -- sets, never a second inventory.
 scaffoldProjectionCatalog :: Context -> Spec -> [ScaffoldModule]
-scaffoldProjectionCatalog ctx spec
+scaffoldProjectionCatalog ctx spec =
+  scaffoldProjectionCatalogWith
+    (projectionAggregateSourceFingerprint spec)
+    ctx
+    spec
+
+scaffoldProjectionCatalogForService :: Context -> CheckedService -> [ScaffoldModule]
+scaffoldProjectionCatalogForService ctx service =
+  scaffoldProjectionCatalogWith
+    (projectionAggregateSourceFingerprintForService service)
+    ctx
+    (checkedSpec service)
+
+scaffoldProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> [ScaffoldModule]
+scaffoldProjectionCatalogWith aggregateFingerprint ctx spec
   | null catalogNodes = []
   | otherwise =
       [ ScaffoldModule
           { modulePath = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
-            moduleText = emitProjectionCatalog ctx spec,
+            moduleText = emitProjectionCatalogWith aggregateFingerprint ctx spec,
             kind = Generated,
             origin = "projection-catalog " <> contextName ctx
           },
@@ -4119,8 +4145,8 @@ scaffoldProjectionCatalog ctx spec
     isCatalogNode NProjectionOwner {} = True
     isCatalogNode _ = False
 
-emitProjectionCatalog :: Context -> Spec -> Text
-emitProjectionCatalog ctx spec =
+emitProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> Text
+emitProjectionCatalogWith aggregateFingerprint ctx spec =
   nl $
     [ generatedBanner,
       "{-# LANGUAGE OverloadedStrings #-}",
@@ -4235,7 +4261,7 @@ emitProjectionCatalog ctx spec =
     sourceScope (CatalogAggregate aggregateName) = "(Catalog.CategorySource (Kiroku.CategoryName " <> tshow (lowerFirst aggregateName) <> "))"
     sourceFingerprint CatalogAll = "all-streams/generated-codec/v1"
     sourceFingerprint (CatalogCategory categoryName) = "category:" <> categoryName <> "/application-decoder/v1"
-    sourceFingerprint (CatalogAggregate aggregateName) = projectionAggregateSourceFingerprint spec aggregateName
+    sourceFingerprint (CatalogAggregate aggregateName) = aggregateFingerprint aggregateName
     targetExpr target =
       "Catalog.TargetDeclaration "
         <> smart "mkTargetId" (ptName target)
@@ -4793,7 +4819,7 @@ scaffoldRouterForService ctx service router = case rvSource (rtResolve router) o
     spec = checkedSpec service
     genPrefix = genPrefixFor ctx (rtId router)
     routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
-    graph = case resolveTypeGraph spec of
+    graph = case checkedTypeGraph service of
       Left errors -> error ("checked declarative router type graph failed: " <> show errors)
       Right value -> value
     selection = case checkRouterSelection (checkedLanguageContract service) graph spec router of
@@ -6457,7 +6483,18 @@ outputFunctionName transitionIndex transition emitIndex eventName =
 -- version-2 @fields(Command)@ generation.  Scaffolding reports these names as
 -- safe-to-remove candidates without parsing or modifying consumer Haskell.
 obsoleteGeneratedOutputHooks :: Spec -> [(Name, Text)]
-obsoleteGeneratedOutputHooks spec =
+obsoleteGeneratedOutputHooks spec = obsoleteGeneratedOutputHooksWith (eventOutputMapping spec) spec
+
+obsoleteGeneratedOutputHooksForService :: CheckedService -> [(Name, Text)]
+obsoleteGeneratedOutputHooksForService service =
+  obsoleteGeneratedOutputHooksWith
+    (eventOutputMappingFromGraphResult (checkedTypeGraph service) spec)
+    spec
+  where
+    spec = checkedSpec service
+
+obsoleteGeneratedOutputHooksWith :: (Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping) -> Spec -> [(Name, Text)]
+obsoleteGeneratedOutputHooksWith outputMapping spec =
   [ ( aggName aggregate,
       outputFunctionName transitionIndex transition emitIndex eventName
     )
@@ -6466,7 +6503,7 @@ obsoleteGeneratedOutputHooks spec =
     let transitionIndex = layoutDeclarationIndex entry
         transition = layoutTransition entry,
     (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
-    Right GeneratedCommandIdentity {} <- [eventOutputMapping spec aggregate transition emitIndex eventName]
+    Right GeneratedCommandIdentity {} <- [outputMapping aggregate transition emitIndex eventName]
   ]
 
 commandForTransition :: Agg -> Transition -> ResolvedCtor
@@ -6529,7 +6566,7 @@ resolvedGeneratedTransitions aggregate =
     tImplementation transition == GeneratedImplementation
   ]
   where
-    environment transition = expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition
+    environment transition = expressionEnvironmentWith (aSymbols aggregate) (aTypeGraph aggregate) (aSpec aggregate) (aAggregate aggregate) transition
     resolvedGuard index transition expression =
       expressionOrDie (guardFunctionName index transition) (resolveGuardExpr (environment transition) expression)
     resolvedWrite index transition registerName expression =
@@ -6567,7 +6604,7 @@ resolvedSilentOutcomes aggregate =
     resolveReason entry expected expression =
       let transition = layoutTransition entry
           owner = transitionStem (layoutDeclarationIndex entry) transition <> "OutcomeReason"
-          environment = expressionEnvironment (aSpec aggregate) (aAggregate aggregate) transition
+          environment = expressionEnvironmentWith (aSymbols aggregate) (aTypeGraph aggregate) (aSpec aggregate) (aAggregate aggregate) transition
        in expressionOrDie owner (resolveScalarExpr environment (ExpectScalarType expected) expression)
 
 resolvedOutcomeExpressions :: Agg -> [TypedScalarExpr]
@@ -8350,7 +8387,18 @@ nodeOrigin nodeKind nodeName loc =
 -- pre-write scaffold pipeline treats each returned message as a refusal. The
 -- list is extended alongside the policy and type lowering milestones.
 scaffoldRefusals :: Spec -> [Text]
-scaffoldRefusals spec =
+scaffoldRefusals spec = scaffoldRefusalsWithSymbols (aggregateSymbols spec) spec
+
+scaffoldRefusalsForService :: CheckedService -> [Text]
+scaffoldRefusalsForService service =
+  scaffoldRefusalsWithSymbols
+    (aggregateSymbolsFromGraphResult (checkedTypeGraph service) spec)
+    spec
+  where
+    spec = checkedSpec service
+
+scaffoldRefusalsWithSymbols :: AggregateSymbols -> Spec -> [Text]
+scaffoldRefusalsWithSymbols symbols spec =
   concatMap aggregateRefusals aggregates
     <> concatMap contractRefusals contracts
     <> concatMap publisherRefusals publishers
@@ -8358,7 +8406,6 @@ scaffoldRefusals spec =
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
     contracts = [contract | NContract contract <- specNodes spec]
     publishers = [publisher | NPublisher publisher <- specNodes spec]
-    symbols = aggregateSymbols spec
     aggregateRefusals aggregate =
       [ "AggregateEmpty: aggregate '" <> aggName aggregate <> "' must declare at least one command, event, and transition"
       | null (aggCommands aggregate) || null (aggEvents aggregate) || null (aggTransitions aggregate)
