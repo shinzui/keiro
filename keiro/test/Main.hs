@@ -3904,6 +3904,51 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Just (IntNumber n) -> n `shouldSatisfy` (>= 1)
         other -> expectationFailure ("expected an integer global position distance, got " <> show other)
 
+    it "reports zero global position distance after the newest events are hard deleted" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right (Right survivorResult) <-
+        Store.runStoreIO storeHandle $
+          runCommand
+            defaultRunCommandOptions
+            counterEventStream
+            (stream "gauge-gc-survivor" :: Stream CounterEventStream)
+            (Add 1)
+      survivorPosition <- case survivorResult ^. #globalPosition of
+        Just position -> pure position
+        Nothing -> expectationFailure "expected survivor global position" *> error "unreachable"
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement
+              ("counter-read-model-sub", globalPositionToInt survivorPosition)
+              upsertSubscriptionCursorStmt
+      Right (Right _) <-
+        Store.runStoreIO storeHandle $
+          runCommand
+            defaultRunCommandOptions
+            counterEventStream
+            (stream "gauge-gc-victim" :: Stream CounterEventStream)
+            (Add 1)
+      Right (Just _) <-
+        Store.runStoreIO storeHandle $
+          Store.hardDeleteStream (StreamName "gauge-gc-victim")
+      Right () <-
+        Store.runStoreIO storeHandle $
+          recordProjectionGlobalPositionDistance (Just keiroMetrics) counterAsyncProjection
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      lookup "keiro.projection.global_position_distance" scalars
+        `shouldBe` Just (IntNumber 0)
+      lookup "keiro.projection.lag" scalars
+        `shouldBe` Just (IntNumber 0)
+
     it "counts a position-wait timeout in the timeout counter" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
       (provider, _env) <-

@@ -158,7 +158,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force (2026-08-12T11:47:46Z)
 - [x] EP-1 (237) M6: docs, changelogs, ADR 0032 and pointer amendments to ADRs 0026/0028/0031, full `just verify` (2026-08-12T12:05:34Z)
 - [x] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression (2026-08-12T16:55:27Z)
-- [ ] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test
+- [x] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test (2026-08-12T17:00:29Z)
 - [ ] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test
 - [ ] EP-2 (238) M4: api-reference/CHANGELOG updates and the reachable-wait-targets ADR
 - [ ] EP-3 (239) M1: cancel takes the per-step lock, suspend re-check consults awakeable status; both-order interleaving tests

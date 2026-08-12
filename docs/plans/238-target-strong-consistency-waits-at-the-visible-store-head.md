@@ -53,8 +53,8 @@ This section must always reflect the actual current state of the work.
 - [x] M1: rewrite the existing test "uses Kiroku's captured store head after a stream is hard deleted" to assert the new visible-head semantics (head falls back to `GlobalPosition 0`; the inventory's authoritative `storePosition` is unchanged) (2026-08-12T16:55:27Z).
 - [x] M1: add the genuine-behind test "Strong still times out when visible events outrun the subscription" asserting the timeout error carries the visible-head target (2026-08-12T16:55:27Z).
 - [x] M1: run the `Keiro.ReadModel` test group and confirm all green, including the previously failing regression test: 29 examples, 0 failures (2026-08-12T16:55:27Z).
-- [ ] M2: rebase `recordProjectionGlobalPositionDistance` in `keiro/src/Keiro/Projection.hs` on the visible head; keep the deprecated `recordProjectionLag` alias recording the identical value.
-- [ ] M2: add the gauge test "reports zero global position distance after the newest events are hard deleted" and confirm the existing gauge and timeout-counter tests still pass.
+- [x] M2: rebase `recordProjectionGlobalPositionDistance` in `keiro/src/Keiro/Projection.hs` on the visible head; keep the deprecated `recordProjectionLag` alias recording the identical value (2026-08-12T17:00:29Z).
+- [x] M2: add the gauge test "reports zero global position distance after the newest events are hard deleted" and confirm the focused metric tests (2 examples) and full `keiro-test` suite (494 examples) pass with zero failures (2026-08-12T17:00:29Z).
 - [ ] M3: add the visible head to `keiro-ops` `projection position` and `stream subscriptions` output and compute their distance columns against it; update `keiro-ops/test/Main.hs` expectations and add a hard-delete divergence test.
 - [ ] M4: update `docs/user/api-reference.md` and the `CHANGELOG.md` Unreleased entries that describe the inventory-based head.
 - [ ] M4: distill the durable decision (wait targets must be reachable positions; the authoritative counter is not a wait target) into a new ADR in `docs/adr/` and run `just adr-validate`.
@@ -176,6 +176,12 @@ both sides of the contract. A caught-up Strong query now returns promptly after 
 workflow collector deletes a newer journal tail, while a genuinely behind subscription
 still waits five seconds and reports `ReadModelWaitTimeout` with the visible target.
 The focused `Keiro.ReadModel` group passes all 29 examples.
+
+Milestone 2 rebases projection distance telemetry on the visible event head. The
+preferred `keiro.projection.global_position_distance` gauge and deprecated
+`keiro.projection.lag` alias now both report zero when a checkpoint is at the newest
+surviving event after tail deletion. The focused metric tests and all 494 `keiro-test`
+examples pass.
 
 
 ## Context and Orientation

@@ -78,7 +78,7 @@ import Keiro.Projection.Catalog
     typedProjectionRebuildGroups,
   )
 import Keiro.Projection.Types
-import Keiro.ReadModel (subscriptionPositionFromInventory)
+import Keiro.ReadModel (storeHeadPosition, subscriptionPositionFromInventory)
 import Keiro.ReadModel.Rebuild.Group
   ( ProjectionWriteFence (..),
     RebuildRunId,
@@ -91,8 +91,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Subscription
-  ( SubscriptionCheckpointInventory (..),
-    SubscriptionName (..),
+  ( SubscriptionName (..),
     subscriptionCheckpointInventory,
   )
 import Kiroku.Store.Transaction (runTransaction)
@@ -419,16 +418,17 @@ pruneAsyncProjectionDedupForBefore projectionName cutoff =
   runTransaction
     $ Tx.statement (projectionName, cutoff) pruneProjectionDedupForBeforeStmt
 
--- | Record the non-negative global position distance between Kiroku's captured
--- store position and the slowest durable member checkpoint for one async
--- projection. A global position is an opaque cursor, so this is not an exact
--- count of relevant events for filtered, category, or sharded consumers.
+-- | Record the non-negative global position distance between the newest visible
+-- event and the slowest durable member checkpoint for one async projection. A
+-- global position is an opaque cursor, so this is not an exact count of relevant
+-- events for filtered, category, or sharded consumers. Tail hard-deletion leaves
+-- a caught-up projection at distance zero because an authoritative append
+-- counter that includes deleted events is not actionable backlog.
 --
 -- There is no in-library polling drain loop today (the application drives
 -- 'applyAsyncProjection' per event), so this is the entry point an application
 -- calls once per drain pass after applying a batch. The preferred and legacy
--- gauges are recorded from the same one-statement inventory snapshot during the
--- 0.11 compatibility interval.
+-- gauges record the same value during the 0.11 compatibility interval.
 recordProjectionGlobalPositionDistance ::
   (IOE :> es, Store :> es) =>
   Maybe KeiroMetrics ->
@@ -436,12 +436,13 @@ recordProjectionGlobalPositionDistance ::
   Eff es ()
 recordProjectionGlobalPositionDistance metrics projection = do
   inventory <- subscriptionCheckpointInventory
+  visibleHead <- storeHeadPosition
   let checkpoint =
         fromMaybe (GlobalPosition 0)
           $ subscriptionPositionFromInventory
             (SubscriptionName (projection ^. #subscriptionName))
             inventory
-      distance = globalPositionDistance (storePosition inventory) checkpoint
+      distance = globalPositionDistance visibleHead checkpoint
   Telemetry.recordProjectionGlobalPositionDistance metrics distance
   Telemetry.recordProjectionLag metrics distance
 
