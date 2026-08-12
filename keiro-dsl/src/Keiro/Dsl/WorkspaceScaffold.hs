@@ -71,7 +71,7 @@ import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelection
 import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouterForService, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModelForService, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellSourceMove (SourceMove (..), SourceMoveError, planSourceMoves)
 import Keiro.Dsl.IdDomain (idDomainIdentitiesForService)
@@ -89,7 +89,7 @@ import Keiro.Dsl.ReadModelQueryContract
   )
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRecord (projectionCatalogFacts)
+import Keiro.Dsl.ScaffoldRecord (projectionCatalogFactsForService)
 import Keiro.Dsl.ScaffoldRun
   ( GeneratedArtifactImpact,
     MappingDrift (..),
@@ -279,7 +279,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace service = do
       NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
       NReadModel readModel ->
         let resolved = resolveCatalogReadModel merged readModel
-         in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx merged resolved
+         in scaffoldReadModelForService ctx service resolved <> harnessReadModelForService ctx service resolved
       NProjectionTarget _ -> []
       NRebuildGroup _ -> []
       NProjectionOwner _ -> []
@@ -652,7 +652,7 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
       wrNominalEqualities = nominalEqualityIdentitiesForService checkedService,
       wrBindingObligations = either (const []) id (bindingHolesForService checkedService),
       wrBehaviorRequirements = workspaceBehaviorRows checkedService workspace,
-      wrProjectionCatalogFacts = projectionCatalogFacts merged,
+      wrProjectionCatalogFacts = projectionCatalogFactsForService checkedService,
       wrQueryContractBaseline = queryHistoryBaseline,
       wrQueryContracts = either (const []) id (queryContractIdentitiesForService checkedService),
       wrRouterSelections = routerSelectionSnapshots checkedService,
@@ -662,7 +662,6 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
   where
     workspace = wpWorkspace plan
     checkedService = wpCheckedService plan
-    merged = checkedSpec checkedService
     ctx = wpContext plan
 
 workspaceBehaviorRows :: CheckedService -> WorkspaceSpec -> [BehaviorRecordRow]

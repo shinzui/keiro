@@ -4,6 +4,7 @@ module Generated.MappedReadmodel.AccountSummary.ReadModelHarness (readModelFacts
 
 import Generated.MappedReadmodel.AccountSummary.ReadModel (accountSummaryReadModel)
 import Data.Text qualified as T
+import Data.List.NonEmpty qualified as NE
 import Generated.MappedReadmodel.ProjectionCatalog qualified as ProjectionCatalog
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel (ReadModel (..), StrongScope (..))
@@ -17,21 +18,26 @@ readModelFacts =
   , ("consistency", "Eventual", show accountSummaryReadModel.defaultConsistency)
   , ("strongScope", "EntireLog", renderStrongScope accountSummaryReadModel.strongScope)
   ]
-    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations
+    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies
 
 renderStrongScope :: StrongScope -> String
 renderStrongScope EntireLog = "EntireLog"
 renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
 
-catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [(String, String, String)]
-catalogFactsAgainst registrations asyncRegistrations =
+catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]
+catalogFactsAgainst registrations asyncRegistrations supplies =
   [ ("catalogRegistration", "mapped-readmodel-account-summary|1|fnv1a:3c07a19c552c3547|reporting", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "account_summary"])
+  , ("querySupply", "account_summary_writer|reporting|account_summary_table", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "account_summary"])
   , ("asyncRegistration:account_summary_writer", "mapped-readmodel-account-summary|mapped-readmodel-account-summary-v1", renderAsync [entry | entry <- asyncRegistrations, Catalog.projectionIdText entry.projectionId == "account_summary_writer"])
   ]
 
 renderRegistration :: [Catalog.CatalogRegistration] -> String
 renderRegistration [entry] = T.unpack entry.registryName <> "|" <> show entry.version <> "|" <> T.unpack entry.shapeHash <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.rebuildGroupId)
 renderRegistration _ = "missing"
+
+renderSupply :: [Catalog.ResolvedQuerySupply] -> String
+renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> "|" <> T.unpack (T.intercalate "," (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))
+renderSupply _ = "missing"
 
 renderAsync :: [Catalog.AsyncProjectionRegistration] -> String
 renderAsync [entry] = T.unpack entry.subscriptionName <> "|" <> T.unpack entry.dedupName

@@ -10,6 +10,7 @@ module Keiro.Dsl.ScaffoldRecord
     parseRecord,
     recordFileName,
     projectionCatalogFacts,
+    projectionCatalogFactsForService,
   )
 where
 
@@ -17,6 +18,8 @@ import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
 import Data.List (nub, sort)
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
@@ -27,9 +30,10 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractIdentity, queryContractIdentityKey)
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
-import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedSpec, effectiveLanguageContract)
 import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
 import Keiro.Dsl.SidecarNames (contextLedgerFileName)
 import System.FilePath (isAbsolute, splitDirectories)
@@ -275,12 +279,19 @@ mappingRowPrefix _ = "mapping "
 -- | Canonical durable catalog identities used when a declaration disappears
 -- from the next graph. Source lines remain part of the attribution evidence.
 projectionCatalogFacts :: Spec -> [Text]
-projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
+projectionCatalogFacts spec = projectionCatalogFactsWith spec (analyzeProjectionSupplies spec)
+
+projectionCatalogFactsForService :: CheckedService -> [Text]
+projectionCatalogFactsForService service =
+  projectionCatalogFactsWith (checkedSpec service) (analyzeProjectionSupplies (checkedSpec service))
+
+projectionCatalogFactsWith :: Spec -> ProjectionSupplyAnalysis -> [Text]
+projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (specNodes spec) <> map supplyFact (resolvedProjectionSupplies supplyAnalysis))
   where
     nodeFacts (NProjectionTarget target) =
       [T.intercalate "|" ["target", ptName target, ptSchema target, ptTable target, resetText (ptReset target), T.intercalate "," (ptDependsOn target), lineText (ptLoc target)]]
     nodeFacts (NRebuildGroup groupNode) =
-      [T.intercalate "|" ["group", rgName groupNode, T.intercalate "," (rgTargets groupNode), T.intercalate "," (rgOrder groupNode), lineText (rgLoc groupNode)]]
+      [T.intercalate "|" ["group", rgName groupNode, T.intercalate "," (sort (rgTargets groupNode)), T.intercalate "," (rgOrder groupNode), lineText (rgLoc groupNode)]]
     nodeFacts (NProjectionOwner owner) =
       [ T.intercalate
           "|"
@@ -289,7 +300,7 @@ projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
             T.intercalate "," (map sourceText (poSources owner)),
             feedText (poFeed owner),
             poGroup owner,
-            T.intercalate "," (poTargets owner),
+            T.intercalate "," (sort (poTargets owner)),
             T.pack (show (poOrder owner)),
             maybe "" id (poSubscription owner),
             maybe "" id (poDedup owner),
@@ -299,8 +310,34 @@ projectionCatalogFacts spec = sort (concatMap nodeFacts (specNodes spec))
           ]
       ]
     nodeFacts (NReadModel readModel)
-      | Just groupName <- rmGroup readModel = [T.intercalate "|" ["query", rmName readModel, groupName, T.intercalate "," (rmObservedTargets readModel), lineText (rmLoc readModel)]]
+      | Just groupName <- rmGroup readModel =
+          [ T.intercalate
+              "|"
+              [ "query",
+                rmName readModel,
+                groupName,
+                T.intercalate "," (sort (rmObservedTargets readModel)),
+                fromMaybe "" (effectiveBacking readModel),
+                lineText (rmLoc readModel)
+              ]
+          ]
     nodeFacts _ = []
+    supplyFact supply =
+      T.intercalate
+        "|"
+        [ "supply",
+          supplyQueryModel supply,
+          supplyProjectionOwner supply,
+          supplyRebuildGroup supply,
+          T.intercalate "," (NE.toList (supplyObservedTargets supply)),
+          lineText (supplyQueryLoc supply),
+          lineText (supplyOwnerLoc supply)
+        ]
+    effectiveBacking readModel = case rmBackingTarget readModel of
+      Just targetName -> Just targetName
+      Nothing -> case sort (rmObservedTargets readModel) of
+        [targetName] -> Just targetName
+        _ -> Nothing
     resetText TargetClear = "clear"
     resetText TargetPreserve = "preserve"
     sourceText CatalogAll = "all"

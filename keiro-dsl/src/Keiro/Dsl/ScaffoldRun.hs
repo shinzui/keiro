@@ -90,7 +90,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), 
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), Spec (..))
-import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModel, harnessRouterForService, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModelForService, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.HaskellSourceMove
@@ -103,7 +103,7 @@ import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappe
 import Keiro.Dsl.ReadModelQueryContract
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFactsForService, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedService, checkedSpec, checkedTypeGraph, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
   ( MappedImpactDelta (..),
@@ -280,7 +280,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
           NWorkqueue workqueue -> scaffoldWorkqueueForService ctx service workqueue
           NReadModel readModel ->
             let resolved = resolveCatalogReadModel spec readModel
-             in scaffoldReadModelForService ctx service resolved <> harnessReadModel ctx spec resolved
+             in scaffoldReadModelForService ctx service resolved <> harnessReadModelForService ctx service resolved
           NProjectionTarget _ -> []
           NRebuildGroup _ -> []
           NProjectionOwner _ -> []
@@ -1278,14 +1278,12 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       recNominalEqualities = nominalEqualityIdentitiesForService service,
       recBindingObligations = either (const []) id (bindingHolesForService service),
       recBehaviorRequirements = currentBehavior,
-      recProjectionCatalogFacts = projectionCatalogFacts spec,
+      recProjectionCatalogFacts = projectionCatalogFactsForService service,
       recQueryContractBaseline = queryHistoryBaseline,
       recQueryContracts = either (const []) id (queryContractIdentitiesForService service),
       recRouterSelections = routerSelectionSnapshots service,
       recSemanticImpact = Just currentSemanticImpact
     }
-  where
-    spec = checkedSpec service
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
 missingGeneratedBanners out modules = fmap concat $ mapM check generated

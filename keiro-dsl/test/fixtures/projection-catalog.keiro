@@ -130,6 +130,18 @@ readmodel order_inline {
   targets = [ order_summary ]
 }
 
+readmodel order_totals_lookup {
+  columns {
+    total bigint required
+  }
+  version = 1
+  shape = "fnv1a:768a23d719dcb4d4"
+  consistency = Eventual
+  feed = inline
+  group = reporting
+  targets = [ order_totals ]
+}
+
 workqueue qualification_jobs {
   queue logical = "catalog-demo.qualification-jobs"
   derive physical = "catalog_demo_qualification_jobs"

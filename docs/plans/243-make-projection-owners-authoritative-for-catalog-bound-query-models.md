@@ -43,7 +43,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] 2026-08-12T12:41:56Z — M1: added the normalized `ResolvedQuerySupply`/handler-capability view, validated empty/split supplier diagnostics, and positive/negative `keiro-test` coverage. `cabal test keiro-test --test-option=--match --test-option="Keiro.Projection.Catalog"` passed 15 examples with 0 failures.
 - [x] 2026-08-12T13:04:36Z — M2: added the shared `Keiro.Dsl.ProjectionSupply` analysis, made Language 5 catalog-bound read models resolve exactly one owner/group from their complete observed-target set, preserved the legacy aggregate reference rule outside catalog-bound Language 5, and added deterministic split-owner/legacy-conflict diagnostics. The focused language-5 projection-catalog suite passed 13 examples with 0 failures.
-- [ ] M3: update generated catalog selection, scaffold plans/ledgers, diff facts, harness facts, workspace composition, and compiled conformance for one owner supplying several queries.
+- [x] 2026-08-12T13:27:28Z — M3: threaded resolved suppliers through service/workspace scaffolding, generated catalog exports and source-selected inline views, durable backing/supply ledger rows, diff classification, and compiled harness facts. The focused suite passed 13 examples; all three affected Language 5 conformance packages passed; full 39-entry corpus regeneration left Languages 1-4 byte-identical; and `projection-supply-mutation-test.sh` caught both per-query handler duplication and first-supplier truncation before restoring exact bytes.
 - [ ] M4: update guides, API reference, changelogs, ADR 0026, and ADR 0032 identity notes; run repository-wide verification and update MasterPlan 38.
 
 
@@ -73,6 +73,11 @@ implementation. Provide concise evidence.
   for the same catalog-bound query. Removing the legacy clause also removed the duplicate
   mapped-consumer fact; the catalog owner remains the sole mapped projection consumer and
   supplies the generated inline handler independently.
+- Milestone 3 (2026-08-12): the corpus has two additional candidate Language 5 catalogs
+  (`conformance-declarative-router` and `conformance-mapped-readmodel`). They gained the
+  same supplier export and ledger/harness facts and remained compiled-green. A full
+  39-entry regeneration changed only those three Language 5 catalog suites, providing
+  direct zero-drift evidence for Languages 1-4.
 
 
 ## Decision Log
@@ -117,6 +122,18 @@ Record every decision made while working on the plan.
   primary source for missing/multiple owner and malformed group claims, which avoids
   redundant query-level noise while split valid owners and legacy double ownership receive
   precise query diagnostics with related owner/clause locations.
+  Date: 2026-08-12
+- Decision: Generate aggregate-source inline views from resolved projection owners, while
+  generating query bindings from resolved query supplies.
+  Rationale: command execution selects each owner handler once per event source regardless
+  of how many queries it supplies, while each query still retains its independent typed
+  binding and backing table.
+  Date: 2026-08-12
+- Decision: Persist a `query` ledger row with the backing target and a separate `supply`
+  row with owner, group, full observed-target set, and both claim locations.
+  Rationale: backing is a physical query choice; supply is derived delivery authority.
+  Keeping them separate makes scaffold drift and diff evidence reflect the semantic model
+  without treating the derived relationship as new catalog fingerprint identity.
   Date: 2026-08-12
 
 

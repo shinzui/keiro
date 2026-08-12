@@ -87,6 +87,7 @@ import Keiro.Dsl.PrettyPrint
     renderTypeExpr,
   )
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
@@ -1247,14 +1248,22 @@ readModelPairDiff env oldReadModel newReadModel =
       | otherwise =
           [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
     bindingChanges =
-      [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group, observed target set, or backing target changed; persisted lifecycle identity and rebuild completeness changed"
-      | bindingIdentity oldReadModel /= bindingIdentity newReadModel
+      [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group, observed target set, resolved projection supplier, or backing target changed; persisted lifecycle identity and rebuild completeness changed"
+      | bindingIdentity (deOld env) oldReadModel /= bindingIdentity (deNew env) newReadModel
       ]
-    bindingIdentity readModel =
+    bindingIdentity spec readModel =
       ( rmGroup readModel,
         Set.fromList (rmObservedTargets readModel),
+        resolvedSupplier spec readModel,
         effectiveBacking readModel
       )
+    resolvedSupplier spec readModel =
+      case [ supplyProjectionOwner supply
+           | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+             supplyQueryModel supply == rmName readModel
+           ] of
+        [ownerName] -> Just ownerName
+        _ -> Nothing
     effectiveBacking readModel = case rmBackingTarget readModel of
       Just target -> Just target
       Nothing -> case rmObservedTargets readModel of
@@ -1355,7 +1364,7 @@ projectionOwnerPairDiff oldOwner newOwner = groupAndTargets <> orderChange <> so
     ownerName = poName newOwner
     groupAndTargets =
       [ breaking ownerName "projection-owner-group-targets" ownerName CatalogOwnerChanged "rebuild group or owned target set changed"
-      | (poGroup oldOwner, poTargets oldOwner) /= (poGroup newOwner, poTargets newOwner)
+      | (poGroup oldOwner, Set.fromList (poTargets oldOwner)) /= (poGroup newOwner, Set.fromList (poTargets newOwner))
       ]
     orderChange =
       [ advisory ownerName "projection-owner-order" ownerName CatalogHandlerOrderChanged "handler order changed; replay materialization and resume fingerprint change"

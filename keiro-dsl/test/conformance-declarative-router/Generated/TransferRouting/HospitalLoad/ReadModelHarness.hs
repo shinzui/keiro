@@ -4,6 +4,7 @@ module Generated.TransferRouting.HospitalLoad.ReadModelHarness (readModelFacts, 
 
 import Generated.TransferRouting.HospitalLoad.ReadModel (hospitalLoadReadModel)
 import Data.Text qualified as T
+import Data.List.NonEmpty qualified as NE
 import Generated.TransferRouting.ProjectionCatalog qualified as ProjectionCatalog
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel (ReadModel (..), StrongScope (..))
@@ -17,21 +18,26 @@ readModelFacts =
   , ("consistency", "Eventual", show hospitalLoadReadModel.defaultConsistency)
   , ("strongScope", "EntireLog", renderStrongScope hospitalLoadReadModel.strongScope)
   ]
-    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations
+    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies
 
 renderStrongScope :: StrongScope -> String
 renderStrongScope EntireLog = "EntireLog"
 renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
 
-catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [(String, String, String)]
-catalogFactsAgainst registrations asyncRegistrations =
+catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]
+catalogFactsAgainst registrations asyncRegistrations supplies =
   [ ("catalogRegistration", "transfer-routing-hospital-load|1|fnv1a:3c07a19c552c3547|reporting", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "hospital_load"])
+  , ("querySupply", "hospital_load_writer|reporting|hospital_load_table", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "hospital_load"])
   , ("asyncRegistration:hospital_load_writer", "declarative-router-hospital-load|declarative-router-hospital-load-v1", renderAsync [entry | entry <- asyncRegistrations, Catalog.projectionIdText entry.projectionId == "hospital_load_writer"])
   ]
 
 renderRegistration :: [Catalog.CatalogRegistration] -> String
 renderRegistration [entry] = T.unpack entry.registryName <> "|" <> show entry.version <> "|" <> T.unpack entry.shapeHash <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.rebuildGroupId)
 renderRegistration _ = "missing"
+
+renderSupply :: [Catalog.ResolvedQuerySupply] -> String
+renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> "|" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> "|" <> T.unpack (T.intercalate "," (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))
+renderSupply _ = "missing"
 
 renderAsync :: [Catalog.AsyncProjectionRegistration] -> String
 renderAsync [entry] = T.unpack entry.subscriptionName <> "|" <> T.unpack entry.dedupName

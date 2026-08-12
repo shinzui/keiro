@@ -135,6 +135,7 @@ import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint, projectionAggregateSourceFingerprintForService)
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
@@ -4112,6 +4113,7 @@ scaffoldProjectionCatalog ctx spec =
     (projectionAggregateSourceFingerprint spec)
     ctx
     spec
+    (analyzeProjectionSupplies spec)
 
 scaffoldProjectionCatalogForService :: Context -> CheckedService -> [ScaffoldModule]
 scaffoldProjectionCatalogForService ctx service =
@@ -4119,14 +4121,15 @@ scaffoldProjectionCatalogForService ctx service =
     (projectionAggregateSourceFingerprintForService service)
     ctx
     (checkedSpec service)
+    (analyzeProjectionSupplies (checkedSpec service))
 
-scaffoldProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> [ScaffoldModule]
-scaffoldProjectionCatalogWith aggregateFingerprint ctx spec
+scaffoldProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> ProjectionSupplyAnalysis -> [ScaffoldModule]
+scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
   | null catalogNodes = []
   | otherwise =
       [ ScaffoldModule
           { modulePath = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
-            moduleText = emitProjectionCatalogWith aggregateFingerprint ctx spec,
+            moduleText = emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis,
             kind = Generated,
             origin = "projection-catalog " <> contextName ctx
           },
@@ -4145,8 +4148,8 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec
     isCatalogNode NProjectionOwner {} = True
     isCatalogNode _ = False
 
-emitProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> Text
-emitProjectionCatalogWith aggregateFingerprint ctx spec =
+emitProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> ProjectionSupplyAnalysis -> Text
+emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
   nl $
     [ generatedBanner,
       "{-# LANGUAGE OverloadedStrings #-}",
@@ -4156,10 +4159,12 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
       "  , projectionCatalogInventory",
       "  , projectionCatalogRegistrations",
       "  , projectionCatalogAsyncRegistrations",
+      "  , projectionCatalogQuerySupplies",
       "  , registerProjectionCatalog"
     ]
       ++ map (("  , " <>) . ownerSetName) owners
       ++ map (("  , " <>) . ownerInlineViewName) inlineOwners
+      ++ map (("  , " <>) . aggregateInlineViewName . fst) aggregateInlineOwners
       ++ concatMap groupExports groups
       ++ [ "  ) where",
            "",
@@ -4181,6 +4186,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
            "must = either (error . show) id"
          ]
       ++ concatMap ownerDefinition owners
+      ++ concatMap aggregateInlineDefinition aggregateInlineOwners
       ++ [ "",
            "projectionCatalog :: Catalog.ProjectionCatalog",
            "projectionCatalog =",
@@ -4206,6 +4212,9 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
            "",
            "projectionCatalogAsyncRegistrations :: [Catalog.AsyncProjectionRegistration]",
            "projectionCatalogAsyncRegistrations = Catalog.asyncProjectionRegistrations validatedProjectionCatalog",
+           "",
+           "projectionCatalogQuerySupplies :: [Catalog.ResolvedQuerySupply]",
+           "projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog",
            "",
            "registerProjectionCatalog :: (Store :> es) => Eff es (Either Rebuild.CatalogRegistrationError [Rebuild.GroupRebuildMetadata])",
            "registerProjectionCatalog = Rebuild.registerProjectionCatalog validatedProjectionCatalog"
@@ -4237,7 +4246,13 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
       (True, False) -> ["import Keiro.Projection (InlineProjection (..))"]
       (True, True) -> []
     readModels = [readModel | NReadModel readModel <- specNodes spec]
-    boundReadModels = [readModel | readModel <- readModels, isJust (rmGroup readModel)]
+    supplies = resolvedProjectionSupplies supplyAnalysis
+    boundReadModels =
+      [ readModel
+      | supply <- supplies,
+        readModel <- readModels,
+        rmName readModel == supplyQueryModel supply
+      ]
     readModelAlias readModel = "RM" <> pascal (rmName readModel)
     readModelImport readModel = "import " <> genPrefixFor ctx (pascal (rmName readModel)) <> ".ReadModel qualified as " <> readModelAlias readModel
     aggregateImports aggregateName =
@@ -4316,6 +4331,17 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
         <> ")"
     ownerSetName owner = lowerFirst (pascal (poName owner)) <> "ProjectionSet"
     ownerInlineViewName owner = lowerFirst (pascal (poName owner)) <> "InlineProjections"
+    aggregateInlineViewName aggregateName = lowerFirst (pascal aggregateName) <> "InlineProjections"
+    aggregateInlineOwners =
+      [ (aggregateName, matchingOwners)
+      | aggregateName <- sort aggregateSources,
+        let matchingOwners =
+              [ owner
+              | owner <- inlineOwners,
+                ownerPrimarySource owner == CatalogAggregate aggregateName
+              ],
+        not (null matchingOwners)
+      ]
     ownerEventType owner = case ownerPrimarySource owner of
       CatalogAggregate aggregateName -> aggregateDomainAlias aggregateName <> "." <> pascal aggregateName <> "Event"
       _ -> "Holes." <> pascal (poName owner) <> "Event"
@@ -4342,6 +4368,14 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
               ownerInlineViewName owner <> " = Catalog.typedInlineProjections validatedProjectionCatalog " <> ownerSetName owner
             ]
           else []
+    aggregateInlineDefinition (aggregateName, sourceOwners) =
+      [ "",
+        aggregateInlineViewName aggregateName <> " :: [InlineProjection " <> aggregateDomainAlias aggregateName <> "." <> pascal aggregateName <> "Event]",
+        aggregateInlineViewName aggregateName
+          <> " = concat ["
+          <> T.intercalate ", " (map ownerInlineViewName sourceOwners)
+          <> "]"
+      ]
     replayPolicyExpr owner = case poReplay owner of
       ProjectionLiveOnly reason -> "(Catalog.LiveOnly (Catalog.LiveOnlyReason " <> tshow reason <> "))"
       ProjectionReplayExplicit -> case ownerPrimarySource owner of
@@ -4389,9 +4423,10 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec =
       [] -> ""
     matchingReadModels owner =
       [ readModel
-      | readModel <- boundReadModels,
-        rmGroup readModel == Just (poGroup owner),
-        any (`elem` poTargets owner) (rmObservedTargets readModel)
+      | supply <- supplies,
+        supplyProjectionOwner supply == poName owner,
+        readModel <- boundReadModels,
+        rmName readModel == supplyQueryModel supply
       ]
     ownerLiveApplyName owner = "apply" <> pascal (poName owner) <> "Live"
     ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"

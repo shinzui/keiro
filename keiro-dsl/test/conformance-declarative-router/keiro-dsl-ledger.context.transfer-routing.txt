@@ -66,7 +66,8 @@ behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence
 behavior {"aggregate":"Hospital","command":"RouteAcceptedTransferNeed","evidence":"generated-authoritative","key":"behavior-v1-6dc56a81dec7fe2b","kind":"live-transition","outputs":[{"command":"RouteAcceptedTransferNeed","ownership":"generated-command-identity"}],"source":"Open"}
 projection-catalog-fact group|reporting|hospital_load_table|hospital_load_table|35
 projection-catalog-fact owner|hospital_load_writer|category:hospitalLoad|subscription|reporting|hospital_load_table|10|declarative-router-hospital-load|declarative-router-hospital-load-v1|fail|explicit|40
-projection-catalog-fact query|hospital_load|reporting|hospital_load_table|52
+projection-catalog-fact query|hospital_load|reporting|hospital_load_table|hospital_load_table|52
+projection-catalog-fact supply|hospital_load|hospital_load_writer|reporting|hospital_load_table|52|40
 projection-catalog-fact target|hospital_load_table|public|hospital_load|clear||29
 query-contract-baseline v1
 query-contract {"mappedDependencies":["TransferRouteInput"],"position":"input","readModel":"hospital_load","typeExpression":"TransferRouteInput"}

@@ -8,14 +8,18 @@ import Data.Text (Text)
 import Generated.CatalogDemo.CatalogAudit.ReadModelHarness qualified as CatalogAudit
 import Generated.CatalogDemo.OrderInline.QueryContract (OrderInlineQueryInput, OrderInlineQueryResult)
 import Generated.CatalogDemo.OrderInline.ReadModelHarness qualified as OrderInline
+import Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness qualified as OrderTotalsLookup
 import Generated.CatalogDemo.Orders.Harness qualified as Orders
 import Generated.CatalogDemo.ProjectionCatalog
   ( orderSummaryWriterInlineProjections
+  , ordersInlineProjections
   , projectionCatalogAsyncRegistrations
   , projectionCatalogInventory
+  , projectionCatalogQuerySupplies
   , projectionCatalogRegistrations
   , reportingRebuildGroupId
   , shipmentWriterInlineProjections
+  , shipmentsInlineProjections
   , shippingRebuildGroupId
   )
 import Generated.CatalogDemo.ShipmentLookup.ReadModelHarness qualified as ShipmentLookup
@@ -29,10 +33,10 @@ import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (FromCurrentHead
 
 main :: IO ()
 main = do
-  readModelFactsPassed <- and <$> sequence [CatalogAudit.runReadModelFacts, OrderInline.runReadModelFacts, ShipmentLookup.runReadModelFacts]
+  readModelFactsPassed <- and <$> sequence [CatalogAudit.runReadModelFacts, OrderInline.runReadModelFacts, OrderTotalsLookup.runReadModelFacts, ShipmentLookup.runReadModelFacts]
   assert "generated read-model facts" readModelFactsPassed
   let perturbed = map perturbSubscriptionName projectionCatalogAsyncRegistrations
-      mutated = CatalogAudit.catalogFactsAgainst projectionCatalogRegistrations perturbed
+      mutated = CatalogAudit.catalogFactsAgainst projectionCatalogRegistrations perturbed projectionCatalogQuerySupplies
   assert
     "perturbed async registration identity is detected"
     (any (\(fact, expected, actual) -> fact == "asyncRegistration:audit_writer" && expected /= actual) mutated)
@@ -66,7 +70,13 @@ main = do
     )
   assert "three generated owners" (length (Catalog.inventoryProjections projectionCatalogInventory) == 3)
   assert "two typed aggregate handlers" (length orderSummaryWriterInlineProjections == 1 && length shipmentWriterInlineProjections == 1)
-  assert "three query registrations" (length projectionCatalogRegistrations == 3)
+  assert "source-selected inline handlers stay singular" (length ordersInlineProjections == 1 && length shipmentsInlineProjections == 1)
+  assert "four query registrations" (length projectionCatalogRegistrations == 4)
+  assert
+    "one owner supplies both order queries"
+    ( map (Catalog.projectionIdText . Catalog.resolvedProjectionId) projectionCatalogQuerySupplies
+        == ["audit_writer", "order_summary_writer", "order_summary_writer", "shipment_writer"]
+    )
   assert "one async registration" (length projectionCatalogAsyncRegistrations == 1)
   assert "generated missing-checkpoint policy" (map inventoryCheckpointPolicy (Catalog.inventorySubscriptions projectionCatalogInventory) == [FromCurrentHead])
   assert "catalog-scoped rebuild group" (Catalog.rebuildGroupIdText reportingRebuildGroupId == "reporting")

@@ -169,7 +169,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1 (243) M1: runtime owner/query resolution type, capability matrix, and deterministic catalog diagnostics
 - [x] EP-1 (243) M2: Language 5 catalog-managed read-model validation uses owner/target resolution; legacy standalone behavior remains version-gated
-- [ ] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
+- [x] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
 - [ ] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
 - [ ] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
 - [ ] EP-2 (244) M2: query execution derives and validates wait capability; old names retain tested semantics
@@ -203,6 +203,10 @@ interactions between child plans. Provide concise evidence.
   `slice-v1`. The supply relation itself now resolves independently of that order. ADR
   0032 requires the fingerprint correction to ride Plan 244's explicit format-prefix
   bump and adoption evidence instead of silently changing the existing formats in EP-1.
+- EP-1 M3 (2026-08-12): a full 39-entry corpus regeneration changed only the three
+  candidate Language 5 catalog suites. Languages 1-4 remained byte-identical while all
+  affected catalog conformance packages compiled and passed; mutation coverage proves
+  query count cannot duplicate source-selected inline handlers or truncate suppliers.
 
 
 ## Decision Log

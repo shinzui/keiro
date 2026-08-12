@@ -30,6 +30,7 @@ module Keiro.Dsl.Harness
     harnessRouter,
     harnessRouterForService,
     harnessReadModel,
+    harnessReadModelForService,
     harnessWorkflow,
     processHarnessFactValues,
     routerHarnessFactValues,
@@ -39,6 +40,7 @@ module Keiro.Dsl.Harness
 where
 
 import Data.List (find, sortOn)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
@@ -53,6 +55,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
@@ -225,10 +228,13 @@ routerHarnessFactValuesForService service router = case rvSource (rtResolve rout
 -- derivation helpers. Committed conformance expectations pin the lowered values,
 -- while a shape-fixture drift makes the generated harness itself fail.
 harnessReadModel :: Context -> Spec -> ReadModelNode -> [ScaffoldModule]
-harnessReadModel ctx spec readModel =
+harnessReadModel ctx spec = harnessReadModelForService ctx (legacyCheckedService spec)
+
+harnessReadModelForService :: Context -> CheckedService -> ReadModelNode -> [ScaffoldModule]
+harnessReadModelForService ctx service readModel =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs"),
-        moduleText = emitReadModelHarness genPrefix ctx spec readModel,
+        moduleText = emitReadModelHarness genPrefix ctx (checkedSpec service) readModel,
         kind = Generated,
         origin = "readmodel " <> rmName readModel <> locSuffix (rmLoc readModel)
       }
@@ -262,7 +268,7 @@ emitReadModelHarness genPrefix ctx spec readModel =
            "  , (\"strongScope\", " <> tshow scope <> ", renderStrongScope " <> readModelName <> ".strongScope)",
            "  ]"
          ]
-      <> ["    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations" | catalogManaged]
+      <> ["    <> catalogFactsAgainst ProjectionCatalog.projectionCatalogRegistrations ProjectionCatalog.projectionCatalogAsyncRegistrations ProjectionCatalog.projectionCatalogQuerySupplies" | catalogManaged]
       <> [ "",
            "renderStrongScope :: StrongScope -> String",
            "renderStrongScope EntireLog = \"EntireLog\"",
@@ -300,21 +306,24 @@ emitReadModelHarness genPrefix ctx spec readModel =
     emitsLegacyAsync = not catalogManaged && rmFeed readModel == RmSubscription
     catalogImports
       | catalogManaged =
-          [ "import " <> contextGeneratedPrefix ctx <> ".ProjectionCatalog qualified as ProjectionCatalog",
+          [ "import Data.List.NonEmpty qualified as NE",
+            "import " <> contextGeneratedPrefix ctx <> ".ProjectionCatalog qualified as ProjectionCatalog",
             "import Keiro.Projection.Catalog qualified as Catalog"
           ]
       | otherwise = []
-    feedingOwners = case rmGroup readModel of
-      Nothing -> []
-      Just groupName ->
-        sortOn
-          poOrder
-          [ owner
-          | NProjectionOwner owner <- specNodes spec,
-            poFeed owner == RmSubscription,
-            poGroup owner == groupName,
-            any (`elem` poTargets owner) (rmObservedTargets readModel)
-          ]
+    supply =
+      find
+        ((== rmName readModel) . supplyQueryModel)
+        (resolvedProjectionSupplies (analyzeProjectionSupplies spec))
+    feedingOwners =
+      sortOn
+        poOrder
+        [ owner
+        | Just resolved <- [supply],
+          NProjectionOwner owner <- specNodes spec,
+          poName owner == supplyProjectionOwner resolved,
+          poFeed owner == RmSubscription
+        ]
     expectedCatalogRegistration =
       T.intercalate
         "|"
@@ -323,18 +332,31 @@ emitReadModelHarness genPrefix ctx spec readModel =
           rmShape readModel,
           fromMaybe "" (rmGroup readModel)
         ]
+    expectedCatalogSupply = case supply of
+      Nothing -> "missing"
+      Just resolved ->
+        T.intercalate
+          "|"
+          [ supplyProjectionOwner resolved,
+            supplyRebuildGroup resolved,
+            T.intercalate "," (NE.toList (supplyObservedTargets resolved))
+          ]
     catalogHelpers
       | not catalogManaged = []
       | otherwise =
           [ "",
-            "catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [(String, String, String)]",
-            "catalogFactsAgainst registrations " <> asyncParameter <> " ="
+            "catalogFactsAgainst :: [Catalog.CatalogRegistration] -> [Catalog.AsyncProjectionRegistration] -> [Catalog.ResolvedQuerySupply] -> [(String, String, String)]",
+            "catalogFactsAgainst registrations " <> asyncParameter <> " supplies ="
           ]
             <> catalogFactRows
             <> [ "",
                  "renderRegistration :: [Catalog.CatalogRegistration] -> String",
                  "renderRegistration [entry] = T.unpack entry.registryName <> \"|\" <> show entry.version <> \"|\" <> T.unpack entry.shapeHash <> \"|\" <> T.unpack (Catalog.rebuildGroupIdText entry.rebuildGroupId)",
-                 "renderRegistration _ = \"missing\""
+                 "renderRegistration _ = \"missing\"",
+                 "",
+                 "renderSupply :: [Catalog.ResolvedQuerySupply] -> String",
+                 "renderSupply [entry] = T.unpack (Catalog.projectionIdText entry.resolvedProjectionId) <> \"|\" <> T.unpack (Catalog.rebuildGroupIdText entry.resolvedRebuildGroupId) <> \"|\" <> T.unpack (T.intercalate \",\" (map Catalog.targetIdText (NE.toList entry.resolvedObservedTargets)))",
+                 "renderSupply _ = \"missing\""
                ]
             <> asyncRenderHelper
     asyncRenderHelper
@@ -352,6 +374,11 @@ emitReadModelHarness genPrefix ctx spec readModel =
       [ "  [ (\"catalogRegistration\", "
           <> tshow expectedCatalogRegistration
           <> ", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "
+          <> tshow (rmName readModel)
+          <> "])",
+        "  , (\"querySupply\", "
+          <> tshow expectedCatalogSupply
+          <> ", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "
           <> tshow (rmName readModel)
           <> "])"
       ]

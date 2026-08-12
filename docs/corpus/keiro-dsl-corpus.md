@@ -241,6 +241,7 @@ candidate Language-5 catalog and mapped-workqueue lanes and form the primary pro
 | `test/mutation-test.sh` | temporarily flipping the stable generated aggregate guard reddens a specific behavior assertion and restores the file |
 | `test/diff-test.sh` | unsafe evolution is BREAKING while versioned/upcast evolution is ADDITIVE |
 | `test/process-mutation-test.sh` | changing the timer rejection inversion reddens its process fact |
+| `test/projection-supply-mutation-test.sh` | duplicating a shared owner's inline handler per query or retaining only the first resolved supplier reddens compiled projection-catalog conformance and restores exact bytes |
 | `test/replay-mutation-test.sh` | routing a generated emit through a dishonest wire constructor reddens only the forward/replay register assertion |
 | `test/router-mutation-test.sh` | changing target-keyed router identity reddens its router fact |
 | `test/structural-mutation-test.sh` | binding, fixture coverage, and generated mapped-state event omissions fail their structural/replay gates |

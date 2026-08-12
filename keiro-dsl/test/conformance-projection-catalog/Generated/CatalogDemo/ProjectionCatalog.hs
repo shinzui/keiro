@@ -6,12 +6,15 @@ module Generated.CatalogDemo.ProjectionCatalog
   , projectionCatalogInventory
   , projectionCatalogRegistrations
   , projectionCatalogAsyncRegistrations
+  , projectionCatalogQuerySupplies
   , registerProjectionCatalog
   , orderSummaryWriterProjectionSet
   , shipmentWriterProjectionSet
   , auditWriterProjectionSet
   , orderSummaryWriterInlineProjections
   , shipmentWriterInlineProjections
+  , ordersInlineProjections
+  , shipmentsInlineProjections
   , reportingRebuildGroupId
   , startReportingRebuild
   , shippingRebuildGroupId
@@ -31,6 +34,7 @@ import Kiroku.Store.Types qualified as Kiroku
 import Kiroku.Store.Subscription.Types qualified as KirokuSubscription
 import CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles qualified as Holes
 import Generated.CatalogDemo.OrderInline.ReadModel qualified as RMOrderInline
+import Generated.CatalogDemo.OrderTotalsLookup.ReadModel qualified as RMOrderTotalsLookup
 import Generated.CatalogDemo.ShipmentLookup.ReadModel qualified as RMShipmentLookup
 import Generated.CatalogDemo.CatalogAudit.ReadModel qualified as RMCatalogAudit
 
@@ -85,6 +89,12 @@ auditWriterProjectionSet =
       :| [])
     (must (Catalog.mkClaimSite "projection-owner audit_writer source"))
 
+ordersInlineProjections :: [InlineProjection OrdersDomain.OrdersEvent]
+ordersInlineProjections = concat [orderSummaryWriterInlineProjections]
+
+shipmentsInlineProjections :: [InlineProjection ShipmentsDomain.ShipmentsEvent]
+shipmentsInlineProjections = concat [shipmentWriterInlineProjections]
+
 projectionCatalog :: Catalog.ProjectionCatalog
 projectionCatalog =
   Catalog.ProjectionCatalog
@@ -93,7 +103,7 @@ projectionCatalog =
     [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary")), (must (Catalog.mkTargetId "order_totals")), (must (Catalog.mkTargetId "audit_log"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting")), Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "shipping")) [(must (Catalog.mkTargetId "shipment_summary"))] [] (must (Catalog.mkClaimSite "rebuild-group shipping"))]
     [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "catalog-demo-audit")) "catalog-demo-audit" (must (Catalog.mkSourceId "category:audit")) KirokuSubscription.FromCurrentHead (must (Catalog.mkClaimSite "projection-owner audit_writer subscription"))]
     [Catalog.DedupKeyDeclaration (must (Catalog.mkDedupKeyId "catalog-demo-audit-v1")) "catalog-demo-audit-v1" (must (Catalog.mkClaimSite "projection-owner audit_writer dedup"))]
-    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "order_inline")) RMOrderInline.orderInlineReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary"))] (must (Catalog.mkClaimSite "readmodel order_inline"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "shipmentLookup")) RMShipmentLookup.shipmentLookupReadModel (must (Catalog.mkRebuildGroupId "shipping")) [(must (Catalog.mkTargetId "shipment_summary"))] (must (Catalog.mkClaimSite "readmodel shipmentLookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "catalogAudit")) RMCatalogAudit.catalogAuditReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "audit_log"))] (must (Catalog.mkClaimSite "readmodel catalogAudit")))]
+    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "catalogAudit")) RMCatalogAudit.catalogAuditReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "audit_log"))] (must (Catalog.mkClaimSite "readmodel catalogAudit"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "order_inline")) RMOrderInline.orderInlineReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_summary"))] (must (Catalog.mkClaimSite "readmodel order_inline"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "order_totals_lookup")) RMOrderTotalsLookup.orderTotalsLookupReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "order_totals"))] (must (Catalog.mkClaimSite "readmodel order_totals_lookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "shipmentLookup")) RMShipmentLookup.shipmentLookupReadModel (must (Catalog.mkRebuildGroupId "shipping")) [(must (Catalog.mkTargetId "shipment_summary"))] (must (Catalog.mkClaimSite "readmodel shipmentLookup")))]
     [Catalog.SomeProjectionSet orderSummaryWriterProjectionSet, Catalog.SomeProjectionSet shipmentWriterProjectionSet, Catalog.SomeProjectionSet auditWriterProjectionSet]
 
 validatedProjectionCatalog :: Catalog.ValidatedProjectionCatalog
@@ -109,6 +119,9 @@ projectionCatalogRegistrations = Catalog.catalogRegistrations validatedProjectio
 
 projectionCatalogAsyncRegistrations :: [Catalog.AsyncProjectionRegistration]
 projectionCatalogAsyncRegistrations = Catalog.asyncProjectionRegistrations validatedProjectionCatalog
+
+projectionCatalogQuerySupplies :: [Catalog.ResolvedQuerySupply]
+projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog
 
 registerProjectionCatalog :: (Store :> es) => Eff es (Either Rebuild.CatalogRegistrationError [Rebuild.GroupRebuildMetadata])
 registerProjectionCatalog = Rebuild.registerProjectionCatalog validatedProjectionCatalog

@@ -1012,6 +1012,7 @@ test-suite keiro-dsl-conformance-projection-catalog
     CatalogDemo.OrderInline.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
     CatalogDemo.Orders.Holes
+    CatalogDemo.OrderTotalsLookup.ReadModelHoles
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
     CatalogDemo.ShipmentLookup.ReadModelHoles
     CatalogDemo.Shipments.BehaviorHoles
@@ -1030,6 +1031,9 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.Orders.Harness
     Generated.CatalogDemo.Orders.Projection
     Generated.CatalogDemo.Orders.Transducer
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModel
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable
     Generated.CatalogDemo.ProjectionCatalog
     Generated.CatalogDemo.QualificationJobs.Queue
     Generated.CatalogDemo.QualificationJobs.QueueCodec

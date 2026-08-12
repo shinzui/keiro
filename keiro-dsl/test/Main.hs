@@ -70,7 +70,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), R
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
-import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, projectionCatalogFactsForService, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
@@ -2054,13 +2054,17 @@ main = hspec $ do
       let spec = checkedSpec service
           modules = scaffoldServiceModules (defaultContext (specContext spec)) service
           auditHarness = generatedTextEndingIn "Generated/CatalogDemo/CatalogAudit/ReadModelHarness.hs" modules
+          totalsHarness = generatedTextEndingIn "Generated/CatalogDemo/OrderTotalsLookup/ReadModelHarness.hs" modules
           shipmentHarness = generatedTextEndingIn "Generated/CatalogDemo/ShipmentLookup/ReadModelHarness.hs" modules
       auditHarness `shouldSatisfy` T.isInfixOf "import Generated.CatalogDemo.ProjectionCatalog qualified as ProjectionCatalog"
       auditHarness `shouldSatisfy` T.isInfixOf "ProjectionCatalog.projectionCatalogAsyncRegistrations"
+      auditHarness `shouldSatisfy` T.isInfixOf "ProjectionCatalog.projectionCatalogQuerySupplies"
       auditHarness `shouldSatisfy` T.isInfixOf "catalog-demo-catalogAudit|1|fnv1a:9682af3ada04bf50|reporting"
       auditHarness `shouldSatisfy` T.isInfixOf "asyncRegistration:audit_writer"
+      auditHarness `shouldSatisfy` T.isInfixOf "querySupply"
       auditHarness `shouldSatisfy` T.isInfixOf "catalog-demo-audit|catalog-demo-audit-v1"
       auditHarness `shouldNotSatisfy` T.isInfixOf "\"catalog-managed\", \"catalog-managed\""
+      totalsHarness `shouldSatisfy` T.isInfixOf "order_summary_writer|reporting|order_totals"
       shipmentHarness `shouldSatisfy` T.isInfixOf "catalogRegistration"
       shipmentHarness `shouldNotSatisfy` T.isInfixOf "asyncRegistration:"
 
@@ -2231,7 +2235,7 @@ main = hspec $ do
       operationReplay <$> findOperation (CatalogProjectionConsumer "shipment_writer" "Shipments") replayImpact
         `shouldBe` Just True
       operationObservers <$> findOperation (CatalogProjectionConsumer "order_summary_writer" "Orders") observationImpact
-        `shouldBe` Just Set.empty
+        `shouldBe` Just (Set.singleton "order_totals_lookup")
       map ProjectionImpact.source (ProjectionImpact.unsupported categoryImpact)
         `shouldBe` [UnsupportedCatalogCategory "audit_writer" "archive-audit"]
       restored <- checkedServiceFromText "projection-catalog-restored.keiro" source >>= requireImpact "restored fixture"
@@ -2299,11 +2303,13 @@ main = hspec $ do
           holes = case [moduleText m | m <- modules, kind m == HoleStub, "ProjectionCatalog/ProjectionCatalogHoles.hs" `T.isSuffixOf` T.pack (modulePath m)] of
             [value] -> value
             values -> error ("expected one projection catalog hole module, got " <> show (length values))
-          facts = projectionCatalogFacts spec
+          facts = projectionCatalogFactsForService service
       facade `shouldSatisfy` T.isInfixOf "Catalog.validateProjectionCatalog projectionCatalog"
       facade `shouldSatisfy` T.isInfixOf "Catalog.ClearBeforeReplay"
       facade `shouldSatisfy` T.isInfixOf "Catalog.PreserveAndReconcile"
       facade `shouldSatisfy` T.isInfixOf "KirokuSubscription.FromCurrentHead"
+      facade `shouldSatisfy` T.isInfixOf "projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog"
+      facade `shouldSatisfy` T.isInfixOf "ordersInlineProjections = concat [orderSummaryWriterInlineProjections]"
       facade
         `shouldSatisfy` ( \text ->
                             let (_, fromFirst) = T.breakOn "orderSummaryWriterProjectionSet" text
@@ -2314,6 +2320,9 @@ main = hspec $ do
       facts `shouldBe` sort facts
       facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
+      facts `shouldSatisfy` any (T.isPrefixOf "query|order_totals_lookup|reporting|order_totals|order_totals|")
+      facts `shouldSatisfy` any (T.isPrefixOf "supply|order_inline|order_summary_writer|reporting|order_summary|")
+      facts `shouldSatisfy` any (T.isPrefixOf "supply|order_totals_lookup|order_summary_writer|reporting|order_totals|")
       facts `shouldSatisfy` any (T.isInfixOf "|from-current-head|explicit|")
 
     it "preserves edited catalog behavior holes on regeneration" $
@@ -2388,6 +2397,29 @@ main = hspec $ do
           changed <- checkedServiceFromText ("projection-catalog-" <> caseName <> ".keiro") (mutate source)
           map (ckCode . kindOfChange) (diffServices oldService changed) `shouldContain` [expectedCode]
           pure (caseName, changed)
+      supplierChanged <-
+        checkedServiceFromText
+          "projection-catalog-supplier-changed.keiro"
+          ( T.replace
+              "projection-owner audit_writer"
+              ( T.unlines
+                  [ "projection-owner order_totals_writer {",
+                    "  source = category \"orderTotals\"",
+                    "  feed = inline",
+                    "  group = reporting",
+                    "  targets = [ order_totals ]",
+                    "  order = 15",
+                    "  replay = explicit",
+                    "}",
+                    "",
+                    "projection-owner audit_writer"
+                  ]
+              )
+              (T.replace "targets = [ order_summary order_totals ]" "targets = [ order_summary ]" source)
+          )
+      validateService supplierChanged `shouldBe` []
+      map (ckCode . kindOfChange) (diffServices oldService supplierChanged)
+        `shouldContain` [CatalogQueryBindingChanged]
       sourceChanged <- case lookup "source" changedServices of
         Just changed -> pure changed
         Nothing -> expectationFailure "source mutation was not exercised" >> fail "unreachable"

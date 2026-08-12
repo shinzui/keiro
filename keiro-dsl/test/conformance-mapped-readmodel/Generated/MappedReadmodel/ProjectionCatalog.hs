@@ -6,6 +6,7 @@ module Generated.MappedReadmodel.ProjectionCatalog
   , projectionCatalogInventory
   , projectionCatalogRegistrations
   , projectionCatalogAsyncRegistrations
+  , projectionCatalogQuerySupplies
   , registerProjectionCatalog
   , accountSummaryWriterProjectionSet
   , reportingRebuildGroupId
@@ -64,6 +65,9 @@ projectionCatalogRegistrations = Catalog.catalogRegistrations validatedProjectio
 
 projectionCatalogAsyncRegistrations :: [Catalog.AsyncProjectionRegistration]
 projectionCatalogAsyncRegistrations = Catalog.asyncProjectionRegistrations validatedProjectionCatalog
+
+projectionCatalogQuerySupplies :: [Catalog.ResolvedQuerySupply]
+projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog
 
 registerProjectionCatalog :: (Store :> es) => Eff es (Either Rebuild.CatalogRegistrationError [Rebuild.GroupRebuildMetadata])
 registerProjectionCatalog = Rebuild.registerProjectionCatalog validatedProjectionCatalog

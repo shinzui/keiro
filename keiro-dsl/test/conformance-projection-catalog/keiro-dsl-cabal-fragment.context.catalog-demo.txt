@@ -11,8 +11,8 @@ other-modules:
     CatalogDemo.CatalogAudit.ReadModelHoles
     CatalogDemo.MappedBindings
     CatalogDemo.OrderInline.ReadModelHoles
+    CatalogDemo.OrderTotalsLookup.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
-    CatalogDemo.Orders.Holes
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
     CatalogDemo.ShipmentLookup.ReadModelHoles
     CatalogDemo.Shipments.BehaviorHoles
@@ -24,6 +24,9 @@ other-modules:
     Generated.CatalogDemo.OrderInline.ReadModel
     Generated.CatalogDemo.OrderInline.ReadModelHarness
     Generated.CatalogDemo.OrderInline.ReadModelTable
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModel
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable
     Generated.CatalogDemo.Orders.BehaviorContract
     Generated.CatalogDemo.Orders.Codec
     Generated.CatalogDemo.Orders.Domain
