@@ -20,12 +20,31 @@ parseDuration input = do
             | Just factor <- durationFactor (toLower suffix) ->
                 (reverse rest, factor)
           _ -> (input, 1)
-  value <- maybe (Left durationError) Right (Read.readMaybe numberText :: Maybe Double)
-  if value < 0
-    then Left durationError
-    else Right (realToFrac (value * multiplier))
+  value <- maybe (Left malformed) Right (Read.readMaybe numberText :: Maybe Double)
+  let scaled = value * multiplier
+  if isNaN scaled || isInfinite scaled || scaled < 0
+    then Left malformed
+    else
+      if scaled > maxDurationSeconds
+        then Left tooLarge
+        else Right (realToFrac scaled)
   where
-    durationError = "expected a non-negative duration in seconds, or with s, m, h, or d suffix"
+    malformed =
+      "invalid duration "
+        <> show input
+        <> ": expected a finite, non-negative number of seconds, optionally with an s, m, h, or d suffix"
+    tooLarge =
+      "invalid duration "
+        <> show input
+        <> ": exceeds the maximum supported duration of 9.0e12 seconds (about 285000 years)"
+
+-- | Upper bound on any operator-supplied duration, in seconds. PostgreSQL's
+-- binary timestamptz format is Int64 microseconds since 2000-01-01 (maximum
+-- about 9.22e12 seconds); a larger duration wraps modulo 2^64 into an arbitrary
+-- cutoff. 9.0e12 seconds is comfortably inside that range and far beyond any
+-- legitimate retention.
+maxDurationSeconds :: Double
+maxDurationSeconds = 9.0e12
 
 durationFactor :: Char -> Maybe Double
 durationFactor = \case

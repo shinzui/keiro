@@ -309,15 +309,42 @@ spec fixture = do
       selectConnectionString Nothing Nothing Nothing `shouldBe` ""
 
   describe "parseDuration" do
-    it "accepts bare seconds and the documented suffixes" do
-      parseDuration "1.5" `shouldBe` Right 1.5
-      parseDuration "2m" `shouldBe` Right 120
-      parseDuration "3h" `shouldBe` Right 10800
-      parseDuration "1d" `shouldBe` Right 86400
+    it "rejects every non-finite spelling Read Double accepts" do
+      parseDuration "NaN"
+        `shouldBe` Left "invalid duration \"NaN\": expected a finite, non-negative number of seconds, optionally with an s, m, h, or d suffix"
+      parseDuration "-NaN" `shouldSatisfy` isLeft
+      parseDuration "Infinity" `shouldSatisfy` isLeft
+      parseDuration "-Infinity" `shouldSatisfy` isLeft
+      parseDuration "NaNs" `shouldSatisfy` isLeft
+      parseDuration "NaNm" `shouldSatisfy` isLeft
+      parseDuration "NaNh" `shouldSatisfy` isLeft
+      parseDuration "NaNd" `shouldSatisfy` isLeft
+      parseDuration "Infinityd" `shouldSatisfy` isLeft
 
-    it "rejects negative and malformed values" do
+    it "rejects finite durations the timestamptz wire encoding cannot represent" do
+      parseDuration "1e13"
+        `shouldBe` Left "invalid duration \"1e13\": exceeds the maximum supported duration of 9.0e12 seconds (about 285000 years)"
+      parseDuration "1e308" `shouldSatisfy` isLeft
+      parseDuration "1e308d" `shouldSatisfy` isLeft
+      parseDuration "115740741000000d" `shouldSatisfy` isLeft
+
+    it "still rejects lowercase non-finite spellings, negatives, and junk" do
+      parseDuration "nan" `shouldSatisfy` isLeft
+      parseDuration "infinity" `shouldSatisfy` isLeft
+      parseDuration "-1" `shouldSatisfy` isLeft
       parseDuration "-1s" `shouldSatisfy` isLeft
       parseDuration "soon" `shouldSatisfy` isLeft
+      parseDuration "" `shouldSatisfy` isLeft
+
+    it "accepts integers, decimals, scientific notation, and suffixes unchanged" do
+      parseDuration "0" `shouldBe` Right 0
+      parseDuration "1.5" `shouldBe` Right 1.5
+      parseDuration "2592000" `shouldBe` Right 2592000
+      parseDuration "1e6" `shouldBe` Right 1000000
+      parseDuration "2m" `shouldBe` Right 120
+      parseDuration "3h" `shouldBe` Right 10800
+      parseDuration "30d" `shouldBe` Right 2592000
+      parseDuration "9.0e12" `shouldBe` Right 9000000000000
 
   describe "renderHuman" do
     it "aligns columns without changing the structured JSON value" do

@@ -87,7 +87,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Complete |
-| 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
+| 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | In Progress |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -172,7 +172,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first (2026-08-12T19:29:46Z)
 - [x] EP-4 (240) M3: awakeable adoption bridge (2026-08-12T19:32:44Z)
 - [x] EP-4 (240) M4: ADR 0024 window contract, CHANGELOG note, comment/window unification, and full Haskell gate (2026-08-12T19:43:22Z)
-- [ ] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix
+- [ ] EP-5 (241): implementation started; complete child plan read before changing CLI parsing (2026-08-12T19:44:48Z)
+- [x] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix (2026-08-12T19:46:50Z)
 - [ ] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies)
 - [ ] EP-5 (241) M3: executable-level no-DB-contact rejection test and closeout
 - [ ] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged

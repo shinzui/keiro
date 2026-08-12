@@ -47,11 +47,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: `parseDuration` in `keiro-ops/src/Keiro/Ops/Parse.hs` rejects
+- [x] Implementation started; read the complete ExecPlan and marked EP-5 in progress in
+      the parent MasterPlan before changing CLI parsing (2026-08-12T19:44:48Z).
+- [x] Milestone 1: `parseDuration` in `keiro-ops/src/Keiro/Ops/Parse.hs` rejects
       non-finite, negative, and wire-unrepresentable values with the exact messages
-      documented in this plan.
-- [ ] Milestone 1: the `parseDuration` unit matrix in `keiro-ops/test/Main.hs` covers
-      every rejected spelling and every preserved accepted form, and passes.
+      documented in this plan (2026-08-12T19:46:50Z).
+- [x] Milestone 1: the `parseDuration` unit matrix in `keiro-ops/test/Main.hs` covers
+      every rejected spelling and every preserved accepted form; the full keiro-ops
+      suite passes with 35 examples and zero failures (2026-08-12T19:46:50Z).
 - [ ] Milestone 2: the three unguarded `option auto` call sites
       (`wf list --limit`, `wf gc run-once --batch`, `replay-audit --resume-from`)
       use guarded readers.
@@ -114,6 +117,12 @@ modulo 2^64 — `read "18446744073709551716" :: Int` evaluates to `100` — so e
 number. Milestone 2 closes this.
 
 (Implementation-time surprises to be added as work proceeds.)
+
+- Milestone 1 reproduction (2026-08-12): the tests-first duration matrix failed in
+  exactly the two unsafe classes. `NaN` was admitted as an enormous positive
+  `NominalDiffTime`, and `1e13` was admitted unchanged; the preserved ordinary and
+  existing malformed-input rows were already green. This confirmed the guard was the
+  only missing boundary before applying it to the scaled product.
 
 
 ## Decision Log
