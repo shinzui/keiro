@@ -8,6 +8,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-dsl**: candidate language 5 catalog-bound read models now reject
+  read-model-local `table`/`schema` coordinates, treat observed `targets` as an
+  unordered set, and require `backing = <target>` when that set has more than
+  one member. `DiagnosticCode` gains `CatalogReadModelPhysicalOverride`,
+  `CatalogReadModelBackingRequired`, and `CatalogReadModelBackingUnobserved`;
+  exhaustive consumers must be extended. Regenerated grouped read-model
+  harnesses import the generated `ProjectionCatalog`, assert real catalog and
+  async-registration identities, and export `catalogFactsAgainst` for negative
+  controls instead of emitting the vacuous `catalog-managed` fact.
 - **keiro-dsl**: regenerate each mapped service once, reconcile the generated Cabal fragment with
   the new context `StructuralConformance` and `BehaviorSourceMap` modules, compile the runtime
   package, and run its generated service conformance target. Scaffold ledgers gain an additive

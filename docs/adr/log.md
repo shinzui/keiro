@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0026: catalog-bound read models observe an unordered target set and bind by name to one target-owned physical identity (plan 234).
 * **Update**: Require successor-language syntax to use feature-gated contextual keywords without globally reserving identifiers from published languages (plan 233).
 
 ## 2026-08-11

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-08T13:31:09Z
+timestamp: 2026-08-12T02:31:20Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -49,6 +49,15 @@ its reset policy. A rebuild group owns the deterministic order of targets that
 must move through one lifecycle. A projection definition is the single owner of
 one or more targets and contains an explicitly ordered non-empty list of live
 handlers.
+
+For a catalog-bound language-5 read model, the observed targets are an unordered
+lifecycle set, while its generated `ReadModel` and `ReadModelTable` bind to
+exactly one physical target. A single observed target is the implicit backing;
+a model that observes several targets must name one member with
+`backing = <target>`. Resolution is by target name, never list position. The
+physical target declaration remains the sole authority for schema and table
+coordinates, so a catalog-bound read model cannot repeat or override them with
+local `schema =` or `table =` clauses.
 
 Candidate language 5 may derive `q` and `r` from a complete checked mapped input/result pair. The
 generated `QueryContract` aliases are the compile-time API authority used by the generated
@@ -176,6 +185,9 @@ dedup rows are not completion evidence.
 - One physical table has one projection owner. Several ordered handlers can be
   composed under that one owner, but two independent projection identities
   cannot both claim the table.
+- Reordering a query model's observed targets changes neither its generated
+  physical binding nor its catalog identity. Changing the observed set or its
+  effective backing remains a persisted query-binding change.
 - `$all` and category sources cannot feed the same rebuild group because that
   would replay overlapping events. Several distinct categories are allowed and
   later orchestration must merge them by `RecordedEvent.globalPosition`.

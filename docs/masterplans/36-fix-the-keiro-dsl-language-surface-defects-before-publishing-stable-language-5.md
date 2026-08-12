@@ -78,7 +78,7 @@ ADR applies.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | Complete |
-| 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | In Progress |
+| 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | Complete |
 | 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | Not Started |
 | 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | Not Started |
 
@@ -141,10 +141,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (233) M1: red regression fixtures covering `outcome` as an identifier in every affected position across legacy + declared languages 1–4, plus the language-5 clause-boundary coexistence fixture
 - [x] EP-1 (233) M2: contextual-keyword fix (drop the two reserved words, `try`/lookahead-guard the clause marker) turns the fixtures green with the v4 feature-gating test untouched
 - [x] EP-1 (233) M3: corpus zero-drift proof, full gates, changelog, ADR-0016 distillation
-- [ ] EP-2 (234) M1: `CatalogReadModelPhysicalOverride` diagnostic forbids explicit table/schema on catalog-bound read models
-- [ ] EP-2 (234) M2: explicit order-insensitive `backing = <target>` binding; name-based resolution deduplicated across ScaffoldRun and WorkspaceScaffold; reorder diffs as nothing
-- [ ] EP-2 (234) M3: real grouped-harness facts against the generated ProjectionCatalog exports, with mutation-test proof
-- [ ] EP-2 (234) M4: corpus regeneration, gates, documentation, ADR-0026 update
+- [x] EP-2 (234) M1: `CatalogReadModelPhysicalOverride` diagnostic forbids explicit table/schema on catalog-bound read models
+- [x] EP-2 (234) M2: explicit order-insensitive `backing = <target>` binding; name-based resolution deduplicated across ScaffoldRun and WorkspaceScaffold; reorder diffs as nothing
+- [x] EP-2 (234) M3: real grouped-harness facts against the generated ProjectionCatalog exports, with mutation-test proof
+- [x] EP-2 (234) M4: corpus regeneration, gates, documentation, ADR-0026 update
 - [ ] EP-3 (235) M1: seven legacy Spec-only exports deleted, Haddocks relocated, library compiles
 - [ ] EP-3 (235) M2: test suite migrated off the retired exports while preserving the anti-fabrication proof
 - [ ] EP-3 (235) M3: changelog Breaking Changes entry with both migration recipes; ADR-16 amendment
@@ -182,6 +182,10 @@ interactions between child plans. Provide concise evidence.
   `keiro-dsl/test/conformance-baseline.json`, and any legacy or candidate-language fixture must
   appear in the non-stable fixture list in `keiro-dsl/test/Main.hs`. EP-2 should account for
   both policies when it adds or changes candidate-language-5 conformance evidence.
+- EP-2 completion (2026-08-12): grouped read-model harness output exists in three compiled
+  corpora, not the two originally identified: declarative-router's `hospitalLoad` model is
+  also catalog-bound. Regenerating and running all three suites kept the change attributable,
+  and the repository-wide corpus gate finished at zero drift.
 
 
 ## Decision Log
@@ -218,4 +222,10 @@ docs/adr/. Keep task-local execution and coordination details here.
 EP-1 is complete. It restored `outcome` as an identifier in published languages and retained
 typed domain outcomes through contextual clause parsing in candidate language 5. Regression,
 compiled conformance, corpus-policy, and full repository gates pass, and ADR-16 now records the
-general rule. EP-2, EP-3, and EP-4 remain before the language-5 publication gate can move.
+general rule.
+
+EP-2 is complete. Catalog-bound read models now bind to one target by name, reject competing
+physical coordinates, and treat observation order as semantically inert. Their generated
+harnesses assert real catalog registrations and detect perturbed async identity. Corpus and
+full repository gates pass, and ADR-26 records the durable identity rule. EP-3 and EP-4 remain
+before the language-5 publication gate can move.

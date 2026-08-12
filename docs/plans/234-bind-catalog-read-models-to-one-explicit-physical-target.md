@@ -82,11 +82,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-08-11 19:29 PDT) M3: Update the three `harnessReadModel` call sites (`ScaffoldRun.hs`, `WorkspaceScaffold.hs`, `test/Main.hs`).
 - [x] (2026-08-11 19:29 PDT) M3: Add textual emitter tests: grouped harness imports the generated `ProjectionCatalog` module, pins the spec-derived expected identities, and no longer contains the constant `"catalog-managed", "catalog-managed"` row.
 - [x] (2026-08-11 19:29 PDT) M3: Add the runtime mutation test to `keiro-dsl/test/conformance-projection-catalog/Main.hs` (hand-owned): `catalogFactsAgainst` fails on a perturbed registration list and passes as generated.
-- [ ] M4: Run `just corpus-regen`; commit regenerated `conformance-projection-catalog`, `conformance-mapped-readmodel`, and `conformance-declarative-router` modules; run `just conformance-corpus-policy`.
-- [ ] M4: Run `just verify` clean.
-- [ ] M4: Update `CHANGELOG.md` (Unreleased, keiro-dsl entries: new codes, new clause, forbidden form, harness change).
-- [ ] M4: Extend `docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md` with the binding rule (see Decision Log) and update the MasterPlan-36 registry row and progress checkboxes.
-- [ ] Final: ADR distillation pass and Outcomes & Retrospective entry.
+- [x] (2026-08-11 19:41 PDT) M4: Run `just corpus-regen`; commit regenerated `conformance-projection-catalog`, `conformance-mapped-readmodel`, and `conformance-declarative-router` modules; run `just conformance-corpus-policy`.
+- [x] (2026-08-11 19:41 PDT) M4: Run `just verify` clean.
+- [x] (2026-08-11 19:41 PDT) M4: Update `CHANGELOG.md` (Unreleased, keiro-dsl entries: new codes, new clause, forbidden form, harness change).
+- [x] (2026-08-11 19:41 PDT) M4: Extend `docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md` with the binding rule (see Decision Log) and update the MasterPlan-36 registry row and progress checkboxes.
+- [x] (2026-08-11 19:41 PDT) Final: ADR distillation pass and Outcomes & Retrospective entry.
 
 
 ## Surprises & Discoveries
@@ -221,7 +221,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The two dishonest language-5 behaviors are removed before publication. Catalog-bound read
+models can no longer carry ignored physical coordinates, multi-target models identify one
+backing member, and declared target order has no generated or diff meaning. Grouped harnesses
+now compare spec-derived catalog and async identities with the generated catalog exports; the
+compiled negative control proves a changed subscription name makes the fact fail.
+
+The focused unit and three affected conformance suites passed, corpus regeneration reached
+zero drift, and `just verify` passed all repository gates (including 695 `keiro-dsl-test`
+examples and all 43 DSL test components). The durable physical-binding rule is recorded in
+ADR-26. No additional ADR was needed: the other decisions are implementation details of that
+identity rule and the existing generated-conformance boundary.
 
 
 ## Context and Orientation
