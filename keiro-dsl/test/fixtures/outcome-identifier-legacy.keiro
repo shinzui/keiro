@@ -1,0 +1,15 @@
+context outcome-ident
+
+aggregate Account
+  regs
+    outcome Text = "none"
+  states Open Done!
+
+  command Close { outcome }
+
+  event AccountClosed = fields(Close)
+
+  Open -- Close -->
+    write outcome := outcome
+    emit AccountClosed
+    goto Done

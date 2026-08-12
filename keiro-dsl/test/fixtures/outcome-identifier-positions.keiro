@@ -1,0 +1,17 @@
+language keiro-dsl 4
+context outcome-state
+
+enum Decision { outcome=outcome-wire Other=other-wire }
+
+aggregate Review
+  regs
+    d Decision = Other
+  states outcome Done!
+
+  command Finish { note:Text }
+
+  event Finished = fields(Finish)
+
+  outcome -- Finish -->
+    emit Finished
+    goto Done

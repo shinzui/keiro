@@ -1,0 +1,16 @@
+language keiro-dsl 4
+context outcome-ident
+
+aggregate Account
+  regs
+    outcome Text = "none"
+  states Open Done!
+
+  command Close { outcome:Text }
+
+  event AccountClosed = fields(Close)
+
+  Open -- Close -->
+    write outcome := cmd.outcome
+    emit AccountClosed
+    goto Done

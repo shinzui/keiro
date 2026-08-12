@@ -1,0 +1,25 @@
+language keiro-dsl 5
+context outcome-five
+
+enum ReviewRejection { AlreadyDone=already-done }
+enum ReviewNoOp { Duplicate=duplicate }
+
+aggregate Review
+  domain-outcomes rejection=ReviewRejection no-op=ReviewNoOp
+  regs
+    outcome Text = "none"
+  states outcome Done
+
+  command Finish { outcome:Text }
+
+  event Finished = fields(Finish)
+
+  Done -- Finish -->
+    outcome no-op ReviewNoOp.Duplicate
+    goto Done
+
+  outcome -- Finish -->
+    write outcome := cmd.outcome
+    outcome accepted
+    emit Finished
+    goto Done

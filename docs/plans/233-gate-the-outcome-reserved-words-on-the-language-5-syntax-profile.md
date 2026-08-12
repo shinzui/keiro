@@ -44,12 +44,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `keiro-dsl/test/fixtures/outcome-identifier-legacy.keiro` (legacy grammar, no preamble).
-- [ ] M1: add `keiro-dsl/test/fixtures/outcome-identifier.keiro` (language-4 body, typed expressions).
-- [ ] M1: add `keiro-dsl/test/fixtures/outcome-identifier-positions.keiro` (language 4: enum constructor, state, transition source named `outcome`).
-- [ ] M1: add `keiro-dsl/test/fixtures/outcome-identifier-v5.keiro` (language 5: outcome clauses coexisting with `outcome` identifiers, including the clause-boundary hazard).
-- [ ] M1: add the `outcome identifier compatibility` describe block to `keiro-dsl/test/Main.hs` covering legacy, declared 1, 2, 3, 4, the position fixture, the renderer round-trip, and the language-5 coexistence fixture.
-- [ ] M1: run the targeted suite and record the red result (new examples fail at HEAD; all pre-existing examples still pass).
+- [x] (2026-08-12T00:21:30Z) M1: add `keiro-dsl/test/fixtures/outcome-identifier-legacy.keiro` (legacy grammar, no preamble).
+- [x] (2026-08-12T00:21:30Z) M1: add `keiro-dsl/test/fixtures/outcome-identifier.keiro` (language-4 body, typed expressions).
+- [x] (2026-08-12T00:21:30Z) M1: add `keiro-dsl/test/fixtures/outcome-identifier-positions.keiro` (language 4: enum constructor, state, transition source named `outcome`).
+- [x] (2026-08-12T00:21:30Z) M1: add `keiro-dsl/test/fixtures/outcome-identifier-v5.keiro` (language 5: outcome clauses coexisting with `outcome` identifiers, including the clause-boundary hazard).
+- [x] (2026-08-12T00:21:30Z) M1: add the `outcome identifier compatibility` describe block to `keiro-dsl/test/Main.hs` covering legacy, declared 1, 2, 3, 4, the position fixture, the renderer round-trip, and the language-5 coexistence fixture.
+- [x] (2026-08-12T00:21:30Z) M1: run the targeted suite and record the red result (new examples fail at HEAD; all pre-existing examples still pass).
 - [ ] M2: remove `"domain-outcomes"` and `"outcome"` from `reservedWords` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`.
 - [ ] M2: make the `outcome` clause marker in `pClause` (`keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs`) contextual with `try` + `lookAhead` of the three selector keywords.
 - [ ] M2: targeted suite green, including the untouched "gates the syntax to candidate language 5" example.
@@ -67,7 +67,11 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Milestone 1 (2026-08-12): the focused red run produced exactly the intended five failures
+  and no passing compatibility example. Four failures stopped on the reserved register name
+  (`unexpected "outcom"`, expecting `states`); the positions fixture stopped on the reserved
+  enum constructor (`unexpected 'o'`, expecting `}`). Cabal reported `5 examples, 5 failures`,
+  confirming the fixtures isolate the global reservation before the parser changes.
 
 
 ## Decision Log
@@ -702,3 +706,7 @@ Test-side dependencies (already present in `keiro-dsl/test/Main.hs`): `readTestT
 hspec's `describe`/`it`/`shouldBe`/`expectationFailure`, and `Data.Text` as `T`. Tooling:
 `cabal`, `just`, and for `just verify` the repository's full dev environment (Postgres via
 `process-compose`, `okf`, shell scripts under `scripts/`).
+
+
+Plan revision note (2026-08-12): Milestone 1 fixtures and red regression evidence were added
+to the living sections after the focused suite failed in all five intended examples.

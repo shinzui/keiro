@@ -1965,6 +1965,46 @@ main = hspec $ do
       ReplayImpact.replayImpactServices (checkedSource oldParsed) (checkedSource newParsed)
         `shouldBe` Right ReplayImpact.ReplayNeutral
 
+  describe "outcome identifier compatibility" $ do
+    it "parses outcome as an ordinary identifier under legacy and declared language 1" $ do
+      source <- readTestText "test/fixtures/outcome-identifier-legacy.keiro"
+      case parseSource "outcome-identifier-legacy.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right _ -> pure ()
+      case parseSource "outcome-identifier-v1.keiro" ("language keiro-dsl 1\n" <> source) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right _ -> pure ()
+
+    it "parses outcome as an ordinary identifier under languages 2, 3, and 4" $ do
+      source <- readTestText "test/fixtures/outcome-identifier.keiro"
+      forM_ ["2", "3", "4"] $ \version ->
+        case parseSource
+          ("outcome-identifier-v" <> T.unpack version <> ".keiro")
+          (T.replace "language keiro-dsl 4" ("language keiro-dsl " <> version) source) of
+          Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+          Right parsed
+            | version == "4" -> validateService (checkedSource parsed) `shouldBe` []
+            | otherwise -> pure ()
+
+    it "parses outcome as an enum constructor, state, and transition source" $ do
+      source <- readTestText "test/fixtures/outcome-identifier-positions.keiro"
+      case parseSource "outcome-identifier-positions.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right parsed -> validateService (checkedSource parsed) `shouldBe` []
+
+    it "round-trips outcome identifiers through the canonical renderer" $ do
+      source <- readTestText "test/fixtures/outcome-identifier.keiro"
+      parsed <- case parseSource "outcome-identifier.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      parseSource "outcome-identifier-rendered.keiro" (renderSource parsed) `shouldBe` Right parsed
+
+    it "keeps outcome usable as an identifier alongside language-5 outcome clauses" $ do
+      source <- readTestText "test/fixtures/outcome-identifier-v5.keiro"
+      case parseSource "outcome-identifier-v5.keiro" source of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right parsed -> validateService (checkedSource parsed) `shouldBe` []
+
   describe "language-5 projection catalogs" $ do
     it "parses, validates, and canonically round-trips the closed-world catalog graph" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
