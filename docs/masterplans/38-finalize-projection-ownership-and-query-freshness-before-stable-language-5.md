@@ -212,6 +212,10 @@ interactions between child plans. Provide concise evidence.
   also exposed five stale aggregate-consumer, coverage, compatibility, and fixture-
   inventory expectations; correcting them confirmed that catalog ownership is now the
   sole mapped projection authority rather than leaving hidden legacy ownership facts.
+- EP-2 M2a (2026-08-12): truthful and legacy query execution now share schema/liveness,
+  polling, timeout telemetry, and SQL execution, and the focused 27-example runtime group
+  passes. Plan 238 remains Not Started in MasterPlan 37, so EP-2 preserves the
+  `storeHeadPosition` seam and keeps visible-tail-GC acceptance as an explicit pending gate.
 
 
 ## Decision Log

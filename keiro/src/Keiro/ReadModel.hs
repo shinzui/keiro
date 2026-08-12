@@ -50,6 +50,7 @@ module Keiro.ReadModel
 
     -- * Querying
     runQuery,
+    runQueryWithFreshness,
     runQueryWith,
     waitFor,
     subscriptionPositionFromInventory,
@@ -357,6 +358,11 @@ data ReadModelError
   | -- | The model is registered but not 'Live' (e.g. rebuilding or
     --       abandoned): name and current status.
     ReadModelNotLive !Text !ReadModelStatus
+  | -- | A truthful wait was requested for a model with no durable cursor:
+    --       model name and requested freshness.
+    ReadModelMissingCursor !Text !QueryFreshness
+  | -- | A truthful position wait omitted its required target: model name.
+    ReadModelMissingPosition !Text
   deriving stock (Generic, Eq, Show)
 
 -- | Query a read model using its 'defaultConsistency'. Validates schema and
@@ -370,6 +376,19 @@ runQuery ::
 runQuery metrics readModel =
   runQueryWith metrics (readModel ^. #defaultConsistency) readModel
 
+-- | Query a read model with an honest freshness override. 'Immediate' runs
+-- after schema and liveness validation without polling. Waiting modes require
+-- a durable cursor; 'WaitForPosition' additionally requires a concrete target.
+runQueryWithFreshness ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  QueryFreshness ->
+  ReadModel q r ->
+  q ->
+  Eff es (Either ReadModelError r)
+runQueryWithFreshness metrics freshness readModel input =
+  runValidatedQuery readModel input (waitForFreshness metrics freshness readModel)
+
 -- | Query a read model with an explicit 'ConsistencyMode', overriding its
 -- default. Validates the model's schema and liveness, honours the wait mode,
 -- then runs the query in a transaction.
@@ -381,11 +400,21 @@ runQueryWith ::
   q ->
   Eff es (Either ReadModelError r)
 runQueryWith metrics consistency readModel input = do
+  runValidatedQuery readModel input (waitIfNeeded metrics consistency readModel)
+{-# DEPRECATED runQueryWith "Use runQueryWithFreshness. The legacy override is removed in 0.13." #-}
+
+runValidatedQuery ::
+  (Store :> es) =>
+  ReadModel q r ->
+  q ->
+  Eff es (Either ReadModelError ()) ->
+  Eff es (Either ReadModelError r)
+runValidatedQuery readModel input waitAction = do
   schemaCheck <- ensureReadModel readModel
   case schemaCheck of
     Left err -> pure (Left err)
     Right () -> do
-      waitResult <- waitIfNeeded metrics consistency readModel
+      waitResult <- waitAction
       case waitResult of
         Left err -> pure (Left err)
         Right () -> Right <$> runTransaction ((readModel ^. #query) input)
@@ -401,11 +430,27 @@ waitFor ::
   GlobalPosition ->
   Eff es (Either ReadModelError ())
 waitFor metrics options readModel targetPosition = do
+  waitForCursor
+    metrics
+    options
+    readModel
+    (readModel ^. #subscriptionName)
+    targetPosition
+
+waitForCursor ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  PositionWaitOptions ->
+  ReadModel q r ->
+  Text ->
+  GlobalPosition ->
+  Eff es (Either ReadModelError ())
+waitForCursor metrics options readModel cursor targetPosition = do
   started <- liftIO getCurrentTime
   poll started (GlobalPosition 0)
   where
     poll started observed = do
-      current <- readSubscriptionPosition (readModel ^. #subscriptionName)
+      current <- readSubscriptionPosition cursor
       let observed' = fromMaybe observed current
       if observed' >= targetPosition
         then pure (Right ())
@@ -476,6 +521,43 @@ waitIfNeeded metrics (PositionWait options) readModel =
   case options ^. #target of
     Nothing -> pure (Right ())
     Just targetPosition -> waitFor metrics options readModel targetPosition
+
+waitForFreshness ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  QueryFreshness ->
+  ReadModel q r ->
+  Eff es (Either ReadModelError ())
+waitForFreshness _ Immediate _ = pure (Right ())
+waitForFreshness metrics requested@(WaitForHead scope) readModel =
+  withCursor requested readModel $ \cursor -> do
+    target <- case scope of
+      EntireVisibleLog -> storeHeadPosition
+      CategoryVisibleHead category -> categoryHeadPosition category
+    waitForCursor
+      metrics
+      (defaultHeadWaitOptions & #target ?~ target)
+      readModel
+      cursor
+      target
+waitForFreshness metrics requested@(WaitForPosition options) readModel =
+  case options ^. #target of
+    Nothing -> pure (Left (ReadModelMissingPosition (readModel ^. #name)))
+    Just targetPosition ->
+      withCursor requested readModel $ \cursor ->
+        waitForCursor metrics options readModel cursor targetPosition
+
+withCursor ::
+  (Applicative f) =>
+  QueryFreshness ->
+  ReadModel q r ->
+  (Text -> f (Either ReadModelError ())) ->
+  f (Either ReadModelError ())
+withCursor requested readModel action =
+  case readModelCursorAuthority readModel of
+    NoQueryCursor ->
+      pure (Left (ReadModelMissingCursor (readModel ^. #name) requested))
+    DurableQueryCursor cursor -> action cursor
 
 readSubscriptionPosition ::
   (Store :> es) =>

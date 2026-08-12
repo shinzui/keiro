@@ -3149,6 +3149,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.runStoreIO storeHandle $
             runQuery Nothing counterReadModel "inline"
         queryResult `shouldBe` Right (Right 5)
+        truthfulResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWithFreshness Nothing Immediate counterImmediateReadModel "inline"
+        truthfulResult `shouldBe` queryResult
 
     it "reads the minimum checkpoint across consumer-group subscription members" $ \storeHandle -> do
       Right () <-
@@ -3191,6 +3195,34 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           runQueryWith Nothing Strong counterReadModel "empty"
       queryResult `shouldBe` Right (Right 0)
+      truthfulResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWithFreshness
+            Nothing
+            (WaitForHead EntireVisibleLog)
+            counterCursorReadModel
+            "empty"
+      truthfulResult `shouldBe` queryResult
+
+    it "rejects truthful waits when an immediate inline model has no cursor" $ \storeHandle -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          initializeRegisteredReadModel counterImmediateReadModel initializeCounterReadModelTable
+      queryResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWithFreshness
+            Nothing
+            (WaitForHead EntireVisibleLog)
+            counterImmediateReadModel
+            "inline"
+      queryResult
+        `shouldBe` Right
+          ( Left
+              ( ReadModelMissingCursor
+                  "counter-read-model"
+                  (WaitForHead EntireVisibleLog)
+              )
+          )
 
     it "Strong returns immediately when the subscription is already at the store head" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
@@ -3280,6 +3312,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.runStoreIO storeHandle $
             runQueryWith Nothing Strong counterCategoryReadModel "inline"
         queryResult `shouldBe` Right (Right 8)
+        truthfulResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWithFreshness
+              Nothing
+              (WaitForHead (CategoryVisibleHead "counter"))
+              counterCursorReadModel
+              "inline"
+        truthfulResult `shouldBe` queryResult
 
     it "inline projection populates actor and source_event_id from command metadata" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
@@ -3330,6 +3370,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               counterReadModel
               "inline"
         queryResult `shouldBe` Right (Right 3)
+        truthfulResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWithFreshness
+              Nothing
+              (WaitForPosition (fastWaitOptions & #target .~ Just globalPosition))
+              counterCursorReadModel
+              "inline"
+        truthfulResult `shouldBe` queryResult
 
     it "times out when PositionWait target is not reached" $ \storeHandle -> do
       Right () <-
@@ -3349,6 +3397,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       queryResult
         `shouldBe` Right
           (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 1)))
+      truthfulResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWithFreshness
+            Nothing
+            (WaitForPosition (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+            counterCursorReadModel
+            "timeout"
+      truthfulResult `shouldBe` queryResult
+
+    it "rejects a truthful position wait without a target" $ \storeHandle -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          initializeRegisteredReadModel counterCursorReadModel initializeCounterReadModelTable
+      queryResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWithFreshness
+            Nothing
+            (WaitForPosition fastWaitOptions)
+            counterCursorReadModel
+            "missing-target"
+      queryResult
+        `shouldBe` Right (Left (ReadModelMissingPosition "counter-read-model"))
 
     it "does not write the registry row on repeated read-model queries" $ \storeHandle -> do
       Right () <-
@@ -14144,6 +14214,27 @@ counterReadModel =
       shapeHash = "counter-read-model-v1",
       defaultConsistency = Eventual,
       strongScope = EntireLog,
+      query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
+    }
+
+counterImmediateReadModel :: ReadModel Text Int
+counterImmediateReadModel =
+  immediateReadModel (counterReadModelBlueprint NoQueryCursor)
+
+counterCursorReadModel :: ReadModel Text Int
+counterCursorReadModel =
+  immediateReadModel
+    (counterReadModelBlueprint (DurableQueryCursor "counter-read-model-sub"))
+
+counterReadModelBlueprint :: QueryCursorAuthority -> ReadModelBlueprint Text Int
+counterReadModelBlueprint authority =
+  ReadModelBlueprint
+    { name = "counter-read-model",
+      tableName = "counter_read_model",
+      schema = "public",
+      version = 1,
+      shapeHash = "counter-read-model-v1",
+      cursorAuthority = authority,
       query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
     }
 

@@ -42,7 +42,8 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] M1: pin an old/new API compatibility matrix; add honest freshness, head-scope, cursor-authority, and builder types without breaking old call sites. (2026-08-12 14:28Z)
-- [ ] M2: implement truthful query execution and capability errors; preserve old semantics with equivalence tests and integrate Plan 238's visible-head behavior.
+- [x] M2a: implement truthful query execution and deterministic missing-cursor/missing-target errors; preserve old semantics through shared helpers and old/new equivalence tests. (2026-08-12 14:35Z)
+- [ ] M2b: after Plan 238 completes, run the visible-tail-GC, genuinely-behind, and category-bounded `WaitForHead` integration proof without changing the preserved `storeHeadPosition` seam.
 - [ ] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior.
 - [ ] M4: compile-audit registered Keiro dependents through Mori, update API/reference/migration docs and changelogs, run full verification, and update MasterPlan 38.
 
@@ -68,6 +69,12 @@ implementation. Provide concise evidence.
   PostgreSQL text subscription name, and `readModelCursorAuthority` is the sole public
   decoder. The compile-only 0.11 fixture proves positional patterns, direct records, all
   legacy constructors, and `runQueryWith` remain source-compatible.
+- M2a (2026-08-12): the truthful and legacy entry points can share schema/liveness,
+  cursor polling, timeout telemetry, and SQL execution without translating new missing-
+  capability states into legacy values. A 27-example `Keiro.ReadModel` run passed immediate,
+  whole-head, category-head, caught-up position, behind timeout, missing cursor, and missing
+  target cases. Plan 238 remains Not Started in MasterPlan 37, so the tail-GC proof remains
+  an explicit M2b gate rather than being simulated here.
 
 
 ## Decision Log
@@ -121,6 +128,12 @@ Milestone 1 established the compatibility boundary. `cabal build keiro-test` com
 old API fixture, and the focused truthful-construction run passed 6 examples covering
 cursorless immediate models, cursor-retaining immediate models, missing-cursor and
 missing-target rejection, honest default round-trips, and legacy no-target normalization.
+
+Milestone 2's in-scope runtime implementation is complete: `runQueryWithFreshness` and the
+legacy entry point use one validated execution path and one polling implementation, while
+truthful waits reject absent cursor capability and absent position targets before polling.
+The focused `Keiro.ReadModel` group passed 27 examples. The visible-tail-GC integration
+proof remains pending on Plan 238, which belongs to MasterPlan 37 and is still Not Started.
 
 
 ## Context and Orientation
