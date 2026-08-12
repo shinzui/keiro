@@ -9,6 +9,8 @@ where
 import Control.Concurrent (threadDelay)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
+import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.Int (Int32)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
@@ -59,6 +61,17 @@ import Keiro.ProcessManager
     ProcessManagerAction (..),
     runDomainProcessManagerWorker,
   )
+import Keiro.Projection (InlineProjection (..))
+import Keiro.ReadModel.Rebuild
+  ( RebuildOptions (..),
+    RebuildRequest (..),
+    RebuildRunId,
+    RebuildRunStatus (..),
+    defaultRebuildOptions,
+    mkRebuildRunId,
+    registerProjectionCatalog,
+    startCatalogRebuild,
+  )
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedSuite)
 import Kiroku.Store qualified as Store
@@ -66,7 +79,10 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Lifecycle qualified as Lifecycle
 import Kiroku.Store.Types
-  ( EventId (..),
+  ( CategoryName (..),
+    EventData (..),
+    EventId (..),
+    ExpectedVersion (..),
     GlobalPosition (..),
     RecordedEvent (..),
     StreamId (..),
@@ -130,10 +146,12 @@ main =
           defaultSdkMeterProviderOptions
       meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
       metrics <- Telemetry.newKeiroMetrics meter
-      defaultMain (benchmarks store runner metrics)
+      rebuildRunCounter <- newIORef 0
+      runStoreChecked store (Store.runTransaction (Tx.sql rebuildBenchSql))
+      defaultMain (benchmarks store runner metrics rebuildRunCounter)
 
-benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> [Benchmark]
-benchmarks store runner metrics =
+benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark]
+benchmarks store runner metrics rebuildRunCounter =
   [ bgroup
       "outbox"
       [ scenarioBench store hotKey,
@@ -191,7 +209,10 @@ benchmarks store runner metrics =
               | fanout <- coordinatorFanouts
               ]
           ]
-      ]
+      ],
+    bgroup
+      "rebuild"
+      [rebuildScenarioBench store rebuildRunCounter]
   ]
   where
     hotKey =
@@ -589,6 +610,181 @@ domainCommandScenarioBench store benchmarkName handler target command =
     case result of
       Right DomainCommandOutcome {} -> pure ()
       Left err -> liftIO (fail ("unexpected typed command benchmark result: " <> show err))
+
+-- * Projection rebuild benchmark fixtures ---------------------------------
+
+rebuildEventsPerCategory :: Int
+rebuildEventsPerCategory = 200
+
+rebuildPageSize :: Int32
+rebuildPageSize = 16
+
+rebuildScenarioBench :: Store.KirokuStore -> IORef Int -> Benchmark
+rebuildScenarioBench store runCounter =
+  bench "three-categories-200" $ nfIO $ runStoreChecked store do
+    traverse_ (void . Lifecycle.hardDeleteStream) rebuildStreams
+    traverse_ seedRebuildStream rebuildStreams
+    registered <- registerProjectionCatalog rebuildCatalog
+    case registered of
+      Left err -> liftIO (fail ("unexpected rebuild catalog registration result: " <> show err))
+      Right _ -> pure ()
+    runNumber <- liftIO $ atomicModifyIORef' runCounter (\current -> let next = current + 1 in (next, next))
+    let request =
+          RebuildRequest
+            { rebuildRunId = benchmarkRebuildRunId runNumber,
+              requestedBy = "keiro-bench",
+              requestReason = "measure buffered projection replay",
+              replayFrom = GlobalPosition 0
+            }
+        options =
+          (defaultRebuildOptions request)
+            { replayPageSize = rebuildPageSize
+            }
+    startCatalogRebuild rebuildCatalog benchmarkRebuildGroupId options >>= \case
+      Left err -> liftIO (fail ("unexpected rebuild benchmark result: " <> show err))
+      Right report
+        | report ^. #runStatus == RebuildRunPromoted -> pure ()
+        | otherwise -> liftIO (fail ("rebuild benchmark did not promote: " <> show (report ^. #runStatus)))
+
+seedRebuildStream :: (Store :> es) => StreamName -> Eff es ()
+seedRebuildStream streamName' =
+  void $
+    Store.appendToStream
+      streamName'
+      NoStream
+      [ EventData
+          { eventId = Nothing,
+            eventType = EventType "BenchRebuildEvent",
+            payload = Aeson.toJSON eventNumber,
+            metadata = Nothing,
+            causationId = Nothing,
+            correlationId = Nothing
+          }
+      | eventNumber <- [1 .. rebuildEventsPerCategory]
+      ]
+
+rebuildStreams :: [StreamName]
+rebuildStreams =
+  [ StreamName "orders-bench-rebuild",
+    StreamName "customers-bench-rebuild",
+    StreamName "billing-bench-rebuild"
+  ]
+
+rebuildCatalog :: ValidatedProjectionCatalog
+rebuildCatalog =
+  case validateProjectionCatalog rebuildCatalogDeclaration of
+    Success catalog -> catalog
+    Failure diagnostics -> error ("invalid rebuild benchmark catalog: " <> show diagnostics)
+
+rebuildCatalogDeclaration :: ProjectionCatalog
+rebuildCatalogDeclaration =
+  ProjectionCatalog
+    { sources =
+        [ source "orders" ordersRebuildSourceId,
+          source "customers" customersRebuildSourceId,
+          source "billing" billingRebuildSourceId
+        ],
+      targets =
+        [ target ordersRebuildTargetId "bench_rebuild_orders",
+          target customersRebuildTargetId "bench_rebuild_customers",
+          target billingRebuildTargetId "bench_rebuild_billing"
+        ],
+      rebuildGroups =
+        [ RebuildGroupDeclaration
+            { rebuildGroupId = benchmarkRebuildGroupId,
+              orderedTargets = [ordersRebuildTargetId, customersRebuildTargetId, billingRebuildTargetId],
+              verificationHooks = [],
+              claimSite = rebuildSite "bench:rebuild-group"
+            }
+        ],
+      subscriptions = [],
+      dedupKeys = [],
+      queryModels = [],
+      projectionSets =
+        [ projectionSet "orders" ordersRebuildSourceId ordersRebuildProjectionId ordersRebuildTargetId,
+          projectionSet "customers" customersRebuildSourceId customersRebuildProjectionId customersRebuildTargetId,
+          projectionSet "billing" billingRebuildSourceId billingRebuildProjectionId billingRebuildTargetId
+        ]
+    }
+  where
+    source sourceCategory sourceId =
+      SourceDeclaration
+        { sourceId,
+          sourceScope = CategorySource (CategoryName sourceCategory),
+          codecFingerprint = "bench-rebuild-v1",
+          claimSite = rebuildSite ("bench:rebuild-source:" <> sourceCategory)
+        }
+    target targetId tableName =
+      TargetDeclaration
+        { targetId,
+          qualifiedTable = QualifiedTable "app" tableName,
+          resetPolicy = ClearBeforeReplay,
+          dependsOn = [],
+          claimSite = rebuildSite ("bench:rebuild-target:" <> tableName)
+        }
+    projectionSet label sourceId projectionId targetId =
+      SomeProjectionSet
+        ProjectionSet
+          { projectionSource = sourceId,
+            projectionDefinitions =
+              ProjectionDefinition
+                { projectionId,
+                  rebuildGroup = benchmarkRebuildGroupId,
+                  ownedTargets = targetId :| [],
+                  replayPolicy =
+                    Replayable
+                      ReplayAdapter
+                        { decodeForReplay = const ReplayIrrelevant,
+                          applyForReplay = \() _ -> pure ()
+                        },
+                  handlers =
+                    InlineHandler
+                      InlineProjection
+                        { name = "bench-rebuild-live-" <> label,
+                          apply = \_ _ -> pure ()
+                        }
+                      (rebuildSite ("bench:rebuild-handler:" <> label))
+                      :| [],
+                  claimSite = rebuildSite ("bench:rebuild-projection:" <> label)
+                }
+                :| [],
+            claimSite = rebuildSite ("bench:rebuild-set:" <> label)
+          }
+
+benchmarkRebuildRunId :: Int -> RebuildRunId
+benchmarkRebuildRunId runNumber =
+  either (error . Text.unpack) id (mkRebuildRunId ("bench-rebuild-" <> Text.pack (show runNumber)))
+
+rebuildSite :: Text -> ClaimSite
+rebuildSite raw = either (error . show) id (mkClaimSite raw)
+
+rebuildIdentity :: (Text -> Either CatalogIdentityError value) -> Text -> value
+rebuildIdentity constructor raw = either (error . show) id (constructor raw)
+
+ordersRebuildSourceId, customersRebuildSourceId, billingRebuildSourceId :: SourceId
+ordersRebuildSourceId = rebuildIdentity mkSourceId "bench-orders-source"
+customersRebuildSourceId = rebuildIdentity mkSourceId "bench-customers-source"
+billingRebuildSourceId = rebuildIdentity mkSourceId "bench-billing-source"
+
+ordersRebuildTargetId, customersRebuildTargetId, billingRebuildTargetId :: TargetId
+ordersRebuildTargetId = rebuildIdentity mkTargetId "bench-orders-target"
+customersRebuildTargetId = rebuildIdentity mkTargetId "bench-customers-target"
+billingRebuildTargetId = rebuildIdentity mkTargetId "bench-billing-target"
+
+ordersRebuildProjectionId, customersRebuildProjectionId, billingRebuildProjectionId :: ProjectionId
+ordersRebuildProjectionId = rebuildIdentity mkProjectionId "bench-orders-projection"
+customersRebuildProjectionId = rebuildIdentity mkProjectionId "bench-customers-projection"
+billingRebuildProjectionId = rebuildIdentity mkProjectionId "bench-billing-projection"
+
+benchmarkRebuildGroupId :: RebuildGroupId
+benchmarkRebuildGroupId = rebuildIdentity mkRebuildGroupId "bench-rebuild-group"
+
+rebuildBenchSql :: BS.ByteString
+rebuildBenchSql =
+  "CREATE SCHEMA IF NOT EXISTS app; \
+  \CREATE TABLE IF NOT EXISTS app.bench_rebuild_orders (marker bigint); \
+  \CREATE TABLE IF NOT EXISTS app.bench_rebuild_customers (marker bigint); \
+  \CREATE TABLE IF NOT EXISTS app.bench_rebuild_billing (marker bigint)"
 
 -- * Domain coordinator worker benchmark fixtures ---------------------------
 
