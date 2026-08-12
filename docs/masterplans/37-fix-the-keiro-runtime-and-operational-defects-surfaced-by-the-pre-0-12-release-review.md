@@ -88,7 +88,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Complete |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Complete |
-| 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | In Progress |
+| 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -176,10 +176,13 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-5 (241) M1: `parseDuration` rejects non-finite/negative/beyond-wire-bound with frozen messages and a unit matrix (2026-08-12T19:46:50Z)
 - [x] EP-5 (241) M2: integer readers consolidated and bounds-checked (3 `option auto` sites, 16 `reads` copies) (2026-08-12T19:49:52Z)
 - [x] EP-5 (241) M3: executable-level no-DB-contact rejection test, ADR 0028 distillation, and full 38-example keiro-ops suite (2026-08-12T19:52:30Z)
-- [ ] EP-6 (242): implementation started after complete child-plan read; EP-1/EP-4 soft dependencies satisfied (2026-08-12T19:54:01Z)
+- [x] EP-6 (242): implementation started after complete child-plan read; EP-1/EP-4 soft dependencies satisfied (2026-08-12T19:54:01Z)
 - [x] EP-6 (242) M1: shared internal attempt loops (`domainCommandAttempts`/`domainSqlCommandAttempts`) collapse four retry loops to two with telemetry unchanged; full Haskell and command benchmark gates pass (2026-08-12T20:00:44Z)
 - [x] EP-6 (242) M2 (after EP-4): router/PM dispatch consolidated onto the bridged probe helper; bridge, benign-duplicate, full Haskell, and fan-out benchmark gates green (2026-08-12T20:06:23Z)
-- [ ] EP-6 (242) M3 (after EP-1): rebuild paging reads each event once (interpose-counted), `rebuild` bench group added
+- [x] EP-6 (242) M3 (after EP-1): buffered rebuild paging reduced the 3×6/page-2
+      proof from 26 reads/48 returned rows to 11 reads/18 rows; the identical 3×200
+      benchmark improved from 61.7 ms to 45.9 ms; full Haskell gate green
+      (2026-08-12T20:45:22Z)
 
 
 ## Surprises & Discoveries
@@ -230,6 +233,11 @@ interactions between child plans. Provide concise evidence.
   visible-global-head effect and transaction-composable statement requested by this
   work. Hackage, upstream tag `kiroku-store-v0.6.0.0`, and Mori-located source agree;
   Keiro now delegates both call sites and requires `kiroku-store >=0.6 && <0.7`.
+- EP-6 M3 implementation (2026-08-12): retaining per-source page tails eliminated
+  duplicate event fetches without weakening the fixed-head replay contract. Exact
+  expected-cursor updates condemn a stale chunk and force a fresh inspection, so
+  concurrent-driver interference falls back to the old safe behavior instead of
+  double-applying a retained tail.
 
 
 ## Decision Log
@@ -302,14 +310,21 @@ bounded integral argument is protected from machine-integer wraparound. Pure par
 coverage and an executable-level unreachable-database proof pass, the full 38-example
 `keiro-ops-test` suite is green, and ADR 0028 records the durable safety boundary.
 
-The MasterPlan remains in progress: EP-6 is not started. EP-1 removes
-the release-critical catalog lockout and fingerprint-forgery defects and clears
-EP-6's soft dependency on its rebuild-runner identity changes; EP-2 removes the
-release-critical unreachable consistency target and permanent false-distance defect;
-EP-3 removes the workflow-stranding race and non-terminating drain contract; EP-4 removes
-the deploy-boundary double-dispatch and orphaned-awakeable defects for non-ASCII identity;
-EP-5 removes destructive numeric argument corruption before it can reach an operational
-preview or mutation.
+EP-6 is complete. Four command retry implementations now share two attempt loops without
+changing public outcomes or telemetry; Router and ProcessManager command dispatch share
+one bridged idempotency helper; and the rebuild runner retains source-page tails with an
+expected-cursor interference guard. The counted replay proof fetches every event once
+(48 returned rows before, 18 after), and the 3×200 benchmark is about 26% faster. The
+final full Haskell matrix passed. No ADR was added: this consolidation changes no public
+API, persisted format, identity, or operational contract.
+
+The MasterPlan is complete. EP-1 removes the release-critical catalog lockout and
+fingerprint-forgery defects; EP-2 removes the unreachable consistency target and
+permanent false-distance defect; EP-3 removes the workflow-stranding race and
+non-terminating drain contract; EP-4 removes deploy-boundary double dispatch and orphaned
+awakeables for non-ASCII identity; EP-5 removes destructive numeric corruption before
+operational preview or mutation; and EP-6 removes the duplicated correctness paths and
+rebuild read amplification that made future fixes risky.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
 and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
@@ -318,4 +333,6 @@ public visible-head API; completed EP-3 and amended ADRs 0023 and 0025 with wake
 arbitration and bounded-drain progress; completed EP-4 and amended ADR 0024 with the
 golden-pinned compatibility bridge and its operator-attested removal criteria; completed
 EP-5 with total duration and bounded integer parsing, an executable no-database-contact
-proof, and the ADR 0028 amendment; left EP-6 eligible for subsequent execution.
+proof, and the ADR 0028 amendment; completed EP-6 with shared retry/dispatch paths,
+buffered rebuild paging, counted and wall-time performance evidence, and no new ADR
+material; marked the MasterPlan complete.

@@ -97,7 +97,12 @@ telemetry.
 - [x] Milestone 3: added `rebuild/three-categories-200`. The identical fixture measured
       61.7 ms ± 2.0 ms on the pre-fix runner and 45.9 ms ± 2.7 ms on the buffered runner,
       about 26% faster (2026-08-12T20:25:36Z).
-- [ ] ADR distillation pass; masterplan Progress and Status updated.
+- [x] ADR distillation pass found no new durable architectural contract: all public
+      APIs, persisted formats, catalog identities, and replay semantics remain unchanged;
+      the retained-buffer and expected-cursor rules are internal implementation safety.
+      `just adr-validate` is green; MasterPlan 37 Progress, registry Status, and
+      retrospective updated
+      (2026-08-12T20:45:22Z).
 
 
 ## Surprises & Discoveries
@@ -105,7 +110,7 @@ telemetry.
 Findings from plan research (2026-08-11), recorded because they shaped the design:
 
 - keiki defines `stepEither` literally as a projection of `stepDetailedEither`
-  (`/…/keiki/src/Keiki/Core.hs`, lines 1597–1607 in the registered corpus checkout:
+  (`mori://shinzui/keiki/packages/keiki`, `keiki/src/Keiki/Core.hs` lines 1597–1607:
   `stepEither t seed ci = case stepDetailedEither t seed ci of …`). This makes the
   legacy-runner-as-wrapper design semantically exact, not merely plausible: the legacy
   plan preparation (`prepareCommandPlan` via `evaluateCommand`/`stepEither`) and the
@@ -143,6 +148,12 @@ Findings from plan research (2026-08-11), recorded because they shaped the desig
   worktree at that commit measured the old runner, while the primary worktree measured
   the same fixture with only the buffered-runner changes present; the temporary
   worktree was removed after the comparison.
+- Final command-benchmark reruns after the full repository gate produced contradictory
+  samples (adjacent cases ranged from 70% faster to 96% slower, and one domain/control
+  ratio jumped to 3.8×). The user confirmed the host was very busy, so those samples are
+  invalid and the second rerun was stopped. Milestones 1 and 2 retain their earlier
+  uncontended, passing command-baseline evidence; Milestone 3 does not edit command or
+  dispatch code.
 
 
 ## Decision Log
@@ -218,10 +229,25 @@ Findings from plan research (2026-08-11), recorded because they shaped the desig
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. At completion: compare against the Purpose
-section, then run the ADR distillation pass — the consolidation itself is unlikely to need
-a new ADR, but if Milestone 3's buffered-paging invariants prove subtle enough to be
-durable context, extend the rebuild-related ADRs or add one.)
+Complete. The four public command entry points now share two internal attempt loops while
+retaining their legacy/domain result types and telemetry. Router and process-manager
+command dispatch now share one idempotent probe/append/duplicate-confirmation helper,
+including the pre-UTF-8 bridge order established by plan 240.
+
+The rebuild runner now inspects once, retains unconsumed per-source page tails, advances
+only from the expected persisted cursor, and discards its buffers for a fresh inspection
+if another driver wins. The empty-chunk completion transaction remains intact,
+`rebuildContract` is untouched, and `advanceSourceStmt` has the exact expected-cursor
+guard. On the 3×6/page-2 proof, category reads fell from 26 to 11 and returned rows from
+48 to the 18 distinct events. The identical 3×200 benchmark fell from 61.7 ms to 45.9 ms
+(about 26%).
+
+All focused suites and the final full Haskell gate pass: the core suite reports 508
+examples, PGMQ 58 with two documented pending cases, ops 38, the DSL main suite 697 plus
+all conformance components, and Jitsurei 23. The ADR distillation pass found no new ADR
+material because the work changes no public API, persisted representation, replay
+identity, or operator contract; the implementation invariants and interference recovery
+remain documented here.
 
 
 ## Context and Orientation
