@@ -209,8 +209,6 @@ reservedWords =
     "wire",
     "projection",
     "snapshot",
-    "domain-outcomes",
-    "outcome",
     "category",
     "guard",
     "write",

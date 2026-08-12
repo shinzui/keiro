@@ -50,11 +50,11 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-12T00:21:30Z) M1: add `keiro-dsl/test/fixtures/outcome-identifier-v5.keiro` (language 5: outcome clauses coexisting with `outcome` identifiers, including the clause-boundary hazard).
 - [x] (2026-08-12T00:21:30Z) M1: add the `outcome identifier compatibility` describe block to `keiro-dsl/test/Main.hs` covering legacy, declared 1, 2, 3, 4, the position fixture, the renderer round-trip, and the language-5 coexistence fixture.
 - [x] (2026-08-12T00:21:30Z) M1: run the targeted suite and record the red result (new examples fail at HEAD; all pre-existing examples still pass).
-- [ ] M2: remove `"domain-outcomes"` and `"outcome"` from `reservedWords` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`.
-- [ ] M2: make the `outcome` clause marker in `pClause` (`keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs`) contextual with `try` + `lookAhead` of the three selector keywords.
-- [ ] M2: targeted suite green, including the untouched "gates the syntax to candidate language 5" example.
-- [ ] M2: `cabal test -v0 keiro-dsl:keiro-dsl-conformance-domain-outcomes --test-show-details=direct` green (language-5 outcome corpus still compiles and its runtime facts hold).
-- [ ] M2: before/after CLI transcripts captured for the language-4 fixture (failing exit 1 before, `OK` exit 0 after).
+- [x] (2026-08-12T00:27:20Z) M2: remove `"domain-outcomes"` and `"outcome"` from `reservedWords` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`.
+- [x] (2026-08-12T00:27:20Z) M2: make the `outcome` clause marker in `pClause` (`keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs`) contextual with `try` + `lookAhead` of the three selector keywords.
+- [x] (2026-08-12T00:27:20Z) M2: targeted suite green, including the untouched "gates the syntax to candidate language 5" example.
+- [x] (2026-08-12T00:27:20Z) M2: `cabal test -v0 keiro-dsl:keiro-dsl-conformance-domain-outcomes --test-show-details=direct` green (language-5 outcome corpus still compiles and its runtime facts hold).
+- [x] (2026-08-12T00:27:20Z) M2: before/after CLI transcripts captured for the language-4 fixture (failing exit 1 before, `OK` exit 0 after).
 - [ ] M3: changelog entry under `Unreleased` in `keiro-dsl/CHANGELOG.md`.
 - [ ] M3: `just conformance-corpus-policy` passes with zero corpus drift (coordinate with plan 234 per the MasterPlan if it landed first).
 - [ ] M3: `cabal test keiro-dsl:tests` green; `just verify` green.
@@ -72,6 +72,11 @@ implementation. Provide concise evidence.
   (`unexpected "outcom"`, expecting `states`); the positions fixture stopped on the reserved
   enum constructor (`unexpected 'o'`, expecting `}`). Cabal reported `5 examples, 5 failures`,
   confirming the fixtures isolate the global reservation before the parser changes.
+- Milestone 2 (2026-08-12): the contextual marker restored all five compatibility examples
+  while the untouched typed-domain-outcome block also reported `5 examples, 0 failures`,
+  including the candidate-language feature-gate assertion. The compiled outcome conformance
+  suite exited 0, the language-4 CLI check printed `OK`, and diffing the committed fixture
+  against `HEAD` succeeded with `replay-neutral: stored-data replay is unchanged by this diff`.
 
 
 ## Decision Log
@@ -710,3 +715,6 @@ hspec's `describe`/`it`/`shouldBe`/`expectationFailure`, and `Data.Text` as `T`.
 
 Plan revision note (2026-08-12): Milestone 1 fixtures and red regression evidence were added
 to the living sections after the focused suite failed in all five intended examples.
+
+Plan revision note (2026-08-12): Milestone 2 parser changes and focused green evidence were
+recorded after compatibility, feature-gating, compiled conformance, CLI, and diff checks passed.

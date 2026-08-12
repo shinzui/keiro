@@ -361,7 +361,18 @@ pClause context =
   choice
     [ do
         loc <- getLoc
-        marker <- withOwnedSpan (keyword "outcome")
+        -- @outcome@ is a contextual keyword, never reserved (plan 233, completing
+        -- plan 232's decision for accepted/rejected/no-op): claim it only when one
+        -- of the three selectors follows, so @outcome@ stays a legal identifier in
+        -- every language -- including a transition source named @outcome@, whose
+        -- next token is @--@.
+        marker <-
+          withOwnedSpan
+            ( try
+                ( keyword "outcome"
+                    <* lookAhead (keyword "accepted" <|> keyword "rejected" <|> keyword "no-op")
+                )
+            )
         requireLanguageFeatureAt context DomainCommandOutcomeSyntax (spanOf marker)
         choice
           [ (COutcome (OutcomeAccepted loc), []) <$ keyword "accepted",
