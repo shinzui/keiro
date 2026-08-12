@@ -10,10 +10,14 @@
 -- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
 module Keiro.DeterministicId
   ( identitySeedBytes,
+    legacySeedBytes,
+    seedMovedAcrossEncodings,
   )
 where
 
 import Data.ByteString qualified as ByteString
+import Data.Char (isAscii)
+import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 import Data.Word (Word8)
 import Keiro.Prelude
@@ -35,3 +39,16 @@ import Keiro.Prelude
 -- edit here.
 identitySeedBytes :: Text -> [Word8]
 identitySeedBytes = ByteString.unpack . Text.Encoding.encodeUtf8
+
+-- | The pre-0.12 deterministic-id seed encoding.
+--
+-- This deliberately reproduces the historical @Char -> Word8@ truncation so
+-- deployed identifiers can be probed during the compatibility window. It is a
+-- frozen reader for old identity, not an encoding for new writes.
+legacySeedBytes :: Text -> [Word8]
+legacySeedBytes = fmap (fromIntegral . fromEnum) . Text.unpack
+
+-- | Whether UTF-8 and the historical seed encoding can produce different
+-- bytes for this seed. ASCII is byte-identical under both encodings.
+seedMovedAcrossEncodings :: Text -> Bool
+seedMovedAcrossEncodings = not . Text.all isAscii

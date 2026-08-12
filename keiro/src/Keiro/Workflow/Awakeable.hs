@@ -55,6 +55,7 @@ module Keiro.Workflow.Awakeable
     awakeableIdToUuid,
     awakeableIdText,
     deterministicAwakeableId,
+    legacyDeterministicAwakeableId,
 
     -- * Authoring surface (inside a workflow)
     awakeableNamed,
@@ -78,7 +79,7 @@ import Data.UUID.V4 qualified as UUID.V4
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
-import Keiro.DeterministicId (identitySeedBytes)
+import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes)
 import Keiro.Prelude
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -148,15 +149,26 @@ awakeableIdText = UUID.toText . awakeableIdToUuid
 -- byte-identical to the original codepoint encoding for ASCII seeds and
 -- collision-free for the rest; see
 -- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
--- A label with non-ASCII characters therefore derives a different legacy id
--- than it did before that change, so a generation-0 row registered under the
--- old id is no longer adopted.
 deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
-deterministicAwakeableId (WorkflowName name) (WorkflowId wid) label =
+deterministicAwakeableId name wid label =
   AwakeableId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       identitySeedBytes $
-        Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
+        awakeableSeed name wid label
+
+-- | Reproduce the deterministic awakeable id written before Keiro switched
+-- its seed encoding to UTF-8. Generation-0 adoption uses this as a fallback;
+-- new allocations remain random and journaled.
+legacyDeterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
+legacyDeterministicAwakeableId name wid label =
+  AwakeableId $
+    UUID.V5.generateNamed UUID.V5.namespaceURL $
+      legacySeedBytes $
+        awakeableSeed name wid label
+
+awakeableSeed :: WorkflowName -> WorkflowId -> Text -> Text
+awakeableSeed (WorkflowName name) (WorkflowId wid) label =
+  Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
 
 -- ---------------------------------------------------------------------------
 -- Errors

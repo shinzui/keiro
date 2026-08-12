@@ -268,6 +268,7 @@ import Keiro.Workflow.Awakeable
     awakeableNamed,
     cancelAwakeable,
     deterministicAwakeableId,
+    legacyDeterministicAwakeableId,
     signalAwakeable,
     signalAwakeableFrom,
   )
@@ -9809,6 +9810,78 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         firstRecorded `shouldBe` True
         Right secondRecorded <- Store.runStoreIO storeHandle $ stepExists wfName wfId 0 "\SOH"
         secondRecorded `shouldBe` True
+
+  describe "Keiro deterministic id legacy-encoding bridge" $ do
+    -- These values were captured by running the pre-UTF-8 implementation at
+    -- 7d7a200b in an isolated worktree. Do not regenerate them from the bridge
+    -- implementation: they are the independent evidence that it reproduces
+    -- deployed identity.
+    let sourceEventId = EventId (uuidLiteral "3f2504e0-4f89-51d3-9a0c-0305e82c3301")
+        name = WorkflowName "legacy-awake"
+        wid = WorkflowId "la-1"
+
+    it "reproduces every captured process-manager command id" $ do
+      let commandGoldens =
+            [ ("order-1", 0, "ff20892c-6665-5e92-8c99-d1569d2ce629"),
+              ("order-1", -1, "4f3aa6bc-b12c-5dae-8eb5-81f6364f41ef"),
+              ("Jos\x00E9", 0, "78cbd6e1-c15f-58c3-be0e-14c861de6c85"),
+              ("\x4E2D\x6587", 0, "58e6ef7b-a2c9-5e46-b580-db8df2ce72c7"),
+              ("\x4E2D\x6587", -1, "f276cf1b-0f5c-5427-a27a-f6d4ad2ca577"),
+              ("\x1F600", 0, "ddc163fc-3563-5ae6-a7f8-fbe1af2712b2"),
+              ("\x0101", 0, "cfa5de78-8cc7-5eb2-8edd-da847221541d"),
+              ("\SOH", 0, "cfa5de78-8cc7-5eb2-8edd-da847221541d"),
+              ("\x0169ser", 0, "4fb869b4-d5b7-5c99-8c5d-c4552c5d4115"),
+              ("iser", 0, "4fb869b4-d5b7-5c99-8c5d-c4552c5d4115")
+            ]
+      for_ commandGoldens $ \(correlation, emitIndex, golden) ->
+        legacyDeterministicCommandId "counter-pm" correlation sourceEventId emitIndex
+          `shouldBe` EventId (uuidLiteral golden)
+      legacyDeterministicCommandId "demo-router" "g-\x4E2D\x6587" sourceEventId 0
+        `shouldBe` EventId (uuidLiteral "379ebaad-62e1-5265-9605-340789ae6af7")
+
+    it "reproduces every captured deterministic awakeable id" $ do
+      legacyDeterministicAwakeableId name wid "\x627F\x8A8D"
+        `shouldBe` AwakeableId (uuidLiteral "c4eb4dfa-4108-577d-8e92-84edb337a48b")
+      legacyDeterministicAwakeableId name wid "caf\x00E9"
+        `shouldBe` AwakeableId (uuidLiteral "446e5258-0697-525d-af06-0c2c3911ded7")
+      legacyDeterministicAwakeableId name wid "\x4E2D"
+        `shouldBe` AwakeableId (uuidLiteral "7b252ef4-c7c0-579e-8f15-8f26c73196de")
+      legacyDeterministicAwakeableId name wid "-"
+        `shouldBe` AwakeableId (uuidLiteral "7b252ef4-c7c0-579e-8f15-8f26c73196de")
+
+    it "keeps ASCII identity stable and moves every non-ASCII capture" $ do
+      legacyDeterministicCommandId "counter-pm" "order-1" sourceEventId 0
+        `shouldBe` deterministicCommandId "counter-pm" "order-1" sourceEventId 0
+      legacyDeterministicCommandId "counter-pm" "\SOH" sourceEventId 0
+        `shouldBe` deterministicCommandId "counter-pm" "\SOH" sourceEventId 0
+      legacyDeterministicCommandId "counter-pm" "iser" sourceEventId 0
+        `shouldBe` deterministicCommandId "counter-pm" "iser" sourceEventId 0
+      for_ ["Jos\x00E9", "\x4E2D\x6587", "\x1F600", "\x0101", "\x0169ser"] $ \correlation ->
+        legacyDeterministicCommandId "counter-pm" correlation sourceEventId 0
+          `shouldNotBe` deterministicCommandId "counter-pm" correlation sourceEventId 0
+      legacyDeterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId (-1)
+        `shouldNotBe` deterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId (-1)
+      legacyDeterministicAwakeableId name wid "legacy"
+        `shouldBe` deterministicAwakeableId name wid "legacy"
+      legacyDeterministicAwakeableId name wid "-"
+        `shouldBe` deterministicAwakeableId name wid "-"
+      for_ ["\x627F\x8A8D", "caf\x00E9", "\x4E2D"] $ \label ->
+        legacyDeterministicAwakeableId name wid label
+          `shouldNotBe` deterministicAwakeableId name wid label
+
+    it "documents the historical truncation collisions and their UTF-8 separation" $ do
+      legacyDeterministicCommandId "counter-pm" "\x0101" sourceEventId 0
+        `shouldBe` legacyDeterministicCommandId "counter-pm" "\SOH" sourceEventId 0
+      deterministicCommandId "counter-pm" "\x0101" sourceEventId 0
+        `shouldNotBe` deterministicCommandId "counter-pm" "\SOH" sourceEventId 0
+      legacyDeterministicCommandId "counter-pm" "\x0169ser" sourceEventId 0
+        `shouldBe` legacyDeterministicCommandId "counter-pm" "iser" sourceEventId 0
+      deterministicCommandId "counter-pm" "\x0169ser" sourceEventId 0
+        `shouldNotBe` deterministicCommandId "counter-pm" "iser" sourceEventId 0
+      legacyDeterministicAwakeableId name wid "\x4E2D"
+        `shouldBe` legacyDeterministicAwakeableId name wid "-"
+      deterministicAwakeableId name wid "\x4E2D"
+        `shouldNotBe` deterministicAwakeableId name wid "-"
 
   describe "Keiro.Workflow.Sleep" $ do
     -- Pure (no-DB) checks of the id/payload/step-name helpers.

@@ -133,6 +133,7 @@ module Keiro.ProcessManager
 
     -- * Idempotency primitives
     deterministicCommandId,
+    legacyDeterministicCommandId,
     eventAlreadyIn,
     confirmBenignDuplicate,
   )
@@ -156,7 +157,7 @@ import Keiro.Command
     runCommandWithSql,
   )
 import Keiro.DeadLetter (DispatchDeadLetter (..), DispatcherKind (..), recordDispatchDeadLetter)
-import Keiro.DeterministicId (identitySeedBytes)
+import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
@@ -476,15 +477,29 @@ deterministicCommandId managerName correlationId sourceEventId emitIndex =
   EventId
     $ UUID.V5.generateNamed UUID.V5.namespaceURL
     $ identitySeedBytes
-    $ Text.intercalate
-      ":"
-      [ "keiro",
-        "process-manager",
-        managerName,
-        correlationId,
-        UUID.toText (eventIdToUuid sourceEventId),
-        Text.pack (show emitIndex)
-      ]
+    $ commandIdSeed managerName correlationId sourceEventId emitIndex
+
+-- | Reproduce the deterministic command id written before Keiro switched its
+-- seed encoding to UTF-8. This exists only for compatibility probes; all new
+-- writes continue to use 'deterministicCommandId'.
+legacyDeterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
+legacyDeterministicCommandId managerName correlationId sourceEventId emitIndex =
+  EventId
+    $ UUID.V5.generateNamed UUID.V5.namespaceURL
+    $ legacySeedBytes
+    $ commandIdSeed managerName correlationId sourceEventId emitIndex
+
+commandIdSeed :: Text -> Text -> EventId -> Int -> Text
+commandIdSeed managerName correlationId sourceEventId emitIndex =
+  Text.intercalate
+    ":"
+    [ "keiro",
+      "process-manager",
+      managerName,
+      correlationId,
+      UUID.toText (eventIdToUuid sourceEventId),
+      Text.pack (show emitIndex)
+    ]
 
 -- | React to a single source event: advance the manager's state, dispatch
 -- its target commands, and schedule its timers — each under a deterministic,

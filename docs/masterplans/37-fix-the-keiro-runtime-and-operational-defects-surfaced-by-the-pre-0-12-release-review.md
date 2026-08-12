@@ -86,7 +86,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
-| 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
+| 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | In Progress |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
 
@@ -167,6 +167,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test (2026-08-12T18:20:18Z)
 - [x] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests (2026-08-12T18:23:05Z)
 - [x] EP-3 (239) M4: CHANGELOG, ADR 0023/0025 amendments, masterplan bookkeeping (2026-08-12T18:39:59Z)
+- [ ] EP-4 (240): implementation started; complete plan read and capture-first M1 underway (2026-08-12T19:09:47Z)
 - [ ] EP-4 (240) M1: frozen legacy encoder pinned by golden vectors captured at `f8ca7a16^`
 - [ ] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first
 - [ ] EP-4 (240) M3: awakeable adoption bridge

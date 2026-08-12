@@ -53,18 +53,22 @@ code appends a second event. ASCII deployments are byte-for-byte unaffected.
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] M1: Create the capture worktree at `f8ca7a16^` and record the old-encoding golden
+- [x] Implementation started; read the complete ExecPlan and marked EP-4 in progress in
+      the parent MasterPlan before changing deterministic-id code (2026-08-12T19:09:47Z).
+- [x] M1: Create the capture worktree at `f8ca7a16^` and record the old-encoding golden
       UUIDs for every vector in the capture table (the three ASCII cross-checks must
-      reproduce the known literals).
-- [ ] M1: Add `legacySeedBytes` and `seedMovedAcrossEncodings` to
-      `keiro/src/Keiro/DeterministicId.hs` with freeze haddocks.
-- [ ] M1: Add `legacyDeterministicCommandId` (sharing a private `commandIdSeed` with
-      `deterministicCommandId`) to `keiro/src/Keiro/ProcessManager.hs`; export it.
-- [ ] M1: Add `legacyDeterministicAwakeableId` (sharing a private `awakeableSeed`) to
-      `keiro/src/Keiro/Workflow/Awakeable.hs`; export it.
-- [ ] M1: Add the pure golden-vector tests under a new
+      reproduce the known literals (2026-08-12T19:17:05Z).
+- [x] M1: Add `legacySeedBytes` and `seedMovedAcrossEncodings` to
+      `keiro/src/Keiro/DeterministicId.hs` with freeze haddocks (2026-08-12T19:17:05Z).
+- [x] M1: Add `legacyDeterministicCommandId` (sharing a private `commandIdSeed` with
+      `deterministicCommandId`) to `keiro/src/Keiro/ProcessManager.hs`; export it
+      (2026-08-12T19:17:05Z).
+- [x] M1: Add `legacyDeterministicAwakeableId` (sharing a private `awakeableSeed`) to
+      `keiro/src/Keiro/Workflow/Awakeable.hs`; export it (2026-08-12T19:17:05Z).
+- [x] M1: Add the pure golden-vector tests under a new
       `describe "Keiro deterministic id legacy-encoding bridge"` block in
-      `keiro/test/Main.hs`; `cabal test keiro-test` green.
+      `keiro/test/Main.hs`; `cabal test keiro-test` green with 501 examples and
+      zero failures (2026-08-12T19:20:42Z).
 - [ ] M2: Add `firstExistingEventId` and `deterministicCommandIdProbes` to
       `keiro/src/Keiro/ProcessManager.hs`; export both.
 - [ ] M2: Add the five DB-backed redelivery scenarios (PM state+command, router, domain
@@ -102,6 +106,14 @@ implementation. Provide concise evidence.
   (`f8ca7a16`) is in the unreleased 0.12 window. So no release ever wrote positional
   router ids with UTF-8 seed bytes, and the router's legacy probe can simply be derived
   with the legacy encoder instead of gaining a third probe (Decision Log).
+- Implementation (2026-08-12): the isolated capture worktree at pre-change commit
+  `7d7a200b` reproduced the three known ASCII ids and supplied all non-ASCII fixtures.
+  The collision rows were exact: command correlations U+0101/U+0001 both yielded
+  `cfa5de78-8cc7-5eb2-8edd-da847221541d`, U+0169/ASCII `i` prefixes both yielded
+  `4fb869b4-d5b7-5c99-8c5d-c4552c5d4115`, and awakeable labels U+4E2D/ASCII `-`
+  both yielded `7b252ef4-c7c0-579e-8f15-8f26c73196de`. A deliberately corrupted
+  `José` golden failed with the genuine captured id, proving the fixture block is
+  behavior-sensitive rather than self-derived.
 
 (Implementation entries to be added as work proceeds.)
 
