@@ -7,11 +7,16 @@ module Keiro.Projection.Catalog.Operations
     CatalogInventoryReport (..),
     RebuildPreview (..),
     RegisteredRebuildPreview (..),
+    CatalogAdoptionGroupPreview (..),
+    CatalogAdoptionReport (..),
+    CatalogAdoptionOutcome (..),
     CatalogRunReport (..),
     CatalogOpsError (..),
     catalogInventoryReport,
     previewGroupRebuild,
     previewRegisteredGroupRebuild,
+    previewCatalogAdoption,
+    adoptCatalogGroups,
     startGroupRebuild,
     inspectGroupRebuild,
     resumeGroupRebuild,
@@ -26,7 +31,9 @@ import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.ReadModel.Rebuild
-  ( CatalogRebuildError,
+  ( CatalogAdoptionError,
+    CatalogRebuildError,
+    GroupAdoptionClass (..),
     GroupLifecycleStatus (..),
     GroupRebuildMetadata,
     RebuildAdapterProgress,
@@ -45,6 +52,7 @@ import Keiro.ReadModel.Rebuild
     resumeCatalogRebuild,
     startCatalogRebuild,
   )
+import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..))
 
@@ -58,6 +66,7 @@ projectionCatalogOperations = ProjectionCatalogOperations
 data CatalogInventoryReport = CatalogInventoryReport
   { reportSchema :: !Text,
     catalogFingerprint :: !Text,
+    groupSlices :: ![(RebuildGroupId, Text)],
     inventory :: !CatalogInventory
   }
   deriving stock (Eq, Show, Generic)
@@ -93,6 +102,28 @@ data RegisteredRebuildPreview = RegisteredRebuildPreview
   }
   deriving stock (Eq, Show, Generic)
 
+data CatalogAdoptionGroupPreview = CatalogAdoptionGroupPreview
+  { rebuildGroupId :: !RebuildGroupId,
+    classification :: !GroupAdoptionClass,
+    storedSlice :: !(Maybe Text),
+    currentSlice :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionReport = CatalogAdoptionReport
+  { reportSchema :: !Text,
+    catalogFingerprint :: !Text,
+    groups :: ![CatalogAdoptionGroupPreview],
+    removedGroups :: ![RebuildGroupId]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionOutcome = CatalogAdoptionOutcome
+  { reportSchema :: !Text,
+    adoptedGroups :: ![GroupRebuildMetadata]
+  }
+  deriving stock (Eq, Show, Generic)
+
 -- | Versioned operations envelope around the runtime runner's structured
 -- progress report.
 data CatalogRunReport = CatalogRunReport
@@ -104,6 +135,7 @@ data CatalogRunReport = CatalogRunReport
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
   | CatalogOpsRunSliceMismatch !RebuildRunId !Text !Text
+  | CatalogOpsAdoptionRefused !CatalogAdoptionError
   | CatalogOpsRebuildError !CatalogRebuildError
   deriving stock (Eq, Show, Generic)
 
@@ -112,8 +144,18 @@ catalogInventoryReport (ProjectionCatalogOperations catalog) =
   CatalogInventoryReport
     { reportSchema = "keiro/catalog-inventory/v1",
       catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
+      groupSlices =
+        [ (groupId, sliceFor groupId)
+        | groupId <- (^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups)
+        ],
       inventory = catalogInventory catalog
     }
+  where
+    sliceFor groupId =
+      maybe
+        (error "catalogInventoryReport: inventory group has no slice")
+        groupSliceFingerprintText
+        (Keiro.Projection.Catalog.groupSliceFingerprint catalog groupId)
 
 previewGroupRebuild ::
   ProjectionCatalogOperations ->
@@ -187,6 +229,35 @@ previewRegisteredGroupRebuild operations wantedGroup =
               }
         )
 
+previewCatalogAdoption ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  Eff es CatalogAdoptionReport
+previewCatalogAdoption (ProjectionCatalogOperations catalog) = do
+  plan <- Rebuild.previewCatalogAdoption catalog
+  pure
+    CatalogAdoptionReport
+      { reportSchema = "keiro/catalog-adoption-preview/v1",
+        catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
+        groups = map (groupPreview catalog) (plan ^. #groupStates),
+        removedGroups = plan ^. #removedGroups
+      }
+
+adoptCatalogGroups ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  NonEmpty RebuildGroupId ->
+  Eff es (Either CatalogOpsError CatalogAdoptionOutcome)
+adoptCatalogGroups (ProjectionCatalogOperations catalog) groups =
+  Rebuild.adoptCatalogGroups catalog groups <&> \case
+    Left err -> Left (CatalogOpsAdoptionRefused err)
+    Right metadata ->
+      Right
+        CatalogAdoptionOutcome
+          { reportSchema = "keiro/catalog-adoption-outcome/v1",
+            adoptedGroups = metadata
+          }
+
 startGroupRebuild ::
   (IOE :> es, Store :> es) =>
   ProjectionCatalogOperations ->
@@ -251,6 +322,13 @@ instance Aeson.ToJSON CatalogInventoryReport where
     Aeson.object
       [ "schema" Aeson..= (report ^. #reportSchema),
         "catalogFingerprint" Aeson..= (report ^. #catalogFingerprint),
+        "groupSlices"
+          Aeson..= [ Aeson.object
+                       [ "groupId" Aeson..= rebuildGroupIdText groupId,
+                         "sliceFingerprint" Aeson..= slice
+                       ]
+                   | (groupId, slice) <- report ^. #groupSlices
+                   ],
         "inventory" Aeson..= inventoryValue (report ^. #inventory)
       ]
 
@@ -280,6 +358,22 @@ instance Aeson.ToJSON RegisteredRebuildPreview where
         "preview" Aeson..= (report ^. #preview),
         "registeredState" Aeson..= fmap groupMetadataValue (report ^. #registeredState),
         "registeredSliceMatches" Aeson..= (report ^. #registeredSliceMatches)
+      ]
+
+instance Aeson.ToJSON CatalogAdoptionReport where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "catalogFingerprint" Aeson..= (report ^. #catalogFingerprint),
+        "groups" Aeson..= map adoptionGroupValue (report ^. #groups),
+        "removedGroups" Aeson..= map rebuildGroupIdText (report ^. #removedGroups)
+      ]
+
+instance Aeson.ToJSON CatalogAdoptionOutcome where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "adoptedGroups" Aeson..= map groupMetadataValue (report ^. #adoptedGroups)
       ]
 
 instance Aeson.ToJSON CatalogRunReport where
@@ -423,6 +517,41 @@ groupMetadataValue metadata =
       "failureCode" Aeson..= (metadata ^. #failureCode),
       "failureDetail" Aeson..= (metadata ^. #failureDetail)
     ]
+
+groupPreview :: ValidatedProjectionCatalog -> (RebuildGroupId, GroupAdoptionClass) -> CatalogAdoptionGroupPreview
+groupPreview catalog (groupId, adoptionClass) =
+  CatalogAdoptionGroupPreview
+    { rebuildGroupId = groupId,
+      classification = adoptionClass,
+      storedSlice = case adoptionClass of
+        AdoptionNew -> Nothing
+        AdoptionUnchanged -> Just current
+        AdoptionSliceChanged stored _ -> Just stored
+        AdoptionStaleFormat stored -> Just stored,
+      currentSlice = current
+    }
+  where
+    current =
+      maybe
+        (error "groupPreview: catalog inventory group has no slice")
+        groupSliceFingerprintText
+        (Keiro.Projection.Catalog.groupSliceFingerprint catalog groupId)
+
+adoptionGroupValue :: CatalogAdoptionGroupPreview -> Aeson.Value
+adoptionGroupValue group =
+  Aeson.object
+    [ "groupId" Aeson..= rebuildGroupIdText (group ^. #rebuildGroupId),
+      "state" Aeson..= adoptionStateText (group ^. #classification),
+      "storedSlice" Aeson..= (group ^. #storedSlice),
+      "currentSlice" Aeson..= (group ^. #currentSlice)
+    ]
+
+adoptionStateText :: GroupAdoptionClass -> Text
+adoptionStateText = \case
+  AdoptionNew -> "new"
+  AdoptionUnchanged -> "unchanged"
+  AdoptionSliceChanged {} -> "slice-changed"
+  AdoptionStaleFormat {} -> "stale-format"
 
 lifecycleStatusText :: GroupLifecycleStatus -> Text
 lifecycleStatusText = \case

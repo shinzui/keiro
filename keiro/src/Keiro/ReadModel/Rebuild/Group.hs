@@ -12,6 +12,9 @@ module Keiro.ReadModel.Rebuild.Group
     GroupLifecycleStatus (..),
     GroupRebuildMetadata (..),
     CatalogRegistrationError (..),
+    GroupAdoptionClass (..),
+    CatalogAdoptionPlan (..),
+    CatalogAdoptionError (..),
     RebuildStartError (..),
     GroupTransitionError (..),
     ProjectionWriteFence (..),
@@ -26,6 +29,8 @@ module Keiro.ReadModel.Rebuild.Group
     completionTokenForHandle,
     groupRebuildHandleFor,
     registerProjectionCatalog,
+    previewCatalogAdoption,
+    adoptCatalogGroups,
     lookupProjectionRebuildGroup,
     beginGroupRebuild,
     finishGroupRebuild,
@@ -39,6 +44,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.Functor (($>))
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -135,6 +141,25 @@ data CatalogRegistrationError
   | RegisteredGroupStaleFingerprint !RebuildGroupId !Text
   | RegisteredQueryModelDrift !Text !Text
   | RegisteredQueryModelNotLive !Text
+  deriving stock (Eq, Show, Generic)
+
+data GroupAdoptionClass
+  = AdoptionNew
+  | AdoptionUnchanged
+  | AdoptionSliceChanged !Text !Text
+  | AdoptionStaleFormat !Text
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionPlan = CatalogAdoptionPlan
+  { groupStates :: ![(RebuildGroupId, GroupAdoptionClass)],
+    removedGroups :: ![RebuildGroupId]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionError
+  = AdoptGroupNotInCatalog !RebuildGroupId
+  | AdoptGroupUnregistered !RebuildGroupId
+  | AdoptGroupNotLive !RebuildGroupId !GroupLifecycleStatus !(Maybe RebuildRunId)
   deriving stock (Eq, Show, Generic)
 
 data RebuildStartError
@@ -313,6 +338,112 @@ registerProjectionCatalogTx catalog = do
             <> ", catalog group="
             <> rebuildGroupIdText (registration ^. #rebuildGroupId)
         )
+
+previewCatalogAdoption ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  Eff es CatalogAdoptionPlan
+previewCatalogAdoption catalog =
+  runTransaction $ do
+    registered <- Tx.statement () listGroupsStmt
+    let registeredById = Map.fromList [(metadata ^. #rebuildGroupId, metadata) | metadata <- registered]
+        catalogGroups =
+          List.sortOn
+            rebuildGroupIdText
+            ((^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups))
+        catalogGroupSet = Set.fromList catalogGroups
+        classify groupId =
+          ( groupId,
+            case Map.lookup groupId registeredById of
+              Nothing -> AdoptionNew
+              Just metadata -> adoptionClass groupId (metadata ^. #sliceFingerprint)
+          )
+        removed =
+          List.sortOn
+            rebuildGroupIdText
+            [ metadata ^. #rebuildGroupId
+            | metadata <- registered,
+              metadata ^. #sliceFingerprint /= "$legacy-unmanaged",
+              (metadata ^. #rebuildGroupId) `Set.notMember` catalogGroupSet
+            ]
+    pure
+      CatalogAdoptionPlan
+        { groupStates = classify <$> catalogGroups,
+          removedGroups = removed
+        }
+  where
+    adoptionClass groupId stored
+      | stored == current = AdoptionUnchanged
+      | "slice-v1:" `Text.isPrefixOf` stored = AdoptionSliceChanged stored current
+      | otherwise = AdoptionStaleFormat stored
+      where
+        current = sliceTextFor catalog groupId
+
+adoptCatalogGroups ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  NonEmpty.NonEmpty RebuildGroupId ->
+  Eff es (Either CatalogAdoptionError [GroupRebuildMetadata])
+adoptCatalogGroups catalog requested =
+  case List.find (`Set.notMember` catalogGroupSet) groupIds of
+    Just groupId -> pure (Left (AdoptGroupNotInCatalog groupId))
+    Nothing -> runTransaction adoptTx
+  where
+    groupIds = List.sort . Set.toList . Set.fromList $ NonEmpty.toList requested
+    catalogGroupSet =
+      Set.fromList ((^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups))
+    namedGroupSet = Set.fromList groupIds
+    registrations =
+      List.sortOn
+        (^. #registryName)
+        [ registration
+        | registration <- catalogRegistrations catalog,
+          (registration ^. #rebuildGroupId) `Set.member` namedGroupSet
+        ]
+
+    adoptTx = do
+      locked <- lockAll [] groupIds
+      case locked of
+        Left err -> Tx.condemn $> Left err
+        Right _ -> do
+          for_ groupIds $ \groupId ->
+            Tx.statement
+              (rebuildGroupIdText groupId, sliceTextFor catalog groupId)
+              adoptGroupSliceStmt
+          for_ registrations $ \registration ->
+            Tx.statement (queryRegistrationParams registration) adoptQueryRegistrationStmt
+          updated <- traverse (\groupId -> Tx.statement (rebuildGroupIdText groupId) lookupGroupStmt) groupIds
+          pure
+            ( Right
+                [ metadata
+                | Just metadata <- updated
+                ]
+            )
+
+    lockAll accumulated = \case
+      [] -> pure (Right (Prelude.reverse accumulated))
+      groupId : rest -> do
+        row <- Tx.statement (rebuildGroupIdText groupId) lockGroupForUpdateStmt
+        case row of
+          Nothing -> pure (Left (AdoptGroupUnregistered groupId))
+          Just metadata
+            | metadata ^. #status /= GroupLive ->
+                pure
+                  ( Left
+                      ( AdoptGroupNotLive
+                          groupId
+                          (metadata ^. #status)
+                          (metadata ^. #activeRunId)
+                      )
+                  )
+            | otherwise -> lockAll (metadata : accumulated) rest
+
+sliceTextFor :: ValidatedProjectionCatalog -> RebuildGroupId -> Text
+sliceTextFor catalog groupId =
+  maybe
+    (error "sliceTextFor: catalog inventory group has no slice")
+    groupSliceFingerprintText
+    (groupSliceFingerprint catalog groupId)
 
 lookupProjectionRebuildGroup ::
   (Store :> es) =>
@@ -582,6 +713,19 @@ lookupGroupStmt =
     (E.param (E.nonNullable E.text))
     (D.rowMaybe groupMetadataDecoder)
 
+listGroupsStmt :: Statement () [GroupRebuildMetadata]
+listGroupsStmt =
+  preparable
+    """
+    SELECT group_id, slice_fingerprint, status, active_run_id,
+           requested_by, request_reason, started_at, completed_at, failed_at,
+           failure_code, failure_detail
+    FROM keiro.keiro_projection_rebuild_groups
+    ORDER BY group_id
+    """
+    E.noParams
+    (D.rowList groupMetadataDecoder)
+
 lockGroupForUpdateStmt :: Statement Text (Maybe GroupRebuildMetadata)
 lockGroupForUpdateStmt =
   preparable
@@ -737,6 +881,40 @@ adoptLegacyQueryRegistrationStmt =
     WHERE name = $1
     """
     ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+adoptGroupSliceStmt :: Statement (Text, Text) ()
+adoptGroupSliceStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_projection_rebuild_groups
+    SET slice_fingerprint = $2,
+        updated_at = now()
+    WHERE group_id = $1
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+adoptQueryRegistrationStmt :: Statement (Text, Int64, Text, Text) ()
+adoptQueryRegistrationStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_read_models
+    SET version = $2,
+        shape_hash = $3,
+        rebuild_group_id = $4,
+        updated_at = now()
+    WHERE name = $1
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )

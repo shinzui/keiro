@@ -3,6 +3,7 @@ module Main
   )
 where
 
+import CatalogEvolutionSpec qualified
 import CatalogOperationsSpec qualified
 import CatalogSpec qualified
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
@@ -391,6 +392,7 @@ main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogSpec.spec
   PreimageSpec.spec
+  CatalogEvolutionSpec.spec fixture
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   ProjectionReplaySpec.spec fixture

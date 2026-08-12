@@ -154,7 +154,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (237) M1: prototyping — both defects reproduced, encoder injectivity and lifecycle-join map validated against the real schema (2026-08-12T11:04:39Z)
 - [x] EP-1 (237) M2: pure canonical encoding (`Keiro.Projection.Catalog.Preimage`, `catalog-v2:`/`slice-v1:`) with the two collision fixtures as regressions (2026-08-12T11:11:51Z)
 - [x] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors (2026-08-12T11:27:41Z)
-- [ ] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API
+- [x] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API (2026-08-12T11:46:09Z)
 - [ ] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force
 - [ ] EP-1 (237) M6: docs, changelogs, ADR distillation (0026/0031)
 - [ ] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression

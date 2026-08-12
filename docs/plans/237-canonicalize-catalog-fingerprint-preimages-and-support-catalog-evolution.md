@@ -89,10 +89,10 @@ here, even if it requires splitting a partially completed task into two ("done" 
       completion-proof statements to slice-scoped identity; renamed error
       constructors; DB tests for additive re-registration and slice-drift refusal.
       Completed 2026-08-12T11:27:41Z.
-- [ ] M4: adoption API (`previewCatalogAdoption`, `adoptCatalogGroups`) in the
+- [x] M4: adoption API (`previewCatalogAdoption`, `adoptCatalogGroups`) in the
       rebuild library and `Keiro.Projection.Catalog.Operations`; DB tests for the
       full changed-slice adoption path, read-model reconciliation, and stale-format
-      (hypothetical 0.11) row adoption.
+      (hypothetical 0.11) row adoption. Completed 2026-08-12T11:46:09Z.
 - [ ] M5: `keiro-ops rebuild adopt` command with preview-then-`--force`; slice
       fields in existing preview/list renderings; keiro-ops tests.
 - [ ] M6: docs (`docs/user/read-models-and-projections.md`, API reference),
@@ -134,6 +134,12 @@ implementation. Provide concise evidence.
   for genuine codec changes. The full `keiro-test` suite passed with `474
   examples, 0 failures`, including the additive registration and active-run
   regression fixtures.
+- Adoption must lock and validate the complete sorted request set before issuing
+  any update. The implementation therefore separates its lock pass from the
+  group-slice and query-registration reconciliation passes; a later non-live or
+  missing group cannot leave an earlier group adopted. The new full-path,
+  atomic-refusal, and stale-format scenarios brought `keiro-test` to `477
+  examples, 0 failures`.
 
 
 ## Decision Log
