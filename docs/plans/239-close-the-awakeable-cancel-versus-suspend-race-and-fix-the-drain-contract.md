@@ -68,12 +68,12 @@ This section must always reflect the actual current state of the work.
 - [x] M1: broaden the suspend re-check in `markInstanceSuspendedAwaiting` (`keiro/src/Keiro/Workflow/Instance.hs`) to consult the awakeable row's terminal status for `awk:`-prefixed awaited steps (2026-08-12T18:06:52Z)
 - [x] M1: take the per-step advisory lock in `cancelAwakeable` (`keiro/src/Keiro/Workflow/Awakeable.hs`), deriving the lock key from the owner row and current generation (2026-08-12T18:06:52Z)
 - [x] M1: both interleaving tests pass; full `cabal test keiro-test` green (496 examples, 2026-08-12T18:10:51Z)
-- [ ] M2: change `claimInstance` to return a `ClaimOutcome` that distinguishes acquired / lease-held / paced / unavailable
-- [ ] M2: extend `ResumeSummary` with `advanced`, `paced`, and `unregisteredNames`; update `emptyResumeSummary`, the `Semigroup` instance, and every bump site in `Resume.hs`
-- [ ] M2: rewrite the `resumeWorkflowsOnce` / `resumeWorkflowsOnceUpTo` haddock to state the honest drain contract
-- [ ] M2: update the existing full-record `ResumeSummary` assertions and `claimInstance` call sites in `keiro/test/Main.hs`
-- [ ] M2: add the drain-termination test (one crashed + one unregistered workflow; loop on `advanced > 0` terminates; `discovered` provably never reaches zero)
-- [ ] M2: add claim-classification assertions (paced after a recorded crash; lease-held under a live foreign lease)
+- [x] M2: change `claimInstance` to return a `ClaimOutcome` that distinguishes acquired / lease-held / paced / unavailable (2026-08-12T18:20:18Z)
+- [x] M2: extend `ResumeSummary` with `advanced`, `paced`, and `unregisteredNames`; update `emptyResumeSummary`, the `Semigroup` instance, and every bump site in `Resume.hs` (2026-08-12T18:20:18Z)
+- [x] M2: rewrite the `resumeWorkflowsOnce` / `resumeWorkflowsOnceUpTo` haddock to state the honest drain contract (2026-08-12T18:20:18Z)
+- [x] M2: update the existing full-record `ResumeSummary` assertions and `claimInstance` call sites in `keiro/test/Main.hs` (2026-08-12T18:20:18Z)
+- [x] M2: add the drain-termination test (one crashed + one unregistered workflow; loop on `advanced > 0` terminates; `discovered` provably never reaches zero) (2026-08-12T18:20:18Z)
+- [x] M2: add claim-classification assertions (paced after a recorded crash; lease-held under a live foreign lease); focused resume tests and full `cabal test keiro-test` green (497 examples) (2026-08-12T18:20:18Z)
 - [ ] M3: extend `resumeSummaryResult` in `keiro-ops/src/Keiro/Ops/Workflow.hs` with the new columns and JSON keys
 - [ ] M3: extend the keiro-ops resume test in `keiro-ops/test/Main.hs` to cover `advanced` and `unregistered_names`
 - [ ] M4: CHANGELOG entries (breaking API change + bug fixes) under Unreleased

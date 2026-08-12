@@ -11,6 +11,7 @@ module Keiro.Workflow.Instance
     defaultWorkflowInstanceFilter,
     ResurrectOutcome (..),
     CancelWorkflowOutcome (..),
+    ClaimOutcome (..),
     statusToText,
     statusFromText,
     upsertInstanceTx,
@@ -140,6 +141,18 @@ data CancelWorkflowOutcome
   = WorkflowCancelRecorded
   | WorkflowAlreadyTerminal !WorkflowStatus
   | WorkflowCancelUnknown
+  deriving stock (Generic, Eq, Show)
+
+-- | Why 'claimInstance' did or did not acquire the advance lease.
+data ClaimOutcome
+  = -- | This caller now holds the lease.
+    ClaimAcquired
+  | -- | Another live lease exists; the instance is being advanced elsewhere.
+    ClaimLeaseHeld
+  | -- | The crash-backoff gate (@next_attempt_at@) is still in the future.
+    ClaimPaced
+  | -- | The row is terminal or gone; it will drop out of discovery by itself.
+    ClaimUnavailable
   deriving stock (Generic, Eq, Show)
 
 -- | Record that a run parked on @awaitedStep@, arbitrating against a wake
@@ -303,7 +316,12 @@ cancelWorkflow name@(WorkflowName nameText) wid@(WorkflowId widText) =
         throwIO (WorkflowJournalAppendError (Text.pack (show err)))
       _ -> pure ()
 
-claimInstance :: (IOE :> es, Store :> es) => Text -> NominalDiffTime -> WorkflowName -> WorkflowId -> Eff es Bool
+-- | Claim one runnable workflow instance and classify any refusal.
+--
+-- A live lease takes precedence over crash pacing because it means another
+-- worker is actively responsible for the instance. The guarded update and the
+-- refusal classification share one transaction and one clock reading.
+claimInstance :: (IOE :> es, Store :> es) => Text -> NominalDiffTime -> WorkflowName -> WorkflowId -> Eff es ClaimOutcome
 claimInstance owner ttl (WorkflowName nameText) (WorkflowId widText) = do
   now <- liftIO getCurrentTime
   runTransaction $ do
@@ -317,10 +335,21 @@ claimInstance owner ttl (WorkflowName nameText) (WorkflowId widText) = do
     -- MAX(generation) here would cost a query per claim to learn a number the
     -- insert almost never uses.
     Tx.statement (widText, nameText, 0 :: Int32) ensureInstanceStmt
-    fromMaybe False
-      <$> Tx.statement
+    claimed <-
+      Tx.statement
         (widText, nameText, owner, now, addUTCTime ttl now)
         claimInstanceStmt
+    case claimed of
+      Just True -> pure ClaimAcquired
+      _ -> do
+        state <- Tx.statement (widText, nameText) classifyClaimRefusalStmt
+        pure $ case state of
+          Nothing -> ClaimUnavailable
+          Just (status, leaseExpiry, nextAttempt)
+            | status `notElem` [WfRunning, WfSuspended] -> ClaimUnavailable
+            | maybe False (>= now) leaseExpiry -> ClaimLeaseHeld
+            | maybe False (> now) nextAttempt -> ClaimPaced
+            | otherwise -> ClaimUnavailable
 
 -- | Extend an instance lease only when @owner@ still holds it.
 --
@@ -500,6 +529,26 @@ claimInstanceStmt =
         (E.param (E.nonNullable E.timestamptz))
     )
     (D.rowMaybe (D.column (D.nonNullable D.bool)))
+
+classifyClaimRefusalStmt :: Statement (Text, Text) (Maybe (WorkflowStatus, Maybe UTCTime, Maybe UTCTime))
+classifyClaimRefusalStmt =
+  preparable
+    """
+    SELECT status, lease_expires_at, next_attempt_at
+    FROM keiro.keiro_workflows
+    WHERE workflow_id = $1 AND workflow_name = $2
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    ( D.rowMaybe
+        ( (,,)
+            <$> (statusFromText <$> D.column (D.nonNullable D.text))
+            <*> D.column (D.nullable D.timestamptz)
+            <*> D.column (D.nullable D.timestamptz)
+        )
+    )
 
 renewInstanceLeaseStmt :: Statement (Text, Text, Text, UTCTime, UTCTime) Bool
 renewInstanceLeaseStmt =

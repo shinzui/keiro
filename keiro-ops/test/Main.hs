@@ -472,7 +472,7 @@ spec fixture = do
             300
             (WorkflowName ref.workflowName)
             (WorkflowId ref.workflowId)
-      claimed `shouldBe` True
+      claimed `shouldBe` Instance.ClaimAcquired
 
       releasePreview <- OpsWorkflow.runCommand (opsEnv False store) (OpsWorkflow.ReleaseLease ref)
       releasePreview `shouldSatisfy` isPreview

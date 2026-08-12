@@ -7661,7 +7661,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             second <- step (StepName "second") (liftIO (incrementAndRead secondEffect))
             pure (first, second)
       Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 60 name wid
-      claimedA `shouldBe` True
+      claimedA `shouldBe` Instance.ClaimAcquired
       lost <-
         try
           ( Store.runStoreIO storeHandle $
@@ -7679,7 +7679,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       releasedAgain `shouldBe` False
 
       Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 60 name wid
-      claimedB `shouldBe` True
+      claimedB `shouldBe` Instance.ClaimAcquired
       Right (Completed (1, 1)) <-
         Store.runStoreIO storeHandle $
           runWorkflowWith (options "owner-b") name wid body
@@ -8123,13 +8123,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary
         `shouldBe` ResumeSummary
           { discovered = 1,
+            advanced = 1,
             resumed = 1,
             completed = 1,
             stillSuspended = 0,
             unknownName = 0,
             failed = 0,
             transientErrors = 0,
-            leaseSkipped = 0
+            leaseSkipped = 0,
+            paced = 0,
+            unregisteredNames = Set.empty
           }
       -- Step 1 short-circuited; steps 2 and 3 ran exactly once.
       readIORef counter >>= \c -> c `shouldBe` 3
@@ -8166,13 +8169,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary
         `shouldBe` ResumeSummary
           { discovered = 1,
+            advanced = 1,
             resumed = 1,
             completed = 1,
             stillSuspended = 0,
             unknownName = 0,
             failed = 0,
             transientErrors = 0,
-            leaseSkipped = 0
+            leaseSkipped = 0,
+            paced = 0,
+            unregisteredNames = Set.empty
           }
       readIORef counter >>= \c -> c `shouldBe` 1
       Right recorded <-
@@ -8204,13 +8210,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary
         `shouldBe` ResumeSummary
           { discovered = 1,
+            advanced = 0,
             resumed = 0,
             completed = 0,
             stillSuspended = 0,
             unknownName = 1,
             failed = 0,
             transientErrors = 0,
-            leaseSkipped = 0
+            leaseSkipped = 0,
+            paced = 0,
+            unregisteredNames = Set.singleton "orphan"
           }
       -- The journal is unchanged: still one step, no completion.
       Right recorded <-
@@ -8252,6 +8261,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary
         `shouldBe` emptyResumeSummary
           { discovered = 2,
+            advanced = 2,
             resumed = 2,
             completed = 1,
             failed = 1
@@ -8383,6 +8393,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary
         `shouldBe` emptyResumeSummary
           { discovered = 2,
+            advanced = 1,
             resumed = 2,
             completed = 1,
             transientErrors = 1
@@ -8630,29 +8641,32 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       let name = WorkflowName "lease-claim"
           wid = WorkflowId "lc-1"
       Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 30 name wid
-      claimedA `shouldBe` True
+      claimedA `shouldBe` Instance.ClaimAcquired
       Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
-      claimedB `shouldBe` False
+      claimedB `shouldBe` Instance.ClaimLeaseHeld
       Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-a" False name wid
       Right claimedBAfterRelease <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
-      claimedBAfterRelease `shouldBe` True
+      claimedBAfterRelease `shouldBe` Instance.ClaimAcquired
 
     it "lets an expired workflow lease be taken and resets attempts on progressed release" $ \storeHandle -> do
       let name = WorkflowName "lease-expire"
           wid = WorkflowId "le-1"
       Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 30 name wid
-      claimedA `shouldBe` True
+      claimedA `shouldBe` Instance.ClaimAcquired
       Right attempt <-
         Store.runStoreIO storeHandle $
           Store.runTransaction $
             Instance.recordCrashTx "le-1" "lease-expire" "boom"
       attempt `shouldBe` Just 1
+      Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-a" False name wid
+      Right pacedClaim <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
+      pacedClaim `shouldBe` Instance.ClaimPaced
       Right () <-
         Store.runStoreIO storeHandle $
           Store.runTransaction $
             Tx.sql "UPDATE keiro.keiro_workflows SET lease_expires_at = now() - interval '1 second', next_attempt_at = now() - interval '1 second' WHERE workflow_id = 'le-1' AND workflow_name = 'lease-expire'"
       Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
-      claimedB `shouldBe` True
+      claimedB `shouldBe` Instance.ClaimAcquired
       Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-b" True name wid
       Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
       row ^. #attempts `shouldBe` 0
@@ -8676,7 +8690,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           appendJournalEntry name wid (StepRecorded "seed" (toJSON True) now)
       Right foreignClaim <- Store.runStoreIO storeHandle $ Instance.claimInstance "foreign-owner" 30 name wid
-      foreignClaim `shouldBe` True
+      foreignClaim `shouldBe` Instance.ClaimAcquired
       Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
       summary
         `shouldBe` emptyResumeSummary
@@ -8721,12 +8735,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                   name
                   wid
               liftIO (writeIORef attemptedClaim (Just claimed))
-              pure claimed
+              pure (claimed == Instance.ClaimAcquired)
       Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 0.2 name wid
-      claimedA `shouldBe` True
+      claimedA `shouldBe` Instance.ClaimAcquired
       outcome <- Store.runStoreIO storeHandle $ runWorkflowWith runOpts name wid body
       outcome `shouldBe` Right (Completed False)
-      readIORef attemptedClaim `shouldReturn` Just False
+      readIORef attemptedClaim `shouldReturn` Just Instance.ClaimLeaseHeld
       Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
       row ^. #leasedBy `shouldBe` Just "owner-a"
 
@@ -8742,7 +8756,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           appendJournalEntry directName directId (StepRecorded "seed" (toJSON True) now)
       Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 60 directName directId
-      claimedA `shouldBe` True
+      claimedA `shouldBe` Instance.ClaimAcquired
       leaseUntil <- addUTCTime 60 <$> getCurrentTime
       Right () <-
         Store.runStoreIO storeHandle $
@@ -10494,8 +10508,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       visible `shouldBe` [("qs-1", "quiet-sleep")]
 
     -- A crashed workflow stays 'running', so exact discovery keeps returning it;
-    -- what paces the retry is claimInstance's next_attempt_at gate, which shows
-    -- up as a lease skip rather than a disappearance.
+    -- what paces the retry is claimInstance's next_attempt_at gate, which is
+    -- reported distinctly from a live foreign lease.
     it "keeps a crashed workflow discovered while its backoff gate paces retries" $ \storeHandle -> do
       let name = WorkflowName "crash-visible"
           wid = WorkflowId "cvz-1"
@@ -10517,7 +10531,48 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       crashed ^. #status `shouldBe` Instance.WfRunning
       crashed ^. #attempts `shouldBe` 1
       Right second <- pass
-      (discovered second, leaseSkipped second) `shouldBe` (1, 1)
+      (discovered second, paced second, leaseSkipped second) `shouldBe` (1, 1, 0)
+
+    it "a bounded drain loop terminates over a pool that cannot advance" $ \storeHandle -> do
+      let crashName = WorkflowName "drain-crash"
+          crashWid = WorkflowId "drain-crash-1"
+          ghostName = WorkflowName "drain-ghost"
+          ghostWid = WorkflowId "drain-ghost-1"
+          opts =
+            defaultWorkflowResumeOptions
+              & #maxAttempts
+              .~ 3
+              & #logEvent
+              .~ const (pure ())
+          registry =
+            Map.singleton
+              crashName
+              (WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+          pass = Store.runStoreIO storeHandle (resumeWorkflowsOnce opts registry)
+          drain 0 acc = pure acc
+          drain n acc = do
+            Right summary <- pass
+            if advanced summary > 0
+              then drain (n - 1 :: Int) (acc <> [summary])
+              else pure (acc <> [summary])
+      seededAt <- getCurrentTime
+      for_ [(crashName, crashWid), (ghostName, ghostWid)] $ \(name, wid) -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            appendJournalEntry name wid (StepRecorded "seed" (toJSON True) seededAt)
+        pure ()
+      passes <- drain 10 []
+      length passes `shouldBe` 1
+      case passes of
+        [summary] -> do
+          (discovered summary, resumed summary, unknownName summary, advanced summary)
+            `shouldBe` (2, 1, 1, 0)
+          unregisteredNames summary `shouldBe` Set.singleton "drain-ghost"
+        other -> expectationFailure ("expected one drain pass, got " <> show other)
+      Right blocked <- pass
+      (discovered blocked, paced blocked, unknownName blocked, advanced blocked)
+        `shouldBe` (2, 1, 1, 0)
+      unregisteredNames blocked `shouldBe` Set.singleton "drain-ghost"
 
   describe "Keiro.Workflow terminal boundaries" $ around (withFreshStore fixture) $ do
     -- The asymmetry this closes: cancellation stopped a run at the next step
@@ -11629,11 +11684,13 @@ expectedMixedResumeSummary :: ResumeSummary
 expectedMixedResumeSummary =
   emptyResumeSummary
     { discovered = 4,
+      advanced = 3,
       resumed = 3,
       completed = 1,
       stillSuspended = 1,
       unknownName = 1,
-      failed = 1
+      failed = 1,
+      unregisteredNames = Set.singleton "mixed-orphan"
     }
 
 -- | Do two recorded execution windows intersect? Used to tell a concurrent
