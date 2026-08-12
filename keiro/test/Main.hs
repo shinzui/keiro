@@ -11082,6 +11082,23 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         completed <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
         completed `shouldBe` Right (Completed "ok!")
 
+      it "adopts a pre-UTF-8 generation-0 row for a non-ASCII label" $ \storeHandle -> do
+        aidRef <- newIORef Nothing
+        let name = WorkflowName "legacy-awake"
+            wid = WorkflowId "la-1"
+            legacy = AwakeableId (uuidLiteral "c4eb4dfa-4108-577d-8e92-84edb337a48b")
+        legacyDeterministicAwakeableId name wid "\x627F\x8A8D" `shouldBe` legacy
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Awk.registerAwakeableTx (awakeableIdToUuid legacy) (unWorkflowName name) (unWorkflowId wid)
+        Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (unicodeApprovalFlowWithId aidRef)
+        adopted <- readRequiredAwakeableId aidRef
+        adopted `shouldBe` legacy
+        Right True <- Store.runStoreIO storeHandle $ signalAwakeable legacy ("ok" :: Text)
+        completed <- Store.runStoreIO storeHandle $ runWorkflow name wid (unicodeApprovalFlowWithId aidRef)
+        completed `shouldBe` Right (Completed "ok!")
+
       it "allocates a fresh awakeable for the same label after continueAsNew" $ \storeHandle -> do
         idsRef <- newIORef []
         let name = WorkflowName "awake-roll"
@@ -12094,6 +12111,13 @@ neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
 approvalFlowWithId :: (Workflow :> es, Store :> es, IOE :> es) => IORef (Maybe AwakeableId) -> Eff es Text
 approvalFlowWithId ref = do
   (aid, await) <- awakeableNamed (StepName "approval")
+  liftIO (writeIORef ref (Just aid))
+  v <- await
+  step (StepName "use") (pure (v <> "!"))
+
+unicodeApprovalFlowWithId :: (Workflow :> es, Store :> es, IOE :> es) => IORef (Maybe AwakeableId) -> Eff es Text
+unicodeApprovalFlowWithId ref = do
+  (aid, await) <- awakeableNamed (StepName "\x627F\x8A8D")
   liftIO (writeIORef ref (Just aid))
   v <- await
   step (StepName "use") (pure (v <> "!"))

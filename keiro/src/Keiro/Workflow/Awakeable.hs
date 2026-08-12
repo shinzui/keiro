@@ -79,7 +79,7 @@ import Data.UUID.V4 qualified as UUID.V4
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
-import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes)
+import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes, seedMovedAcrossEncodings)
 import Keiro.Prelude
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -149,6 +149,8 @@ awakeableIdText = UUID.toText . awakeableIdToUuid
 -- byte-identical to the original codepoint encoding for ASCII seeds and
 -- collision-free for the rest; see
 -- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
+-- Generation-0 adoption probes this id first, then the frozen pre-UTF-8 id for
+-- non-ASCII seeds, so in-flight rows survive the encoding upgrade.
 deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
 deterministicAwakeableId name wid label =
   AwakeableId $
@@ -237,12 +239,22 @@ allocateAwakeableId ::
   Eff es AwakeableId
 allocateAwakeableId name wid gen label
   | gen <= 0 = do
-      let legacy = deterministicAwakeableId name wid label
-      existing <- lookupAwakeable (awakeableIdToUuid legacy)
-      case existing of
-        Just _ -> pure legacy
-        Nothing -> AwakeableId <$> liftIO UUID.V4.nextRandom
+      let current = deterministicAwakeableId name wid label
+          seedMoved = seedMovedAcrossEncodings (awakeableSeed name wid label)
+      currentRow <- lookupAwakeable (awakeableIdToUuid current)
+      case currentRow of
+        Just _ -> pure current
+        Nothing
+          | seedMoved -> do
+              let legacy = legacyDeterministicAwakeableId name wid label
+              legacyRow <- lookupAwakeable (awakeableIdToUuid legacy)
+              case legacyRow of
+                Just _ -> pure legacy
+                Nothing -> freshAwakeableId
+          | otherwise -> freshAwakeableId
   | otherwise = AwakeableId <$> liftIO UUID.V4.nextRandom
+  where
+    freshAwakeableId = AwakeableId <$> liftIO UUID.V4.nextRandom
 
 -- | Allocate an awakeable under an ordinal label (the @N@th awakeable in a run
 -- becomes @ord:N@). Convenient, but its determinism is __conditional__: adding or

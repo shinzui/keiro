@@ -79,8 +79,8 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
       scenarios turn green; the full suite, including existing ASCII and concurrent
       dedup tests, passes with 506 examples and zero failures
       (2026-08-12T19:29:46Z).
-- [ ] M3: Bridge `allocateAwakeableId` adoption; add the non-ASCII-label adoption test;
-      existing ASCII adoption test stays green.
+- [x] M3: Bridge `allocateAwakeableId` adoption; the new non-ASCII-label scenario and
+      existing ASCII adoption scenario both pass (2026-08-12T19:32:44Z).
 - [ ] M4: Update ADR 0024 (bridge, unified window, removal criteria, residual collision
       ambiguity) and `docs/adr/log.md`; `just adr-validate` green.
 - [ ] M4: Add the `keiro/CHANGELOG.md` Unreleased upgrade note.
@@ -126,6 +126,11 @@ implementation. Provide concise evidence.
   (PM), `50b226dc...`/`8837a38c...` (domain PM), `1b99b504...` (router), and
   `f2aad3de...` (domain router). This is the planned before-fix evidence that one
   pre-upgrade event becomes two post-upgrade writes.
+- Implementation (2026-08-12): the non-ASCII awakeable adoption scenario failed before
+  the bridge at the identity assertion: expected captured legacy id
+  `c4eb4dfa-4108-577d-8e92-84edb337a48b`, but generation 0 allocated fresh v4 id
+  `ce33caed-8f8a-4afc-a6ab-3853efb271eb`. This directly reproduces the orphaned
+  pre-upgrade row; the particular v4 value is intentionally not a golden.
 
 (Implementation entries to be added as work proceeds.)
 
