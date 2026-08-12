@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-12T00:28:14Z
+timestamp: 2026-08-12T03:01:29Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -101,8 +101,12 @@ the existing semantic `Spec`. After parsing, `CheckedService` pairs that graph w
 diff, and replay-impact planning use this checked service boundary. The effective contract records
 the selected language version and a runtime-semantics discriminator. Grammar-only versions may
 share the discriminator; a successor that can change runtime or fold behavior must receive a new
-one. Compatibility entry points that accept only `Spec` remain documented legacy/version-1
-wrappers and are not used by CLI or workspace semantic routes.
+one. As of 0.12.0.0, public scaffold planning and planning-backed checks are indexed-only: callers
+must supply a `SemanticSourceIndex`, and the former `Spec`-only wrappers are removed rather than
+pretend that line-only compatibility positions are exact provenance. Compatibility bridges remain
+only where the operation makes no exact-provenance claim, including `parseSource`, `parseSpec`,
+`parseSpecText`, `validateSpec`, `scaffoldModules`, and workspace member adapters. CLI and workspace
+semantic routes continue to use exact parsed source documents.
 
 **Version 4 tightens only declared public contract TypeID fields.** A contract
 field that already says `typeid "inc"` generates `KindID "inc"` and enforces the
@@ -164,8 +168,9 @@ missing, inexact, duplicate, or colliding anchors before writes. One generated c
 `BehaviorSourceMap` then maps the frozen behavior-key text to the current exact file, line, and
 column. Aggregate contracts and create-once witnesses retain only semantic identity, so source
 movement changes positional presentation without changing `Spec`, behavior keys, contracts,
-folds, or runtime behavior. Bare-`Spec` scaffold planning cannot use its compatibility line-only
-index as exact provenance and fails explicitly instead of inventing columns.
+folds, or runtime behavior. No public scaffold planner or planning-backed check accepts a bare
+`Spec` or `CheckedService` without a caller-supplied index; the compatibility line-only adapter
+remains available for honest non-planning bridges and can never invent exact columns.
 
 Advanced frontend failures are structured before they cross the parser facade. Each failure names
 source-selection, body-parsing, or lowering phase; carries a stable frontend or source-language

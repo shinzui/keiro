@@ -72,6 +72,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Removes the semantic-only planning and check entry points from
+  `Keiro.Dsl.ScaffoldRun`: `planServiceScaffold`, `planServiceScaffoldWithGoldens`,
+  `planServiceScaffoldWithRuntimePackage`,
+  `planServiceScaffoldWithRuntimePackageAndGoldens`, `planScaffold`,
+  `planScaffoldWithGoldens`, and `checkServiceDiagnostics`. Once behavior provenance
+  became part of planning, these wrappers could only derive a `CompatibilityLineOnly`
+  source index, whose behavior-source join refuses every aggregate transition and
+  rejection anchor — so they refused every transition-bearing service that they
+  planned cleanly under 0.11.0.0. Migrate by parsing with `parseSourceDocument` and
+  passing the document's `documentSourceIndex` to `planIndexedServiceScaffold`,
+  `planIndexedServiceScaffoldWithGoldens`,
+  `planIndexedServiceScaffoldWithRuntimePackage`,
+  `planIndexedServiceScaffoldWithRuntimePackageAndGoldens`, or
+  `checkIndexedServiceDiagnostics`. A `Spec` constructed programmatically can still
+  be planned by building a complete exact index with
+  `Keiro.Dsl.SourceIndex.exactSemanticSourceIndex` over `semanticSourceSubjects`,
+  taking responsibility for the spans it asserts. The Spec-only module-set builders
+  (`scaffoldModules`, `scaffoldModulesWithGoldens`) and every execution entry point
+  are unchanged.
 - The public DSL AST adds `DomainOutcomeTypes`, `TransitionOutcome`, outcome
   fields to `Aggregate`/`Transition`, and corresponding located duplicate
   evidence. `LanguageFeature`, `RuntimeCapability`, and `DiagnosticCode` gain

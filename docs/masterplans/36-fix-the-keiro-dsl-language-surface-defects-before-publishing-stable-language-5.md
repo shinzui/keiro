@@ -79,7 +79,7 @@ ADR applies.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | Complete |
 | 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | Complete |
-| 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | In Progress |
+| 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | Complete |
 | 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -145,9 +145,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (234) M2: explicit order-insensitive `backing = <target>` binding; name-based resolution deduplicated across ScaffoldRun and WorkspaceScaffold; reorder diffs as nothing
 - [x] EP-2 (234) M3: real grouped-harness facts against the generated ProjectionCatalog exports, with mutation-test proof
 - [x] EP-2 (234) M4: corpus regeneration, gates, documentation, ADR-0026 update
-- [ ] EP-3 (235) M1: seven legacy Spec-only exports deleted, Haddocks relocated, library compiles
-- [ ] EP-3 (235) M2: test suite migrated off the retired exports while preserving the anti-fabrication proof
-- [ ] EP-3 (235) M3: changelog Breaking Changes entry with both migration recipes; ADR-16 amendment
+- [x] EP-3 (235) M1: seven legacy Spec-only exports deleted, Haddocks relocated, library compiles
+- [x] EP-3 (235) M2: test suite migrated off the retired exports while preserving the anti-fabrication proof
+- [x] EP-3 (235) M3: changelog Breaking Changes entry with both migration recipes; ADR-16 amendment
 - [ ] EP-4 (236) M1: baseline evidence and the `type-graph` benchmark group
 - [ ] EP-4 (236) M2: inert lazy `checkedTypeGraph` field on `CheckedService` (Eq/Show-invisible)
 - [ ] EP-4 (236) M3: check-pass threading (Validate/RouterSelection/ExplainBindings)
@@ -210,6 +210,12 @@ plan.
   freeze wrong behavior into the published contract, and EP-4's refactor becomes riskier once
   fingerprint-bearing outputs are frozen.
   Date: 2026-08-11
+- Decision: EP-3 retires all seven Spec-only planning and planning-backed check wrappers instead
+  of weakening exact-provenance requirements to repair them.
+  Rationale: No repository or registered dependent caller uses the wrappers; the indexed APIs are
+  already the production path; and accepting `CompatibilityLineOnly` anchors would contradict the
+  behavior-source ownership contract. The 0.12 major release is the safe removal boundary.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -227,5 +233,12 @@ general rule.
 EP-2 is complete. Catalog-bound read models now bind to one target by name, reject competing
 physical coordinates, and treat observation order as semantically inert. Their generated
 harnesses assert real catalog registrations and detect perturbed async identity. Corpus and
-full repository gates pass, and ADR-26 records the durable identity rule. EP-3 and EP-4 remain
-before the language-5 publication gate can move.
+full repository gates pass, and ADR-26 records the durable identity rule. At that checkpoint,
+EP-3 and EP-4 remained before the language-5 publication gate could move.
+
+EP-3 is complete. The seven unusable Spec-only planning and planning-backed check wrappers are
+removed, the anti-fabrication proof now exercises the behavior source-map join directly, and the
+changelog gives both parsed-source and programmatic-spec migration recipes. ADR-16 records
+indexed-only planning as durable API policy. Strict ADR validation and the complete repository
+gate pass with a byte-identical conformance corpus. EP-4 is the sole remaining child before the
+language-5 publication gate can move.

@@ -64,11 +64,15 @@ This section must always reflect the actual current state of the work.
       `planBehaviorSourceMap`-over-compatibility-index assertion, verified that no live Haskell
       reference remains, and passed both `cabal test keiro-dsl-test` and
       `cabal test keiro-dsl:tests`.
-- [ ] Milestone 3: add the Breaking Changes migration bullet to `keiro-dsl/CHANGELOG.md`
-      (Unreleased), amend `docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md`
-      to record indexed-only planning as API policy, update the MasterPlan 36 registry row
-      and progress line for EP-3, and run `just verify` to completion.
-- [ ] Write the Outcomes & Retrospective entry and perform the ADR distillation pass.
+- [x] (2026-08-12T03:01:29Z) Milestone 3 documentation: added the Breaking Changes migration
+      recipes to `keiro-dsl/CHANGELOG.md` and amended
+      `docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md` to record
+      indexed-only planning as API policy.
+- [x] (2026-08-12T03:10:59Z) Milestone 3 validation and bookkeeping: passed strict ADR-16
+      profile/log enforcement and `just verify`, then updated the MasterPlan 36 registry row and
+      all EP-3 progress lines.
+- [x] (2026-08-12T03:10:59Z) Wrote the Outcomes & Retrospective entry and completed the ADR
+      distillation pass by amending ADR-16.
 
 
 ## Surprises & Discoveries
@@ -156,7 +160,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The seven unusable Spec-only planning and check entry points are retired. The remaining public
+planning surface requires a caller-supplied `SemanticSourceIndex`, while the Spec-only module-set
+builders that make no provenance claim remain available. The test suite still proves that a
+compatibility line-only index cannot fabricate exact behavior columns by exercising the source-map
+join directly.
+
+The migration is documented for both parsed source documents and programmatically constructed
+specs. ADR-16 now records indexed-only planning as durable API policy, and the ADR bundle log
+records the amendment. `cabal build keiro-dsl`, the focused 695-example suite, every declared
+`keiro-dsl` suite, strict ADR validation, and `just verify` all pass. The conformance corpus remains
+byte-identical, so the retirement changed only the public surface and its negative proof, not
+indexed planning output.
 
 
 ## Context and Orientation
