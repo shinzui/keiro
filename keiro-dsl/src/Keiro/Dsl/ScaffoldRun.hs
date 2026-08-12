@@ -15,16 +15,10 @@ module Keiro.Dsl.ScaffoldRun
     scaffoldServiceModulesWithGoldens,
     scaffoldModules,
     scaffoldModulesWithGoldens,
-    planServiceScaffold,
-    planServiceScaffoldWithGoldens,
-    planServiceScaffoldWithRuntimePackage,
-    planServiceScaffoldWithRuntimePackageAndGoldens,
     planIndexedServiceScaffold,
     planIndexedServiceScaffoldWithGoldens,
     planIndexedServiceScaffoldWithRuntimePackage,
     planIndexedServiceScaffoldWithRuntimePackageAndGoldens,
-    planScaffold,
-    planScaffoldWithGoldens,
     executeServiceScaffold,
     executeServiceScaffoldWithRuntimePackage,
     executeServiceScaffoldWithRuntimePackageAndNameMigrations,
@@ -45,7 +39,6 @@ module Keiro.Dsl.ScaffoldRun
     -- $shared
     planningGatePipeline,
     planningRefusalDiagnostics,
-    checkServiceDiagnostics,
     checkIndexedServiceDiagnostics,
     inertNodesOf,
     renderInertNodeSection,
@@ -127,7 +120,7 @@ import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanc
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
-import Keiro.Dsl.SourceIndex (SemanticSourceIndex, compatibilitySemanticSourceIndex)
+import Keiro.Dsl.SourceIndex (SemanticSourceIndex)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
 import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
@@ -311,34 +304,18 @@ scaffoldModules = scaffoldModulesWithGoldens []
 scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
 scaffoldModulesWithGoldens goldens ctx = scaffoldServiceModulesWithGoldens goldens ctx . legacyCheckedService
 
--- | Run every pure refusal gate under the effective semantic contract.
-planServiceScaffold :: Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffold = planServiceScaffoldWithRuntimePackage Nothing
-
-planServiceScaffoldWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffoldWithGoldens goldens = planServiceScaffoldWithRuntimePackageAndGoldens goldens Nothing
-
--- | Add the one service-level conformance facade only when the runtime package
--- is explicitly configured. The package name itself is build metadata; facade
--- naming depends solely on the service context and placement policy.
-planServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffoldWithRuntimePackage = planServiceScaffoldWithRuntimePackageAndGoldens []
-
-planServiceScaffoldWithRuntimePackageAndGoldens :: [GoldenPayload] -> Maybe RuntimePackageName -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
-planServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage ctx service = do
-  sourceIndex <-
-    either
-      (\failure -> Left [LoweringRefusal ["semantic-only source-index construction failed: " <> T.pack (show failure)]])
-      Right
-      (compatibilitySemanticSourceIndex "<semantic-only>" (checkedSpec service))
-  planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens runtimePackage sourceIndex ctx service
-
+-- | Run every pure refusal gate under the effective semantic contract. A
+-- successful result is the exact write set; a refusal has no write set and
+-- therefore cannot be accidentally executed.
 planIndexedServiceScaffold :: SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
 planIndexedServiceScaffold = planIndexedServiceScaffoldWithRuntimePackage Nothing
 
 planIndexedServiceScaffoldWithGoldens :: [GoldenPayload] -> SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
 planIndexedServiceScaffoldWithGoldens goldens = planIndexedServiceScaffoldWithRuntimePackageAndGoldens goldens Nothing
 
+-- | Add the one service-level conformance facade only when the runtime package
+-- is explicitly configured. The package name itself is build metadata; facade
+-- naming depends solely on the service context and placement policy.
 planIndexedServiceScaffoldWithRuntimePackage :: Maybe RuntimePackageName -> SemanticSourceIndex -> Context -> CheckedService -> Either [Refusal] [ScaffoldModule]
 planIndexedServiceScaffoldWithRuntimePackage = planIndexedServiceScaffoldWithRuntimePackageAndGoldens []
 
@@ -430,21 +407,6 @@ renderInertNodeSection = \case
 -- deliberate exception: the workspace path already plans through it so the
 -- stronger whole-path collision can cite every claimant. Existing diagnostics
 -- retain their order and planning diagnostics follow them.
-checkServiceDiagnostics :: Maybe RuntimePackageName -> Context -> CheckedService -> [Diagnostic]
-checkServiceDiagnostics runtimePackage ctx service =
-  case compatibilitySemanticSourceIndex "<semantic-only>" (checkedSpec service) of
-    Left failure ->
-      validationDiagnostics
-        <> [ planningDiagnostic 1 GeneratedPlanningInvariantViolation ("semantic-only source-index construction failed: " <> T.pack (show failure))
-           | not (any blocksPlanning validationDiagnostics)
-           ]
-    Right sourceIndex -> checkIndexedServiceDiagnostics runtimePackage sourceIndex ctx service
-  where
-    validationDiagnostics = validateService service
-    blocksPlanning diagnostic = severity diagnostic == Error && code diagnostic /= GeneratedOccurrenceCollision
-    planningDiagnostic diagnosticLine diagnosticCode diagnosticMessage =
-      Diagnostic {line = diagnosticLine, severity = Error, code = diagnosticCode, relatedLocations = [], message = diagnosticMessage}
-
 checkIndexedServiceDiagnostics :: Maybe RuntimePackageName -> SemanticSourceIndex -> Context -> CheckedService -> [Diagnostic]
 checkIndexedServiceDiagnostics runtimePackage sourceIndex ctx service
   | any blocksPlanning validationDiagnostics = validationDiagnostics
@@ -554,14 +516,6 @@ originLine originText = do
   withoutClose <- T.stripSuffix ")" originText
   let (before, after) = T.breakOnEnd " (line " withoutClose
   if T.null before then Nothing else readMaybe (T.unpack after)
-
--- | Run every pure refusal gate. A successful result is the exact write set;
--- a refusal has no write set and therefore cannot be accidentally executed.
-planScaffold :: Context -> Spec -> Either [Refusal] [ScaffoldModule]
-planScaffold = planScaffoldWithGoldens []
-
-planScaffoldWithGoldens :: [GoldenPayload] -> Context -> Spec -> Either [Refusal] [ScaffoldModule]
-planScaffoldWithGoldens goldens ctx = planServiceScaffoldWithGoldens goldens ctx . legacyCheckedService
 
 -- | Every pure refusal gate, over an already-built module set: case-folded path
 -- collisions, generated\/consumer collisions and import cycles, firewall breaches,

@@ -55,10 +55,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: delete the seven legacy exports and their definitions from
-      `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`, relocate their still-true Haddock prose to
-      the indexed variants, and tighten the now-partial imports; `cabal build keiro-dsl`
-      compiles cleanly.
+- [x] (2026-08-12T02:49:06Z) Milestone 1: deleted the seven legacy exports and their definitions from
+      `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`, relocated their still-true Haddock prose to
+      the indexed variants, tightened the now-partial imports, and verified that
+      `cabal build keiro-dsl` compiles cleanly.
 - [ ] Milestone 2: remove the one remaining test reference (`keiro-dsl/test/Main.hs`
       import at line 73 and the guard assertion at lines 3069–3071), replacing the guard
       with a direct `planBehaviorSourceMap`-over-compatibility-index assertion;
