@@ -80,7 +80,7 @@ ADR applies.
 | 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | Complete |
 | 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | Complete |
 | 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | Complete |
-| 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | Not Started |
+| 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -148,7 +148,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 (235) M1: seven legacy Spec-only exports deleted, Haddocks relocated, library compiles
 - [x] EP-3 (235) M2: test suite migrated off the retired exports while preserving the anti-fabrication proof
 - [x] EP-3 (235) M3: changelog Breaking Changes entry with both migration recipes; ADR-16 amendment
-- [ ] EP-4 (236) M1: baseline evidence and the `type-graph` benchmark group
+- [x] EP-4 (236) M1: baseline evidence and the `type-graph` benchmark group
 - [ ] EP-4 (236) M2: inert lazy `checkedTypeGraph` field on `CheckedService` (Eq/Show-invisible)
 - [ ] EP-4 (236) M3: check-pass threading (Validate/RouterSelection/ExplainBindings)
 - [ ] EP-4 (236) M4: scaffold-run threading plus the workspace double-construction hoist

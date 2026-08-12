@@ -12,6 +12,7 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (ParsedSource (..))
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
 import Keiro.Dsl.Scaffold (ScaffoldModule, defaultContext, firewallBreaches, modulePath, moduleText, scaffoldAggregateForService)
+import Keiro.Dsl.ScaffoldRun (scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract (checkedSource)
 import Keiro.Dsl.Syntax (SurfaceSource)
 import Keiro.Dsl.Validate (validateService)
@@ -42,10 +43,17 @@ data OutcomeFixture = OutcomeFixture
     fixtureOutcomeSource :: !Text
   }
 
+data TypeGraphFixture = TypeGraphFixture
+  { fixtureMappedCount :: !Int,
+    fixtureRouterCount :: !Int,
+    fixtureTypeGraphParsed :: !ParsedSource
+  }
+
 main :: IO ()
 main = do
   let sourceFixtures = map (uncurry sourceFixture) sourceShapes
       outcomeFixtures = map outcomeFixture outcomeShapes
+      typeGraphFixtures = map (uncurry typeGraphFixture) typeGraphShapes
       workspaceFixtures =
         [ workspaceFixture memberCount aggregateCount transitionsPerAggregate
         | (memberCount, aggregateCount, transitionsPerAggregate) <- workspaceShapes
@@ -53,9 +61,9 @@ main = do
   -- Build and force immutable inputs directly before registering benchmarks.
   -- tasty-bench's env accessor is deliberately unnecessary here and would
   -- reintroduce a lazy resource thunk around these already prepared values.
-  forceFixtures sourceFixtures workspaceFixtures outcomeFixtures
-  preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures
-  defaultMain (benchmarks sourceFixtures workspaceFixtures outcomeFixtures)
+  forceFixtures sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures
+  preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures
+  defaultMain (benchmarks sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures)
 
 sourceShapes :: [(Int, Int)]
 sourceShapes = [(8, 4), (8, 8), (8, 16), (8, 32)]
@@ -66,17 +74,22 @@ workspaceShapes = [(1, 8, 16), (2, 8, 16), (4, 8, 16), (8, 8, 16)]
 outcomeShapes :: [Int]
 outcomeShapes = [8, 32, 128, 512]
 
-forceFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> IO ()
-forceFixtures sourceFixtures workspaceFixtures outcomeFixtures = do
+typeGraphShapes :: [(Int, Int)]
+typeGraphShapes = [(16, 2), (32, 4), (64, 8), (64, 16)]
+
+forceFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> [TypeGraphFixture] -> IO ()
+forceFixtures sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures = do
   forM_ sourceFixtures $ \SourceFixture {fixtureSource} ->
     evaluate (force fixtureSource)
   forM_ workspaceFixtures $ \WorkspaceFixture {fixtureContents} ->
     evaluate (force fixtureContents)
   forM_ outcomeFixtures $ \OutcomeFixture {fixtureOutcomeSource} ->
     evaluate (force fixtureOutcomeSource)
+  forM_ typeGraphFixtures $ \TypeGraphFixture {fixtureTypeGraphParsed} ->
+    evaluate fixtureTypeGraphParsed
 
-preflightFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> IO ()
-preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures = do
+preflightFixtures :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> [TypeGraphFixture] -> IO ()
+preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures = do
   forM_ sourceFixtures $ \fixture@SourceFixture {fixtureSource} -> do
     _ <- evaluate (parseSurfaceOrFail (sourcePath fixture) fixtureSource)
     _ <- evaluate (parseCompatibilityOrFail (sourcePath fixture) fixtureSource)
@@ -106,9 +119,13 @@ preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures = do
             <> " -> "
             <> show largerBytes
         )
+  forM_ typeGraphFixtures $ \fixture -> do
+    _ <- evaluate (checkTypeGraphOrFail fixture)
+    _ <- evaluate (scaffoldTypeGraphBytes fixture)
+    pure ()
 
-benchmarks :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> [Benchmark]
-benchmarks sourceFixtures workspaceFixtures outcomeFixtures =
+benchmarks :: [SourceFixture] -> [WorkspaceFixture] -> [OutcomeFixture] -> [TypeGraphFixture] -> [Benchmark]
+benchmarks sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixtures =
   -- Weak-head evaluation is sufficient: producing the outer Right requires
   -- each Megaparsec route to consume its explicit eof, and loadWorkspace does
   -- all member reads, parses, and composition before returning its Either.
@@ -120,6 +137,11 @@ benchmarks sourceFixtures workspaceFixtures outcomeFixtures =
       "domain-outcomes"
       [ bgroup "check" (map outcomeCheckBenchmark outcomeFixtures),
         bgroup "generate" (map outcomeGenerationBenchmark outcomeFixtures)
+      ],
+    bgroup
+      "type-graph"
+      [ bgroup "service-check" (map typeGraphCheckBenchmark typeGraphFixtures),
+        bgroup "service-scaffold-plan" (map typeGraphScaffoldBenchmark typeGraphFixtures)
       ]
   ]
 
@@ -154,6 +176,14 @@ outcomeCheckBenchmark fixture =
 outcomeGenerationBenchmark :: OutcomeFixture -> Benchmark
 outcomeGenerationBenchmark fixture =
   bench (outcomeLabel fixture) $ whnf generateOutcomeBytesOrFail fixture
+
+typeGraphCheckBenchmark :: TypeGraphFixture -> Benchmark
+typeGraphCheckBenchmark fixture =
+  bench (typeGraphLabel fixture) $ whnf checkTypeGraphOrFail fixture
+
+typeGraphScaffoldBenchmark :: TypeGraphFixture -> Benchmark
+typeGraphScaffoldBenchmark fixture =
+  bench (typeGraphLabel fixture) $ whnf scaffoldTypeGraphBytes fixture
 
 sourceFixture :: Int -> Int -> SourceFixture
 sourceFixture fixtureAggregateCount fixtureTransitionsPerAggregate =
@@ -322,6 +352,198 @@ outcomeEventStreamOrFail modules =
        ] of
     [eventStream] -> eventStream
     eventStreams -> error ("outcome benchmark expected one event-stream module, got " <> show (length eventStreams))
+
+typeGraphFixture :: Int -> Int -> TypeGraphFixture
+typeGraphFixture fixtureMappedCount fixtureRouterCount =
+  TypeGraphFixture
+    { fixtureMappedCount,
+      fixtureRouterCount,
+      fixtureTypeGraphParsed =
+        parseCompatibilityOrFail
+          ("type-graph-" <> show fixtureMappedCount <> "-" <> show fixtureRouterCount <> ".keiro")
+          (typeGraphSpecification fixtureMappedCount fixtureRouterCount)
+    }
+
+typeGraphLabel :: TypeGraphFixture -> String
+typeGraphLabel TypeGraphFixture {fixtureMappedCount, fixtureRouterCount} =
+  "m" <> show fixtureMappedCount <> "-r" <> show fixtureRouterCount
+
+checkTypeGraphOrFail :: TypeGraphFixture -> Int
+checkTypeGraphOrFail fixture@TypeGraphFixture {fixtureTypeGraphParsed} =
+  case validateService (checkedSource fixtureTypeGraphParsed) of
+    [] -> fixtureMappedCount fixture + fixtureRouterCount fixture
+    diagnostics -> error ("type-graph benchmark validation failed: " <> show diagnostics)
+
+scaffoldTypeGraphBytes :: TypeGraphFixture -> Int
+scaffoldTypeGraphBytes TypeGraphFixture {fixtureTypeGraphParsed} =
+  let spec = parsedSpec fixtureTypeGraphParsed
+      service = checkedSource fixtureTypeGraphParsed
+   in sum
+        ( map
+            (T.length . moduleText)
+            (scaffoldServiceModules (defaultContext (specContext spec)) service)
+        )
+
+typeGraphSpecification :: Int -> Int -> Text
+typeGraphSpecification mappedCount routerCount
+  | mappedCount < 2 = error "type-graph fixture needs at least two mapped declarations"
+  | routerCount < 1 = error "type-graph fixture needs at least one router"
+  | otherwise =
+      T.unlines
+        [ "language keiro-dsl 5",
+          "context type-graph-bench",
+          ""
+        ]
+        <> T.concat (map chainedMappedDefinition [0 .. mappedCount - 3])
+        <> routeInputDefinition
+        <> routeRowDefinition
+        <> typeGraphServiceDefinition
+        <> T.concat (map routerDefinition [0 .. routerCount - 1])
+
+chainedMappedDefinition :: Int -> Text
+chainedMappedDefinition index =
+  T.unlines
+    [ "mapped structural record " <> typeName <> " {",
+      "  haskell package=keiro-dsl module=Benchmark.TypeGraph.Domain type=" <> typeName,
+      "  binding = \"Benchmark.TypeGraph.Bindings." <> lowerName <> "Binding\"",
+      "  binding-version = \"1\"",
+      "  canonical-type = \"benchmark.type-graph." <> typeName <> ".v1\"",
+      "  fixtures = \"Benchmark.TypeGraph.Bindings." <> lowerName <> "Cases\"",
+      "  wire object constructor=" <> typeName <> " unknown-fields=reject {",
+      "    value as \"value\" : " <> fieldType <> " required",
+      "  }",
+      "}",
+      ""
+    ]
+  where
+    typeName = "BenchMapped" <> paddedDecimal index
+    lowerName = "benchMapped" <> paddedDecimal index
+    fieldType
+      | index == 0 = "Text"
+      | otherwise = "BenchMapped" <> paddedDecimal (index - 1)
+
+routeInputDefinition :: Text
+routeInputDefinition =
+  T.unlines
+    [ "mapped structural record BenchRouteInput {",
+      "  haskell package=keiro-dsl module=Benchmark.TypeGraph.Domain type=BenchRouteInput",
+      "  binding = \"Benchmark.TypeGraph.Bindings.benchRouteInputBinding\"",
+      "  binding-version = \"1\"",
+      "  canonical-type = \"benchmark.type-graph.BenchRouteInput.v1\"",
+      "  fixtures = \"Benchmark.TypeGraph.Bindings.benchRouteInputCases\"",
+      "  wire object constructor=BenchRouteInput unknown-fields=reject {",
+      "    transferNeedId as \"transfer_need_id\" : Text required",
+      "    region as \"region\" : Text required",
+      "  }",
+      "}",
+      ""
+    ]
+
+routeRowDefinition :: Text
+routeRowDefinition =
+  T.unlines
+    [ "mapped structural record BenchRouteRow {",
+      "  haskell package=keiro-dsl module=Benchmark.TypeGraph.Domain type=BenchRouteRow",
+      "  binding = \"Benchmark.TypeGraph.Bindings.benchRouteRowBinding\"",
+      "  binding-version = \"1\"",
+      "  canonical-type = \"benchmark.type-graph.BenchRouteRow.v1\"",
+      "  fixtures = \"Benchmark.TypeGraph.Bindings.benchRouteRowCases\"",
+      "  wire object constructor=BenchRouteRow unknown-fields=reject {",
+      "    hospitalId as \"hospital_id\" : Text required",
+      "    region as \"region\" : Text required",
+      "    availableBeds as \"available_beds\" : Int required",
+      "  }",
+      "}",
+      ""
+    ]
+
+typeGraphServiceDefinition :: Text
+typeGraphServiceDefinition =
+  T.unlines
+    [ "target bench_route_table {",
+      "  schema = \"public\"",
+      "  table = \"bench_route\"",
+      "  reset = clear",
+      "}",
+      "",
+      "rebuild-group reporting {",
+      "  targets = [ bench_route_table ]",
+      "  order = [ bench_route_table ]",
+      "}",
+      "",
+      "projection-owner bench_route_writer {",
+      "  source = category \"benchRoute\"",
+      "  feed = subscription",
+      "  group = reporting",
+      "  targets = [ bench_route_table ]",
+      "  order = 10",
+      "  subscription = \"type-graph-bench-route\"",
+      "  dedup = \"type-graph-bench-route-v1\"",
+      "  checkpoint-on-missing = fail",
+      "  replay = explicit",
+      "}",
+      "",
+      "readmodel bench_route {",
+      "  columns {}",
+      "  query input = BenchRouteInput",
+      "  query result = List BenchRouteRow",
+      "  version = 1",
+      "  shape = \"fnv1a:3c07a19c552c3547\"",
+      "  consistency = Eventual",
+      "  feed = subscription",
+      "  group = reporting",
+      "  targets = [ bench_route_table ]",
+      "}",
+      "",
+      "aggregate BenchHospital",
+      "  regs",
+      "    routed Bool = False",
+      "  states Open Routed!",
+      "",
+      "  command RouteAcceptedTransferNeed { transferNeedId:Text hospitalId:Text }",
+      "  event TransferNeedRouted = fields(RouteAcceptedTransferNeed)",
+      "",
+      "  Open -- RouteAcceptedTransferNeed --> write routed := true ; emit TransferNeedRouted ; goto Routed",
+      "",
+      "  wire kind=ctorName fields=camelCase schemaVersion=1",
+      ""
+    ]
+
+routerDefinition :: Int -> Text
+routerDefinition index =
+  T.unlines
+    [ "router BenchRouter" <> suffix,
+      "  name \"bench-router-" <> suffix <> "\"",
+      "  input AcceptedHospitalTransferNeed" <> suffix <> " : BenchRouteInput",
+      "  key input.transferNeedId",
+      "  resolve declarative {",
+      "    identity = \"bench-route-selection-" <> suffix <> "\"",
+      "    version = 1",
+      "    query = read-model bench_route with input",
+      "    where = row.region == input.region && row.availableBeds > 0",
+      "    recipient = row.hospitalId",
+      "    order = target-stream",
+      "    dedupe = target-stream",
+      "    max-recipients = 64",
+      "    empty => ack",
+      "    failure => retry",
+      "    redelivery = stable-union",
+      "    partial = retain-successes",
+      "  }",
+      "  target BenchHospital",
+      "  projections []",
+      "  dispatch-each RouteAcceptedTransferNeed {",
+      "    transferNeedId=input.transferNeedId",
+      "    hospitalId=row.hospitalId",
+      "  }",
+      "    on-appended AckOk ; on-duplicate Retry ; on-failed Retry",
+      "  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)",
+      "  rejected => halt",
+      "  poison => halt",
+      ""
+    ]
+  where
+    suffix = paddedDecimal index
 
 workspaceFixture :: Int -> Int -> Int -> WorkspaceFixture
 workspaceFixture memberCount aggregateCount transitionsPerAggregate

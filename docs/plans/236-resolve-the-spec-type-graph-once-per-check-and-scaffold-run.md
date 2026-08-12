@@ -49,9 +49,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Confirm plan 234 status; regenerate and reconcile the resolveTypeGraph call-site inventory against the tree at implementation time.
-- [ ] M1: Add the `type-graph` fixture generator and `service-check` / `service-scaffold-plan` benchmark groups to `keiro-dsl/bench/parser-scaling/Main.hs`.
-- [ ] M1: Record baseline benchmark timings and a baseline trace count in Surprises & Discoveries.
+- [x] M1: Confirm plan 234 status; regenerate and reconcile the resolveTypeGraph call-site inventory against the tree at implementation time.
+- [x] M1: Add the `type-graph` fixture generator and `service-check` / `service-scaffold-plan` benchmark groups to `keiro-dsl/bench/parser-scaling/Main.hs`.
+- [x] M1: Record baseline benchmark timings and a baseline trace count in Surprises & Discoveries.
 - [ ] M2: Add the lazy `checkedTypeGraph` field to `CheckedService` with hand-written Eq/Show; update all direct construction sites.
 - [ ] M2: Full suite green, corpus zero drift with the field present but unconsumed.
 - [ ] M3: Thread the shared graph through the check pass (Validate.hs, RouterSelection.hs, ExplainBindings.hs, Coverage path).
@@ -68,9 +68,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. Record the M1 baseline numbers here: benchmark timings per fixture shape, and the
-trace-count observed for one `check` and one `scaffold` of
-`keiro-dsl/test/fixtures/declarative-router/valid.keiro`.)
+- M1 baseline (2026-08-12, GHC 9.12.4, `-O1`): the committed `type-graph`
+  benchmark measured `service-check` at m16-r2 160 us +/- 16 us, m32-r4 367 us
+  +/- 33 us, m64-r8 1.19 ms +/- 108 us, and m64-r16 1.33 ms +/- 132 us.
+  `service-scaffold-plan` measured m16-r2 5.03 ms +/- 415 us, m32-r4 24.2 ms
+  +/- 2.1 ms, m64-r8 166 ms +/- 15 ms, and m64-r16 307 ms +/- 18 ms. The
+  temporary `Debug.Trace` counter on the shipped declarative-router fixture observed 34
+  resolutions for one `check` and 46 for one `scaffold`; the trace patch was removed
+  immediately after measurement.
+- The reconciled post-plan-234 inventory retained every expected Class A/B/C site and added
+  no new `resolveTypeGraph` consumer. Plan 235 had removed only the forecast Spec-only
+  planning wrappers, so it reduced entry-point surface without changing the hot call graph.
 
 
 ## Decision Log
@@ -128,6 +136,11 @@ Record every decision made while working on the plan.
   iteration one and measure nothing on later iterations, making before/after numbers
   incomparable.
   Date: 2026-08-11.
+- Decision: Plan 234 was Complete before implementation began, and the regenerated call-site
+  inventory matched this plan's classification after accounting for shifted line numbers.
+  Therefore EP-4 can follow the planned service-sharing seam without any diagnostic-code or
+  catalog-binding coordination change.
+  Date: 2026-08-12.
 
 
 ## Outcomes & Retrospective
