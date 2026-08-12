@@ -79,10 +79,10 @@ here, even if it requires splitting a partially completed task into two ("done" 
 - [x] M1 (prototyping): reproduce both defects with concrete fixtures; validate the
       canonical encoder and the slice-scoped lifecycle joins against the real schema;
       record evidence in Surprises & Discoveries. Completed 2026-08-12T11:04:39Z.
-- [ ] M2: `Keiro.Projection.Catalog.Preimage` canonical encoder; v2 catalog
+- [x] M2: `Keiro.Projection.Catalog.Preimage` canonical encoder; v2 catalog
       fingerprint; new `GroupSliceFingerprint`; pure regression tests (collision
       fixtures now distinct, order-insensitivity retained, slice stability under
-      additive change).
+      additive change). Completed 2026-08-12T11:11:51Z.
 - [ ] M3: migration `0024` (rename `catalog_fingerprint` → `slice_fingerprint` on
       groups; add `group_slice_fingerprint` to runs); regenerate expected schema;
       convert registration, begin, resume, finish, abandon, fence-lifecycle and
@@ -116,6 +116,13 @@ implementation. Provide concise evidence.
   snapshot are the only schema definitions. The DB-backed probe additionally
   proved that `beginGroupRebuild` reaches the stored-fingerprint refusal before
   any target-table preparation after registration drift.
+- The canonical tree needed byte lengths, not character counts: the installed
+  `bytestring` builder exposes strict-byte payload builders and decimal integer
+  builders, while `cryptohash-sha256` hashes a strict `ByteString`. The promoted
+  implementation encodes `Text` to UTF-8 once per payload, prefixes its strict
+  byte length, and hashes the strict builder result. The full `keiro-test` suite
+  passed with `473 examples, 0 failures`, including seven permanent preimage and
+  slice regressions.
 
 
 ## Decision Log

@@ -152,7 +152,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [x] EP-1 (237) M1: prototyping — both defects reproduced, encoder injectivity and lifecycle-join map validated against the real schema (2026-08-12T11:04:39Z)
-- [ ] EP-1 (237) M2: pure canonical encoding (`Keiro.Projection.Catalog.Preimage`, `catalog-v2:`/`contract-v2:`) with the two collision fixtures as regressions
+- [x] EP-1 (237) M2: pure canonical encoding (`Keiro.Projection.Catalog.Preimage`, `catalog-v2:`/`slice-v1:`) with the two collision fixtures as regressions (2026-08-12T11:11:51Z)
 - [ ] EP-1 (237) M3: slice-scoped group identity (`slice-v1:`, migration 0024) — additive catalog changes register cleanly, changed/stale slices refused with typed errors
 - [ ] EP-1 (237) M4: transactional `previewCatalogAdoption`/`adoptCatalogGroups` library API
 - [ ] EP-1 (237) M5: `keiro-ops rebuild adopt` with preview-then---force
@@ -202,6 +202,10 @@ interactions between child plans. Provide concise evidence.
   Two review details corrected: `keiro/src/Keiro/Projection.hs:288` duplicates the
   catalog-fence callback pair, not a fifth retry loop; and the second amplification site is
   the quadratic `eventConsumed`/`completedSources` rescan inside `applyChunkTx`.
+- EP-1 M2 implementation (2026-08-12): the aggregate checklist mislabeled
+  `contract-v2:` as an M2 output. The child plan correctly assigns the rebuild
+  contract switch to M3, where its persisted run schema and epoch joins change;
+  the checklist now names M2's actual `slice-v1:` output.
 
 
 ## Decision Log

@@ -89,6 +89,8 @@ module Keiro.Projection.Catalog
     InventoryHandler (..),
     CatalogFingerprint,
     catalogFingerprintText,
+    GroupSliceFingerprint,
+    groupSliceFingerprintText,
     CatalogEvolution (..),
     CatalogRegistration (..),
     AsyncProjectionRegistration (..),
@@ -104,6 +106,7 @@ module Keiro.Projection.Catalog
     asyncProjectionRebuildGroup,
     catalogInventory,
     catalogFingerprint,
+    groupSliceFingerprint,
     catalogRegistrations,
     asyncProjectionRegistrations,
     replayAdapterMetadata,
@@ -125,19 +128,18 @@ module Keiro.Projection.Catalog
   )
 where
 
-import Crypto.Hash.SHA256 qualified as SHA256
-import Data.ByteString.Base16 qualified as Base16
 import Data.Graph (SCC (..), stronglyConnComp)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
 import Hasql.Transaction qualified as Tx
 import Keiro.Codec (Codec (..), decodeRecorded)
 import Keiro.Prelude
+import Keiro.Projection.Catalog.Preimage (Preimage (..), hashPreimage)
 import Keiro.Projection.Types (AsyncProjection, InlineProjection)
 import Keiro.ReadModel (ReadModel)
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
@@ -623,6 +625,13 @@ newtype CatalogFingerprint = CatalogFingerprint Text
 catalogFingerprintText :: CatalogFingerprint -> Text
 catalogFingerprintText (CatalogFingerprint value) = value
 
+-- | Identity of the catalog facts owned by one rebuild group.
+newtype GroupSliceFingerprint = GroupSliceFingerprint Text
+  deriving stock (Eq, Ord, Show, Generic)
+
+groupSliceFingerprintText :: GroupSliceFingerprint -> Text
+groupSliceFingerprintText (GroupSliceFingerprint value) = value
+
 data ValidatedProjectionCatalog = ValidatedProjectionCatalog
   { originalCatalog :: !ProjectionCatalog,
     validatedInventory :: !CatalogInventory,
@@ -885,6 +894,62 @@ catalogInventory = validatedInventory
 
 catalogFingerprint :: ValidatedProjectionCatalog -> CatalogFingerprint
 catalogFingerprint = validatedFingerprint
+
+-- | Fingerprint the catalog facts that preparation, replay, promotion, and
+-- query transitions for one rebuild group depend on. Unrelated catalog slices
+-- do not affect this identity.
+groupSliceFingerprint ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  Maybe GroupSliceFingerprint
+groupSliceFingerprint validated wantedGroup = do
+  group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
+  pure
+    . GroupSliceFingerprint
+    . hashPreimage "slice-v1"
+    $ PRecord
+      "keiro/catalog-group-slice/v1"
+      [ PText (rebuildGroupIdText wantedGroup),
+        groupPreimage group,
+        PList (targetPreimage <$> targets),
+        PList (projectionPreimage <$> projections),
+        PList (sourcePreimage <$> sources),
+        PList (queryPreimage <$> queries),
+        PList (subscriptionPreimage <$> subscriptions),
+        PList (dedupPreimage <$> dedupKeys)
+      ]
+  where
+    inventory = catalogInventory validated
+    groupTargets = maybe [] (^. #orderedTargets) $ List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
+    targets =
+      mapMaybe
+        (\wanted -> List.find ((== wanted) . (^. #targetId)) (inventory ^. #inventoryTargets))
+        groupTargets
+    projections =
+      filter
+        ((== wantedGroup) . (^. #rebuildGroupId))
+        (inventory ^. #inventoryProjections)
+    sourceIds = Set.fromList (map (^. #sourceId) projections)
+    sources = filter ((`Set.member` sourceIds) . (^. #sourceId)) (inventory ^. #inventorySources)
+    queries =
+      filter
+        ((== wantedGroup) . (^. #rebuildGroupId))
+        (inventory ^. #inventoryQueryModels)
+    asyncHandlers =
+      [ (subscriptionId, dedupId)
+      | projection <- projections,
+        InventoryAsyncHandler _ subscriptionId dedupId <- projection ^. #handlers
+      ]
+    subscriptionIds = Set.fromList (map fst asyncHandlers)
+    dedupIds = Set.fromList (map snd asyncHandlers)
+    subscriptions =
+      filter
+        ((`Set.member` subscriptionIds) . (^. #subscriptionId))
+        (inventory ^. #inventorySubscriptions)
+    dedupKeys =
+      filter
+        ((`Set.member` dedupIds) . (^. #dedupKeyId))
+        (inventory ^. #inventoryDedupKeys)
 
 catalogRegistrations :: ValidatedProjectionCatalog -> [CatalogRegistration]
 catalogRegistrations validated =
@@ -1510,14 +1575,109 @@ inventoryHandler (AsyncFacts name _ _ subscriptionId dedupId _) =
   InventoryAsyncHandler name subscriptionId dedupId
 
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory =
-  CatalogFingerprint
-    . Text.decodeUtf8
-    . Base16.encode
-    . SHA256.hash
-    . Text.encodeUtf8
-    . renderInventory
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v2" . inventoryPreimage
 
+inventoryPreimage :: CatalogInventory -> Preimage
+inventoryPreimage inventory =
+  PRecord
+    "keiro/catalog-inventory/v2"
+    [ PList (sourcePreimage <$> inventory ^. #inventorySources),
+      PList (targetPreimage <$> inventory ^. #inventoryTargets),
+      PList (groupPreimage <$> inventory ^. #inventoryGroups),
+      PList (projectionPreimage <$> inventory ^. #inventoryProjections),
+      PList (queryPreimage <$> inventory ^. #inventoryQueryModels),
+      PList (subscriptionPreimage <$> inventory ^. #inventorySubscriptions),
+      PList (dedupPreimage <$> inventory ^. #inventoryDedupKeys)
+    ]
+
+sourcePreimage :: InventorySource -> Preimage
+sourcePreimage source =
+  PRecord
+    "source"
+    [ PText (sourceIdText (source ^. #sourceId)),
+      PText (renderScope (source ^. #sourceScope)),
+      PText (source ^. #codecFingerprint)
+    ]
+
+targetPreimage :: InventoryTarget -> Preimage
+targetPreimage target =
+  PRecord
+    "target"
+    [ PText (targetIdText (target ^. #targetId)),
+      PText (target ^. #qualifiedTable . #schemaName),
+      PText (target ^. #qualifiedTable . #tableName),
+      PText (renderReset (target ^. #resetPolicy)),
+      PList (PText . targetIdText <$> target ^. #dependsOn),
+      PText (projectionIdText (target ^. #owner))
+    ]
+
+groupPreimage :: InventoryGroup -> Preimage
+groupPreimage group =
+  PRecord
+    "group"
+    [ PText (rebuildGroupIdText (group ^. #rebuildGroupId)),
+      PList (PText . targetIdText <$> group ^. #orderedTargets),
+      PList
+        [ PRecord "verification" [PText verificationId, PText verificationVersion]
+        | (verificationId, verificationVersion) <- group ^. #verifications
+        ]
+    ]
+
+projectionPreimage :: InventoryProjection -> Preimage
+projectionPreimage projection =
+  PRecord
+    "projection"
+    [ PText (projectionIdText (projection ^. #projectionId)),
+      PText (sourceIdText (projection ^. #sourceId)),
+      PText (rebuildGroupIdText (projection ^. #rebuildGroupId)),
+      PList (PText . targetIdText <$> projection ^. #ownedTargets),
+      PText (projection ^. #replayDisposition),
+      PList (handlerPreimage <$> projection ^. #handlers)
+    ]
+
+handlerPreimage :: InventoryHandler -> Preimage
+handlerPreimage = \case
+  InventoryInlineHandler name -> PRecord "inline" [PText name]
+  InventoryAsyncHandler name subscriptionId dedupId ->
+    PRecord
+      "async"
+      [ PText name,
+        PText (subscriptionIdText subscriptionId),
+        PText (dedupKeyIdText dedupId)
+      ]
+
+queryPreimage :: InventoryQueryModel -> Preimage
+queryPreimage query =
+  PRecord
+    "query"
+    [ PText (queryModelIdText (query ^. #queryModelId)),
+      PText (query ^. #registryName),
+      PText (Text.pack (show (query ^. #version))),
+      PText (query ^. #shapeHash),
+      PText (rebuildGroupIdText (query ^. #rebuildGroupId)),
+      PList (PText . targetIdText <$> query ^. #observedTargets)
+    ]
+
+subscriptionPreimage :: InventorySubscription -> Preimage
+subscriptionPreimage subscription =
+  PRecord
+    "subscription"
+    [ PText (subscriptionIdText (subscription ^. #subscriptionId)),
+      PText (subscription ^. #subscriptionName),
+      PText (sourceIdText (subscription ^. #sourceId)),
+      PText (missingCheckpointPolicyText (subscription ^. #checkpointOnMissing))
+    ]
+
+dedupPreimage :: InventoryDedupKey -> Preimage
+dedupPreimage key =
+  PRecord
+    "dedup"
+    [ PText (dedupKeyIdText (key ^. #dedupKeyId)),
+      PText (key ^. #dedupName)
+    ]
+
+-- | Render the inventory for operators. This human-readable text is not the
+-- fingerprint preimage; identity uses the canonical tree encoding above.
 renderInventory :: CatalogInventory -> Text
 renderInventory inventory =
   Text.unlines

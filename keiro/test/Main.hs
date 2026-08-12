@@ -3,7 +3,6 @@ module Main
   )
 where
 
-import CanonicalPreimageProbeSpec qualified
 import CatalogOperationsSpec qualified
 import CatalogSpec qualified
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
@@ -374,6 +373,7 @@ import OpenTelemetry.Trace.Core
     SpanKind,
     getSpanContext,
   )
+import PreimageSpec qualified
 import ProjectionReplaySpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
@@ -390,7 +390,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogSpec.spec
-  CanonicalPreimageProbeSpec.spec fixture
+  PreimageSpec.spec
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   ProjectionReplaySpec.spec fixture

@@ -159,10 +159,10 @@ test-suite keiro-test
   hs-source-dirs: test
   main-is:        Main.hs
   other-modules:
-    CanonicalPreimageProbeSpec
     CatalogOperationsSpec
     CatalogSpec
     GroupRebuildSpec
+    PreimageSpec
     ProjectionReplaySpec
 
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
