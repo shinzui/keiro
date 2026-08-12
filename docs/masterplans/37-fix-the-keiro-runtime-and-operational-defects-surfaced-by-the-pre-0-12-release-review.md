@@ -161,6 +161,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test (2026-08-12T17:00:29Z)
 - [x] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test (2026-08-12T17:03:19Z)
 - [x] EP-2 (238) M4: api-reference/CHANGELOG updates, ADR 0033 plus ADR 0028 amendment, and full `just verify` (2026-08-12T17:15:51Z)
+- [x] EP-2 (238) post-completion: adopt Kiroku 0.6's public visible-head effect and transactional statement, remove duplicate SQL, and advance workspace bounds (2026-08-12T18:51:10Z)
+- [x] EP-2 (238) post-completion: focused read-model regressions and full `just verify` pass against Kiroku 0.6.0.0 (2026-08-12T19:08:43Z)
 - [x] EP-3 (239) M1: cancel takes the per-step lock, suspend re-check consults awakeable status; both-order interleaving tests (2026-08-12T18:10:51Z)
 - [x] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test (2026-08-12T18:20:18Z)
 - [x] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests (2026-08-12T18:23:05Z)
@@ -216,6 +218,10 @@ interactions between child plans. Provide concise evidence.
   preserved it as stale evidence; the new supported adoption preview classified it,
   `rebuild adopt --force` reconciled it, and the full `just verify` then passed.
   This exercised the documented unreleased-snapshot cutover without direct SQL.
+- EP-2 post-completion (2026-08-12): Kiroku published 0.6.0.0 with the public
+  visible-global-head effect and transaction-composable statement requested by this
+  work. Hackage, upstream tag `kiroku-store-v0.6.0.0`, and Mori-located source agree;
+  Keiro now delegates both call sites and requires `kiroku-store >=0.6 && <0.7`.
 
 
 ## Decision Log
@@ -267,7 +273,8 @@ reachable wait target, while genuinely behind subscriptions retain the honest ti
 path. Projection distance uses the same visible basis and `keiro-ops` reports both the
 authoritative append counter and visible head. The workflow-GC, timeout, telemetry, and
 operator divergence regressions pass; ADR 0033 and the ADR 0028 amendment preserve the
-contract, and full repository verification passed.
+contract. Kiroku 0.6 now owns the visible-head effect and transaction-composable SQL,
+so Keiro carries no duplicate schema query; full repository verification passed.
 
 EP-3 is complete. Awakeable cancellation, signal delivery, and suspension now
 share one per-step serialization discipline, and suspend arbitration consults
@@ -285,6 +292,7 @@ EP-3 removes the workflow-stranding race and non-terminating drain contract.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
 and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
-reachable consistency targets in ADR 0033 and amended ADR 0028; completed EP-3 and
+reachable consistency targets in ADR 0033, amended ADR 0028, and adopted Kiroku 0.6's
+public visible-head API; completed EP-3 and
 amended ADRs 0023 and 0025 with wake arbitration and bounded-drain progress; left
 EP-4 through EP-6 eligible for subsequent execution.

@@ -29,10 +29,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   snapshot, and behavior-key identities remain stable.
 - **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
   **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
-  `kiroku-store >=0.5 && <0.6`. Kiroku 0.5 adds explicit missing-checkpoint
+  `kiroku-store >=0.6 && <0.7`. Kiroku 0.5 adds explicit missing-checkpoint
   policy and the public transaction-composable checkpoint reset operation;
-  exhaustive third-party interpreters and direct constructors must adopt the
-  corresponding API changes.
+  Kiroku 0.6 adds the public visible-global-head query used by consistency
+  waits. Exhaustive third-party interpreters and direct constructors must adopt
+  both effect-surface changes.
 - **keiro-dsl**: candidate language 5 extends the exported semantic graph with
   projection target, rebuild group, and projection owner nodes and adds catalog
   bindings to `ReadModelNode`. `DiagnosticCode` gains the corresponding

@@ -42,14 +42,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   `rejected`, and `no_op`. Application payloads never become telemetry labels
   or error descriptions.
 - `subscriptionPositionFromInventory` derives a subscription's durable floor
-  across all matching consumer-group members. `readSubscriptionPosition` and
-  `storeHeadPosition` now consume Kiroku's public one-statement checkpoint
-  inventory instead of querying the owned table or inferring the head from a
-  visible event.
+  across all matching consumer-group members, and `readSubscriptionPosition`
+  consumes Kiroku's public one-statement checkpoint inventory instead of
+  querying the owned table. `storeHeadPosition` delegates to Kiroku 0.6's
+  public payload-free visible-global-head effect; transactional rebuild
+  completion uses its matching public statement.
 - `recordProjectionGlobalPositionDistance` records the preferred
   `keiro.projection.global_position_distance` gauge and the deprecated
-  compatibility `keiro.projection.lag` gauge from the same inventory snapshot.
-  Both use `{position}` and neither claims to count relevant events.
+  compatibility `keiro.projection.lag` gauge from the visible head and durable
+  member floor. Both use `{position}` and neither claims to count relevant
+  events.
 - Projection catalog subscriptions now carry Kiroku's
   `MissingCheckpointPolicy` through registration, inventory, stable rendering,
   ordering, fingerprints, and operator JSON. Validation rejects
@@ -97,13 +99,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   Use the truthful freshness/cursor façade; legacy `PositionWait` with no target retains
   its historical immediate behavior during the migration window.
 
-- Requires `kiroku-store >=0.5 && <0.6`. Direct constructors of
+- Requires `kiroku-store >=0.6 && <0.7`. Direct constructors of
   `SubscriptionDeclaration` and exhaustive matches on grouped
   `RebuildStartError` must adopt the explicit checkpoint lifecycle surface.
   `KeiroMetrics` gains the
   `projectionGlobalPositionDistance` gauge field; code constructing that record
   directly must initialize it. Exhaustive custom Kiroku interpreters must also
-  implement the 0.5 effect surface.
+  implement the 0.5 checkpoint lifecycle and 0.6 visible-head effect surface.
 - `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
   constructor. The journal-append transaction now declines an ordinary
   `StepRecorded` append into a workflow generation that already carries a

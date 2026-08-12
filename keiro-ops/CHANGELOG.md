@@ -36,5 +36,6 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.5 && <0.6` for explicit checkpoint lifecycle and
-  the public transaction-composable reset API used across the workspace.
+- Requires `kiroku-store >=0.6 && <0.7` for explicit checkpoint lifecycle, the
+  public transaction-composable reset API, and the visible-head query used by
+  the operator position commands.

@@ -79,6 +79,7 @@ import Keiro.Prelude
 import Keiro.ReadModel.Schema
 import Keiro.Telemetry (KeiroMetrics, recordProjectionWaitTimeouts)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Read (visibleGlobalHeadPosition)
 import Kiroku.Store.Subscription
   ( SubscriptionCheckpoint (..),
     SubscriptionCheckpointInventory (..),
@@ -598,23 +599,12 @@ subscriptionPositionFromInventory wanted inventory =
 -- events: subscription checkpoints advance only at delivered batch tails, so
 -- after tail hard-deletion (for example workflow GC) the authoritative
 -- counter is unreachable until an unrelated append lands, while the visible
--- head is reachable by any caught-up subscription. Reads Kiroku's indexed
--- @stream_events@ table because Kiroku 0.5 exports no visible-head query;
--- @Keiro.ReadModel.Rebuild.finishRebuild@ guards on the same statement.
+-- head is reachable by any caught-up subscription. Kiroku observes this with
+-- one payload-free statement through its public Store effect;
+-- @Keiro.ReadModel.Rebuild.finishRebuild@ guards transactionally on the same
+-- visible-head basis.
 storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
-storeHeadPosition =
-  runTransaction $ Tx.statement () visibleStoreHeadPositionStmt
-
-visibleStoreHeadPositionStmt :: Statement () GlobalPosition
-visibleStoreHeadPositionStmt =
-  preparable
-    """
-    SELECT COALESCE(max(stream_version), 0)
-    FROM stream_events
-    WHERE stream_id = 0
-    """
-    E.noParams
-    (D.singleRow (GlobalPosition <$> D.column (D.nonNullable D.int8)))
+storeHeadPosition = visibleGlobalHeadPosition
 
 -- | The latest global position originating in a Kiroku category, or
 -- @GlobalPosition 0@ when that category has no events. This deliberately reads

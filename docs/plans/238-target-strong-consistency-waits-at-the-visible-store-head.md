@@ -60,6 +60,13 @@ This section must always reflect the actual current state of the work.
 - [x] M4: distill the durable decision (wait targets must be reachable positions; the authoritative counter is not a wait target) into ADR 0033, amend ADR 0028's obsolete distance basis, and pass strict `just adr-validate` for all 33 concepts (2026-08-12T17:07:31Z).
 - [x] M4: run `just verify` from the repository root; the complete build, package tests, 697-example DSL suite, 39-entry conformance corpus, Jitsurei checks, migration tests, policy scripts, diagrams, and strict OKF validation pass (2026-08-12T17:15:51Z).
 - [x] Update the parent MasterPlan's registry, Progress, and Outcomes entries to mark EP-2 (238) complete (2026-08-12T17:15:51Z).
+- [x] Post-completion: verify released `kiroku-store-0.6.0.0` against Hackage, its
+  upstream tag, and Mori-located source; replace Keiro's duplicate visible-head SQL with
+  Kiroku's public effect and transactional statement; advance all workspace bounds to
+  `>=0.6 && <0.7` (2026-08-12T18:51:10Z).
+- [x] Post-completion: rerun the focused 30-example `Keiro.ReadModel` group and full
+  `just verify` gate against Kiroku 0.6.0.0; every package, runtime, DSL conformance,
+  Jitsurei, migration, documentation, and policy check passes (2026-08-12T19:08:43Z).
 
 
 ## Surprises & Discoveries
@@ -80,6 +87,13 @@ implementation. Provide concise evidence.
   This is the planned first assertion of the same defect: a caught-up cursor at position 1
   cannot reach the inventory counter at position 4 after the three newer workflow journal
   events have been hard-deleted.
+- Kiroku 0.6.0.0 was published while this MasterPlan was in progress. Hackage lists the
+  release and upstream tag `kiroku-store-v0.6.0.0` resolves to commit
+  `c14831a3056663ece376c6baa5488ae8ee73c773`, whose Mori-located source exports both
+  `Kiroku.Store.Read.visibleGlobalHeadPosition` and
+  `Kiroku.Store.SQL.visibleGlobalHeadPositionStmt`. The local Cabal index initially knew
+  only 0.5.0.0 and had to be refreshed with `cabal update` before the 0.6 bound could
+  resolve.
 
 
 ## Decision Log
@@ -162,6 +176,15 @@ Record every decision made while working on the plan.
   is now the visible head — costs five seconds once. The fast-timeout path is already
   covered by the existing `PositionWait` tests using `fastWaitOptions` (50 ms).
   Date: 2026-08-11
+- Decision: After Kiroku 0.6.0.0 became available, delegate ordinary visible-head reads
+  to `Kiroku.Store.Read.visibleGlobalHeadPosition` and the transactional rebuild guard
+  to `Kiroku.Store.SQL.visibleGlobalHeadPositionStmt`; remove both Keiro-owned copies of
+  the dependency's indexed SQL and require `kiroku-store >=0.6 && <0.7` workspace-wide.
+  Rationale: The released dependency now owns exactly the payload-free effect and
+  transaction-composable query this plan needed. Adopting both public surfaces restores
+  schema ownership without changing reachable-head semantics or splitting the wait and
+  rebuild bases.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -196,6 +219,14 @@ operator output. The full repository `just verify` gate passes. The plan's origi
 purpose is met: Strong reads return promptly after workflow GC, genuinely behind reads
 still time out honestly, projection distance returns zero when no visible work remains,
 and operators retain both head values for diagnosis. No implementation gaps remain.
+
+The post-completion Kiroku 0.6 adoption removes the temporary private SQL from both
+Keiro call sites. `storeHeadPosition` now delegates through Kiroku's public `Store`
+effect operation, while `finishRebuild` uses Kiroku's public transaction-composable
+statement. The package-set bounds require `kiroku-store >=0.6 && <0.7`; the observable
+reachable-head contract and its regressions are unchanged.
+The focused 30-example read-model group and full repository `just verify` gate pass
+against the released dependency.
 
 
 ## Context and Orientation
@@ -795,12 +826,11 @@ at write time as described in Milestone 4.
 
 ## Interfaces and Dependencies
 
-No dependency bounds change. Everything uses `kiroku-store >=0.5 && <0.6` as already
-declared in `keiro/keiro.cabal` and `keiro-ops/keiro-ops.cabal`; the Kiroku APIs consumed
-are all public and present in 0.5.0.0 (`Kiroku.Store.Subscription.subscriptionCheckpointInventory`,
-the `SubscriptionCheckpointInventory`/`SubscriptionCheckpoint` types,
-`Kiroku.Store.Lifecycle.hardDeleteStream`, `Kiroku.Store.Transaction.runTransaction`).
-Locate Kiroku's sources via `mori registry show shinzui/kiroku --full`
+The completed implementation requires `kiroku-store >=0.6 && <0.7` across the workspace.
+Kiroku 0.6 adds `Kiroku.Store.Read.visibleGlobalHeadPosition` and
+`Kiroku.Store.SQL.visibleGlobalHeadPositionStmt`; the checkpoint inventory, lifecycle,
+and transaction APIs used elsewhere remain public. Locate Kiroku's sources via
+`mori registry show shinzui/kiroku --full`
 (`mori://shinzui/kiroku/packages/kiroku-store`).
 
 At the end of Milestone 1, `keiro/src/Keiro/ReadModel.hs` exports the same names it does
@@ -813,8 +843,9 @@ types, and `ReadModelError` — with exactly one changed contract:
 storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
 ```
 
-backed by the private `visibleStoreHeadPositionStmt :: Statement () GlobalPosition`
-(`SELECT COALESCE(max(stream_version), 0) FROM stream_events WHERE stream_id = 0`).
+implemented by delegating to Kiroku's public `visibleGlobalHeadPosition` effect
+operation. `finishRebuild` uses the matching public
+`visibleGlobalHeadPositionStmt` inside its transaction.
 `waitIfNeeded` retains its shape (`Strong`/`EntireLog` targets `storeHeadPosition`;
 `Strong`/`CategoryHead` targets `categoryHeadPosition`; `Eventual` no-ops;
 `PositionWait` honors its explicit target), and `waitFor`, `PositionWaitOptions`,
@@ -860,3 +891,6 @@ fixtures, the OTel in-memory exporter helpers) is already imported.
 - 2026-08-12: Completed all four milestones, distilled the reachable-head contract into
   ADR 0033 with the corresponding ADR 0028 amendment, passed `just verify`, and marked
   EP-2 complete in the parent MasterPlan.
+- 2026-08-12: Adopted Kiroku 0.6.0.0 after its release, removed Keiro's duplicated
+  visible-head SQL, advanced workspace bounds, and amended ADR 0033 without changing
+  the completed plan's semantics.

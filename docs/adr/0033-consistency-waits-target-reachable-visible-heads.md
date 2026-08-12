@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Consistency waits target reachable visible heads
 description: Keiro targets whole-store consistency waits and projection distance at the newest visible event while retaining the authoritative append counter for capacity and audit reporting.
-timestamp: 2026-08-12T17:04:23Z
+timestamp: 2026-08-12T18:51:10Z
 docId: ADR-33
 status: Accepted
 date: 2026-08-12
@@ -48,10 +48,12 @@ whole-store captured-head waits therefore target the newest visible `$all` event
 Keiro does not export a second authoritative-head wrapper because Kiroku's
 `subscriptionCheckpointInventory` already exposes the counter directly.
 
-Keiro owns the indexed SQL statement while Kiroku 0.5 has no public query for a visible
-head without fetching and decoding the newest event. The rebuild-completion guard uses
-the same basis. A future Kiroku API may replace the local statement without changing
-this semantic contract.
+Kiroku 0.6 owns this query through its public
+`Kiroku.Store.Read.visibleGlobalHeadPosition` effect operation, and Keiro's
+`storeHeadPosition` delegates to it. The transaction-composable rebuild-completion guard
+uses Kiroku's public `Kiroku.Store.SQL.visibleGlobalHeadPositionStmt`, so both paths share
+the same basis without duplicating dependency-owned SQL. This preserves the semantic
+contract established against Kiroku 0.5 while moving schema knowledge back to its owner.
 
 Each Strong or `WaitForHead EntireVisibleLog` query captures the visible head once and
 waits for its durable cursor to reach that position. Category-scoped waits continue to
@@ -111,5 +113,7 @@ supported Keiro and Kiroku APIs required by
   preserves Kiroku-owned member checkpoints and monotonic save semantics.
 - `mori://shinzui/kiroku/okf/adrs/concepts/ADR-4` owns checkpoint initialization,
   monotonic ordinary saves, and explicit reset.
+- `mori://shinzui/kiroku/packages/kiroku-store` owns the public visible-global-head
+  effect operation and transaction-composable statement used by this decision.
 - [ExecPlan 238](../plans/238-target-strong-consistency-waits-at-the-visible-store-head.md)
   implements and verifies this decision.

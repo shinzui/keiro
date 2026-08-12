@@ -420,7 +420,8 @@ polling when their capabilities are absent.
 `subscriptionPositionFromInventory` and `readSubscriptionPosition` take the
 minimum durable checkpoint across every member with the exact subscription
 name. `storeHeadPosition` returns the newest visible event's global position,
-or zero when no event remains. This is the reachable boundary for a caught-up
+or zero when no event remains, through Kiroku's public payload-free
+visible-global-head effect. This is the reachable boundary for a caught-up
 subscription. Kiroku's public `subscriptionCheckpointInventory` separately
 exposes the authoritative append counter, which retains positions for
 hard-deleted events.

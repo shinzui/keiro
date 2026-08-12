@@ -102,6 +102,7 @@ import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
 import Keiro.ReadModel.Rebuild.Runner
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.SQL (visibleGlobalHeadPositionStmt)
 import Kiroku.Store.Subscription.Checkpoint (resetSubscriptionCheckpointsTx)
 import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
@@ -157,7 +158,7 @@ finishRebuild ::
   Eff es (Either RebuildError ReadModelMetadata)
 finishRebuild readModel projectionNames replayFrom =
   runTransaction $ do
-    headPosition <- Tx.statement () storeHeadPositionStmt
+    headPosition <- Tx.statement () visibleGlobalHeadPositionStmt
     applyCount <-
       if null projectionNames
         then pure 0
@@ -221,14 +222,3 @@ countProjectionDedupStmt =
     """
     (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     (D.singleRow (D.column (D.nonNullable D.int8)))
-
-storeHeadPositionStmt :: Statement () GlobalPosition
-storeHeadPositionStmt =
-  preparable
-    """
-    SELECT COALESCE(max(stream_version), 0)
-    FROM stream_events
-    WHERE stream_id = 0
-    """
-    E.noParams
-    (D.singleRow (GlobalPosition <$> D.column (D.nonNullable D.int8)))
