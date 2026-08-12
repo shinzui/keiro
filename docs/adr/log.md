@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Advance catalog, group-slice, replay-contract, and runner identity for normalized owned targets plus query freshness and cursor authority (plan 244).
+* **Update**: Assign delivery to the projection owner, freshness to the query, and waiting cursor authority to one compatible validated owner handler (plan 244).
 * **Update**: Amend ADR 0032 so query suppliers are derived from existing owner/observed-target identity, while any owned-target normalization requires a future prefix revision (plan 243).
 * **Update**: Amend ADR 0026 so one projection owner may authoritatively supply several catalog-bound query models without duplicating handlers or legacy ownership clauses (plan 243).
 * **Update**: Amend ADR 0031 so checkpoint policy changes affect only owning group slices and require explicit metadata adoption (plan 237).

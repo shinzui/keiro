@@ -45,7 +45,8 @@ This section must always reflect the actual current state of the work.
 - [x] M2a: implement truthful query execution and deterministic missing-cursor/missing-target errors; preserve old semantics through shared helpers and old/new equivalence tests. (2026-08-12 14:35Z)
 - [ ] M2b: after Plan 238 completes, run the visible-tail-GC, genuinely-behind, and category-bounded `WaitForHead` integration proof without changing the preserved `storeHeadPosition` seam.
 - [x] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior. (2026-08-12 14:49Z)
-- [ ] M4: compile-audit registered Keiro dependents through Mori, update API/reference/migration docs and changelogs, run full verification, and update MasterPlan 38.
+- [x] M4a: statically audit every registered Keiro dependent through Mori and update API/reference/migration docs, Haddocks, changelog, and ADRs. (2026-08-12 14:59Z)
+- [x] M4b: run full repository verification, record results, and update MasterPlan 38. (2026-08-12 15:16Z)
 
 
 ## Surprises & Discoveries
@@ -81,6 +82,17 @@ implementation. Provide concise evidence.
   zero-candidate or multiple-candidate catalog diagnostics before runtime. Normalizing
   set-valued owned targets at the same format boundary also removes the known declaration-
   order sensitivity.
+- M4a (2026-08-12): Mori reports dependencies at project granularity, so nine registered
+  projects have no Haskell `Keiro.ReadModel` import at all. Five have runtime imports:
+  four intentionally exercise the legacy 0.12 surface, while Kotei uses only the
+  unaffected cursor inventory helper. No registered project has adopted candidate
+  Language 5; this audit concerns public runtime source compatibility, not DSL migration.
+- M4 verification (2026-08-12): the generated-output `-Werror` gate initially promoted
+  0.12 deprecation warnings in frozen Languages 1-4 `ReadModel` artifacts to errors.
+  Their bytes cannot change and their users cannot act on generator-owned warnings, so
+  the conformance-only Cabal stanza disables Haskell deprecation warnings. Handwritten
+  callers still receive them, while candidate Language 5 will emit the truthful surface
+  under Plan 245.
 
 
 ## Decision Log
@@ -121,6 +133,13 @@ Record every decision made while working on the plan.
   breaking direct 0.11 record and positional construction before users can adopt the
   truthful façade.
   Date: 2026-08-12
+- Decision: Suppress Haskell deprecation warnings only in the generated-output Cabal
+  conformance stanza.
+  Rationale: published Languages 1-4 retain byte-frozen generated `ReadModel` spellings,
+  and the repository intentionally promotes every generated-code warning to an error.
+  Handwritten callers still receive migration warnings; candidate Language 5 will emit
+  the truthful API in Plan 245.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -147,6 +166,34 @@ Canonical query facts now include normalized freshness and resolved cursor ident
 owned-target order is canonicalized. Focused catalog, preimage, operations, adoption, and
 replay suites prove slice isolation, reviewed `slice-v1:` adoption, and refusal to resume
 an active v2 replay under the v3 runner.
+
+Milestone 4's downstream audit used Mori's complete 14-project reverse-dependency result.
+`mori://shinzui/kawa/packages/kawa-core` has four read-model import sites with direct
+records and `Eventual`; `mori://shinzui/keiro-runtime-jitsurei/packages/incident-command`
+and `mori://shinzui/keiro-runtime-jitsurei/packages/hospital-capacity` have 23 import sites,
+including generated direct records; `mori://shinzui/kioku/packages/kioku-core`
+has nine import sites using direct records and `runQueryWith Eventual`; and
+`mori://shinzui/kizashi/packages/kizashi-core` has 41 equivalent legacy import sites.
+Those are covered by the compile-only 0.11 compatibility fixture. The one import in
+`mori://shinzui/kotei/packages/kotei-core` uses only `readSubscriptionPosition` and needs
+no migration. Danwa, Kanmon, Keiro Runtime Docs, Keiro Runtime Patterns, Keiro Syntax,
+Kikan, Meibo, Mori App, and Shikigami contain no Haskell `Keiro.ReadModel` imports. Their
+project files pin released or prior Keiro revisions, so changing downstream pins would
+not compile this worktree and would exceed this plan's repository scope; every use was
+therefore statically audited, while `cabal build keiro-test` compiled the exact legacy
+forms against the new worktree.
+
+Milestone 4 verification passed. The first `just verify` run intentionally refused the
+persistent Jitsurei `slice-v1:` registration. The mounted application command previewed
+the exact stale-format transition, then `jitsurei-demo ops --json --force rebuild adopt
+jitsurei-order-reporting` adopted only the live Keiro metadata row to `slice-v2:`. The
+rerun passed the Jitsurei demo, 491 Keiro examples, 58 PGMQ examples with 2 existing
+pending cases, 31 operator examples, all 43 DSL test suites including 697 core toolchain
+examples, 23 Jitsurei examples, 28 migration examples, strict ADR/research/capability
+validation, graph checks, generated policies, and the 39-entry corpus gate.
+
+The ExecPlan remains in progress only because M2b requires Plan 238's visible-tail
+implementation and belongs to MasterPlan 37. No simulated substitute was added.
 
 
 ## Context and Orientation

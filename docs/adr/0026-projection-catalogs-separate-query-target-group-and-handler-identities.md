@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-12T13:30:39Z
+timestamp: 2026-08-12T14:55:00Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -81,6 +81,16 @@ Command-side inline selection is by resolved projection owner and event source, 
 owner is applied once even when it supplies several queries. Candidate Language 5
 rejects a catalog-bound query that is also named by an aggregate-local legacy projection
 clause; published Languages 1-4 retain their standalone rule.
+
+Delivery belongs to that supplying projection owner; query freshness belongs to the
+query-model binding. Freshness is normalized as immediate execution, a wait for one
+captured visible head, or a wait for a caller-supplied position. Cursor authority is not
+a mandatory query field and is never selected by declaration order. An immediate query
+needs no cursor. A waiting query must resolve exactly one compatible durable subscription
+handler from its validated owner: a whole-log head requires an all-stream source, while a
+category head accepts an all-stream source or the same category. Zero or several
+compatible cursors are closed-world catalog errors that name the query, owner,
+capabilities, and requested wait before any polling can begin.
 
 Target reset policy and handler replay policy are independent. A target is
 either cleared before replay or preserved and reconciled. A projection is
@@ -172,7 +182,7 @@ with bounded store primitives after those primitives are released.
 Every committed replay chunk contains application target writes, consumed
 source cursors, and adapter evaluation/apply counters in one transaction. A
 decode failure condemns the whole chunk. Resume accepts a different page size
-but requires the exact `keiro/projection-replay/v2` contract fingerprint, which
+but requires the exact `keiro/projection-replay/v3` contract fingerprint, which
 combines the group slice with normalized sources, codec fingerprints,
 adapter identities and order, verification identity/version, and runner format.
 Function closures and page size are excluded.
@@ -201,14 +211,19 @@ dedup rows are not completion evidence.
   repair or resume it through the rebuild runner; they cannot bypass completion
   evidence by promoting one binding.
 - Existing `InlineProjection`, `AsyncProjection`, and `ReadModel` values remain
-  source-compatible. Explicit unmanaged wrappers label callers that have not
-  adopted catalog validation; they do not make a legacy list safe by naming it.
+  source-compatible through 0.12. New read models use the truthful freshness/cursor
+  façade; the legacy `Strong`, `Eventual`, `PositionWait`, and direct waiting fields are
+  deprecated for removal in 0.13. Explicit unmanaged wrappers label callers that have
+  not adopted catalog validation; they do not make a legacy list safe by naming it.
 - One physical table has one projection owner. Several ordered handlers can be
   composed under that one owner, but two independent projection identities
   cannot both claim the table.
 - One projection owner may supply several query models. Query count does not duplicate
   live handlers, and neither backing-target choice nor declaration order selects the
   supplier.
+- Immediate query models may be cursorless. Head and position waits require one
+  catalog-derived durable cursor compatible with the owner's source; fictional inline
+  subscription names and first-match cursor selection are not runtime authority.
 - Reordering a query model's observed targets changes neither its generated
   physical binding nor its catalog identity. Changing the observed set or its
   effective backing remains a persisted query-binding change.
@@ -248,3 +263,6 @@ dedup rows are not completion evidence.
 - [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
   makes fingerprint preimages injective and scopes durable rebuild compatibility
   to each group.
+- [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
+  implements truthful query freshness, derived cursor authority, and the 0.12
+  compatibility window.

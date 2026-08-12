@@ -1,22 +1,23 @@
--- | Querying the read side, with explicit consistency.
+-- | Querying the read side, with explicit freshness.
 --
 -- A 'ReadModel' is a named, versioned SQL projection table plus the query that
 -- reads it. Querying it does more than run SQL: 'runQuery' first verifies the
 -- table's registered schema is current and 'Live' (rejecting a stale or
--- mid-rebuild model), then honours the requested 'ConsistencyMode' before
--- running the query in a transaction.
+-- mid-rebuild model), then honours its default 'QueryFreshness' before running
+-- the query in a transaction.
 --
--- The consistency modes trade freshness against latency:
+-- The truthful modes describe the actual operation:
 --
--- * 'Strong' — capture the store head position at query start and block until
---   the model's subscription cursor reaches it.
--- * 'Eventual' — query immediately. Read-your-writes is the projection worker's
---   responsibility under 'Eventual'.
--- * 'PositionWait' — block until the model's subscription has caught up to a
---   target 'GlobalPosition' (typically the position returned by the command
---   the caller just ran), giving read-your-writes against an asynchronous
---   projection. 'waitFor' implements the polling loop and times out with
---   'ReadModelWaitTimeout'.
+-- * 'Immediate' — execute without polling.
+-- * 'WaitForHead' — capture one visible whole-store or category head and wait
+--   for the model's durable cursor to reach it.
+-- * 'WaitForPosition' — wait for a concrete caller-supplied 'GlobalPosition'.
+--
+-- Waiting modes require 'DurableQueryCursor'; a cursorless model fails with
+-- 'ReadModelMissingCursor' before polling. Define new models through
+-- 'ReadModelBlueprint' and the truthful builders. 'ConsistencyMode', direct
+-- waiting fields, and 'runQueryWith' remain deprecated 0.12 compatibility and
+-- are removed in 0.13.
 --
 -- Schema lifecycle (registration, status transitions) lives in
 -- "Keiro.ReadModel.Schema", which is re-exported here.
@@ -100,12 +101,14 @@ import Prelude qualified
 --   rewrite 'query'. This is the application's data schema and is entirely
 --   separate from Keiro's own @keiro@ schema, where the @keiro_read_models@
 --   registry lives. It is deliberately not persisted (see 'ensureReadModel').
--- * 'subscriptionName' — the cursor that tracks how far the projection worker
---   has consumed the event log; consulted by 'PositionWait'.
+-- * 'subscriptionName' — deprecated compatibility storage for the cursor that
+--   tracks how far the projection worker has consumed the event log. New code
+--   uses 'ReadModelBlueprint.cursorAuthority'.
 -- * 'version' \/ 'shapeHash' — schema identity; a query fails with
 --   'ReadModelStaleSchema' if the registered values diverge, forcing a rebuild.
--- * 'defaultConsistency' — the 'ConsistencyMode' used by 'runQuery'.
--- * 'strongScope' — the event-log head a 'Strong' query waits for.
+-- * 'defaultConsistency' — deprecated compatibility representation of the
+--   'QueryFreshness' used by 'runQuery'.
+-- * 'strongScope' — deprecated compatibility representation of 'HeadScope'.
 -- * 'query' — the SQL read, as a 'Hasql.Transaction.Transaction'.
 data ReadModel q r = ReadModel
   { name :: !Text,
@@ -365,8 +368,10 @@ data ReadModelError
     ReadModelMissingPosition !Text
   deriving stock (Generic, Eq, Show)
 
--- | Query a read model using its 'defaultConsistency'. Validates schema and
--- liveness first, waits if the mode requires it, then runs the query.
+-- | Query a read model using its default freshness. The compatibility record
+-- representation is decoded by 'readModelDefaultFreshness'; validation and
+-- execution preserve the exact legacy behavior for directly constructed 0.11
+-- values.
 runQuery ::
   (IOE :> es, Store :> es) =>
   Maybe KeiroMetrics ->
@@ -374,7 +379,7 @@ runQuery ::
   q ->
   Eff es (Either ReadModelError r)
 runQuery metrics readModel =
-  runQueryWith metrics (readModel ^. #defaultConsistency) readModel
+  runQueryWithFreshness metrics (readModelDefaultFreshness readModel) readModel
 
 -- | Query a read model with an honest freshness override. 'Immediate' runs
 -- after schema and liveness validation without polling. Waiting modes require

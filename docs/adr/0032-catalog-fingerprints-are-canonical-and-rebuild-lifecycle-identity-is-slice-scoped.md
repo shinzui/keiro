@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
 description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, retains whole-catalog provenance, and requires explicit transactional adoption of reviewed slice changes.
-timestamp: 2026-08-12T13:30:39Z
+timestamp: 2026-08-12T14:55:00Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -43,7 +43,7 @@ Keiro hashes a typed canonical preimage tree. Text nodes encode their UTF-8 byte
 length before their bytes; list and record nodes encode a distinguishing tag,
 child count, and recursively encoded children. Every structural boundary is
 therefore recoverable without delimiter escaping. Whole-catalog fingerprints
-use the `catalog-v2:` prefix and group-slice fingerprints use `slice-v1:`.
+use the `catalog-v3:` prefix and group-slice fingerprints use `slice-v2:`.
 Prefix changes are mandatory when the canonical identity contract changes.
 
 A group slice contains only the normalized catalog facts that can affect that
@@ -62,15 +62,18 @@ second fingerprint field. Changing an authoritative owner or observed-target fac
 changes the owning catalog/group identity, while merely adding or reading the derived
 accessor changes no fingerprint or format prefix.
 
-The current `catalog-v2`/`slice-v1` contract preserves a projection declaration's owned
-target order even though supplier resolution treats that set order-independently.
-Normalizing that existing preimage is an identity-contract change and therefore requires
-a future prefix revision and explicit adoption evidence; it must not be repaired silently
-under the current prefixes.
+The v3/v2 revision normalizes a projection declaration's set-valued owned targets and
+adds each query's normalized freshness plus optional resolved subscription identity to
+the whole catalog and owning group slice. Immediate query models serialize no cursor
+when none is unambiguously available. Waiting query models serialize the one cursor
+derived from their validated owner; missing or ambiguous candidates fail validation and
+never reach fingerprinting. Reordering owned targets is therefore identity-neutral,
+while changing freshness or resolved cursor changes the whole catalog and only the
+owning group slice.
 
 The complete catalog fingerprint remains useful provenance. A replay run stores
 both the whole catalog fingerprint and the group slice that owns its lifecycle.
-The persisted runner format is `keiro/projection-replay/v2`; its contract is
+The persisted runner format is `keiro/projection-replay/v3`; its `contract-v3:` value is
 derived from the group slice plus normalized runner facts. Inspection and joins
 use the slice for compatibility and expose the whole catalog value without
 treating it as a fence.
@@ -98,6 +101,12 @@ migration cannot infer an old run's precise slice. A pre-canonical group row is
 then refused at registration until an operator previews and explicitly adopts
 the current catalog slice.
 
+The v3/v2 identity cutover reuses that same reviewed adoption workflow. A stored
+`slice-v1:` value is stale-format and must be previewed and adopted while the group is
+`live`. An active replay written as `keiro/projection-replay/v2` cannot be resumed by the
+v3 runner or adopted in place; operators complete it with the old runtime or explicitly
+abandon it before upgrading, then preview and adopt the live group metadata.
+
 
 ## Consequences
 
@@ -114,8 +123,8 @@ the current catalog slice.
   move as drift.
 - Catalog and slice prefixes, replay format, and migration evidence make future
   identity changes explicit rather than silently reinterpreting stored hashes.
-- Derived supplier lookup adds no independent identity field. Any future normalization
-  of existing owned-target ordering must advance the applicable prefixes.
+- Derived supplier lookup adds no duplicate owner edge, but normalized query freshness
+  and the cursor selected from that relationship are explicit query-binding identity.
 
 
 ## Alternatives considered
@@ -141,3 +150,6 @@ the current catalog slice.
   makes missing-checkpoint policy one of the group-slice replay facts.
 - [ExecPlan 237](../plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md)
   implements and verifies this decision.
+- [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
+  implements and verifies the v3/v2 freshness, cursor, and owned-target normalization
+  revision.

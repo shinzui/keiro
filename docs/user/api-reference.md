@@ -381,14 +381,22 @@ without changing the event-store schema or notification channel.
 Types and functions:
 
 - `ReadModel (..)`
+- `ReadModelBlueprint (..)`
+- `QueryCursorAuthority (..)`
+- `ReadModelDefinitionError (..)`
+- `immediateReadModel`
+- `headWaitingReadModel`
+- `positionWaitingReadModel`
+- `readModelCursorAuthority`
+- `readModelDefaultFreshness`
 - `qualifiedTableName`
-- `ConsistencyMode (..)`
-- `StrongScope (..)`
+- `QueryFreshness (..)`
+- `HeadScope (..)`
 - `PositionWaitOptions (..)`
-- `defaultStrongWaitOptions`
+- `defaultHeadWaitOptions`
+- `runQueryWithFreshness`
 - `ReadModelError (..)`
 - `runQuery`
-- `runQueryWith`
 - `waitFor`
 - `subscriptionPositionFromInventory`
 - `readSubscriptionPosition`
@@ -396,7 +404,18 @@ Types and functions:
 - `categoryHeadPosition`
 - re-exports from `Keiro.ReadModel.Schema`.
 
-Use it to define typed query wrappers and consistency behavior.
+Deprecated 0.12 compatibility, scheduled for removal in 0.13:
+
+- `ConsistencyMode (..)`
+- `StrongScope (..)`
+- `defaultStrongWaitOptions`
+- `runQueryWith`
+
+Use `ReadModelBlueprint` and a truthful builder to define typed query wrappers. `Immediate`
+does not poll and needs no cursor. `WaitForHead` captures one visible whole-store or
+category head; `WaitForPosition` waits for a concrete caller position. Both waiting modes
+require `DurableQueryCursor` and return typed missing-cursor/missing-position errors before
+polling when their capabilities are absent.
 
 `subscriptionPositionFromInventory` and `readSubscriptionPosition` take the
 minimum durable checkpoint across every member with the exact subscription

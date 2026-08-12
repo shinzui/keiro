@@ -172,9 +172,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
 - [x] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
 - [x] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
-- [ ] EP-2 (244) M2: query execution derives and validates wait capability; old names retain tested semantics
+- [x] EP-2 (244) M2a: query execution derives and validates wait capability; old names retain tested semantics
+- [ ] EP-2 (244) M2b: run visible-tail-GC and genuinely-behind acceptance after external Plan 238 completes
 - [x] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
-- [ ] EP-2 (244) M4: registered dependent compile audit, API documentation, changelog, and Plan-238 integration tests
+- [x] EP-2 (244) M4a: registered dependent audit, API/ADR documentation, changelog, and full repository verification
+- [ ] EP-2 (244) M4b: record the external Plan-238 integration evidence from M2b
 - [ ] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print
 - [ ] EP-3 (245) M2: capability-based validation and generated runtime configuration
 - [ ] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts
@@ -221,6 +223,15 @@ interactions between child plans. Provide concise evidence.
   The identity boundary advanced to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and replay
   v3; focused adoption tests prove old slices are stale-format and active v2 runs cannot
   resume under the new runner.
+- EP-2 M4a (2026-08-12): Mori found no Language 5 adopters. Four actual runtime
+  dependents exercise the preserved direct-record/legacy override surface, one uses only
+  an unaffected cursor helper, and nine project-level dependents have no Haskell
+  `Keiro.ReadModel` imports. Full verification passed after the supported operator command
+  previewed and explicitly adopted Jitsurei's live `slice-v1:` metadata to `slice-v2:`.
+- EP-2 M4a (2026-08-12): frozen Languages 1-4 generated artifacts compile under a
+  generated-output `-Werror` gate. Their Cabal stanza now disables only Haskell
+  deprecation warnings so their bytes remain frozen; handwritten callers still see the
+  0.12 warnings, and Plan 245 owns truthful candidate-Language-5 generation.
 
 
 ## Decision Log
@@ -274,8 +285,12 @@ query backing stays independently explicit. The relation is visible in runtime
 inventory access, scaffold ledgers, diffs, and compiled harness facts; ambiguity and
 legacy double ownership fail before generation or execution.
 
-This completes IR-23's semantic foundation without changing Languages 1-4 or the current
-canonical fingerprint prefixes. EP-2 (Plan 244) is now the next implementable child. It
-will introduce truthful query freshness and cursor APIs, include owned-target
-normalization in the planned identity-format revision, and coordinate final wait
-behavior with Plan 238 before EP-3 changes Language 5 syntax.
+EP-1 completed IR-23's semantic foundation without changing Languages 1-4 or the then-
+current canonical fingerprint prefixes. EP-2 subsequently advanced those formats under
+its own reviewed identity revision.
+
+EP-2 is implemented and fully verified within MasterPlan 38's repository authority.
+Truthful runtime construction/execution, catalog-derived wait cursors, canonical v3/v2/v3
+identity, explicit adoption, documentation, and downstream compatibility evidence are in
+place. The child remains In Progress solely for its external Plan 238 visible-tail
+integration gate; therefore EP-3 has not started.

@@ -8,6 +8,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `QueryFreshness`, `HeadScope`, `QueryCursorAuthority`, `ReadModelBlueprint`, truthful
+  read-model builders, and `runQueryWithFreshness`. Immediate reads need no cursor;
+  captured-head and caller-position waits require one durable cursor and fail with typed
+  missing-cursor or missing-position errors before polling.
+- Catalog query inventory now records normalized freshness and the optional cursor derived
+  from the validated projection owner. Validation rejects waiting queries with zero or
+  several compatible durable cursors, and canonical identity normalizes set-valued owned
+  targets.
 - `ProjectionHandlerCapability`, `ResolvedQuerySupply`, and
   `resolvedQuerySupplies` expose the closure-free relationship from each validated
   query model to the single projection owner of its complete observed-target set.
@@ -51,7 +59,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   condemning the entire preparation transaction if a declared subscription has
   no persisted member. The legacy unmanaged rebuild also uses the public API.
 - Projection catalog fingerprints now use an injective, length-prefixed
-  canonical preimage and explicit `catalog-v2:` / `slice-v1:` prefixes. Group
+  canonical preimage and explicit `catalog-v3:` / `slice-v2:` prefixes. Group
   registration and rebuild lifecycle fences use only the affected group slice,
   while rebuild runs retain the whole catalog fingerprint as provenance.
 - `previewCatalogAdoption` and `adoptCatalogGroups` provide a read-only plan and
@@ -63,12 +71,25 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- Canonical identity advances to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
+  `keiro/projection-replay/v3`; catalog inventory and rebuild preview JSON advance to v2.
+  Stored `slice-v1:` groups require preview and explicit live-group adoption. An active v2
+  replay cannot resume under the v3 runner: complete it with the old runtime or abandon it
+  before upgrading and adopting metadata.
 - Catalog fingerprints, group metadata, rebuild contracts, and grouped errors
   use the new canonical slice identity. `GroupRebuildMetadata.catalogFingerprint`
   is now `sliceFingerprint`; fingerprint-drift errors are slice-specific; and
   `RebuildRunReport` adds `groupSliceFingerprint`. Persisted replay format is
-  `keiro/projection-replay/v2`. Complete or abandon active catalog rebuilds
-  before migration `0024`, then explicitly adopt any pre-canonical group rows.
+  `keiro/projection-replay/v3`. Complete or abandon active catalog rebuilds before
+  migration `0024` or the v3 runner cutover, then explicitly adopt stale group rows.
+
+### Deprecated
+
+- `ConsistencyMode`, `StrongScope`, `Strong`, `Eventual`, `PositionWait`,
+  `defaultStrongWaitOptions`, `runQueryWith`, and the legacy `ReadModel` waiting/cursor
+  record fields remain source-compatible in 0.12 and are scheduled for removal in 0.13.
+  Use the truthful freshness/cursor façade; legacy `PositionWait` with no target retains
+  its historical immediate behavior during the migration window.
 
 - Requires `kiroku-store >=0.5 && <0.6`. Direct constructors of
   `SubscriptionDeclaration` and exhaustive matches on grouped

@@ -68,10 +68,10 @@ case validateProjectionCatalog catalog of
 
 The `ValidatedProjectionCatalog` constructor is hidden. Use
 `useProjectionCatalogM` when registration is effectful; it does not invoke the
-callback after failed validation. Inventory rendering and SHA-256 fingerprints
-normalize top-level declaration and query observed-target order. The current
-`catalog-v2`/`slice-v1` identity still preserves each projection's declared owned-target
-order; changing that contract requires a future prefix revision. Handler closures are
+callback after failed validation. Inventory rendering and SHA-256 fingerprints normalize
+top-level declarations, query observed targets, and each projection's set-valued owned
+targets. Current `catalog-v3`/`slice-v2` identity includes normalized query freshness and
+the optional subscription cursor resolved from the validated owner. Handler closures are
 excluded from the fingerprint.
 
 Every validated query binding also resolves to exactly one supplying projection
@@ -82,6 +82,11 @@ closures. A query that observes targets owned by different projections is invali
 several queries may observe different subsets of one owner's targets and all resolve to
 that same owner. The query's backing target remains a separate physical SQL choice and
 does not determine its supplier.
+
+Inventory records each query's normalized freshness and optional resolved cursor. An
+immediate query remains valid without a cursor. A head or position wait must have exactly
+one compatible durable cursor among its owner's handlers; zero or several candidates
+produce stable, fully attributed catalog diagnostics instead of first-match selection.
 
 Validation reports deterministic codes and every conflicting `ClaimSite`. It
 rejects duplicate logical or physical identities, unknown references, targets
@@ -227,7 +232,7 @@ Success validated -> do
 ```
 
 Registration persists one row per rebuild group and binds each query model to
-that group in one transaction. Each group stores its canonical `slice-v1:`
+that group in one transaction. Each group stores its canonical `slice-v2:`
 fingerprint, so an unrelated additive group leaves existing registrations
 unchanged. Repeating the same slice is idempotent; a changed or pre-canonical
 stored slice is a typed startup error. Existing
@@ -245,11 +250,12 @@ shape, and group metadata in one transaction. It does not rebuild or migrate
 application-owned rows; start a rebuild separately when the catalog change
 invalidates persisted data.
 
-Before applying migration `0024`, complete or abandon every active catalog
-rebuild. This pre-0.12 clean break cannot infer the group slice used by an old
-active run. After upgrading, a database containing a pre-canonical group
-fingerprint must use the adoption preview and explicit adoption path before
-startup registration can succeed.
+Before crossing an identity or runner format boundary, complete or explicitly abandon
+every active catalog rebuild. A `slice-v1:` group previews as stale-format and can be
+adopted only while `live`; an active `keiro/projection-replay/v2` run cannot resume under
+the v3 runner. Complete that run with the old runtime or abandon it, then upgrade,
+preview, and explicitly adopt the live group. Adoption changes Keiro metadata only; it
+does not rebuild application rows.
 
 Use `runCommandWithCatalogProjections` for inline application and
 `applyAsyncProjectionFromCatalog` for async application. Both acquire shared
@@ -348,8 +354,8 @@ and classified every event as irrelevant. Dedup rows are never substituted for
 missing participation evidence.
 
 The default page size is 500 and the persisted format is
-`keiro/projection-replay/v2`. A run retains the whole `catalog-v2:` fingerprint
-as provenance and separately stores the `slice-v1:` fingerprint used by its
+`keiro/projection-replay/v3` with a `contract-v3:` fingerprint. A run retains the whole
+`catalog-v3:` fingerprint as provenance and separately stores the `slice-v2:` fingerprint used by its
 lifecycle fences. An unrelated catalog addition therefore does not strand an
 active run, while a genuine change to that group still refuses resume. Optional metrics expose rebuild starts, resumes,
 committed pages/events, failures, promotions, and page duration. Durable reports
@@ -375,9 +381,9 @@ group or run identity and operational request; target, source, handler, reset,
 subscription, and dedup lists cannot be overridden. Reports have stable,
 versioned JSON envelopes:
 
-- `keiro/catalog-inventory/v1`;
-- `keiro/catalog-rebuild-preview/v1`;
-- `keiro/catalog-registered-rebuild-preview/v1`; and
+- `keiro/catalog-inventory/v2`;
+- `keiro/catalog-rebuild-preview/v2`;
+- `keiro/catalog-registered-rebuild-preview/v2`; and
 - `keiro/catalog-adoption-preview/v1`;
 - `keiro/catalog-adoption-outcome/v1`; and
 - `keiro/catalog-rebuild-run/v1`.
@@ -455,17 +461,19 @@ database (the `keiro-test-support` `withMigratedSuite` fixture).
 ## Define A ReadModel
 
 ```haskell
-data ReadModel q r = ReadModel
+data ReadModelBlueprint q r = ReadModelBlueprint
   { name :: Text
   , tableName :: Text
   , schema :: Text
-  , subscriptionName :: Text
   , version :: Int
   , shapeHash :: Text
-  , defaultConsistency :: ConsistencyMode
-  , strongScope :: StrongScope
+  , cursorAuthority :: QueryCursorAuthority
   , query :: q -> Tx.Transaction r
   }
+
+data QueryCursorAuthority
+  = NoQueryCursor
+  | DurableQueryCursor Text
 ```
 
 `q` is your query input type. `r` is your result type. `schema` is the
@@ -481,6 +489,13 @@ in, and helpers to target it, instead of implicitly inheriting the store
 connection's `search_path`. See [Migration Ownership](migration-ownership.md)
 for where those migrations live and how to compose them with the framework
 ledger.
+
+Build new values with `immediateReadModel`, `headWaitingReadModel`, or
+`positionWaitingReadModel`. Immediate inline models use `NoQueryCursor`; an async model
+uses the durable subscription cursor resolved from its validated catalog owner. The two
+waiting builders reject `NoQueryCursor`, and the position builder also rejects a missing
+target. They return the existing `ReadModel q r` representation so registration and query
+consumers stay compatible.
 
 ## Choosing Your Projection Schema
 
@@ -498,21 +513,26 @@ import Keiro.Connection
   , keiroConnectionSettings  -- kiroku defaults + a projection schema on extraSearchPath
   , ensureProjectionSchema   -- opt-in CREATE SCHEMA IF NOT EXISTS, for dev/tests/examples
   )
-import Keiro.ReadModel (ReadModel (..), qualifiedTableName)
+import Keiro.ReadModel
+  ( QueryCursorAuthority (NoQueryCursor)
+  , ReadModel
+  , ReadModelBlueprint (..)
+  , immediateReadModel
+  , qualifiedTableName
+  )
 
 orderSummary :: ReadModel OrderId (Maybe OrderSummary)
 orderSummary =
-  ReadModel
-    { name = "order-summary"
-    , tableName = "order_summary"
-    , schema = "app_reads"          -- your chosen schema, NOT kiroku
-    , subscriptionName = "order-summary-inline"
-    , version = 1
-    , shapeHash = "order-summary-v1"
-    , defaultConsistency = Eventual
-    , strongScope = EntireLog
-    , query = \oid -> Tx.statement (orderIdText oid) selectOrderSummaryStmt
-    }
+  immediateReadModel
+    ReadModelBlueprint
+      { name = "order-summary"
+      , tableName = "order_summary"
+      , schema = "app_reads"          -- your chosen schema, NOT kiroku
+      , version = 1
+      , shapeHash = "order-summary-v1"
+      , cursorAuthority = NoQueryCursor
+      , query = \oid -> Tx.statement (orderIdText oid) selectOrderSummaryStmt
+      }
 ```
 
 Qualify every DDL and DML statement for that table against the schema. The
@@ -545,33 +565,35 @@ Store.withStore (keiroConnectionSettings connString "app_reads") $ \store ->
 Keiro's own framework metadata (`keiro_read_models`, `keiro_projection_dedup`)
 stays in the `keiro` schema and is unaffected by your choice.
 
-## Consistency Modes
+## Query Freshness
 
 ```haskell
-data ConsistencyMode
-  = Strong
-  | Eventual
-  | PositionWait PositionWaitOptions
+data QueryFreshness
+  = Immediate
+  | WaitForHead HeadScope
+  | WaitForPosition PositionWaitOptions
 
-data StrongScope
-  = EntireLog
-  | CategoryHead Text
+data HeadScope
+  = EntireVisibleLog
+  | CategoryVisibleHead Text
 ```
 
 Use:
 
-- `Strong` for an async model that should wait for its subscription cursor to
-  reach the log head captured at query start. Set `strongScope = EntireLog` only
-  when the subscription observes the whole log; category subscriptions should
-  use `CategoryHead category` so unrelated categories cannot cause a timeout.
-- `Eventual` for async models where stale reads are acceptable.
-- `PositionWait` when a caller has a target `GlobalPosition` and wants to wait
-  until the subscription has processed at least that position.
+- `Immediate` to execute after schema/liveness validation without polling. It works for
+  inline and async models and does not require a cursor.
+- `WaitForHead EntireVisibleLog` to capture the visible whole-store head once and wait
+  until an all-stream owner's durable cursor reaches it.
+- `WaitForHead (CategoryVisibleHead category)` to capture that category's visible head
+  once and wait on an all-stream or same-category owner cursor.
+- `WaitForPosition options` when the caller has a concrete `GlobalPosition`, commonly the
+  position returned by its command, and wants an async projection to catch up to it.
 
-Inline projections commit with their command and should normally use
-`Eventual`: there is no asynchronous cursor to wait for. A model fed from
-multiple categories should use an explicit `PositionWait` target or an
-all-stream subscription with `EntireLog`.
+`WaitForHead` is a bounded captured-head wait, not a claim of linearizability. The head is
+captured once at query start. A model fed from multiple categories should use an explicit
+position target or an all-stream owner with `EntireVisibleLog`. The current whole-store
+head implementation remains the visible-head seam owned by Plan 238; final tail-GC
+acceptance is gated on that plan.
 
 `PositionWaitOptions`:
 
@@ -583,13 +605,38 @@ data PositionWaitOptions = PositionWaitOptions
   }
 ```
 
-If `target = Nothing`, `PositionWait` does not wait.
+Truthful `WaitForPosition` requires `target = Just position`. A missing target returns
+`ReadModelMissingPosition`; a wait on a cursorless model returns
+`ReadModelMissingCursor`. Catalog construction catches owner-level missing or ambiguous
+cursor capabilities earlier with deterministic validation diagnostics.
+
+### 0.12 compatibility and 0.13 removal
+
+The physical `ReadModel` record and legacy vocabulary remain source-compatible for the
+0.12 migration window. New code should migrate mechanically:
+
+| 0.11 API | Exact behavior retained in 0.12 | Truthful replacement |
+|---|---|---|
+| `Eventual` | Execute immediately. | `Immediate` |
+| `Strong` + `EntireLog` | Capture the visible whole-store head and poll the named cursor. | `WaitForHead EntireVisibleLog` |
+| `Strong` + `CategoryHead c` | Capture category `c`'s visible head and poll the named cursor. | `WaitForHead (CategoryVisibleHead c)` |
+| `PositionWait options` | Wait for `target`; historical `Nothing` executes immediately. | `WaitForPosition options` with a concrete target |
+| direct `ReadModel` construction | Existing fields and positional construction compile unchanged. | `ReadModelBlueprint` plus a truthful builder |
+| `runQueryWith` | Override the legacy mode. | `runQueryWithFreshness` |
+| `defaultStrongWaitOptions` | Five-second timeout, 10ms poll. | `defaultHeadWaitOptions` |
+
+`ConsistencyMode`, `StrongScope`, their constructors, `subscriptionName`,
+`defaultConsistency`, `strongScope`, `defaultStrongWaitOptions`, and `runQueryWith` are
+deprecated and scheduled for removal in 0.13. To migrate a direct record, move its
+identity/table/query fields into `ReadModelBlueprint`, use `NoQueryCursor` for inline
+models or `DurableQueryCursor subscription` for async models, then choose the builder
+matching the old default. Use `runQueryWithFreshness` for per-call overrides.
 
 ## Querying
 
 ```haskell
 runQuery readModel input
-runQueryWith consistency readModel input
+runQueryWithFreshness freshness readModel input
 ```
 
 Register each model once when its projection starts:
@@ -702,6 +749,8 @@ promotion safeguards.
 
 - `ReadModelStaleSchema`: code and stored metadata disagree.
 - `ReadModelWaitTimeout`: position wait timed out.
+- `ReadModelMissingCursor`: a truthful wait was requested for a cursorless model.
+- `ReadModelMissingPosition`: `WaitForPosition` omitted its required target.
 - `ReadModelNotLive`: metadata status is not `Live`.
 - `ReadModelUnregistered`: startup did not register this model name.
 
