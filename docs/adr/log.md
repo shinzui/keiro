@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Make opaque CheckedService the lazy sharing point for whole-spec type-graph analysis and require cache-refreshing spec replacement (plan 236).
 * **Update**: Make scaffold planning and planning-backed checks indexed-only; retire the Spec-only wrappers with migration guidance (plan 235).
 * **Update**: Amend ADR 0026: catalog-bound read models observe an unordered target set and bind by name to one target-owned physical identity (plan 234).
 * **Update**: Require successor-language syntax to use feature-gated contextual keywords without globally reserving identifiers from published languages (plan 233).

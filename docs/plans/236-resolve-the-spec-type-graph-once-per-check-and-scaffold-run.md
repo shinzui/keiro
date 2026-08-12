@@ -58,9 +58,9 @@ This section must always reflect the actual current state of the work.
 - [x] M3: Trace count for `keiro-dsl check` on the declarative-router fixture is exactly 1.
 - [x] M4: Thread the shared graph through the scaffold run (Scaffold.hs, ScaffoldRun.hs, AggregateType symbols, FoldFingerprint, Harness, ServiceHarness, StructuralConformance, MappedConsumer, ReadModelQueryContract, CoordinationImpact, ProjectionMappedImpact, Goldens, Workspace hoist).
 - [x] M4: Trace count for `keiro-dsl scaffold` on the declarative-router fixture is exactly 1.
-- [ ] M5: Full `cabal test keiro-dsl:tests` green; `just conformance-corpus-policy` zero drift; regenerated corpus produces no git diff.
-- [ ] M5: After-timings recorded next to the baselines; resolution-count reduction documented with evidence.
-- [ ] M5: ADR distillation pass done; masterplan 36 registry row for this plan updated.
+- [x] M5: Full `cabal test keiro-dsl:tests` green; `just conformance-corpus-policy` zero drift; regenerated corpus produces no git diff.
+- [x] M5: After-timings recorded next to the baselines; resolution-count reduction documented with evidence.
+- [x] M5: ADR distillation pass done; masterplan 36 registry row for this plan updated.
 
 
 ## Surprises & Discoveries
@@ -95,6 +95,12 @@ implementation. Provide concise evidence.
   A derived cache field makes such updates capable of pairing a new spec with an old graph.
   Making `CheckedService` opaque and adding `checkedServiceWithSpec` made that invalid state
   unrepresentable; all seven repository update seams now rebuild the lazy cache explicitly.
+- M5 after-timings (2026-08-12, same GHC 9.12.4 `-O1` command): `service-check`
+  measured m16-r2 132 us +/- 7.3 us, m32-r4 270 us +/- 14 us, m64-r8 785 us
+  +/- 54 us, and m64-r16 905 us +/- 56 us. `service-scaffold-plan` measured
+  m16-r2 4.57 ms +/- 271 us, m32-r4 22.0 ms +/- 1.9 ms, m64-r8 154 ms +/-
+  13 ms, and m64-r16 285 ms +/- 28 ms. Every shape improved: check by about
+  18-34% and scaffold planning by about 7-10%.
 
 
 ## Decision Log
@@ -181,9 +187,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation. Expected distillation targets: if the cached
-lazy field pattern proves durable, record it as an ADR note on `CheckedService` being the
-sharing point for whole-spec analyses; carry the `resolveNominalTypes` follow-up here.)
+Complete. A `check` now resolves the mapped type graph once instead of 34 times, and a
+`scaffold` once instead of 46 times, while preserving every diagnostic, generated module,
+record, fold identity, and corpus byte. All DSL suites pass (including 695 main examples),
+the 39-entry corpus policy and full regeneration report zero drift, and every committed
+benchmark shape improved. ADR-18 now records opaque `CheckedService` as the sharing point
+and `checkedServiceWithSpec` as the only cache-safe spec replacement.
+The repository-wide `just verify` gate also passes.
+
+The parallel repeated `resolveNominalTypes` work remains a candidate follow-up. It was not
+widened into this refactor because the acceptance proof depended on keeping behavior and
+identity changes out of scope.
 
 
 ## Context and Orientation
@@ -664,12 +678,14 @@ current surface:
 
 ```haskell
 checkedTypeGraph :: CheckedService -> Either (NonEmpty TypeGraphError) TypeGraph
--- (the record accessor; lazy field, excluded from Eq and Show)
+-- (an accessor over a private lazy field, excluded from Eq and Show)
+checkedServiceWithSpec :: Spec -> CheckedService -> CheckedService
+-- (the cache-refreshing replacement operation for programmatic candidates)
 checkedServiceForContract :: EffectiveLanguageContract -> Spec -> CheckedService
 -- (only if Workspace.hs routes through it; otherwise Workspace sets the field directly)
 ```
 
-with `CheckedService` carrying hand-written `Eq`/`Show` instances over
+with opaque `CheckedService` carrying hand-written `Eq`/`Show` instances over
 `checkedLanguageContract` and `checkedSpec` only. `Keiro.Dsl.SemanticContract` newly imports
 `Keiro.Dsl.TypeGraph` (no cycle: TypeGraph depends only on `Keiro.Dsl.Grammar`).
 
@@ -700,3 +716,10 @@ Sequencing dependencies: implement after plan 234 lands (soft dependency; see De
 for the coordination rule if it has not), stay clear of plan 235's entry-point removals in
 ScaffoldRun.hs by rebasing the inventory if both are in flight, and do not touch the
 `DiagnosticCode` enumeration in Validate.hs.
+
+
+## Revision Note
+
+2026-08-12: Completed implementation. Recorded the final one-resolution traces, benchmark
+improvements, full-suite and zero-drift corpus evidence, the opaque-service cache invariant,
+ADR-18 distillation, and the remaining nominal-resolution follow-up.

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-08-02T18:06:50Z
+timestamp: 2026-08-12T04:41:00Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -69,6 +69,14 @@ profile alongside the semantic graph. The misleading `Spec`-only fingerprint,
 diff, replay-impact, and nominal-equality wrappers are removed; an intentional
 legacy caller must cross `legacyCheckedService` explicitly.
 
+`CheckedService` is also the sharing point for pure whole-spec analyses. It is
+opaque, retains one lazy resolved type graph derived from its spec, and excludes
+that derived value from equality, display, and serialization. Check and scaffold
+consumers read the shared graph instead of resolving independently. A caller that
+needs a modified graph must use `checkedServiceWithSpec`, which preserves the
+effective language contract and constructs a fresh lazy analysis; record updates
+cannot pair a replacement spec with stale derived state.
+
 
 ## Consequences
 
@@ -81,6 +89,9 @@ legacy caller must cross `legacyCheckedService` explicitly.
 - Invalid semantic graphs cannot receive truncated fingerprints or partial
   diff, replay, workspace, CLI, or generated output.
 - Replay-impact classification is invariant under sibling declaration order.
+- One checked service resolves its type graph at most once across validation,
+  planning, generation, conformance, and record construction. Derived analysis
+  cannot become stale when a caller replaces the spec.
 - The FNV-1a-128 migration invalidates every earlier aggregate snapshot once.
   Events remain authoritative and full replay repopulates compatible caches.
 - FNV remains a deterministic change detector, not an authentication or

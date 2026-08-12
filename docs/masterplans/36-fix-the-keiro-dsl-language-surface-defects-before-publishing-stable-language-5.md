@@ -80,7 +80,7 @@ ADR applies.
 | 1 | Gate the outcome reserved words on the language-5 syntax profile | docs/plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md | None | None | Complete |
 | 2 | Bind catalog read models to one explicit physical target | docs/plans/234-bind-catalog-read-models-to-one-explicit-physical-target.md | None | None | Complete |
 | 3 | Retire or repair the legacy Spec-only scaffold entry points | docs/plans/235-retire-or-repair-the-legacy-spec-only-scaffold-entry-points.md | None | None | Complete |
-| 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | In Progress |
+| 4 | Resolve the spec type graph once per check and scaffold run | docs/plans/236-resolve-the-spec-type-graph-once-per-check-and-scaffold-run.md | None | EP-2 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -152,7 +152,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 (236) M2: inert lazy `checkedTypeGraph` field on `CheckedService` (Eq/Show-invisible)
 - [x] EP-4 (236) M3: check-pass threading (Validate/RouterSelection/ExplainBindings)
 - [x] EP-4 (236) M4: scaffold-run threading plus the workspace double-construction hoist
-- [ ] EP-4 (236) M5: equivalence proof (tests, corpus zero drift) and recorded before/after timings
+- [x] EP-4 (236) M5: equivalence proof (tests, corpus zero drift) and recorded before/after timings
 
 
 ## Surprises & Discoveries
@@ -186,6 +186,10 @@ interactions between child plans. Provide concise evidence.
   corpora, not the two originally identified: declarative-router's `hospitalLoad` model is
   also catalog-bound. Regenerating and running all three suites kept the change attributable,
   and the repository-wide corpus gate finished at zero drift.
+- EP-4 completion (2026-08-12): the initial review count was more than an undercount: one
+  declarative-router `check` resolved the type graph 34 times and one `scaffold` 46 times.
+  Opaque `CheckedService` sharing reduced both to exactly one. Every benchmark shape improved,
+  all DSL suites passed, and the 39-entry corpus remained byte-identical after regeneration.
 
 
 ## Decision Log
@@ -240,5 +244,24 @@ EP-3 is complete. The seven unusable Spec-only planning and planning-backed chec
 removed, the anti-fabrication proof now exercises the behavior source-map join directly, and the
 changelog gives both parsed-source and programmatic-spec migration recipes. ADR-16 records
 indexed-only planning as durable API policy. Strict ADR validation and the complete repository
-gate pass with a byte-identical conformance corpus. EP-4 is the sole remaining child before the
-language-5 publication gate can move.
+gate pass with a byte-identical conformance corpus. At that checkpoint, EP-4 was the sole
+remaining child before the language-5 publication gate could move.
+
+EP-4 is complete. Validation, scaffold planning, generation, conformance, manifests, records,
+and workspace routes share one lazy type graph per opaque `CheckedService`; programmatic spec
+replacement refreshes the cache explicitly. Trace counts fell from 34/46 to 1/1, all eight
+benchmark shapes improved, and ADR-18 records the durable sharing invariant. The complete DSL
+suite, corpus policy, and full regeneration are green with no generated-byte drift.
+
+All four language-surface defect plans are complete. Published languages 1-4 retain their
+identifier compatibility, candidate language 5 has explicit catalog binding and truthful
+harness identity, unsupported planning APIs are removed with migration guidance, and the
+whole-spec type analysis is shared. The language-5 registry publication flip remains outside
+this MasterPlan, but its language-surface prerequisite is now satisfied. The final
+repository-wide `just verify` gate passes.
+
+
+## Revision Note
+
+2026-08-12: Closed EP-4 and the MasterPlan after exact one-resolution traces, improved
+benchmarks, all-suite validation, byte-identical corpus regeneration, and ADR-18 distillation.
