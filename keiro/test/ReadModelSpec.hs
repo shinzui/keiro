@@ -5,7 +5,6 @@ module ReadModelSpec
   )
 where
 
-import Keiro.Prelude
 import Keiro.ReadModel
 import Kiroku.Store.Types (GlobalPosition (..))
 import Test.Hspec

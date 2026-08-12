@@ -22,7 +22,7 @@ import Data.Text qualified as Text
 import Keiro.Prelude
 import Keiro.Projection (AsyncProjection (..), InlineProjection (..))
 import Keiro.Projection.Catalog
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (ConsistencyMode (..), HeadScope (..), ReadModel (..), StrongScope (..))
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
 import Kiroku.Store.Types (CategoryName (..))
 import Test.Hspec
@@ -61,6 +61,12 @@ spec = describe "Keiro.Projection.Catalog" $ do
       `shouldBe` [mainGroupId, mainGroupId]
     map (NonEmpty.toList . (^. #resolvedObservedTargets)) supplies
       `shouldBe` [[auditTargetId, counterTargetId], [counterTargetId]]
+    map (^. #resolvedQueryFreshness) supplies
+      `shouldBe` [InventoryImmediate, InventoryImmediate]
+    map (^. #resolvedQueryCursor) supplies
+      `shouldBe` [ Just (InventoryQueryCursor asyncSubscriptionId "catalog-async-subscription"),
+                   Just (InventoryQueryCursor asyncSubscriptionId "catalog-async-subscription")
+                 ]
     for_ supplies $ \supply -> do
       supply ^. #resolvedSourceId `shouldBe` headSourceId
       case NonEmpty.toList (supply ^. #resolvedHandlerCapabilities) of
@@ -86,6 +92,55 @@ spec = describe "Keiro.Projection.Catalog" $ do
 
     ownedTargetsReordered <- expectValid reorderedSharedOwnerCatalog
     resolvedQuerySupplies ownedTargetsReordered `shouldBe` supplies
+    catalogFingerprint ownedTargetsReordered `shouldBe` catalogFingerprint validated
+    groupSliceFingerprint ownedTargetsReordered mainGroupId
+      `shouldBe` groupSliceFingerprint validated mainGroupId
+
+  it "derives cursor authority from the owner and validates waiting scope" $ do
+    immediate <- expectValid validCatalog
+    let immediateQueries = catalogInventory immediate ^. #inventoryQueryModels
+    map (^. #freshness) immediateQueries
+      `shouldBe` [InventoryImmediate, InventoryImmediate]
+    map (^. #cursor) immediateQueries
+      `shouldBe` [ Just (InventoryQueryCursor asyncSubscriptionId "catalog-async-subscription"),
+                   Nothing
+                 ]
+
+    waiting <- expectValid (setQueryWait auditQueryId Strong (CategoryHead "counter") validCatalog)
+    map (^. #freshness) (catalogInventory waiting ^. #inventoryQueryModels)
+      `shouldBe` [InventoryWaitForHead (CategoryVisibleHead "counter"), InventoryImmediate]
+    map (^. #resolvedQueryCursor) (resolvedQuerySupplies waiting)
+      `shouldBe` [Just (InventoryQueryCursor asyncSubscriptionId "catalog-async-subscription"), Nothing]
+
+    diagnosticsFor (setQueryWait counterQueryId Strong EntireLog validCatalog)
+      `shouldSatisfy` hasDiagnostic
+        QueryWaitWithoutCompatibleCursor
+        (queryModelIdText counterQueryId)
+    diagnosticsFor (setQueryWait auditQueryId Strong (CategoryHead "counter") catalogWithMissingSubscription)
+      `shouldSatisfy` hasDiagnostic
+        QueryWaitWithAmbiguousCursor
+        (queryModelIdText auditQueryId)
+
+    let wrongCategory =
+          setQueryWait auditQueryId Strong (CategoryHead "orders") $
+            validCatalog
+              { sources = [headSource & #sourceScope .~ CategorySource (CategoryName "payments")]
+              }
+    diagnosticsFor wrongCategory
+      `shouldSatisfy` hasDiagnostic
+        QueryWaitWithoutCompatibleCursor
+        (queryModelIdText auditQueryId)
+
+  it "fingerprints freshness and cursor policy only in the owning group slice" $ do
+    immediate <- expectValid additiveCatalog
+    waiting <- expectValid (setQueryWait auditQueryId Strong (CategoryHead "counter") additiveCatalog)
+    catalogFingerprint waiting `shouldNotBe` catalogFingerprint immediate
+    groupSliceFingerprint waiting mainGroupId
+      `shouldNotBe` groupSliceFingerprint immediate mainGroupId
+    groupSliceFingerprint waiting additiveGroupId
+      `shouldBe` groupSliceFingerprint immediate additiveGroupId
+    renderCatalogInventory waiting
+      `shouldSatisfy` Text.isInfixOf "wait-for-head:category-visible-head:counter"
 
   it "rejects empty and split-owner query target sets with stable derived diagnostics" $ do
     let emptyObserved =
@@ -615,6 +670,25 @@ reverseCatalog catalog =
       queryModels = reverse (catalog ^. #queryModels),
       projectionSets = reverse (catalog ^. #projectionSets)
     }
+
+setQueryWait :: QueryModelId -> ConsistencyMode -> StrongScope -> ProjectionCatalog -> ProjectionCatalog
+setQueryWait wanted consistency scope catalog =
+  catalog
+    { queryModels = map updateBinding (catalog ^. #queryModels)
+    }
+  where
+    updateBinding (SomeQueryModelBinding binding)
+      | binding ^. #queryModelId == wanted =
+          SomeQueryModelBinding
+            ( binding
+                & #readModel
+                . #defaultConsistency
+                .~ consistency
+                & #readModel
+                . #strongScope
+                .~ scope
+            )
+      | otherwise = SomeQueryModelBinding binding
 
 headSource :: SourceDeclaration
 headSource =

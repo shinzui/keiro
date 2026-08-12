@@ -38,7 +38,7 @@ import Kiroku.Store.Types
   )
 import Test.Hspec
 import "hasql-transaction" Hasql.Transaction qualified as Tx
-import Prelude (map, replicate)
+import Prelude (map, replicate, (&&))
 import Prelude qualified
 
 spec :: Fixture -> Spec
@@ -176,6 +176,40 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     resumed ^. #runStatus `shouldBe` RebuildRunPromoted
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 5, 6]
+
+  it "refuses to resume an active v2 replay contract under the v3 runner" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
+    appendInterleaved store
+    faulted <- expectValid (replayCatalog goodDecoder failingVerification)
+    _ <- expectStore store (registerProjectionCatalog faulted) >>= shouldBeRight
+    first <- expectStore store (startCatalogRebuild faulted replayGroupId (options "v2-contract-run" 2))
+    first `shouldSatisfy` \case
+      Left CatalogRebuildVerificationFailed {} -> True
+      _ -> False
+    let staleContract = "contract-v2:" <> Text.replicate 64 "a"
+    expectStore
+      store
+      ( Store.runTransaction
+          ( Tx.statement
+              ("v2-contract-run", staleContract, "keiro/projection-replay/v2")
+              setRunContractStmt
+          )
+      )
+    inspected <- expectStore store (inspectCatalogRebuild (runId "v2-contract-run")) >>= shouldBeRight
+    inspected ^. #contractFingerprint `shouldBe` staleContract
+    inspected ^. #runnerFormatVersion `shouldBe` "keiro/projection-replay/v2"
+
+    repaired <- expectValid (replayCatalog goodDecoder passingVerification)
+    resumeResult <-
+      expectStore store (resumeCatalogRebuild repaired (runId "v2-contract-run") (options "ignored" 2))
+    resumeResult `shouldSatisfy` \case
+      Left (CatalogRebuildContractMismatch mismatchedRun expected actual) ->
+        mismatchedRun
+          == runId "v2-contract-run"
+          && expected
+            == staleContract
+          && Text.isPrefixOf "contract-v3:" actual
+      _ -> False
 
   it "refuses promotion when a required adapter participation row is missing" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
@@ -473,4 +507,20 @@ deleteAdapterStmt =
     WHERE run_id = $1 AND projection_id = 'billing-projection'
     """
     (E.param (E.nonNullable E.text))
+    D.noResult
+
+setRunContractStmt :: Statement (Text, Text, Text) ()
+setRunContractStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_projection_rebuild_runs
+    SET contract_fingerprint = $2,
+        runner_format = $3
+    WHERE run_id = $1
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
     D.noResult

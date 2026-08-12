@@ -84,6 +84,8 @@ module Keiro.Projection.Catalog
     InventoryGroup (..),
     InventoryProjection (..),
     InventoryQueryModel (..),
+    InventoryQueryFreshness (..),
+    InventoryQueryCursor (..),
     InventorySubscription (..),
     InventoryDedupKey (..),
     InventoryHandler (..),
@@ -144,7 +146,12 @@ import Keiro.Codec (Codec (..), decodeRecorded)
 import Keiro.Prelude
 import Keiro.Projection.Catalog.Preimage (Preimage (..), hashPreimage)
 import Keiro.Projection.Types (AsyncProjection, InlineProjection)
-import Keiro.ReadModel (ReadModel)
+import Keiro.ReadModel
+  ( HeadScope (..),
+    QueryFreshness (..),
+    ReadModel,
+    readModelDefaultFreshness,
+  )
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
 import Kiroku.Store.Types (CategoryName (..), RecordedEvent)
 
@@ -463,6 +470,8 @@ data CatalogDiagnosticCode
   | EmptyQueryObservedTargets
   | QueryModelWithoutSupplier
   | QueryModelWithMultipleSuppliers
+  | QueryWaitWithoutCompatibleCursor
+  | QueryWaitWithAmbiguousCursor
   | DuplicateSubscriptionId
   | DuplicateSubscriptionName
   | DuplicateDedupKeyId
@@ -504,6 +513,8 @@ diagnosticCodeText = \case
   EmptyQueryObservedTargets -> "catalog.query-model-empty-observed-targets"
   QueryModelWithoutSupplier -> "catalog.query-model-without-supplier"
   QueryModelWithMultipleSuppliers -> "catalog.query-model-with-multiple-suppliers"
+  QueryWaitWithoutCompatibleCursor -> "catalog.query-wait-without-compatible-cursor"
+  QueryWaitWithAmbiguousCursor -> "catalog.query-wait-with-ambiguous-cursor"
   DuplicateSubscriptionId -> "catalog.duplicate-subscription-id"
   DuplicateSubscriptionName -> "catalog.duplicate-subscription-name"
   DuplicateDedupKeyId -> "catalog.duplicate-dedup-key-id"
@@ -584,7 +595,25 @@ data InventoryQueryModel = InventoryQueryModel
     version :: !Int,
     shapeHash :: !Text,
     rebuildGroupId :: !RebuildGroupId,
-    observedTargets :: ![TargetId]
+    observedTargets :: ![TargetId],
+    freshness :: !InventoryQueryFreshness,
+    cursor :: !(Maybe InventoryQueryCursor)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Canonical query freshness. Position targets and polling durations are
+-- per-call execution data, so the catalog records only the position-wait kind.
+data InventoryQueryFreshness
+  = InventoryImmediate
+  | InventoryWaitForHead !HeadScope
+  | InventoryWaitForPosition
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | The one durable cursor derived from the supplying projection, when that
+-- projection exposes exactly one compatible subscription authority.
+data InventoryQueryCursor = InventoryQueryCursor
+  { subscriptionId :: !SubscriptionId,
+    subscriptionName :: !Text
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -655,7 +684,9 @@ data ResolvedQuerySupply = ResolvedQuerySupply
     resolvedRebuildGroupId :: !RebuildGroupId,
     resolvedObservedTargets :: !(NonEmpty TargetId),
     resolvedSourceId :: !SourceId,
-    resolvedHandlerCapabilities :: !(NonEmpty ProjectionHandlerCapability)
+    resolvedHandlerCapabilities :: !(NonEmpty ProjectionHandlerCapability),
+    resolvedQueryFreshness :: !InventoryQueryFreshness,
+    resolvedQueryCursor :: !(Maybe InventoryQueryCursor)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -801,6 +832,7 @@ data QueryFacts = QueryFacts
     factShapeHash :: !Text,
     factQueryGroup :: !RebuildGroupId,
     factObservedTargets :: ![TargetId],
+    factQueryFreshness :: !QueryFreshness,
     factQuerySite :: !ClaimSite
   }
 
@@ -831,6 +863,7 @@ validateProjectionCatalog catalog =
             <> ownershipDiagnostics catalog facts
             <> groupDiagnostics catalog facts queryFacts
             <> querySupplyDiagnostics catalog facts queryFacts
+            <> queryFreshnessDiagnostics catalog facts queryFacts
             <> replayDiagnostics catalog facts
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
@@ -956,9 +989,9 @@ groupSliceFingerprint validated wantedGroup = do
   group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
   pure
     . GroupSliceFingerprint
-    . hashPreimage "slice-v1"
+    . hashPreimage "slice-v2"
     $ PRecord
-      "keiro/catalog-group-slice/v1"
+      "keiro/catalog-group-slice/v2"
       [ PText (rebuildGroupIdText wantedGroup),
         groupPreimage group,
         PList (targetPreimage <$> targets),
@@ -1470,6 +1503,163 @@ querySupplyDiagnostics catalog facts queryFacts = concatMap diagnosticsForQuery 
               )
               targetOwners
 
+data QueryCursorCandidate
+  = QueryCursorCandidate
+      !SubscriptionId
+      !Text
+      !SourceScope
+      !ClaimSite
+  deriving stock (Eq, Ord, Show)
+
+-- | Validate only query policies that actually wait. Immediate queries remain
+-- valid for inline, subscription, and composed owners; they merely expose no
+-- per-call cursor when the owner has zero or several durable authorities.
+queryFreshnessDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [QueryFacts] -> [CatalogDiagnostic]
+queryFreshnessDiagnostics catalog facts = concatMap diagnosticsForQuery
+  where
+    diagnosticsForQuery query =
+      case factQueryFreshness query of
+        Immediate -> []
+        requested ->
+          case queryOwner facts query of
+            Nothing -> []
+            Just owner ->
+              let allCandidates = queryCursorCandidates catalog owner
+                  compatible = compatibleQueryCursors requested allCandidates
+                  sites =
+                    List.sort
+                      . List.nub
+                      $ factQuerySite query
+                        : factSite owner
+                        : map handlerClaimSite (factHandlers owner)
+                  detail = cursorDiagnosticDetail requested owner allCandidates
+               in case compatible of
+                    [] ->
+                      [ diagnostic
+                          QueryWaitWithoutCompatibleCursor
+                          (queryModelIdText (factQueryModelId query))
+                          sites
+                          ( "query wait has no compatible durable cursor; "
+                              <> detail
+                              <> "; remedy: use Immediate or give the supplying owner one compatible subscription"
+                          )
+                      ]
+                    [_] -> []
+                    _ ->
+                      [ diagnostic
+                          QueryWaitWithAmbiguousCursor
+                          (queryModelIdText (factQueryModelId query))
+                          sites
+                          ( "query wait has several compatible durable cursors; "
+                              <> detail
+                              <> "; remedy: leave exactly one compatible subscription or use Immediate"
+                          )
+                      ]
+
+queryOwner :: [ProjectionFacts] -> QueryFacts -> Maybe ProjectionFacts
+queryOwner facts query =
+  case List.nubBy
+    (\left right -> factProjectionId left == factProjectionId right)
+    [ fact
+    | targetId <- factObservedTargets query,
+      fact <- facts,
+      targetId `List.elem` factTargets fact
+    ] of
+    [owner]
+      | not (null (factObservedTargets query)),
+        factGroupId owner == factQueryGroup query,
+        all (`List.elem` factTargets owner) (factObservedTargets query) ->
+          Just owner
+    _ -> Nothing
+
+queryCursorCandidates :: ProjectionCatalog -> ProjectionFacts -> [QueryCursorCandidate]
+queryCursorCandidates catalog owner =
+  List.nubBy sameCursor
+    . List.sortOn candidateKey
+    $ mapMaybe candidateFor (factHandlers owner)
+  where
+    subscriptionsById =
+      Map.fromList
+        [ (subscription ^. #subscriptionId, subscription)
+        | subscription <- catalog ^. #subscriptions
+        ]
+    sourcesById =
+      Map.fromList
+        [ (source ^. #sourceId, source)
+        | source <- catalog ^. #sources
+        ]
+
+    candidateFor (InlineFacts _ _) = Nothing
+    candidateFor (AsyncFacts _ _ _ subscriptionId _ site) = do
+      subscription <- Map.lookup subscriptionId subscriptionsById
+      source <- Map.lookup (subscription ^. #subscriptionSource) sourcesById
+      pure
+        ( QueryCursorCandidate
+            subscriptionId
+            (subscription ^. #subscriptionName)
+            (source ^. #sourceScope)
+            site
+        )
+
+    candidateKey (QueryCursorCandidate subscriptionId name scope _) =
+      (subscriptionId, name, scope)
+    sameCursor left right = candidateKey left == candidateKey right
+
+compatibleQueryCursors :: QueryFreshness -> [QueryCursorCandidate] -> [QueryCursorCandidate]
+compatibleQueryCursors freshness =
+  case freshness of
+    Immediate -> id
+    WaitForPosition _ -> id
+    WaitForHead scope -> filter (headScopeReachable scope . candidateScope)
+  where
+    candidateScope (QueryCursorCandidate _ _ scope _) = scope
+
+headScopeReachable :: HeadScope -> SourceScope -> Bool
+headScopeReachable EntireVisibleLog AllStreams = True
+headScopeReachable EntireVisibleLog CategorySource {} = False
+headScopeReachable CategoryVisibleHead {} AllStreams = True
+headScopeReachable (CategoryVisibleHead wanted) (CategorySource (CategoryName actual)) =
+  wanted == actual
+
+cursorDiagnosticDetail :: QueryFreshness -> ProjectionFacts -> [QueryCursorCandidate] -> Text
+cursorDiagnosticDetail requested owner candidates =
+  "query freshness="
+    <> queryFreshnessText requested
+    <> ", owner="
+    <> projectionIdText (factProjectionId owner)
+    <> ", delivery capabilities="
+    <> Text.intercalate "," (map renderHandlerFact (factHandlers owner))
+    <> ", cursor candidates="
+    <> if null candidates
+      then "none"
+      else Text.intercalate "," (map renderCursorCandidate candidates)
+
+queryFreshnessText :: QueryFreshness -> Text
+queryFreshnessText Immediate = "immediate"
+queryFreshnessText (WaitForHead scope) = "wait-for-head(" <> headScopeText scope <> ")"
+queryFreshnessText WaitForPosition {} = "wait-for-position"
+
+headScopeText :: HeadScope -> Text
+headScopeText EntireVisibleLog = "entire-visible-log"
+headScopeText (CategoryVisibleHead category) = "category-visible-head:" <> category
+
+renderHandlerFact :: HandlerFacts -> Text
+renderHandlerFact (InlineFacts name _) = "inline:" <> name
+renderHandlerFact (AsyncFacts name _ _ subscriptionId _ _) =
+  "subscription:" <> name <> "/" <> subscriptionIdText subscriptionId
+
+renderCursorCandidate :: QueryCursorCandidate -> Text
+renderCursorCandidate (QueryCursorCandidate subscriptionId name scope _) =
+  subscriptionIdText subscriptionId
+    <> "/"
+    <> name
+    <> "/"
+    <> renderScope scope
+
+handlerClaimSite :: HandlerFacts -> ClaimSite
+handlerClaimSite (InlineFacts _ site) = site
+handlerClaimSite (AsyncFacts _ _ _ _ _ site) = site
+
 replayDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [CatalogDiagnostic]
 replayDiagnostics catalog facts =
   clearRequiresReplay <> currentHeadAfterClear <> mixedGroupReplay
@@ -1619,6 +1809,7 @@ collectQueryFacts bindings =
         factShapeHash = model ^. #shapeHash,
         factQueryGroup = binding ^. #rebuildGroup,
         factObservedTargets = binding ^. #observedTargets,
+        factQueryFreshness = readModelDefaultFreshness model,
         factQuerySite = binding ^. #claimSite
       }
   | SomeQueryModelBinding binding <- bindings,
@@ -1665,9 +1856,15 @@ buildInventory catalog facts queryFacts =
                 version = factVersion query,
                 shapeHash = factShapeHash query,
                 rebuildGroupId = factQueryGroup query,
-                observedTargets = List.sort (factObservedTargets query)
+                observedTargets = List.sort (factObservedTargets query),
+                freshness = inventoryQueryFreshness (factQueryFreshness query),
+                cursor = resolvedInventoryCursor catalog owner (factQueryFreshness query)
               }
-          | query <- queryFacts
+          | query <- queryFacts,
+            let owner =
+                  fromMaybe
+                    (error "buildInventory: validated query has no projection owner")
+                    (queryOwner facts query)
           ],
       inventorySubscriptions =
         List.sort
@@ -1704,7 +1901,9 @@ buildResolvedQuerySupplies inventory =
           resolvedHandlerCapabilities =
             requireNonEmpty
               "projection handler capabilities"
-              (map (handlerCapability projection) (projection ^. #handlers))
+              (map (handlerCapability projection) (projection ^. #handlers)),
+          resolvedQueryFreshness = query ^. #freshness,
+          resolvedQueryCursor = query ^. #cursor
         }
     | query <- inventory ^. #inventoryQueryModels,
       let ownerId = ownerForQuery query,
@@ -1767,13 +1966,33 @@ buildResolvedQuerySupplies inventory =
         (error ("buildResolvedQuerySupplies: empty " <> label))
         (NonEmpty.nonEmpty values)
 
+inventoryQueryFreshness :: QueryFreshness -> InventoryQueryFreshness
+inventoryQueryFreshness Immediate = InventoryImmediate
+inventoryQueryFreshness (WaitForHead scope) = InventoryWaitForHead scope
+inventoryQueryFreshness WaitForPosition {} = InventoryWaitForPosition
+
+resolvedInventoryCursor ::
+  ProjectionCatalog ->
+  ProjectionFacts ->
+  QueryFreshness ->
+  Maybe InventoryQueryCursor
+resolvedInventoryCursor catalog owner freshness =
+  case compatibleQueryCursors freshness (queryCursorCandidates catalog owner) of
+    [QueryCursorCandidate subscriptionId name _ _] ->
+      Just
+        InventoryQueryCursor
+          { subscriptionId = subscriptionId,
+            subscriptionName = name
+          }
+    _ -> Nothing
+
 inventoryProjection :: ProjectionFacts -> InventoryProjection
 inventoryProjection fact =
   InventoryProjection
     { projectionId = factProjectionId fact,
       sourceId = factSourceId fact,
       rebuildGroupId = factGroupId fact,
-      ownedTargets = factTargets fact,
+      ownedTargets = List.sort (factTargets fact),
       replayDisposition = if factReplayable fact then "replayable" else "live-only",
       handlers = map inventoryHandler (factHandlers fact)
     }
@@ -1784,12 +2003,12 @@ inventoryHandler (AsyncFacts name _ _ subscriptionId dedupId _) =
   InventoryAsyncHandler name subscriptionId dedupId
 
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v2" . inventoryPreimage
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v3" . inventoryPreimage
 
 inventoryPreimage :: CatalogInventory -> Preimage
 inventoryPreimage inventory =
   PRecord
-    "keiro/catalog-inventory/v2"
+    "keiro/catalog-inventory/v3"
     [ PList (sourcePreimage <$> inventory ^. #inventorySources),
       PList (targetPreimage <$> inventory ^. #inventoryTargets),
       PList (groupPreimage <$> inventory ^. #inventoryGroups),
@@ -1864,7 +2083,23 @@ queryPreimage query =
       PText (Text.pack (show (query ^. #version))),
       PText (query ^. #shapeHash),
       PText (rebuildGroupIdText (query ^. #rebuildGroupId)),
-      PList (PText . targetIdText <$> query ^. #observedTargets)
+      PList (PText . targetIdText <$> query ^. #observedTargets),
+      inventoryFreshnessPreimage (query ^. #freshness),
+      maybe (PRecord "no-cursor" []) inventoryCursorPreimage (query ^. #cursor)
+    ]
+
+inventoryFreshnessPreimage :: InventoryQueryFreshness -> Preimage
+inventoryFreshnessPreimage InventoryImmediate = PRecord "immediate" []
+inventoryFreshnessPreimage (InventoryWaitForHead scope) =
+  PRecord "wait-for-head" [PText (headScopeText scope)]
+inventoryFreshnessPreimage InventoryWaitForPosition = PRecord "wait-for-position" []
+
+inventoryCursorPreimage :: InventoryQueryCursor -> Preimage
+inventoryCursorPreimage queryCursor =
+  PRecord
+    "durable-cursor"
+    [ PText (subscriptionIdText (queryCursor ^. #subscriptionId)),
+      PText (queryCursor ^. #subscriptionName)
     ]
 
 subscriptionPreimage :: InventorySubscription -> Preimage
@@ -1955,7 +2190,9 @@ renderInventory inventory =
           Text.pack (show (query ^. #version)),
           query ^. #shapeHash,
           rebuildGroupIdText (query ^. #rebuildGroupId),
-          commaSeparated targetIdText (query ^. #observedTargets)
+          commaSeparated targetIdText (query ^. #observedTargets),
+          renderInventoryFreshness (query ^. #freshness),
+          maybe "no-cursor" renderInventoryCursor (query ^. #cursor)
         ]
     renderSubscription :: InventorySubscription -> Text
     renderSubscription subscription =
@@ -1972,6 +2209,19 @@ renderInventory inventory =
       Text.intercalate
         "|"
         ["dedup", dedupKeyIdText (key ^. #dedupKeyId), key ^. #dedupName]
+
+renderInventoryFreshness :: InventoryQueryFreshness -> Text
+renderInventoryFreshness InventoryImmediate = "immediate"
+renderInventoryFreshness (InventoryWaitForHead scope) =
+  "wait-for-head:" <> headScopeText scope
+renderInventoryFreshness InventoryWaitForPosition = "wait-for-position"
+
+renderInventoryCursor :: InventoryQueryCursor -> Text
+renderInventoryCursor queryCursor =
+  "cursor:"
+    <> subscriptionIdText (queryCursor ^. #subscriptionId)
+    <> "/"
+    <> queryCursor ^. #subscriptionName
 
 renderScope :: SourceScope -> Text
 renderScope AllStreams = "$all"

@@ -35,26 +35,21 @@ spec fixture = do
       let operations = Operations.projectionCatalogOperations validated
           inventory = Operations.catalogInventoryReport operations
           previewResult = Operations.previewGroupRebuild operations Catalog.mainGroupId
-      inventory ^. #reportSchema `shouldBe` "keiro/catalog-inventory/v1"
+      inventory ^. #reportSchema `shouldBe` "keiro/catalog-inventory/v2"
       case Aeson.toJSON inventory of
         Aeson.Object fields -> do
           KeyMap.lookup "catalogFingerprint" fields `shouldSatisfy` (/= Nothing)
           KeyMap.lookup "inventory" fields
             `shouldSatisfy` \case
               Just (Aeson.Object inventoryFields) ->
-                case KeyMap.lookup "subscriptions" inventoryFields of
-                  Just (Aeson.Array subscriptions) ->
-                    case Vector.toList subscriptions of
-                      Aeson.Object subscriptionFields : _ ->
-                        KeyMap.lookup "checkpointOnMissing" subscriptionFields
-                          == Just (Aeson.String "FromBeginning")
-                      _ -> False
-                  _ -> False
+                subscriptionsExposePolicy inventoryFields
+                  && queriesExposeFreshnessAndCursor inventoryFields
               _ -> False
         other -> expectationFailure ("expected inventory object, got " <> show other)
       report <- case previewResult of
         Left err -> expectationFailure ("expected preview, got " <> show err) >> error "unreachable"
         Right value -> pure value
+      report ^. #reportSchema `shouldBe` "keiro/catalog-rebuild-preview/v2"
       map (^. #resetPolicy) (report ^. #targets)
         `shouldBe` [PreserveAndReconcile, ClearBeforeReplay]
       map (^. #subscriptionName) (report ^. #subscriptionResets)
@@ -175,6 +170,28 @@ operationsCatalog verificationHook =
         | group <- Catalog.validCatalog ^. #rebuildGroups
         ]
     }
+
+subscriptionsExposePolicy :: Aeson.Object -> Bool
+subscriptionsExposePolicy inventoryFields =
+  case KeyMap.lookup "subscriptions" inventoryFields of
+    Just (Aeson.Array subscriptions) ->
+      case Vector.toList subscriptions of
+        Aeson.Object subscriptionFields : _ ->
+          KeyMap.lookup "checkpointOnMissing" subscriptionFields
+            == Just (Aeson.String "FromBeginning")
+        _ -> False
+    _ -> False
+
+queriesExposeFreshnessAndCursor :: Aeson.Object -> Bool
+queriesExposeFreshnessAndCursor inventoryFields =
+  case KeyMap.lookup "queryModels" inventoryFields of
+    Just (Aeson.Array queries) ->
+      case Vector.toList queries of
+        Aeson.Object queryFields : _ ->
+          KeyMap.member "freshness" queryFields
+            && KeyMap.member "cursor" queryFields
+        _ -> False
+    _ -> False
 
 passingVerification :: RebuildVerification
 passingVerification = verification (pure (Right ()))

@@ -44,7 +44,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: pin an old/new API compatibility matrix; add honest freshness, head-scope, cursor-authority, and builder types without breaking old call sites. (2026-08-12 14:28Z)
 - [x] M2a: implement truthful query execution and deterministic missing-cursor/missing-target errors; preserve old semantics through shared helpers and old/new equivalence tests. (2026-08-12 14:35Z)
 - [ ] M2b: after Plan 238 completes, run the visible-tail-GC, genuinely-behind, and category-bounded `WaitForHead` integration proof without changing the preserved `storeHeadPosition` seam.
-- [ ] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior.
+- [x] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior. (2026-08-12 14:49Z)
 - [ ] M4: compile-audit registered Keiro dependents through Mori, update API/reference/migration docs and changelogs, run full verification, and update MasterPlan 38.
 
 
@@ -75,6 +75,12 @@ implementation. Provide concise evidence.
   whole-head, category-head, caught-up position, behind timeout, missing cursor, and missing
   target cases. Plan 238 remains Not Started in MasterPlan 37, so the tail-GC proof remains
   an explicit M2b gate rather than being simulated here.
+- M3 (2026-08-12): cursor authority must be resolved from the validated owner handlers,
+  not copied from the legacy mandatory read-model field. Immediate queries therefore
+  retain no cursor when ownership is absent or ambiguous, while waits produce stable
+  zero-candidate or multiple-candidate catalog diagnostics before runtime. Normalizing
+  set-valued owned targets at the same format boundary also removes the known declaration-
+  order sensitivity.
 
 
 ## Decision Log
@@ -134,6 +140,13 @@ legacy entry point use one validated execution path and one polling implementati
 truthful waits reject absent cursor capability and absent position targets before polling.
 The focused `Keiro.ReadModel` group passed 27 examples. The visible-tail-GC integration
 proof remains pending on Plan 238, which belongs to MasterPlan 37 and is still Not Started.
+
+Milestone 3 advanced whole-catalog, group-slice, replay-contract, and runner identities to
+`catalog-v3:`, `slice-v2:`, `contract-v3:`, and `keiro/projection-replay/v3` respectively.
+Canonical query facts now include normalized freshness and resolved cursor identity;
+owned-target order is canonicalized. Focused catalog, preimage, operations, adoption, and
+replay suites prove slice isolation, reviewed `slice-v1:` adoption, and refusal to resume
+an active v2 replay under the v3 runner.
 
 
 ## Context and Orientation

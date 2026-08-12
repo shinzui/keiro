@@ -30,6 +30,7 @@ import Data.Maybe (mapMaybe)
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
+import Keiro.ReadModel (HeadScope (..))
 import Keiro.ReadModel.Rebuild
   ( CatalogAdoptionError,
     CatalogRebuildError,
@@ -142,7 +143,7 @@ data CatalogOpsError
 catalogInventoryReport :: ProjectionCatalogOperations -> CatalogInventoryReport
 catalogInventoryReport (ProjectionCatalogOperations catalog) =
   CatalogInventoryReport
-    { reportSchema = "keiro/catalog-inventory/v1",
+    { reportSchema = "keiro/catalog-inventory/v2",
       catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
       groupSlices =
         [ (groupId, sliceFor groupId)
@@ -169,7 +170,7 @@ previewGroupRebuild (ProjectionCatalogOperations catalog) wantedGroup = do
       (List.find ((== wantedGroup) . (^. #rebuildGroupId)) groups)
   pure
     RebuildPreview
-      { reportSchema = "keiro/catalog-rebuild-preview/v1",
+      { reportSchema = "keiro/catalog-rebuild-preview/v2",
         rebuildGroupId = wantedGroup,
         catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
         sliceFingerprint =
@@ -483,7 +484,36 @@ queryModelValue queryModel =
       "version" Aeson..= (queryModel ^. #version),
       "shapeHash" Aeson..= (queryModel ^. #shapeHash),
       "groupId" Aeson..= rebuildGroupIdText (queryModel ^. #rebuildGroupId),
-      "observedTargets" Aeson..= map targetIdText (queryModel ^. #observedTargets)
+      "observedTargets" Aeson..= map targetIdText (queryModel ^. #observedTargets),
+      "freshness" Aeson..= queryFreshnessValue (queryModel ^. #freshness),
+      "cursor" Aeson..= fmap queryCursorValue (queryModel ^. #cursor)
+    ]
+
+queryFreshnessValue :: InventoryQueryFreshness -> Aeson.Value
+queryFreshnessValue InventoryImmediate =
+  Aeson.object ["kind" Aeson..= ("immediate" :: Text)]
+queryFreshnessValue (InventoryWaitForHead scope) =
+  Aeson.object
+    [ "kind" Aeson..= ("wait-for-head" :: Text),
+      "scope" Aeson..= headScopeValue scope
+    ]
+queryFreshnessValue InventoryWaitForPosition =
+  Aeson.object ["kind" Aeson..= ("wait-for-position" :: Text)]
+
+headScopeValue :: HeadScope -> Aeson.Value
+headScopeValue EntireVisibleLog =
+  Aeson.object ["kind" Aeson..= ("entire-visible-log" :: Text)]
+headScopeValue (CategoryVisibleHead category) =
+  Aeson.object
+    [ "kind" Aeson..= ("category-visible-head" :: Text),
+      "category" Aeson..= category
+    ]
+
+queryCursorValue :: InventoryQueryCursor -> Aeson.Value
+queryCursorValue queryCursor =
+  Aeson.object
+    [ "subscriptionId" Aeson..= subscriptionIdText (queryCursor ^. #subscriptionId),
+      "subscriptionName" Aeson..= (queryCursor ^. #subscriptionName)
     ]
 
 subscriptionValue :: InventorySubscription -> Aeson.Value

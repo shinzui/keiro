@@ -162,7 +162,7 @@ data QueryFreshness
 data HeadScope
   = EntireVisibleLog
   | CategoryVisibleHead !Text
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic, Eq, Ord, Show)
 
 -- | Build a read model whose default query executes immediately. The model may
 -- still retain a durable cursor for caller-selected position waits.

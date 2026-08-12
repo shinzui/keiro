@@ -86,7 +86,7 @@ import Prelude (all, any, concatMap, const, filter, id, not, null, (&&), (*), (+
 import Prelude qualified
 
 runnerFormat :: Text
-runnerFormat = "keiro/projection-replay/v2"
+runnerFormat = "keiro/projection-replay/v3"
 
 data RebuildOptions = RebuildOptions
   { rebuildRequest :: !RebuildRequest,
@@ -755,7 +755,7 @@ rebuildContract catalog groupId = do
   slice <- Catalog.groupSliceFingerprint catalog groupId
   pure
     ( hashPreimage
-        "contract-v2"
+        "contract-v3"
         (PRecord runnerFormat [PText (groupSliceFingerprintText slice)])
     )
 

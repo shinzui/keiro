@@ -290,9 +290,9 @@ registerProjectionCatalogTx catalog = do
         if stored == currentText
           then registerGroups (metadata : accumulated) rest
           else
-            if not ("slice-v1:" `Text.isPrefixOf` stored) && stored /= "$legacy-unmanaged"
-              then pure (Left (RegisteredGroupStaleFingerprint groupId stored))
-              else pure (Left (RegisteredGroupSliceDrift groupId stored currentText))
+            if "slice-v2:" `Text.isPrefixOf` stored
+              then pure (Left (RegisteredGroupSliceDrift groupId stored currentText))
+              else pure (Left (RegisteredGroupStaleFingerprint groupId stored))
 
     sliceFor groupId =
       fromMaybe
@@ -374,7 +374,7 @@ previewCatalogAdoption catalog =
   where
     adoptionClass groupId stored
       | stored == current = AdoptionUnchanged
-      | "slice-v1:" `Text.isPrefixOf` stored = AdoptionSliceChanged stored current
+      | "slice-v2:" `Text.isPrefixOf` stored = AdoptionSliceChanged stored current
       | otherwise = AdoptionStaleFormat stored
       where
         current = sliceTextFor catalog groupId

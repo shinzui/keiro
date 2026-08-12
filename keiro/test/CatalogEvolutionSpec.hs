@@ -108,10 +108,10 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     additive <- expectStore store (lookupProjectionRebuildGroup Catalog.additiveGroupId)
     additive ^? _Just . #sliceFingerprint `shouldBe` Just additiveBefore
 
-  it "classifies and adopts a pre-canonical stored fingerprint" $ \store -> do
+  it "classifies and adopts a live slice-v1 stored fingerprint" $ \store -> do
     current <- expectValid Catalog.validCatalog
     _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
-    let stale = Text.replicate 64 "a"
+    let stale = "slice-v1:" <> Text.replicate 64 "a"
     expectStore
       store
       (Store.runTransaction (Tx.statement (rebuildGroupIdText Catalog.mainGroupId, stale) setStoredSliceStmt))

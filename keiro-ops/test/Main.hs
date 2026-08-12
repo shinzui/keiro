@@ -147,8 +147,8 @@ spec fixture = do
             [group, state, stored, currentSlice] : _ -> do
               group `shouldBe` "ops-group"
               state `shouldBe` "slice-changed"
-              stored `shouldSatisfy` Text.isPrefixOf "slice-v1:"
-              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v1:"
+              stored `shouldSatisfy` Text.isPrefixOf "slice-v2:"
+              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v2:"
               stored `shouldNotBe` currentSlice
             otherRows -> expectationFailure ("unexpected adoption preview rows: " <> show otherRows)
           renderHuman result

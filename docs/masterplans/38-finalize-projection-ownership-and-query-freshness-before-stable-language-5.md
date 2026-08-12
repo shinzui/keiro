@@ -171,9 +171,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (243) M2: Language 5 catalog-managed read-model validation uses owner/target resolution; legacy standalone behavior remains version-gated
 - [x] EP-1 (243) M3: generated catalog, scaffold, diff, harness, and fixture evidence for one owner supplying several query models
 - [x] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
-- [ ] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
+- [x] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
 - [ ] EP-2 (244) M2: query execution derives and validates wait capability; old names retain tested semantics
-- [ ] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
+- [x] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
 - [ ] EP-2 (244) M4: registered dependent compile audit, API documentation, changelog, and Plan-238 integration tests
 - [ ] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print
 - [ ] EP-3 (245) M2: capability-based validation and generated runtime configuration
@@ -216,6 +216,11 @@ interactions between child plans. Provide concise evidence.
   polling, timeout telemetry, and SQL execution, and the focused 27-example runtime group
   passes. Plan 238 remains Not Started in MasterPlan 37, so EP-2 preserves the
   `storeHeadPosition` seam and keeps visible-tail-GC acceptance as an explicit pending gate.
+- EP-2 M3 (2026-08-12): catalog validation derives wait cursor authority from compatible
+  owner handlers and rejects missing or ambiguous cursor capabilities deterministically.
+  The identity boundary advanced to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and replay
+  v3; focused adoption tests prove old slices are stale-format and active v2 runs cannot
+  resume under the new runner.
 
 
 ## Decision Log

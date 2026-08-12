@@ -53,9 +53,9 @@ spec = describe "canonical catalog fingerprint preimages" $ do
   it "spells canonical identities with explicit format prefixes" $ do
     validated <- expectValid Catalog.validCatalog
     catalogFingerprintText (CatalogApi.catalogFingerprint validated)
-      `shouldSatisfy` Text.isPrefixOf "catalog-v2:"
+      `shouldSatisfy` Text.isPrefixOf "catalog-v3:"
     fmap groupSliceFingerprintText (groupSliceFingerprint validated Catalog.mainGroupId)
-      `shouldSatisfy` maybe False (Text.isPrefixOf "slice-v1:")
+      `shouldSatisfy` maybe False (Text.isPrefixOf "slice-v2:")
 
 sourceOnlyCatalog :: Text -> Text -> ProjectionCatalog
 sourceOnlyCatalog identity codec =
