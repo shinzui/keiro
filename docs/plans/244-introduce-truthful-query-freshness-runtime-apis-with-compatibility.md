@@ -41,7 +41,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: pin an old/new API compatibility matrix; add honest freshness, head-scope, cursor-authority, and builder types without breaking old call sites.
+- [x] M1: pin an old/new API compatibility matrix; add honest freshness, head-scope, cursor-authority, and builder types without breaking old call sites. (2026-08-12 14:28Z)
 - [ ] M2: implement truthful query execution and capability errors; preserve old semantics with equivalence tests and integrate Plan 238's visible-head behavior.
 - [ ] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior.
 - [ ] M4: compile-audit registered Keiro dependents through Mori, update API/reference/migration docs and changelogs, run full verification, and update MasterPlan 38.
@@ -62,6 +62,12 @@ implementation. Provide concise evidence.
   `defaultConsistency` and `strongScope`. Making freshness a catalog policy therefore
   changes the canonical identity contract. ADR 0032 requires explicit new prefixes; the
   change cannot reuse `catalog-v2:`/`slice-v1:` while assigning them new meaning.
+- M1 (2026-08-12): preserving the positional `ReadModel` constructor means cursor
+  absence cannot gain a physical field during the 0.12 window. The honest builders encode
+  `NoQueryCursor` with a private NUL-prefixed sentinel, which cannot be persisted as a
+  PostgreSQL text subscription name, and `readModelCursorAuthority` is the sole public
+  decoder. The compile-only 0.11 fixture proves positional patterns, direct records, all
+  legacy constructors, and `runQueryWith` remain source-compatible.
 
 
 ## Decision Log
@@ -95,6 +101,13 @@ Record every decision made while working on the plan.
   a prefix change when the canonical identity contract changes; group adoption must expose
   that drift rather than silently reinterpret old fingerprints.
   Date: 2026-08-12
+- Decision: Announce 0.13 as the removal release for the legacy consistency vocabulary and
+  physical waiting fields.
+  Rationale: 0.12 is the first stable release but must provide a complete mechanical
+  migration window. Naming the next minor release makes the deprecation finite without
+  breaking direct 0.11 record and positional construction before users can adopt the
+  truthful façade.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -104,7 +117,10 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 1 established the compatibility boundary. `cabal build keiro-test` compiled the
+old API fixture, and the focused truthful-construction run passed 6 examples covering
+cursorless immediate models, cursor-retaining immediate models, missing-cursor and
+missing-target rejection, honest default round-trips, and legacy no-target normalization.
 
 
 ## Context and Orientation
@@ -180,6 +196,19 @@ can later perform a caller-targeted wait. Use a private reserved cursor sentinel
 implementation detail for `NoQueryCursor`; reject it at the new wait boundary and never
 export or render it. Generated code will use these builders, so it contains no legacy
 consistency names even though the 0.12 representation remains compatible.
+
+The compatibility contract pinned for this migration is:
+
+| 0.11 spelling | 0.12 behavior | New spelling | Deprecated | Removal release |
+|---|---|---|---|---|
+| `Eventual` | Execute immediately after schema and liveness checks. | `Immediate` | Yes | 0.13 |
+| `Strong` plus `EntireLog` | Capture the visible whole-store head once and wait for the model cursor. | `WaitForHead EntireVisibleLog` | Yes | 0.13 |
+| `Strong` plus `CategoryHead category` | Capture that category's visible head once and wait for the model cursor. | `WaitForHead (CategoryVisibleHead category)` | Yes | 0.13 |
+| `PositionWait options` with `target = Just position` | Wait for the model cursor to reach the supplied position. | `WaitForPosition options` | Yes | 0.13 |
+| `PositionWait options` with `target = Nothing` | Execute immediately; this historical invalid state is retained only for compatibility. | `Immediate` | Yes | 0.13 |
+| Direct `ReadModel` construction and legacy record fields | Compile and retain their 0.11 meanings. | `ReadModelBlueprint` with truthful builders and `QueryCursorAuthority` | Yes | 0.13 |
+| `defaultStrongWaitOptions` | Five-second timeout and 10ms polling; the target is captured or supplied separately. | `defaultHeadWaitOptions` | Yes | 0.13 |
+| `runQueryWith` | Override with the legacy mode and retain every 0.11 edge case. | `runQueryWithFreshness` | Yes | 0.13 |
 
 Keep and deprecate, but do not alter, `ConsistencyMode(..)`, `StrongScope(..)`,
 `defaultStrongWaitOptions`, the three legacy record fields, and `runQueryWith`. Haddocks

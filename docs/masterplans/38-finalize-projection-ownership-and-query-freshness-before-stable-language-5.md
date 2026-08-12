@@ -92,7 +92,7 @@ the canonical project URI `mori://tan/notification-render-service`.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | Complete |
-| 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | Not Started |
+| 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | In Progress |
 | 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.

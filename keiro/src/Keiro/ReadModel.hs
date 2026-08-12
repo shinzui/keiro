@@ -27,9 +27,22 @@
 module Keiro.ReadModel
   ( -- * Definition
     ReadModel (..),
+    ReadModelBlueprint (..),
+    QueryCursorAuthority (..),
+    ReadModelDefinitionError (..),
+    immediateReadModel,
+    headWaitingReadModel,
+    positionWaitingReadModel,
+    readModelCursorAuthority,
+    readModelDefaultFreshness,
     qualifiedTableName,
 
-    -- * Consistency
+    -- * Freshness
+    QueryFreshness (..),
+    HeadScope (..),
+    defaultHeadWaitOptions,
+
+    -- * Deprecated consistency compatibility
     ConsistencyMode (..),
     StrongScope (..),
     PositionWaitOptions (..),
@@ -106,6 +119,140 @@ data ReadModel q r = ReadModel
   }
   deriving stock (Generic)
 
+-- | The cursor capability available to a read model. Immediate queries need no
+-- cursor. Head and caller-position waits require exactly one durable cursor
+-- whose checkpoint represents the projection supplying the model.
+data QueryCursorAuthority
+  = NoQueryCursor
+  | DurableQueryCursor !Text
+  deriving stock (Generic, Eq, Show)
+
+-- | Honest construction input for a 'ReadModel'. It contains query identity,
+-- schema, and SQL without requiring legacy consistency fields or a fictional
+-- subscription name for an inline model.
+data ReadModelBlueprint q r = ReadModelBlueprint
+  { name :: !Text,
+    tableName :: !Text,
+    schema :: !Text,
+    version :: !Int,
+    shapeHash :: !Text,
+    cursorAuthority :: !QueryCursorAuthority,
+    query :: !(q -> Tx.Transaction r)
+  }
+  deriving stock (Generic)
+
+-- | Why an honest read-model definition could not be constructed.
+data ReadModelDefinitionError
+  = -- | A waiting default was requested for a model without a durable cursor:
+    -- model name and requested freshness.
+    ReadModelDefinitionMissingCursor !Text !QueryFreshness
+  | -- | A position-waiting default omitted its required target: model name.
+    ReadModelDefinitionMissingPosition !Text
+  deriving stock (Generic, Eq, Show)
+
+-- | What, if anything, a query waits for before executing its SQL.
+data QueryFreshness
+  = Immediate
+  | WaitForHead !HeadScope
+  | WaitForPosition !PositionWaitOptions
+  deriving stock (Generic, Eq, Show)
+
+-- | The visible event-log boundary captured by 'WaitForHead'.
+data HeadScope
+  = EntireVisibleLog
+  | CategoryVisibleHead !Text
+  deriving stock (Generic, Eq, Show)
+
+-- | Build a read model whose default query executes immediately. The model may
+-- still retain a durable cursor for caller-selected position waits.
+immediateReadModel :: ReadModelBlueprint q r -> ReadModel q r
+immediateReadModel = blueprintReadModel Immediate
+
+-- | Build a read model whose default query waits for a captured visible head.
+-- A durable cursor is required because an inline-only model has nothing that
+-- can advance while the query waits.
+headWaitingReadModel ::
+  HeadScope ->
+  ReadModelBlueprint q r ->
+  Either ReadModelDefinitionError (ReadModel q r)
+headWaitingReadModel scope blueprint =
+  requireCursor blueprint (WaitForHead scope)
+
+-- | Build a read model whose default query waits for a concrete caller-supplied
+-- position. Both a durable cursor and a non-'Nothing' target are required.
+positionWaitingReadModel ::
+  PositionWaitOptions ->
+  ReadModelBlueprint q r ->
+  Either ReadModelDefinitionError (ReadModel q r)
+positionWaitingReadModel options blueprint =
+  case options ^. #target of
+    Nothing -> Left (ReadModelDefinitionMissingPosition (blueprint ^. #name))
+    Just _ -> requireCursor blueprint (WaitForPosition options)
+
+-- | Recover the honest cursor capability from the compatibility representation.
+-- Values built directly with the legacy record retain their named subscription.
+readModelCursorAuthority :: ReadModel q r -> QueryCursorAuthority
+readModelCursorAuthority readModel
+  | readModel ^. #subscriptionName == noQueryCursorSentinel = NoQueryCursor
+  | otherwise = DurableQueryCursor (readModel ^. #subscriptionName)
+
+-- | Translate the legacy default into its exact operational freshness. In
+-- particular, the historical @PositionWait@ with no target is immediate.
+readModelDefaultFreshness :: ReadModel q r -> QueryFreshness
+readModelDefaultFreshness readModel =
+  case readModel ^. #defaultConsistency of
+    Strong -> WaitForHead (legacyHeadScope (readModel ^. #strongScope))
+    Eventual -> Immediate
+    PositionWait options ->
+      case options ^. #target of
+        Nothing -> Immediate
+        Just _ -> WaitForPosition options
+
+blueprintReadModel :: QueryFreshness -> ReadModelBlueprint q r -> ReadModel q r
+blueprintReadModel freshness blueprint =
+  ReadModel
+    { name = blueprint ^. #name,
+      tableName = blueprint ^. #tableName,
+      schema = blueprint ^. #schema,
+      subscriptionName = cursorText (blueprint ^. #cursorAuthority),
+      version = blueprint ^. #version,
+      shapeHash = blueprint ^. #shapeHash,
+      defaultConsistency = legacyConsistency freshness,
+      strongScope = legacyStrongScope freshness,
+      query = blueprint ^. #query
+    }
+
+requireCursor ::
+  ReadModelBlueprint q r ->
+  QueryFreshness ->
+  Either ReadModelDefinitionError (ReadModel q r)
+requireCursor blueprint freshness =
+  case blueprint ^. #cursorAuthority of
+    NoQueryCursor ->
+      Left (ReadModelDefinitionMissingCursor (blueprint ^. #name) freshness)
+    DurableQueryCursor _ -> Right (blueprintReadModel freshness blueprint)
+
+cursorText :: QueryCursorAuthority -> Text
+cursorText NoQueryCursor = noQueryCursorSentinel
+cursorText (DurableQueryCursor cursor) = cursor
+
+noQueryCursorSentinel :: Text
+noQueryCursorSentinel = "\NULkeiro:no-query-cursor"
+
+legacyConsistency :: QueryFreshness -> ConsistencyMode
+legacyConsistency Immediate = Eventual
+legacyConsistency WaitForHead {} = Strong
+legacyConsistency (WaitForPosition options) = PositionWait options
+
+legacyStrongScope :: QueryFreshness -> StrongScope
+legacyStrongScope (WaitForHead EntireVisibleLog) = EntireLog
+legacyStrongScope (WaitForHead (CategoryVisibleHead category)) = CategoryHead category
+legacyStrongScope _ = EntireLog
+
+legacyHeadScope :: StrongScope -> HeadScope
+legacyHeadScope EntireLog = EntireVisibleLog
+legacyHeadScope (CategoryHead category) = CategoryVisibleHead category
+
 -- | The read model's fully-qualified, double-quoted table reference
 -- @"schema"."table"@, for interpolation into the application's projection SQL.
 -- Equal to @'Keiro.Connection.qualifyTable' ('schema' rm) ('tableName' rm)@.
@@ -161,12 +308,39 @@ data PositionWaitOptions = PositionWaitOptions
 -- | Default wait settings used by 'Strong': wait up to five seconds, polling
 -- every 10ms, for the store head captured at query start.
 defaultStrongWaitOptions :: PositionWaitOptions
-defaultStrongWaitOptions =
+defaultStrongWaitOptions = defaultHeadWaitOptions
+
+-- | Default options for a captured-head wait: five seconds total, polling
+-- every 10ms. 'WaitForHead' supplies the captured target at execution time.
+defaultHeadWaitOptions :: PositionWaitOptions
+defaultHeadWaitOptions =
   PositionWaitOptions
     { target = Nothing,
       timeoutMicros = 5000000,
       pollMicros = 10000
     }
+
+{-# DEPRECATED ConsistencyMode "Use QueryFreshness. ConsistencyMode remains through the 0.12 compatibility window and is removed in 0.13." #-}
+
+{-# DEPRECATED Strong "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability; it is removed in 0.13." #-}
+
+{-# DEPRECATED Eventual "Use Immediate. Eventual means only that the query does not wait; it is removed in 0.13." #-}
+
+{-# DEPRECATED PositionWait "Use WaitForPosition with a concrete target. Legacy PositionWait Nothing remains immediate through 0.12 and is removed in 0.13." #-}
+
+{-# DEPRECATED StrongScope "Use HeadScope. StrongScope remains through the 0.12 compatibility window and is removed in 0.13." #-}
+
+{-# DEPRECATED EntireLog "Use EntireVisibleLog. EntireLog remains through the 0.12 compatibility window and is removed in 0.13." #-}
+
+{-# DEPRECATED CategoryHead "Use CategoryVisibleHead. CategoryHead remains through the 0.12 compatibility window and is removed in 0.13." #-}
+
+{-# DEPRECATED defaultStrongWaitOptions "Use defaultHeadWaitOptions. The legacy name is removed in 0.13." #-}
+
+{-# DEPRECATED subscriptionName "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. The legacy record field is removed in 0.13." #-}
+
+{-# DEPRECATED defaultConsistency "Use ReadModelBlueprint builders and readModelDefaultFreshness. The legacy record field is removed in 0.13." #-}
+
+{-# DEPRECATED strongScope "Use HeadScope through the ReadModelBlueprint builders. The legacy record field is removed in 0.13." #-}
 
 -- | Why a read-model query could not run.
 data ReadModelError

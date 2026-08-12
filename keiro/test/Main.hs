@@ -376,6 +376,7 @@ import OpenTelemetry.Trace.Core
   )
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
+import ReadModelSpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -396,6 +397,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   ProjectionReplaySpec.spec fixture
+  ReadModelSpec.spec
 
   describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
     it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
