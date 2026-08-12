@@ -83,8 +83,8 @@ import Keiro.ProcessManager
     confirmBenignDuplicate,
     decideForFailures,
     defaultWorkerOptions,
-    deterministicCommandId,
-    eventAlreadyIn,
+    firstExistingEventId,
+    legacyDeterministicCommandId,
     summarizeDomainCommandResult,
   )
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
@@ -324,39 +324,31 @@ dispatchRouterCommands options routerName targetEventStream targetProjections co
               targetStreamName
               occurrence
           -- Transition: dispatches written by keiro versions that derived
-          -- positional ids must still dedup across the upgrade. Remove in a
-          -- later release after the compatibility window closes.
+          -- positional ids must still dedup across the upgrade.
           legacyCommandId =
-            deterministicCommandId
+            legacyDeterministicCommandId
               routerName
               correlationId
               sourceEventId
               legacyIndex
           targetOptions = options & #eventIds .~ [commandId]
           targetStream = retarget (command ^. #target)
-      commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-      legacyAlreadyProcessed <-
-        if commandAlreadyProcessed
-          then pure False
-          else eventAlreadyIn options targetStreamName legacyCommandId
-      if commandAlreadyProcessed
-        then pure (PMCommandDuplicate commandId)
-        else
-          if legacyAlreadyProcessed
-            then pure (PMCommandDuplicate legacyCommandId)
-            else do
-              outcome <-
-                runCommandWithProjections
-                  targetOptions
-                  targetEventStream
-                  targetStream
-                  (command ^. #command)
-                  (targetProjections (command ^. #target))
-              case outcome of
-                Right result -> pure (PMCommandAppended result)
-                Left err -> do
-                  benign <- confirmBenignDuplicate targetStreamName commandId err
-                  pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed targetStreamName err
+      existingCommandId <- firstExistingEventId options targetStreamName (commandId :| [legacyCommandId])
+      case existingCommandId of
+        Just matchedId -> pure (PMCommandDuplicate matchedId)
+        Nothing -> do
+          outcome <-
+            runCommandWithProjections
+              targetOptions
+              targetEventStream
+              targetStream
+              (command ^. #command)
+              (targetProjections (command ^. #target))
+          case outcome of
+            Right result -> pure (PMCommandAppended result)
+            Left err -> do
+              benign <- confirmBenignDuplicate targetStreamName commandId err
+              pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed targetStreamName err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -476,7 +468,7 @@ dispatchDomainRouterCommand options router correlationId sourceEventId (legacyIn
           targetStreamName
           occurrence
       legacyCommandId =
-        deterministicCommandId
+        legacyDeterministicCommandId
           (router ^. #name)
           correlationId
           sourceEventId
@@ -484,33 +476,26 @@ dispatchDomainRouterCommand options router correlationId sourceEventId (legacyIn
       targetOptions = options & #eventIds .~ [commandId]
       handler = router ^. #targetHandler
       targetStream = retarget (command ^. #target)
-  commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-  legacyAlreadyProcessed <-
-    if commandAlreadyProcessed
-      then pure False
-      else eventAlreadyIn options targetStreamName legacyCommandId
-  if commandAlreadyProcessed
-    then pure (DomainPMCommandDuplicate commandId)
-    else
-      if legacyAlreadyProcessed
-        then pure (DomainPMCommandDuplicate legacyCommandId)
-        else do
-          outcome <-
-            runDomainCommandWithProjections
-              targetOptions
-              handler
-              targetStream
-              (command ^. #command)
-              ((router ^. #targetProjections) (command ^. #target))
-          case outcome of
-            Right result -> pure (DomainPMCommandHandled result)
-            Left err -> do
-              benign <- confirmBenignDuplicate targetStreamName commandId err
-              pure
-                ( if benign
-                    then DomainPMCommandDuplicate commandId
-                    else DomainPMCommandFailed targetStreamName err
-                )
+  existingCommandId <- firstExistingEventId options targetStreamName (commandId :| [legacyCommandId])
+  case existingCommandId of
+    Just matchedId -> pure (DomainPMCommandDuplicate matchedId)
+    Nothing -> do
+      outcome <-
+        runDomainCommandWithProjections
+          targetOptions
+          handler
+          targetStream
+          (command ^. #command)
+          ((router ^. #targetProjections) (command ^. #target))
+      case outcome of
+        Right result -> pure (DomainPMCommandHandled result)
+        Left err -> do
+          benign <- confirmBenignDuplicate targetStreamName commandId err
+          pure
+            ( if benign
+                then DomainPMCommandDuplicate commandId
+                else DomainPMCommandFailed targetStreamName err
+            )
   where
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce

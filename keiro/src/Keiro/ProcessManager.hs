@@ -134,12 +134,15 @@ module Keiro.ProcessManager
     -- * Idempotency primitives
     deterministicCommandId,
     legacyDeterministicCommandId,
+    deterministicCommandIdProbes,
+    firstExistingEventId,
     eventAlreadyIn,
     confirmBenignDuplicate,
   )
 where
 
 import Data.Coerce (coerce)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
@@ -157,7 +160,7 @@ import Keiro.Command
     runCommandWithSql,
   )
 import Keiro.DeadLetter (DispatchDeadLetter (..), DispatcherKind (..), recordDispatchDeadLetter)
-import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes)
+import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes, seedMovedAcrossEncodings)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
@@ -474,10 +477,7 @@ ackForCommandError delay err
 -- length-prefixed encoding.
 deterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
 deterministicCommandId managerName correlationId sourceEventId emitIndex =
-  EventId
-    $ UUID.V5.generateNamed UUID.V5.namespaceURL
-    $ identitySeedBytes
-    $ commandIdSeed managerName correlationId sourceEventId emitIndex
+  NonEmpty.head (deterministicCommandIdProbes managerName correlationId sourceEventId emitIndex)
 
 -- | Reproduce the deterministic command id written before Keiro switched its
 -- seed encoding to UTF-8. This exists only for compatibility probes; all new
@@ -488,6 +488,17 @@ legacyDeterministicCommandId managerName correlationId sourceEventId emitIndex =
     $ UUID.V5.generateNamed UUID.V5.namespaceURL
     $ legacySeedBytes
     $ commandIdSeed managerName correlationId sourceEventId emitIndex
+
+-- | Candidate ids for a process-manager write, ordered with the current UTF-8
+-- append id first and the frozen legacy id second only when the seed contains
+-- non-ASCII text. This is the single source of truth for the compatibility
+-- probe described by ADR 0024.
+deterministicCommandIdProbes :: Text -> Text -> EventId -> Int -> NonEmpty EventId
+deterministicCommandIdProbes managerName correlationId sourceEventId emitIndex =
+  let seed = commandIdSeed managerName correlationId sourceEventId emitIndex
+      current = EventId (UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes seed))
+      legacy = EventId (UUID.V5.generateNamed UUID.V5.namespaceURL (legacySeedBytes seed))
+   in current :| [legacy | seedMovedAcrossEncodings seed]
 
 commandIdSeed :: Text -> Text -> EventId -> Int -> Text
 commandIdSeed managerName correlationId sourceEventId emitIndex =
@@ -533,13 +544,14 @@ runProcessManagerOnce options manager sourceEvent input = do
   let correlationId = (manager ^. #correlate) input
       action = (manager ^. #handle) input
       managerStream = (manager ^. #streamFor) correlationId
-      managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+      managerProbes = deterministicCommandIdProbes (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+      managerEventId = NonEmpty.head managerProbes
       managerOptions = options & #eventIds .~ [managerEventId]
       managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
-  managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
-  if managerAlreadyProcessed
-    then finish correlationId (PMStateDuplicate managerEventId) action
-    else do
+  existingManagerId <- firstExistingEventId options managerStreamName managerProbes
+  case existingManagerId of
+    Just matchedId -> finish correlationId (PMStateDuplicate matchedId) action
+    Nothing -> do
       managerOutcome <-
         runCommandWithSql
           managerOptions
@@ -577,14 +589,15 @@ runProcessManagerOnce options manager sourceEvent input = do
         (zip [0 ..] commands)
 
     dispatchCommand correlationId sourceEventId emitIndex command = do
-      let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
+      let commandProbes = deterministicCommandIdProbes (manager ^. #name) correlationId sourceEventId emitIndex
+          commandId = NonEmpty.head commandProbes
           targetOptions = options & #eventIds .~ [commandId]
           targetStream = retarget (command ^. #target)
           targetStreamName = ((unvalidated (manager ^. #targetEventStream)) ^. #resolveStreamName) targetStream
-      commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-      if commandAlreadyProcessed
-        then pure (PMCommandDuplicate commandId)
-        else do
+      existingCommandId <- firstExistingEventId options targetStreamName commandProbes
+      case existingCommandId of
+        Just matchedId -> pure (PMCommandDuplicate matchedId)
+        Nothing -> do
           outcome <-
             runCommandWithProjections
               targetOptions
@@ -673,14 +686,15 @@ advanceDomainProcessManager options manager sourceEvent input = do
   let correlationId = (manager ^. #correlate) input
       action = (manager ^. #handle) input
       managerStream = (manager ^. #streamFor) correlationId
-      managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+      managerProbes = deterministicCommandIdProbes (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+      managerEventId = NonEmpty.head managerProbes
       managerOptions = options & #eventIds .~ [managerEventId]
       managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
       finish managerResult = pure (Right (correlationId, managerResult, action))
-  managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
-  if managerAlreadyProcessed
-    then finish (PMStateDuplicate managerEventId)
-    else do
+  existingManagerId <- firstExistingEventId options managerStreamName managerProbes
+  case existingManagerId of
+    Just matchedId -> finish (PMStateDuplicate matchedId)
+    Nothing -> do
       managerOutcome <-
         runCommandWithSql
           managerOptions
@@ -765,16 +779,17 @@ dispatchDomainProcessManagerCommand ::
   PMCommand targetCi ->
   Eff es (DomainPMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) targetCo rejection noOp)
 dispatchDomainProcessManagerCommand options manager correlationId sourceEventId emitIndex command = do
-  let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
+  let commandProbes = deterministicCommandIdProbes (manager ^. #name) correlationId sourceEventId emitIndex
+      commandId = NonEmpty.head commandProbes
       targetOptions = options & #eventIds .~ [commandId]
       handler = manager ^. #targetHandler
       targetEventStream = handler ^. #eventStream
       targetStream = retarget (command ^. #target)
       targetStreamName = ((unvalidated targetEventStream) ^. #resolveStreamName) targetStream
-  commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-  if commandAlreadyProcessed
-    then pure (DomainPMCommandDuplicate commandId)
-    else do
+  existingCommandId <- firstExistingEventId options targetStreamName commandProbes
+  case existingCommandId of
+    Just matchedId -> pure (DomainPMCommandDuplicate matchedId)
+    Nothing -> do
       outcome <-
         runDomainCommandWithProjections
           targetOptions
@@ -1113,6 +1128,23 @@ eventAlreadyIn ::
   Eff es Bool
 eventAlreadyIn _options streamName eventId =
   eventExistsInStream streamName eventId
+
+-- | Return the first candidate id already present in the target stream.
+-- Candidate order is significant: callers put the current append id first and
+-- immutable historical identities after it.
+firstExistingEventId ::
+  (Store :> es) =>
+  RunCommandOptions ->
+  StoreTypes.StreamName ->
+  NonEmpty EventId ->
+  Eff es (Maybe EventId)
+firstExistingEventId options streamName = go . NonEmpty.toList
+  where
+    go = \case
+      [] -> pure Nothing
+      candidate : rest -> do
+        exists <- eventAlreadyIn options streamName candidate
+        if exists then pure (Just candidate) else go rest
 
 -- | Decide whether a failed append is a benign duplicate of the write just
 -- attempted: whether @ourId@ is genuinely present in @streamName@.

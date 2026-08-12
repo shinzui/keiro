@@ -4070,6 +4070,57 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Vector.length managerEvents `shouldBe` 1
       Vector.length targetEvents `shouldBe` 1
 
+    it "bridges a pre-UTF-8 process-manager state and command redelivery" $ \(storeHandle, StoreRunner _runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+          correlationId = "\x4E2D\x6587-42"
+          managerStreamName = StreamName "pm:counter-unicode"
+          targetStreamName = StreamName "counter-target-unicode"
+          legacyManagerId = legacyDeterministicCommandId "unicode-pm" correlationId (sourceEvent ^. #eventId) (-1)
+          legacyCommandId = legacyDeterministicCommandId "unicode-pm" correlationId (sourceEvent ^. #eventId) 0
+      appendCounterEventWithId storeHandle managerStreamName legacyManagerId (CounterAdded 9)
+      appendCounterEventWithId storeHandle targetStreamName legacyCommandId (CounterAdded 9)
+      Right (Right pmResult) <-
+        _runner $
+          runProcessManagerOnce defaultRunCommandOptions unicodeCounterProcessManager sourceEvent (CounterAdded 9)
+      Right managerEvents <- _runner $ Store.readStreamForward managerStreamName (StreamVersion 0) 10
+      Right targetEvents <- _runner $ Store.readStreamForward targetStreamName (StreamVersion 0) 10
+      ( pmResult ^. #managerResult,
+        pmResult ^. #commandResults,
+        Vector.length managerEvents,
+        Vector.length targetEvents
+        )
+        `shouldBe` ( PMStateDuplicate legacyManagerId,
+                     [PMCommandDuplicate legacyCommandId],
+                     1,
+                     1
+                   )
+
+    it "bridges a pre-UTF-8 domain process-manager state and command redelivery" $ \(storeHandle, StoreRunner _runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+          correlationId = "\x4E2D\x6587-9"
+          managerStreamName = StreamName ("domain-pm:" <> correlationId)
+          targetStreamName = StreamName ("domain-pm-target:" <> correlationId <> ":0")
+          legacyManagerId = legacyDeterministicCommandId "domain-pm" correlationId (sourceEvent ^. #eventId) (-1)
+          legacyCommandId = legacyDeterministicCommandId "domain-pm" correlationId (sourceEvent ^. #eventId) 0
+          input = DomainDispatchInput correlationId [CoordinatorAccept 9]
+      appendCounterEventWithId storeHandle managerStreamName legacyManagerId (CounterAdded 1)
+      appendCounterEventWithId storeHandle targetStreamName legacyCommandId (CounterAdded 9)
+      Right (Right pmResult) <-
+        _runner $
+          runDomainProcessManagerOnce defaultRunCommandOptions domainProcessManager sourceEvent input
+      Right managerEvents <- _runner $ Store.readStreamForward managerStreamName (StreamVersion 0) 10
+      Right targetEvents <- _runner $ Store.readStreamForward targetStreamName (StreamVersion 0) 10
+      ( pmResult ^. #managerResult,
+        pmResult ^. #commandResults,
+        Vector.length managerEvents,
+        Vector.length targetEvents
+        )
+        `shouldBe` ( PMStateDuplicate legacyManagerId,
+                     [DomainPMCommandDuplicate legacyCommandId],
+                     1,
+                     1
+                   )
+
     it "replays a Kiroku dead letter freshly and deduplicates a second replay" $ \(_storeHandle, StoreRunner _runner) -> do
       let subName = SubscriptionName "counter-pm-replay-fresh"
           replayHandler recorded =
@@ -5192,6 +5243,39 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         _runner $
           Store.readStreamForward targetStreamName (StreamVersion 0) 10
       Vector.length targetEvents `shouldBe` 1
+
+    it "bridges a pre-UTF-8 positional router redelivery with a non-ASCII key" $ \(storeHandle, StoreRunner _runner) -> do
+      Right () <-
+        _runner $
+          initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
+      let correlationId = "g-\x4E2D\x6587"
+          targetStreamName = StreamName "transition-unicode-target"
+          sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          legacyId = legacyDeterministicCommandId "demo-router" correlationId (sourceEvent ^. #eventId) 0
+      Right () <-
+        _runner $
+          Store.runTransaction (Tx.statement (correlationId, "transition-unicode-target") insertRouterTargetStmt)
+      appendCounterEventWithId storeHandle targetStreamName legacyId (CounterAdded 1)
+      Right (RouterResult results) <-
+        _runner $
+          runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup correlationId)
+      Right targetEvents <- _runner $ Store.readStreamForward targetStreamName (StreamVersion 0) 10
+      (results, Vector.length targetEvents)
+        `shouldBe` ([PMCommandDuplicate legacyId], 1)
+
+    it "bridges a pre-UTF-8 domain router redelivery with a non-ASCII key" $ \(storeHandle, StoreRunner _runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+          correlationId = "\x4E2D\x6587-9"
+          targetStreamName = StreamName ("domain-router-target:" <> correlationId <> ":0")
+          legacyId = legacyDeterministicCommandId "domain-router" correlationId (sourceEvent ^. #eventId) 0
+          input = DomainDispatchInput correlationId [CoordinatorAccept 9]
+      appendCounterEventWithId storeHandle targetStreamName legacyId (CounterAdded 9)
+      Right (DomainRouterResult results) <-
+        _runner $
+          runDomainRouterOnce defaultRunCommandOptions domainRouter sourceEvent input
+      Right targetEvents <- _runner $ Store.readStreamForward targetStreamName (StreamVersion 0) 10
+      (results, Vector.length targetEvents)
+        `shouldBe` ([DomainPMCommandDuplicate legacyId], 1)
 
   describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
     it "validates worker options before startup" $ \_storeHandle -> do
@@ -9883,6 +9967,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       deterministicAwakeableId name wid "\x4E2D"
         `shouldNotBe` deterministicAwakeableId name wid "-"
 
+    it "adds a legacy command probe only when the seed moved" $ do
+      NonEmpty.toList (deterministicCommandIdProbes "counter-pm" "order-1" sourceEventId 0)
+        `shouldBe` [deterministicCommandId "counter-pm" "order-1" sourceEventId 0]
+      NonEmpty.toList (deterministicCommandIdProbes "counter-pm" "\x4E2D\x6587" sourceEventId 0)
+        `shouldBe` [ deterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId 0,
+                     legacyDeterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId 0
+                   ]
+
   describe "Keiro.Workflow.Sleep" $ do
     -- Pure (no-DB) checks of the id/payload/step-name helpers.
     it "derives a deterministic, distinct timer id" $ do
@@ -13983,6 +14075,39 @@ counterProcessManager =
                     }
                 ],
               timers = [counterTimerRequest]
+            }
+        CounterAudited amount ->
+          ProcessManagerAction
+            { command = Add amount,
+              commands = [],
+              timers = []
+            }
+    }
+
+unicodeCounterProcessManager ::
+  ProcessManager
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+unicodeCounterProcessManager =
+  counterProcessManager
+    { name = "unicode-pm",
+      correlate = const "\x4E2D\x6587-42",
+      streamFor = const (stream "pm:counter-unicode"),
+      handle = \case
+        CounterAdded amount ->
+          ProcessManagerAction
+            { command = Add amount,
+              commands = [PMCommand {target = stream "counter-target-unicode", command = Add amount}],
+              timers = []
             }
         CounterAudited amount ->
           ProcessManagerAction

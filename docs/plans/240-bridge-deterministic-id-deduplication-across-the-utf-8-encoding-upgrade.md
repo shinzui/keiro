@@ -69,12 +69,16 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
       `describe "Keiro deterministic id legacy-encoding bridge"` block in
       `keiro/test/Main.hs`; `cabal test keiro-test` green with 501 examples and
       zero failures (2026-08-12T19:20:42Z).
-- [ ] M2: Add `firstExistingEventId` and `deterministicCommandIdProbes` to
-      `keiro/src/Keiro/ProcessManager.hs`; export both.
-- [ ] M2: Add the five DB-backed redelivery scenarios (PM state+command, router, domain
-      PM, domain router) and record their failure transcripts against the unbridged code.
-- [ ] M2: Wire the four process-manager probe sites and the two router probe sites;
-      scenarios turn green; existing ASCII dedup tests stay green.
+- [x] M2: Add `firstExistingEventId` and `deterministicCommandIdProbes` to
+      `keiro/src/Keiro/ProcessManager.hs`; export both (2026-08-12T19:25:25Z).
+- [x] M2: Add the five redelivery checks (four DB-backed scenarios for PM
+      state+command, router, domain PM, and domain router, plus the pure ASCII probe
+      cardinality check) and record their failure transcripts against the unbridged code
+      (2026-08-12T19:25:25Z).
+- [x] M2: Wire the four process-manager probe sites and the two router probe sites;
+      scenarios turn green; the full suite, including existing ASCII and concurrent
+      dedup tests, passes with 506 examples and zero failures
+      (2026-08-12T19:29:46Z).
 - [ ] M3: Bridge `allocateAwakeableId` adoption; add the non-ASCII-label adoption test;
       existing ASCII adoption test stays green.
 - [ ] M4: Update ADR 0024 (bridge, unified window, removal criteria, residual collision
@@ -114,6 +118,14 @@ implementation. Provide concise evidence.
   both yielded `7b252ef4-c7c0-579e-8f15-8f26c73196de`. A deliberately corrupted
   `José` golden failed with the genuine captured id, proving the fixture block is
   behavior-sensitive rather than self-derived.
+- Implementation (2026-08-12): all four database reproductions failed together against
+  the deliberately unbridged runtime. Both process-manager cases reported
+  `PMStateAppended` plus an appended/handled command with manager and target stream
+  lengths `(2,2)`; both router cases reported an appended/handled command with target
+  length `2`. The expected historical IDs were respectively `4d474ccc...`/`b19708e7...`
+  (PM), `50b226dc...`/`8837a38c...` (domain PM), `1b99b504...` (router), and
+  `f2aad3de...` (domain router). This is the planned before-fix evidence that one
+  pre-upgrade event becomes two post-upgrade writes.
 
 (Implementation entries to be added as work proceeds.)
 
