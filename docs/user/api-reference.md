@@ -419,9 +419,11 @@ polling when their capabilities are absent.
 
 `subscriptionPositionFromInventory` and `readSubscriptionPosition` take the
 minimum durable checkpoint across every member with the exact subscription
-name. `storeHeadPosition` uses the store cursor captured by Kiroku's public
-one-statement inventory, rather than inferring the head from the newest visible
-event.
+name. `storeHeadPosition` returns the newest visible event's global position,
+or zero when no event remains. This is the reachable boundary for a caught-up
+subscription. Kiroku's public `subscriptionCheckpointInventory` separately
+exposes the authoritative append counter, which retains positions for
+hard-deleted events.
 
 ## `Keiro.ReadModel.Schema`
 
@@ -777,19 +779,22 @@ dead-letter reasons, and typed rejection/no-op keeps successful span status.
 The preferred projection gauge is
 `keiro.projection.global_position_distance` with unit `{position}`. The
 historical `keiro.projection.lag` gauge remains a deprecated 0.11 compatibility
-instrument and receives the same value. Neither value counts relevant events.
+instrument and receives the same value. Both measure from the newest visible
+event to the slowest durable subscription member, so a caught-up projection
+reports zero after tail hard-deletion. Neither value counts relevant events.
 
 ## `Keiro.Ops` (package `keiro-ops`)
 
 Embeddable and standalone operational command tree. The database-only surface
-includes `stream subscriptions`, which returns the captured Kiroku store
-position plus every durable checkpoint in subscription/member order, and
-`projection position --subscription NAME`, which returns matching `members`
-plus `minimum_checkpoint_position` and
-`maximum_global_position_distance`. Missing subscriptions have an empty member
-array and null summaries. Both commands are read-only, use
-`subscriptionCheckpointInventory`, and are available without an `AppHooks`
-capability.
+includes `stream subscriptions`, which returns Kiroku's authoritative
+`store_position`, Keiro's reachable `visible_store_head`, and every durable
+checkpoint in subscription/member order. `projection position --subscription
+NAME` returns the same two heads plus matching `members`,
+`minimum_checkpoint_position`, and `maximum_global_position_distance`; every
+distance uses the visible head. Missing subscriptions have an empty member array
+and null summaries. Both commands are read-only, use
+`subscriptionCheckpointInventory` plus `storeHeadPosition`, and are available
+without an `AppHooks` capability.
 
 ## `Keiro.ReplayAudit`
 

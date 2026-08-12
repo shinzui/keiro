@@ -84,7 +84,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
-| 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | In Progress |
+| 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
 | 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Not Started |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
@@ -160,7 +160,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (238) M1: reproduce-first GC regression test plus the visible-head fix in ReadModel.hs, with genuine-behind timeout non-regression (2026-08-12T16:55:27Z)
 - [x] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test (2026-08-12T17:00:29Z)
 - [x] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test (2026-08-12T17:03:19Z)
-- [ ] EP-2 (238) M4: api-reference/CHANGELOG updates and the reachable-wait-targets ADR
+- [x] EP-2 (238) M4: api-reference/CHANGELOG updates, ADR 0033 plus ADR 0028 amendment, and full `just verify` (2026-08-12T17:15:51Z)
 - [ ] EP-3 (239) M1: cancel takes the per-step lock, suspend re-check consults awakeable status; both-order interleaving tests
 - [ ] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test
 - [ ] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests
@@ -262,10 +262,19 @@ refused until an operator previews and forces adoption. ADR 0032 and amendments 
 ADRs 0026, 0028, and 0031 capture the durable boundary, and full repository
 verification passed.
 
-The MasterPlan remains in progress: EP-2 through EP-6 are not started. EP-1 removes
+EP-2 is complete. Strong whole-log reads now capture the newest visible event as a
+reachable wait target, while genuinely behind subscriptions retain the honest timeout
+path. Projection distance uses the same visible basis and `keiro-ops` reports both the
+authoritative append counter and visible head. The workflow-GC, timeout, telemetry, and
+operator divergence regressions pass; ADR 0033 and the ADR 0028 amendment preserve the
+contract, and full repository verification passed.
+
+The MasterPlan remains in progress: EP-3 through EP-6 are not started. EP-1 removes
 the release-critical catalog lockout and fingerprint-forgery defects and clears
-EP-6's soft dependency on its rebuild-runner identity changes.
+EP-6's soft dependency on its rebuild-runner identity changes; EP-2 removes the
+release-critical unreachable consistency target and permanent false-distance defect.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
-and adoption decisions in ADR 0032 and related amendments, and left EP-2 through
+and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
+reachable consistency targets in ADR 0033 and amended ADR 0028; left EP-3 through
 EP-6 eligible for subsequent execution.

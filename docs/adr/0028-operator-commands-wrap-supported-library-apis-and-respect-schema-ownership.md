@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-08-12T11:51:04Z
+timestamp: 2026-08-12T17:04:23Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -58,11 +58,15 @@ command exposes it.
 Durable Kiroku checkpoint commands call
 `Kiroku.Store.Subscription.subscriptionCheckpointInventory` and preserve every
 member row. A subscription-wide checkpoint is the minimum across matching members;
-member zero does not identify whether the subscription is grouped. Subtracting that
-checkpoint from the captured store cursor is named **global position distance**,
-never event lag, backlog, or events behind. A global cursor may be sparse for a
-filtered, category, hard-deleted, or sharded history, so a true relevant-event lag
-requires a compatible frontier and definition exported by the owning library.
+member zero does not identify whether the subscription is grouped. The commands also
+call `Keiro.ReadModel.storeHeadPosition` for the newest visible event. They report the
+inventory's authoritative append counter as `store_position`, report the reachable
+event boundary as `visible_store_head`, and subtract each checkpoint from the visible
+head for **global position distance**. That subtraction is never called event lag,
+backlog, or events behind. A global cursor may be sparse for a filtered, category,
+hard-deleted, or sharded history, so a true relevant-event lag requires a compatible
+frontier and definition exported by the owning library. [ADR 0033](0033-consistency-waits-target-reachable-visible-heads.md)
+defines why the authoritative counter is not a consistency-wait or distance target.
 
 Every destructive command has two phases. Without `--force`, it performs only the
 supported read or preview path, renders the rows or objects that would be affected,
@@ -101,9 +105,9 @@ preview and mutation call the supported slice-adoption operations from
 - JSON and human table output are alternative renderings of the same structured
   handler result, so scripts do not depend on terminal formatting.
 - `stream subscriptions` and `projection position` remain database-only and
-  read-only. They expose stopped-worker checkpoint rows without consulting the
-  process-local subscription registry, scanning category history, or adding an
-  application hook.
+  read-only. They expose stopped-worker checkpoint rows and both store heads
+  without consulting the process-local subscription registry, scanning category
+  history, or adding an application hook.
 - Dashboards migrate from `keiro.projection.lag` to
   `keiro.projection.global_position_distance`; the old gauge is a one-series
   compatibility alias with the same position-unit value, not permission to retain
@@ -124,3 +128,5 @@ preview and mutation call the supported slice-adoption operations from
 - [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
   defines the catalog adoption preview, transaction, and compiled-catalog
   capability boundary.
+- [ADR 0033](0033-consistency-waits-target-reachable-visible-heads.md) separates
+  the authoritative append counter from reachable wait and distance targets.

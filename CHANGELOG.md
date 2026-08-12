@@ -35,6 +35,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   handler-order changes; exhaustive consumers must be extended. Languages 1–4
   retain their published parse and runtime meaning.
 
+### Bug Fixes
+
+- **keiro**: Strong and `WaitForHead EntireVisibleLog` read-model queries now
+  target the newest visible event instead of Kiroku's authoritative append
+  counter, so a caught-up query no longer times out after workflow garbage
+  collection hard-deletes the newest journal events. Projection position
+  distance uses the same reachable head and returns zero when no visible work
+  remains.
+
 ### New Features
 
 - **keiro**: make absent subscription checkpoints explicit catalog identity.
@@ -78,17 +87,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   comments no longer embed volatile lines; source movement changes the map while failures and
   `behavior-obligations` still report the current exact position.
 
-- **keiro**: replace the private subscription-checkpoint read and inferred
-  global head with Kiroku 0.4's public one-statement durable inventory. Add the
-  preferred `recordProjectionGlobalPositionDistance` API and
+- **keiro**: replace the private subscription-checkpoint read with Kiroku's
+  public one-statement durable inventory. The inventory's authoritative append
+  counter remains available for operator reporting, while consistency waits
+  and telemetry use the newest visible event. Add the preferred
+  `recordProjectionGlobalPositionDistance` API and
   `keiro.projection.global_position_distance` gauge; the historical lag API and
   gauge remain a deprecated 0.11 compatibility alias with the same
   position-unit value.
 - **keiro-ops**: add read-only `stream subscriptions` and
   `projection position --subscription NAME` commands. They preserve durable
-  consumer-group member rows, report the captured store cursor, and label the
-  derived subtraction `global_position_distance` rather than claiming an event
-  count.
+  consumer-group member rows, report both the authoritative `store_position`
+  and reachable `visible_store_head`, and compute the derived
+  `global_position_distance` from the visible head rather than claiming an
+  event count.
 - **keiro**: add `Keiro.Projection.Catalog`, a pure typed projection inventory
   that separates query models, physical targets, atomic rebuild groups, and
   ordered projection owners. Validation accumulates stable multi-site

@@ -56,10 +56,10 @@ This section must always reflect the actual current state of the work.
 - [x] M2: rebase `recordProjectionGlobalPositionDistance` in `keiro/src/Keiro/Projection.hs` on the visible head; keep the deprecated `recordProjectionLag` alias recording the identical value (2026-08-12T17:00:29Z).
 - [x] M2: add the gauge test "reports zero global position distance after the newest events are hard deleted" and confirm the focused metric tests (2 examples) and full `keiro-test` suite (494 examples) pass with zero failures (2026-08-12T17:00:29Z).
 - [x] M3: add the visible head to `keiro-ops` `projection position` and `stream subscriptions` output and compute their distance columns against it; update `keiro-ops/test/Main.hs` expectations and add a hard-delete divergence test; `keiro-ops-test` passes 32 examples (2026-08-12T17:03:19Z).
-- [ ] M4: update `docs/user/api-reference.md` and the `CHANGELOG.md` Unreleased entries that describe the inventory-based head.
-- [ ] M4: distill the durable decision (wait targets must be reachable positions; the authoritative counter is not a wait target) into a new ADR in `docs/adr/` and run `just adr-validate`.
-- [ ] M4: run `just verify` from the repository root and record the result here.
-- [ ] Update the parent MasterPlan's Progress entry for EP-2 (238) when the milestones above complete.
+- [x] M4: update `docs/user/api-reference.md` and the `CHANGELOG.md` Unreleased entries that describe the inventory-based head (2026-08-12T17:07:31Z).
+- [x] M4: distill the durable decision (wait targets must be reachable positions; the authoritative counter is not a wait target) into ADR 0033, amend ADR 0028's obsolete distance basis, and pass strict `just adr-validate` for all 33 concepts (2026-08-12T17:07:31Z).
+- [x] M4: run `just verify` from the repository root; the complete build, package tests, 697-example DSL suite, 39-entry conformance corpus, Jitsurei checks, migration tests, policy scripts, diagrams, and strict OKF validation pass (2026-08-12T17:15:51Z).
+- [x] Update the parent MasterPlan's registry, Progress, and Outcomes entries to mark EP-2 (238) complete (2026-08-12T17:15:51Z).
 
 
 ## Surprises & Discoveries
@@ -188,6 +188,14 @@ the authoritative append counter, `visible_store_head` reports the newest surviv
 event, and member plus summary distances use the visible value. The hard-delete
 fixture proves the columns diverge from 5 to 4 while the orders floor distance becomes
 2; all 32 `keiro-ops-test` examples pass.
+
+Milestone 4 completes the public and durable contract. The API reference and Unreleased
+changelog now distinguish authoritative and visible heads; ADR 0033 records that waits
+and projection distance require reachable targets, and ADR 0028 now applies that rule to
+operator output. The full repository `just verify` gate passes. The plan's original
+purpose is met: Strong reads return promptly after workflow GC, genuinely behind reads
+still time out honestly, projection distance returns zero when no visible work remains,
+and operators retain both head values for diagnosis. No implementation gaps remain.
 
 
 ## Context and Orientation
@@ -849,3 +857,6 @@ fixtures, the OTel in-memory exporter helpers) is already imported.
   `keiro-ops/src/Keiro/Ops/{Projection,Stream}.hs`, both test mains, the
   `d612b770`/`f47053a7` diffs, and Kiroku's `Subscription`, `Fsm`, `Effect`, `Read`,
   `CheckpointInventory.SQL`, and bootstrap-migration sources.
+- 2026-08-12: Completed all four milestones, distilled the reachable-head contract into
+  ADR 0033 with the corresponding ADR 0028 amendment, passed `just verify`, and marked
+  EP-2 complete in the parent MasterPlan.

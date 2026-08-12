@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0028 so operator checkpoint commands report authoritative and visible heads and derive global position distance from the visible head (plan 238).
+* **Add**: Define reachable visible event heads for consistency waits and projection distance while retaining the authoritative append counter for operator reporting (plan 238).
 * **Update**: Advance catalog, group-slice, replay-contract, and runner identity for normalized owned targets plus query freshness and cursor authority (plan 244).
 * **Update**: Assign delivery to the projection owner, freshness to the query, and waiting cursor authority to one compatible validated owner handler (plan 244).
 * **Update**: Amend ADR 0032 so query suppliers are derived from existing owner/observed-target identity, while any owned-target normalization requires a future prefix revision (plan 243).
