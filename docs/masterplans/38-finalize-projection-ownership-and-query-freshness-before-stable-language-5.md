@@ -92,7 +92,7 @@ the canonical project URI `mori://tan/notification-render-service`.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make projection owners authoritative for catalog-bound query models | docs/plans/243-make-projection-owners-authoritative-for-catalog-bound-query-models.md | None | None | Complete |
-| 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | In Progress |
+| 2 | Introduce truthful query-freshness runtime APIs with compatibility | docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md | EP-1 | None | Complete |
 | 3 | Separate Language 5 projection delivery from query freshness | docs/plans/245-separate-language-5-projection-delivery-from-query-freshness.md | EP-1, EP-2 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -110,13 +110,12 @@ EP-1 and EP-2. This sequencing also makes each intermediate commit compile: firs
 runtime understands the semantic facts, then it offers the new API, then Language 5 emits
 it.
 
-EP-2 has a soft external dependency on Plan 238 in MasterPlan 37,
-`docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md`. That plan
-corrects which head a captured-head wait may safely target. EP-2 can develop its types and
-compatibility layer before Plan 238, but final wait-behavior acceptance and documentation
-must be run after both changes are present. If EP-2 lands first, it must preserve the
-`storeHeadPosition` seam so Plan 238 changes one implementation rather than reintroducing
-old terminology.
+EP-2 had a soft external dependency on Plan 238 in MasterPlan 37,
+`docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md`. That plan is
+now complete and corrects which head a captured-head wait may safely target through
+Kiroku 0.6's public visible-head API. EP-2 preserved the `storeHeadPosition` seam while
+developing its types and compatibility layer, then completed its final wait-behavior
+acceptance after both changes were present.
 
 Completed Plan 237,
 `docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md`,
@@ -137,9 +136,9 @@ from checked Language 5 declarations; it must not reproduce owner lookup.
 
 `keiro/src/Keiro/ReadModel.hs` is owned by EP-2. EP-1 may name delivery and cursor
 capabilities but must not perform the public API rename. EP-3 consumes EP-2's final
-`QueryFreshness`, wait-option, and cursor interfaces in generated code. Plan 238 may edit
-the visible-head query in the same module; EP-2 preserves that function boundary and
-coordinates tests rather than duplicating head SQL.
+`QueryFreshness`, wait-option, and cursor interfaces in generated code. Completed Plan 238
+owns the visible-head behavior in the same module through the Kiroku API; EP-2 preserves
+that function boundary and coordinates tests rather than duplicating head SQL.
 
 `CatalogInventory`, `fingerprintInventory`, `groupSliceFingerprint`, and the replay
 contract connect EP-2 and EP-3 to completed Plan 237. Query freshness is operational
@@ -156,10 +155,11 @@ EP-1 supplies shared owner resolution. Languages 1-4 continue to lower their fro
 `feed`/`consistency`/`scope` syntax into the new semantic concepts, and language-aware
 rendering/scaffolding preserves their bytes.
 
-The durable outcome should amend ADRs 0026 and 0032, and add or amend the reachable-wait
-decision produced by Plan 238. It should record that delivery belongs to the projection
-owner, freshness belongs to the query, and cursor capability is derived from a validated
-relationship rather than declaration order.
+The durable outcome amends ADRs 0026 and 0032 and relies on the reachable-wait decision in
+ADR 0033 produced by Plan 238. Together they record that delivery belongs to the projection
+owner, freshness belongs to the query, cursor capability derives from a validated
+relationship rather than declaration order, and captured heads must be reachable by that
+cursor.
 
 
 ## Progress
@@ -173,10 +173,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (243) M4: documentation, ADR amendments, changelog, and full verification
 - [x] EP-2 (244) M1: compatibility matrix and truthful runtime `QueryFreshness`/cursor types
 - [x] EP-2 (244) M2a: query execution derives and validates wait capability; old names retain tested semantics
-- [ ] EP-2 (244) M2b: run visible-tail-GC and genuinely-behind acceptance after external Plan 238 completes
+- [x] EP-2 (244) M2b: run visible-tail-GC and genuinely-behind acceptance after external Plan 238 completes (2026-08-12 20:53Z)
 - [x] EP-2 (244) M3: canonical inventory/slice/runner format bump and adoption regressions
 - [x] EP-2 (244) M4a: registered dependent audit, API/ADR documentation, changelog, and full repository verification
-- [ ] EP-2 (244) M4b: record the external Plan-238 integration evidence from M2b
+- [x] EP-2 (244) M4b: record the external Plan-238 integration evidence from M2b (2026-08-12 21:03Z)
 - [ ] EP-3 (245) M1: Language 5 owner-only `delivery` and query-only `freshness` grammar/AST/pretty-print
 - [ ] EP-3 (245) M2: capability-based validation and generated runtime configuration
 - [ ] EP-3 (245) M3: separate diff, scaffold-ledger, harness, workspace, and compiled-corpus facts
@@ -232,6 +232,11 @@ interactions between child plans. Provide concise evidence.
   generated-output `-Werror` gate. Their Cabal stanza now disables only Haskell
   deprecation warnings so their bytes remain frozen; handwritten callers still see the
   0.12 warnings, and Plan 245 owns truthful candidate-Language-5 generation.
+- EP-2 M2b (2026-08-12): completed external Plan 238 now supplies Kiroku 0.6's
+  reachable visible-head seam. Three combined legacy/truthful database examples passed in
+  11.7392 seconds, proving prompt tail-GC completion, honest genuinely-behind timeout, and
+  category-bounded waiting through `WaitForHead`; the subsequent full `just verify` passed
+  508 runtime examples and every repository gate without a second head implementation.
 
 
 ## Decision Log
@@ -269,6 +274,13 @@ plan.
   EP-1 can make owner/query resolution order-independent without changing persisted
   identity.
   Date: 2026-08-12
+- Decision: Treat Plan 238's completion as an integration-evidence gate for EP-2, not as
+  authority to duplicate its visible-head implementation or create another ADR.
+  Rationale: EP-2 deliberately preserved `storeHeadPosition`; ADR 0033 already governs
+  reachable heads for both `Strong` and `WaitForHead` and records Kiroku 0.6 as the query
+  owner. Direct tests and a full verification rerun close the dependency without changing
+  the architecture boundary.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -289,8 +301,10 @@ EP-1 completed IR-23's semantic foundation without changing Languages 1-4 or the
 current canonical fingerprint prefixes. EP-2 subsequently advanced those formats under
 its own reviewed identity revision.
 
-EP-2 is implemented and fully verified within MasterPlan 38's repository authority.
-Truthful runtime construction/execution, catalog-derived wait cursors, canonical v3/v2/v3
-identity, explicit adoption, documentation, and downstream compatibility evidence are in
-place. The child remains In Progress solely for its external Plan 238 visible-tail
-integration gate; therefore EP-3 has not started.
+EP-2 is complete. Truthful runtime construction/execution, catalog-derived wait cursors,
+canonical v3/v2/v3 identity, explicit adoption, documentation, downstream compatibility,
+and the external Plan-238 visible-tail integration proof are all in place. The final
+repository rerun passed 508 runtime examples, the full 43-suite DSL wave, strict ADR and
+bundle validation, and the 39-entry corpus gate. ADRs 0026, 0032, and 0033 already contain
+the durable decisions distilled from the child plan, so its evidence-only closeout needed
+no new ADR. EP-3 is now dependency-ready and remains Not Started.

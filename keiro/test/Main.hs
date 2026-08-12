@@ -3285,7 +3285,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             runQueryWith Nothing Strong counterReadModel "inline"
         queryResult `shouldBe` Right (Right 6)
 
-    it "Strong returns promptly after workflow GC hard-deletes the newest events" $ \_ ->
+    it "Strong and WaitForHead return promptly after workflow GC hard-deletes the newest events" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
         Right () <-
           Store.runStoreIO storeHandle $
@@ -3338,7 +3338,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         queryResult `shouldBe` Right (Right 5)
         diffUTCTime finishedAt startedAt `shouldSatisfy` (< 2)
 
-    it "Strong still times out when visible events outrun the subscription" $ \_ ->
+        truthfulStartedAt <- getCurrentTime
+        truthfulResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWithFreshness
+              Nothing
+              (WaitForHead EntireVisibleLog)
+              counterCursorReadModel
+              "inline"
+        truthfulFinishedAt <- getCurrentTime
+        truthfulResult `shouldBe` queryResult
+        diffUTCTime truthfulFinishedAt truthfulStartedAt `shouldSatisfy` (< 2)
+
+    it "Strong and WaitForHead still time out when visible events outrun the subscription" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
         Right () <-
           Store.runStoreIO storeHandle $
@@ -3366,8 +3378,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     (GlobalPosition 0)
                 )
             )
+        truthfulResult <-
+          Store.runStoreIO storeHandle $
+            runQueryWithFreshness
+              Nothing
+              (WaitForHead EntireVisibleLog)
+              counterCursorReadModel
+              "inline"
+        truthfulResult `shouldBe` queryResult
 
-    it "Strong returns when its category is caught up despite another active category" $ \_ ->
+    it "Strong and WaitForHead return when their category is caught up despite another active category" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
         Right () <-
           Store.runStoreIO storeHandle $

@@ -43,10 +43,11 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: pin an old/new API compatibility matrix; add honest freshness, head-scope, cursor-authority, and builder types without breaking old call sites. (2026-08-12 14:28Z)
 - [x] M2a: implement truthful query execution and deterministic missing-cursor/missing-target errors; preserve old semantics through shared helpers and old/new equivalence tests. (2026-08-12 14:35Z)
-- [ ] M2b: after Plan 238 completes, run the visible-tail-GC, genuinely-behind, and category-bounded `WaitForHead` integration proof without changing the preserved `storeHeadPosition` seam.
+- [x] M2b: after Plan 238 completes, run the visible-tail-GC, genuinely-behind, and category-bounded `WaitForHead` integration proof without changing the preserved `storeHeadPosition` seam. (2026-08-12 20:53Z)
 - [x] M3: add normalized freshness/cursor facts to catalog inventory, bump canonical catalog/slice/replay formats, and prove preview/adoption behavior. (2026-08-12 14:49Z)
 - [x] M4a: statically audit every registered Keiro dependent through Mori and update API/reference/migration docs, Haddocks, changelog, and ADRs. (2026-08-12 14:59Z)
 - [x] M4b: run full repository verification, record results, and update MasterPlan 38. (2026-08-12 15:16Z)
+- [x] Closeout: rerun the full repository verification gate after the Plan-238 integration proof, then finalize this plan and MasterPlan 38. (2026-08-12 21:03Z)
 
 
 ## Surprises & Discoveries
@@ -93,6 +94,12 @@ implementation. Provide concise evidence.
   the conformance-only Cabal stanza disables Haskell deprecation warnings. Handwritten
   callers still receive them, while candidate Language 5 will emit the truthful surface
   under Plan 245.
+- M2b integration (2026-08-12): completed Plan 238 now delegates whole-store visible-head
+  capture to Kiroku 0.6's public API. The combined legacy/truthful integration group passed
+  three database-backed examples in 11.7392 seconds: both APIs returned promptly after
+  workflow tail GC, both reported the same visible target and zero observed cursor when
+  genuinely behind, and category-scoped waits ignored a newer unrelated category. No
+  runtime seam or SQL changed.
 
 
 ## Decision Log
@@ -140,6 +147,14 @@ Record every decision made while working on the plan.
   Handwritten callers still receive migration warnings; candidate Language 5 will emit
   the truthful API in Plan 245.
   Date: 2026-08-12
+- Decision: Close the external Plan-238 gate by running its production workflow-GC,
+  genuinely-behind, and category-scope scenarios through both the legacy and truthful APIs;
+  do not add a second head query or amend an ADR merely to record test evidence.
+  Rationale: both APIs intentionally share one wait interpreter and the preserved
+  `storeHeadPosition` seam. ADR 0033 already requires reachable visible heads for both
+  `Strong` and `WaitForHead`, including Kiroku 0.6 ownership of the head query, so the
+  integration adds executable proof without changing durable architecture.
+  Date: 2026-08-12
 
 
 ## Outcomes & Retrospective
@@ -154,11 +169,12 @@ old API fixture, and the focused truthful-construction run passed 6 examples cov
 cursorless immediate models, cursor-retaining immediate models, missing-cursor and
 missing-target rejection, honest default round-trips, and legacy no-target normalization.
 
-Milestone 2's in-scope runtime implementation is complete: `runQueryWithFreshness` and the
-legacy entry point use one validated execution path and one polling implementation, while
-truthful waits reject absent cursor capability and absent position targets before polling.
-The focused `Keiro.ReadModel` group passed 27 examples. The visible-tail-GC integration
-proof remains pending on Plan 238, which belongs to MasterPlan 37 and is still Not Started.
+Milestone 2 is complete: `runQueryWithFreshness` and the legacy entry point use one
+validated execution path and one polling implementation, while truthful waits reject
+absent cursor capability and absent position targets before polling. After Plan 238
+completed, the focused three-example integration proof exercised both APIs after workflow
+tail GC, with a genuinely behind cursor, and under category scope; all passed without
+changing the preserved `storeHeadPosition` seam.
 
 Milestone 3 advanced whole-catalog, group-slice, replay-contract, and runner identities to
 `catalog-v3:`, `slice-v2:`, `contract-v3:`, and `keiro/projection-replay/v3` respectively.
@@ -192,8 +208,19 @@ pending cases, 31 operator examples, all 43 DSL test suites including 697 core t
 examples, 23 Jitsurei examples, 28 migration examples, strict ADR/research/capability
 validation, graph checks, generated policies, and the 39-entry corpus gate.
 
-The ExecPlan remains in progress only because M2b requires Plan 238's visible-tail
-implementation and belongs to MasterPlan 37. No simulated substitute was added.
+Final closeout verification passed after the Plan-238 integration proof. `just verify`
+completed the persistent Jitsurei demo, 508 Keiro examples, 58 PGMQ examples with the two
+existing pending cases, 38 operator examples, all 43 DSL test suites including 697 core
+toolchain examples, 23 Jitsurei examples, 28 migration examples, strict validation of all
+33 ADRs plus the research and capability bundles, policy and diagram checks, and the
+39-entry corpus gate.
+
+The ExecPlan is complete. The Plan-238 gate was satisfied with production-path evidence
+rather than a simulated substitute, every original acceptance criterion is covered, and
+Language 5 generation can now consume the final truthful runtime surface. The ADR
+distillation pass reviewed ADRs 0026, 0032, and 0033; they already contain the durable
+ownership, freshness, cursor-authority, identity, and reachable-head decisions, so no ADR
+change was warranted for this evidence-only closeout.
 
 
 ## Context and Orientation
@@ -219,16 +246,19 @@ plan derives that authority.
 `inventoryPreimage`, and `groupSliceFingerprint`. Completed Plan 237,
 `docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md`,
 implemented injective preimages, slice-scoped lifecycle identity, and
-`previewCatalogAdoption`/`adoptCatalogGroups`. The current formats are `catalog-v2:`,
-`slice-v1:`, `contract-v2:`, and `keiro/projection-replay/v2`. No schema column needs a
-new type to store later prefixed text, but existing registered groups must be previewed and
-adopted, and active old-format runs cannot resume under a new contract.
+`previewCatalogAdoption`/`adoptCatalogGroups`. Before this plan, the formats were
+`catalog-v2:`, `slice-v1:`, `contract-v2:`, and `keiro/projection-replay/v2`; this plan
+advances them to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
+`keiro/projection-replay/v3`. No schema column needs a new type to store the prefixed text,
+but existing registered groups must be previewed and adopted, and active old-format runs
+cannot resume under the new contract.
 
 Plan 238,
-`docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md`, is not yet
-implemented. It changes `storeHeadPosition` from an unreachable append counter after hard
-deletion to the newest visible event and aligns telemetry/ops. This plan preserves that
-function seam and considers its behavior a final integration gate for `WaitForHead`.
+`docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md`, is complete.
+It changed `storeHeadPosition` from an unreachable append counter after hard deletion to
+the newest visible event, later delegating that operation to Kiroku 0.6's public API, and
+aligned telemetry and operator output. This plan preserves that function seam and verifies
+its behavior directly through `WaitForHead`.
 
 Relevant ADRs are
 `docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md`
@@ -236,9 +266,11 @@ Relevant ADRs are
 `docs/adr/0031-subscription-checkpoint-policy-is-catalog-identity-and-replay-safety.md`
 (cursor identity and missing-row semantics), and
 `docs/adr/0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md`
-(format prefix and adoption rules). ADR 0016 governs the later generated Language 5 use,
-but this plan changes the runtime package rather than grammar. There is no relevant
-cross-repository ADR.
+(format prefix and adoption rules). The completed external gate is governed by
+`docs/adr/0033-consistency-waits-target-reachable-visible-heads.md`, which explicitly
+applies the reachable-head rule to `WaitForHead` and assigns the query to Kiroku 0.6's
+public API. ADR 0016 governs the later generated Language 5 use, but this plan changes the
+runtime package rather than grammar. There is no relevant cross-repository ADR.
 
 
 ## Plan of Work
@@ -461,3 +493,10 @@ authority derived from Plan 243. It continues to use
 `Keiro.Projection.Catalog.Preimage`; do not add another serializer. Plan 238 owns the SQL
 meaning of `storeHeadPosition`. Kiroku cursor APIs must be checked through Mori if their
 released signatures change; do not infer them from memory.
+
+
+## Revision Notes
+
+- 2026-08-12: Completed the deferred Plan-238 integration gate, added direct
+  `WaitForHead` coverage for tail GC and genuine lag alongside the existing category proof,
+  reran `just verify`, and finalized the plan without changing runtime semantics or ADRs.
