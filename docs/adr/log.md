@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-12
+* **Update**: Amend ADR 0025 so bounded workflow drains continue on durable advances and report paced and unregistered blocked work (plan 239).
+* **Update**: Amend ADR 0023 so awakeable cancellation and suspend arbitration share the per-step lock and terminal awakeable rows keep owners discoverable (plan 239).
 * **Update**: Amend ADR 0028 so operator checkpoint commands report authoritative and visible heads and derive global position distance from the visible head (plan 238).
 * **Add**: Define reachable visible event heads for consistency waits and projection distance while retaining the authoritative append counter for operator reporting (plan 238).
 * **Update**: Advance catalog, group-slice, replay-contract, and runner identity for normalized owned targets plus query freshness and cursor authority (plan 244).

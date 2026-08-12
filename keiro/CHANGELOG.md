@@ -71,6 +71,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of
+  `Bool`, distinguishing an acquired lease from a live foreign lease, crash
+  pacing, and an instance that became unavailable. `ResumeSummary` adds
+  `advanced`, `paced`, and `unregisteredNames`; code constructing the record or
+  matching its fields exhaustively must adopt the expanded pass contract.
+
 - Canonical identity advances to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
   `keiro/projection-replay/v3`; catalog inventory and rebuild preview JSON advance to v2.
   Stored `slice-v1:` groups require preview and explicit live-group adoption. An active v2
@@ -138,6 +144,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Changed
 
+- Bounded workflow drains repeat while `ResumeSummary.advanced > 0`, not while
+  `discovered > 0`. `discovered` remains the admitted pool size; `advanced`
+  counts candidates whose journal or terminal state moved, while paced retries,
+  unregistered workflow names, foreign leases, and transient errors remain
+  blocked in place and stop an operator drain for inspection.
+
 - Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
   instance only when its status is `running`, or `suspended` with a due
   `wake_after`. A workflow parked on an awakeable, a child, or a future-dated
@@ -194,6 +206,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   children.
 
 ### Fixed
+
+- Awakeable cancellation now serializes with a concurrent suspend write under
+  the awaited step's advisory lock. Suspend arbitration also consults a valid
+  `awk:` awakeable row after an absent step-index result, keeping the instance
+  `running` when the awakeable is already completed or cancelled. A cancellation
+  that committed just before the stale suspend write can therefore no longer
+  strand the workflow as undiscoverable `suspended` work.
 
 - A workflow that goes terminal while the resume worker is recording its crash
   no longer aborts the rest of the pass. The crash-recording `UPDATE` matches no

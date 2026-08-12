@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workflow discovery is exact and the instance row is the complete wake ledger
 description: A workflow is discovered only when its keiro_workflows row says it has progress to make, so every wake-source lifecycle transition must write that row.
-timestamp: 2026-08-06T05:10:00Z
+timestamp: 2026-08-12T18:24:20Z
 docId: ADR-23
 status: Accepted
 date: 2026-08-06
@@ -54,21 +54,30 @@ wake-source lifecycle transition must leave the owning instance discoverable in
 the same transaction that performs it. Wake delivery already does this through
 `prepareJournalAppend`, which upserts the row to `running` alongside the journal
 append and the step-index write. Cancellation of an awakeable — which has no
-result to journal — flips the owner row to `running` in the same transaction as
-the row's `pending` to `cancelled` transition. A third-party wake source
-inherits the same obligation; delivering a result through
+result to journal — resolves the owner and current generation, takes that same
+awaited-step advisory lock, and flips the owner row to `running` in the same
+transaction as the row's `pending` to `cancelled` transition. It does not
+fabricate a step-index row: ADR 5 makes any indexed value authoritative replay
+data, while cancellation has no result value to decode. A third-party wake
+source inherits the same obligation; delivering a result through
 `appendJournalEntry` satisfies it automatically, and any transition that does
-not append must write the instance row itself.
+not append must write the instance row itself under an arbitration discipline
+the suspend path can observe.
 
 The suspend write arbitrates against wake delivery rather than assuming it
 lost or won. `markInstanceSuspendedAwaiting` takes the same per-step advisory
 lock the append path takes (`workflowStepLockKey`, shared by both callers so
 the derivations cannot drift), re-checks the authoritative step index for the
 awaited step on the run's generation, and writes `suspended` only when the step
-is still absent — otherwise `running`. The two writers are therefore totally
-ordered: whichever takes the lock second observes the other's committed effect.
-This reuses ADR 5's rule that the step index is the authoritative
-replay-visibility fallback rather than weakening it.
+is still absent. For a syntactically valid `awk:<uuid>` step whose index result
+is absent, it additionally consults the awakeable row: `pending` or missing
+remains `suspended`, while either terminal status (`completed` or `cancelled`)
+writes `running`. The completed case repairs the historical wedge in which the
+row settled without its step-index delivery; the awakeable await arm re-delivers
+the stored payload on the next run. Signal, cancellation, and suspension are
+therefore totally ordered under one lock, and whichever writer runs second
+observes the durable artifact the first committed. This preserves ADR 5's rule
+that only real result data enters the replay-visible step index.
 
 `wake_after` remains what ADR 7 defines: a sleep-only scheduling hint owned by
 the first arm, not a general wake mechanism. No wake source other than a sleep
@@ -101,7 +110,11 @@ operator inspection only.
   cancel such a workflow deliberately.
 - Crash retries are unaffected: a crashed instance stays `running` and stays
   discovered, and `claimInstance`'s `next_attempt_at` gate — not discovery —
-  paces the backoff. A discovered-but-not-yet-due retry appears as a lease skip.
+  paces the backoff. `ClaimOutcome` and `ResumeSummary.paced` distinguish that
+  condition from a live foreign lease.
+- Cancellation cannot be overwritten by a stale suspend write. Both commit
+  orders leave the instance `running`, so exact discovery re-enters the workflow
+  and lets its awakeable arm observe `WorkflowAwakeableCancelled`.
 - Migration 0021 returns every pre-existing `suspended` instance to `running`
   once. A legacy suspension may be parked on a promise that was already
   cancelled, or on a transition that predates this rule, and nothing would flip

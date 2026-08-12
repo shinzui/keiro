@@ -76,10 +76,10 @@ This section must always reflect the actual current state of the work.
 - [x] M2: add claim-classification assertions (paced after a recorded crash; lease-held under a live foreign lease); focused resume tests and full `cabal test keiro-test` green (497 examples) (2026-08-12T18:20:18Z)
 - [x] M3: extend `resumeSummaryResult` in `keiro-ops/src/Keiro/Ops/Workflow.hs` with the new columns and JSON keys (2026-08-12T18:23:05Z)
 - [x] M3: extend the keiro-ops resume test in `keiro-ops/test/Main.hs` to cover `advanced` and `unregistered_names`; `cabal test keiro-ops-test` green (33 examples) (2026-08-12T18:23:05Z)
-- [ ] M4: CHANGELOG entries (breaking API change + bug fixes) under Unreleased
-- [ ] M4: amend `docs/adr/0023` (cancel joins the per-step lock discipline; suspend arbitration consults the awakeable row) and `docs/adr/0025` (pass summaries distinguish advanced from blocked; drain termination), record both in `docs/adr/log.md`, run `just adr-validate`
-- [ ] M4: tick EP-3 checkboxes and registry status in `docs/masterplans/37-...md`
-- [ ] M4: `just haskell-test` and `just verify` green; Outcomes & Retrospective written
+- [x] M4: CHANGELOG entries (breaking API change + bug fixes) under Unreleased (2026-08-12T18:24:20Z)
+- [x] M4: amend `docs/adr/0023` (cancel joins the per-step lock discipline; suspend arbitration consults the awakeable row) and `docs/adr/0025` (pass summaries distinguish advanced from blocked; drain termination), record both in `docs/adr/log.md`, run `just adr-validate` (33 concepts green, 2026-08-12T18:24:20Z)
+- [x] M4: tick EP-3 checkboxes and registry status in `docs/masterplans/37-...md` (2026-08-12T18:39:59Z)
+- [x] M4: `just haskell-test` and `just verify` green; Outcomes & Retrospective written (2026-08-12T18:39:59Z)
 
 
 ## Surprises & Discoveries
@@ -194,7 +194,21 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-3 is complete. Awakeable cancellation now participates in the same
+generation-and-step advisory-lock ordering as signal delivery and suspension;
+the suspend arbitration sees terminal awakeable rows without fabricating a
+replay-visible result. Both deterministic commit orders pass, including the
+cancel-first order that reproduced a permanently stranded `suspended` row before
+the fix.
+
+Bounded resume passes now separate admitted pool size from durable convergence.
+`ClaimOutcome` identifies lease, pacing, and unavailable refusals;
+`ResumeSummary` reports `advanced`, `paced`, and the exact unregistered name set;
+and `keiro-ops wf resume-once` renders the same facts for humans and JSON clients.
+A regression loop over a crashed plus unregistered pool stops after one
+zero-advance pass even though both candidates remain discoverable. ADRs 0023 and
+0025 carry the durable contracts. `just haskell-test`, `just verify`, and strict
+ADR validation all pass.
 
 
 ## Context and Orientation

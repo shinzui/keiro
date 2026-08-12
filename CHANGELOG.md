@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro**: `Keiro.Workflow.Instance.claimInstance` now returns
+  `ClaimOutcome` instead of `Bool`, distinguishing acquired, lease-held, paced,
+  and unavailable outcomes. `ResumeSummary` adds `advanced`, `paced`, and
+  `unregisteredNames`; direct record construction and exhaustive field
+  handling must adopt the expanded resume-pass contract.
 - **keiro-dsl**: candidate language 5 catalog-bound read models now reject
   read-model-local `table`/`schema` coordinates, treat observed `targets` as an
   unordered set, and require `backing = <target>` when that set has more than
@@ -37,6 +42,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Bug Fixes
 
+- **keiro**: awakeable cancellation and suspension now arbitrate under the same
+  awaited-step advisory lock. A stale suspend write observes a terminal
+  awakeable row and leaves its owner running, so cancellation can no longer
+  strand an exact-discovery workflow as permanently invisible suspended work.
+- **keiro**: bounded resume drains now continue on durable `advanced` work,
+  rather than the repeatedly discoverable pool size. Paced retries,
+  unregistered workflow names, foreign leases, and transient errors stop and
+  report honestly instead of making a drain-until-zero loop spin forever.
 - **keiro**: Strong and `WaitForHead EntireVisibleLog` read-model queries now
   target the newest visible event instead of Kiroku's authoritative append
   counter, so a caught-up query no longer times out after workflow garbage
@@ -46,6 +59,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro-ops**: `wf resume-once` reports `advanced`, `paced`, and sorted
+  `unregistered_names` in JSON and corresponding human columns, making a
+  blocked bounded drain actionable.
 - **keiro**: make absent subscription checkpoints explicit catalog identity.
   `SubscriptionDeclaration`, inventory, async registration, fingerprints, and
   operator JSON carry `FromBeginning`, `FromCurrentHead`, or `FailIfMissing`.

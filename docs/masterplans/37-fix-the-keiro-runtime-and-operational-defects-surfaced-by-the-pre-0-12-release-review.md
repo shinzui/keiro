@@ -85,7 +85,7 @@ the ownership rule EP-5's CLI hardening serves). No cross-repository ADR applies
 |---|-------|------|-----------|-----------|--------|
 | 1 | Canonicalize catalog fingerprint preimages and support catalog evolution | docs/plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md | None | None | Complete |
 | 2 | Target strong-consistency waits at the visible store head | docs/plans/238-target-strong-consistency-waits-at-the-visible-store-head.md | None | None | Complete |
-| 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | In Progress |
+| 3 | Close the awakeable cancel-versus-suspend race and fix the drain contract | docs/plans/239-close-the-awakeable-cancel-versus-suspend-race-and-fix-the-drain-contract.md | None | None | Complete |
 | 4 | Bridge deterministic-id deduplication across the UTF-8 encoding upgrade | docs/plans/240-bridge-deterministic-id-deduplication-across-the-utf-8-encoding-upgrade.md | None | None | Not Started |
 | 5 | Reject non-finite durations in keiro-ops destructive commands | docs/plans/241-reject-non-finite-durations-in-keiro-ops-destructive-commands.md | None | None | Not Started |
 | 6 | Deduplicate dispatch and retry skeletons and fix rebuild read amplification | docs/plans/242-deduplicate-dispatch-and-retry-skeletons-and-fix-rebuild-read-amplification.md | None | EP-1, EP-4 | Not Started |
@@ -161,10 +161,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (238) M2: distance gauge rebased to the visible head; zero-after-GC metrics test (2026-08-12T17:00:29Z)
 - [x] EP-2 (238) M3: keiro-ops dual-head columns with a store/visible divergence test (2026-08-12T17:03:19Z)
 - [x] EP-2 (238) M4: api-reference/CHANGELOG updates, ADR 0033 plus ADR 0028 amendment, and full `just verify` (2026-08-12T17:15:51Z)
-- [ ] EP-3 (239) M1: cancel takes the per-step lock, suspend re-check consults awakeable status; both-order interleaving tests
-- [ ] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test
-- [ ] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests
-- [ ] EP-3 (239) M4: CHANGELOG, ADR 0023/0025 amendments, masterplan bookkeeping
+- [x] EP-3 (239) M1: cancel takes the per-step lock, suspend re-check consults awakeable status; both-order interleaving tests (2026-08-12T18:10:51Z)
+- [x] EP-3 (239) M2: `ClaimOutcome` and `ResumeSummary` reshape (`advanced`/`paced`/`unregisteredNames`); drain-termination test (2026-08-12T18:20:18Z)
+- [x] EP-3 (239) M3: keiro-ops `wf resume-once` surface and tests (2026-08-12T18:23:05Z)
+- [x] EP-3 (239) M4: CHANGELOG, ADR 0023/0025 amendments, masterplan bookkeeping (2026-08-12T18:39:59Z)
 - [ ] EP-4 (240) M1: frozen legacy encoder pinned by golden vectors captured at `f8ca7a16^`
 - [ ] EP-4 (240) M2: `firstExistingEventId`/`deterministicCommandIdProbes` bridge all six dispatch probe sites, tests-first
 - [ ] EP-4 (240) M3: awakeable adoption bridge
@@ -269,12 +269,22 @@ authoritative append counter and visible head. The workflow-GC, timeout, telemet
 operator divergence regressions pass; ADR 0033 and the ADR 0028 amendment preserve the
 contract, and full repository verification passed.
 
-The MasterPlan remains in progress: EP-3 through EP-6 are not started. EP-1 removes
+EP-3 is complete. Awakeable cancellation, signal delivery, and suspension now
+share one per-step serialization discipline, and suspend arbitration consults
+terminal awakeable state so neither cancellation commit order can strand an
+exact-discovery workflow. Resume summaries distinguish the admitted pool from
+durable advances and expose paced and unregistered blockers through the library
+and `keiro-ops`; bounded drains now terminate on honest progress. ADRs 0023 and
+0025 preserve both contracts, and full repository verification passed.
+
+The MasterPlan remains in progress: EP-4 through EP-6 are not started. EP-1 removes
 the release-critical catalog lockout and fingerprint-forgery defects and clears
 EP-6's soft dependency on its rebuild-runner identity changes; EP-2 removes the
-release-critical unreachable consistency target and permanent false-distance defect.
+release-critical unreachable consistency target and permanent false-distance defect;
+EP-3 removes the workflow-stranding race and non-terminating drain contract.
 
 Revision note (2026-08-12): Completed EP-1, recorded its durable catalog-identity
 and adoption decisions in ADR 0032 and related amendments; completed EP-2, recorded
-reachable consistency targets in ADR 0033 and amended ADR 0028; left EP-3 through
-EP-6 eligible for subsequent execution.
+reachable consistency targets in ADR 0033 and amended ADR 0028; completed EP-3 and
+amended ADRs 0023 and 0025 with wake arbitration and bounded-drain progress; left
+EP-4 through EP-6 eligible for subsequent execution.

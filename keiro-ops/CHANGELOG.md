@@ -29,6 +29,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   and removed groups, and prints the exact force invocation. With `--force` it
   calls the supported transactional adoption API and reports the adopted rows.
   Existing rebuild list and preview tables also expose slice identity.
+- Embedded `wf resume-once` results expose `advanced` and `paced` counts plus
+  the sorted set of `unregistered_names` in JSON (and the corresponding human
+  columns), so an operator can terminate a bounded drain on durable progress and
+  identify the workflow definitions blocking convergence.
 
 ### Breaking Changes
 
