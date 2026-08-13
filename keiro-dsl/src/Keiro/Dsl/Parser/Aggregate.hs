@@ -369,6 +369,20 @@ pClause context =
   choice
     [ do
         loc <- getLoc
+        let outcomeSelectors :: [(T.Text, P (Clause, [Located SurfaceElement]))]
+            outcomeSelectors =
+              [ ("accepted", pure (COutcome (OutcomeAccepted loc), [])),
+                ( "rejected",
+                  do
+                    expression <- withOwnedSpan (pExpr context)
+                    pure (COutcome (OutcomeRejected (locatedValue expression) loc), [mapLocated SurfaceExpression expression])
+                ),
+                ( "no-op",
+                  do
+                    expression <- withOwnedSpan (pExpr context)
+                    pure (COutcome (OutcomeNoOp (locatedValue expression) loc), [mapLocated SurfaceExpression expression])
+                )
+              ]
         -- @outcome@ is a contextual keyword, never reserved (plan 233, completing
         -- plan 232's decision for accepted/rejected/no-op): claim it only when one
         -- of the three selectors follows, so @outcome@ stays a legal identifier in
@@ -378,21 +392,11 @@ pClause context =
           withOwnedSpan
             ( try
                 ( keyword "outcome"
-                    <* lookAhead (keyword "accepted" <|> keyword "rejected" <|> keyword "no-op")
+                    <* lookAhead (choice [keyword name | (name, _) <- outcomeSelectors])
                 )
             )
         requireLanguageFeatureAt context DomainCommandOutcomeSyntax (spanOf marker)
-        choice
-          [ (COutcome (OutcomeAccepted loc), []) <$ keyword "accepted",
-            do
-              keyword "rejected"
-              expression <- withOwnedSpan (pExpr context)
-              pure (COutcome (OutcomeRejected (locatedValue expression) loc), [mapLocated SurfaceExpression expression]),
-            do
-              keyword "no-op"
-              expression <- withOwnedSpan (pExpr context)
-              pure (COutcome (OutcomeNoOp (locatedValue expression) loc), [mapLocated SurfaceExpression expression])
-          ],
+        choice [keyword name *> handler | (name, handler) <- outcomeSelectors],
       do
         marker <- withOwnedSpan (keyword "implementation" *> keyword "hole")
         requireLanguageFeatureAt context ExplicitTransitionImplementationSyntax (spanOf marker)

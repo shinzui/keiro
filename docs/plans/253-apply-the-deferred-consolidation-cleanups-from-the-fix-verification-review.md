@@ -59,9 +59,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 09:10Z) M1: keiro CHANGELOG entry for the new `deterministicIdProbes` export; commit.
 - [x] (2026-08-13 09:15Z) M2: Add the message-parameterized reader to `keiro-ops/src/Keiro/Ops/Parse.hs`; delete the four `nonNegativeInt64Reader` copies and `generationReader` (Item 4).
 - [x] (2026-08-13 09:15Z) M2: Run `cabal test keiro-ops-test` green (43 examples); keiro-ops CHANGELOG entry; commit.
-- [ ] M3: Derive the `outcome` selector guard and body from one selector list in `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` (Item 5).
-- [ ] M3: Delete the `pureRefusals` and `constraintPlan` exports and definitions from `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` (Item 7).
-- [ ] M3: Run `cabal test keiro-dsl:tests` and `just conformance-corpus-policy` green; keiro-dsl CHANGELOG Breaking Changes entry; commit.
+- [x] (2026-08-13 09:25Z) M3: Derive the `outcome` selector guard and body from one selector list in `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` (Item 5).
+- [x] (2026-08-13 09:25Z) M3: Delete the `pureRefusals` and `constraintPlan` exports and definitions from `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` (Item 7).
+- [x] (2026-08-13 09:25Z) M3: Run `cabal test keiro-dsl:tests` (705 main examples plus all conformance targets) and `just conformance-corpus-policy` (39 of 39 entries) green; keiro-dsl CHANGELOG Breaking Changes entry; commit.
 - [ ] M4: Confirm plan 250 (EP-1) is Complete in MasterPlan 40's registry; re-verify Diff.hs line references against HEAD.
 - [ ] M4: Add the lazy `checkedProjectionSupplies` cache to `CheckedService`; thread it through Validate, Scaffold, ScaffoldRecord, and Harness; hoist per-side analyses in Diff (Item 1).
 - [ ] M4: Adopt the cached `checkedTypeGraph` and a per-side symbols table on the replay-impact path (Item 2).

@@ -95,6 +95,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Removes the zero-caller Spec-only `pureRefusals` and `constraintPlan` shims
+  from `Keiro.Dsl.ScaffoldRun`. Use `pureRefusalsForService` and
+  `constraintPlanForService`; callers that genuinely have only a `Spec` can
+  cross the compatibility boundary explicitly with `legacyCheckedService`.
 - The public DSL AST replaces read-model `rmConsistency`/`rmScope`/`rmFeed`/
   `rmSubscription` with `rmFreshness` and `rmSupply`, replaces projection-owner
   `poFeed` with `poDelivery`, and adds `ProjectionDelivery`,

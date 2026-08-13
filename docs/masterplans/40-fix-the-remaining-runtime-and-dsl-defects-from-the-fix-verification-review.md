@@ -146,8 +146,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 (252) M3: cursorless `startRebuild` skips the checkpoint reset (typed, documented); scaffold audit confirming no keiro-dsl change
 - [x] EP-3 (252) M4: docs, changelog, ADR distillation, standalone 548-example runtime suite, and full `just verify`
 - [ ] EP-4 (253) M1: keiro consolidation (shared command-attempt driver; shared deterministic-id probe helper) with golden vectors untouched + command benchmark guard
-- [ ] EP-4 (253) M2: keiro-ops reader consolidation into `Keiro.Ops.Parse`
-- [ ] EP-4 (253) M3: keiro-dsl surface (single `outcomeSelectors` source; delete dead `pureRefusals`/`constraintPlan` exports)
+- [x] EP-4 (253) M2: keiro-ops reader consolidation into `Keiro.Ops.Parse`
+- [x] EP-4 (253) M3: keiro-dsl surface (single `outcomeSelectors` source; delete dead `pureRefusals`/`constraintPlan` exports)
 - [ ] EP-4 (253) M4 (after EP-1): `checkedProjectionSupplies` derived field threaded through Validate/Scaffold/Harness/Diff; ReplayImpact adopts `checkedTypeGraph`
 - [ ] EP-4 (253) M5: `just verify`, benchmark guard, registry update
 

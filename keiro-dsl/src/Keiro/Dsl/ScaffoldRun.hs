@@ -44,7 +44,6 @@ module Keiro.Dsl.ScaffoldRun
     renderInertNodeSection,
     withSidecarMovesApplied,
     originLine,
-    pureRefusals,
     pureRefusalsForService,
     auditGeneratedHaskell,
     missingGeneratedBanners,
@@ -53,7 +52,6 @@ module Keiro.Dsl.ScaffoldRun
     preparedSourceMove,
     preflightSourceMoves,
     applyPreparedSourceMoves,
-    constraintPlan,
     constraintPlanForService,
     mappingDrift,
     behaviorDrift,
@@ -524,9 +522,6 @@ originLine originText = do
 -- and lowering refusals. Whole-workspace planning builds its module set from the
 -- merged spec and then runs exactly this, so no gate can apply to one input shape
 -- and not the other.
-pureRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
-pureRefusals ctx spec = pureRefusalsForService ctx (legacyCheckedService spec)
-
 pureRefusalsForService :: Context -> CheckedService -> [ScaffoldModule] -> [Refusal]
 pureRefusalsForService ctx service modules =
   collisionRefusals modules
@@ -1099,9 +1094,6 @@ renderSourceMoveState move =
       "source-digest " <> maybe "<missing>" id (moveContentDigest move),
       "transformed-digest " <> maybe "<missing>" id (moveTransformedDigest move)
     ]
-
-constraintPlan :: Spec -> ConsumerPlan -> [Text]
-constraintPlan spec = constraintPlanForService (legacyCheckedService spec)
 
 constraintPlanForService :: CheckedService -> ConsumerPlan -> [Text]
 constraintPlanForService service plan = case checkedTypeGraph service of
