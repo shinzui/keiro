@@ -91,7 +91,7 @@ MasterPlan beyond ADR-26's already-cited `mori://shinzui/mori/okf/adrs/concepts/
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Preserve cross-source global position order in buffered replay paging | docs/plans/246-preserve-cross-source-global-position-order-in-buffered-replay-paging.md | None | None | In Progress |
+| 1 | Preserve cross-source global position order in buffered replay paging | docs/plans/246-preserve-cross-source-global-position-order-in-buffered-replay-paging.md | None | None | Complete |
 | 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | Not Started |
 | 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | Not Started |
 | 4 | Make catalog adoption scoped, truthful, and registry-complete | docs/plans/249-make-catalog-adoption-scoped-truthful-and-registry-complete.md | None | EP-3 | Not Started |
@@ -167,10 +167,10 @@ and a contract that pins adapter order.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 (246) M0-M1: baseline + red staggered-fixture test proving out-of-order application (expected trace `[1,2,3,4,7,9,8]`-style violation) that still promotes
-- [ ] EP-1 (246) M2: merge-horizon clamp + monotonic applied floor with typed invariant failures (`replay.global-position-regression`, `replay.buffer-horizon-stalled`)
-- [ ] EP-1 (246) M3: seeded multi-interleaving ordering sweep (18 deterministic cases)
-- [ ] EP-1 (246) M4-M5: read-count/benchmark evidence (expected parity with plan 242's numbers), changelog, docs, `just verify`
+- [x] EP-1 (246) M0-M1: baseline + red staggered-fixture test proving out-of-order application (promoted trace `[1,2,3,8,4,7,9]`) that still promotes
+- [x] EP-1 (246) M2: merge-horizon clamp + monotonic applied floor with typed invariant failures (`replay.global-position-regression`, `replay.buffer-horizon-stalled`)
+- [x] EP-1 (246) M3: seeded multi-interleaving ordering sweep (18 deterministic cases)
+- [x] EP-1 (246) M4-M5: read-count/benchmark evidence (read-count parity and 0.8% benchmark delta), changelog, docs, `just verify`
 - [ ] EP-2 (247) M1: red order-swap resume test (slice fingerprints byte-equal, resume wrongly proceeds)
 - [ ] EP-2 (247) M2: `contract-v4` preimage with ordered adapter identities, runner format v4, slice-scoped abandon with `CatalogRebuildSliceMismatch`
 - [ ] EP-2 (247) M3-M4: same-order/swap/from-scratch proofs; ADR-32 amendment, user docs, changelog, `just verify`
@@ -263,4 +263,11 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+- EP-1 completed on 2026-08-13. Multi-source buffered replay now clamps each merged chunk
+  to the smallest unexhausted source horizon and enforces a monotonic applied-position
+  floor. The exact regression and 18-case deterministic sweep pass, source-read counts are
+  unchanged, the benchmark delta is within noise, and `just verify` exits 0. The fix
+  changes no public API or persisted contract, so the ADR distillation pass required no
+  ADR amendment and EP-2 retains sole ownership of the planned contract-prefix change.
+
+(Overall MasterPlan retrospective to be completed after the remaining child plans.)

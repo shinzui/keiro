@@ -354,9 +354,12 @@ startCatalogRebuild validated orderReadGroup options
 
 The runner captures one immutable global head after fencing writers. It scans
 either `$all` or distinct categories in exclusive-cursor pages; multiple
-categories are merged by global position. Each bounded transaction commits
-target writes with source cursors and adapter counters. Events appended after
-the captured head are never included.
+categories are merged and applied in strictly ascending global-position order
+across all of the group's sources. Replay adapters may rely on that order when
+they read sibling targets. If buffered paging would regress or cannot advance
+that order, the run fails with recorded invariant evidence instead of promoting.
+Each bounded transaction commits target writes with source cursors and adapter
+counters. Events appended after the captured head are never included.
 
 `ReplayIrrelevant` still advances its source cursor and evaluation count.
 `ReplayDecodeFailure` rolls back the whole current chunk, records the run,

@@ -75,6 +75,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Multi-source catalog rebuilds again apply events in strictly ascending global position
+  across sources. Buffered chunks are clamped to the smallest safe source horizon, and
+  the runner records `replay.global-position-regression` or
+  `replay.buffer-horizon-stalled` invariant evidence instead of promoting if ordering
+  would regress or the merge cannot advance. Per-event source-read counts are unchanged.
 - Upgrades with non-ASCII process-manager correlations, router keys, or
   awakeable labels now deduplicate against IDs written before deterministic seed
   encoding switched to UTF-8. The runtime probes the frozen historical identity

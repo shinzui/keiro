@@ -75,11 +75,13 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
       same-session pre-fix 52.8 ms +/- 5.2 ms, a 0.8% mean increase within measurement
       noise and well inside the 15% acceptance bound. The temporary diagnostic print was
       removed; `git status --short` returned clean before this plan update.
-- [ ] Milestone 5: `keiro/CHANGELOG.md` Unreleased entry added;
-      `docs/user/read-models-and-projections.md` ordering guarantee sentence added; ADR
-      distillation pass done (expected outcome: no ADR change — confirm and record);
-      `just verify` green; parent MasterPlan registry row updated to Complete; Outcomes &
-      Retrospective written.
+- [x] (2026-08-13T02:52:00Z) Milestone 5: added the Unreleased changelog entry and the
+      user-facing strict cross-source ordering guarantee; the ADR distillation pass
+      confirmed this runtime-only control-flow correction changes no durable identity or
+      interface, so no ADR amendment was warranted; `just verify` completed with exit 0,
+      including 527 `keiro-test` examples, 701 `keiro-dsl-test` examples, the 39-case
+      conformance corpus, adapters, examples, and migrations; parent MasterPlan
+      bookkeeping and this retrospective were completed.
 
 
 ## Surprises & Discoveries
@@ -145,7 +147,21 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The buffered multi-source replay loop now applies every eligible event in strict ascending
+global-position order. A merge-horizon clamp prevents a partially consumed source buffer
+from being overtaken, while the monotonic applied floor turns any regression or impossible
+stall into recorded typed invariant evidence instead of allowing promotion.
+
+The exact staggered fixture reproduced the old promoted trace `[1,2,3,8,4,7,9]` and now
+produces `[1,2,3,4,7,8,9]`. The deterministic sweep covers 18 seed/page-size combinations;
+removing only the runner fix made six of them fail, while all pass with the fix. Existing
+source-read behavior remained 11 calls and 18 rows, and the benchmark moved from 52.8 ms
++/- 5.2 ms to 53.2 ms +/- 3.8 ms (0.8%, within noise and the 15% bound).
+
+No public API, database shape, runner format, or persisted rebuild contract changed. The
+ADR distillation pass therefore retained ADR-32 unchanged and left its contract-prefix
+work to EP-2, as the MasterPlan decomposition intended. EP-1 has no remaining work; the
+full repository verification gate passes.
 
 
 ## Context and Orientation
