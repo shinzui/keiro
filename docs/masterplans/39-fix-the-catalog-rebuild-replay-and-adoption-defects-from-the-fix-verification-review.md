@@ -95,7 +95,7 @@ MasterPlan beyond ADR-26's already-cited `mori://shinzui/mori/okf/adrs/concepts/
 | 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | Complete |
 | 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | Complete |
 | 4 | Make catalog adoption scoped, truthful, and registry-complete | docs/plans/249-make-catalog-adoption-scoped-truthful-and-registry-complete.md | None | EP-3 | Complete |
-| 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | In Progress |
+| 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -182,11 +182,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] (2026-08-13 04:38Z) EP-4 (249) M2: lookup-then-update-or-insert adoption, orphan old-name deletion under the three-part rule, per-registration result types
 - [x] (2026-08-13 04:38Z) EP-4 (249) M3: scope-annotated preview, preview-time not-in-catalog refusal, v2 report envelopes and tables
 - [x] (2026-08-13 04:46Z) EP-4 (249) M4: ADR-32 adoption-contract amendment, docs, changelogs, plan-248 vocabulary reconciliation, `just verify`
-- [ ] EP-5 (258) M1: red promote-then-redeliver double-application tests (ClearBeforeReplay and PreserveAndReconcile, real subscription members + dedup key, non-idempotent handler)
-- [ ] EP-5 (258) M2: exported `CatalogAsyncDedupSpec`/`catalogAsyncIdempotencyKeys` (membership mirrors `preparationFor`; plan 256 consumes)
-- [ ] EP-5 (258) M3: promote-transaction dedup backfill (input paged outside the tx over the immutable range) + checkpoint advance to captured head; typed `CatalogRebuildPromotionCheckpointsMissing`; inline-only fast path
-- [ ] EP-5 (258) M4: resume/fenced/multi-member/redeliver-twice matrix
-- [ ] EP-5 (258) M5: ADR-31 amendment, doc corrections (both idempotency lines reframed as defense-in-depth), changelog, `just verify`
+- [x] (2026-08-13 05:19Z) EP-5 (258) M1: red promote-then-redeliver double-application tests (ClearBeforeReplay and PreserveAndReconcile, real subscription members + dedup key, non-idempotent handler)
+- [x] (2026-08-13 05:19Z) EP-5 (258) M2: exported `CatalogAsyncDedupSpec`/`catalogAsyncIdempotencyKeys` (membership mirrors `preparationFor`; plan 256 consumes)
+- [x] (2026-08-13 05:19Z) EP-5 (258) M3: promote-transaction dedup backfill (input paged outside the tx over the immutable range) + checkpoint advance to captured head; typed `CatalogRebuildPromotionCheckpointsMissing`; inline-only fast path
+- [x] (2026-08-13 05:19Z) EP-5 (258) M4: resume/fenced/multi-member/redeliver-twice matrix
+- [x] (2026-08-13 05:19Z) EP-5 (258) M5: ADR-31 amendment, doc corrections (both idempotency lines reframed as defense-in-depth), changelog, `just verify`
 
 
 ## Surprises & Discoveries
@@ -292,5 +292,22 @@ docs/adr/. Keep task-local execution and coordination details here.
   through the new failed -> rebuilding transition. The supported ops transcript,
   startup registration, fresh promotion, documentation, changelogs, ADR-26/ADR-32, and
   the full `just verify` gate all pass; operators no longer need SQL remediation.
+- EP-4 completed on 2026-08-13. Scoped adoption now reconciles every selected query
+  registration by update or insert, removes only previewed names unclaimed by the complete
+  catalog, preserves out-of-scope moves and failed-group fences, and reports the exact v2
+  preview/result vocabulary. ADR-32, user guidance, both changelogs, and the full gate agree.
+- EP-5 completed on 2026-08-13. Catalog promotion now derives the replayable async dedup
+  window from each slowest durable subscription member, backfills event identities, advances
+  every declared member to the captured head, and lifts the group fence in one transaction.
+  Four database-backed scenarios cover both reset policies, failure/resume, repeated
+  redelivery, multi-member floors, and missing-row recovery; ADR-31 records the durable
+  preparation/promotion symmetry and `just verify` passes.
 
-(Overall MasterPlan retrospective to be completed after the remaining child plans.)
+The initiative is complete. All five review and follow-up defects are closed without release
+mechanics or MasterPlan 40/41 scope leaking in. The replay pager preserves global order, the v4
+resume contract pins adapter order, pre-canonical runs have a supported fenced recovery path,
+adoption is registry-complete and truthfully scoped, and async promotion restores the worker's
+redelivery boundary before returning live. Each child passed the full repository gate, and the
+final gate passed 544 core, 58 PGMQ (two expected pending), 41 ops, 701 DSL, 23 jitsurei, and 29
+migration examples with zero failures. MasterPlan 41 may now build on the exported EP-5 helpers
+and corrected replay contract rather than reimplementing either invariant.

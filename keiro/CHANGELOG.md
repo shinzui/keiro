@@ -75,12 +75,24 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   but are inspectable and idempotently abandonable while active; failed
   stale-format groups can be adopted without lifting their fence, and a fresh
   rebuild can then start from `failed`.
+- `CatalogAsyncDedupSpec`, `catalogAsyncIdempotencyKeys`,
+  `AsyncDedupBackfill`, `collectAsyncDedupBackfill`,
+  `resetDeclaredSubscriptions`, `insertProjectionDedupBatchStmt`, and
+  `CatalogRebuildPromotionCheckpointsMissing` expose the catalog-derived
+  redelivery-safety inputs and transactional primitives used by rebuild
+  promotion.
 - `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
 ### Fixed
 
+- Offline catalog rebuild promotion now backfills replayable async projection
+  dedup rows for each subscription's replayed redelivery window and advances
+  every declared checkpoint member to the captured head in the promotion
+  transaction. Previously the reset checkpoints and deleted dedup rows caused
+  every replayed event to be redelivered and re-applied after promotion,
+  corrupting non-idempotent async read models.
 - Catalog adoption no longer silently succeeds after a zero-row query-registration
   update. It updates or inserts every selected catalog registration and deletes a
   previewed renamed-model row only when no registration in the complete catalog claims

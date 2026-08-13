@@ -125,7 +125,11 @@ For command handlers, keep these operational rules:
 
 For read models, coordinate `ReadModel.version` and `shapeHash` with deployment.
 A stale read model should fail closed rather than return rows from an unknown
-schema. Async projections must be idempotent by source event id.
+schema. Async delivery is at least once, while the projection's `idempotencyKey`
+and Keiro's retained dedup rows provide exactly-once application, including
+across offline catalog rebuilds. Keep handler SQL idempotent when practical as
+defense in depth for events whose dedup rows have been pruned beyond the
+redelivery window.
 
 For process managers and timers, treat duplicate delivery as normal. The
 fulfillment process manager demonstrates deterministic command ids. The timer

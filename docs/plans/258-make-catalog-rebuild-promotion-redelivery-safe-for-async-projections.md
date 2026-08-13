@@ -77,9 +77,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 05:08Z) M4: resume-path test (verification failure, then repaired resume promotes with
       backfill) passing; fenced-while-failed and multi-member checkpoint assertions
       passing.
-- [ ] M5: ADR-31 amended; docs corrected (`docs/user/read-models-and-projections.md`,
+- [x] (2026-08-13 05:19Z) M5: ADR-31 amended; docs corrected (`docs/user/read-models-and-projections.md`,
       `docs/guides/run-and-operate-jitsurei.md`); `keiro/CHANGELOG.md` updated.
-- [ ] M5: `cabal build all`, `cabal test keiro-test`, and `just verify` green;
+- [x] (2026-08-13 05:19Z) M5: `cabal build all`, `cabal test keiro-test`, and `just verify` green;
       Outcomes & Retrospective written; ADR distillation pass done.
 
 
@@ -207,7 +207,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The catalog rebuild lifecycle now restores both halves of async redelivery safety before
+returning a group to service: it derives dedup identities from the validated catalog and
+immutable event history, then commits the bounded dedup batches, exact multi-member
+checkpoint advance, completion proof, and live transition atomically. Clear and preserved
+targets, repaired resume, repeated redelivery, slow consumer-group members, truthful fencing,
+and a vanished-checkpoint failure all have database-backed proofs. Inline-only groups and the
+legacy unmanaged protocol remain unchanged.
+
+The implementation added no migration or persisted-format revision. That kept ADR-32 stable;
+the durable preparation/promotion symmetry and dedup-window contract were instead distilled
+into ADR-31. The main lesson is that replay correctness is a lifecycle property: resetting
+dedup/checkpoint state at preparation is safe only if promotion restores the exact worker
+redelivery boundary before lifting the fence. Plan 256 can now reuse the exported catalog,
+history-collection, batched-insert, and checkpoint-reset helpers for its online cutover.
+
+The final `just verify` run passed: keiro 544 examples, keiro-pgmq 58 examples with two
+expected pending cases, keiro-ops 41, keiro-dsl 701, jitsurei 23, and migrations 29, all with
+zero failures. Strict ADR validation reported 33 concepts and the conformance/policy gates
+also passed.
 
 
 ## Context and Orientation
@@ -945,6 +963,29 @@ The change is proven by behavior, not by code shape:
 
 Record the final green run's relevant excerpt (the new test names passing) and the red
 excerpt from Milestone 1 in this section as evidence when executing the plan.
+
+Observed red before the fix:
+
+```text
+promotion leaves redelivery safe for a clear-before-replay async projection
+  expected ([CatalogAsyncDuplicate x3],60,[3,3],3)
+   but got ([CatalogAsyncApplied x3],120,[0,0],3)
+promotion leaves redelivery safe for a preserve-and-reconcile async projection
+  expected ([CatalogAsyncDuplicate x3],[1,1,1])
+   but got ([CatalogAsyncApplied x3],[2,2,2])
+```
+
+Observed green in the final full gate:
+
+```text
+catalog rebuild promotion redelivery
+  promotion leaves redelivery safe for a clear-before-replay async projection [✔]
+  promotion leaves redelivery safe for a preserve-and-reconcile async projection [✔]
+  resumes a verification failure with redelivery safety and an honest fence [✔]
+  reports vanished checkpoint rows and resumes promotion after repair [✔]
+Finished in 107.6142 seconds
+544 examples, 0 failures
+```
 
 
 ## Idempotence and Recovery

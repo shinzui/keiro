@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Subscription checkpoint policy is catalog identity and replay safety
-description: Keiro fingerprints every explicit missing-checkpoint policy, rejects current-head seeding after a replayable clear, and composes Kiroku-owned checkpoint resets with rebuild preparation.
-timestamp: 2026-08-12T11:51:04Z
+description: Keiro fingerprints every explicit missing-checkpoint policy, rejects unsafe head seeding, and brackets catalog replay with atomic dedup and checkpoint restoration.
+timestamp: 2026-08-13T05:10:57Z
 docId: ADR-31
 status: Accepted
 date: 2026-08-11
@@ -61,6 +61,17 @@ condemns the entire transaction when any catalog-declared subscription name is m
 creates member rows, deletes checkpoints, infers group topology, or issues private SQL against
 Kiroku's table.
 
+Catalog rebuild promotion restores the other half of this replay-safety boundary. After replay and
+verification succeed, Keiro reads each declared subscription's durable floor (the minimum across
+its persisted consumer-group members) and pages immutable source history over the interval
+@(floor, captured head]@. For each replayable async projection it derives the event identity through
+that projection's own `idempotencyKey`, then backfills `keiro_projection_dedup` and advances every
+persisted member of the declared subscriptions to the captured head through the same Kiroku exact-
+position reset primitive used by preparation. The inserts, checkpoint advance, completion proof,
+and group transition to live commit in one transaction. A missing declared row condemns promotion
+with typed evidence and leaves the run resumable; Keiro still never invents checkpoint topology.
+Inline-only groups skip this work.
+
 A policy-only DSL change emits `CatalogCheckpointPolicyChanged`. Its compatibility vector marks the
 generated consumer build breaking and requires stop-the-world operational review, but marks
 persisted subscription identity compatible. Text and JSON include the old and new policy; catalog
@@ -80,7 +91,11 @@ does not itself reset a checkpoint or rebuild application data.
 - Clearing a replayable target cannot combine with a missing-checkpoint choice that silently skips
   retained history.
 - Multi-member reset remains Kiroku-owned while target, fence, dedup, and checkpoint changes commit
-  or roll back as one Keiro preparation transaction.
+  or roll back at each boundary: preparation rewinds while fenced, and promotion backfills dedup,
+  advances every member, and returns the group to live atomically.
+- Async application remains exactly-once per retained dedup window across an offline catalog
+  rebuild, including an in-flight delivery parked on the rebuild fence. Idempotent handler SQL is
+  still useful defense in depth after operator pruning moves an event outside that window.
 - Renaming a subscription or losing a checkpoint remains operationally significant. Operators must
   repair missing state or change the declaration; Keiro does not synthesize topology.
 - Changing only `checkpointOnMissing` changes the catalog fingerprint even though the persisted
@@ -118,3 +133,5 @@ does not itself reset a checkpoint or rebuild application data.
   implements this decision.
 - [ExecPlan 216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md)
   implements the candidate-language and evolution-tooling boundary.
+- [ExecPlan 258](../plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md)
+  restores async redelivery safety at catalog rebuild promotion.

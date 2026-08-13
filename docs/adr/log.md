@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-13
+* **Update**: Amend ADR-31 with atomic promotion-time async dedup backfill, multi-member checkpoint advancement, and typed missing-row recovery (plan 258).
 * **Update**: Amend ADR-32 with scoped registry-complete adoption, reviewed old-name deletion, and truthful v2 operator reporting (plan 249).
 * **Update**: Add the failed -\> rebuilding lifecycle transition for explicitly requested fresh rebuilds (ADR-26).
 * **Update**: Record the pre-canonical sentinel recovery path: always-abandonable stranded runs, fenced stale-format adoption, and typed resume refusal (ADR-32).

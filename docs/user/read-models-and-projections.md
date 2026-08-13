@@ -324,6 +324,13 @@ condemns the transaction: the fence, target clear, dedup deletion, and any
 already matched checkpoint resets all roll back together. Keiro never invents
 consumer-group members or updates Kiroku's private table directly.
 
+After replay and verification, promotion re-seeds each replayable async
+projection's dedup identities over its durable redelivery window and advances
+every persisted member of its declared subscription to the captured head. The
+dedup backfill, checkpoint advance, completion proof, and group transition to
+`live` commit in one transaction; a missing declared checkpoint condemns
+promotion and leaves the run fenced and resumable.
+
 An undeclared foreign-key reference therefore rejects and rolls back the whole
 preparation instead of erasing external data. `abandonGroupRebuild` records
 structured failure evidence and deliberately keeps the group fenced. Promotion
@@ -760,7 +767,12 @@ Shibuya subscription source. It returns `AsyncApplied`, `AsyncDuplicate`, or
 fail the delivery and retry after the model is promoted. The fence is checked
 inside the same transaction as the dedup insert and model update.
 
-Async projections are at-least-once in v1. Make every async handler idempotent.
+Async delivery is at least once. An `idempotencyKey` plus Keiro's dedup table
+makes projection application exactly once per retained dedup window, including
+across offline catalog rebuilds whose promotion re-seeds dedup and advances the
+declared checkpoints. Idempotent handler SQL remains recommended defense in
+depth because operators may prune dedup rows once events leave the redelivery
+window.
 The usual table shape includes a unique `source_event_id` column:
 
 ```sql
