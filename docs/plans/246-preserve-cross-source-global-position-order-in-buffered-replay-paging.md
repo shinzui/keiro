@@ -48,11 +48,11 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
 
 ## Progress
 
-- [ ] Baseline: re-verify the file/line references in Context and Orientation against the
-      current working tree; run `cabal test keiro-test` on unmodified HEAD to confirm the
-      existing replay suite is green; run the rebuild benchmark on unmodified HEAD
-      (`cabal bench keiro-bench --benchmark-options="-p rebuild --time-mode wall"`) and
-      record the pre-fix number here.
+- [x] (2026-08-13T02:22:54Z) Baseline: re-verified the referenced runner and replay-spec
+      locations against the current working tree; `cabal build all` succeeded;
+      `cabal test keiro-test` passed 508 examples with 0 failures in 106.0253 seconds;
+      `cabal bench keiro-bench --benchmark-options="-p rebuild --time-mode wall"` measured
+      `rebuild/three-categories-200` at 52.8 ms +/- 5.2 ms before the fix.
 - [ ] Milestone 1: red test "applies merged multi-source chunks in ascending global order
       across buffer boundaries" added to `keiro/test/ProjectionReplaySpec.hs`; observed
       failing with trace `[1,2,3,8,4,7,9]` against expected `[1,2,3,4,7,8,9]` on
