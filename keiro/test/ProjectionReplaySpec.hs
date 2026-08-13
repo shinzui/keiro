@@ -25,15 +25,22 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
-import Keiro.Projection (InlineProjection (..))
+import Keiro.Projection
+  ( AsyncProjection (..),
+    CatalogAsyncApplyOutcome (..),
+    InlineProjection (..),
+    applyAsyncProjectionFromCatalog,
+  )
 import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog qualified as CatalogApi
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
 import Kiroku.Store.Types
   ( CategoryName (..),
     EventData (..),
@@ -49,7 +56,12 @@ import Prelude (map, replicate, (&&))
 import Prelude qualified
 
 spec :: Fixture -> Spec
-spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture) $ do
+spec fixture = do
+  catalogReplaySpec fixture
+  redeliverySpec fixture
+
+catalogReplaySpec :: Fixture -> Spec
+catalogReplaySpec fixture = describe "catalog replay runner" $ around (withFreshStore fixture) $ do
   it "merges interleaved categories in global order and promotes only complete evidence" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
     appendInterleaved store
@@ -381,6 +393,74 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
       )
       [(seed, pageSize) | seed <- [1 .. 6], pageSize <- [1, 2, 3]]
 
+redeliverySpec :: Fixture -> Spec
+redeliverySpec fixture =
+  describe "catalog rebuild promotion redelivery"
+    $ around (withFreshStore fixture)
+    $ do
+      it "promotion leaves redelivery safe for a clear-before-replay async projection" $ \store -> do
+        expectStore store (Store.runTransaction (Tx.sql redeliveryFixtureSql))
+        events <- appendAuditEvents store
+        validated <- expectValid (redeliveryCatalog ClearAuditTotals passingVerification)
+        case catalogAsyncIdempotencyKeys validated auditGroupId of
+          [dedupSpec] ->
+            ( dedupSpec ^. #specSubscriptionName,
+              dedupSpec ^. #specDedupName,
+              dedupSpec ^. #specSourceId,
+              dedupSpec ^. #specSourceScope
+            )
+              `shouldBe` ( "audit-subscription",
+                           "audit-async",
+                           auditSourceId,
+                           CategorySource (CategoryName "audit")
+                         )
+          specs -> expectationFailure ("unexpected async dedup specs: " <> show (Prelude.length specs))
+        liveOnly <-
+          expectValid (redeliveryCatalogWithReplayability PreserveAuditEntries passingVerification False)
+        Prelude.null (catalogAsyncIdempotencyKeys liveOnly auditGroupId) `shouldBe` True
+        _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+        liveApplyAuditEvents store validated auditTotalsProjection events
+        expectStore store (Store.runTransaction (Tx.statement () auditTotalStmt))
+          `shouldReturn` 60
+        expectStore store (Store.runTransaction (Tx.statement "audit-async" auditDedupCountStmt))
+          `shouldReturn` 3
+
+        report <-
+          expectStore
+            store
+            (startCatalogRebuild validated auditGroupId (options "redelivery-clear-run" 2))
+            >>= shouldBeRight
+        report ^. #runStatus `shouldBe` RebuildRunPromoted
+        outcomes <- redeliverAuditEvents store validated auditTotalsProjection events
+        total <- expectStore store (Store.runTransaction (Tx.statement () auditTotalStmt))
+        checkpoints <- expectStore store (Store.runTransaction (Tx.statement () auditCheckpointsStmt))
+        dedupCount <- expectStore store (Store.runTransaction (Tx.statement "audit-async" auditDedupCountStmt))
+        let GlobalPosition capturedHead = report ^. #capturedHead
+        (outcomes, total, checkpoints, dedupCount)
+          `shouldBe` ( replicate 3 CatalogAsyncDuplicate,
+                       60,
+                       replicate 2 capturedHead,
+                       3
+                     )
+
+      it "promotion leaves redelivery safe for a preserve-and-reconcile async projection" $ \store -> do
+        expectStore store (Store.runTransaction (Tx.sql redeliveryFixtureSql))
+        events <- appendAuditEvents store
+        validated <- expectValid (redeliveryCatalog PreserveAuditEntries passingVerification)
+        _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+        liveApplyAuditEvents store validated auditEntriesProjection events
+
+        report <-
+          expectStore
+            store
+            (startCatalogRebuild validated auditGroupId (options "redelivery-preserve-run" 2))
+            >>= shouldBeRight
+        report ^. #runStatus `shouldBe` RebuildRunPromoted
+        outcomes <- redeliverAuditEvents store validated auditEntriesProjection events
+        liveApplies <- expectStore store (Store.runTransaction (Tx.statement () auditEntryAppliesStmt))
+        (outcomes, liveApplies)
+          `shouldBe` (replicate 3 CatalogAsyncDuplicate, replicate 3 1)
+
 data ReplayEvent = ReplayEvent !Int64
   deriving stock (Eq, Show)
 
@@ -506,6 +586,203 @@ addUnrelatedReplaySource catalog =
                  }
              ]
     }
+
+data AuditProjectionKind
+  = ClearAuditTotals
+  | PreserveAuditEntries
+
+redeliveryCatalog :: AuditProjectionKind -> RebuildVerification -> ProjectionCatalog
+redeliveryCatalog projectionKind verification =
+  redeliveryCatalogWithReplayability projectionKind verification True
+
+redeliveryCatalogWithReplayability :: AuditProjectionKind -> RebuildVerification -> Bool -> ProjectionCatalog
+redeliveryCatalogWithReplayability projectionKind verification replayable =
+  ProjectionCatalog
+    { sources =
+        [ SourceDeclaration
+            { sourceId = auditSourceId,
+              sourceScope = CategorySource (CategoryName "audit"),
+              codecFingerprint = "audit-v1",
+              claimSite = site "test:audit-source"
+            }
+        ],
+      targets =
+        [ TargetDeclaration
+            { targetId = selectedTargetId,
+              qualifiedTable = QualifiedTable "app" selectedTable,
+              resetPolicy = selectedResetPolicy,
+              dependsOn = [],
+              claimSite = site "test:audit-target"
+            }
+        ],
+      rebuildGroups =
+        [ RebuildGroupDeclaration
+            { rebuildGroupId = auditGroupId,
+              orderedTargets = [selectedTargetId],
+              verificationHooks = [verification],
+              claimSite = site "test:audit-group"
+            }
+        ],
+      subscriptions =
+        [ SubscriptionDeclaration
+            { subscriptionId = auditSubscriptionId,
+              subscriptionName = "audit-subscription",
+              subscriptionSource = auditSourceId,
+              checkpointOnMissing = FromBeginning,
+              claimSite = site "test:audit-subscription"
+            }
+        ],
+      dedupKeys =
+        [ DedupKeyDeclaration
+            { dedupKeyId = auditDedupId,
+              dedupName = "audit-async",
+              claimSite = site "test:audit-dedup"
+            }
+        ],
+      queryModels =
+        [ SomeQueryModelBinding
+            QueryModelBinding
+              { queryModelId = auditQueryId,
+                readModel = auditReadModel selectedTable,
+                rebuildGroup = auditGroupId,
+                observedTargets = [selectedTargetId],
+                claimSite = site "test:audit-query"
+              }
+        ],
+      projectionSets =
+        [ SomeProjectionSet
+            ProjectionSet
+              { projectionSource = auditSourceId,
+                projectionDefinitions =
+                  ProjectionDefinition
+                    { projectionId = auditProjectionId,
+                      rebuildGroup = auditGroupId,
+                      ownedTargets = selectedTargetId :| [],
+                      replayPolicy =
+                        if replayable
+                          then Replayable (auditReplayAdapter projectionKind)
+                          else LiveOnly (LiveOnlyReason "membership-test"),
+                      handlers =
+                        AsyncHandler selectedProjection auditSubscriptionId auditDedupId (site "test:audit-handler")
+                          :| [],
+                      claimSite = site "test:audit-projection"
+                    }
+                    :| [],
+                claimSite = site "test:audit-set"
+              }
+        ]
+    }
+  where
+    (selectedTargetId, selectedTable, selectedResetPolicy, selectedProjection) =
+      case projectionKind of
+        ClearAuditTotals ->
+          (auditTotalsTargetId, "audit_totals", ClearBeforeReplay, auditTotalsProjection)
+        PreserveAuditEntries ->
+          (auditEntriesTargetId, "audit_entries", PreserveAndReconcile, auditEntriesProjection)
+
+auditReplayAdapter :: AuditProjectionKind -> ReplayAdapter Int64
+auditReplayAdapter projectionKind =
+  ReplayAdapter
+    { decodeForReplay = decodeAuditEvent,
+      applyForReplay = \value recorded ->
+        case projectionKind of
+          ClearAuditTotals -> Tx.statement value addAuditTotalStmt
+          PreserveAuditEntries ->
+            let GlobalPosition position = recorded ^. #globalPosition
+             in Tx.statement (position, value) reconcileAuditEntryStmt
+    }
+
+decodeAuditEvent :: RecordedEvent -> ReplayDecodeResult Int64
+decodeAuditEvent recorded
+  | recorded ^. #eventType /= EventType "AuditEvent" = ReplayIrrelevant
+  | otherwise =
+      case Aeson.fromJSON (recorded ^. #payload) of
+        Aeson.Error detail -> ReplayDecodeFailure (ReplayDecodeError (Text.pack detail))
+        Aeson.Success value -> ReplayRelevant value
+
+auditTotalsProjection :: AsyncProjection
+auditTotalsProjection =
+  AsyncProjection
+    { name = "audit-async",
+      readModelName = "audit-query",
+      subscriptionName = "audit-subscription",
+      applyRecorded = \recorded -> Tx.statement (auditEventValue recorded) addAuditTotalStmt,
+      idempotencyKey = (^. #eventId)
+    }
+
+auditEntriesProjection :: AsyncProjection
+auditEntriesProjection =
+  auditTotalsProjection
+    { applyRecorded = \recorded ->
+        let GlobalPosition position = recorded ^. #globalPosition
+         in Tx.statement (position, auditEventValue recorded) applyAuditEntryStmt
+    }
+
+auditEventValue :: RecordedEvent -> Int64
+auditEventValue recorded =
+  case Aeson.fromJSON (recorded ^. #payload) of
+    Aeson.Error detail -> error detail
+    Aeson.Success value -> value
+
+auditReadModel :: Text -> ReadModel Text ()
+auditReadModel tableName =
+  ReadModel
+    { name = "audit-query",
+      tableName,
+      schema = "app",
+      subscriptionName = "audit-subscription",
+      version = 1,
+      shapeHash = "audit-query-v1",
+      defaultConsistency = Eventual,
+      strongScope = EntireLog,
+      query = \_ -> pure ()
+    }
+
+appendAuditEvents :: Store.KirokuStore -> IO [RecordedEvent]
+appendAuditEvents store = do
+  traverse_
+    (appendRaw store)
+    [ (StreamName "audit-1", NoStream, EventType "AuditEvent", Aeson.toJSON (10 :: Int64)),
+      (StreamName "audit-1", AnyVersion, EventType "AuditEvent", Aeson.toJSON (20 :: Int64)),
+      (StreamName "audit-1", AnyVersion, EventType "AuditEvent", Aeson.toJSON (30 :: Int64))
+    ]
+  Vector.toList
+    <$> expectStore store (Store.readCategory (CategoryName "audit") (GlobalPosition 0) 100)
+
+liveApplyAuditEvents ::
+  Store.KirokuStore ->
+  ValidatedProjectionCatalog ->
+  AsyncProjection ->
+  [RecordedEvent] ->
+  IO ()
+liveApplyAuditEvents store catalog projection events =
+  for_ events $ \recorded -> do
+    outcome <-
+      expectStore
+        store
+        ( Store.runTransaction $ do
+            applied <- applyAsyncProjectionFromCatalog catalog auditProjectionId projection recorded
+            let GlobalPosition position = recorded ^. #globalPosition
+            Tx.statement ("audit-subscription", position) setAuditCheckpointStmt
+            pure applied
+        )
+    outcome `shouldBe` CatalogAsyncApplied
+
+redeliverAuditEvents ::
+  Store.KirokuStore ->
+  ValidatedProjectionCatalog ->
+  AsyncProjection ->
+  [RecordedEvent] ->
+  IO [CatalogAsyncApplyOutcome]
+redeliverAuditEvents store catalog projection =
+  traverse
+    ( \recorded ->
+        expectStore
+          store
+          ( Store.runTransaction
+              (applyAsyncProjectionFromCatalog catalog auditProjectionId projection recorded)
+          )
+    )
 
 pairCatalog :: Bool -> ReplayDecoder -> ProjectionCatalog
 pairCatalog swapOrder decoder =
@@ -803,6 +1080,28 @@ pairSecondTargetId = identity mkTargetId "pair-second"
 pairGroupId :: RebuildGroupId
 pairGroupId = identity mkRebuildGroupId "pair-group"
 
+auditSourceId :: SourceId
+auditSourceId = identity mkSourceId "audit-source"
+
+auditTotalsTargetId, auditEntriesTargetId :: TargetId
+auditTotalsTargetId = identity mkTargetId "audit-totals-target"
+auditEntriesTargetId = identity mkTargetId "audit-entries-target"
+
+auditGroupId :: RebuildGroupId
+auditGroupId = identity mkRebuildGroupId "audit-group"
+
+auditProjectionId :: ProjectionId
+auditProjectionId = identity mkProjectionId "audit-projection"
+
+auditSubscriptionId :: SubscriptionId
+auditSubscriptionId = identity mkSubscriptionId "audit-subscription-id"
+
+auditDedupId :: DedupKeyId
+auditDedupId = identity mkDedupKeyId "audit-dedup-id"
+
+auditQueryId :: QueryModelId
+auditQueryId = identity mkQueryModelId "audit-query-id"
+
 replayFixtureSql :: ByteString
 replayFixtureSql =
   """
@@ -831,6 +1130,29 @@ pairFixtureSql =
   CREATE TABLE app.pair_second (global_position bigint PRIMARY KEY, value bigint NOT NULL);
   """
 
+redeliveryFixtureSql :: ByteString
+redeliveryFixtureSql =
+  """
+  CREATE SCHEMA app;
+  CREATE TABLE app.audit_totals (
+    id text PRIMARY KEY,
+    total bigint NOT NULL
+  );
+  CREATE TABLE app.audit_entries (
+    event_pos bigint PRIMARY KEY,
+    value bigint NOT NULL,
+    live_applies bigint NOT NULL
+  );
+  INSERT INTO subscriptions (
+    subscription_name,
+    consumer_group_member,
+    consumer_group_size,
+    last_seen
+  ) VALUES
+    ('audit-subscription', 0, 2, 0),
+    ('audit-subscription', 1, 2, 0);
+  """
+
 insertTraceStmt :: Statement (Int64, Text, Int64) ()
 insertTraceStmt =
   preparable
@@ -844,6 +1166,89 @@ insertPairTraceStmt =
     "INSERT INTO app.pair_trace (global_position, projection, value) VALUES ($1, $2, $3)"
     (contrazip3 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
     D.noResult
+
+addAuditTotalStmt :: Statement Int64 ()
+addAuditTotalStmt =
+  preparable
+    """
+    INSERT INTO app.audit_totals (id, total) VALUES ('audit', $1)
+    ON CONFLICT (id) DO UPDATE
+      SET total = app.audit_totals.total + EXCLUDED.total
+    """
+    (E.param (E.nonNullable E.int8))
+    D.noResult
+
+applyAuditEntryStmt :: Statement (Int64, Int64) ()
+applyAuditEntryStmt =
+  preparable
+    """
+    INSERT INTO app.audit_entries (event_pos, value, live_applies)
+    VALUES ($1, $2, 1)
+    ON CONFLICT (event_pos) DO UPDATE
+      SET live_applies = app.audit_entries.live_applies + 1
+    """
+    (contrazip2 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+reconcileAuditEntryStmt :: Statement (Int64, Int64) ()
+reconcileAuditEntryStmt =
+  preparable
+    """
+    INSERT INTO app.audit_entries (event_pos, value, live_applies)
+    VALUES ($1, $2, 1)
+    ON CONFLICT (event_pos) DO NOTHING
+    """
+    (contrazip2 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+setAuditCheckpointStmt :: Statement (Text, Int64) ()
+setAuditCheckpointStmt =
+  preparable
+    """
+    UPDATE subscriptions
+    SET last_seen = $2,
+        updated_at = now()
+    WHERE subscription_name = $1
+    """
+    (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+auditTotalStmt :: Statement () Int64
+auditTotalStmt =
+  preparable
+    "SELECT COALESCE((SELECT total FROM app.audit_totals WHERE id = 'audit'), 0)"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
+auditEntryAppliesStmt :: Statement () [Int64]
+auditEntryAppliesStmt =
+  preparable
+    "SELECT live_applies FROM app.audit_entries ORDER BY event_pos"
+    E.noParams
+    (D.rowList (D.column (D.nonNullable D.int8)))
+
+auditCheckpointsStmt :: Statement () [Int64]
+auditCheckpointsStmt =
+  preparable
+    """
+    SELECT last_seen
+    FROM subscriptions
+    WHERE subscription_name = 'audit-subscription'
+    ORDER BY consumer_group_member
+    """
+    E.noParams
+    (D.rowList (D.column (D.nonNullable D.int8)))
+
+auditDedupCountStmt :: Statement Text Int64
+auditDedupCountStmt =
+  preparable
+    """
+    SELECT count(*)
+    FROM keiro.keiro_projection_dedup
+    WHERE projection_name = $1
+    """
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.int8)))
 
 ordersInsertStmt, customersInsertStmt, billingInsertStmt :: Statement (Int64, Int64) ()
 ordersInsertStmt = targetInsertStmt "orders_projection"

@@ -68,6 +68,8 @@ module Keiro.ReadModel.Rebuild
     adoptCatalogGroups,
     lookupProjectionRebuildGroup,
     beginGroupRebuild,
+    resetDeclaredSubscriptions,
+    insertProjectionDedupBatchStmt,
     finishGroupRebuild,
     abandonGroupRebuild,
 
@@ -81,6 +83,8 @@ module Keiro.ReadModel.Rebuild
     RebuildAdapterProgress (..),
     RebuildVerificationProgress (..),
     RebuildRunReport (..),
+    AsyncDedupBackfill (..),
+    collectAsyncDedupBackfill,
     startCatalogRebuild,
     resumeCatalogRebuild,
     inspectCatalogRebuild,

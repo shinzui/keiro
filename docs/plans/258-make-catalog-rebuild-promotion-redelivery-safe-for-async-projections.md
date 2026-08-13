@@ -58,21 +58,22 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-13 04:48Z) M1: baseline `cabal build all` and `cabal test keiro-test` pass at the starting commit.
-- [ ] M1: redelivery fixture catalog (async handler, real subscription, real dedup key,
+- [x] (2026-08-13 04:52Z) M1: redelivery fixture catalog (async handler, real subscription, real dedup key,
       non-idempotent handler) added to `keiro/test/ProjectionReplaySpec.hs`.
-- [ ] M1: red test "promotion leaves redelivery safe for a clear-before-replay async
+- [x] (2026-08-13 04:52Z) M1: red test "promotion leaves redelivery safe for a clear-before-replay async
       projection" written; observed failing (doubled total, `CatalogAsyncApplied`
       outcomes, checkpoint at replay start); red transcript captured in this plan.
-- [ ] M1: red test for a `PreserveAndReconcile`-fed async projection written and observed
+- [x] (2026-08-13 04:52Z) M1: red test for a `PreserveAndReconcile`-fed async projection written and observed
       failing.
-- [ ] M2: `CatalogAsyncDedupSpec` and `catalogAsyncIdempotencyKeys` added to
+- [x] (2026-08-13 05:03Z) M2: `CatalogAsyncDedupSpec` and `catalogAsyncIdempotencyKeys` added to
       `keiro/src/Keiro/Projection/Catalog.hs` and exported; membership assertions added.
-- [ ] M3: backfill input collection (`collectAsyncDedupBackfill`) and batched dedup
+- [x] (2026-08-13 05:03Z) M3: backfill input collection (`collectAsyncDedupBackfill`) and batched dedup
       insert statement added; `resetDeclaredSubscriptions` exported from
       `keiro/src/Keiro/ReadModel/Rebuild/Group.hs`.
-- [ ] M3: `verifyAndPromote` extended — backfill inserts and checkpoint advance inside
+- [x] (2026-08-13 05:03Z) M3: `verifyAndPromote` extended — backfill inserts and checkpoint advance inside
       the promote transaction; `CatalogRebuildPromotionCheckpointsMissing` added.
-- [ ] M3: M1 red tests now pass; whole `cabal test keiro-test` green.
+- [x] (2026-08-13 05:03Z) M3: M1 red tests now pass; whole `cabal test keiro-test`
+      green with 542 examples and zero failures.
 - [ ] M4: resume-path test (verification failure, then repaired resume promotes with
       backfill) passing; fenced-while-failed and multi-member checkpoint assertions
       passing.
@@ -96,6 +97,16 @@ implementation. Provide concise evidence.
   `mori://shinzui/kiroku/okf/adrs/concepts/ADR-4`: inventory exposes every persisted
   member; the reset assigns one exact position to all existing members, invents none,
   and returns deterministic affected/missing evidence.
+- The focused red run compiled and failed only on the two intended new examples. The
+  clear target expected three duplicates, total 60, checkpoints `[3,3]`, and three dedup
+  rows but got three applied outcomes, total 120, checkpoints `[0,0]`, and three rows
+  re-created only by the corrupting redelivery. The preserved target expected three
+  duplicates and `[1,1,1]` live-apply counts but got three applied outcomes and
+  `[2,2,2]`.
+- The first green implementation passed both redelivery scenarios without changing the
+  persisted runner format: promotion restored three dedup rows, advanced both member
+  checkpoints to the captured head, and repeated worker delivery returned only
+  `CatalogAsyncDuplicate`. The full `keiro-test` suite then passed 542 examples.
 
 
 ## Decision Log

@@ -98,6 +98,7 @@ module Keiro.Projection.Catalog
     CatalogEvolution (..),
     CatalogRegistration (..),
     AsyncProjectionRegistration (..),
+    CatalogAsyncDedupSpec (..),
     ReplayAdapterMetadata (..),
     CatalogReplayAdapter,
     catalogReplayAdapterProjectionId,
@@ -114,6 +115,7 @@ module Keiro.Projection.Catalog
     groupSliceFingerprint,
     catalogRegistrations,
     asyncProjectionRegistrations,
+    catalogAsyncIdempotencyKeys,
     replayAdapterMetadata,
     catalogReplayAdapters,
     catalogRebuildVerifications,
@@ -153,7 +155,7 @@ import Keiro.ReadModel
     readModelDefaultFreshness,
   )
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
-import Kiroku.Store.Types (CategoryName (..), RecordedEvent)
+import Kiroku.Store.Types (CategoryName (..), EventId, RecordedEvent)
 
 newtype ProjectionId = ProjectionId Text
   deriving stock (Eq, Ord, Show, Generic)
@@ -765,6 +767,20 @@ instance Ord AsyncProjectionRegistration where
         right ^. #dedupName
       )
 
+-- | One replayable async handler's redelivery identity. Promotion uses this
+-- to re-seed dedup rows and advance the declared checkpoint for one rebuild
+-- group. Membership matches rebuild preparation: every replayable definition
+-- in the group, independent of target reset policy. Plan 256 consumes this
+-- same view for versioned cutover.
+data CatalogAsyncDedupSpec = CatalogAsyncDedupSpec
+  { specSubscriptionName :: !Text,
+    specDedupName :: !Text,
+    specSourceId :: !SourceId,
+    specSourceScope :: !SourceScope,
+    specIdempotencyKey :: !(RecordedEvent -> EventId)
+  }
+  deriving stock (Generic)
+
 data ReplayAdapterMetadata = ReplayAdapterMetadata
   { projectionId :: !ProjectionId,
     sourceId :: !SourceId,
@@ -1076,6 +1092,61 @@ asyncProjectionRegistrations validated =
             [ (entry ^. #dedupKeyId, entry ^. #dedupName)
             | entry <- inventory ^. #inventoryDedupKeys
             ]
+        )
+
+-- | Redelivery identities for replayable async definitions in one group,
+-- preserving projection-set, definition, and handler declaration order.
+catalogAsyncIdempotencyKeys ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  [CatalogAsyncDedupSpec]
+catalogAsyncIdempotencyKeys validated wantedGroup =
+  concatMap specsForSet (validated ^. #originalCatalog . #projectionSets)
+  where
+    inventory = validated ^. #validatedInventory
+
+    specsForSet (SomeProjectionSet projectionSet) =
+      [ CatalogAsyncDedupSpec
+          { specSubscriptionName = subscriptionNameFor subscriptionId,
+            specDedupName = dedupNameFor dedupKeyId,
+            specSourceId = sourceId,
+            specSourceScope = sourceScopeFor sourceId,
+            specIdempotencyKey = projection ^. #idempotencyKey
+          }
+      | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+        definition ^. #rebuildGroup == wantedGroup,
+        Replayable {} <- [definition ^. #replayPolicy],
+        AsyncHandler projection subscriptionId dedupKeyId _ <-
+          NonEmpty.toList (definition ^. #handlers)
+      ]
+      where
+        sourceId = projectionSet ^. #projectionSource
+
+    subscriptionNameFor ref =
+      fromMaybe
+        (error "catalogAsyncIdempotencyKeys: validated subscription missing from inventory")
+        ( (^. #subscriptionName)
+            <$> List.find
+              ((== ref) . (^. #subscriptionId))
+              (inventory ^. #inventorySubscriptions)
+        )
+
+    dedupNameFor ref =
+      fromMaybe
+        (error "catalogAsyncIdempotencyKeys: validated dedup key missing from inventory")
+        ( (^. #dedupName)
+            <$> List.find
+              ((== ref) . (^. #dedupKeyId))
+              (inventory ^. #inventoryDedupKeys)
+        )
+
+    sourceScopeFor ref =
+      fromMaybe
+        (error "catalogAsyncIdempotencyKeys: validated source missing from inventory")
+        ( (^. #sourceScope)
+            <$> List.find
+              ((== ref) . (^. #sourceId))
+              (inventory ^. #inventorySources)
         )
 
 replayAdapterMetadata :: ValidatedProjectionCatalog -> [ReplayAdapterMetadata]

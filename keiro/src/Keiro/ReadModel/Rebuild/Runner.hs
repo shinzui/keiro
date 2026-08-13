@@ -11,6 +11,8 @@ module Keiro.ReadModel.Rebuild.Runner
     RebuildAdapterProgress (..),
     RebuildVerificationProgress (..),
     RebuildRunReport (..),
+    AsyncDedupBackfill (..),
+    collectAsyncDedupBackfill,
     startCatalogRebuild,
     resumeCatalogRebuild,
     inspectCatalogRebuild,
@@ -32,6 +34,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Text qualified as Text
 import Data.Time (diffUTCTime)
+import Data.UUID (UUID)
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
@@ -61,6 +64,7 @@ import Keiro.Projection.Catalog
   )
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Preimage (Preimage (..), hashPreimage)
+import Keiro.ReadModel (subscriptionPositionFromInventory)
 import Keiro.ReadModel.Rebuild.Group
   ( GroupTransitionError,
     RebuildFailure (..),
@@ -73,16 +77,21 @@ import Keiro.ReadModel.Rebuild.Group
     completionTokenForHandle,
     finishGroupRebuildTx,
     groupRebuildHandleFor,
+    groupRebuildHandlePreparation,
+    insertProjectionDedupBatchStmt,
     mkRebuildRunId,
     preCanonicalRunSliceSentinel,
     rebuildRunIdText,
+    resetDeclaredSubscriptions,
   )
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read qualified as Store
+import Kiroku.Store.Subscription (subscriptionCheckpointInventory)
+import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
-import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), RecordedEvent)
+import Kiroku.Store.Types (CategoryName (..), EventId (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude (all, any, concatMap, const, filter, id, not, null, (&&), (*), (+), (||))
 import Prelude qualified
@@ -120,6 +129,7 @@ data CatalogRebuildError
   | CatalogRebuildRunNotActive !RebuildRunId
   | CatalogRebuildDecodeFailed !RebuildRunId !SourceId !Text !GlobalPosition !ReplayDecodeError
   | CatalogRebuildVerificationFailed !RebuildRunId !Text !Text
+  | CatalogRebuildPromotionCheckpointsMissing !RebuildRunId ![SubscriptionName]
   | CatalogRebuildInvariantFailed !RebuildRunId !Text
   | CatalogRebuildPromotionFailed !GroupTransitionError
   | CatalogRebuildAbandonFailed !GroupTransitionError
@@ -211,6 +221,116 @@ data AdapterCounts = AdapterCounts
     applications :: !Int64
   }
   deriving stock (Generic)
+
+-- | Promotion-time redelivery-safety input for one rebuild group. Each pair
+-- identifies a replayed async application that must remain deduplicated after
+-- promotion; each floor is the slowest durable member of that subscription.
+data AsyncDedupBackfill = AsyncDedupBackfill
+  { backfillPairs :: ![(Text, UUID)],
+    backfillFloors :: ![(Text, GlobalPosition)]
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Collect the async dedup identities between each subscription's durable
+-- floor and the captured rebuild head. Missing checkpoint rows are returned
+-- explicitly and are never synthesized.
+collectAsyncDedupBackfill ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  Int32 ->
+  GlobalPosition ->
+  Eff es (Either [SubscriptionName] AsyncDedupBackfill)
+collectAsyncDedupBackfill catalog groupId pageSize capturedHead =
+  case Catalog.catalogAsyncIdempotencyKeys catalog groupId of
+    [] -> pure (Right (AsyncDedupBackfill [] []))
+    specs -> do
+      inventory <- subscriptionCheckpointInventory
+      let resolved =
+            [ ( spec,
+                SubscriptionName (Catalog.specSubscriptionName spec),
+                subscriptionPositionFromInventory
+                  (SubscriptionName (Catalog.specSubscriptionName spec))
+                  inventory
+              )
+            | spec <- specs
+            ]
+          missing =
+            List.sort
+              . List.nub
+              $ [subscriptionName | (_, subscriptionName, Nothing) <- resolved]
+      if not (null missing)
+        then pure (Left missing)
+        else do
+          let specFloors =
+                [ (spec, floor)
+                | (spec, _, Just floor) <- resolved
+                ]
+              sourceKeys =
+                List.nub
+                  [ (Catalog.specSourceId spec, Catalog.specSourceScope spec)
+                  | (spec, _) <- specFloors
+                  ]
+              floors =
+                Map.toAscList
+                  ( Map.fromListWith
+                      Prelude.min
+                      [ (Catalog.specSubscriptionName spec, floor)
+                      | (spec, floor) <- specFloors
+                      ]
+                  )
+          pairs <-
+            concatMap id
+              <$> traverse
+                (collectSourcePairs specFloors)
+                sourceKeys
+          pure
+            ( Right
+                AsyncDedupBackfill
+                  { backfillPairs = pairs,
+                    backfillFloors = floors
+                  }
+            )
+  where
+    collectSourcePairs specFloors (sourceId, scope) =
+      let members =
+            [ (spec, floor)
+            | (spec, floor) <- specFloors,
+              Catalog.specSourceId spec == sourceId,
+              Catalog.specSourceScope spec == scope
+            ]
+          cursor = Prelude.minimum (Prelude.snd <$> members)
+       in collectPages scope members cursor
+
+    collectPages scope members cursor
+      | cursor >= capturedHead = pure []
+      | otherwise = do
+          raw <-
+            case scope of
+              AllStreams -> Store.readAllForward cursor pageSize
+              CategorySource category -> Store.readCategory category cursor pageSize
+          let rawEvents = Vector.toList raw
+              eligible = Prelude.takeWhile ((<= capturedHead) . (^. #globalPosition)) rawEvents
+              pairs =
+                [ (Catalog.specDedupName spec, eventId)
+                | event <- eligible,
+                  (spec, floor) <- members,
+                  event ^. #globalPosition > floor,
+                  let EventId eventId = Catalog.specIdempotencyKey spec event
+                ]
+              beyondHead = Prelude.any ((> capturedHead) . (^. #globalPosition)) rawEvents
+              shortPage = Vector.length raw < Prelude.fromIntegral pageSize
+              reachedHead =
+                not (null eligible)
+                  && Prelude.last eligible ^. #globalPosition == capturedHead
+          if beyondHead || shortPage || reachedHead || null eligible
+            then pure pairs
+            else
+              (pairs <>)
+                <$> collectPages
+                  scope
+                  members
+                  (Prelude.last eligible ^. #globalPosition)
 
 startCatalogRebuild ::
   (IOE :> es, Store :> es) =>
@@ -747,44 +867,113 @@ verifyAndPromote catalog groupId runId contract metrics = do
       recordFailure runId "replay.verification-failure" detail Nothing (Just verificationId) Nothing
       Telemetry.recordProjectionRebuildFailures metrics 1
       pure (Left (CatalogRebuildVerificationFailed runId verificationId detail))
-    Right () ->
-      case groupRebuildHandleFor catalog groupId runId of
-        Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
-        Just handle -> do
-          promoted <-
-            runTransaction $ do
-              complete <-
-                Tx.statement
-                  ( rebuildRunIdText runId,
-                    contract,
-                    Prelude.fromIntegral sourceCount,
-                    Prelude.fromIntegral adapterCount,
-                    Prelude.fromIntegral (Prelude.length hooks)
-                  )
-                  completionProofStmt
-              if not complete
-                then Tx.condemn >> pure (Left Nothing)
-                else do
-                  Tx.statement (rebuildRunIdText runId) markVerifiedStmt
-                  transition <- finishGroupRebuildTx handle (completionTokenForHandle handle)
-                  case transition of
-                    Left err -> pure (Left (Just err))
-                    Right _ -> do
-                      Tx.statement (rebuildRunIdText runId) markPromotedStmt
-                      pure (Right ())
-          case promoted of
-            Left Nothing -> do
-              let detail = "source, adapter, or verification completion proof is incomplete"
-              Telemetry.recordProjectionRebuildFailures metrics 1
-              pure (Left (CatalogRebuildInvariantFailed runId detail))
-            Left (Just err) -> pure (Left (CatalogRebuildPromotionFailed err))
-            Right () -> do
-              Telemetry.recordProjectionRebuildPromotions metrics 1
-              inspectCatalogRebuild runId
+    Right () -> do
+      maybeReport <- inspectCatalogRebuildMaybe runId
+      case maybeReport of
+        Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
+        Just report -> do
+          backfill <-
+            collectAsyncDedupBackfill
+              catalog
+              groupId
+              (report ^. #configuredPageSize)
+              (report ^. #capturedHead)
+          case backfill of
+            Left missing -> promotionCheckpointsMissing missing
+            Right redeliverySafety ->
+              case groupRebuildHandleFor catalog groupId runId of
+                Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+                Just handle -> do
+                  promoted <-
+                    runTransaction $ do
+                      complete <-
+                        Tx.statement
+                          ( rebuildRunIdText runId,
+                            contract,
+                            Prelude.fromIntegral sourceCount,
+                            Prelude.fromIntegral adapterCount,
+                            Prelude.fromIntegral (Prelude.length hooks)
+                          )
+                          completionProofStmt
+                      if not complete
+                        then Tx.condemn >> pure (Left PromotionProofIncomplete)
+                        else do
+                          Tx.statement (rebuildRunIdText runId) markVerifiedStmt
+                          traverse_
+                            ( \batch ->
+                                Tx.statement
+                                  (Prelude.unzip batch)
+                                  insertProjectionDedupBatchStmt
+                            )
+                            (dedupBatches (redeliverySafety ^. #backfillPairs))
+                          checkpointResult <-
+                            if null asyncSpecs
+                              then pure (Right ())
+                              else do
+                                resetReport <-
+                                  resetDeclaredSubscriptions
+                                    (groupRebuildHandlePreparation handle)
+                                    (report ^. #capturedHead)
+                                let missing =
+                                      Vector.toList
+                                        (resetReport ^. #missingSubscriptionNames)
+                                if null missing
+                                  then pure (Right ())
+                                  else
+                                    Tx.condemn
+                                      >> pure (Left (PromotionCheckpointsMissing missing))
+                          case checkpointResult of
+                            Left failure -> pure (Left failure)
+                            Right () -> do
+                              transition <- finishGroupRebuildTx handle (completionTokenForHandle handle)
+                              case transition of
+                                Left err -> pure (Left (PromotionTransitionFailed err))
+                                Right _ -> do
+                                  Tx.statement (rebuildRunIdText runId) markPromotedStmt
+                                  pure (Right ())
+                  case promoted of
+                    Left PromotionProofIncomplete -> do
+                      let detail = "source, adapter, or verification completion proof is incomplete"
+                      Telemetry.recordProjectionRebuildFailures metrics 1
+                      pure (Left (CatalogRebuildInvariantFailed runId detail))
+                    Left (PromotionTransitionFailed err) ->
+                      pure (Left (CatalogRebuildPromotionFailed err))
+                    Left (PromotionCheckpointsMissing missing) ->
+                      promotionCheckpointsMissing missing
+                    Right () -> do
+                      Telemetry.recordProjectionRebuildPromotions metrics 1
+                      inspectCatalogRebuild runId
   where
     hooks = catalogRebuildVerifications catalog groupId
     sourceCount = Prelude.length (sourceSpecs catalog groupId)
     adapterCount = Prelude.length (catalogReplayAdapters catalog groupId)
+    asyncSpecs = Catalog.catalogAsyncIdempotencyKeys catalog groupId
+
+    promotionCheckpointsMissing missing = do
+      let detail =
+            "declared subscription checkpoints are missing at promotion: "
+              <> Text.intercalate ", " [name | SubscriptionName name <- missing]
+      recordFailure
+        runId
+        "promotion.checkpoints-missing"
+        detail
+        Nothing
+        Nothing
+        Nothing
+      Telemetry.recordProjectionRebuildFailures metrics 1
+      pure (Left (CatalogRebuildPromotionCheckpointsMissing runId missing))
+
+data PromotionFailure
+  = PromotionProofIncomplete
+  | PromotionTransitionFailed !GroupTransitionError
+  | PromotionCheckpointsMissing ![SubscriptionName]
+
+dedupBatches :: [(Text, UUID)] -> [[(Text, UUID)]]
+dedupBatches = \case
+  [] -> []
+  pairs ->
+    let (batch, rest) = Prelude.splitAt 10000 pairs
+     in batch : dedupBatches rest
 
 runVerificationsTx ::
   RebuildRunId ->

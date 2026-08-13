@@ -39,6 +39,8 @@ module Keiro.ReadModel.Rebuild.Group
     adoptCatalogGroups,
     lookupProjectionRebuildGroup,
     beginGroupRebuild,
+    resetDeclaredSubscriptions,
+    insertProjectionDedupBatchStmt,
     finishGroupRebuild,
     finishGroupRebuildTx,
     abandonGroupRebuild,
@@ -56,6 +58,7 @@ import Data.Maybe (mapMaybe, maybeToList)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
+import Data.UUID (UUID)
 import Data.Vector qualified as Vector
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -657,6 +660,10 @@ beginGroupRebuild catalog groupId request =
         (groupSliceFingerprint catalog groupId)
     expectedSliceText = groupSliceFingerprintText expectedSlice
 
+-- | Reset every declared subscription member to one exact position.
+-- Preparation uses this to rewind to @replayFrom@; promotion uses it to
+-- advance to the captured head. Both transitions remain inside the group
+-- lifecycle transaction.
 resetDeclaredSubscriptions :: GroupPreparation -> GlobalPosition -> Tx.Transaction SubscriptionCheckpointResetReport
 resetDeclaredSubscriptions preparation replayFrom =
   case NonEmpty.nonEmpty (SubscriptionName <$> preparation ^. #resetSubscriptionNames) of
@@ -1218,6 +1225,23 @@ deleteProjectionDedupStmt =
     """
     (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     D.noResult
+
+-- | Insert a bounded batch of async-projection dedup identities. Existing
+-- identities are expected during promotion retries and are left unchanged.
+insertProjectionDedupBatchStmt :: Statement ([Text], [UUID]) Int64
+insertProjectionDedupBatchStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_dedup (projection_name, event_id)
+    SELECT pair.name, pair.event
+    FROM unnest($1::text[], $2::uuid[]) AS pair (name, event)
+    ON CONFLICT (projection_name, event_id) DO NOTHING
+    """
+    ( contrazip2
+        (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+        (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.uuid))))
+    )
+    D.rowsAffected
 
 groupMetadataSingle :: D.Result GroupRebuildMetadata
 groupMetadataSingle = D.singleRow groupMetadataDecoder
