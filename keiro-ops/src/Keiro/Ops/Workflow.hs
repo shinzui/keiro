@@ -315,7 +315,7 @@ resumePreviewResult limit candidates =
 resumeSummaryResult :: ResumeSummary -> OpsResult
 resumeSummaryResult summary =
   OpsResult
-    { headers = ["discovered", "resumed", "completed", "suspended", "unknown", "failed", "errors", "lease_skipped", "advanced", "paced", "unregistered"],
+    { headers = ["discovered", "resumed", "completed", "suspended", "unknown", "failed", "errors", "lease_skipped", "advanced", "paced", "sleep_due", "unregistered"],
       rows =
         [ map (Text.pack . show) counts
             <> [renderUnregistered summary.unregisteredNames]
@@ -332,6 +332,7 @@ resumeSummaryResult summary =
             "lease_skipped" .= summary.leaseSkipped,
             "advanced" .= summary.advanced,
             "paced" .= summary.paced,
+            "sleep_due" .= summary.sleepDue,
             "unregistered_names" .= Set.toAscList summary.unregisteredNames
           ]
     }
@@ -346,7 +347,8 @@ resumeSummaryResult summary =
         summary.transientErrors,
         summary.leaseSkipped,
         summary.advanced,
-        summary.paced
+        summary.paced,
+        summary.sleepDue
       ]
     renderUnregistered names
       | Set.null names = "-"

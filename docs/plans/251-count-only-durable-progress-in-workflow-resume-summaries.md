@@ -61,7 +61,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 14:58Z) M2: reshaped `ResumeSummary` with `sleepDue :: !Int`, threaded a per-candidate append witness through `advance`/`driveInstance`, and replaced `bumpForOutcome` with append-aware classification plus the post-suspension instance-row check.
 - [x] (2026-08-13 14:58Z) M2: rewrote the `advanced` field documentation, module-header field recap, and both bounded-drain recipes in `Resume.hs`.
 - [x] (2026-08-13 14:58Z) M2: updated every full-record summary assertion, changed `expectedMixedResumeSummary.advanced` from 3 to 2, extended the due-sleep test with stable `sleepDue` assertions, and passed all 545 `keiro-test` examples.
-- [ ] M3: render `sleep_due` in `keiro-ops` `resumeSummaryResult` (column + JSON key) and add the due-sleep CLI test; `cabal test keiro-ops-test` green.
+- [x] (2026-08-13 15:00Z) M3: rendered `sleep_due` in `keiro-ops` as a human column and JSON key, added the two-pass due-sleep command test, and passed all 42 `keiro-ops-test` examples.
 - [ ] M4: update `docs/guides/durable-workflows.md`, `docs/user/durable-workflows.md`, and `docs/user/operations.md` drain/summary text.
 - [ ] M4: CHANGELOG entries — rewrite the keiro Unreleased breaking-change bullet from plan 239 to the final shape; extend the keiro-ops Unreleased resume-once bullet.
 - [ ] M4: amend ADR 0023 and ADR 0025, add `docs/adr/log.md` entries, `just adr-validate` green.
@@ -764,6 +764,19 @@ just verify
 Expected: each suite prints `N examples, 0 failures` (keiro-test is the slow,
 DB-backed one); `just adr-validate` prints the strict OKF validation success for
 `docs/adr`; `just verify` runs the whole repository gate chain and exits 0.
+
+Milestone 3 observed both the focused operator proof and the full suite:
+
+```text
+workflow handlers
+  classifies a due sleep with no timer worker as blocked, not advanced [✔]
+
+Finished in 0.1754 seconds
+1 example, 0 failures
+
+Finished in 7.1707 seconds
+42 examples, 0 failures
+```
 
 ### Commit and trailer convention
 

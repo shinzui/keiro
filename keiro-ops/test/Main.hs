@@ -54,11 +54,12 @@ import Keiro.Snapshot.Schema
 import Keiro.Subscription.Shard qualified as Shard
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore, withMigratedSuiteWith)
 import Keiro.Timer qualified as Timer
-import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume (WorkflowDef (..), defaultWorkflowResumeOptions)
+import Keiro.Workflow.Sleep (sleepNamed)
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -648,6 +649,32 @@ spec fixture = do
       jsonStringArray "unregistered_names" applied `shouldBe` Just ["retired-approval"]
       workflowStatus store registered `shouldReturn` Just Instance.WfCompleted
       workflowStatus store unregistered `shouldReturn` Just Instance.WfRunning
+
+    it "classifies a due sleep with no timer worker as blocked, not advanced" $ \store -> do
+      let ref = OpsWorkflow.WorkflowRef "approval" "wf-resume-due-sleep"
+          registry =
+            Map.singleton
+              (WorkflowName "approval")
+              (WorkflowDef (\_ -> sleepNamed (StepName "wait") (-1) *> pure ("done" :: Text)))
+          hook = Just (registry, defaultWorkflowResumeOptions)
+          command = OpsWorkflow.ResumeOnce (OpsWorkflow.ResumeOptions 1)
+      seedStep store ref "received" Aeson.Null
+
+      first <- OpsWorkflow.runCommandWithResume hook (opsEnv True store) command
+      first `shouldSatisfy` isSucceeded
+      jsonInteger "discovered" first `shouldBe` Just 1
+      jsonInteger "advanced" first `shouldBe` Just 0
+      jsonInteger "still_suspended" first `shouldBe` Just 1
+      jsonInteger "sleep_due" first `shouldBe` Just 1
+      humanField "sleep_due" first `shouldBe` Just "1"
+
+      second <- OpsWorkflow.runCommandWithResume hook (opsEnv True store) command
+      second `shouldSatisfy` isSucceeded
+      jsonInteger "discovered" second `shouldBe` Just 1
+      jsonInteger "advanced" second `shouldBe` Just 0
+      jsonInteger "still_suspended" second `shouldBe` Just 1
+      jsonInteger "sleep_due" second `shouldBe` Just 1
+      humanField "sleep_due" second `shouldBe` Just "1"
 
     it "lists and decodes a real journal without mutating it" $ \store -> do
       let ref = OpsWorkflow.WorkflowRef "approval" "wf-1"
@@ -1479,6 +1506,11 @@ resultCount = fmap fromIntegral . jsonInteger "count"
 jsonInteger :: Key -> OpsOutcome -> Maybe Int64
 jsonInteger key = \case
   Succeeded OpsResult {jsonValue = Aeson.Object value} -> numberAt key value
+  _ -> Nothing
+
+humanField :: Text -> OpsOutcome -> Maybe Text
+humanField key = \case
+  Succeeded OpsResult {headers, rows = [row]} -> lookup key (zip headers row)
   _ -> Nothing
 
 jsonStringArray :: Key -> OpsOutcome -> Maybe [Text]
