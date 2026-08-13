@@ -86,7 +86,7 @@ import Prelude (all, any, concatMap, const, filter, id, not, null, (&&), (*), (+
 import Prelude qualified
 
 runnerFormat :: Text
-runnerFormat = "keiro/projection-replay/v3"
+runnerFormat = "keiro/projection-replay/v4"
 
 data RebuildOptions = RebuildOptions
   { rebuildRequest :: !RebuildRequest,
@@ -110,6 +110,7 @@ data CatalogRebuildError
   | CatalogRebuildStartFailed !RebuildStartError
   | CatalogRebuildStartAfterCapturedHead !GlobalPosition !GlobalPosition
   | CatalogRebuildContractMismatch !RebuildRunId !Text !Text
+  | CatalogRebuildSliceMismatch !RebuildRunId !Text !Text
   | CatalogRebuildGroupMissing !RebuildGroupId
   | CatalogRebuildRunNotActive !RebuildRunId
   | CatalogRebuildDecodeFailed !RebuildRunId !SourceId !Text !GlobalPosition !ReplayDecodeError
@@ -326,12 +327,12 @@ abandonCatalogRebuild catalog runId failure =
     Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
     Just report -> do
       let groupId = report ^. #rebuildGroupId
-          expected = report ^. #contractFingerprint
-      case rebuildContract catalog groupId of
+          stored = report ^. #groupSliceFingerprint
+      case groupSliceFingerprintText <$> Catalog.groupSliceFingerprint catalog groupId of
         Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
-        Just actual ->
-          if expected /= actual
-            then pure (Left (CatalogRebuildContractMismatch runId expected actual))
+        Just current ->
+          if stored /= current
+            then pure (Left (CatalogRebuildSliceMismatch runId stored current))
             else case groupRebuildHandleFor catalog groupId runId of
               Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
               Just handle -> do
@@ -879,8 +880,20 @@ rebuildContract catalog groupId = do
   slice <- Catalog.groupSliceFingerprint catalog groupId
   pure
     ( hashPreimage
-        "contract-v3"
-        (PRecord runnerFormat [PText (groupSliceFingerprintText slice)])
+        "contract-v4"
+        ( PRecord
+            runnerFormat
+            [ PText (groupSliceFingerprintText slice),
+              PList
+                [ PRecord
+                    "adapter"
+                    [ PText (sourceIdText (catalogReplayAdapterSourceId adapter)),
+                      PText (projectionIdText (catalogReplayAdapterProjectionId adapter))
+                    ]
+                | adapter <- catalogReplayAdapters catalog groupId
+                ]
+            ]
+        )
     )
 
 encodeScope :: SourceScope -> (Text, Maybe Text)

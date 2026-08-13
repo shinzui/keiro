@@ -55,24 +55,29 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add the two-adapter fixture catalog (`pairCatalog`, SQL fixture, statements,
-      identifiers) to `keiro/test/ProjectionReplaySpec.hs`.
-- [ ] M1: Add the red test "refuses to resume after replay-adapter declaration order
-      changes" and record its failing output (resume wrongly returns
+- [x] (2026-08-13T03:07:55Z) M1: Add the two-adapter fixture catalog (`pairCatalog`, SQL
+      fixture, statements, identifiers) to `keiro/test/ProjectionReplaySpec.hs`.
+- [x] (2026-08-13T03:07:55Z) M1: Add the red test "refuses to resume after replay-adapter
+      declaration order changes" and record its failing output (resume wrongly returns
       `RebuildRunPromoted`) in this plan.
-- [ ] M2: Bump `runnerFormat` to `keiro/projection-replay/v4` and extend
+- [x] (2026-08-13T03:14:22Z) M2: Bump `runnerFormat` to
+      `keiro/projection-replay/v4` and extend
       `rebuildContract` to hash the ordered adapter identity sequence under the
       `contract-v4` prefix in `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs`.
-- [ ] M2: Add `CatalogRebuildSliceMismatch` to `CatalogRebuildError` and make
+- [x] (2026-08-13T03:14:22Z) M2: Add `CatalogRebuildSliceMismatch` to
+      `CatalogRebuildError` and make
       `abandonCatalogRebuild` compare group slices instead of resume contracts.
-- [ ] M2: Update the existing stale-contract test (prefix assertion `contract-v3:` →
+- [x] (2026-08-13T03:14:22Z) M2: Update the existing stale-contract test (prefix
+      assertion `contract-v3:` →
       `contract-v4:`, description mentions the v4 runner).
-- [ ] M2: `cabal build all` and `cabal test keiro-test` pass; M1 test is green; commit
-      test + fix.
-- [ ] M3: Add the same-order resume-success test for the two-adapter fixture.
-- [ ] M3: Add the abandon-semantics test (drift refused with
+- [x] (2026-08-13T03:14:22Z) M2: `cabal build all` and `cabal test keiro-test` pass;
+      M1 test is green; commit test + fix.
+- [x] (2026-08-13T03:14:22Z) M3: Add the same-order resume-success test for the
+      two-adapter fixture.
+- [x] (2026-08-13T03:14:22Z) M3: Add the abandon-semantics test (drift refused with
       `CatalogRebuildSliceMismatch`; swapped-order registration and abandon succeed).
-- [ ] M3: Add the from-scratch declaration-order demonstration test.
+- [x] (2026-08-13T03:14:22Z) M3: Add the from-scratch declaration-order
+      demonstration test.
 - [ ] M4: Amend `docs/adr/0032-...md` (contract-v4, order is contract identity, abandon
       is slice-scoped), advance its timestamp, `okf log add`, strict `okf validate`.
 - [ ] M4: Update `docs/user/read-models-and-projections.md` (two v3 mentions) and
@@ -86,7 +91,14 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Observation: The red order-swap test failed through the intended defect path: both
+  catalogs produced the same `slice-v2:8fe434...` slice, the persisted
+  `contract-v3:8ce575...` check accepted the swapped declaration order, and resume
+  returned `Right RebuildRunReport { runStatus = RebuildRunPromoted }`.
+  Evidence: `cabal test keiro-test --test-show-details=direct --test-options='--match
+  "refuses to resume after replay-adapter declaration order changes"'` ran one example
+  and reported one failure at `ProjectionReplaySpec.hs:198`, with the promoted report
+  carrying `keiro/projection-replay/v3`.
 
 
 ## Decision Log

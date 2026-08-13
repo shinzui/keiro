@@ -178,6 +178,93 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 5, 6]
 
+  it "refuses to resume after replay-adapter declaration order changes" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql pairFixtureSql))
+    appendPairEvents store
+    interrupted <- expectValid (pairCatalog False failAtThirdPosition)
+    _ <- expectStore store (registerProjectionCatalog interrupted) >>= shouldBeRight
+    first <- expectStore store (startCatalogRebuild interrupted pairGroupId (options "order-swap-run" 2))
+    first `shouldSatisfy` \case
+      Left CatalogRebuildDecodeFailed {} -> True
+      _ -> False
+    expectStore store (Store.runTransaction (Tx.statement () pairTraceStmt))
+      `shouldReturn` [(1, "first"), (1, "second"), (2, "first"), (2, "second")]
+
+    reordered <- expectValid (pairCatalog True goodDecoder)
+    CatalogApi.groupSliceFingerprint reordered pairGroupId
+      `shouldBe` CatalogApi.groupSliceFingerprint interrupted pairGroupId
+    resumeResult <-
+      expectStore store (resumeCatalogRebuild reordered (runId "order-swap-run") (options "ignored" 2))
+    resumeResult `shouldSatisfy` \case
+      Left (CatalogRebuildContractMismatch mismatchedRun expected actual) ->
+        mismatchedRun
+          == runId "order-swap-run"
+          && Text.isPrefixOf "contract-v4:" expected
+          && Text.isPrefixOf "contract-v4:" actual
+          && expected /= actual
+      _ -> False
+
+  it "resumes an interrupted two-adapter rebuild when declaration order is unchanged" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql pairFixtureSql))
+    appendPairEvents store
+    interrupted <- expectValid (pairCatalog False failAtThirdPosition)
+    _ <- expectStore store (registerProjectionCatalog interrupted) >>= shouldBeRight
+    _ <- expectStore store (startCatalogRebuild interrupted pairGroupId (options "order-keep-run" 2))
+    repaired <- expectValid (pairCatalog False goodDecoder)
+    resumed <-
+      expectStore store (resumeCatalogRebuild repaired (runId "order-keep-run") (options "ignored" 2))
+        >>= shouldBeRight
+    resumed ^. #runStatus `shouldBe` RebuildRunPromoted
+    expectStore store (Store.runTransaction (Tx.statement () pairTraceStmt))
+      `shouldReturn` [ (position, label)
+                     | position <- [1 .. 4],
+                       label <- ["first", "second"]
+                     ]
+
+  it "keeps an order swap registration-compatible and abandonable but refuses drifted abandon" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql pairFixtureSql))
+    appendPairEvents store
+    interrupted <- expectValid (pairCatalog False failAtThirdPosition)
+    _ <- expectStore store (registerProjectionCatalog interrupted) >>= shouldBeRight
+    _ <- expectStore store (startCatalogRebuild interrupted pairGroupId (options "order-abandon-run" 2))
+
+    drifted <-
+      expectValid
+        ((pairCatalog True goodDecoder) & #sources . ix 0 . #codecFingerprint .~ "pair-v2")
+    driftedAbandon <-
+      expectStore
+        store
+        (abandonCatalogRebuild drifted (runId "order-abandon-run") (RebuildFailure "operator.abandoned" "drift probe"))
+    driftedAbandon `shouldSatisfy` \case
+      Left CatalogRebuildSliceMismatch {} -> True
+      _ -> False
+
+    reordered <- expectValid (pairCatalog True goodDecoder)
+    _ <- expectStore store (registerProjectionCatalog reordered) >>= shouldBeRight
+    abandoned <-
+      expectStore
+        store
+        (abandonCatalogRebuild reordered (runId "order-abandon-run") (RebuildFailure "operator.abandoned" "declaration order changed"))
+        >>= shouldBeRight
+    abandoned ^. #runStatus `shouldBe` RebuildRunFailed
+    group <- expectStore store (lookupProjectionRebuildGroup pairGroupId)
+    group ^? _Just . #status `shouldBe` Just GroupFailed
+
+  it "applies replay-adapter effects in declaration order" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql pairFixtureSql))
+    appendPairEvents store
+    reordered <- expectValid (pairCatalog True goodDecoder)
+    _ <- expectStore store (registerProjectionCatalog reordered) >>= shouldBeRight
+    report <-
+      expectStore store (startCatalogRebuild reordered pairGroupId (options "order-scratch-run" 2))
+        >>= shouldBeRight
+    report ^. #runStatus `shouldBe` RebuildRunPromoted
+    expectStore store (Store.runTransaction (Tx.statement () pairTraceStmt))
+      `shouldReturn` [ (position, label)
+                     | position <- [1 .. 4],
+                       label <- ["second", "first"]
+                     ]
+
   it "retains committed pages across verification failure and rejects catalog drift on resume" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
     appendInterleaved store
@@ -207,7 +294,7 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 5, 6]
 
-  it "refuses to resume an active v2 replay contract under the v3 runner" $ \store -> do
+  it "refuses to resume a stale replay contract under the v4 runner" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
     appendInterleaved store
     faulted <- expectValid (replayCatalog goodDecoder failingVerification)
@@ -238,7 +325,7 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
           == runId "v2-contract-run"
           && expected
             == staleContract
-          && Text.isPrefixOf "contract-v3:" actual
+          && Text.isPrefixOf "contract-v4:" actual
       _ -> False
 
   it "refuses promotion when a required adapter participation row is missing" $ \store -> do
@@ -419,6 +506,93 @@ addUnrelatedReplaySource catalog =
                  }
              ]
     }
+
+pairCatalog :: Bool -> ReplayDecoder -> ProjectionCatalog
+pairCatalog swapOrder decoder =
+  ProjectionCatalog
+    { sources =
+        [ SourceDeclaration
+            { sourceId = pairSourceId,
+              sourceScope = CategorySource (CategoryName "pair"),
+              codecFingerprint = "pair-v1",
+              claimSite = site "test:source:pair"
+            }
+        ],
+      targets =
+        [ TargetDeclaration
+            { targetId = pairTraceTargetId,
+              qualifiedTable = QualifiedTable "app" "pair_trace",
+              resetPolicy = ClearBeforeReplay,
+              dependsOn = [],
+              claimSite = site "test:target:pair-trace"
+            },
+          TargetDeclaration
+            { targetId = pairSecondTargetId,
+              qualifiedTable = QualifiedTable "app" "pair_second",
+              resetPolicy = ClearBeforeReplay,
+              dependsOn = [],
+              claimSite = site "test:target:pair-second"
+            }
+        ],
+      rebuildGroups =
+        [ RebuildGroupDeclaration
+            { rebuildGroupId = pairGroupId,
+              orderedTargets = [pairTraceTargetId, pairSecondTargetId],
+              verificationHooks = [],
+              claimSite = site "test:pair-group"
+            }
+        ],
+      subscriptions = [],
+      dedupKeys = [],
+      queryModels = [],
+      projectionSets =
+        [ SomeProjectionSet
+            ProjectionSet
+              { projectionSource = pairSourceId,
+                projectionDefinitions =
+                  if swapOrder
+                    then secondDefinition :| [firstDefinition]
+                    else firstDefinition :| [secondDefinition],
+                claimSite = site "test:set:pair"
+              }
+        ]
+    }
+  where
+    firstDefinition = pairDefinition "pair-first" pairTraceTargetId "first"
+    secondDefinition = pairDefinition "pair-second" pairSecondTargetId "second"
+    pairDefinition projectionName targetId label =
+      ProjectionDefinition
+        { projectionId = identity mkProjectionId projectionName,
+          rebuildGroup = pairGroupId,
+          ownedTargets = targetId :| [],
+          replayPolicy =
+            Replayable
+              ReplayAdapter
+                { decodeForReplay = decoder,
+                  applyForReplay = applyPair label
+                },
+          handlers =
+            InlineHandler
+              InlineProjection {name = "live-" <> label, apply = \_ _ -> pure ()}
+              (site ("test:handler:" <> label))
+              :| [],
+          claimSite = site ("test:projection:" <> label)
+        }
+
+applyPair :: Text -> ReplayEvent -> RecordedEvent -> Tx.Transaction ()
+applyPair label (ReplayEvent value) recorded = do
+  let GlobalPosition position = recorded ^. #globalPosition
+  Tx.statement (position, label, value) insertPairTraceStmt
+
+appendPairEvents :: Store.KirokuStore -> IO ()
+appendPairEvents store =
+  traverse_
+    (appendRaw store)
+    [ (StreamName "pair-1", NoStream, EventType "ReplayEvent", Aeson.toJSON (10 :: Int64)),
+      (StreamName "pair-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (20 :: Int64)),
+      (StreamName "pair-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (30 :: Int64)),
+      (StreamName "pair-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (40 :: Int64))
+    ]
 
 applyReplay :: Text -> Statement (Int64, Int64) () -> ReplayEvent -> RecordedEvent -> Tx.Transaction ()
 applyReplay sourceLabel insertTarget (ReplayEvent value) recorded = do
@@ -619,6 +793,16 @@ billingProjectionId = identity mkProjectionId "billing-projection"
 replayGroupId :: RebuildGroupId
 replayGroupId = identity mkRebuildGroupId "replay-group"
 
+pairSourceId :: SourceId
+pairSourceId = identity mkSourceId "pair-source"
+
+pairTraceTargetId, pairSecondTargetId :: TargetId
+pairTraceTargetId = identity mkTargetId "pair-trace"
+pairSecondTargetId = identity mkTargetId "pair-second"
+
+pairGroupId :: RebuildGroupId
+pairGroupId = identity mkRebuildGroupId "pair-group"
+
 replayFixtureSql :: ByteString
 replayFixtureSql =
   """
@@ -634,10 +818,30 @@ replayFixtureSql =
   CREATE TABLE app.billing_projection (global_position bigint PRIMARY KEY, value bigint NOT NULL);
   """
 
+pairFixtureSql :: ByteString
+pairFixtureSql =
+  """
+  CREATE SCHEMA app;
+  CREATE TABLE app.pair_trace (
+    sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    global_position bigint NOT NULL,
+    projection text NOT NULL,
+    value bigint NOT NULL
+  );
+  CREATE TABLE app.pair_second (global_position bigint PRIMARY KEY, value bigint NOT NULL);
+  """
+
 insertTraceStmt :: Statement (Int64, Text, Int64) ()
 insertTraceStmt =
   preparable
     "INSERT INTO app.replay_trace (global_position, source, value) VALUES ($1, $2, $3)"
+    (contrazip3 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+insertPairTraceStmt :: Statement (Int64, Text, Int64) ()
+insertPairTraceStmt =
+  preparable
+    "INSERT INTO app.pair_trace (global_position, projection, value) VALUES ($1, $2, $3)"
     (contrazip3 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
     D.noResult
 
@@ -659,6 +863,13 @@ tracePositionsStmt =
     "SELECT global_position FROM app.replay_trace ORDER BY sequence"
     E.noParams
     (D.rowList (D.column (D.nonNullable D.int8)))
+
+pairTraceStmt :: Statement () [(Int64, Text)]
+pairTraceStmt =
+  preparable
+    "SELECT global_position, projection FROM app.pair_trace ORDER BY sequence"
+    E.noParams
+    (D.rowList ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.text)))
 
 ordersPositionsStmt :: Statement () [Int64]
 ordersPositionsStmt =
