@@ -5,6 +5,14 @@ screens need direct queries. `jitsurei` builds an inline read model named
 `jitsurei_order_summary` that stores one row per order with SKU, quantity,
 status, and the last global event position it observed.
 
+If you are still deciding how the view should be delivered, start with
+[Choosing A Projection](choosing-a-projection.md). The focused
+[Inline Projections](inline-projections.md) and
+[Asynchronous Projections](asynchronous-projections.md) guides explain each
+handler path, while [Offline Projection Rebuilds](offline-projection-rebuilds.md)
+explains the full lifecycle; this guide shows all three operating from one
+catalog.
+
 The code is in
 [`../../jitsurei/src/Jitsurei/ReadModels.hs`](../../jitsurei/src/Jitsurei/ReadModels.hs).
 The tables live in the example's own `jitsurei` schema (chosen via the

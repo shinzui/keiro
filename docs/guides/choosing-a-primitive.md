@@ -30,8 +30,8 @@ note](#a-note-on-transducer-composition-and-alternative) below.
 | Stage A's events feed stage B as a pipeline, all within one stream | Keiki `compose`, then mount the composite as one validated `EventStream` | Keiki `Keiki.Composition` |
 | One round of automatic policy reaction within one stream (command → event → follow-up event), observed atomically | Keiki `feedback1` | Keiki `Keiki.Composition` |
 | A spanning invariant across two parts of one entity (a decision must read both parts) | one hand-written transducer with product state — **not** `alternative` | [Build The Command Side](build-the-command-side.md) |
-| A queryable view derived from one stream, updated in the command's transaction | inline `Projection` + `ReadModel` | [Project Read Models](project-read-models.md) |
-| A queryable view derived from many streams (e.g. an `OrderView` over `Order` and `Payment`) | async `Projection` over a Kiroku **category subscription** | [Project Read Models](project-read-models.md), [Read Models And Projections](../user/read-models-and-projections.md) |
+| A queryable view derived from one stream, updated in the command's transaction | `InlineProjection` + `ReadModel` | [Choosing A Projection](choosing-a-projection.md), [Inline Projections](inline-projections.md) |
+| A queryable view derived from many streams (e.g. an `OrderView` over `Order` and `Payment`) | `AsyncProjection` over a Kiroku category or all-stream subscription | [Choosing A Projection](choosing-a-projection.md), [Asynchronous Projections](asynchronous-projections.md) |
 | Long-running cross-stream coordination with its own state, timers, or compensation | `ProcessManager` | [Process Managers And Timers](process-managers-and-timers.md) |
 | A single long-running function with in-line waits (a durable sleep, an external callback, child work) | a durable `Workflow` | [Durable Workflows](durable-workflows.md) |
 | Stateless fan-out of one event to a target set that needs a read-model lookup, applied idempotently | `Router` | [Routers And Effectful Fan-Out](routers-and-effectful-fan-out.md) |

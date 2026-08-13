@@ -12,6 +12,18 @@ are adopting:
 - [Choosing A Primitive](choosing-a-primitive.md) is the routing map: given a
   shape ("make these cooperate"), it points you to the right primitive
   (`EventStream`, Keiki composition, projection, process manager, or router).
+- [Choosing A Projection](choosing-a-projection.md) separates projection
+  delivery, query freshness, catalog ownership, and hand-written versus
+  generated wiring.
+- [Inline Projections](inline-projections.md) shows same-transaction application
+  from command paths and reactor dispatch, including replay adapters and catalog
+  fence boundaries.
+- [Asynchronous Projections](asynchronous-projections.md) shows subscription
+  delivery, transactional deduplication, checkpoint outcomes, query freshness,
+  and rebuild behavior.
+- [Offline Projection Rebuilds](offline-projection-rebuilds.md) covers catalog
+  preview, group fencing, target preparation, fixed-head replay, verification,
+  repair/resume, atomic promotion, and the legacy single-model lifecycle.
 - [Build The Command Side](build-the-command-side.md) walks through commands,
   events, the Keiki transducer, the Keiro `EventStream` /
   `ValidatedEventStream` boundary, and `runCommand`.
