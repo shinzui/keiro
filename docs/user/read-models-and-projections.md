@@ -275,10 +275,13 @@ invalidates persisted data.
 
 Before crossing an identity or runner format boundary, complete or explicitly abandon
 every active catalog rebuild. A `slice-v1:` group previews as stale-format and can be
-adopted only while `live`; an active `keiro/projection-replay/v2` run cannot resume under
-the v3 runner. Complete that run with the old runtime or abandon it, then upgrade,
-preview, and explicitly adopt the live group. Adoption changes Keiro metadata only; it
-does not rebuild application rows.
+adopted only while `live`; an active `keiro/projection-replay/v3` run cannot resume under
+the v4 runner. Complete that run with the old runtime or abandon it, then upgrade,
+preview, and explicitly adopt the live group. Changing only the declaration order of a
+group's replayable projections also refuses resume of an interrupted run, but it never
+refuses registration or a fresh rebuild, and the interrupted run remains abandonable
+under the reordered catalog. Adoption changes Keiro metadata only; it does not rebuild
+application rows.
 
 Use `runCommandWithCatalogProjections` for inline application and
 `applyAsyncProjectionFromCatalog` for async application. Both acquire shared
@@ -380,13 +383,15 @@ and classified every event as irrelevant. Dedup rows are never substituted for
 missing participation evidence.
 
 The default page size is 500 and the persisted format is
-`keiro/projection-replay/v3` with a `contract-v3:` fingerprint. A run retains the whole
-`catalog-v3:` fingerprint as provenance and separately stores the `slice-v2:` fingerprint used by its
-lifecycle fences. An unrelated catalog addition therefore does not strand an
-active run, while a genuine change to that group still refuses resume. Optional metrics expose rebuild starts, resumes,
-committed pages/events, failures, promotions, and page duration. Durable reports
-also expose captured head, per-source cursor/target, evaluation/apply counts,
-and verification evidence; neither surface contains raw event payloads.
+`keiro/projection-replay/v4` with a `contract-v4:` fingerprint. The contract covers the
+group slice plus replay-adapter source and projection identities in application order. A
+run retains the whole `catalog-v3:` fingerprint as provenance and separately stores the
+`slice-v2:` fingerprint used by its lifecycle fences. An unrelated catalog addition
+therefore does not strand an active run, while a genuine change to that group or its
+adapter application order still refuses resume. Optional metrics expose rebuild starts,
+resumes, committed pages/events, failures, promotions, and page duration. Durable reports
+also expose captured head, per-source cursor/target, evaluation/apply counts, and
+verification evidence; neither surface contains raw event payloads.
 
 ## Inspect And Operate A Catalog
 

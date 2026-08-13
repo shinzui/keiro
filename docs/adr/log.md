@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-13
+* **Update**: Amend ADR 0032 to pin replay-adapter application order in contract-v4 while keeping registration and abandonment slice-scoped (plan 247).
+
 ## 2026-08-12
 * **Update**: Amend ADR 0028 so destructive numeric parameters are rejected before database access when a duration is non-finite, negative, or unrepresentable as PostgreSQL `timestamptz` (plan 241).
 * **Update**: Amend ADR 0024 with the frozen pre-UTF-8 dedup and awakeable-adoption bridge, residual collision ambiguity, and operator-attested unified removal window (plan 240).

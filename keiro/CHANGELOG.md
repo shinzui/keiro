@@ -75,6 +75,9 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Resuming an interrupted catalog rebuild after a deploy reorders the group's replayable
+  projection declarations now refuses with `CatalogRebuildContractMismatch` instead of
+  silently applying the remaining history in a different adapter order.
 - Multi-source catalog rebuilds again apply events in strictly ascending global position
   across sources. Buffered chunks are clamped to the smallest safe source horizon, and
   the runner records `replay.global-position-regression` or
@@ -94,6 +97,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   pacing, and an instance that became unavailable. `ResumeSummary` adds
   `advanced`, `paced`, and `unregisteredNames`; code constructing the record or
   matching its fields exhaustively must adopt the expanded pass contract.
+
+- The catalog rebuild resume contract advances to `contract-v4:` and the persisted runner
+  format to `keiro/projection-replay/v4`. The contract now pins replay-adapter application
+  order. `CatalogRebuildError` gains `CatalogRebuildSliceMismatch`, and
+  `abandonCatalogRebuild` compares group slices rather than resume contracts.
 
 - Canonical identity advances to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
   `keiro/projection-replay/v3`; catalog inventory and rebuild preview JSON advance to v2.

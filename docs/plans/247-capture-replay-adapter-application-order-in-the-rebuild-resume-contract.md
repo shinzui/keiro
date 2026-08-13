@@ -78,9 +78,11 @@ This section must always reflect the actual current state of the work.
       `CatalogRebuildSliceMismatch`; swapped-order registration and abandon succeed).
 - [x] (2026-08-13T03:14:22Z) M3: Add the from-scratch declaration-order
       demonstration test.
-- [ ] M4: Amend `docs/adr/0032-...md` (contract-v4, order is contract identity, abandon
-      is slice-scoped), advance its timestamp, `okf log add`, strict `okf validate`.
-- [ ] M4: Update `docs/user/read-models-and-projections.md` (two v3 mentions) and
+- [x] (2026-08-13T03:16:25Z) M4: Amend `docs/adr/0032-...md` (contract-v4, order is
+      contract identity, abandon is slice-scoped), advance its timestamp, update the
+      bundle log, and pass strict `okf validate` (`OK: 33 concepts`).
+- [x] (2026-08-13T03:16:25Z) M4: Update
+      `docs/user/read-models-and-projections.md` (two v3 mentions) and
       `keiro/CHANGELOG.md` Unreleased.
 - [ ] M4: Update the MasterPlan registry row for EP-2 to Complete; run `just verify`;
       write Outcomes & Retrospective; final ADR distillation pass.

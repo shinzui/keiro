@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
-description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, retains whole-catalog provenance, and requires explicit transactional adoption of reviewed slice changes.
-timestamp: 2026-08-12T14:55:00Z
+description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, and requires explicit transactional adoption of reviewed slice changes.
+timestamp: 2026-08-13T03:15:22Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -73,10 +73,15 @@ owning group slice.
 
 The complete catalog fingerprint remains useful provenance. A replay run stores
 both the whole catalog fingerprint and the group slice that owns its lifecycle.
-The persisted runner format is `keiro/projection-replay/v3`; its `contract-v3:` value is
-derived from the group slice plus normalized runner facts. Inspection and joins
-use the slice for compatibility and expose the whole catalog value without
-treating it as a fence.
+The persisted runner format is `keiro/projection-replay/v4`; its `contract-v4:` value is
+derived from the group slice, the runner format, and the ordered replay-adapter identity
+sequence. Each adapter identity is its source id and projection id in application order.
+Application order is deliberately excluded from the group slice: reordering projection
+declarations preserves registration and group identity, but refuses resume of an
+interrupted run because its already-applied prefix used the retired order. Abandonment
+requires only group-slice identity because it applies no adapter effects. Inspection and
+joins use the slice for compatibility and expose the whole catalog value without treating
+it as a fence.
 
 Catalog evolution uses an explicit preview-then-adopt API. Preview classifies
 catalog groups as new, unchanged, slice-changed, or stale-format and lists
@@ -107,6 +112,13 @@ The v3/v2 identity cutover reuses that same reviewed adoption workflow. A stored
 v3 runner or adopted in place; operators complete it with the old runtime or explicitly
 abandon it before upgrading, then preview and adopt the live group metadata.
 
+The v4 contract revision adds replay-adapter application order without changing catalog
+or group-slice identity. Stored `contract-v3:` values and
+`keiro/projection-replay/v3` runs are refused on resume by the v4 runner. Because the
+0.12 formats remain unreleased, there is no migration: complete a persisted run with the
+old runtime or abandon it. Abandon compares slices, so it remains available across this
+contract break when the catalog's group slice is unchanged.
+
 
 ## Consequences
 
@@ -123,6 +135,9 @@ abandon it before upgrading, then preview and adopt the live group metadata.
   move as drift.
 - Catalog and slice prefixes, replay format, and migration evidence make future
   identity changes explicit rather than silently reinterpreting stored hashes.
+- Replay-adapter application order is in-flight replay identity, not group identity;
+  order swaps never strand registration or a fresh rebuild but always refuse resume of
+  an interrupted run.
 - Derived supplier lookup adds no duplicate owner edge, but normalized query freshness
   and the cursor selected from that relationship are explicit query-binding identity.
 
