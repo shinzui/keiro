@@ -111,7 +111,7 @@ PostgreSQL evidence and operational transcripts stay in the child plans.
 
 | # | Title | Path | Hard Deps | Soft / Integration Deps | Status |
 |---|-------|------|-----------|-------------------------|--------|
-| 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | Not Started |
+| 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | In Progress |
 | 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Not Started |
 | 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Not Started |
 | 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Not Started |
@@ -230,7 +230,7 @@ Relevant local decisions are:
   retention-lease and stream-guard APIs in released `kiroku-store` 0.7.0.0 and migration
   `0010` in released `kiroku-store-migrations` 0.3.2.0. Other cohort uploads do not block
   Keiro's direct dependencies.
-- [ ] EP-1 (256) M1: PostgreSQL proof covers explicit new-schema provisioning, object
+- [x] (2026-08-13T22:51:59Z) EP-1 (256) M1: PostgreSQL proof covers explicit new-schema provisioning, object
   identity, dependency behavior, deterministic locking, rollback, and reader blocking.
 - [ ] EP-1 (256) M2: projection-revision and target-generation catalog contract,
   fingerprints, validation, DSL/code-generation changes, and bridge-deployment fixtures.

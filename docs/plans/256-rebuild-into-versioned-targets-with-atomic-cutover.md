@@ -52,7 +52,7 @@ durable ownership decision is
   retention-lease API in released `kiroku-store` 0.7.0.0 and migration `0010` in
   released `kiroku-store-migrations` 0.3.2.0; the upstream annotated tags and Hackage
   releases agree.
-- [ ] M1: PostgreSQL prototype proves schema-changing provision, dependency and object
+- [x] (2026-08-13T22:51:59Z) M1: PostgreSQL prototype proves schema-changing provision, dependency and object
   identity behavior, deterministic all-target locks, rollback, and concurrent-reader
   semantics; the restricted clone eligibility matrix is recorded from evidence.
 - [ ] M2: projection revisions, target generation contracts, provisioners, validation,
@@ -96,6 +96,32 @@ durable ownership decision is
   frontier captured at acquisition; the active lease conservatively blocks all
   destructive Kiroku data-table work, including deletion of events appended after that
   initial frontier.
+- PostgreSQL proved that a dependent view follows the serving relation's OID across a
+  rename, so after a table swap that view still reads the retired generation. Identity
+  columns expose an internally owned sequence that can be renamed explicitly; a serial
+  default remains an external `nextval` expression and is rejected by the clone path.
+- The restricted clone refusal probe detected dependent views, external `nextval`
+  defaults, foreign keys in both directions, inheritance, non-default owner or ACL,
+  non-default replica identity, partitioning, publication membership, row-level
+  security and policies, rules, and user triggers. A publication catalog membership is
+  present even when PostgreSQL warns that `wal_level` cannot publish logical changes,
+  so eligibility must inspect membership rather than infer it from server settings.
+- One transaction-level `statement_timeout` covering the sorted all-target lock phase
+  aborted a cutover blocked by an independent `ACCESS SHARE` reader. PostgreSQL rolled
+  back the complete rename set and left all serving and staging rows unchanged.
+
+  Evidence:
+
+  ```text
+  versioned target PostgreSQL mechanics
+    provisions an incompatible candidate transactionally and rolls failed provisioning back [✔]
+    keeps OID identity explicit and demonstrates that dependent views follow the retired relation [✔]
+    detects every deliberately unsupported clone feature without mutating the serving table [✔]
+    uses deterministic all-target order and one deadline that rolls a blocked cutover back [✔]
+    detects when a paused generation name is rebound to a different relation [✔]
+
+  5 examples, 0 failures
+  ```
 
 
 ## Decision Log
@@ -166,8 +192,10 @@ durable ownership decision is
 ## Outcomes & Retrospective
 
 Architecture validation replaced the original clone-only design before implementation.
-The external replay-retention prerequisite is now released and verified. Keiro runtime
-implementation remains Not Started and can resume at Milestone 1.
+The external replay-retention prerequisite is now released and verified. Milestone 1
+completed the PostgreSQL proof suite and froze the restricted clone refusal envelope
+from observed catalog behavior. Runtime and catalog implementation continues at
+Milestone 2.
 
 
 ## Context and Orientation

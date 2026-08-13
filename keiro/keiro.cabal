@@ -168,6 +168,7 @@ test-suite keiro-test
     PreimageSpec
     ProjectionReplaySpec
     ReadModelSpec
+    VersionedTargetPostgresSpec
 
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
