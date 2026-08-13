@@ -891,7 +891,10 @@ Catalog-bound read models declare `freshness = immediate`,
 `subscription`, `consistency`, or `scope`. The checked supplier relation derives
 the optional durable cursor and rejects an unreachable or ambiguous head wait.
 `ProjectionDeliveryChanged` and `QueryFreshnessChanged` report the two evolution
-axes independently. Languages 1–4 retain their frozen historical grammar.
+axes independently. `QueryFreshnessChanged` also reports a language 4-to-5 migration
+when normalized freshness weakens or its waited head scope narrows: legacy
+`consistency`/`scope` and language 5 `freshness` are compared on one normalized axis.
+Languages 1–4 retain their frozen historical grammar.
 
 Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --since`, and `new <kind>`. The newer opt-in workflows include

@@ -208,6 +208,12 @@ Migrate candidate sources mechanically:
 | standalone async read model | declare its target, group, and subscription projection owner |
 | inner projection `consistency = ...` | put `freshness` on its read model; the implicit inline owner supports only `immediate` |
 
+`keiro-dsl diff` enforces this table. Migrating `consistency = Strong` to
+`freshness = immediate` is a breaking `QueryFreshnessChanged` finding because callers
+lose the cursor-wait guarantee. A scope-preserving `wait-for-head <scope>` rewrite and
+an `Eventual` to `immediate` rewrite report no policy change; strengthenings and head-
+scope widenings across the migration are additive `CompatibilityStrengthened` findings.
+
 These are candidate-only rewrites. Languages 1–4 retain their published
 `feed`, `consistency`, and `scope` grammar and generated behavior.
 

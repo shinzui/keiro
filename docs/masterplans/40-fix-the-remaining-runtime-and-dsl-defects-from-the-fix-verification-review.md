@@ -85,7 +85,7 @@ No cross-repository ADR bears on this MasterPlan.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | In Progress |
+| 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | Complete |
 | 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | Not Started |
 | 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | Not Started |
 | 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | Not Started |
@@ -133,10 +133,10 @@ modules), `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs`,
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 (250) M1: red L4→L5 fixture + three freshness-migration diff cases (zero breaking findings today, plus the spurious additive scope-widened verdict)
-- [ ] EP-1 (250) M2: `policyChanges` supply-shape split (owner/owner, legacy/legacy, mixed → `migrationFreshnessChanges` on normalized freshness)
-- [ ] EP-1 (250) M3: no-false-positive proofs, corpus zero-drift, CLI gate transcripts (weakening blocks, equivalent/strengthened stay green)
-- [ ] EP-1 (250) M4: migration-table docs, changelog, `just verify`
+- [x] EP-1 (250) M1: red L4→L5 fixture + three freshness-migration diff cases (zero breaking findings today, plus the spurious additive scope-widened verdict)
+- [x] EP-1 (250) M2: `policyChanges` supply-shape split (owner/owner, legacy/legacy, mixed → `migrationFreshnessChanges` on normalized freshness)
+- [x] EP-1 (250) M3: no-false-positive proofs, corpus zero-drift, CLI gate transcripts (weakening blocks, equivalent/strengthened stay green)
+- [x] EP-1 (250) M4: migration-table docs, changelog, `just verify`
 - [ ] EP-2 (251) M1: red bounded-drain test over a due sleep with no timer worker (currently every pass reports `advanced=1`)
 - [ ] EP-2 (251) M2: append-witness through `WorkflowRunOptions`, `classifyOutcome` replacing `bumpForOutcome`, new `sleepDue` blocked category, Haddock drain recipe rewrite
 - [ ] EP-2 (251) M3: keiro-ops `sleep_due` column + two-pass resume-once CLI test (`advanced=0, sleep_due=1` both passes)
@@ -174,6 +174,10 @@ interactions between child plans. Provide concise evidence.
   constraint and deferred the awakeable-probe consolidation "until plan 240 lands";
   two additional recomputation sites (`ScaffoldRecord.hs`, `Validate.hs` fleet pass)
   were folded into the threading item.
+- EP-1 completed on 2026-08-13 without changing its shared projection-supply analysis
+  seam or any durable architecture boundary. Its normalized migration classifier, user
+  documentation, zero-drift corpus proof, and full `just verify` gate are green. EP-4's
+  soft dependency is satisfied, so its later `Diff.hs` threading cleanup is unblocked.
 
 
 ## Decision Log
@@ -203,4 +207,6 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+- 2026-08-13: EP-1 completed. The language migration diff now blocks query-freshness
+  weakenings, keeps equivalent/strengthened migrations non-breaking, preserves both
+  same-language contracts, and documents the gate. EP-2, EP-3, and EP-4 remain.

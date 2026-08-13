@@ -52,11 +52,11 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 07:25 PDT) M2: restructure `policyChanges` in `readModelPairDiff`
       (`keiro-dsl/src/Keiro/Dsl/Diff.hs`) into the three-case supply-shape split; focused
       suite green; commit tests and fix together.
-- [ ] M3: prove no false positives and zero corpus drift — full
+- [x] (2026-08-13 07:32 PDT) M3: prove no false positives and zero corpus drift — full
       `cabal test keiro-dsl:tests`, `just corpus-regen` with clean `git status`,
       `just conformance-corpus-policy`, `bash keiro-dsl/test/diff-test.sh`, and the CLI
       transcripts for all four migration flavors recorded in this plan.
-- [ ] M4: update `docs/user/read-models-and-projections.md` (migration table),
+- [x] (2026-08-13 07:40 PDT) M4: update `docs/user/read-models-and-projections.md` (migration table),
       `docs/user/api-reference.md`, `keiro-dsl/CHANGELOG.md` Unreleased; confirm no ADR
       amendment is needed; run `just verify`; update MasterPlan 40 registry status and
       finish the living sections of this plan.
@@ -105,6 +105,58 @@ implementation. Provide concise evidence.
   ```text
   freshness migration: 4 examples, 0 failures
   read-model: 8 examples, 0 failures
+  ```
+- Implementation (2026-08-13): the broad compatibility, corpus, and CLI layers all
+  passed. Corpus regeneration selected all 39 invocations and left `git status --short`
+  empty; the corpus policy and existing diff integration script passed unchanged.
+
+  ```text
+  cabal build all: exit 0
+  cabal test keiro-dsl:tests: exit 0
+  keiro-dsl-test: 705 examples, 0 failures
+  just corpus-regen: corpus regeneration complete; git reports no changes
+  just conformance-corpus-policy: conformance corpus: ok
+  bash keiro-dsl/test/diff-test.sh: PASS: diff --since gates single specs and whole workspaces with owned unified reports
+  ```
+- Implementation (2026-08-13): the built CLI produced the four migration transcripts
+  below. The Strong weakening is check-valid but blocks diff with the reused diagnostic;
+  the equivalent, widened, and unchanged cases remain non-breaking, and no mixed case
+  prints the fabricated legacy `Strong scope widened` wording.
+
+  ```text
+  Strong category "reservation" -> immediate
+  check exit=0: OK
+  BREAKING: transfer_decisions query-freshness transfer_decisions: query freshness weakened wait-for-head category 'reservation' -> immediate across the legacy consistency migration; callers lose the cursor-wait guarantee [QueryFreshnessChanged]
+  diff exit=1
+
+  Eventual -> immediate
+  check exit=0: OK
+  no query-freshness or read-model-* finding
+  diff exit=0
+
+  Strong category "reservation" -> wait-for-head entire-log
+  ADDITIVE: transfer_decisions query-freshness transfer_decisions: query freshness head scope widened category 'reservation' -> entire-log across the legacy consistency migration
+  diff exit=0
+
+  byte-identical language 4 -> language 4
+  replay-neutral: stored-data replay is unchanged by this diff
+  diff exit=0
+  ```
+- Implementation (2026-08-13): the repository-wide closeout gate passed after the
+  documentation and changelog updates. It exercised database-backed demos, every package
+  suite, all 43 DSL test components, strict ADR/research/capability validation, generated
+  name and extension policies, corpus regeneration, and native migration verification.
+
+  ```text
+  just verify: exit 0
+  keiro-test: 544 examples, 0 failures
+  keiro-pgmq-test: 58 examples, 0 failures, 2 expected pending
+  keiro-ops-test: 41 examples, 0 failures
+  keiro-dsl-test: 705 examples, 0 failures
+  jitsurei-test: 23 examples, 0 failures
+  keiro-migrations-test: 29 examples, 0 failures
+  ADR validation: OK: 33 concepts
+  conformance corpus: ok
   ```
 
 (Add implementation discoveries below as work proceeds.)
@@ -188,6 +240,12 @@ Record every decision made while working on the plan.
   Rationale: `diff` accepts any two parsed revisions and must be total; the caller-visible
   wait contract is symmetric in what it compares even though real migrations run 4 → 5.
   Date: 2026-08-12
+- Decision: Completion-time ADR distillation confirms that no ADR changes are required.
+  Rationale: implementation stayed wholly inside ADR-4's existing layer-2 diff boundary,
+  preserved ADR-16's published-language behavior, and changed no catalog identity or
+  ownership contract from ADR-26/ADR-32. The migration matrix is now durable user-facing
+  guidance in the migration guide and API reference rather than a new architecture rule.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -197,7 +255,19 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-13. Mixed legacy/owner-derived read-model pairs now compare their
+normalized freshness instead of falling through the legacy-only accessors. Strong to
+immediate and waited-scope narrowing are breaking `QueryFreshnessChanged` findings;
+equivalent rewrites are silent; and strengthening or widening is additive. The spurious
+mixed-policy `read-model-scope` finding is gone while both same-language branches remain
+unchanged.
+
+The proof covered four focused regression examples, all 705 main DSL examples, every
+compiled conformance component, zero-drift corpus regeneration, the existing CLI diff
+integration script, four direct migration CLI transcripts, and the full repository gate.
+The migration guide, API reference, and changelog now describe the behavior. No work or
+known gap remains in this ExecPlan, and ADR distillation required no amendment because
+the fix did not move an architectural boundary.
 
 
 ## Context and Orientation

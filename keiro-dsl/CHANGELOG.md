@@ -81,6 +81,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Fixed
 
+- `keiro-dsl diff` now classifies read-model query-policy changes across the language
+  4-to-5 migration. Weakening legacy `consistency = Strong` to
+  `freshness = immediate`, or narrowing the waited head scope, is a breaking
+  `QueryFreshnessChanged` finding. Scope-preserving rewrites are equivalent,
+  strengthenings are additive `CompatibilityStrengthened` findings, and the spurious
+  additive `Strong scope widened` verdict from mixed-policy comparisons is gone.
+  Same-language diff classification is unchanged.
 - Published languages 1–4 once again accept `outcome` as an ordinary identifier, restoring the
   0.11.0.0 grammar that candidate-language-5 outcome syntax accidentally narrowed. Outcome clause
   words are contextual rather than globally reserved, so language-5 sources may also use
