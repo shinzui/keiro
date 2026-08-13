@@ -93,7 +93,7 @@ MasterPlan beyond ADR-26's already-cited `mori://shinzui/mori/okf/adrs/concepts/
 |---|-------|------|-----------|-----------|--------|
 | 1 | Preserve cross-source global position order in buffered replay paging | docs/plans/246-preserve-cross-source-global-position-order-in-buffered-replay-paging.md | None | None | Complete |
 | 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | Complete |
-| 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | In Progress |
+| 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | Complete |
 | 4 | Make catalog adoption scoped, truthful, and registry-complete | docs/plans/249-make-catalog-adoption-scoped-truthful-and-registry-complete.md | None | EP-3 | Not Started |
 | 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | Not Started |
 
@@ -174,10 +174,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (247) M1: red order-swap resume test (slice fingerprints byte-equal, resume wrongly proceeds)
 - [x] EP-2 (247) M2: `contract-v4` preimage with ordered adapter identities, runner format v4, slice-scoped abandon with `CatalogRebuildSliceMismatch`
 - [x] EP-2 (247) M3-M4: same-order/swap/from-scratch proofs; ADR-32 amendment, user docs, changelog, `just verify`
-- [ ] EP-3 (248) M1: red mid-rebuild-upgrade reproduction (migration-level shape pin + full refusal matrix)
-- [ ] EP-3 (248) M2: sentinel-aware abandon (`abandonPreCanonicalGroupRebuild`) + typed `CatalogRebuildRunPreCanonical` resume refusal
-- [ ] EP-3 (248) M3: adoption + fresh rebuild accept `failed`/stale-format groups; ADR-32/ADR-26 amendments
-- [ ] EP-3 (248) M4-M5: sentinel-aware ops inspect/status/preview, `group_slice` run column, transcript; docs, changelogs, `just verify`
+- [x] EP-3 (248) M1: red mid-rebuild-upgrade reproduction (migration-level shape pin + full refusal matrix)
+- [x] EP-3 (248) M2: sentinel-aware abandon (`abandonPreCanonicalGroupRebuild`) + typed `CatalogRebuildRunPreCanonical` resume refusal
+- [x] EP-3 (248) M3: adoption + fresh rebuild accept `failed`/stale-format groups; ADR-32/ADR-26 amendments
+- [x] EP-3 (248) M4-M5: sentinel-aware ops inspect/status/preview, `group_slice` run column, transcript; docs, changelogs, `just verify`
 - [ ] EP-4 (249) M1: red tests for renamed/added registration no-ops and unscoped preview
 - [ ] EP-4 (249) M2: lookup-then-update-or-insert adoption, orphan old-name deletion under the three-part rule, per-registration result types
 - [ ] EP-4 (249) M3: scope-annotated preview, preview-time not-in-catalog refusal, v2 report envelopes and tables
@@ -225,6 +225,11 @@ interactions between child plans. Provide concise evidence.
   order; abandon is slice-scoped and returns `CatalogRebuildSliceMismatch` for real group
   drift. EP-3 must build its `'$pre-canonical'` recovery semantics against these values
   and the new abandon error boundary rather than the retired v3 contract.
+- EP-3 established the lifecycle boundary EP-4 must preserve while reshaping adoption
+  reports: adoption may act on `live` groups or `failed` groups with a stale-format slice,
+  never on `rebuilding` or canonical-format failed groups, and it never removes the
+  failed fence. Sentinel run inspection is independent of current catalog membership;
+  the adoption scope/report work must not reintroduce a catalog lookup ahead of it.
 
 
 ## Decision Log
@@ -280,5 +285,12 @@ docs/adr/. Keep task-local execution and coordination details here.
   resume, order-compatible registration/abandon, and observable application order;
   `just verify` passes. Abandonment is deliberately slice-scoped, and the durable
   identity/cutover boundary is recorded in ADR-32 for EP-3 and MasterPlan 41 to consume.
+- EP-3 completed on 2026-08-13. Migration 0024's exact stranded shape is pinned, and
+  `$pre-canonical` runs now support inspection and safe active-run abandonment while
+  refusing resume, terminal abandonment, and replaced-run abandonment. Failed
+  stale-format groups can be adopted without lifting their fence, then rebuilt freshly
+  through the new failed -> rebuilding transition. The supported ops transcript,
+  startup registration, fresh promotion, documentation, changelogs, ADR-26/ADR-32, and
+  the full `just verify` gate all pass; operators no longer need SQL remediation.
 
 (Overall MasterPlan retrospective to be completed after the remaining child plans.)

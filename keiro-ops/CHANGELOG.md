@@ -29,10 +29,18 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   and removed groups, and prints the exact force invocation. With `--force` it
   calls the supported transactional adoption API and reports the adopted rows.
   Existing rebuild list and preview tables also expose slice identity.
+- Rebuild run tables now include `group_slice`, so status and mutation previews
+  expose `$pre-canonical` directly during migration recovery.
 - Embedded `wf resume-once` results expose `advanced` and `paced` counts plus
   the sorted set of `unregistered_names` in JSON (and the corresponding human
   columns), so an operator can terminate a bounded drain on durable progress and
   identify the workflow definitions blocking convergence.
+
+### Fixed
+
+- `rebuild status` and the non-forced `rebuild abandon` preview now work for
+  pre-canonical runs, enabling the documented abandon, adopt, and fresh-start
+  recovery sequence without direct SQL.
 
 ### Breaking Changes
 

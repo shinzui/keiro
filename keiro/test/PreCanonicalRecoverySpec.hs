@@ -121,6 +121,26 @@ spec fixture = describe "pre-canonical rebuild recovery" $ around (withFreshStor
             (RebuildHandleNoLongerActive Catalog.mainGroupId (runId "inactive-recovery"))
         )
 
+  it "never abandons a terminal pre-canonical run" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql operationsFixtureSql))
+    healthy <- expectValid (operationsCatalog passingVerification)
+    _ <- expectStore store (registerProjectionCatalog healthy) >>= shouldBeRight
+    promoted <-
+      expectStore store (startCatalogRebuild healthy Catalog.mainGroupId (options "terminal-recovery"))
+        >>= shouldBeRight
+    promoted ^. #runStatus `shouldBe` RebuildRunPromoted
+    expectStore
+      store
+      (Store.runTransaction (Tx.statement (rebuildRunIdText (runId "terminal-recovery")) markRunPreCanonicalStmt))
+    expectStore
+      store
+      ( abandonCatalogRebuild
+          healthy
+          (runId "terminal-recovery")
+          (RebuildFailure "operator.pre-canonical" "must not abandon a promoted run")
+      )
+      `shouldReturn` Left (CatalogRebuildRunNotActive (runId "terminal-recovery"))
+
 strandPreCanonicalRun :: Store.KirokuStore -> Text -> IO ValidatedProjectionCatalog
 strandPreCanonicalRun store runIdentity = do
   expectStore store (Store.runTransaction (Tx.sql operationsFixtureSql))

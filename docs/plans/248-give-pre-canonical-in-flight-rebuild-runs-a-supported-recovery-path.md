@@ -69,8 +69,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 03:44Z) M3: adoption accepts fenced stale-format groups (`adoptTx` lock precondition); begin accepts `failed` groups (`beginGroupRebuild` status guard); full recovery spec green.
 - [x] (2026-08-13 03:44Z) M3: amend `docs/adr/0032` and `docs/adr/0026` in the same change; `okf log add` entries; `okf validate` passes.
 - [x] (2026-08-13 03:48Z) M4: sentinel-aware `Operations.inspectGroupRebuild`; `group_slice` column in keiro-ops run tables; keiro-ops recovery transcript test green.
-- [ ] M5: user docs (`docs/user/read-models-and-projections.md`, `docs/user/operations.md`), changelogs (`keiro/CHANGELOG.md`, `keiro-ops/CHANGELOG.md` Unreleased), full `just verify` gate.
-- [ ] MasterPlan 39 registry row for EP-3 updated to Complete; Outcomes & Retrospective written.
+- [x] (2026-08-13 04:08Z) M5: user docs (`docs/user/read-models-and-projections.md`, `docs/user/operations.md`), changelogs (`keiro/CHANGELOG.md`, `keiro-ops/CHANGELOG.md` Unreleased), full `just verify` gate.
+- [x] (2026-08-13 04:08Z) MasterPlan 39 registry row for EP-3 updated to Complete; Outcomes & Retrospective written.
 
 
 ## Surprises & Discoveries
@@ -97,8 +97,13 @@ implementation. Provide concise evidence.
   with 33 concepts.
 - The operator-neutral sentinel inspection branch must precede catalog membership as well
   as slice comparison: the run itself carries all evidence needed for status and abandon
-  preview. The end-to-end human-table transcript passed, followed by the complete
-  `keiro-ops-test` suite (39 examples, 0 failures).
+  preview. The end-to-end human-table transcript passed even with an empty current
+  catalog, followed by the complete `keiro-ops-test` suite (39 examples, 0 failures).
+- The completion audit found that the plan's no-longer-active negative proof did not also
+  exercise a terminal sentinel run. The added promoted-run copy is refused with
+  `CatalogRebuildRunNotActive`, and the final full gate passed with 536 `keiro-test`
+  examples, 39 `keiro-ops-test` examples, 29 migration examples, and every repository
+  conformance and policy check green.
 
 
 ## Decision Log
@@ -187,7 +192,22 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-13. A database caught by migration 0024 with a running or failed
+pre-canonical rebuild now has a supported recovery path from end to end. Sentinel runs
+are inspectable even when their group no longer exists in the current catalog, are never
+resumable, and are abandonable only while running or failed and still active. Abandonment
+is idempotent and leaves the group fenced; adoption accepts only failed stale-format
+groups and preserves that fence; an explicitly requested fresh rebuild may then start
+from `failed`, clears old evidence, replays, verifies, and promotes to `live`.
+
+The public/operator contract now exposes the sentinel through `group_slice`, documents
+the exact abandon -> adopt -> fresh-start sequence, and records the release note in both
+affected packages. Migration 0024 remains byte-identical; its post-upgrade shape is
+pinned by the native migration suite. The broader failed -> rebuilding transition and
+the pre-canonical recovery/adoption boundary are distilled into ADR-26 and ADR-32, so no
+task-local decision remains to be promoted. The final `just verify` run exited 0. There
+are no known gaps in EP-3; EP-4 retains ownership of reshaping the adoption result and
+preview vocabulary while preserving these lifecycle preconditions.
 
 
 ## Context and Orientation

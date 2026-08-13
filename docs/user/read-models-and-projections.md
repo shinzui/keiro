@@ -268,20 +268,30 @@ classify catalog groups as new, unchanged, changed, or stale-format and to list
 registered groups missing from the new catalog. To accept reviewed metadata
 changes, call `adoptCatalogGroups validated groupIds`. Adoption locks every
 requested group in sorted order, requires all of them to be registered and
-`live`, then updates their slices and reconciles bound query-model version,
-shape, and group metadata in one transaction. It does not rebuild or migrate
-application-owned rows; start a rebuild separately when the catalog change
-invalidates persisted data.
+`live`, except that a `failed` group with a stale-format fingerprint may be
+adopted while it remains fenced. Canonical `failed` groups and all `rebuilding`
+groups are still refused. Adoption updates slices and reconciles bound
+query-model version, shape, and group metadata in one transaction. It does not
+rebuild or migrate application-owned rows; start a rebuild separately when the
+catalog change invalidates persisted data.
 
-Before crossing an identity or runner format boundary, complete or explicitly abandon
-every active catalog rebuild. A `slice-v1:` group previews as stale-format and can be
-adopted only while `live`; an active `keiro/projection-replay/v3` run cannot resume under
-the v4 runner. Complete that run with the old runtime or abandon it, then upgrade,
-preview, and explicitly adopt the live group. Changing only the declaration order of a
-group's replayable projections also refuses resume of an interrupted run, but it never
-refuses registration or a fresh rebuild, and the interrupted run remains abandonable
-under the reordered catalog. Adoption changes Keiro metadata only; it does not rebuild
-application rows.
+Before crossing an identity or runner format boundary, completing or explicitly
+abandoning every active catalog rebuild is recommended but not enforced. Migration
+`0024` stamps a run begun before canonical slice identity with
+`group_slice_fingerprint = '$pre-canonical'`. Such a run can never resume; it returns
+`CatalogRebuildRunPreCanonical`. It remains inspectable and abandonable without a slice
+comparison while it is the group's active run. Recover by abandoning it, previewing and
+adopting the failed stale-format group while its fence stays active, then starting a fresh
+rebuild. A fresh start accepts a `failed` group once its stored slice matches the catalog,
+and only verified promotion returns it to `live`.
+
+The same flow applies to an abandoned `slice-v1:` group. An active
+`keiro/projection-replay/v3` run cannot resume under the v4 runner; complete it with the
+old runtime or abandon it, then upgrade, preview, adopt, and start fresh. Changing only
+the declaration order of a group's replayable projections also refuses resume of an
+interrupted run, but it never refuses registration or a fresh rebuild, and the interrupted
+run remains abandonable under the reordered catalog. Adoption changes Keiro metadata
+only; it does not rebuild application rows.
 
 Use `runCommandWithCatalogProjections` for inline application and
 `applyAsyncProjectionFromCatalog` for async application. Both acquire shared

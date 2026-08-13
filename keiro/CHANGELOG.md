@@ -67,14 +67,24 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   registration and rebuild lifecycle fences use only the affected group slice,
   while rebuild runs retain the whole catalog fingerprint as provenance.
 - `previewCatalogAdoption` and `adoptCatalogGroups` provide a read-only plan and
-  an all-or-nothing, live-group-only path for adopting reviewed slice changes
-  and reconciling query-model registration metadata.
+  an all-or-nothing path for adopting reviewed slice changes and reconciling
+  query-model registration metadata. Adoption normally requires a live group;
+  a failed stale-format group may adopt while remaining fenced for recovery.
+- `CatalogRebuildRunPreCanonical` and `preCanonicalRunSliceSentinel` make the
+  migration-0024 recovery boundary explicit. Sentinel runs are never resumable
+  but are inspectable and idempotently abandonable while active; failed
+  stale-format groups can be adopted without lifting their fence, and a fresh
+  rebuild can then start from `failed`.
 - `Keiro.Workflow.Resume.resumeWorkflowsOnceUpTo` runs a resume pass over at
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
 ### Fixed
 
+- A database upgraded by migration 0024 while a catalog rebuild was
+  `rebuilding` or `failed` can now recover entirely through supported APIs:
+  abandon the pre-canonical run, adopt the fenced stale-format group, and start
+  a fresh canonical rebuild.
 - Resuming an interrupted catalog rebuild after a deploy reorders the group's replayable
   projection declarations now refuses with `CatalogRebuildContractMismatch` instead of
   silently applying the remaining history in a different adapter order.

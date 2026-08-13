@@ -271,6 +271,9 @@ spec fixture = do
             _ -> False
         other -> expectationFailure ("expected sentinel status, got " <> show other)
 
+      renamedStatus <- OpsRebuild.runCommand previewEnv emptyCatalogOperations (OpsRebuild.Status strandedRun)
+      renamedStatus `shouldSatisfy` isSucceeded
+
       abandonPreview <- OpsRebuild.runCommand previewEnv operations abandon
       case abandonPreview of
         PreviewRequired result invocation -> do

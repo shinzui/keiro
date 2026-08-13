@@ -219,6 +219,7 @@ yourapp ops rebuild start GROUP --run-id RUN --requested-by OPERATOR --reason TE
 yourapp ops rebuild status RUN
 yourapp ops rebuild resume RUN
 yourapp ops rebuild abandon RUN --code CODE --detail TEXT
+yourapp ops rebuild adopt GROUP
 ```
 
 For a runnable local mount with the real `jitsurei-order-reporting` group, see
@@ -236,6 +237,24 @@ group, captures one fixed head, prepares every declared target atomically,
 replays with durable progress, verifies, and promotes. A failed run stays
 fenced; repair the application-owned cause and resume the same run. Abandonment
 records explicit failure evidence and does not expose partial data.
+
+To recover a rebuild stranded by the 0.12 identity migration, first run each
+mutation without `--force` and review its preview. The run table's `group_slice`
+column shows `$pre-canonical`, which means the historical run cannot be resumed.
+Then execute the supported recovery sequence:
+
+```console
+yourapp ops rebuild abandon OLD_RUN --code operator.pre-canonical --detail "discard run stranded by migration 0024" --force
+yourapp ops rebuild adopt GROUP --force
+yourapp ops rebuild start GROUP --run-id NEW_RUN --requested-by OPERATOR --reason "fresh canonical rebuild" --force
+```
+
+Abandon records evidence and keeps the group fenced. Adoption stamps the
+reviewed canonical slice but preserves the failed state, so startup registration
+continues to fail with `RegisteredGroupStaleFingerprint` until that adoption
+succeeds. The fresh start is allowed from `failed` after the slice matches; it
+replays and verifies normally, and promotion returns the group to live service.
+Use a new run id when retrying a start whose id was already persisted.
 
 These commands wrap `catalogInventoryReport`, `previewRegisteredGroupRebuild`,
 `startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and
