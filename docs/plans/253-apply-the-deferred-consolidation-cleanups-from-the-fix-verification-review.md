@@ -66,8 +66,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 16:32Z) M4: Add the lazy `checkedProjectionSupplies` cache to `CheckedService`; thread it through Validate, Scaffold, ScaffoldRecord, and Harness; hoist per-side analyses in Diff (Item 1).
 - [x] (2026-08-13 16:32Z) M4: Adopt the cached `checkedTypeGraph` and a per-side symbols table on the replay-impact path (Item 2).
 - [x] (2026-08-13 16:32Z) M4: Run `cabal test keiro-dsl:tests` (705 main examples plus all conformance targets), `just conformance-corpus-policy` (39 of 39), and `just corpus-regen` with zero generated drift; keiro-dsl CHANGELOG entry; commit.
-- [ ] M5: Full `just verify` green; re-run the command benchmark guard; record evidence in this plan.
-- [ ] M5: ADR distillation pass (expected outcome: no ADR changes — see Decision Log); update MasterPlan 40's registry row to Complete; final Outcomes & Retrospective entry.
+- [x] (2026-08-13 17:22Z) M5: Full `just verify` green: all package suites, migration and Jitsurei checks, ADR/research/capability validation, policy checks, and all 39 conformance-corpus entries passed.
+- [x] (2026-08-13 17:22Z) M5: ADR distillation pass complete; ADR 18 already owns `CheckedService` analysis sharing and ADR 24 already owns the unchanged dual-probe policy, so no ADR edit is warranted.
+- [ ] M5: Obtain one uninterrupted all-green command benchmark guard; then update MasterPlan 40's registry row to Complete and write the final Outcomes & Retrospective entry.
 
 
 ## Surprises & Discoveries
@@ -111,6 +112,18 @@ implementation. Provide concise evidence.
   `CheckedService` construction, the two Spec-only compatibility wrappers, and
   the old/new diff-side hoists; `ReplayImpact.hs` has no remaining direct
   `resolveTypeGraph` or `aggregateSymbols spec` call.
+- M5's repeated complete command-guard samples confirmed host scheduling noise rather
+  than a path-specific regression. Failures moved among unchanged legacy/control cases,
+  the extracted domain cases, and unchanged router/process-manager fan-outs; cases that
+  failed one run passed the adjacent run, including both 1000-target fan-outs. In
+  paired samples the extracted single-command path measured between `0.97x` and `1.06x`
+  its control. One near-complete run passed every changed path and failed only the
+  untouched legacy no-op at the strict 25% boundary; another passed all leading cases
+  and failed only unchanged `router-fanout.1000` after a multi-second scheduling pause.
+  The source audit also confirmed that every benchmark sample hard-deletes its fixed
+  streams and the suite provisions a fresh resource store, ruling out accumulated test
+  data. The exact all-green guard remains open rather than treating those split proofs as
+  a substitute for the plan's required single invocation.
 
 
 ## Decision Log
@@ -198,7 +211,13 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+- 2026-08-13: All seven consolidations are implemented in four package-scoped commits.
+  Focused runtime, ops, DSL, conformance, and zero-drift gates pass, and the complete
+  repository `just verify` gate passes. The final architecture review found no durable
+  decision beyond ADR 18's existing whole-spec analysis-sharing rule or ADR 24's frozen
+  deterministic-id probe policy. Plan closure remains pending only on one uninterrupted
+  all-green execution of the command benchmark guard; noisy split samples are recorded
+  above but deliberately do not satisfy that criterion.
 
 
 ## Context and Orientation
