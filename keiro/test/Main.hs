@@ -3230,6 +3230,79 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               )
           )
 
+    it "waitFor fails fast on a cursorless model instead of burning the timeout" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      startedAt <- getCurrentTime
+      waitResult <-
+        Store.runStoreIO storeHandle $
+          waitFor (Just keiroMetrics) defaultHeadWaitOptions counterImmediateReadModel (GlobalPosition 5)
+      finishedAt <- getCurrentTime
+      waitResult
+        `shouldBe` Right
+          ( Left
+              ( ReadModelMissingCursor
+                  "counter-read-model"
+                  (WaitForPosition (defaultHeadWaitOptions & #target ?~ GlobalPosition 5))
+              )
+          )
+      diffUTCTime finishedAt startedAt `shouldSatisfy` (< 2)
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      lookup "keiro.projection.wait.timeouts" (flattenScalarPoints exported) `shouldBe` Nothing
+
+    it "deprecated Strong and PositionWait overrides fail fast on a cursorless model" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <-
+        Store.runStoreIO storeHandle $
+          initializeRegisteredReadModel counterImmediateReadModel initializeCounterReadModelTable
+      let target = stream "read-model-cursorless-strong" :: Stream CounterEventStream
+      Right (Right _) <-
+        Store.runStoreIO storeHandle $
+          runCommand defaultRunCommandOptions counterEventStream target (Add 5)
+      startedAt <- getCurrentTime
+      strongResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWith (Just keiroMetrics) Strong counterImmediateReadModel "inline"
+      finishedAt <- getCurrentTime
+      strongResult
+        `shouldBe` Right
+          (Left (ReadModelMissingCursor "counter-read-model" (WaitForHead EntireVisibleLog)))
+      diffUTCTime finishedAt startedAt `shouldSatisfy` (< 2)
+      truthfulResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWithFreshness Nothing (WaitForHead EntireVisibleLog) counterImmediateReadModel "inline"
+      truthfulResult `shouldBe` strongResult
+      positionResult <-
+        Store.runStoreIO storeHandle $
+          runQueryWith
+            (Just keiroMetrics)
+            (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+            counterImmediateReadModel
+            "inline"
+      positionResult
+        `shouldBe` Right
+          ( Left
+              ( ReadModelMissingCursor
+                  "counter-read-model"
+                  (WaitForPosition (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+              )
+          )
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      lookup "keiro.projection.wait.timeouts" (flattenScalarPoints exported) `shouldBe` Nothing
+
     it "Strong returns immediately when the subscription is already at the store head" $ \_ ->
       withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
         Right () <-
@@ -3753,6 +3826,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           runQuery Nothing counterReadModel "async-idempotent"
       afterRebuild `shouldBe` Right (Right 7)
+
+    it "startRebuild on a cursorless model skips the checkpoint reset and completes" $ \storeHandle -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          initializeRegisteredReadModel
+            counterCursorlessRebuildReadModel
+            initializeCounterReadModelTable
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $ do
+            Tx.sql "INSERT INTO counter_read_model (model_id, amount, last_seen) VALUES ('inline', 9, 1)"
+            Tx.statement ("counter-read-model-sub", 7) upsertSubscriptionCursorStmt
+      rebuildingResult <-
+        Store.runStoreIO storeHandle $
+          Rebuild.startRebuild counterCursorlessRebuildReadModel [] (GlobalPosition 0)
+      rebuilding <- case rebuildingResult of
+        Right metadata -> pure metadata
+        Left err -> expectationFailure ("cursorless startRebuild failed: " <> show err) *> error "unreachable"
+      rebuilding ^. #status `shouldBe` Rebuilding
+      untouched <-
+        Store.runStoreIO storeHandle $
+          readSubscriptionPosition "counter-read-model-sub"
+      untouched `shouldBe` Right (Just (GlobalPosition 7))
+      Right (Right live) <-
+        Store.runStoreIO storeHandle $
+          Rebuild.finishRebuild counterCursorlessRebuildReadModel [] (GlobalPosition 0)
+      live ^. #status `shouldBe` Live
+      afterRebuild <-
+        Store.runStoreIO storeHandle $
+          runQuery Nothing counterCursorlessRebuildReadModel "inline"
+      afterRebuild `shouldBe` Right (Right 0)
 
     it "keeps a non-empty-log rebuild offline when replay applies nothing" $ \storeHandle -> do
       Right () <-
@@ -14746,6 +14850,10 @@ counterReadModel =
 counterImmediateReadModel :: ReadModel Text Int
 counterImmediateReadModel =
   immediateReadModel (counterReadModelBlueprint NoQueryCursor)
+
+counterCursorlessRebuildReadModel :: ReadModel Text Int
+counterCursorlessRebuildReadModel =
+  immediateReadModel ((counterReadModelBlueprint NoQueryCursor) & #schema .~ "kiroku")
 
 counterCursorReadModel :: ReadModel Text Int
 counterCursorReadModel =

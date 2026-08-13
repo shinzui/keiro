@@ -87,6 +87,17 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Cursorless read models built through `immediateReadModel` with `NoQueryCursor`
+  now fail fast with `ReadModelMissingCursor` on every public wait path. The
+  exported `waitFor` and deprecated `runQueryWith` waiting overrides no longer
+  poll the private cursor sentinel for the full timeout or record a spurious
+  `keiro.projection.wait.timeouts` increment. Models with durable cursors,
+  including all directly constructed 0.11 records, retain their behavior.
+- `Keiro.ReadModel.Rebuild.startRebuild` now recognizes a cursorless model through
+  `readModelCursorAuthority` and skips the subscription-checkpoint reset because
+  there is no cursor to reset. It no longer passes the private NUL-prefixed
+  compatibility sentinel into Kiroku, while preserving the documented fence,
+  truncate, and dedup clear used by generated inline Language-5 rebuild helpers.
 - A workflow suspended on a due sleep while no timer worker ran no longer makes
   the documented `ResumeSummary.advanced > 0` drain loop spin forever. It now
   reports `advanced = 0` and `sleepDue = 1`, preserving discovery while naming

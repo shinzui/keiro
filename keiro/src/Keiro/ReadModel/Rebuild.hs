@@ -17,7 +17,10 @@
 -- 2. Call 'startRebuild' with every feeding async projection name and the replay
 --    position. It atomically fences live writers, takes queries offline, truncates
 --    the data table, clears the named dedup keys, and resets the subscription
---    checkpoint, preventing live/replay interleaving and all-deduplicated rebuilds.
+--    checkpoint for a model with a durable cursor. A cursorless inline model has
+--    no checkpoint to reset and pairs this call with an empty projection-name
+--    list. Both paths prevent live/replay interleaving and all-deduplicated
+--    rebuilds.
 -- 3. Replay through 'Keiro.Projection.applyAsyncProjectionUnfenced'. This is the
 --    only apply path allowed to bypass the live-writer fence, while retaining
 --    deduplication inside the designated rebuild.
@@ -126,8 +129,10 @@ data RebuildError
   deriving stock (Generic, Eq, Show)
 
 -- | Atomically take a model offline, truncate its data table, clear the dedup
--- keys for its feeding async projections, and reset every member of its
--- subscription to the supplied replay position.
+-- keys for its feeding async projections, and, when it has a durable cursor,
+-- reset every member of that subscription to the supplied replay position. A
+-- cursorless model has no checkpoint to reset, so this deliberately skips the
+-- reset; pair that inline-only shape with an empty projection-name list.
 --
 -- The registry transition runs first and holds the row lock that
 -- 'Keiro.Projection.applyAsyncProjection' uses as its writer fence. PostgreSQL
@@ -146,10 +151,14 @@ startRebuild readModel projectionNames replayFrom =
     Tx.sql (TE.encodeUtf8 ("TRUNCATE TABLE " <> qualifiedTableName readModel))
     unless (null projectionNames) $
       Tx.statement projectionNames deleteProjectionDedupStmt
-    _ <-
-      resetSubscriptionCheckpointsTx
-        (NonEmpty.singleton (SubscriptionName (readModel ^. #subscriptionName)))
-        replayFrom
+    case readModelCursorAuthority readModel of
+      NoQueryCursor -> pure ()
+      DurableQueryCursor cursor -> do
+        _ <-
+          resetSubscriptionCheckpointsTx
+            (NonEmpty.singleton (SubscriptionName cursor))
+            replayFrom
+        pure ()
     pure metadata
 
 -- | Promote a completed rebuild in the same transaction as its safety check.

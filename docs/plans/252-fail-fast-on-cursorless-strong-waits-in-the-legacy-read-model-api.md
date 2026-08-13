@@ -31,13 +31,16 @@ finally return `ReadModelWaitTimeout` with a last-observed position of zero. The
 `runQueryWithFreshness` on the very same model fails in microseconds with the typed
 `ReadModelMissingCursor`.
 
-A third path is worse than slow: `Keiro.ReadModel.Rebuild.startRebuild` sends the
-sentinel to PostgreSQL as a subscription name inside its checkpoint-reset statement. The
-sentinel begins with a NUL byte, which PostgreSQL rejects in any `text` value (error
-22021, "invalid byte sequence for encoding UTF8: 0x00"), so the entire rebuild-fencing
-transaction aborts. Generated Language-5 scaffolds pair cursorless read models with a
-`startXxxRebuild` helper that calls exactly this function, so the unmanaged rebuild
-lifecycle is unusable for those models today.
+A third path crosses the same capability boundary incorrectly:
+`Keiro.ReadModel.Rebuild.startRebuild` sends the private sentinel to Kiroku as a
+subscription name even though a cursorless model has no checkpoint to reset. A
+planning-time PostgreSQL `convert_from` probe rejected the sentinel's leading NUL byte
+with error 22021, but the Milestone 1 database regression showed that the actual Hasql
+`text[]` parameter path accepts it and the lifecycle completes. The reset request is
+still invalid at the type and ownership boundary and exposes private compatibility
+storage to a dependency. Generated Language-5 scaffolds pair cursorless read models with
+a `startXxxRebuild` helper that calls exactly this function, so the runtime must define
+the no-cursor lifecycle explicitly.
 
 After this plan, every public wait path on a cursorless model fails fast with the same
 typed `ReadModelMissingCursor` that `runQueryWithFreshness` raises, records no spurious
@@ -47,9 +50,10 @@ because there is no cursor to reset. Behavior for every model that carries a rea
 — including every directly constructed 0.11 record — is unchanged, preserving the
 compatibility contract pinned by
 `docs/plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md`.
-You can see it working by running the three new tests in `cabal test keiro-test`: they
-fail today (two by burning five-second timeouts, one with the 22021 transaction abort)
-and pass in milliseconds after the fix.
+You can see it working by running the three new tests in `cabal test keiro-test`: before
+the fix, the two wait examples burn five-second timeouts while the rebuild lifecycle
+already completes through the current driver; after the fix, all three pass in under a
+second and the rebuild implementation no longer issues a reset for `NoQueryCursor`.
 
 
 ## Progress
@@ -58,21 +62,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the three red tests to `keiro/test/Main.hs` (cursorless `waitFor`,
-  cursorless `runQueryWith` waiting overrides, cursorless `startRebuild`), plus the
-  cursorless rebuild fixture; run them and record the observed failures.
-- [ ] M2: fix the wait paths — route `waitFor` through the cursor-authority check and
-  reimplement `runQueryWith` as a translation onto `runQueryWithFreshness`; delete the
-  now-dead `waitIfNeeded`; update the `waitFor`/`runQueryWith` Haddocks.
-- [ ] M2: rerun the two wait tests (now green) and the full `Keiro.ReadModel` group to
-  prove cursor-bearing behavior is byte-for-byte unchanged.
-- [ ] M3: make `startRebuild` skip the checkpoint reset for `NoQueryCursor` models via
-  `readModelCursorAuthority`; update its Haddock; rerun the rebuild tests (new cursorless
-  one green, existing cursored runbook test still resets to the replay position).
-- [ ] M3: audit the generated-scaffold pairing (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`)
-  and record why no scaffold change is needed.
-- [ ] M4: update `docs/user/read-models-and-projections.md`,
-  `docs/user/api-reference.md`, and `keiro/CHANGELOG.md` (Unreleased, Fixed).
+- [x] M1: added the three cursorless regression tests and rebuild fixture; `cabal build
+  keiro-test` passed, and the direct matched run finished in 10.5104 seconds with three
+  examples, two expected wait failures, and the rebuild example unexpectedly green.
+- [x] M2: routed `waitFor` through the cursor-authority check, translated
+  `runQueryWith` onto `runQueryWithFreshness`, deleted `waitIfNeeded`, and updated the
+  module/function/error Haddocks.
+- [x] M2: `cabal build all` and `cabal build keiro-test` passed; the three cursorless
+  examples passed in 0.4572 seconds and the full `Keiro.ReadModel` group passed 33
+  examples in 16.4079 seconds, including the 0.11 compatibility fixture at build time.
+- [x] M3: `startRebuild` now skips checkpoint reset for `NoQueryCursor` through the
+  typed decoder and documents the branch; both cursorless and cursor-bearing rebuild
+  examples passed in the 33-example read-model group.
+- [x] M3: audited `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`; inline ownership resolves to
+  `NoQueryCursor`, unmanaged cursorless lifecycle helpers pass `[]`, and no generated
+  test module currently combines `NoQueryCursor` with `Rebuild.startRebuild`.
+- [x] M4: updated `docs/user/read-models-and-projections.md`,
+  `docs/user/api-reference.md`, and `keiro/CHANGELOG.md` with the verified fail-fast
+  and typed cursorless rebuild contracts.
 - [ ] M4: run `cabal test keiro-test` in full, then `just verify`; record results; update
   the MasterPlan 40 registry row for this plan; complete the living sections and the ADR
   distillation pass (expected outcome: no ADR change — see Decision Log).
@@ -83,7 +90,32 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The planning-time `convert_from` probe did not predict the actual Hasql parameter path:
+  before the runtime fix, the cursorless `startRebuild` regression already passed. The
+  NUL-prefixed sentinel sent through Kiroku's encoded `text[]` reset did not abort this
+  PostgreSQL-backed test, while both raw wait paths failed exactly as predicted.
+
+  Evidence from the direct `--match cursorless` run:
+
+  ```text
+  waitFor fails fast on a cursorless model instead of burning the timeout [✘]
+  deprecated Strong and PositionWait overrides fail fast on a cursorless model [✘]
+  startRebuild on a cursorless model skips the checkpoint reset and completes [✔]
+  Finished in 10.5104 seconds
+  3 examples, 2 failures
+  ```
+
+  The rebuild fix remains warranted as a typed capability boundary: a
+  `NoQueryCursor` model has no checkpoint to reset, so `startRebuild` must not pass its
+  private compatibility sentinel to the owning library even when the current driver and
+  server accept that encoded parameter.
+
+- The scaffold audit confirmed no generated-byte change is needed. `ownerDerivedCursor`
+  returns `Nothing` for an inline owner, the truthful definition renders that as
+  `NoQueryCursor`, and `legacyReadModelFeed` renders its projection-name list as `[]`.
+  Of the 16 files under `keiro-dsl/test/` containing `Rebuild.startRebuild`, only
+  `keiro-dsl/test/Main.hs` also contains `NoQueryCursor`; no generated `ReadModel.hs`
+  module contains both tokens.
 
 
 ## Decision Log
@@ -119,13 +151,22 @@ Record every decision made while working on the plan.
   models — `finishRebuild` documents and implements the empty-projection-name exemption
   for exactly that shape — and Language-5 scaffolds generate `startRebuild` calls for
   cursorless models. There is genuinely no cursor to reset, so a skip is the semantically
-  correct action, not error suppression. Refusing would leave generated code permanently
-  broken for a legitimate operation. Today the call is not even a silent no-op: the
-  NUL-prefixed sentinel aborts the whole transaction with PostgreSQL error 22021, so the
-  skip strictly repairs a hard failure. The typed acknowledgment lives in the code branch
-  on `QueryCursorAuthority` and in the function's documented contract; the signature is
-  unchanged because the skip is not an error condition a caller must handle.
+  correct action, not error suppression. The planning-time `convert_from` probe suggested
+  PostgreSQL error 22021, but the actual Hasql regression accepted the encoded parameter;
+  the fix therefore repairs an invalid dependency request and makes the capability
+  contract explicit rather than claiming a reproduced transaction failure. The typed
+  acknowledgment lives in the code branch on `QueryCursorAuthority` and in the function's
+  documented contract; the signature is unchanged because the skip is not an error
+  condition a caller must handle.
   Date: 2026-08-12
+- Decision: Retract the planning claim that the current Hasql rebuild path aborts on the
+  sentinel; document and changelog the verified defect as an unnecessary reset request
+  that leaks private cursorless representation across the Kiroku boundary.
+  Rationale: the direct PostgreSQL `convert_from` probe raised SQLSTATE 22021, but the
+  pre-fix database-backed `startRebuild` example passed. Operator-facing text must follow
+  executable evidence while the typed `NoQueryCursor` branch still enforces the correct
+  no-checkpoint semantics.
+  Date: 2026-08-13
 - Decision: No ADR is amended or created by this plan.
   Rationale: `docs/adr/0033-consistency-waits-target-reachable-visible-heads.md` governs
   what position a wait targets; this plan changes which models may wait at all, which is
@@ -248,9 +289,8 @@ projections' dedup keys, and calls Kiroku's `resetSubscriptionCheckpointsTx` wit
 `SubscriptionName (readModel ^. #subscriptionName)` — again the raw field. Kiroku's reset
 (see `Kiroku.Store.Subscription.Checkpoint` in the `kiroku-store` package,
 `mori://shinzui/kiroku/packages/kiroku-store`) never creates rows for missing names, so
-one might expect a silent no-op for the sentinel. It is not: the reset statement passes
-the names as a `text[]` parameter through `unnest`, and PostgreSQL rejects any `text`
-value containing a NUL byte. Verified against PostgreSQL 18 during planning:
+the names as a `text[]` parameter through `unnest`. A planning-time probe suggested that
+the sentinel could not traverse that boundary:
 
 ```text
 postgres=# SELECT s.* FROM subs s
@@ -259,9 +299,13 @@ postgres=# SELECT s.* FROM subs s
 ERROR:  22021: invalid byte sequence for encoding "UTF8": 0x00
 ```
 
-So `startRebuild` on a cursorless model aborts its entire transaction — fence, truncate,
-dedup delete, and reset all roll back — and surfaces a session error. This matters
-because generated code creates exactly this pairing: in
+The actual database-backed Milestone 1 regression contradicted that prediction: the
+Hasql-encoded parameter was accepted and the full lifecycle passed before the branch was
+added. The defect is therefore not a reproduced transaction abort on this toolchain; it
+is the raw reset request itself. A cursorless model has no checkpoint, and its private
+compatibility sentinel must not cross into Kiroku as though it were a durable
+subscription identity. This matters because generated code creates exactly this pairing:
+in
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, `emitReadModelGenWithContract` (near line 4637)
 emits a blueprint with `cursorAuthority = NoQueryCursor` (near line 4732) whenever the
 resolved owner-derived cursor is absent (owner delivery is inline — see
@@ -270,7 +314,7 @@ emits the legacy lifecycle helpers including `startXxxRebuild = Rebuild.startReb
 <model> <projectionNames>` (near line 4764). For such inline-supplied models the emitted
 projection-name list is `[]`, which `finishRebuild` explicitly documents as the
 inline-only shape exempt from its empty-rebuild guard — evidence that cursorless rebuilds
-are an intended, supported operation whose only broken step is the reset.
+are an intended, supported operation and that reset must be skipped explicitly.
 
 ### The test suite
 
@@ -489,17 +533,15 @@ it "startRebuild on a cursorless model skips the checkpoint reset and completes"
   afterRebuild `shouldBe` Right (Right 0)
 ```
 
-Today this fails at the `startRebuild` step: the store returns a `Left` whose rendering
-contains `invalid byte sequence for encoding "UTF8": 0x00` (PostgreSQL error 22021,
-raised when the NUL-prefixed sentinel arrives as a `text[]` element), and the whole
-fencing transaction rolls back. If the observed failure differs from this prediction,
-record the actual output verbatim in Surprises & Discoveries and plan the Milestone 3
-assertion against reality — the desired end state (the test body above) stays the same.
+Before the fix this example unexpectedly passes on the current Hasql/PostgreSQL path.
+That result is recorded in Surprises & Discoveries. It remains the behavioral acceptance
+for the supported cursorless lifecycle, while the Milestone 3 source change supplies the
+typed proof that no reset is requested.
 
 Acceptance for Milestone 1: `cabal build keiro-test` succeeds;
 `cabal test keiro-test --test-option=--match --test-option="cursorless"` runs exactly the
-three new examples and all three fail, the first two after multi-second waits, with the
-outputs described above. Record the observed red transcript in this plan.
+three new examples: the first two fail after multi-second waits, and the rebuild example
+passes. Record the observed transcript in this plan.
 
 ### Milestone 2 — Route every wait through the cursor-authority check
 
@@ -674,11 +716,11 @@ Changelog. Add to `keiro/CHANGELOG.md` under `## Unreleased` / `### Fixed`:
   internal cursor sentinel for the full timeout or record a spurious
   `keiro.projection.wait.timeouts` increment. Behavior for models with durable cursors,
   including all directly constructed 0.11 records, is unchanged.
-- `Keiro.ReadModel.Rebuild.startRebuild` on a cursorless model no longer aborts its
-  fencing transaction by sending the NUL-prefixed cursor sentinel to PostgreSQL (error
-  22021); it now skips the subscription-checkpoint reset — such a model has no cursor to
-  reset — and performs the documented fence, truncate, and dedup clear, making the
-  generated `startXxxRebuild` helpers usable for inline-supplied Language-5 read models.
+- `Keiro.ReadModel.Rebuild.startRebuild` now recognizes a cursorless model through
+  `readModelCursorAuthority` and skips the subscription-checkpoint reset because there is
+  no cursor to reset. It no longer passes the private NUL-prefixed compatibility sentinel
+  into Kiroku, while preserving the documented fence, truncate, and dedup clear used by
+  generated inline Language-5 rebuild helpers.
 ```
 
 ADRs: per the Decision Log, no ADR is amended or created; re-confirm that judgment
@@ -702,16 +744,12 @@ cabal build keiro-test
 cabal test keiro-test --test-option=--match --test-option="cursorless"
 ```
 
-Expected today: 3 examples, 3 failures. The `waitFor` example fails after roughly five
+Observed before the fix: 3 examples, 2 failures. The `waitFor` example fails after roughly five
 seconds expecting `ReadModelMissingCursor` but getting
 `ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 0)`; the
 override example fails the same way against the visible head captured from the appended
-event, and its metric lookup reports `Just (IntNumber 2)` instead of `Nothing`; the
-rebuild example fails at `startRebuild` with a store error containing:
-
-```text
-invalid byte sequence for encoding "UTF8": 0x00
-```
+event, and its metric lookup reports `Just (IntNumber 2)` instead of `Nothing`. The
+cursorless rebuild example passes on the current Hasql/PostgreSQL parameter path.
 
 Milestones 2 and 3 (green), after the edits to `keiro/src/Keiro/ReadModel.hs` and
 `keiro/src/Keiro/ReadModel/Rebuild.hs`:
@@ -806,8 +844,14 @@ in `keiro/src/Keiro/ReadModel/Rebuild.hs` keeps its signature and branches on
 `resetSubscriptionCheckpointsTx` (package `kiroku-store`,
 `mori://shinzui/kiroku/packages/kiroku-store`): it updates only existing rows for the
 requested names and never creates rows — the fix stops passing it a name that PostgreSQL
-cannot even represent. Test-side, the new examples use only what
+does not identify any durable cursor. Test-side, the new examples use only what
 `keiro/test/Main.hs` already imports: the OpenTelemetry in-memory exporter harness,
 `Keiro.ReadModel(.Rebuild)`, and the counter fixtures; the new
 `counterCursorlessRebuildReadModel` fixture derives from the existing
 `counterReadModelBlueprint`. No new package dependencies.
+
+Revision note (2026-08-13): implementation evidence corrected the planned rebuild
+failure mode. The actual Hasql/PostgreSQL path accepted the cursor sentinel before the
+fix, so the plan, changelog guidance, and parent MasterPlan now describe the verified
+capability-boundary leak instead of claiming an unreproduced SQLSTATE 22021 abort. The
+typed `NoQueryCursor` skip and its behavioral acceptance remain unchanged.

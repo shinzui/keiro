@@ -87,7 +87,7 @@ No cross-repository ADR bears on this MasterPlan.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | Complete |
 | 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | Complete |
-| 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | Not Started |
+| 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | In Progress |
 | 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -157,13 +157,18 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-- EP-3 drafting (2026-08-12) upgraded the finding: the `startRebuild` sentinel
-  checkpoint reset is not a silent no-op — PostgreSQL rejects the sentinel's leading
-  NUL byte in any `text` value (SQLSTATE 22021, verified empirically against
-  PostgreSQL 18), so the whole fencing transaction aborts. Generated
-  `startXxxRebuild` helpers are hard-broken for cursorless language-5 models today,
-  not silently ineffective. The deprecated `PositionWait`-with-target override shares
-  the raw path and was added to EP-3's scope.
+- EP-3 drafting (2026-08-12) inferred from a direct PostgreSQL `convert_from` probe
+  that the `startRebuild` sentinel checkpoint reset would abort with SQLSTATE 22021,
+  and expanded the plan to the generated cursorless lifecycle. Implementation later
+  corrected that inference as recorded below. The deprecated
+  `PositionWait`-with-target override shares the raw wait path and was also added to
+  EP-3's scope.
+- EP-3 implementation (2026-08-13) corrected that planning-time rebuild claim: the
+  database-backed pre-fix regression passed through the actual Hasql `text[]` parameter
+  path, despite the direct `convert_from` probe raising SQLSTATE 22021. EP-3 retains the
+  typed `NoQueryCursor` branch because a cursorless model has no checkpoint to reset,
+  but user-facing text now describes the verified boundary leak rather than an
+  unreproduced transaction abort. The two wait defects reproduced exactly.
 - EP-1 drafting corrected two brief details: the Validate.hs lines cited for the L4
   side are actually the language-5 groupless-binding check (the L4 side needs no such
   rule), and `PositionWait` has no read-model-supply representation, so it carries no

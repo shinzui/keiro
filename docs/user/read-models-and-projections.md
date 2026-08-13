@@ -688,6 +688,12 @@ The physical `ReadModel` record and legacy vocabulary remain source-compatible f
 | `runQueryWith` | Override the legacy mode. | `runQueryWithFreshness` |
 | `defaultStrongWaitOptions` | Five-second timeout, 10ms poll. | `defaultHeadWaitOptions` |
 
+The exact-behavior column applies to models with real durable cursors. A cursorless model
+built with `NoQueryCursor` fails fast with `ReadModelMissingCursor` through `waitFor` and
+deprecated `Strong` or targeted `PositionWait` overrides, exactly as it does through
+`runQueryWithFreshness`; no 0.11 source can construct the private cursorless
+compatibility representation.
+
 `ConsistencyMode`, `StrongScope`, their constructors, `subscriptionName`,
 `defaultConsistency`, `strongScope`, `defaultStrongWaitOptions`, and `runQueryWith` are
 deprecated and scheduled for removal in 0.13. To migrate a direct record, move its
@@ -794,8 +800,10 @@ The supported offline workflow in `Keiro.ReadModel.Rebuild` is:
 1. Register the model at projection startup.
 2. Call `startRebuild model projectionNames replayFrom`. One transaction marks
    the model `Rebuilding`, fences normal writers, truncates the model table,
-   clears only those projections' dedup keys, and uses Kiroku's public reset API
-   to move all existing members of each named subscription to the replay point.
+   clears only those projections' dedup keys, and, for a cursor-bearing model,
+   uses Kiroku's public reset API to move all existing members of its subscription
+   to the replay point. A cursorless model has no checkpoint to reset, so this
+   step is skipped; pair that inline-only shape with an empty projection-name list.
 3. Replay events through `applyAsyncProjectionUnfenced`. Do not use that entry
    point in normal workers.
 4. After replay and application-specific verification, call
@@ -817,7 +825,8 @@ promotion safeguards.
 
 - `ReadModelStaleSchema`: code and stored metadata disagree.
 - `ReadModelWaitTimeout`: position wait timed out.
-- `ReadModelMissingCursor`: a truthful wait was requested for a cursorless model.
+- `ReadModelMissingCursor`: any wait was requested for a cursorless model, whether
+  through truthful freshness, a deprecated waiting override, or `waitFor`.
 - `ReadModelMissingPosition`: `WaitForPosition` omitted its required target.
 - `ReadModelNotLive`: metadata status is not `Live`.
 - `ReadModelUnregistered`: startup did not register this model name.

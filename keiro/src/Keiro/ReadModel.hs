@@ -14,7 +14,8 @@
 -- * 'WaitForPosition' — wait for a concrete caller-supplied 'GlobalPosition'.
 --
 -- Waiting modes require 'DurableQueryCursor'; a cursorless model fails with
--- 'ReadModelMissingCursor' before polling. Define new models through
+-- 'ReadModelMissingCursor' before polling, including through 'waitFor' and the
+-- deprecated 'runQueryWith' waiting overrides. Define new models through
 -- 'ReadModelBlueprint' and the truthful builders. 'ConsistencyMode', direct
 -- waiting fields, and 'runQueryWith' remain deprecated 0.12 compatibility and
 -- are removed in 0.13.
@@ -201,17 +202,22 @@ readModelCursorAuthority readModel
   | readModel ^. #subscriptionName == noQueryCursorSentinel = NoQueryCursor
   | otherwise = DurableQueryCursor (readModel ^. #subscriptionName)
 
--- | Translate the legacy default into its exact operational freshness. In
--- particular, the historical @PositionWait@ with no target is immediate.
+-- | Translate the legacy default into its exact operational freshness.
 readModelDefaultFreshness :: ReadModel q r -> QueryFreshness
 readModelDefaultFreshness readModel =
-  case readModel ^. #defaultConsistency of
-    Strong -> WaitForHead (legacyHeadScope (readModel ^. #strongScope))
-    Eventual -> Immediate
-    PositionWait options ->
-      case options ^. #target of
-        Nothing -> Immediate
-        Just _ -> WaitForPosition options
+  legacyOverrideFreshness (readModel ^. #defaultConsistency) readModel
+
+-- | Translate a legacy consistency mode into the exact operational freshness.
+-- The historical @PositionWait@ with no target is immediate. Strong resolves its
+-- head scope from the model's compatibility 'strongScope' field.
+legacyOverrideFreshness :: ConsistencyMode -> ReadModel q r -> QueryFreshness
+legacyOverrideFreshness Strong readModel =
+  WaitForHead (legacyHeadScope (readModel ^. #strongScope))
+legacyOverrideFreshness Eventual _ = Immediate
+legacyOverrideFreshness (PositionWait options) _ =
+  case options ^. #target of
+    Nothing -> Immediate
+    Just _ -> WaitForPosition options
 
 blueprintReadModel :: QueryFreshness -> ReadModelBlueprint q r -> ReadModel q r
 blueprintReadModel freshness blueprint =
@@ -362,7 +368,7 @@ data ReadModelError
   | -- | The model is registered but not 'Live' (e.g. rebuilding or
     --       abandoned): name and current status.
     ReadModelNotLive !Text !ReadModelStatus
-  | -- | A truthful wait was requested for a model with no durable cursor:
+  | -- | A wait was requested for a model with no durable cursor:
     --       model name and requested freshness.
     ReadModelMissingCursor !Text !QueryFreshness
   | -- | A truthful position wait omitted its required target: model name.
@@ -396,8 +402,10 @@ runQueryWithFreshness metrics freshness readModel input =
   runValidatedQuery readModel input (waitForFreshness metrics freshness readModel)
 
 -- | Query a read model with an explicit 'ConsistencyMode', overriding its
--- default. Validates the model's schema and liveness, honours the wait mode,
--- then runs the query in a transaction.
+-- default. The override is translated into its exact 'QueryFreshness' and run
+-- through the truthful execution path. Waiting overrides on a cursorless model
+-- fail fast with 'ReadModelMissingCursor'; models with durable cursors preserve
+-- their exact 0.11 behavior.
 runQueryWith ::
   (IOE :> es, Store :> es) =>
   Maybe KeiroMetrics ->
@@ -405,8 +413,8 @@ runQueryWith ::
   ReadModel q r ->
   q ->
   Eff es (Either ReadModelError r)
-runQueryWith metrics consistency readModel input = do
-  runValidatedQuery readModel input (waitIfNeeded metrics consistency readModel)
+runQueryWith metrics consistency readModel =
+  runQueryWithFreshness metrics (legacyOverrideFreshness consistency readModel) readModel
 {-# DEPRECATED runQueryWith "Use runQueryWithFreshness. The legacy override is removed in 0.13." #-}
 
 runValidatedQuery ::
@@ -425,9 +433,11 @@ runValidatedQuery readModel input waitAction = do
         Left err -> pure (Left err)
         Right () -> Right <$> runTransaction ((readModel ^. #query) input)
 
--- | Block until the model's subscription has advanced to @targetPosition@,
+-- | Block until the model's durable cursor has advanced to @targetPosition@,
 -- polling at 'pollMicros' intervals. Returns @Right ()@ once caught up, or
--- 'ReadModelWaitTimeout' if 'timeoutMicros' elapses first.
+-- 'ReadModelWaitTimeout' if 'timeoutMicros' elapses first. A model without a
+-- durable cursor fails fast with 'ReadModelMissingCursor' without polling or
+-- recording a timeout metric.
 waitFor ::
   (IOE :> es, Store :> es) =>
   Maybe KeiroMetrics ->
@@ -435,13 +445,11 @@ waitFor ::
   ReadModel q r ->
   GlobalPosition ->
   Eff es (Either ReadModelError ())
-waitFor metrics options readModel targetPosition = do
-  waitForCursor
-    metrics
-    options
+waitFor metrics options readModel targetPosition =
+  withCursor
+    (WaitForPosition (options & #target ?~ targetPosition))
     readModel
-    (readModel ^. #subscriptionName)
-    targetPosition
+    (\cursor -> waitForCursor metrics options readModel cursor targetPosition)
 
 waitForCursor ::
   (IOE :> es, Store :> es) =>
@@ -510,23 +518,6 @@ validateMetadata readModel metadata
             (readModel ^. #shapeHash)
             (metadata ^. #shapeHash)
         )
-
-waitIfNeeded ::
-  (IOE :> es, Store :> es) =>
-  Maybe KeiroMetrics ->
-  ConsistencyMode ->
-  ReadModel q r ->
-  Eff es (Either ReadModelError ())
-waitIfNeeded metrics Strong readModel = do
-  target <- case readModel ^. #strongScope of
-    EntireLog -> storeHeadPosition
-    CategoryHead category -> categoryHeadPosition category
-  waitFor metrics (defaultStrongWaitOptions & #target ?~ target) readModel target
-waitIfNeeded _ Eventual _ = pure (Right ())
-waitIfNeeded metrics (PositionWait options) readModel =
-  case options ^. #target of
-    Nothing -> pure (Right ())
-    Just targetPosition -> waitFor metrics options readModel targetPosition
 
 waitForFreshness ::
   (IOE :> es, Store :> es) =>

@@ -415,7 +415,9 @@ Use `ReadModelBlueprint` and a truthful builder to define typed query wrappers. 
 does not poll and needs no cursor. `WaitForHead` captures one visible whole-store or
 category head; `WaitForPosition` waits for a concrete caller position. Both waiting modes
 require `DurableQueryCursor` and return typed missing-cursor/missing-position errors before
-polling when their capabilities are absent.
+polling when their capabilities are absent. The same fail-fast missing-cursor contract
+applies to `waitFor` and deprecated `Strong` or targeted `PositionWait` overrides on a
+cursorless model; models with real cursors retain their 0.11 behavior.
 
 `subscriptionPositionFromInventory` and `readSubscriptionPosition` take the
 minimum durable checkpoint across every member with the exact subscription
