@@ -84,8 +84,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13T03:16:25Z) M4: Update
       `docs/user/read-models-and-projections.md` (two v3 mentions) and
       `keiro/CHANGELOG.md` Unreleased.
-- [ ] M4: Update the MasterPlan registry row for EP-2 to Complete; run `just verify`;
-      write Outcomes & Retrospective; final ADR distillation pass.
+- [x] (2026-08-13T03:26:27Z) M4: Update the MasterPlan registry row for EP-2 to
+      Complete; pass `just verify`; write Outcomes & Retrospective; complete the final
+      ADR distillation pass (durable decisions are recorded in ADR-32).
 
 
 ## Surprises & Discoveries
@@ -168,7 +169,20 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-12. Catalog replay now persists
+`keiro/projection-replay/v4` evidence whose `contract-v4:` preimage includes the ordered
+replay-adapter source/projection identity sequence. A declaration-order change therefore
+refuses resume with `CatalogRebuildContractMismatch`, while the unchanged order resumes
+without duplicate writes. Registration and fresh rebuilds remain order-compatible, and
+abandonment now uses the group slice so an operator can abandon a run after an order-only
+change while genuine slice drift reports `CatalogRebuildSliceMismatch`.
+
+The four new database-backed proofs cover order-swap refusal, same-order success,
+slice-scoped abandon, and observable from-scratch adapter effect order. The original red
+run promoted incorrectly under v3; after the fix `cabal test keiro-test` passes 531
+examples and `just verify` passes every repository gate. ADR-32 now holds the durable
+identity boundary and v4 cutover policy; the user guide and changelog describe the
+operator-visible behavior. No schema migration or dependency change was needed.
 
 
 ## Context and Orientation

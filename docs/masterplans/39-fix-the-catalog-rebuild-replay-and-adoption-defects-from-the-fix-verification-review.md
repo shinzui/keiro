@@ -92,7 +92,7 @@ MasterPlan beyond ADR-26's already-cited `mori://shinzui/mori/okf/adrs/concepts/
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Preserve cross-source global position order in buffered replay paging | docs/plans/246-preserve-cross-source-global-position-order-in-buffered-replay-paging.md | None | None | Complete |
-| 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | In Progress |
+| 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | Complete |
 | 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | Not Started |
 | 4 | Make catalog adoption scoped, truthful, and registry-complete | docs/plans/249-make-catalog-adoption-scoped-truthful-and-registry-complete.md | None | EP-3 | Not Started |
 | 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | Not Started |
@@ -171,9 +171,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (246) M2: merge-horizon clamp + monotonic applied floor with typed invariant failures (`replay.global-position-regression`, `replay.buffer-horizon-stalled`)
 - [x] EP-1 (246) M3: seeded multi-interleaving ordering sweep (18 deterministic cases)
 - [x] EP-1 (246) M4-M5: read-count/benchmark evidence (read-count parity and 0.8% benchmark delta), changelog, docs, `just verify`
-- [ ] EP-2 (247) M1: red order-swap resume test (slice fingerprints byte-equal, resume wrongly proceeds)
-- [ ] EP-2 (247) M2: `contract-v4` preimage with ordered adapter identities, runner format v4, slice-scoped abandon with `CatalogRebuildSliceMismatch`
-- [ ] EP-2 (247) M3-M4: same-order/swap/from-scratch proofs; ADR-32 amendment, user docs, changelog, `just verify`
+- [x] EP-2 (247) M1: red order-swap resume test (slice fingerprints byte-equal, resume wrongly proceeds)
+- [x] EP-2 (247) M2: `contract-v4` preimage with ordered adapter identities, runner format v4, slice-scoped abandon with `CatalogRebuildSliceMismatch`
+- [x] EP-2 (247) M3-M4: same-order/swap/from-scratch proofs; ADR-32 amendment, user docs, changelog, `just verify`
 - [ ] EP-3 (248) M1: red mid-rebuild-upgrade reproduction (migration-level shape pin + full refusal matrix)
 - [ ] EP-3 (248) M2: sentinel-aware abandon (`abandonPreCanonicalGroupRebuild`) + typed `CatalogRebuildRunPreCanonical` resume refusal
 - [ ] EP-3 (248) M3: adoption + fresh rebuild accept `failed`/stale-format groups; ADR-32/ADR-26 amendments
@@ -220,6 +220,11 @@ interactions between child plans. Provide concise evidence.
   are equally affected. No catalog-path test pins post-promotion non-redelivery.
   EP-5 (plan 258) was added for this on 2026-08-13 and gates the release like its
   siblings.
+- EP-2 established the final 0.12 replay evidence baseline as `contract-v4:` plus
+  `keiro/projection-replay/v4`. Resume is contract-scoped and pins adapter application
+  order; abandon is slice-scoped and returns `CatalogRebuildSliceMismatch` for real group
+  drift. EP-3 must build its `'$pre-canonical'` recovery semantics against these values
+  and the new abandon error boundary rather than the retired v3 contract.
 
 
 ## Decision Log
@@ -269,5 +274,11 @@ docs/adr/. Keep task-local execution and coordination details here.
   unchanged, the benchmark delta is within noise, and `just verify` exits 0. The fix
   changes no public API or persisted contract, so the ADR distillation pass required no
   ADR amendment and EP-2 retains sole ownership of the planned contract-prefix change.
+- EP-2 completed on 2026-08-12. Rebuild contracts and runner evidence now use v4 and
+  include replay-adapter identities in application order, so an interrupted run cannot
+  silently mix declaration orders. Four database-backed proofs cover refusal, unchanged
+  resume, order-compatible registration/abandon, and observable application order;
+  `just verify` passes. Abandonment is deliberately slice-scoped, and the durable
+  identity/cutover boundary is recorded in ADR-32 for EP-3 and MasterPlan 41 to consume.
 
 (Overall MasterPlan retrospective to be completed after the remaining child plans.)
