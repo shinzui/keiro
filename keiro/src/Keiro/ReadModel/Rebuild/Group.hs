@@ -87,7 +87,7 @@ import Kiroku.Store.Subscription.Types
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
-import Prelude (not, null, (&&))
+import Prelude (not, null, (&&), (||))
 import Prelude qualified
 
 -- | Sentinel that migration 0024 stamps into
@@ -441,7 +441,7 @@ adoptCatalogGroups catalog requested =
         case row of
           Nothing -> pure (Left (AdoptGroupUnregistered groupId))
           Just metadata
-            | metadata ^. #status /= GroupLive ->
+            | not (adoptable metadata) ->
                 pure
                   ( Left
                       ( AdoptGroupNotLive
@@ -451,6 +451,17 @@ adoptCatalogGroups catalog requested =
                       )
                   )
             | otherwise -> lockAll (metadata : accumulated) rest
+
+    adoptable metadata =
+      metadata
+        ^. #status
+        == GroupLive
+        || ( metadata ^. #status == GroupFailed
+               && not
+                 ( canonicalSlicePrefix
+                     `Text.isPrefixOf` (metadata ^. #sliceFingerprint)
+                 )
+           )
 
 sliceTextFor :: ValidatedProjectionCatalog -> RebuildGroupId -> Text
 sliceTextFor catalog groupId =
@@ -495,7 +506,8 @@ beginGroupRebuild catalog groupId request =
                         (metadata ^. #sliceFingerprint)
                         expectedSliceText
                     )
-            | metadata ^. #status /= GroupLive ->
+            | metadata ^. #status /= GroupLive
+                && metadata ^. #status /= GroupFailed ->
                 Tx.condemn
                   $> Left
                     ( RebuildGroupNotLive

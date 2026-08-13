@@ -150,6 +150,17 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
         (abandonGroupRebuild started (RebuildFailure "again" "must not replace evidence"))
     secondAbandon
       `shouldBe` Left (RebuildHandleNoLongerActive Catalog.mainGroupId (runId "mixed-run"))
+    reopened <-
+      expectStore
+        store
+        (beginGroupRebuild validated Catalog.mainGroupId (request "mixed-run-retry" (GlobalPosition 3)))
+        >>= shouldBeRight
+    groupRebuildHandleRun reopened `shouldBe` runId "mixed-run-retry"
+    afterReopen <- expectStore store (lookupProjectionRebuildGroup Catalog.mainGroupId)
+    afterReopen ^? _Just . #status `shouldBe` Just GroupRebuilding
+    afterReopen ^? _Just . #activeRunId `shouldBe` Just (Just (runId "mixed-run-retry"))
+    afterReopen ^? _Just . #failureCode `shouldBe` Just Nothing
+    afterReopen ^? _Just . #failureDetail `shouldBe` Just Nothing
 
   it "condemns missing subscription names and rolls back targets, fences, dedup, and matched member resets" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql mixedFixtureSql))

@@ -126,6 +126,34 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     registered <- expectStore store (registerProjectionCatalog current)
     registered `shouldSatisfy` isRight
 
+  it "adopts only stale-format failed groups while preserving their fence" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql catalogFixtureSql))
+    current <- expectValid (rebuildableCatalog Catalog.validCatalog)
+    _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    handle <-
+      expectStore store (beginGroupRebuild current Catalog.mainGroupId (request "failed-adoption"))
+        >>= shouldBeRight
+    _ <-
+      expectStore
+        store
+        (abandonGroupRebuild handle (RebuildFailure "operator.abandoned" "prepare adoption boundary"))
+        >>= shouldBeRight
+
+    expectStore store (adoptCatalogGroups current (Catalog.mainGroupId :| []))
+      `shouldReturn` Left
+        (AdoptGroupNotLive Catalog.mainGroupId GroupFailed (Just (runId "failed-adoption")))
+
+    let stale = "slice-v1:" <> Text.replicate 64 "a"
+    expectStore
+      store
+      (Store.runTransaction (Tx.statement (rebuildGroupIdText Catalog.mainGroupId, stale) setStoredSliceStmt))
+    adopted <-
+      expectStore store (adoptCatalogGroups current (Catalog.mainGroupId :| []))
+        >>= shouldBeRight
+    map (^. #status) adopted `shouldBe` [GroupFailed]
+    map (^. #sliceFingerprint) adopted
+      `shouldBe` [sliceText current Catalog.mainGroupId]
+
 changedCatalog :: ProjectionCatalog
 changedCatalog = changeCatalog (rebuildableCatalog Catalog.validCatalog)
 

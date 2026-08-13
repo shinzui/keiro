@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
-description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, and requires explicit transactional adoption of reviewed slice changes.
-timestamp: 2026-08-13T03:15:22Z
+description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires explicit transactional adoption, and gives pre-canonical runs a fenced recovery path.
+timestamp: 2026-08-13T03:41:31Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -88,10 +88,13 @@ catalog groups as new, unchanged, slice-changed, or stale-format and lists
 registered non-legacy groups absent from the new catalog. Adoption accepts a
 non-empty set of reviewed group IDs, sorts and deduplicates them, locks and
 validates the entire set before updating anything, requires every row to be
-registered and `live`, then updates group slices and reconciles bound query
-model version, shape, and group metadata in one transaction. An unchanged
-group is a successful idempotent outcome. Adoption never changes
-application-owned tables and never starts a rebuild.
+registered and `live`, except that a `failed` group whose stored fingerprint
+lacks the canonical `slice-v2:` prefix is also adoptable while remaining
+fenced. Every other non-live group, including a canonical `failed` group, is
+refused. Adoption then updates group slices and reconciles bound query model
+version, shape, and group metadata in one transaction. An unchanged group is a
+successful idempotent outcome. Adoption never changes application-owned tables,
+never clears failure evidence, and never starts a rebuild.
 
 The embedded `keiro-ops rebuild adopt GROUP...` command wraps those library
 operations. Without `--force` it is read-only, shows stored and current slices,
@@ -100,17 +103,24 @@ actual adopted rows. The standalone binary cannot mount the command because it
 does not contain the application's validated catalog.
 
 Migration `0024` is a pre-0.12 clean break. It renames the group column to
-`slice_fingerprint` and records `group_slice_fingerprint` on runs. Operators
-must complete or abandon active catalog rebuilds before applying it because the
-migration cannot infer an old run's precise slice. A pre-canonical group row is
-then refused at registration until an operator previews and explicitly adopts
-the current catalog slice.
+`slice_fingerprint` and stamps existing runs' `group_slice_fingerprint` with
+`'$pre-canonical'` because it cannot infer an old run's precise slice. Completing
+or abandoning active catalog rebuilds before applying it is recommended but not
+enforced. The sentinel is never a lifecycle identity and never resumable; resume
+returns the typed `CatalogRebuildRunPreCanonical` refusal. A stranded sentinel
+run remains abandonable without a catalog or slice comparison, provided it is
+still the group's active run. That abandonment is idempotent and preserves the
+first group failure evidence. The operator then previews and adopts the stale
+group slice while the group stays fenced and explicitly starts a fresh canonical
+rebuild. A fresh rebuild may begin from `failed` once the stored slice matches
+the catalog; promotion alone returns the group to `live`.
 
 The v3/v2 identity cutover reuses that same reviewed adoption workflow. A stored
 `slice-v1:` value is stale-format and must be previewed and adopted while the group is
-`live`. An active replay written as `keiro/projection-replay/v2` cannot be resumed by the
-v3 runner or adopted in place; operators complete it with the old runtime or explicitly
-abandon it before upgrading, then preview and adopt the live group metadata.
+`live`, or after abandonment while it is fenced and `failed`. An active replay written
+as `keiro/projection-replay/v2` cannot be resumed by the v3 runner or adopted in place;
+operators complete it with the old runtime or explicitly abandon it before upgrading,
+then preview and adopt the group metadata.
 
 The v4 contract revision adds replay-adapter application order without changing catalog
 or group-slice identity. Stored `contract-v3:` values and
@@ -138,6 +148,9 @@ contract break when the catalog's group slice is unchanged.
 - Replay-adapter application order is in-flight replay identity, not group identity;
   order swaps never strand registration or a fresh rebuild but always refuse resume of
   an interrupted run.
+- The pre-canonical clean-break promise is fulfilled without hand-written SQL:
+  abandon the sentinel run, adopt its stale-format failed group without lifting the
+  fence, then start a fresh rebuild. A sentinel can never authorize resume or promotion.
 - Derived supplier lookup adds no duplicate owner edge, but normalized query freshness
   and the cursor selected from that relationship are explicit query-binding identity.
 
@@ -171,3 +184,5 @@ contract break when the catalog's group slice is unchanged.
 - [ExecPlan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
   populates those normalized freshness/cursor facts from checked Language 5 source and proves
   delivery and freshness evolution remain distinct.
+- [ExecPlan 248](../plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md)
+  implements and verifies the supported 0024 sentinel recovery path.

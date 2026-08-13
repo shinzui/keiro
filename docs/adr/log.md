@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-08-13
+* **Update**: Add the failed -> rebuilding lifecycle transition for explicitly requested fresh rebuilds (ADR-26).
+* **Update**: Record the pre-canonical sentinel recovery path: always-abandonable stranded runs, fenced stale-format adoption, and typed resume refusal (ADR-32).
 * **Update**: Amend ADR 0032 to pin replay-adapter application order in contract-v4 while keeping registration and abandonment slice-scoped (plan 247).
 
 ## 2026-08-12

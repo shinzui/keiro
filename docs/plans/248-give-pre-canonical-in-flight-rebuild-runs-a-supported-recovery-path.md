@@ -66,8 +66,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 03:37Z) M2: `preCanonicalRunSliceSentinel` and `canonicalSlicePrefix` constants in `Keiro.ReadModel.Rebuild.Group`, exported through the facade where needed.
 - [x] (2026-08-13 03:37Z) M2: sentinel-aware `abandonCatalogRebuild` (new `abandonPreCanonicalGroupRebuild` + statement in Group.hs; sentinel branch in Runner.hs).
 - [x] (2026-08-13 03:37Z) M2: `CatalogRebuildRunPreCanonical` constructor; `resumeCatalogRebuild` refuses sentinel runs with it; abandon/resume test stages green.
-- [ ] M3: adoption accepts fenced stale-format groups (`adoptTx` lock precondition); begin accepts `failed` groups (`beginGroupRebuild` status guard); full recovery spec green.
-- [ ] M3: amend `docs/adr/0032` and `docs/adr/0026` in the same change; `okf log add` entries; `okf validate` passes.
+- [x] (2026-08-13 03:44Z) M3: adoption accepts fenced stale-format groups (`adoptTx` lock precondition); begin accepts `failed` groups (`beginGroupRebuild` status guard); full recovery spec green.
+- [x] (2026-08-13 03:44Z) M3: amend `docs/adr/0032` and `docs/adr/0026` in the same change; `okf log add` entries; `okf validate` passes.
 - [ ] M4: sentinel-aware `Operations.inspectGroupRebuild`; `group_slice` column in keiro-ops run tables; keiro-ops recovery transcript test green.
 - [ ] M5: user docs (`docs/user/read-models-and-projections.md`, `docs/user/operations.md`), changelogs (`keiro/CHANGELOG.md`, `keiro-ops/CHANGELOG.md` Unreleased), full `just verify` gate.
 - [ ] MasterPlan 39 registry row for EP-3 updated to Complete; Outcomes & Retrospective written.
@@ -90,6 +90,11 @@ implementation. Provide concise evidence.
   typed resume refusal and idempotent abandon, then fails at the first M3 operation with
   `AdoptGroupNotLive ... GroupFailed`. This proves the sentinel path does not depend on
   the catalog slice or resume contract while leaving adoption closed until M3.
+- M3 needed no registration special case and no SQL mutation beyond the M2 abandon
+  statement. Adoption's existing metadata update preserves the failed fence, and begin's
+  existing statement clears failure evidence before preparing the new run. The full
+  `keiro-test` suite passed (535 examples, 0 failures), and strict ADR validation passed
+  with 33 concepts.
 
 
 ## Decision Log

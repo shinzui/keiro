@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-12T14:55:00Z
+timestamp: 2026-08-13T03:41:31Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -157,11 +157,13 @@ that proof.
 
 A rebuild group is also the durable database lifecycle and live-writer fence.
 It moves through `live -> rebuilding -> live` after verified promotion, or
-`live -> rebuilding -> failed` after abandonment. Both rebuilding and failed
-states keep ordinary writers fenced. The group row stores the active run and
-canonical group-slice fingerprint; query-model rows observe that group and
-transition with it. Whole-catalog fingerprints remain rebuild-run provenance,
-not lifecycle fences, under
+`live -> rebuilding -> failed` after abandonment. An operator may explicitly
+start a fresh run through `failed -> rebuilding` after the stored group slice
+matches the current catalog. Both rebuilding and failed states keep ordinary
+writers fenced; only verified promotion returns the group to live service. The
+group row stores the active run and canonical group-slice fingerprint;
+query-model rows observe that group and transition with it. Whole-catalog
+fingerprints remain rebuild-run provenance, not lifecycle fences, under
 [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md).
 No target or query model can return to service independently.
 
@@ -217,8 +219,9 @@ dedup rows are not completion evidence.
   compatibility calls keep their old behavior without inventing fake catalog
   targets.
 - A failed rebuild is an offline state, not an automatic rollback. Operators
-  repair or resume it through the rebuild runner; they cannot bypass completion
-  evidence by promoting one binding.
+  repair or resume the active run, or explicitly start a fresh run after catalog
+  identity is reconciled; they cannot bypass completion evidence by promoting
+  one binding.
 - Existing `InlineProjection`, `AsyncProjection`, and `ReadModel` values remain
   source-compatible through 0.12. New read models use the truthful freshness/cursor
   façade; the legacy `Strong`, `Eventual`, `PositionWait`, and direct waiting fields are
@@ -277,3 +280,5 @@ dedup rows are not completion evidence.
   compatibility window.
 - [ExecPlan 245](../plans/245-separate-language-5-projection-delivery-from-query-freshness.md)
   implements the owner-only delivery and query-only freshness Language 5 surface.
+- [ExecPlan 248](../plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md)
+  implements and verifies the explicit `failed -> rebuilding` recovery transition.
