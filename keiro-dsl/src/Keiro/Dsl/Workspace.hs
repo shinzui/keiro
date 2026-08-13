@@ -1498,6 +1498,14 @@ instance HasLocs ProjectionTargetNode
 
 instance HasLocs RebuildGroupNode
 
+instance HasLocs PromotionObjectKindNode
+
+instance HasLocs PromotionObjectNode
+
+instance HasLocs RevisionTargetNode
+
+instance HasLocs ProjectionRevisionNode
+
 instance HasLocs CatalogSource
 
 instance HasLocs CheckpointOnMissingNode

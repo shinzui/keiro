@@ -2,6 +2,7 @@
 module Keiro.Dsl.Parser.ProjectionCatalog
   ( pProjectionTarget,
     pRebuildGroup,
+    pProjectionRevision,
     pProjectionOwner,
   )
 where
@@ -39,6 +40,54 @@ pRebuildGroup context = do
   order <- symbol "order" *> symbol "=" *> brackets (many ident)
   _ <- symbol "}"
   pure RebuildGroupNode {rgName = name, rgTargets = targets, rgOrder = order, rgLoc = loc}
+
+pProjectionRevision :: FrontendContext -> P ProjectionRevisionNode
+pProjectionRevision context = do
+  loc <- getLoc
+  marker <- withOwnedSpan (keyword "projection-revision")
+  requireLanguageFeatureAt context ProjectionCatalogSyntax (spanOf marker)
+  name <- ident
+  _ <- symbol "{"
+  group <- symbol "group" *> symbol "=" *> ident
+  revisionTargets <- many pRevisionTarget
+  _ <- symbol "}"
+  pure ProjectionRevisionNode {prvName = name, prvGroup = group, prvTargets = revisionTargets, prvLoc = loc}
+  where
+    pRevisionTarget = do
+      _ <- keyword "target"
+      targetName <- ident
+      _ <- symbol "{"
+      schemaVersion <- symbol "schema-version" *> symbol "=" *> stringLit
+      provisioner <- symbol "provisioner" *> symbol "=" *> stringLit
+      provisionerVersion <- symbol "provisioner-version" *> symbol "=" *> boundedDecimal
+      expectedShape <- symbol "expected-shape" *> symbol "=" *> stringLit
+      validator <- symbol "validator" *> symbol "=" *> stringLit
+      validatorVersion <- symbol "validator-version" *> symbol "=" *> boundedDecimal
+      promotionObjects <- many pPromotionObject
+      _ <- symbol "}"
+      pure
+        RevisionTargetNode
+          { prtTarget = targetName,
+            prtSchemaVersion = schemaVersion,
+            prtProvisioner = provisioner,
+            prtProvisionerVersion = provisionerVersion,
+            prtExpectedShape = expectedShape,
+            prtValidator = validator,
+            prtValidatorVersion = validatorVersion,
+            prtPromotionObjects = promotionObjects
+          }
+    pPromotionObject = do
+      _ <- keyword "promotion"
+      objectKind <-
+        choice
+          [ PromotionIndexNode <$ keyword "index",
+            PromotionConstraintNode <$ keyword "constraint",
+            PromotionOwnedSequenceNode <$ keyword "owned-sequence"
+          ]
+      generationName <- stringLit
+      _ <- symbol "->"
+      canonicalName <- stringLit
+      pure (PromotionObjectNode objectKind generationName canonicalName)
 
 pProjectionOwner :: FrontendContext -> P ProjectionOwnerNode
 pProjectionOwner context = do

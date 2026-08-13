@@ -8,6 +8,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- Projection catalogs now declare executable `ProjectionRevision` bridges, total
+  `PhysicalTargets` mappings, per-target schema/provisioner/validator contracts, and
+  ordered promotion names. Canonical identity advances to `catalog-v4:` and
+  `slice-v3:`. Candidate Language 5 accepts `projection-revision` blocks and scaffolds
+  transaction-local provision, validation, live, replay, and verification holes.
 - `Keiro.DeterministicId.deterministicIdProbes` centralizes the unchanged
   current-first, legacy-only-for-moved-seeds compatibility order shared by
   process-manager preflights and generation-0 awakeable adoption.

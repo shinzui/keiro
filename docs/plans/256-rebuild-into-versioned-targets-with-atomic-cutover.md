@@ -55,8 +55,9 @@ durable ownership decision is
 - [x] (2026-08-13T22:51:59Z) M1: PostgreSQL prototype proves schema-changing provision, dependency and object
   identity behavior, deterministic all-target locks, rollback, and concurrent-reader
   semantics; the restricted clone eligibility matrix is recorded from evidence.
-- [ ] M2: projection revisions, target generation contracts, provisioners, validation,
-  canonical fingerprints, and language-5/code-generation surfaces are implemented.
+- [x] (2026-08-13T23:32:54Z) M2: projection revisions, target generation contracts,
+  provisioners, validation, canonical fingerprints, and language-5/code-generation
+  surfaces are implemented and validated across Keiro, the DSL, Jitsurei, and ops.
 - [ ] M3: migration persists serving revisions, epochs, target generations, relation
   identities, observed schema fingerprints, canonical object-name maps, run policy,
   and retention evidence; begin/abandon are idempotent and tested.
@@ -109,6 +110,15 @@ durable ownership decision is
 - One transaction-level `statement_timeout` covering the sorted all-target lock phase
   aborted a cutover blocked by an independent `ACCESS SHARE` reader. PostgreSQL rolled
   back the complete rename set and left all serving and staging rows unchanged.
+- Catalog identity needed another coordinated clean break: revision contracts change
+  both the complete catalog and group-local resume authority, so the canonical prefixes
+  are now `catalog-v4` and `slice-v3`. Executable closures and relation OIDs remain out
+  of the preimages; their stable declared identities and ordered promotion-name maps are
+  included instead.
+- A total `PhysicalTargets` value cannot be represented safely by accepting a partial
+  map and failing later inside application SQL. Construction now requires the exact
+  expected target set and returns typed missing/unexpected-target evidence before any
+  revision handler runs.
 
   Evidence:
 
@@ -187,6 +197,18 @@ durable ownership decision is
   later appends from destructive removal, so Keiro must verify active ownership rather
   than invent a moving private retention cursor.
   Date: 2026-08-13
+- Decision: Introduce projection revisions as first-class catalog entries while keeping
+  query-model revision references separate and minimal until plan 255 owns the complete
+  external read-contract surface.
+  Rationale: live/replay executable schema authority is needed now, while freezing the
+  public consumer-contract model belongs to the dependent plan.
+  Date: 2026-08-13
+- Decision: Encode provisioner, validator, live, replay, and verification implementations
+  through explicit stable identifiers and positive versions; exclude Haskell closures,
+  allocated generation UUIDs, physical names, and relation OIDs from catalog preimages.
+  Rationale: declarations must invalidate resume identity deterministically without
+  making deployment-specific runtime values part of catalog identity.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -194,8 +216,12 @@ durable ownership decision is
 Architecture validation replaced the original clone-only design before implementation.
 The external replay-retention prerequisite is now released and verified. Milestone 1
 completed the PostgreSQL proof suite and froze the restricted clone refusal envelope
-from observed catalog behavior. Runtime and catalog implementation continues at
-Milestone 2.
+from observed catalog behavior. Milestone 2 added the runtime and language-5 revision
+contract, total physical-target maps, deterministic diagnostics, `catalog-v4` and
+`slice-v3` identity, generated application holes, and a compile-checked Jitsurei v1/v2
+bridge. The complete Keiro (559 examples), DSL (705 examples plus all conformance
+components), Jitsurei (23 examples), and keiro-ops (43 examples) suites pass. Milestone
+3 is next.
 
 
 ## Context and Orientation

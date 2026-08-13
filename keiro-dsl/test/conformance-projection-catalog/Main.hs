@@ -78,6 +78,11 @@ main = do
            ]
     )
   assert "three generated owners" (length (Catalog.inventoryProjections projectionCatalogInventory) == 3)
+  assert
+    "v1/v2 projection revision bridge"
+    ( map (Catalog.projectionRevisionIdText . inventoryRevisionId) (Catalog.inventoryProjectionRevisions projectionCatalogInventory)
+        == ["reporting_v1", "reporting_v2"]
+    )
   assert "two typed aggregate handlers" (length orderSummaryWriterInlineProjections == 1 && length shipmentWriterInlineProjections == 1)
   assert "source-selected inline handlers stay singular" (length ordersInlineProjections == 1 && length shipmentsInlineProjections == 1)
   assert "four query registrations" (length projectionCatalogRegistrations == 4)
@@ -95,6 +100,9 @@ main = do
 perturbSubscriptionName :: Catalog.AsyncProjectionRegistration -> Catalog.AsyncProjectionRegistration
 perturbSubscriptionName (Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId _ checkpointOnMissing dedupKeyId dedupName) =
   Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId "catalog-demo-audit-WRONG" checkpointOnMissing dedupKeyId dedupName
+
+inventoryRevisionId :: Catalog.InventoryProjectionRevision -> Catalog.ProjectionRevisionId
+inventoryRevisionId (Catalog.InventoryProjectionRevision revisionId _ _ _ _ _) = revisionId
 
 exerciseQualificationQueue :: IO ()
 exerciseQualificationQueue = do

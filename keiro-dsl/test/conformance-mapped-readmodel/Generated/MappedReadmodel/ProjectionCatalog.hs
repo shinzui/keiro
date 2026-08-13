@@ -46,6 +46,8 @@ projectionCatalog =
     [Catalog.SourceDeclaration (must (Catalog.mkSourceId "all")) Catalog.AllStreams "all-streams/generated-codec/v1" (must (Catalog.mkClaimSite "source all"))]
     [Catalog.TargetDeclaration (must (Catalog.mkTargetId "account_summary_table")) (Catalog.QualifiedTable "public" "account_summary") Catalog.ClearBeforeReplay [] (must (Catalog.mkClaimSite "target account_summary_table"))]
     [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "account_summary_table"))] [] (must (Catalog.mkClaimSite "rebuild-group reporting"))]
+    []
+    []
     [Catalog.SubscriptionDeclaration (must (Catalog.mkSubscriptionId "mapped-readmodel-account-summary")) "mapped-readmodel-account-summary" (must (Catalog.mkSourceId "all")) KirokuSubscription.FromBeginning (must (Catalog.mkClaimSite "projection-owner account_summary_writer subscription"))]
     [Catalog.DedupKeyDeclaration (must (Catalog.mkDedupKeyId "mapped-readmodel-account-summary-v1")) "mapped-readmodel-account-summary-v1" (must (Catalog.mkClaimSite "projection-owner account_summary_writer dedup"))]
     [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "account_summary")) RMAccountSummary.accountSummaryReadModel (must (Catalog.mkRebuildGroupId "reporting")) [(must (Catalog.mkTargetId "account_summary_table"))] (must (Catalog.mkClaimSite "readmodel account_summary")))]

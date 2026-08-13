@@ -139,6 +139,7 @@ depsForNode service n = case n of
   NReadModel readModel -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"] <> readModelDependencies readModel
   NProjectionTarget {} -> ["keiro", "kiroku-store", "text"]
   NRebuildGroup {} -> ["keiro", "kiroku-store", "text"]
+  NProjectionRevision {} -> ["containers", "hasql-transaction", "keiro", "kiroku-store", "text"]
   NProjectionOwner {} -> ["keiro", "kiroku-store", "text"]
   NWorkflow {} -> ["containers", "effectful-core", "keiro", "text"]
   NOperation {} -> ["effectful-core", "keiro", "text"]

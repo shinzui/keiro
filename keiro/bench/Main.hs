@@ -697,6 +697,8 @@ rebuildCatalogDeclaration =
               claimSite = rebuildSite "bench:rebuild-group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

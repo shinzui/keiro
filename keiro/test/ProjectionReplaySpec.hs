@@ -635,6 +635,8 @@ replayCatalog decoder verification =
               claimSite = site "test:replay-group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
@@ -739,6 +741,8 @@ redeliveryCatalogWithReplayability projectionKind verification replayable =
               claimSite = site "test:audit-group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions =
         [ SubscriptionDeclaration
             { subscriptionId = auditSubscriptionId,
@@ -935,6 +939,8 @@ pairCatalog swapOrder decoder =
               claimSite = site "test:pair-group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

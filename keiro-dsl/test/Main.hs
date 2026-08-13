@@ -2386,6 +2386,18 @@ main = hspec $ do
       let mutationCodes mutation = do
             service <- checkedServiceFromText "projection-catalog-mutation.keiro" (mutation source)
             pure (map code (validateService service))
+          revisionV2AuditBlock =
+            T.unlines
+              [ "  target audit_log {",
+                "    schema-version = \"v2\"",
+                "    provisioner = \"reporting-v2-audit-log\"",
+                "    provisioner-version = 1",
+                "    expected-shape = \"audit-log-v2\"",
+                "    validator = \"reporting-v2-audit-log-validator\"",
+                "    validator-version = 1",
+                "    promotion owned-sequence \"audit_log_id_seq__v2\" -> \"audit_log_id_seq\"",
+                "  }"
+              ]
       missingAsyncIdentity <- mutationCodes (T.replace "  subscription = \"catalog-demo-audit\"\n" "")
       missingAsyncIdentity `shouldContain` [CatalogAsyncIdentityMissing]
       missingCheckpointPolicy <- mutationCodes (T.replace "  checkpoint-on-missing = from-current-head\n" "")
@@ -2427,6 +2439,12 @@ main = hspec $ do
       ambiguousSourceOrdering `shouldContain` [CatalogAmbiguousSourceOrdering]
       missingQueryBinding <- mutationCodes (T.replace "  targets = [ audit_log ]\n}\n\nprojection-owner audit_writer" "  targets = [ order_summary ]\n}\n\nprojection-owner audit_writer")
       missingQueryBinding `shouldContain` [CatalogAsyncQueryBindingMissing]
+      missingRevisionTarget <- mutationCodes (T.replace "  target audit_log {\n    schema-version = \"v2\"" "  target missing_target {\n    schema-version = \"v2\"")
+      missingRevisionTarget `shouldContain` [CatalogRevisionTargetUnknown, CatalogRevisionTargetSetMismatch]
+      incompleteRevision <- mutationCodes (T.replace revisionV2AuditBlock "")
+      incompleteRevision `shouldContain` [CatalogRevisionTargetSetMismatch]
+      invalidRevisionIdentity <- mutationCodes (T.replace "provisioner-version = 1" "provisioner-version = 0")
+      invalidRevisionIdentity `shouldContain` [CatalogRevisionIdentityInvalid]
 
     it "generates one facade, one create-once behavior surface, and durable ledger facts" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -2442,6 +2460,8 @@ main = hspec $ do
       facade `shouldSatisfy` T.isInfixOf "Catalog.ClearBeforeReplay"
       facade `shouldSatisfy` T.isInfixOf "Catalog.PreserveAndReconcile"
       facade `shouldSatisfy` T.isInfixOf "KirokuSubscription.FromCurrentHead"
+      facade `shouldSatisfy` T.isInfixOf "Catalog.ProjectionRevision (must (Catalog.mkProjectionRevisionId \"reporting_v1\"))"
+      facade `shouldSatisfy` T.isInfixOf "Catalog.TargetSchemaVersion \"v2\""
       facade `shouldSatisfy` T.isInfixOf "projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog"
       facade `shouldSatisfy` T.isInfixOf "ordersInlineProjections = concat [orderSummaryWriterInlineProjections]"
       facade
@@ -2451,10 +2471,14 @@ main = hspec $ do
                         )
       holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer live apply"
       holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer replay apply"
+      holes `shouldSatisfy` T.isInfixOf "provisionReportingV2OrderSummary :: Catalog.TargetProvisioningContext"
+      holes `shouldSatisfy` T.isInfixOf "applyReportingV2Live :: Catalog.PhysicalTargets"
       facts `shouldBe` sort facts
       facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
       facts `shouldSatisfy` any (T.isPrefixOf "delivery|audit_writer|subscription|")
+      facts `shouldSatisfy` any (T.isPrefixOf "revision|reporting_v1|reporting|")
+      facts `shouldSatisfy` any (T.isInfixOf "order_summary,v2,reporting-v2-order-summary")
       facts `shouldSatisfy` any (T.isPrefixOf "freshness|catalogAudit|immediate|")
       facts `shouldSatisfy` any (T.isPrefixOf "cursor|catalogAudit|catalog-demo-audit|")
       facts `shouldSatisfy` any (T.isPrefixOf "query|order_totals_lookup|reporting|order_totals|order_totals|")
@@ -2518,6 +2542,8 @@ main = hspec $ do
               ("target-reset", CatalogTargetResetPolicyChanged, T.replace "reset = preserve" "reset = clear"),
               ("target-dependency", CatalogTargetDependencyChanged, T.replace "depends-on = [ order_summary ]" "depends-on = [ audit_log ]"),
               ("group-membership-order", CatalogGroupChanged, T.replace "order = [ order_summary order_totals audit_log ]" "order = [ audit_log order_summary order_totals ]"),
+              ("revision-schema", CatalogTargetSchemaChanged, T.replace "schema-version = \"v2\"" "schema-version = \"v2.1\""),
+              ("revision-provider", CatalogProjectionRevisionChanged, T.replace "provisioner = \"reporting-v2-order-summary\"" "provisioner = \"reporting-v2-order-summary-new\""),
               ("owner-binding", CatalogOwnerChanged, T.replace "targets = [ order_summary order_totals ]" "targets = [ order_summary ]"),
               ("owner-removed", CatalogOwnerRemoved, T.replace ownerBlock ""),
               ("handler-order", CatalogHandlerOrderChanged, T.replace "order = 20" "order = 30"),
@@ -13629,6 +13655,7 @@ nodeTag = \case
   NReadModel _ -> "readmodel"
   NProjectionTarget _ -> "projection-target"
   NRebuildGroup _ -> "rebuild-group"
+  NProjectionRevision _ -> "projection-revision"
   NProjectionOwner _ -> "projection-owner"
   NWorkflow _ -> "workflow"
   NOperation _ -> "operation"

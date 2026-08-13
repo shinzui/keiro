@@ -4159,7 +4159,7 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
           },
         ScaffoldModule
           { modulePath = modulePathFor (holePrefixFor ctx "ProjectionCatalog") "ProjectionCatalogHoles",
-            moduleText = emitProjectionCatalogHoles ctx owners,
+            moduleText = emitProjectionCatalogHoles ctx owners revisions,
             kind = HoleStub,
             origin = "projection-catalog " <> contextName ctx
           }
@@ -4167,8 +4167,10 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
   where
     catalogNodes = [() | node <- specNodes spec, isCatalogNode node]
     owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
+    revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
     isCatalogNode NProjectionTarget {} = True
     isCatalogNode NRebuildGroup {} = True
+    isCatalogNode NProjectionRevision {} = True
     isCatalogNode NProjectionOwner {} = True
     isCatalogNode _ = False
 
@@ -4195,6 +4197,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
            "import Data.List.NonEmpty (NonEmpty (..))",
            "import Effectful (Eff, IOE, (:>))"
          ]
+      ++ ["import Data.Map.Strict qualified as Map" | not (null revisions)]
       ++ concatMap aggregateImports aggregateSources
       ++ projectionImports
       ++ [ "import Keiro.Projection.Catalog qualified as Catalog",
@@ -4218,6 +4221,8 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
            "    " <> renderList sourceExpr sources,
            "    " <> renderList targetExpr targets,
            "    " <> renderList groupExpr groups,
+           "    " <> renderList revisionExpr revisions,
+           "    []",
            "    " <> renderList subscriptionExpr asyncOwners,
            "    " <> renderList dedupExpr asyncOwners,
            "    " <> renderList queryExpr boundReadModels,
@@ -4249,6 +4254,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     holesModule = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
     targets = [target | NProjectionTarget target <- specNodes spec]
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+    revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
     -- The catalog's list order is the declared total handler order. Keeping the
     -- sort here (rather than in the runtime) makes generated inventory and replay
     -- behavior agree even when declarations are arranged for readability.
@@ -4324,6 +4330,70 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         <> renderList (smart "mkTargetId") (rgOrder groupNode)
         <> " [] "
         <> claim ("rebuild-group " <> rgName groupNode)
+    revisionExpr revision =
+      "Catalog.ProjectionRevision "
+        <> smart "mkProjectionRevisionId" (prvName revision)
+        <> " "
+        <> smart "mkRebuildGroupId" (prvGroup revision)
+        <> " (Map.fromList "
+        <> renderList (revisionTargetExpr revision) (prvTargets revision)
+        <> ") "
+        <> "[Catalog.RevisionLiveHandler "
+        <> tshow (prvName revision <> "/live")
+        <> " 1 "
+        <> revisionRequiredTargets revision
+        <> " Holes."
+        <> revisionLiveName revision
+        <> "] "
+        <> "[Catalog.RevisionReplayAdapter "
+        <> tshow (prvName revision <> "/replay")
+        <> " 1 "
+        <> revisionRequiredTargets revision
+        <> " Holes."
+        <> revisionReplayName revision
+        <> "] "
+        <> "[Catalog.RevisionVerification "
+        <> tshow (prvName revision <> "/verification")
+        <> " 1 "
+        <> revisionRequiredTargets revision
+        <> " Holes."
+        <> revisionVerificationName revision
+        <> "] "
+        <> claim ("projection-revision " <> prvName revision)
+    revisionTargetExpr revision target =
+      "("
+        <> smart "mkTargetId" (prtTarget target)
+        <> ", Catalog.TargetProvisioner "
+        <> tshow (prtProvisioner target)
+        <> " "
+        <> T.pack (show (prtProvisionerVersion target))
+        <> " (Catalog.TargetSchemaVersion "
+        <> tshow (prtSchemaVersion target)
+        <> ") "
+        <> tshow (prtExpectedShape target)
+        <> " Holes."
+        <> revisionProvisionName revision target
+        <> " "
+        <> tshow (prtValidator target)
+        <> " "
+        <> T.pack (show (prtValidatorVersion target))
+        <> " (Just Holes."
+        <> revisionValidateName revision target
+        <> ") "
+        <> renderList promotionObjectExpr (prtPromotionObjects target)
+        <> ")"
+    promotionObjectExpr promotionObject =
+      "Catalog.PromotionObjectName "
+        <> ( case rpoKind promotionObject of
+               PromotionIndexNode -> "Catalog.PromotionIndex"
+               PromotionConstraintNode -> "Catalog.PromotionConstraint"
+               PromotionOwnedSequenceNode -> "Catalog.PromotionOwnedSequence"
+           )
+        <> " "
+        <> tshow (rpoGenerationName promotionObject)
+        <> " "
+        <> tshow (rpoCanonicalName promotionObject)
+    revisionRequiredTargets revision = renderList (smart "mkTargetId") (map prtTarget (prvTargets revision))
     subscriptionExpr owner =
       "Catalog.SubscriptionDeclaration "
         <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
@@ -4459,6 +4529,11 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
     ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
     ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
+    revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
+    revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
+    revisionLiveName revision = "apply" <> pascal (prvName revision) <> "Live"
+    revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
+    revisionVerificationName revision = "verify" <> pascal (prvName revision)
     groupIdName groupNode = lowerFirst (pascal (rgName groupNode)) <> "RebuildGroupId"
     groupStartName groupNode = "start" <> pascal (rgName groupNode) <> "Rebuild"
     groupExports groupNode = ["  , " <> groupIdName groupNode, "  , " <> groupStartName groupNode]
@@ -4484,8 +4559,8 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
       [CheckpointFail] -> "KirokuSubscription.FailIfMissing"
       _ -> "error \"keiro-dsl invariant: validated subscription owner must declare exactly one checkpoint-on-missing policy\""
 
-emitProjectionCatalogHoles :: Context -> [ProjectionOwnerNode] -> Text
-emitProjectionCatalogHoles ctx owners =
+emitProjectionCatalogHoles :: Context -> [ProjectionOwnerNode] -> [ProjectionRevisionNode] -> Text
+emitProjectionCatalogHoles ctx owners revisions =
   nl $
     [ "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it.",
       "module " <> moduleName,
@@ -4494,16 +4569,18 @@ emitProjectionCatalogHoles ctx owners =
       ""
     ]
       ++ ["import " <> genPrefixFor ctx aggregateName <> ".Domain (" <> pascal aggregateName <> "Event)" | aggregateName <- aggregateSources]
+      ++ ["import Data.Text (Text)" | not (null revisions)]
       ++ [ "import Hasql.Transaction qualified as Tx",
            "import Keiro.Projection.Catalog qualified as Catalog",
            "import Kiroku.Store.Types (EventId, RecordedEvent)",
            ""
          ]
       ++ concatMap ownerStubs owners
+      ++ concatMap revisionStubs revisions
   where
     moduleName = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
     aggregateSources = nub [aggregateName | owner <- owners, CatalogAggregate aggregateName <- poSources owner]
-    exports = concatMap ownerExports owners
+    exports = concatMap ownerExports owners <> concatMap revisionExports revisions
     ownerExports owner =
       [pascal (poName owner) <> "Event" | not (isAggregateSource owner)]
         <> [ownerLiveApplyName owner]
@@ -4524,6 +4601,27 @@ emitProjectionCatalogHoles ctx owners =
            )
         <> replayStubs owner
         <> [""]
+    revisionExports revision =
+      concatMap (\target -> [revisionProvisionName revision target, revisionValidateName revision target]) (prvTargets revision)
+        <> [revisionLiveName revision, revisionReplayName revision, revisionVerificationName revision]
+    revisionStubs revision =
+      ["-- Projection revision " <> prvName revision <> "."]
+        <> concatMap targetStubs (prvTargets revision)
+        <> [ revisionLiveName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction ()",
+             revisionLiveName revision <> " = error \"HOLE: apply live events for revision " <> prvName revision <> " through PhysicalTargets\"",
+             revisionReplayName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either Catalog.ReplayDecodeError Bool)",
+             revisionReplayName revision <> " = error \"HOLE: replay revision " <> prvName revision <> " through PhysicalTargets\"",
+             revisionVerificationName revision <> " :: Catalog.PhysicalTargets -> Tx.Transaction (Either Text ())",
+             revisionVerificationName revision <> " = error \"HOLE: verify revision " <> prvName revision <> " staging targets\"",
+             ""
+           ]
+      where
+        targetStubs target =
+          [ revisionProvisionName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction ()",
+            revisionProvisionName revision target <> " = error \"HOLE: provision target " <> prtTarget target <> " for revision " <> prvName revision <> "\"",
+            revisionValidateName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction (Either [Catalog.TargetSchemaViolation] Catalog.TargetSchemaEvidence)",
+            revisionValidateName revision target <> " = error \"HOLE: validate target " <> prtTarget target <> " for revision " <> prvName revision <> "\""
+          ]
     replayStubs owner = case poReplay owner of
       ProjectionLiveOnly _ -> []
       ProjectionReplayExplicit ->
@@ -4550,6 +4648,11 @@ emitProjectionCatalogHoles ctx owners =
     ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
     ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
     ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
+    revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
+    revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
+    revisionLiveName revision = "apply" <> pascal (prvName revision) <> "Live"
+    revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
+    revisionVerificationName revision = "verify" <> pascal (prvName revision)
 
 catalogSourceId :: CatalogSource -> Text
 catalogSourceId CatalogAll = "all"

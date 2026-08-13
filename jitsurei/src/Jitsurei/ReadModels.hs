@@ -17,6 +17,7 @@ module Jitsurei.ReadModels
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Hasql.Decoders qualified as D
@@ -247,6 +248,8 @@ jitsureiProjectionCatalogDefinition =
               claimSite = claim "jitsurei:order-reporting-group"
             }
         ],
+      projectionRevisions = [orderReportingRevisionV1, orderReportingRevisionV2],
+      readContractRevisionReferences = [],
       subscriptions =
         [ SubscriptionDeclaration
             { subscriptionId = orderAuditSubscriptionId,
@@ -275,6 +278,81 @@ jitsureiProjectionCatalogDefinition =
         ],
       projectionSets = [SomeProjectionSet orderProjectionSet]
     }
+
+-- | A compile-checked bridge catalog keeps both sides of a schema rollout in
+-- one binary. Later versioned lifecycle code invokes these application-owned
+-- closures with serving or staging physical targets; the example deliberately
+-- keeps their bodies inert until that runner selects a revision.
+orderReportingRevisionV1, orderReportingRevisionV2 :: ProjectionRevision
+orderReportingRevisionV1 = orderReportingRevision "jitsurei-order-reporting-v1" "v1"
+orderReportingRevisionV2 = orderReportingRevision "jitsurei-order-reporting-v2" "v2"
+
+orderReportingRevision :: Text -> Text -> ProjectionRevision
+orderReportingRevision identity schemaVersion =
+  ProjectionRevision
+    { revisionId = identityOrError mkProjectionRevisionId identity,
+      rebuildGroup = orderReportingGroupId,
+      targetProvisioners =
+        Map.fromList
+          [ (targetId, exampleProvisioner targetName)
+          | (targetId, targetName) <-
+              [ (orderSummaryTargetId, "order-summary"),
+                (orderLineTargetId, "order-line"),
+                (orderAuditTargetId, "order-audit")
+              ]
+          ],
+      liveHandlers =
+        [ RevisionLiveHandler
+            { handlerId = identity <> "/live",
+              handlerVersion = 1,
+              requiredTargets = orderReportingTargetIds,
+              runRevisionLive = \_physicalTargets _recorded -> pure ()
+            }
+        ],
+      replayAdapters =
+        [ RevisionReplayAdapter
+            { adapterId = identity <> "/replay",
+              adapterVersion = 1,
+              requiredTargets = orderReportingTargetIds,
+              runRevisionReplay = \_physicalTargets _recorded -> pure (Right False)
+            }
+        ],
+      revisionVerifications =
+        [ RevisionVerification
+            { revisionVerificationId = identity <> "/verification",
+              revisionVerificationVersion = 1,
+              requiredTargets = orderReportingTargetIds,
+              runRevisionVerification = \_physicalTargets -> pure (Right ())
+            }
+        ],
+      claimSite = claim ("jitsurei:" <> identity)
+    }
+  where
+    exampleProvisioner targetName =
+      TargetProvisioner
+        { provisionerId = identity <> "/" <> targetName <> "/provision",
+          provisionerVersion = 1,
+          schemaVersion = TargetSchemaVersion schemaVersion,
+          expectedShapeId = identity <> "/" <> targetName <> "/shape",
+          provisionTarget = \_context -> pure (),
+          validatorId = identity <> "/" <> targetName <> "/validate",
+          validatorVersion = 1,
+          validateTarget =
+            Just $ \_context ->
+              pure
+                ( Right
+                    TargetSchemaEvidence
+                      { relationOid = 1,
+                        observedShapeFingerprint = identity <> "/" <> targetName <> "/shape",
+                        observedPromotionObjects = [],
+                        catalogSnapshot = "jitsurei-bridge-catalog-snapshot-v1"
+                      }
+                ),
+          promotionObjectNames = []
+        }
+
+orderReportingTargetIds :: [TargetId]
+orderReportingTargetIds = [orderSummaryTargetId, orderLineTargetId, orderAuditTargetId]
 
 orderLiveProjections :: [InlineProjection OrderEvent]
 orderLiveProjections = typedInlineProjections jitsureiProjectionCatalog orderProjectionSet

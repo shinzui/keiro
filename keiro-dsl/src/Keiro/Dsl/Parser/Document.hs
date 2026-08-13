@@ -16,7 +16,7 @@ import Keiro.Dsl.Parser.Declaration (pEnumDecl, pIdDecl, pRuleDecl)
 import Keiro.Dsl.Parser.Integration (pContract, pEmit, pIntake, pPublisher)
 import Keiro.Dsl.Parser.Mapped (pMappedTopItem)
 import Keiro.Dsl.Parser.Preamble
-import Keiro.Dsl.Parser.ProjectionCatalog (pProjectionOwner, pProjectionTarget, pRebuildGroup)
+import Keiro.Dsl.Parser.ProjectionCatalog (pProjectionOwner, pProjectionRevision, pProjectionTarget, pRebuildGroup)
 import Keiro.Dsl.Parser.Queue (pPgmqDispatch, pWorkqueue)
 import Keiro.Dsl.Parser.ReadModel (pReadModel)
 import Keiro.Dsl.Parser.Workflow (pOperation, pWorkflow)
@@ -137,6 +137,7 @@ pTopItem context laterPreambleCode =
              plain (SurfaceNode . NReadModel <$> pReadModel context),
              plain (SurfaceNode . NProjectionTarget <$> pProjectionTarget context),
              plain (SurfaceNode . NRebuildGroup <$> pRebuildGroup context),
+             plain (SurfaceNode . NProjectionRevision <$> pProjectionRevision context),
              plain (SurfaceNode . NProjectionOwner <$> pProjectionOwner context),
              plain (SurfaceNode . NWorkflow <$> pWorkflow),
              plain (SurfaceNode . NOperation <$> pOperation),

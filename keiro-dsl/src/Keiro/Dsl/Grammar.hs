@@ -145,6 +145,10 @@ module Keiro.Dsl.Grammar
     TargetResetPolicy (..),
     ProjectionTargetNode (..),
     RebuildGroupNode (..),
+    PromotionObjectKindNode (..),
+    PromotionObjectNode (..),
+    RevisionTargetNode (..),
+    ProjectionRevisionNode (..),
     CatalogSource (..),
     CheckpointOnMissingNode (..),
     ProjectionReplayPolicy (..),
@@ -1287,6 +1291,41 @@ data RebuildGroupNode = RebuildGroupNode
   }
   deriving stock (Eq, Show, Generic)
 
+data PromotionObjectKindNode
+  = PromotionIndexNode
+  | PromotionConstraintNode
+  | PromotionOwnedSequenceNode
+  deriving stock (Eq, Ord, Show, Generic)
+
+data PromotionObjectNode = PromotionObjectNode
+  { rpoKind :: !PromotionObjectKindNode,
+    rpoGenerationName :: !Text,
+    rpoCanonicalName :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Application-owned schema contract for one target in a projection
+-- revision. The DSL carries stable identities, never raw DDL.
+data RevisionTargetNode = RevisionTargetNode
+  { prtTarget :: !Name,
+    prtSchemaVersion :: !Text,
+    prtProvisioner :: !Text,
+    prtProvisionerVersion :: !Int,
+    prtExpectedShape :: !Text,
+    prtValidator :: !Text,
+    prtValidatorVersion :: !Int,
+    prtPromotionObjects :: ![PromotionObjectNode]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ProjectionRevisionNode = ProjectionRevisionNode
+  { prvName :: !Name,
+    prvGroup :: !Name,
+    prvTargets :: ![RevisionTargetNode],
+    prvLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
 -- | A replay source selected by a projection owner.
 data CatalogSource
   = CatalogAggregate !Name
@@ -1401,6 +1440,7 @@ data Node
   | NReadModel ReadModelNode
   | NProjectionTarget ProjectionTargetNode
   | NRebuildGroup RebuildGroupNode
+  | NProjectionRevision ProjectionRevisionNode
   | NProjectionOwner ProjectionOwnerNode
   | NWorkflow WorkflowNode
   | NOperation OperationNode

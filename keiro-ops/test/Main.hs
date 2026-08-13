@@ -175,8 +175,8 @@ spec fixture = do
               group `shouldBe` "ops-group"
               state `shouldBe` "slice-changed"
               scope `shouldBe` "adopt"
-              stored `shouldSatisfy` Text.isPrefixOf "slice-v2:"
-              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v2:"
+              stored `shouldSatisfy` Text.isPrefixOf "slice-v3:"
+              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v3:"
               stored `shouldNotBe` currentSlice
             otherRows -> expectationFailure ("unexpected adoption preview rows: " <> show otherRows)
           renderHuman result
@@ -353,7 +353,7 @@ spec fixture = do
       case adopted of
         Succeeded result ->
           result.rows `shouldSatisfy` \case
-            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v2:" (row !! 3)
+            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v3:" (row !! 3)
             _ -> False
         other -> expectationFailure ("expected forced adoption, got " <> show other)
 
@@ -1281,6 +1281,8 @@ opsCatalog codecFingerprint =
               claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

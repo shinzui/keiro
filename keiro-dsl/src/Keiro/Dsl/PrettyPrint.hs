@@ -263,6 +263,7 @@ docNode (NPgmqDispatch d) = docPgmqDispatch d
 docNode (NReadModel r) = docReadModel r
 docNode (NProjectionTarget target) = docProjectionTarget target
 docNode (NRebuildGroup groupNode) = docRebuildGroup groupNode
+docNode (NProjectionRevision revision) = docProjectionRevision revision
 docNode (NProjectionOwner owner) = docProjectionOwner owner
 docNode (NWorkflow w) = docWorkflow w
 docNode (NOperation o) = docOperation o
@@ -449,6 +450,38 @@ docRebuildGroup groupNode =
       indent 2 ("order =" <+> bracketed (map pretty (rgOrder groupNode))),
       "}"
     ]
+
+docProjectionRevision :: ProjectionRevisionNode -> Doc ann
+docProjectionRevision revision =
+  vsep $
+    [ "projection-revision" <+> pretty (prvName revision) <+> "{",
+      indent 2 ("group =" <+> pretty (prvGroup revision))
+    ]
+      <> concatMap (pure . indent 2 . docRevisionTarget) (prvTargets revision)
+      <> ["}"]
+  where
+    docRevisionTarget target =
+      vsep $
+        [ "target" <+> pretty (prtTarget target) <+> "{",
+          indent 2 ("schema-version =" <+> dquoted (prtSchemaVersion target)),
+          indent 2 ("provisioner =" <+> dquoted (prtProvisioner target)),
+          indent 2 ("provisioner-version =" <+> pretty (prtProvisionerVersion target)),
+          indent 2 ("expected-shape =" <+> dquoted (prtExpectedShape target)),
+          indent 2 ("validator =" <+> dquoted (prtValidator target)),
+          indent 2 ("validator-version =" <+> pretty (prtValidatorVersion target))
+        ]
+          <> map (indent 2 . docPromotionObject) (prtPromotionObjects target)
+          <> ["}"]
+    docPromotionObject promotionObject =
+      "promotion"
+        <+> ( case rpoKind promotionObject of
+                PromotionIndexNode -> "index"
+                PromotionConstraintNode -> "constraint"
+                PromotionOwnedSequenceNode -> "owned-sequence"
+            )
+        <+> dquoted (rpoGenerationName promotionObject)
+        <+> "->"
+        <+> dquoted (rpoCanonicalName promotionObject)
 
 docProjectionOwner :: ProjectionOwnerNode -> Doc ann
 docProjectionOwner owner =

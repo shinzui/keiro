@@ -60,6 +60,7 @@ where
 import Data.Char (toUpper)
 import Data.Foldable (traverse_)
 import Data.List (find, sort, (\\))
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust, isNothing, mapMaybe, maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -643,6 +644,7 @@ data NodeFamily
   | FamReadModel
   | FamProjectionTarget
   | FamRebuildGroup
+  | FamProjectionRevision
   | FamProjectionOwner
   | FamWorkflow
   | FamOperation
@@ -662,6 +664,7 @@ familyOf (NPgmqDispatch _) = FamPgmqDispatch
 familyOf (NReadModel _) = FamReadModel
 familyOf (NProjectionTarget _) = FamProjectionTarget
 familyOf (NRebuildGroup _) = FamRebuildGroup
+familyOf (NProjectionRevision _) = FamProjectionRevision
 familyOf (NProjectionOwner _) = FamProjectionOwner
 familyOf (NWorkflow _) = FamWorkflow
 familyOf (NOperation _) = FamOperation
@@ -719,6 +722,7 @@ familyRegistry =
     (FamReadModel, DiffFamily readModelDiff),
     (FamProjectionTarget, DiffFamily projectionTargetDiff),
     (FamRebuildGroup, DiffFamily rebuildGroupDiff),
+    (FamProjectionRevision, DiffFamily projectionRevisionDiff),
     (FamProjectionOwner, DiffFamily projectionOwnerDiff),
     (FamWorkflow, DiffFamily workflowDiff),
     (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
@@ -1123,6 +1127,10 @@ nodeRebuildGroup :: Node -> Maybe RebuildGroupNode
 nodeRebuildGroup (NRebuildGroup groupNode) = Just groupNode
 nodeRebuildGroup _ = Nothing
 
+nodeProjectionRevision :: Node -> Maybe ProjectionRevisionNode
+nodeProjectionRevision (NProjectionRevision revision) = Just revision
+nodeProjectionRevision _ = Nothing
+
 nodeProjectionOwner :: Node -> Maybe ProjectionOwnerNode
 nodeProjectionOwner (NProjectionOwner owner) = Just owner
 nodeProjectionOwner _ = Nothing
@@ -1383,6 +1391,54 @@ rebuildGroupPairDiff oldGroup newGroup =
   [ breaking (rgName newGroup) "rebuild-group-membership-order" (rgName newGroup) CatalogGroupChanged "target membership or deterministic preparation order changed; abandon any active fingerprint and start a fresh rebuild"
   | (rgTargets oldGroup, rgOrder oldGroup) /= (rgTargets newGroup, rgOrder newGroup)
   ]
+
+projectionRevisionDiff :: DiffEnv -> [Change]
+projectionRevisionDiff env =
+  concatMap (uncurry projectionRevisionPairDiff) (prMatched paired)
+    <> [additive (prvName revision) "projection-revision" (prvName revision) DeclarationAdded "new projection revision and target-schema contract" | revision <- prAdded paired]
+    <> [breaking (prvName revision) "projection-revision" (prvName revision) CatalogProjectionRevisionRemoved "projection revision removed while serving, rebuild, or read-contract evidence may still refer to it" | revision <- prRemoved paired]
+  where
+    paired = pairByName nodeProjectionRevision prvName env
+
+projectionRevisionPairDiff :: ProjectionRevisionNode -> ProjectionRevisionNode -> [Change]
+projectionRevisionPairDiff oldRevision newRevision = groupChange <> schemaChanges <> contractChanges
+  where
+    revisionName = prvName newRevision
+    oldTargets = Map.fromList [(prtTarget target, target) | target <- prvTargets oldRevision]
+    newTargets = Map.fromList [(prtTarget target, target) | target <- prvTargets newRevision]
+    groupChange =
+      [ breaking revisionName "projection-revision-group" revisionName CatalogProjectionRevisionChanged "revision rebuild group changed; persisted revision and generation identity no longer matches"
+      | prvGroup oldRevision /= prvGroup newRevision
+      ]
+    schemaChanges =
+      [ breaking revisionName "target-schema" targetName CatalogTargetSchemaChanged $
+          "target schema version changed " <> prtSchemaVersion oldTarget <> " -> " <> prtSchemaVersion newTarget <> "; declare a new projection revision instead of mutating a registered one"
+      | (targetName, oldTarget) <- Map.toAscList oldTargets,
+        Just newTarget <- [Map.lookup targetName newTargets],
+        prtSchemaVersion oldTarget /= prtSchemaVersion newTarget
+      ]
+    contractChanges =
+      [ breaking revisionName "projection-revision-contract" revisionName CatalogProjectionRevisionChanged "target membership, provisioner, expected-shape, validator, or ordered promotion-name contract changed; declare a new revision identity"
+      | Map.keysSet oldTargets /= Map.keysSet newTargets
+          || any targetContractChanged (Map.toAscList oldTargets)
+      ]
+    targetContractChanged (targetName, oldTarget) = case Map.lookup targetName newTargets of
+      Nothing -> True
+      Just newTarget ->
+        ( prtProvisioner oldTarget,
+          prtProvisionerVersion oldTarget,
+          prtExpectedShape oldTarget,
+          prtValidator oldTarget,
+          prtValidatorVersion oldTarget,
+          prtPromotionObjects oldTarget
+        )
+          /= ( prtProvisioner newTarget,
+               prtProvisionerVersion newTarget,
+               prtExpectedShape newTarget,
+               prtValidator newTarget,
+               prtValidatorVersion newTarget,
+               prtPromotionObjects newTarget
+             )
 
 projectionOwnerDiff :: DiffEnv -> [Change]
 projectionOwnerDiff env =

@@ -2,6 +2,9 @@ module CatalogSpec
   ( spec,
     CatalogEvent (..),
     validCatalog,
+    bridgeCatalog,
+    bridgeRevisionV1,
+    bridgeRevisionV2,
     additiveCatalog,
     validProjectionSet,
     catalogWithMissingSubscription,
@@ -19,6 +22,7 @@ where
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Keiro.Prelude
 import Keiro.Projection (AsyncProjection (..), InlineProjection (..))
@@ -365,11 +369,110 @@ spec = describe "Keiro.Projection.Catalog" $ do
     malformed
       `shouldSatisfy` any ((== InvalidRebuildVerificationIdentity) . (^. #diagnosticCode))
 
+  describe "projection revisions" $ do
+    it "accepts a v1/v2 bridge and inventories every durable revision fact canonically" $ do
+      validated <- expectValid bridgeCatalog
+      let revisions = catalogInventory validated ^. #inventoryProjectionRevisions
+      map (^. #revisionId) revisions `shouldBe` [revision "counter-v1", revision "counter-v2"]
+      map (^. #schemaVersion) (revisions ^.. folded . #targetProvisioners . folded)
+        `shouldBe` replicate 2 (TargetSchemaVersion "v1") <> replicate 2 (TargetSchemaVersion "v2")
+
+      reordered <- expectValid (reverseCatalog bridgeCatalog)
+      catalogInventory reordered `shouldBe` catalogInventory validated
+      catalogFingerprint reordered `shouldBe` catalogFingerprint validated
+      groupSliceFingerprint reordered mainGroupId
+        `shouldBe` groupSliceFingerprint validated mainGroupId
+
+    it "constructs physical target mappings only when they are closed-world total" $ do
+      let supplied =
+            Map.fromList
+              [ (counterTargetId, QualifiedTable "generation" "counter"),
+                (unknownTargetId, QualifiedTable "generation" "unexpected")
+              ]
+      mkPhysicalTargets [counterTargetId, auditTargetId] supplied
+        `shouldBe` Left (MissingPhysicalTarget auditTargetId :| [UnexpectedPhysicalTarget unknownTargetId])
+      mkPhysicalTargets
+        [counterTargetId, auditTargetId]
+        (Map.fromList [(counterTargetId, QualifiedTable "generation" "counter"), (auditTargetId, QualifiedTable "generation" "audit")])
+        `shouldSatisfy` (\case Right _ -> True; Left _ -> False)
+
+    it "accumulates stable bridge diagnostics for incomplete revisions and stale read contracts" $ do
+      let malformedV1 =
+            bridgeRevisionV1
+              & #liveHandlers
+              .~ []
+              & #replayAdapters
+              .~ []
+              & #targetProvisioners
+              .~ Map.insert
+                unknownTargetId
+                (targetProvisioner "unknown" (TargetSchemaVersion "v1") [] & #validateTarget .~ Nothing)
+                (Map.delete auditTargetId (bridgeRevisionV1 ^. #targetProvisioners))
+          partialV2 =
+            bridgeRevisionV2
+              & #liveHandlers
+              .~ [ RevisionLiveHandler
+                     "counter-v2-live"
+                     1
+                     [counterTargetId]
+                     (\_ _ -> pure ())
+                 ]
+          invalid =
+            bridgeCatalog
+              { projectionRevisions = [malformedV1, partialV2, bridgeRevisionV2],
+                readContractRevisionReferences =
+                  [ ReadContractRevisionReference
+                      "counter-reader"
+                      (revision "counter-v3" :| [])
+                      (site "catalog:counter-reader")
+                  ]
+              }
+          diagnostics = diagnosticsFor invalid
+      for_
+        [ DuplicateProjectionRevisionId,
+          UnknownRevisionReference,
+          UnknownTargetProvisioner,
+          ProjectionRevisionWithoutLiveHandler,
+          ProjectionRevisionWithoutReplayAdapter,
+          ProjectionRevisionTargetSetDrift,
+          ProjectionRevisionMissingSchemaValidation,
+          ProjectionRevisionPhysicalTargetsNotTotal
+        ]
+        (\code -> diagnostics `shouldSatisfy` any ((== code) . (^. #diagnosticCode)))
+      diagnosticsFor (reverseCatalog invalid) `shouldBe` diagnostics
+
+    it "fingerprints revision schema, provider, validator, handler, replay, verification, and promotion order" $ do
+      baseline <- expectValid bridgeCatalog
+      let mutateV2 update =
+            bridgeCatalog
+              { projectionRevisions = [bridgeRevisionV1, update bridgeRevisionV2]
+              }
+          variants =
+            [ mutateV2 (adjustCounterProvisioner (#schemaVersion .~ TargetSchemaVersion "v2.1")),
+              mutateV2 (adjustCounterProvisioner (#provisionerVersion .~ 2)),
+              mutateV2 (adjustCounterProvisioner (#validatorVersion .~ 2)),
+              mutateV2 (adjustCounterProvisioner (\p -> p & #promotionObjectNames %~ reverse)),
+              mutateV2 (\value -> value & #liveHandlers %~ map (#handlerVersion .~ 3)),
+              mutateV2 (\value -> value & #replayAdapters %~ map (#adapterVersion .~ 3)),
+              mutateV2 (\value -> value & #revisionVerifications %~ map (#revisionVerificationVersion .~ 3))
+            ]
+      for_ (zip ["schema", "provisioner", "validator", "promotion-order", "live", "replay", "verification"] variants) $ \(label, variant) -> do
+        changed <- expectValid variant
+        when (catalogFingerprint changed == catalogFingerprint baseline) $
+          expectationFailure ("catalog fingerprint ignored revision " <> label <> " identity")
+        when (groupSliceFingerprint changed mainGroupId == groupSliceFingerprint baseline mainGroupId) $
+          expectationFailure ("group slice fingerprint ignored revision " <> label <> " identity")
+
   it "keeps baseline removal comparison separate from single-catalog validity" $ do
     previous <- expectValid validCatalog
     current <- expectValid smallerCatalog
     compareCatalogBaseline (catalogInventory previous) (catalogInventory current)
       `shouldSatisfy` List.elem (TargetRemoved auditTargetId)
+
+    previousBridge <- expectValid bridgeCatalog
+    currentWithoutBridge <- expectValid validCatalog
+    compareCatalogBaseline (catalogInventory previousBridge) (catalogInventory currentWithoutBridge)
+      `shouldSatisfy` List.elem (ProjectionRevisionRemoved (revision "counter-v1"))
 
   it "does not invoke an effectful callback for an invalid catalog" $ do
     effects <- newIORef (0 :: Int)
@@ -429,6 +532,8 @@ validCatalog =
     { sources = [headSource],
       targets = [counterTarget, auditTarget],
       rebuildGroups = [validGroup],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [catalogSubscription],
       dedupKeys = [catalogDedup],
       queryModels =
@@ -437,6 +542,100 @@ validCatalog =
         ],
       projectionSets = [SomeProjectionSet validProjectionSet]
     }
+
+bridgeCatalog :: ProjectionCatalog
+bridgeCatalog =
+  validCatalog
+    { projectionRevisions = [bridgeRevisionV1, bridgeRevisionV2],
+      readContractRevisionReferences =
+        [ ReadContractRevisionReference
+            "counter-reader"
+            (revision "counter-v1" :| [revision "counter-v2"])
+            (site "catalog:counter-reader")
+        ]
+    }
+
+bridgeRevisionV1 :: ProjectionRevision
+bridgeRevisionV1 = bridgeRevision "counter-v1" "v1" 1
+
+bridgeRevisionV2 :: ProjectionRevision
+bridgeRevisionV2 = bridgeRevision "counter-v2" "v2" 2
+
+bridgeRevision :: Text -> Text -> Int -> ProjectionRevision
+bridgeRevision identity schema version =
+  ProjectionRevision
+    { revisionId = revision identity,
+      rebuildGroup = mainGroupId,
+      targetProvisioners =
+        Map.fromList
+          [ ( counterTargetId,
+              targetProvisioner
+                (identity <> "-counter")
+                (TargetSchemaVersion schema)
+                [ PromotionObjectName PromotionIndex ("counter_idx__" <> schema) "counter_idx",
+                  PromotionObjectName PromotionOwnedSequence ("counter_id_seq__" <> schema) "counter_id_seq"
+                ]
+            ),
+            ( auditTargetId,
+              targetProvisioner
+                (identity <> "-audit")
+                (TargetSchemaVersion schema)
+                [PromotionObjectName PromotionConstraint ("counter_audit_pkey__" <> schema) "counter_audit_pkey"]
+            )
+          ],
+      liveHandlers =
+        [ RevisionLiveHandler
+            (identity <> "-live")
+            version
+            [counterTargetId, auditTargetId]
+            (\_ _ -> pure ())
+        ],
+      replayAdapters =
+        [ RevisionReplayAdapter
+            (identity <> "-replay")
+            version
+            [counterTargetId, auditTargetId]
+            (\_ _ -> pure (Right False))
+        ],
+      revisionVerifications =
+        [ RevisionVerification
+            (identity <> "-verification")
+            version
+            [counterTargetId, auditTargetId]
+            (\_ -> pure (Right ()))
+        ],
+      claimSite = site ("catalog:" <> identity)
+    }
+
+targetProvisioner :: Text -> TargetSchemaVersion -> [PromotionObjectName] -> TargetProvisioner
+targetProvisioner identity schema promotionObjects =
+  TargetProvisioner
+    { provisionerId = identity <> "-provisioner",
+      provisionerVersion = 1,
+      schemaVersion = schema,
+      expectedShapeId = identity <> "-shape",
+      provisionTarget = \_ -> pure (),
+      validatorId = identity <> "-validator",
+      validatorVersion = 1,
+      validateTarget =
+        Just
+          ( \_ ->
+              pure
+                ( Right
+                    TargetSchemaEvidence
+                      { relationOid = 1,
+                        observedShapeFingerprint = identity <> "-shape",
+                        observedPromotionObjects = promotionObjects,
+                        catalogSnapshot = "catalog-snapshot-v1"
+                      }
+                )
+          ),
+      promotionObjectNames = promotionObjects
+    }
+
+adjustCounterProvisioner :: (TargetProvisioner -> TargetProvisioner) -> ProjectionRevision -> ProjectionRevision
+adjustCounterProvisioner update value =
+  value & #targetProvisioners %~ Map.adjust update counterTargetId
 
 sharedOwnerCatalog :: ProjectionCatalog
 sharedOwnerCatalog = sharedOwnerCatalogWithOrders (counterTargetId :| [auditTargetId]) [auditTargetId, counterTargetId]
@@ -666,6 +865,8 @@ reverseCatalog catalog =
     { sources = reverse (catalog ^. #sources),
       targets = reverse (catalog ^. #targets),
       rebuildGroups = reverse (catalog ^. #rebuildGroups),
+      projectionRevisions = reverse (catalog ^. #projectionRevisions),
+      readContractRevisionReferences = reverse (catalog ^. #readContractRevisionReferences),
       subscriptions = reverse (catalog ^. #subscriptions),
       dedupKeys = reverse (catalog ^. #dedupKeys),
       queryModels = reverse (catalog ^. #queryModels),
@@ -911,6 +1112,9 @@ subscription = identityOrError mkSubscriptionId
 
 dedup :: Text -> DedupKeyId
 dedup = identityOrError mkDedupKeyId
+
+revision :: Text -> ProjectionRevisionId
+revision = identityOrError mkProjectionRevisionId
 
 site :: Text -> ClaimSite
 site = identityOrError mkClaimSite

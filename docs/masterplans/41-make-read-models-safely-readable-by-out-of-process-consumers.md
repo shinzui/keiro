@@ -232,8 +232,9 @@ Relevant local decisions are:
   Keiro's direct dependencies.
 - [x] (2026-08-13T22:51:59Z) EP-1 (256) M1: PostgreSQL proof covers explicit new-schema provisioning, object
   identity, dependency behavior, deterministic locking, rollback, and reader blocking.
-- [ ] EP-1 (256) M2: projection-revision and target-generation catalog contract,
-  fingerprints, validation, DSL/code-generation changes, and bridge-deployment fixtures.
+- [x] (2026-08-13T23:32:54Z) EP-1 (256) M2: projection-revision and target-generation
+  catalog contract, `catalog-v4`/`slice-v3` fingerprints, validation,
+  DSL/code-generation changes, and bridge-deployment fixtures.
 - [ ] EP-1 (256) M3: private generation/revision lifecycle schema, OID and shape evidence,
   persisted cutover options, Kiroku IR-6 retention lease, and idempotent provisioning.
 - [ ] EP-1 (256) M4: revision-aware live writers and physical-target-parametric replay and

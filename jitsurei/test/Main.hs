@@ -281,6 +281,8 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
 
     it "drives live, async, preview, and mixed-policy rebuild paths from one catalog" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
+      length (inventoryProjectionRevisions (catalogInventory jitsureiProjectionCatalog))
+        `shouldBe` 2
       let previewResult = CatalogOperations.previewGroupRebuild orderCatalogOperations orderReportingGroupId
       previewReport <- case previewResult of
         Left err -> expectationFailure ("catalog preview failed: " <> show err) >> error "unreachable"

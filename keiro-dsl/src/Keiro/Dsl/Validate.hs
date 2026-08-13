@@ -250,6 +250,16 @@ data DiagnosticCode
   | CatalogTargetResetPolicyChanged
   | CatalogTargetDependencyChanged
   | CatalogGroupChanged
+  | CatalogRevisionNoTarget
+  | CatalogRevisionGroupUnknown
+  | CatalogRevisionTargetUnknown
+  | CatalogRevisionTargetSetMismatch
+  | CatalogRevisionIdentityInvalid
+  | CatalogRevisionDuplicateTarget
+  | CatalogRevisionPromotionNameInvalid
+  | CatalogProjectionRevisionChanged
+  | CatalogProjectionRevisionRemoved
+  | CatalogTargetSchemaChanged
   | CatalogOwnerChanged
   | CatalogOwnerRemoved
   | CatalogHandlerOrderChanged
@@ -1540,6 +1550,7 @@ validateNames languageContract typeGraphResult spec =
       NReadModel readModel -> pascalizedNodeName "readmodel" (rmName readModel) (rmLoc readModel)
       NProjectionTarget target -> pascalizedNodeName "target" (ptName target) (ptLoc target)
       NRebuildGroup groupNode -> pascalizedNodeName "rebuild group" (rgName groupNode) (rgLoc groupNode)
+      NProjectionRevision revision -> pascalizedNodeName "projection revision" (prvName revision) (prvLoc revision)
       NProjectionOwner owner -> pascalizedNodeName "projection owner" (poName owner) (poLoc owner)
       NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
       NOperation _ -> []
@@ -1847,6 +1858,7 @@ validateNames languageContract typeGraphResult spec =
       NReadModel value -> ("readmodel", rmName value, rmLoc value)
       NProjectionTarget value -> ("target", ptName value, ptLoc value)
       NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
+      NProjectionRevision value -> ("projection-revision", prvName value, prvLoc value)
       NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
       NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
       NOperation value -> ("operation", opName value, opLoc value)
@@ -2008,6 +2020,7 @@ nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
 nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
 nodeIdentity (NProjectionTarget target) = ("target", ptName target, ptLoc target)
 nodeIdentity (NRebuildGroup groupNode) = ("rebuild-group", rgName groupNode, rgLoc groupNode)
+nodeIdentity (NProjectionRevision revision) = ("projection-revision", prvName revision, prvLoc revision)
 nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc owner)
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
@@ -2025,6 +2038,7 @@ validateNode languageContract _typeGraphResult _supplyAnalysis spec (NPgmqDispat
 validateNode languageContract _typeGraphResult supplyAnalysis spec (NReadModel readModel) = validateReadModel languageContract supplyAnalysis spec readModel
 validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NProjectionRevision revision) = validateProjectionRevision languageContract spec revision
 validateNode languageContract _typeGraphResult supplyAnalysis spec (NProjectionOwner owner) = validateProjectionOwner languageContract supplyAnalysis spec owner
 validateNode _languageContract _typeGraphResult _supplyAnalysis _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract _typeGraphResult _supplyAnalysis spec (NOperation o) = validateOperation spec o
@@ -2483,6 +2497,65 @@ validateRebuildGroup languageContract spec groupNode
       | Set.fromList (rgOrder groupNode) /= Set.fromList (rgTargets groupNode)
           || length (rgOrder groupNode) /= Set.size (Set.fromList (rgOrder groupNode))
           || length (rgTargets groupNode) /= Set.size (Set.fromList (rgTargets groupNode))
+      ]
+
+validateProjectionRevision :: EffectiveLanguageContract -> Spec -> ProjectionRevisionNode -> [Diagnostic]
+validateProjectionRevision languageContract spec revisionNode
+  | not (hasProjectionCatalog languageContract) = []
+  | otherwise = noTargets <> unknownGroup <> unknownTargets <> duplicateTargets <> targetSetMismatch <> invalidIdentities <> invalidPromotionNames
+  where
+    declaredTargets = [ptName target | NProjectionTarget target <- specNodes spec]
+    matchingGroups = [groupNode | NRebuildGroup groupNode <- specNodes spec, rgName groupNode == prvGroup revisionNode]
+    revisionTargets = prvTargets revisionNode
+    revisionTargetNames = map prtTarget revisionTargets
+    noTargets =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionNoTarget $
+          "projection revision '" <> prvName revisionNode <> "' must declare every target in its rebuild group"
+      | null revisionTargets
+      ]
+    unknownGroup =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionGroupUnknown $
+          "projection revision '" <> prvName revisionNode <> "' references undeclared rebuild group '" <> prvGroup revisionNode <> "'"
+      | null matchingGroups
+      ]
+    unknownTargets =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionTargetUnknown $
+          "projection revision '" <> prvName revisionNode <> "' references undeclared target '" <> prtTarget revisionTarget <> "'"
+      | revisionTarget <- revisionTargets,
+        prtTarget revisionTarget `notElem` declaredTargets
+      ]
+    duplicateTargets =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionDuplicateTarget $
+          "projection revision '" <> prvName revisionNode <> "' declares target '" <> targetName <> "' more than once"
+      | targetName <- duplicatesBy id revisionTargetNames
+      ]
+    targetSetMismatch =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionTargetSetMismatch $
+          "projection revision '" <> prvName revisionNode <> "' target set must equal rebuild group '" <> prvGroup revisionNode <> "'"
+      | groupNode : _ <- [matchingGroups],
+        Set.fromList revisionTargetNames /= Set.fromList (rgTargets groupNode)
+          || length revisionTargetNames /= Set.size (Set.fromList revisionTargetNames)
+      ]
+    invalidIdentities =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionIdentityInvalid $
+          "projection revision '" <> prvName revisionNode <> "' target '" <> prtTarget revisionTarget <> "' has invalid " <> identityKind <> " identity/version"
+      | revisionTarget <- revisionTargets,
+        (identityKind, identity, version) <-
+          [ ("schema", prtSchemaVersion revisionTarget, 1),
+            ("provisioner", prtProvisioner revisionTarget, prtProvisionerVersion revisionTarget),
+            ("expected-shape", prtExpectedShape revisionTarget, 1),
+            ("validator", prtValidator revisionTarget, prtValidatorVersion revisionTarget)
+          ],
+        T.null identity || T.strip identity /= identity || version <= 0
+      ]
+    invalidPromotionNames =
+      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionPromotionNameInvalid $
+          "projection revision '" <> prvName revisionNode <> "' target '" <> prtTarget revisionTarget <> "' promotion names must be valid, unique PostgreSQL identifiers"
+      | revisionTarget <- revisionTargets,
+        let objects = prtPromotionObjects revisionTarget
+            names = concat [[rpoGenerationName object, rpoCanonicalName object] | object <- objects],
+        any (not . validPostgresIdentifier) names
+          || length names /= Set.size (Set.fromList names)
       ]
 
 validateProjectionOwner :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> ProjectionOwnerNode -> [Diagnostic]

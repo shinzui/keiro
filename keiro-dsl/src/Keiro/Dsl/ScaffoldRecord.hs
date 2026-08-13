@@ -294,6 +294,16 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
       [T.intercalate "|" ["target", ptName target, ptSchema target, ptTable target, resetText (ptReset target), T.intercalate "," (ptDependsOn target), lineText (ptLoc target)]]
     nodeFacts (NRebuildGroup groupNode) =
       [T.intercalate "|" ["group", rgName groupNode, T.intercalate "," (sort (rgTargets groupNode)), T.intercalate "," (rgOrder groupNode), lineText (rgLoc groupNode)]]
+    nodeFacts (NProjectionRevision revision) =
+      [ T.intercalate
+          "|"
+          [ "revision",
+            prvName revision,
+            prvGroup revision,
+            T.intercalate ";" (map revisionTargetText (prvTargets revision)),
+            lineText (prvLoc revision)
+          ]
+      ]
     nodeFacts (NProjectionOwner owner) =
       [ T.intercalate
           "|"
@@ -344,6 +354,28 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
               ]
           ]
     nodeFacts _ = []
+    revisionTargetText target =
+      T.intercalate
+        ","
+        [ prtTarget target,
+          prtSchemaVersion target,
+          prtProvisioner target,
+          T.pack (show (prtProvisionerVersion target)),
+          prtExpectedShape target,
+          prtValidator target,
+          T.pack (show (prtValidatorVersion target)),
+          T.intercalate ":" (map promotionText (prtPromotionObjects target))
+        ]
+    promotionText promotionObject =
+      T.intercalate
+        ">"
+        [ promotionKindText (rpoKind promotionObject),
+          rpoGenerationName promotionObject,
+          rpoCanonicalName promotionObject
+        ]
+    promotionKindText PromotionIndexNode = "index"
+    promotionKindText PromotionConstraintNode = "constraint"
+    promotionKindText PromotionOwnedSequenceNode = "owned-sequence"
     supplyFact supply =
       T.intercalate
         "|"

@@ -106,7 +106,7 @@ preCanonicalRunSliceSentinel = "$pre-canonical"
 
 -- | Prefix of the current canonical group-slice format (ADR-32).
 canonicalSlicePrefix :: Text
-canonicalSlicePrefix = "slice-v2:"
+canonicalSlicePrefix = "slice-v3:"
 
 -- | Stable operator-supplied identity for one rebuild attempt.
 newtype RebuildRunId = RebuildRunId Text

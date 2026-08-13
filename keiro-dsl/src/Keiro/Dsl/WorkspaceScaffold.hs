@@ -282,6 +282,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace service = do
          in scaffoldReadModelForService ctx service resolved <> harnessReadModelForService ctx service resolved
       NProjectionTarget _ -> []
       NRebuildGroup _ -> []
+      NProjectionRevision _ -> []
       NProjectionOwner _ -> []
       NWorkflow workflow -> harnessWorkflow ctx workflow
       NEmit _ -> []

@@ -22,6 +22,9 @@ module Keiro.Projection.Catalog
     QueryModelId,
     SubscriptionId,
     DedupKeyId,
+    ProjectionRevisionId,
+    TargetGenerationId (..),
+    TargetSchemaVersion (..),
     ClaimSite,
     CatalogIdentityError (..),
     mkProjectionId,
@@ -31,6 +34,7 @@ module Keiro.Projection.Catalog
     mkQueryModelId,
     mkSubscriptionId,
     mkDedupKeyId,
+    mkProjectionRevisionId,
     mkClaimSite,
     projectionIdText,
     targetIdText,
@@ -39,10 +43,27 @@ module Keiro.Projection.Catalog
     queryModelIdText,
     subscriptionIdText,
     dedupKeyIdText,
+    projectionRevisionIdText,
     claimSiteText,
 
     -- * Declarations
     QualifiedTable (..),
+    PhysicalTargets,
+    PhysicalTargetMapError (..),
+    mkPhysicalTargets,
+    physicalTargetMap,
+    resolvePhysicalTarget,
+    PromotionObjectKind (..),
+    PromotionObjectName (..),
+    TargetSchemaViolation (..),
+    TargetSchemaEvidence (..),
+    TargetProvisioningContext (..),
+    TargetProvisioner (..),
+    RevisionLiveHandler (..),
+    RevisionReplayAdapter (..),
+    RevisionVerification (..),
+    ProjectionRevision (..),
+    ReadContractRevisionReference (..),
     TargetResetPolicy (..),
     TargetDeclaration (..),
     RebuildVerification (..),
@@ -89,6 +110,10 @@ module Keiro.Projection.Catalog
     InventorySubscription (..),
     InventoryDedupKey (..),
     InventoryHandler (..),
+    InventoryTargetProvisioner (..),
+    InventoryRevisionHandler (..),
+    InventoryProjectionRevision (..),
+    InventoryReadContractRevisionReference (..),
     ProjectionHandlerCapability (..),
     ResolvedQuerySupply (..),
     CatalogFingerprint,
@@ -143,6 +168,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Data.UUID (UUID)
 import Hasql.Transaction qualified as Tx
 import Keiro.Codec (Codec (..), decodeRecorded)
 import Keiro.Prelude
@@ -178,6 +204,15 @@ newtype SubscriptionId = SubscriptionId Text
 newtype DedupKeyId = DedupKeyId Text
   deriving stock (Eq, Ord, Show, Generic)
 
+newtype ProjectionRevisionId = ProjectionRevisionId Text
+  deriving stock (Eq, Ord, Show, Generic)
+
+newtype TargetGenerationId = TargetGenerationId UUID
+  deriving stock (Eq, Ord, Show, Generic)
+
+newtype TargetSchemaVersion = TargetSchemaVersion Text
+  deriving stock (Eq, Ord, Show, Generic)
+
 newtype ClaimSite = ClaimSite Text
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -208,6 +243,9 @@ mkSubscriptionId = mkIdentity SubscriptionId
 mkDedupKeyId :: Text -> Either CatalogIdentityError DedupKeyId
 mkDedupKeyId = mkIdentity DedupKeyId
 
+mkProjectionRevisionId :: Text -> Either CatalogIdentityError ProjectionRevisionId
+mkProjectionRevisionId = mkIdentity ProjectionRevisionId
+
 mkClaimSite :: Text -> Either CatalogIdentityError ClaimSite
 mkClaimSite = mkIdentity ClaimSite
 
@@ -232,6 +270,9 @@ subscriptionIdText (SubscriptionId value) = value
 dedupKeyIdText :: DedupKeyId -> Text
 dedupKeyIdText (DedupKeyId value) = value
 
+projectionRevisionIdText :: ProjectionRevisionId -> Text
+projectionRevisionIdText (ProjectionRevisionId value) = value
+
 claimSiteText :: ClaimSite -> Text
 claimSiteText (ClaimSite value) = value
 
@@ -246,6 +287,140 @@ mkIdentity constructor value
 data QualifiedTable = QualifiedTable
   { schemaName :: !Text,
     tableName :: !Text
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | A complete logical-target to physical-table binding supplied to every
+-- revision handler. Construction is closed-world: missing and unexpected
+-- targets are reported together before application SQL can run.
+newtype PhysicalTargets = PhysicalTargets (Map TargetId QualifiedTable)
+  deriving stock (Eq, Ord, Show, Generic)
+
+data PhysicalTargetMapError
+  = MissingPhysicalTarget !TargetId
+  | UnexpectedPhysicalTarget !TargetId
+  deriving stock (Eq, Ord, Show, Generic)
+
+mkPhysicalTargets :: [TargetId] -> Map TargetId QualifiedTable -> Either (NonEmpty PhysicalTargetMapError) PhysicalTargets
+mkPhysicalTargets expected supplied =
+  case NonEmpty.nonEmpty errors of
+    Nothing -> Right (PhysicalTargets supplied)
+    Just failures -> Left failures
+  where
+    expectedSet = Set.fromList expected
+    suppliedSet = Map.keysSet supplied
+    errors =
+      [ MissingPhysicalTarget targetId
+      | targetId <- Set.toAscList (expectedSet `Set.difference` suppliedSet)
+      ]
+        <> [ UnexpectedPhysicalTarget targetId
+           | targetId <- Set.toAscList (suppliedSet `Set.difference` expectedSet)
+           ]
+
+physicalTargetMap :: PhysicalTargets -> Map TargetId QualifiedTable
+physicalTargetMap (PhysicalTargets targets) = targets
+
+resolvePhysicalTarget :: TargetId -> PhysicalTargets -> Maybe QualifiedTable
+resolvePhysicalTarget targetId (PhysicalTargets targets) = Map.lookup targetId targets
+
+data PromotionObjectKind
+  = PromotionIndex
+  | PromotionConstraint
+  | PromotionOwnedSequence
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | One generation-local object name and the canonical serving name it must
+-- receive during promotion. Declaration order is durable cutover identity.
+data PromotionObjectName = PromotionObjectName
+  { objectKind :: !PromotionObjectKind,
+    generationName :: !Text,
+    canonicalName :: !Text
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data TargetSchemaViolation = TargetSchemaViolation
+  { violationCode :: !Text,
+    violationDetail :: !Text
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | PostgreSQL evidence captured after provisioning and compared again under
+-- cutover locks. The catalog snapshot is canonically rendered by the
+-- application validator and intentionally remains opaque to Keiro.
+data TargetSchemaEvidence = TargetSchemaEvidence
+  { relationOid :: !Int64,
+    observedShapeFingerprint :: !Text,
+    observedPromotionObjects :: ![PromotionObjectName],
+    catalogSnapshot :: !Text
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data TargetProvisioningContext = TargetProvisioningContext
+  { targetId :: !TargetId,
+    generationId :: !TargetGenerationId,
+    servingTable :: !QualifiedTable,
+    stagingTable :: !QualifiedTable
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Application-owned schema provisioning and validation for one logical
+-- target under one projection revision. A missing validator is representable
+-- only so closed-world catalog validation can produce a stable diagnostic.
+data TargetProvisioner = TargetProvisioner
+  { provisionerId :: !Text,
+    provisionerVersion :: !Int,
+    schemaVersion :: !TargetSchemaVersion,
+    expectedShapeId :: !Text,
+    provisionTarget :: !(TargetProvisioningContext -> Tx.Transaction ()),
+    validatorId :: !Text,
+    validatorVersion :: !Int,
+    validateTarget :: !(Maybe (TargetProvisioningContext -> Tx.Transaction (Either [TargetSchemaViolation] TargetSchemaEvidence))),
+    promotionObjectNames :: ![PromotionObjectName]
+  }
+  deriving stock (Generic)
+
+data RevisionLiveHandler = RevisionLiveHandler
+  { handlerId :: !Text,
+    handlerVersion :: !Int,
+    requiredTargets :: ![TargetId],
+    runRevisionLive :: !(PhysicalTargets -> RecordedEvent -> Tx.Transaction ())
+  }
+  deriving stock (Generic)
+
+data RevisionReplayAdapter = RevisionReplayAdapter
+  { adapterId :: !Text,
+    adapterVersion :: !Int,
+    requiredTargets :: ![TargetId],
+    runRevisionReplay :: !(PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either ReplayDecodeError Bool))
+  }
+  deriving stock (Generic)
+
+data RevisionVerification = RevisionVerification
+  { revisionVerificationId :: !Text,
+    revisionVerificationVersion :: !Int,
+    requiredTargets :: ![TargetId],
+    runRevisionVerification :: !(PhysicalTargets -> Tx.Transaction (Either Text ()))
+  }
+  deriving stock (Generic)
+
+data ProjectionRevision = ProjectionRevision
+  { revisionId :: !ProjectionRevisionId,
+    rebuildGroup :: !RebuildGroupId,
+    targetProvisioners :: !(Map TargetId TargetProvisioner),
+    liveHandlers :: ![RevisionLiveHandler],
+    replayAdapters :: ![RevisionReplayAdapter],
+    revisionVerifications :: ![RevisionVerification],
+    claimSite :: !ClaimSite
+  }
+  deriving stock (Generic)
+
+-- | Minimal compatibility edge consumed by later external-read work. It lets
+-- this catalog reject a read contract whose compatible revision vanished
+-- without prematurely defining the SQL surface owned by plan 255.
+data ReadContractRevisionReference = ReadContractRevisionReference
+  { readContractId :: !Text,
+    compatibleRevisions :: !(NonEmpty ProjectionRevisionId),
+    claimSite :: !ClaimSite
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -437,6 +612,8 @@ data ProjectionCatalog = ProjectionCatalog
   { sources :: ![SourceDeclaration],
     targets :: ![TargetDeclaration],
     rebuildGroups :: ![RebuildGroupDeclaration],
+    projectionRevisions :: ![ProjectionRevision],
+    readContractRevisionReferences :: ![ReadContractRevisionReference],
     subscriptions :: ![SubscriptionDeclaration],
     dedupKeys :: ![DedupKeyDeclaration],
     queryModels :: ![SomeQueryModelBinding],
@@ -450,6 +627,8 @@ emptyProjectionCatalog =
     { sources = [],
       targets = [],
       rebuildGroups = [],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
@@ -463,6 +642,7 @@ data Validation err value
 
 data CatalogDiagnosticCode
   = DuplicateProjectionId
+  | DuplicateProjectionRevisionId
   | DuplicateTargetId
   | DuplicateQualifiedTable
   | DuplicateRebuildGroupId
@@ -486,6 +666,8 @@ data CatalogDiagnosticCode
   | UnknownSubscriptionReference
   | UnknownDedupKeyReference
   | UnknownQueryModelReference
+  | UnknownRevisionReference
+  | UnknownTargetProvisioner
   | AsyncHandlerSubscriptionMismatch
   | AsyncHandlerDedupMismatch
   | TargetWithoutOwner
@@ -501,11 +683,18 @@ data CatalogDiagnosticCode
   | AmbiguousSourceOrdering
   | DuplicateRebuildVerificationId
   | InvalidRebuildVerificationIdentity
+  | ProjectionRevisionWithoutLiveHandler
+  | ProjectionRevisionWithoutReplayAdapter
+  | ProjectionRevisionTargetSetDrift
+  | ProjectionRevisionMissingSchemaValidation
+  | ProjectionRevisionPhysicalTargetsNotTotal
+  | InvalidProjectionRevisionIdentity
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 diagnosticCodeText :: CatalogDiagnosticCode -> Text
 diagnosticCodeText = \case
   DuplicateProjectionId -> "catalog.duplicate-projection-id"
+  DuplicateProjectionRevisionId -> "catalog.duplicate-projection-revision-id"
   DuplicateTargetId -> "catalog.duplicate-target-id"
   DuplicateQualifiedTable -> "catalog.duplicate-qualified-table"
   DuplicateRebuildGroupId -> "catalog.duplicate-rebuild-group-id"
@@ -529,6 +718,8 @@ diagnosticCodeText = \case
   UnknownSubscriptionReference -> "catalog.unknown-subscription-reference"
   UnknownDedupKeyReference -> "catalog.unknown-dedup-key-reference"
   UnknownQueryModelReference -> "catalog.unknown-query-model-reference"
+  UnknownRevisionReference -> "catalog.unknown-revision-reference"
+  UnknownTargetProvisioner -> "catalog.unknown-target-provisioner"
   AsyncHandlerSubscriptionMismatch -> "catalog.async-handler-subscription-mismatch"
   AsyncHandlerDedupMismatch -> "catalog.async-handler-dedup-mismatch"
   TargetWithoutOwner -> "catalog.target-without-owner"
@@ -544,6 +735,12 @@ diagnosticCodeText = \case
   AmbiguousSourceOrdering -> "catalog.ambiguous-source-ordering"
   DuplicateRebuildVerificationId -> "catalog.duplicate-rebuild-verification-id"
   InvalidRebuildVerificationIdentity -> "catalog.invalid-rebuild-verification-identity"
+  ProjectionRevisionWithoutLiveHandler -> "catalog.projection-revision-without-live-handler"
+  ProjectionRevisionWithoutReplayAdapter -> "catalog.projection-revision-without-replay-adapter"
+  ProjectionRevisionTargetSetDrift -> "catalog.projection-revision-target-set-drift"
+  ProjectionRevisionMissingSchemaValidation -> "catalog.projection-revision-missing-schema-validation"
+  ProjectionRevisionPhysicalTargetsNotTotal -> "catalog.projection-revision-physical-targets-not-total"
+  InvalidProjectionRevisionIdentity -> "catalog.invalid-projection-revision-identity"
 
 data CatalogDiagnostic = CatalogDiagnostic
   { diagnosticCode :: !CatalogDiagnosticCode,
@@ -588,6 +785,41 @@ data InventoryProjection = InventoryProjection
     ownedTargets :: ![TargetId],
     replayDisposition :: !Text,
     handlers :: ![InventoryHandler]
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data InventoryTargetProvisioner = InventoryTargetProvisioner
+  { targetId :: !TargetId,
+    provisionerId :: !Text,
+    provisionerVersion :: !Int,
+    schemaVersion :: !TargetSchemaVersion,
+    expectedShapeId :: !Text,
+    validatorId :: !Text,
+    validatorVersion :: !Int,
+    promotionObjectNames :: ![PromotionObjectName]
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data InventoryRevisionHandler = InventoryRevisionHandler
+  { handlerId :: !Text,
+    handlerVersion :: !Int,
+    requiredTargets :: ![TargetId]
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data InventoryProjectionRevision = InventoryProjectionRevision
+  { revisionId :: !ProjectionRevisionId,
+    rebuildGroupId :: !RebuildGroupId,
+    targetProvisioners :: ![InventoryTargetProvisioner],
+    liveHandlers :: ![InventoryRevisionHandler],
+    replayAdapters :: ![InventoryRevisionHandler],
+    verifications :: ![InventoryRevisionHandler]
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data InventoryReadContractRevisionReference = InventoryReadContractRevisionReference
+  { readContractId :: !Text,
+    compatibleRevisions :: !(NonEmpty ProjectionRevisionId)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -653,6 +885,8 @@ data CatalogInventory = CatalogInventory
     inventoryTargets :: ![InventoryTarget],
     inventoryGroups :: ![InventoryGroup],
     inventoryProjections :: ![InventoryProjection],
+    inventoryProjectionRevisions :: ![InventoryProjectionRevision],
+    inventoryReadContractRevisionReferences :: ![InventoryReadContractRevisionReference],
     inventoryQueryModels :: ![InventoryQueryModel],
     inventorySubscriptions :: ![InventorySubscription],
     inventoryDedupKeys :: ![InventoryDedupKey]
@@ -719,6 +953,7 @@ data CatalogEvolution
   | TargetRemoved !TargetId
   | RebuildGroupRemoved !RebuildGroupId
   | ProjectionRemoved !ProjectionId
+  | ProjectionRevisionRemoved !ProjectionRevisionId
   | QueryModelRemoved !QueryModelId
   | SubscriptionRemoved !SubscriptionId
   | DedupKeyRemoved !DedupKeyId
@@ -883,6 +1118,7 @@ validateProjectionCatalog catalog =
             <> replayDiagnostics catalog facts
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
+            <> projectionRevisionDiagnostics catalog
         )
 
 -- | Validate and invoke a consumer only on success. This is the pure boundary
@@ -1005,13 +1241,15 @@ groupSliceFingerprint validated wantedGroup = do
   group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
   pure
     . GroupSliceFingerprint
-    . hashPreimage "slice-v2"
+    . hashPreimage "slice-v3"
     $ PRecord
-      "keiro/catalog-group-slice/v2"
+      "keiro/catalog-group-slice/v3"
       [ PText (rebuildGroupIdText wantedGroup),
         groupPreimage group,
         PList (targetPreimage <$> targets),
         PList (projectionPreimage <$> projections),
+        PList (projectionRevisionPreimage <$> revisions),
+        PList (readContractRevisionReferencePreimage <$> readContractReferences),
         PList (sourcePreimage <$> sources),
         PList (queryPreimage <$> queries),
         PList (subscriptionPreimage <$> subscriptions),
@@ -1028,6 +1266,18 @@ groupSliceFingerprint validated wantedGroup = do
       filter
         ((== wantedGroup) . (^. #rebuildGroupId))
         (inventory ^. #inventoryProjections)
+    revisions =
+      filter
+        ((== wantedGroup) . (^. #rebuildGroupId))
+        (inventory ^. #inventoryProjectionRevisions)
+    revisionIds = Set.fromList (map (^. #revisionId) revisions)
+    readContractReferences =
+      filter
+        ( any (`Set.member` revisionIds)
+            . NonEmpty.toList
+            . (^. #compatibleRevisions)
+        )
+        (inventory ^. #inventoryReadContractRevisionReferences)
     sourceIds = Set.fromList (map (^. #sourceId) projections)
     sources = filter ((`Set.member` sourceIds) . (^. #sourceId)) (inventory ^. #inventorySources)
     queries =
@@ -1210,6 +1460,7 @@ compareCatalogBaseline previous current =
         <> removedEntries TargetRemoved (^. #targetId) (previous ^. #inventoryTargets) (current ^. #inventoryTargets)
         <> removedEntries RebuildGroupRemoved (^. #rebuildGroupId) (previous ^. #inventoryGroups) (current ^. #inventoryGroups)
         <> removedEntries ProjectionRemoved (^. #projectionId) (previous ^. #inventoryProjections) (current ^. #inventoryProjections)
+        <> removedEntries ProjectionRevisionRemoved (^. #revisionId) (previous ^. #inventoryProjectionRevisions) (current ^. #inventoryProjectionRevisions)
         <> removedEntries QueryModelRemoved (^. #queryModelId) (previous ^. #inventoryQueryModels) (current ^. #inventoryQueryModels)
         <> removedEntries SubscriptionRemoved (^. #subscriptionId) (previous ^. #inventorySubscriptions) (current ^. #inventorySubscriptions)
         <> removedEntries DedupKeyRemoved (^. #dedupKeyId) (previous ^. #inventoryDedupKeys) (current ^. #inventoryDedupKeys)
@@ -1269,6 +1520,7 @@ duplicateDiagnostics catalog facts queryFacts =
     <> duplicateBy DuplicateDedupKeyId dedupKeyIdText (^. #dedupKeyId) (^. #claimSite) (catalog ^. #dedupKeys)
     <> duplicateBy DuplicateDedupName (\value -> value) (^. #dedupName) (^. #claimSite) (catalog ^. #dedupKeys)
     <> duplicateBy DuplicateProjectionId projectionIdText factProjectionId factSite facts
+    <> duplicateBy DuplicateProjectionRevisionId projectionRevisionIdText (^. #revisionId) (^. #claimSite) (catalog ^. #projectionRevisions)
     <> duplicateBy DuplicateQueryModelId queryModelIdText factQueryModelId factQuerySite queryFacts
     <> duplicateBy DuplicateQueryModelRegistryName (\value -> value) factRegistryName factQuerySite queryFacts
     <> concatMap duplicateTargetsInGroup (catalog ^. #rebuildGroups)
@@ -1842,6 +2094,173 @@ verificationDiagnostics catalog = concatMap verificationGroupDiagnostics (catalo
 
     invalid value = Text.null value || Text.strip value /= value
 
+projectionRevisionDiagnostics :: ProjectionCatalog -> [CatalogDiagnostic]
+projectionRevisionDiagnostics catalog =
+  concatMap revisionDiagnostics revisions <> readContractDiagnostics
+  where
+    revisions = catalog ^. #projectionRevisions
+    groupsById =
+      Map.fromList
+        [ (group ^. #rebuildGroupId, group)
+        | group <- catalog ^. #rebuildGroups
+        ]
+    declaredTargets = Set.fromList [target ^. #targetId | target <- catalog ^. #targets]
+    declaredRevisionIds = Set.fromList [revision ^. #revisionId | revision <- revisions]
+
+    revisionDiagnostics revision =
+      unknownGroup
+        <> unknownProvisioners
+        <> targetSetDrift
+        <> missingLive
+        <> missingReplay
+        <> missingValidation
+        <> nonTotalMappings
+        <> invalidIdentities
+      where
+        revisionIdentity = projectionRevisionIdText (revision ^. #revisionId)
+        site = revision ^. #claimSite
+        provisionerEntries = Map.toAscList (revision ^. #targetProvisioners)
+        provisionedTargets = Map.keysSet (revision ^. #targetProvisioners)
+        maybeGroup = Map.lookup (revision ^. #rebuildGroup) groupsById
+        expectedTargets =
+          Set.fromList $ maybe [] (^. #orderedTargets) maybeGroup
+        unknownGroup =
+          [ diagnostic
+              UnknownGroupReference
+              (rebuildGroupIdText (revision ^. #rebuildGroup))
+              [site]
+              ("projection revision " <> revisionIdentity <> " references an unknown rebuild group")
+          | isNothing maybeGroup
+          ]
+        unknownProvisioners =
+          [ diagnostic
+              UnknownTargetProvisioner
+              (targetIdText targetId)
+              [site]
+              ("projection revision " <> revisionIdentity <> " supplies a provisioner for an unknown target")
+          | (targetId, _) <- provisionerEntries,
+            targetId `Set.notMember` declaredTargets
+          ]
+        targetSetDrift =
+          [ diagnostic
+              ProjectionRevisionTargetSetDrift
+              revisionIdentity
+              [site, group ^. #claimSite]
+              ( "projection revision target set differs from rebuild group; expected="
+                  <> renderTargetSet expectedTargets
+                  <> ", supplied="
+                  <> renderTargetSet provisionedTargets
+              )
+          | Just group <- [maybeGroup],
+            provisionedTargets /= expectedTargets
+          ]
+        missingLive =
+          [ diagnostic
+              ProjectionRevisionWithoutLiveHandler
+              revisionIdentity
+              [site]
+              "projection revision must supply at least one live handler"
+          | null (revision ^. #liveHandlers)
+          ]
+        missingReplay =
+          [ diagnostic
+              ProjectionRevisionWithoutReplayAdapter
+              revisionIdentity
+              [site]
+              "projection revision must supply at least one replay adapter"
+          | null (revision ^. #replayAdapters)
+          ]
+        missingValidation =
+          [ diagnostic
+              ProjectionRevisionMissingSchemaValidation
+              (revisionIdentity <> "/" <> targetIdText targetId)
+              [site]
+              "target provisioner must supply schema validation before replay or promotion"
+          | (targetId, provisioner) <- provisionerEntries,
+            isNothing (provisioner ^. #validateTarget)
+          ]
+        nonTotalMappings =
+          [ diagnostic
+              ProjectionRevisionPhysicalTargetsNotTotal
+              (revisionIdentity <> "/" <> handlerIdentity)
+              [site]
+              ( "revision closure requires a non-total physical target set; expected="
+                  <> renderTargetSet expectedTargets
+                  <> ", required="
+                  <> renderTargetSet required
+              )
+          | (handlerIdentity, requiredTargets) <- revisionRequirements revision,
+            let required = Set.fromList requiredTargets,
+            isJust maybeGroup,
+            required /= expectedTargets
+          ]
+        invalidIdentities =
+          [ diagnostic
+              InvalidProjectionRevisionIdentity
+              (revisionIdentity <> "/" <> identity)
+              [site]
+              "revision, provisioner, validator, handler, adapter, and verification identities must be non-empty and have no surrounding whitespace; numeric versions must be positive"
+          | (identity, version) <- revisionIdentities revision,
+            invalid identity || version < 1
+          ]
+
+    readContractDiagnostics =
+      [ diagnostic
+          UnknownRevisionReference
+          (reference ^. #readContractId <> "/" <> projectionRevisionIdText revisionId)
+          [reference ^. #claimSite]
+          "read contract references a projection revision absent from the catalog"
+      | reference <- catalog ^. #readContractRevisionReferences,
+        revisionId <- NonEmpty.toList (reference ^. #compatibleRevisions),
+        revisionId `Set.notMember` declaredRevisionIds
+      ]
+
+    invalid value = Text.null value || Text.strip value /= value
+    renderTargetSet = Text.intercalate "," . map targetIdText . Set.toAscList
+
+revisionRequirements :: ProjectionRevision -> [(Text, [TargetId])]
+revisionRequirements revision =
+  [ (handler ^. #handlerId, handler ^. #requiredTargets)
+  | handler <- revision ^. #liveHandlers
+  ]
+    <> [ (adapter ^. #adapterId, adapter ^. #requiredTargets)
+       | adapter <- revision ^. #replayAdapters
+       ]
+    <> [ (verification ^. #revisionVerificationId, verification ^. #requiredTargets)
+       | verification <- revision ^. #revisionVerifications
+       ]
+
+revisionIdentities :: ProjectionRevision -> [(Text, Int)]
+revisionIdentities revision =
+  [ (projectionRevisionIdText (revision ^. #revisionId), 1)
+  ]
+    <> [ (provisioner ^. #provisionerId, provisioner ^. #provisionerVersion)
+       | provisioner <- Map.elems (revision ^. #targetProvisioners)
+       ]
+    <> [ (targetSchemaVersionText (provisioner ^. #schemaVersion), 1)
+       | provisioner <- Map.elems (revision ^. #targetProvisioners)
+       ]
+    <> [ (provisioner ^. #expectedShapeId, 1)
+       | provisioner <- Map.elems (revision ^. #targetProvisioners)
+       ]
+    <> [ (provisioner ^. #validatorId, provisioner ^. #validatorVersion)
+       | provisioner <- Map.elems (revision ^. #targetProvisioners)
+       ]
+    <> [ (name, 1)
+       | provisioner <- Map.elems (revision ^. #targetProvisioners),
+         promotionObject <- provisioner ^. #promotionObjectNames,
+         name <- [promotionObject ^. #generationName, promotionObject ^. #canonicalName]
+       ]
+    <> [ (handler ^. #handlerId, handler ^. #handlerVersion)
+       | handler <- revision ^. #liveHandlers
+       ]
+    <> [ (adapter ^. #adapterId, adapter ^. #adapterVersion)
+       | adapter <- revision ^. #replayAdapters
+       ]
+    <> [ (verification ^. #revisionVerificationId, verification ^. #revisionVerificationVersion)
+       | verification <- revision ^. #revisionVerifications
+       ]
+
 collectProjectionFacts :: [SomeProjectionSet] -> [ProjectionFacts]
 collectProjectionFacts projectionSetEntries =
   [ ProjectionFacts
@@ -1919,6 +2338,18 @@ buildInventory catalog facts queryFacts =
           | group <- catalog ^. #rebuildGroups
           ],
       inventoryProjections = List.sort (map inventoryProjection facts),
+      inventoryProjectionRevisions =
+        List.sort (map inventoryProjectionRevision (catalog ^. #projectionRevisions)),
+      inventoryReadContractRevisionReferences =
+        List.sort
+          [ InventoryReadContractRevisionReference
+              { readContractId = reference ^. #readContractId,
+                compatibleRevisions =
+                  NonEmpty.fromList
+                    (List.sort (NonEmpty.toList (reference ^. #compatibleRevisions)))
+              }
+          | reference <- catalog ^. #readContractRevisionReferences
+          ],
       inventoryQueryModels =
         List.sort
           [ InventoryQueryModel
@@ -2073,17 +2504,60 @@ inventoryHandler (InlineFacts name _) = InventoryInlineHandler name
 inventoryHandler (AsyncFacts name _ _ subscriptionId dedupId _) =
   InventoryAsyncHandler name subscriptionId dedupId
 
+inventoryProjectionRevision :: ProjectionRevision -> InventoryProjectionRevision
+inventoryProjectionRevision revision =
+  InventoryProjectionRevision
+    { revisionId = revision ^. #revisionId,
+      rebuildGroupId = revision ^. #rebuildGroup,
+      targetProvisioners =
+        [ InventoryTargetProvisioner
+            { targetId = targetId,
+              provisionerId = provisioner ^. #provisionerId,
+              provisionerVersion = provisioner ^. #provisionerVersion,
+              schemaVersion = provisioner ^. #schemaVersion,
+              expectedShapeId = provisioner ^. #expectedShapeId,
+              validatorId = provisioner ^. #validatorId,
+              validatorVersion = provisioner ^. #validatorVersion,
+              promotionObjectNames = provisioner ^. #promotionObjectNames
+            }
+        | (targetId, provisioner) <- Map.toAscList (revision ^. #targetProvisioners)
+        ],
+      liveHandlers =
+        [ InventoryRevisionHandler
+            (handler ^. #handlerId)
+            (handler ^. #handlerVersion)
+            (List.sort (handler ^. #requiredTargets))
+        | handler <- revision ^. #liveHandlers
+        ],
+      replayAdapters =
+        [ InventoryRevisionHandler
+            (adapter ^. #adapterId)
+            (adapter ^. #adapterVersion)
+            (List.sort (adapter ^. #requiredTargets))
+        | adapter <- revision ^. #replayAdapters
+        ],
+      verifications =
+        [ InventoryRevisionHandler
+            (verification ^. #revisionVerificationId)
+            (verification ^. #revisionVerificationVersion)
+            (List.sort (verification ^. #requiredTargets))
+        | verification <- revision ^. #revisionVerifications
+        ]
+    }
+
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v3" . inventoryPreimage
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v4" . inventoryPreimage
 
 inventoryPreimage :: CatalogInventory -> Preimage
 inventoryPreimage inventory =
   PRecord
-    "keiro/catalog-inventory/v3"
+    "keiro/catalog-inventory/v4"
     [ PList (sourcePreimage <$> inventory ^. #inventorySources),
       PList (targetPreimage <$> inventory ^. #inventoryTargets),
       PList (groupPreimage <$> inventory ^. #inventoryGroups),
       PList (projectionPreimage <$> inventory ^. #inventoryProjections),
+      PList (projectionRevisionPreimage <$> inventory ^. #inventoryProjectionRevisions),
+      PList (readContractRevisionReferencePreimage <$> inventory ^. #inventoryReadContractRevisionReferences),
       PList (queryPreimage <$> inventory ^. #inventoryQueryModels),
       PList (subscriptionPreimage <$> inventory ^. #inventorySubscriptions),
       PList (dedupPreimage <$> inventory ^. #inventoryDedupKeys)
@@ -2132,6 +2606,61 @@ projectionPreimage projection =
       PList (PText . targetIdText <$> projection ^. #ownedTargets),
       PText (projection ^. #replayDisposition),
       PList (handlerPreimage <$> projection ^. #handlers)
+    ]
+
+projectionRevisionPreimage :: InventoryProjectionRevision -> Preimage
+projectionRevisionPreimage revision =
+  PRecord
+    "projection-revision"
+    [ PText (projectionRevisionIdText (revision ^. #revisionId)),
+      PText (rebuildGroupIdText (revision ^. #rebuildGroupId)),
+      PList (targetProvisionerPreimage <$> revision ^. #targetProvisioners),
+      PList (revisionHandlerPreimage "live-handler" <$> revision ^. #liveHandlers),
+      PList (revisionHandlerPreimage "replay-adapter" <$> revision ^. #replayAdapters),
+      PList (revisionHandlerPreimage "revision-verification" <$> revision ^. #verifications)
+    ]
+
+targetProvisionerPreimage :: InventoryTargetProvisioner -> Preimage
+targetProvisionerPreimage provisioner =
+  PRecord
+    "target-provisioner"
+    [ PText (targetIdText (provisioner ^. #targetId)),
+      PText (provisioner ^. #provisionerId),
+      PText (Text.pack (show (provisioner ^. #provisionerVersion))),
+      PText (targetSchemaVersionText (provisioner ^. #schemaVersion)),
+      PText (provisioner ^. #expectedShapeId),
+      PText (provisioner ^. #validatorId),
+      PText (Text.pack (show (provisioner ^. #validatorVersion))),
+      PList (promotionObjectPreimage <$> provisioner ^. #promotionObjectNames)
+    ]
+
+promotionObjectPreimage :: PromotionObjectName -> Preimage
+promotionObjectPreimage object =
+  PRecord
+    "promotion-object"
+    [ PText (promotionObjectKindText (object ^. #objectKind)),
+      PText (object ^. #generationName),
+      PText (object ^. #canonicalName)
+    ]
+
+revisionHandlerPreimage :: Text -> InventoryRevisionHandler -> Preimage
+revisionHandlerPreimage tag handler =
+  PRecord
+    tag
+    [ PText (handler ^. #handlerId),
+      PText (Text.pack (show (handler ^. #handlerVersion))),
+      PList (PText . targetIdText <$> handler ^. #requiredTargets)
+    ]
+
+readContractRevisionReferencePreimage :: InventoryReadContractRevisionReference -> Preimage
+readContractRevisionReferencePreimage reference =
+  PRecord
+    "read-contract-revision-reference"
+    [ PText (reference ^. #readContractId),
+      PList
+        ( PText . projectionRevisionIdText
+            <$> NonEmpty.toList (reference ^. #compatibleRevisions)
+        )
     ]
 
 handlerPreimage :: InventoryHandler -> Preimage
@@ -2200,6 +2729,8 @@ renderInventory inventory =
         <> map renderTarget (inventory ^. #inventoryTargets)
         <> map renderGroup (inventory ^. #inventoryGroups)
         <> map renderProjection (inventory ^. #inventoryProjections)
+        <> map renderProjectionRevision (inventory ^. #inventoryProjectionRevisions)
+        <> map renderReadContractRevisionReference (inventory ^. #inventoryReadContractRevisionReferences)
         <> map renderQuery (inventory ^. #inventoryQueryModels)
         <> map renderSubscription (inventory ^. #inventorySubscriptions)
         <> map renderDedup (inventory ^. #inventoryDedupKeys)
@@ -2250,6 +2781,28 @@ renderInventory inventory =
           commaSeparated targetIdText (projection ^. #ownedTargets),
           projection ^. #replayDisposition,
           Text.intercalate "," (map renderHandler (projection ^. #handlers))
+        ]
+    renderProjectionRevision :: InventoryProjectionRevision -> Text
+    renderProjectionRevision revision =
+      Text.intercalate
+        "|"
+        [ "projection-revision",
+          projectionRevisionIdText (revision ^. #revisionId),
+          rebuildGroupIdText (revision ^. #rebuildGroupId),
+          Text.intercalate "," (map renderTargetProvisioner (revision ^. #targetProvisioners)),
+          Text.intercalate "," (map (renderRevisionHandler "live") (revision ^. #liveHandlers)),
+          Text.intercalate "," (map (renderRevisionHandler "replay") (revision ^. #replayAdapters)),
+          Text.intercalate "," (map (renderRevisionHandler "verify") (revision ^. #verifications))
+        ]
+    renderReadContractRevisionReference :: InventoryReadContractRevisionReference -> Text
+    renderReadContractRevisionReference reference =
+      Text.intercalate
+        "|"
+        [ "read-contract-revision-reference",
+          reference ^. #readContractId,
+          Text.intercalate
+            ","
+            (map projectionRevisionIdText (NonEmpty.toList (reference ^. #compatibleRevisions)))
         ]
     renderQuery :: InventoryQueryModel -> Text
     renderQuery query =
@@ -2309,6 +2862,45 @@ renderHandler :: InventoryHandler -> Text
 renderHandler (InventoryInlineHandler name) = "inline:" <> name
 renderHandler (InventoryAsyncHandler name subscriptionId dedupId) =
   Text.intercalate ":" ["async", name, subscriptionIdText subscriptionId, dedupKeyIdText dedupId]
+
+renderTargetProvisioner :: InventoryTargetProvisioner -> Text
+renderTargetProvisioner provisioner =
+  Text.intercalate
+    "@"
+    [ targetIdText (provisioner ^. #targetId),
+      provisioner ^. #provisionerId <> ":" <> Text.pack (show (provisioner ^. #provisionerVersion)),
+      targetSchemaVersionText (provisioner ^. #schemaVersion),
+      provisioner ^. #expectedShapeId,
+      provisioner ^. #validatorId <> ":" <> Text.pack (show (provisioner ^. #validatorVersion)),
+      Text.intercalate ";" (map renderPromotionObject (provisioner ^. #promotionObjectNames))
+    ]
+
+renderRevisionHandler :: Text -> InventoryRevisionHandler -> Text
+renderRevisionHandler kind handler =
+  Text.intercalate
+    ":"
+    [ kind,
+      handler ^. #handlerId,
+      Text.pack (show (handler ^. #handlerVersion)),
+      commaSeparated targetIdText (handler ^. #requiredTargets)
+    ]
+
+renderPromotionObject :: PromotionObjectName -> Text
+renderPromotionObject object =
+  Text.intercalate
+    ":"
+    [ promotionObjectKindText (object ^. #objectKind),
+      object ^. #generationName,
+      object ^. #canonicalName
+    ]
+
+promotionObjectKindText :: PromotionObjectKind -> Text
+promotionObjectKindText PromotionIndex = "index"
+promotionObjectKindText PromotionConstraint = "constraint"
+promotionObjectKindText PromotionOwnedSequence = "owned-sequence"
+
+targetSchemaVersionText :: TargetSchemaVersion -> Text
+targetSchemaVersionText (TargetSchemaVersion value) = value
 
 commaSeparated :: (value -> Text) -> [value] -> Text
 commaSeparated render = Text.intercalate "," . map render

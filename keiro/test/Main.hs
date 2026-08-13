@@ -14559,6 +14559,8 @@ catalogInlineProjectionCatalog =
               claimSite = catalogClaimSite "test:catalog-inline-group"
             }
         ],
+      projectionRevisions = [],
+      readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

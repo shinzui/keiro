@@ -1519,6 +1519,28 @@ rebuild-group reporting {
   order = [ order_summary order_totals ]
 }
 
+projection-revision reporting_v2 {
+  group = reporting
+  target order_summary {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-summary"
+    provisioner-version = 1
+    expected-shape = "order-summary-v2"
+    validator = "reporting-v2-order-summary-validator"
+    validator-version = 1
+    promotion index "order_summary_status_idx__v2" -> "order_summary_status_idx"
+  }
+  target order_totals {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-totals"
+    provisioner-version = 1
+    expected-shape = "order-totals-v2"
+    validator = "reporting-v2-order-totals-validator"
+    validator-version = 1
+    promotion constraint "order_totals_pkey__v2" -> "order_totals_pkey"
+  }
+}
+
 projection-owner order_summary_writer {
   source = aggregate Orders
   delivery = subscription
@@ -1548,6 +1570,16 @@ permits group preparation to truncate it; `preserve` leaves brownfield rows in
 place for an explicit reconciliation adapter. `depends-on` names targets in
 the same group and must be acyclic. A `rebuild-group` lists exactly its targets
 and their deterministic preparation order.
+
+A `projection-revision` is the executable and schema contract for every target in one
+rebuild group. Its target set must equal the group's target set. Schema version,
+provisioner, expected-shape, validator, and their positive versions are stable catalog
+identity. Ordered `promotion index`, `promotion constraint`, and `promotion
+owned-sequence` rows map generation-local object names to the canonical names that
+application migrations address after promotion. The source contains no DDL. Generated
+create-once holes receive `TargetProvisioningContext` for provision/validation and
+`PhysicalTargets` for live, replay, and verification, so application SQL resolves the
+serving or staging generation explicitly.
 
 Each `projection-owner` selects exactly one typed source: `aggregate Name`,
 `category "name"`, or `all`. Split independent sources into separate owners.
@@ -1608,7 +1640,8 @@ identity derive from the resolved owner. The generated context-level
 typed owner/source inline views, `projectionCatalogQuerySupplies`,
 registration/inventory functions, and group-scoped rebuild starters.
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles` is create-once
-and owns live apply, replay apply, heterogeneous decoder, and idempotency
+and owns live apply, replay apply, heterogeneous decoder, idempotency,
+revision provision/validation, physical-target-parametric live/replay, and verification
 bodies. Regeneration never overwrites reviewed hole code.
 
 A source of `aggregate Name` derives its mapped consumer dependencies from

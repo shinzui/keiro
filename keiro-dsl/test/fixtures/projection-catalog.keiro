@@ -98,6 +98,68 @@ rebuild-group shipping {
   order = [ shipment_summary ]
 }
 
+projection-revision reporting_v1 {
+  group = reporting
+  target order_summary {
+    schema-version = "v1"
+    provisioner = "reporting-v1-order-summary"
+    provisioner-version = 1
+    expected-shape = "order-summary-v1"
+    validator = "reporting-v1-order-summary-validator"
+    validator-version = 1
+    promotion index "order_summary_status_idx__v1" -> "order_summary_status_idx"
+  }
+  target order_totals {
+    schema-version = "v1"
+    provisioner = "reporting-v1-order-totals"
+    provisioner-version = 1
+    expected-shape = "order-totals-v1"
+    validator = "reporting-v1-order-totals-validator"
+    validator-version = 1
+    promotion constraint "order_totals_pkey__v1" -> "order_totals_pkey"
+  }
+  target audit_log {
+    schema-version = "v1"
+    provisioner = "reporting-v1-audit-log"
+    provisioner-version = 1
+    expected-shape = "audit-log-v1"
+    validator = "reporting-v1-audit-log-validator"
+    validator-version = 1
+    promotion owned-sequence "audit_log_id_seq__v1" -> "audit_log_id_seq"
+  }
+}
+
+projection-revision reporting_v2 {
+  group = reporting
+  target order_summary {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-summary"
+    provisioner-version = 1
+    expected-shape = "order-summary-v2"
+    validator = "reporting-v2-order-summary-validator"
+    validator-version = 1
+    promotion index "order_summary_status_idx__v2" -> "order_summary_status_idx"
+  }
+  target order_totals {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-totals"
+    provisioner-version = 1
+    expected-shape = "order-totals-v2"
+    validator = "reporting-v2-order-totals-validator"
+    validator-version = 1
+    promotion constraint "order_totals_pkey__v2" -> "order_totals_pkey"
+  }
+  target audit_log {
+    schema-version = "v2"
+    provisioner = "reporting-v2-audit-log"
+    provisioner-version = 1
+    expected-shape = "audit-log-v2"
+    validator = "reporting-v2-audit-log-validator"
+    validator-version = 1
+    promotion owned-sequence "audit_log_id_seq__v2" -> "audit_log_id_seq"
+  }
+}
+
 projection-owner order_summary_writer {
   source = aggregate Orders
   delivery = inline
