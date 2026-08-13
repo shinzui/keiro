@@ -32,9 +32,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 - Rebuild run tables now include `group_slice`, so status and mutation previews
   expose `$pre-canonical` directly during migration recovery.
 - Embedded `wf resume-once` results expose `advanced` and `paced` counts plus
-  the sorted set of `unregistered_names` in JSON (and the corresponding human
-  columns), so an operator can terminate a bounded drain on durable progress and
-  identify the workflow definitions blocking convergence.
+  `sleep_due` and the sorted set of `unregistered_names` in JSON (and the
+  corresponding human columns), so an operator can terminate a bounded drain on
+  durable progress, identify missing workflow definitions, and distinguish due
+  sleeps that require the timer worker rather than another resume pass.
 
 ### Changed
 

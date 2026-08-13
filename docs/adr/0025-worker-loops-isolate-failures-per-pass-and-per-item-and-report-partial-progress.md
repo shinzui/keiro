@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Worker loops isolate failures per pass and per item and report partial progress
 description: A keiro background worker never lets one transient error end its loop or one bad item end its batch, and its summary counts work finished rather than work attempted.
-timestamp: 2026-08-12T18:24:20Z
+timestamp: 2026-08-13T15:01:46Z
 docId: ADR-25
 status: Accepted
 date: 2026-08-06
@@ -74,18 +74,24 @@ another field restated.
 
 The same distinction governs bounded workflow drains. `ResumeSummary.discovered`
 is the number admitted to a pass; it is a pool-size observation, not evidence of
-convergence. `ResumeSummary.advanced` counts candidates whose durable journal or
-terminal state moved: every successful workflow outcome and a crash that reaches
-the failure ceiling and records `WorkflowFailed`. A sub-ceiling crash, transient
-store error, live foreign lease, paced retry, unavailable claim, or unregistered
-workflow name is not an advance. Claim refusal is typed as `ClaimAcquired`,
-`ClaimLeaseHeld`, `ClaimPaced`, or `ClaimUnavailable`; the summary reports paced
-claims separately and carries the deduplicated set of unregistered names.
+convergence. `ResumeSummary.advanced` counts a candidate only when its
+re-invocation commits at least one fresh journal append, a crash reaches the
+failure ceiling and records `WorkflowFailed`, or an external wake is observed
+to have returned the instance row to `running` mid-pass. A replay-only
+re-suspension — canonically a due sleep whose timer worker is behind or down —
+is not an advance and is reported as `sleepDue`. A terminal short-circuit race
+also reports no advance and leaves the discoverable pool on its own. A
+sub-ceiling crash, transient store error, live foreign lease, paced retry,
+unavailable claim, or unregistered workflow name is likewise not an advance.
+Claim refusal is typed as `ClaimAcquired`, `ClaimLeaseHeld`, `ClaimPaced`, or
+`ClaimUnavailable`; the summary reports paced claims and due sleeps separately
+and carries the deduplicated set of unregistered names.
 
 A caller draining bounded passes repeats only while `advanced > 0`. When a pass
 reports zero advances, it stops and reports the remaining blocked pool instead
-of spinning until `discovered == 0`, which is impossible for a paced retry or a
-definition absent from the application registry.
+of spinning until `discovered == 0`, which is impossible for a paced retry, a
+definition absent from the application registry, or a due sleep awaiting its
+timer worker.
 
 Asynchronous exceptions are excluded from all of the above: cancellation and
 shutdown must propagate.
@@ -109,9 +115,9 @@ it does not get to isolate; it must surface the failure.
 - Summaries are usable as monitoring signals. A persistent `scanned > deleted`
   gap is a stuck item; before this decision it was invisible.
 - Operator drains terminate on durable progress and preserve actionable blocked
-  state. `keiro-ops wf resume-once` reports `advanced`, `paced`, and the exact
-  sorted `unregistered_names`, while `discovered` remains useful as the admitted
-  pool size rather than being overloaded as a continuation flag.
+  state. `keiro-ops wf resume-once` reports `advanced`, `paced`, `sleep_due`, and
+  the exact sorted `unregistered_names`, while `discovered` remains useful as the
+  admitted pool size rather than being overloaded as a continuation flag.
 - Per-item isolation is deliberately *not* a general error swallow. A store error
   escaping the resume worker's terminal-marking path still aborts the pass
   (`resumeWorkflowsOnce` returns `Left`), because widening that would change

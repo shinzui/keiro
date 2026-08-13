@@ -62,9 +62,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 14:58Z) M2: rewrote the `advanced` field documentation, module-header field recap, and both bounded-drain recipes in `Resume.hs`.
 - [x] (2026-08-13 14:58Z) M2: updated every full-record summary assertion, changed `expectedMixedResumeSummary.advanced` from 3 to 2, extended the due-sleep test with stable `sleepDue` assertions, and passed all 545 `keiro-test` examples.
 - [x] (2026-08-13 15:00Z) M3: rendered `sleep_due` in `keiro-ops` as a human column and JSON key, added the two-pass due-sleep command test, and passed all 42 `keiro-ops-test` examples.
-- [ ] M4: update `docs/guides/durable-workflows.md`, `docs/user/durable-workflows.md`, and `docs/user/operations.md` drain/summary text.
-- [ ] M4: CHANGELOG entries — rewrite the keiro Unreleased breaking-change bullet from plan 239 to the final shape; extend the keiro-ops Unreleased resume-once bullet.
-- [ ] M4: amend ADR 0023 and ADR 0025, add `docs/adr/log.md` entries, `just adr-validate` green.
+- [x] (2026-08-13 15:04Z) M4: updated `docs/guides/durable-workflows.md`, `docs/user/durable-workflows.md`, and `docs/user/operations.md` with the full summary fields, bounded-drain rule, and timer-worker remedy.
+- [x] (2026-08-13 15:04Z) M4: rewrote the keiro Unreleased breaking-change and drain bullets to the final witness-based shape, added the due-sleep fix entry, and extended the keiro-ops `resume-once` bullet with `sleep_due`.
+- [x] (2026-08-13 15:04Z) M4: amended ADR 0023 and ADR 0025, added both `docs/adr/log.md` entries through `okf log add`, and passed strict `just adr-validate` with 33 concepts.
 - [ ] M4: tick EP-2 in `docs/masterplans/40-fix-the-remaining-runtime-and-dsl-defects-from-the-fix-verification-review.md`, write Outcomes & Retrospective here, `just haskell-test` and `just verify` green.
 
 
@@ -776,6 +776,13 @@ Finished in 0.1754 seconds
 
 Finished in 7.1707 seconds
 42 examples, 0 failures
+```
+
+The durable ADR amendments passed their strict profiled-bundle gate:
+
+```text
+okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+OK: 33 concepts
 ```
 
 ### Commit and trailer convention

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Workflow discovery is exact and the instance row is the complete wake ledger
 description: A workflow is discovered only when its keiro_workflows row says it has progress to make, so every wake-source lifecycle transition must write that row.
-timestamp: 2026-08-12T18:24:20Z
+timestamp: 2026-08-13T15:01:46Z
 docId: ADR-23
 status: Accepted
 date: 2026-08-06
@@ -108,6 +108,11 @@ operator inspection only.
   exactly as before this decision: the arm cannot re-insert the cancelled timer
   row, so nothing rewrites or clears the hint. An operator must resurrect or
   cancel such a workflow deliberately.
+- The suspended-with-due-hint arm keeps returning a candidate every pass by
+  design, including the operator-cancelled-timer case above. A replay-only
+  re-suspension reports `ResumeSummary.sleepDue` rather than `advanced`, so a
+  bounded drain terminates while the blocked instance remains discoverable for
+  timer-worker repair.
 - Crash retries are unaffected: a crashed instance stays `running` and stays
   discovered, and `claimInstance`'s `next_attempt_at` gate — not discovery —
   paces the backoff. `ClaimOutcome` and `ResumeSummary.paced` distinguish that

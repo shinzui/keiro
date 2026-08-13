@@ -152,10 +152,14 @@ query over `keiro_workflows` returning instances that are `running`, or
 `WorkflowDef`, short-circuiting journaled steps. Discovery is *exact*: a
 workflow parked on an unresolved awakeable, child, or future-dated sleep is
 deliberately not returned. It returns a `ResumeSummary`
-(`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
-`transientErrors`/`leaseSkipped`), which is a `Monoid` under field-wise
-addition. `runWorkflowResumeWorker` loops it on a poll interval. No `wf:` prefix
-subscription is used, so there is no upstream dependency.
+(`discovered`/`advanced`/`resumed`/`completed`/`stillSuspended`/`unknownName`/
+`failed`/`transientErrors`/`leaseSkipped`/`paced`/`sleepDue`/
+`unregisteredNames`), which is a `Monoid` under field-wise addition.
+`advanced` counts only durable movement; repeat bounded passes while it is
+positive. A stopped pass with `sleepDue > 0` is waiting for a due sleep's timer
+worker, so run or repair that worker instead of repeating resume passes.
+`runWorkflowResumeWorker` loops on a poll interval. No `wf:` prefix subscription
+is used, so there is no upstream dependency.
 
 Set `WorkflowResumeOptions.maxConcurrentAdvances` above its default of `1` to
 advance several discovered workflows at once, so one slow step body does not

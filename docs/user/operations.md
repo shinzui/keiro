@@ -359,15 +359,16 @@ Mutations preview before force. Three application-aware tasks remain:
 - **Resume worker.** The embedded
   `yourapp ops wf resume-once --limit N` command runs one bounded pass through
   the mounted application registry; `runWorkflowResumeWorker` remains the
-  continuous service loop. Each pass discovers
-  workflows whose journal lacks a terminal marker (via the `keiro_workflow_steps`
-  index, unioned with running children) and re-invokes them through the
+  continuous service loop. Each pass discovers instance rows that are `running`
+  or `suspended` with a due `wake_after`, and re-invokes them through the
   application's `WorkflowRegistry`, so suspended workflows resume after their waits
-  resolve and after a process restart. The registry must hold a `WorkflowDef` for
-  every workflow *name* still in flight; a discovered workflow whose name is absent
-  is surfaced as `unknownName` in the `ResumeSummary`, never silently dropped. A
-  parent and its child must use **distinct** workflow ids — discovery groups by
-  `workflow_id`, so a shared id lets a completed child mask an unfinished parent.
+  resolve and after a process restart. Repeat bounded passes while
+  `ResumeSummary.advanced > 0`. A stopped pass with `sleep_due > 0` means the
+  timer worker is behind, down, or a sleep timer was cancelled; run or repair the
+  timer worker rather than issuing more resume passes. The registry must hold a
+  `WorkflowDef` for every workflow *name* still in flight; a discovered workflow
+  whose name is absent is surfaced as `unknownName` in the `ResumeSummary`, never
+  silently dropped.
 - **Awakeable repair.** Inspect with `keiro-ops wf awakeable show UUID`. A
   workflow parked on an awakeable that will never be signalled is repaired with
   `keiro-ops wf awakeable cancel UUID`; an operator-supplied completion uses

@@ -87,6 +87,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- A workflow suspended on a due sleep while no timer worker ran no longer makes
+  the documented `ResumeSummary.advanced > 0` drain loop spin forever. It now
+  reports `advanced = 0` and `sleepDue = 1`, preserving discovery while naming
+  the blocked remedy.
 - Offline catalog rebuild promotion now backfills replayable async projection
   dedup rows for each subscription's replayed redelivery window and advances
   every declared checkpoint member to the captured head in the promotion
@@ -126,8 +130,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of
   `Bool`, distinguishing an acquired lease from a live foreign lease, crash
   pacing, and an instance that became unavailable. `ResumeSummary` adds
-  `advanced`, `paced`, and `unregisteredNames`; code constructing the record or
-  matching its fields exhaustively must adopt the expanded pass contract.
+  `advanced`, `paced`, `sleepDue`, and `unregisteredNames`; `advanced` counts
+  only a fresh journal append by the re-invocation, a terminal failure recorded
+  at the crash ceiling, or an external wake observed mid-pass. Replay-only
+  re-suspensions and terminal short-circuit races report no advance, so bounded
+  drains terminate on every reachable pool. `WorkflowRunOptions` adds
+  `onJournalAppend`; direct record constructions must initialize it, while
+  `defaultWorkflowRunOptions` users are unaffected.
 
 - The catalog rebuild resume contract advances to `contract-v4:` and the persisted runner
   format to `keiro/projection-replay/v4`. The contract now pins replay-adapter application
@@ -203,9 +212,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 - Bounded workflow drains repeat while `ResumeSummary.advanced > 0`, not while
   `discovered > 0`. `discovered` remains the admitted pool size; `advanced`
-  counts candidates whose journal or terminal state moved, while paced retries,
-  unregistered workflow names, foreign leases, and transient errors remain
-  blocked in place and stop an operator drain for inspection.
+  counts only fresh journal appends, crash-ceiling terminal failures, and
+  externally delivered wakes observed mid-pass. Replay-only re-suspensions,
+  paced retries, unregistered workflow names, foreign leases, transient errors,
+  and due sleeps remain blocked in place; due sleeps are reported separately as
+  `sleepDue`.
 
 - Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
   instance only when its status is `running`, or `suspended` with a due

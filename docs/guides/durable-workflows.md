@@ -241,14 +241,20 @@ jitsureiWorkflowRegistry =
 
 `resumeWorkflowsOnce` runs one discover-and-reinvoke pass and returns a
 `ResumeSummary`
-(`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
-`transientErrors`/`leaseSkipped`);
+(`discovered`/`advanced`/`resumed`/`completed`/`stillSuspended`/`unknownName`/
+`failed`/`transientErrors`/`leaseSkipped`/`paced`/`sleepDue`/
+`unregisteredNames`);
 `runWorkflowResumeWorker` loops it on a poll interval. Discovery is a single
 index query over the `keiro_workflows` instance table, and it is **exact**: an
 instance is returned when it is `running`, or `suspended` with a due wake hint,
 and never otherwise. It does **not** use a kiroku `wf:` prefix subscription, so
 the runtime has no upstream dependency. An unfinished workflow whose name is
 absent from the registry is surfaced as `unknownName`, never silently dropped.
+`advanced` counts only durable movement: a fresh journal append, a terminal
+failure recorded at the crash ceiling, or an external wake observed mid-pass.
+Repeat bounded passes while `advanced > 0`. A pass with `advanced == 0` and
+`sleepDue > 0` is blocked on the timer worker; run or repair that worker rather
+than repeating resume passes.
 
 Mount the registry in `Keiro.Ops.AppHooks` to expose the same one-shot boundary
 as an operator command in the candidate application binary:
@@ -489,6 +495,10 @@ so a resumed run instruments itself. See [Operations](../user/operations.md).
   claim-process-commit-poll shape as the timer and outbox workers) so suspended
   workflows resume after their waits resolve and after process restarts. Use
   the embedded `yourapp ops wf resume-once --limit N` for a bounded manual pass.
+  Repeat bounded passes only while `advanced > 0`. If a stopped pass reports
+  `sleep_due > 0`, the timer worker is behind, down, or its sleep timer was
+  cancelled; run or repair the timer worker (for example, with embedded
+  `yourapp ops timer drain-once --limit N`) instead of issuing more resume passes.
 - Set `leaseTtl` above the longest individual step or await-arm timeout. A live
   worker renews at fresh boundaries; expiry remains the dead-worker takeover
   delay.
