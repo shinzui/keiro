@@ -57,7 +57,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: baseline `cabal build all` and `cabal test keiro-test` pass at the starting commit.
+- [x] (2026-08-13 04:48Z) M1: baseline `cabal build all` and `cabal test keiro-test` pass at the starting commit.
 - [ ] M1: redelivery fixture catalog (async handler, real subscription, real dedup key,
       non-idempotent handler) added to `keiro/test/ProjectionReplaySpec.hs`.
 - [ ] M1: red test "promotion leaves redelivery safe for a clear-before-replay async
@@ -87,7 +87,15 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The starting tree was already exercised by EP-4's final `just verify` immediately
+  before this plan began: `cabal build all` passed and `keiro-test` passed 540 examples
+  with zero failures. The intervening commit changed only documentation, so this is the
+  exact code baseline for EP-5.
+- Mori resolved Kiroku to `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku` and
+  verified the public checkpoint APIs against source and
+  `mori://shinzui/kiroku/okf/adrs/concepts/ADR-4`: inventory exposes every persisted
+  member; the reset assigns one exact position to all existing members, invents none,
+  and returns deterministic affected/missing evidence.
 
 
 ## Decision Log

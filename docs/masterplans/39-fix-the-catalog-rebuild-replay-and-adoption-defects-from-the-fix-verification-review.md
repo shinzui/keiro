@@ -95,7 +95,7 @@ MasterPlan beyond ADR-26's already-cited `mori://shinzui/mori/okf/adrs/concepts/
 | 2 | Capture replay adapter application order in the rebuild resume contract | docs/plans/247-capture-replay-adapter-application-order-in-the-rebuild-resume-contract.md | None | EP-1 | Complete |
 | 3 | Give pre-canonical in-flight rebuild runs a supported recovery path | docs/plans/248-give-pre-canonical-in-flight-rebuild-runs-a-supported-recovery-path.md | None | EP-2 | Complete |
 | 4 | Make catalog adoption scoped, truthful, and registry-complete | docs/plans/249-make-catalog-adoption-scoped-truthful-and-registry-complete.md | None | EP-3 | Complete |
-| 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | Not Started |
+| 5 | Make catalog rebuild promotion redelivery-safe for async projections | docs/plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md | None | EP-1, EP-2 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
