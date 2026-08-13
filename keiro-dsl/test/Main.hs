@@ -7686,6 +7686,83 @@ main = hspec $ do
           changes = diffSpecs eventual strong
       any isBreaking changes `shouldBe` False
       [ckFacet k | Additive k <- changes] `shouldContain` ["read-model-consistency"]
+    it "classifies the legacy Strong to language-5 immediate freshness migration as breaking" $ do
+      source <- readTestText "test/fixtures/readmodel-migration-l4.keiro"
+      let legacyStrongPolicy =
+            "  consistency = Strong\n  scope = category \"reservation\"\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          toLanguage5 policy =
+            T.replace "language keiro-dsl 4" "language keiro-dsl 5"
+              . T.replace legacyStrongPolicy policy
+      legacyStrong <- checkedServiceFromText "readmodel-migration-legacy-strong.keiro" source
+      immediate <- checkedServiceFromText "readmodel-migration-immediate.keiro" (toLanguage5 "  freshness = immediate\n" source)
+      let changes = diffServices legacyStrong immediate
+      [ckCode k | Breaking k <- changes] `shouldContain` [QueryFreshnessChanged]
+      [ckFacet k | Breaking k <- changes] `shouldContain` ["query-freshness"]
+      [ckFacet k | Additive k <- changes] `shouldNotContain` ["read-model-scope"]
+      [ckDetail k | Breaking k <- changes, ckCode k == QueryFreshnessChanged]
+        `shouldSatisfy` any (T.isInfixOf "wait-for-head category 'reservation' -> immediate")
+    it "keeps equivalent and strengthened freshness migrations non-breaking" $ do
+      source <- readTestText "test/fixtures/readmodel-migration-l4.keiro"
+      let legacyStrongPolicy =
+            "  consistency = Strong\n  scope = category \"reservation\"\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          legacyEventualPolicy =
+            "  consistency = Eventual\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          toLanguage5 policy =
+            T.replace "language keiro-dsl 4" "language keiro-dsl 5"
+              . T.replace legacyStrongPolicy policy
+          readModelFacets = filter (\facet -> facet == "query-freshness" || "read-model-" `T.isPrefixOf` facet) . map (ckFacet . kindOfChange)
+          assertEquivalent changes = do
+            any isBreaking changes `shouldBe` False
+            readModelFacets changes `shouldBe` []
+      legacyStrong <- checkedServiceFromText "readmodel-migration-equivalent-legacy-strong.keiro" source
+      strongEquivalent <- checkedServiceFromText "readmodel-migration-equivalent-wait.keiro" (toLanguage5 "  freshness = wait-for-head category \"reservation\"\n" source)
+      assertEquivalent (diffServices legacyStrong strongEquivalent)
+      let eventualSource = T.replace legacyStrongPolicy legacyEventualPolicy source
+      legacyEventual <- checkedServiceFromText "readmodel-migration-equivalent-legacy-eventual.keiro" eventualSource
+      immediate <- checkedServiceFromText "readmodel-migration-equivalent-immediate.keiro" (toLanguage5 "  freshness = immediate\n" source)
+      assertEquivalent (diffServices legacyEventual immediate)
+      strengthened <- checkedServiceFromText "readmodel-migration-strengthened.keiro" (toLanguage5 "  freshness = wait-for-head entire-log\n" source)
+      let strengthenedChanges = diffServices legacyEventual strengthened
+      any isBreaking strengthenedChanges `shouldBe` False
+      [ckCode k | Additive k <- strengthenedChanges] `shouldContain` [CompatibilityStrengthened]
+      [ckFacet k | Additive k <- strengthenedChanges] `shouldContain` ["query-freshness"]
+    it "classifies scope changes and reverse downgrades in the freshness migration by the normalized pair" $ do
+      source <- readTestText "test/fixtures/readmodel-migration-l4.keiro"
+      let legacyStrongPolicy =
+            "  consistency = Strong\n  scope = category \"reservation\"\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          legacyEventualPolicy =
+            "  consistency = Eventual\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          toLanguage5 policy =
+            T.replace "language keiro-dsl 4" "language keiro-dsl 5"
+              . T.replace legacyStrongPolicy policy
+      legacyStrong <- checkedServiceFromText "readmodel-migration-scope-legacy-strong.keiro" source
+      widened <- checkedServiceFromText "readmodel-migration-scope-widened.keiro" (toLanguage5 "  freshness = wait-for-head entire-log\n" source)
+      let widenedChanges = diffServices legacyStrong widened
+      any isBreaking widenedChanges `shouldBe` False
+      [ckCode k | Additive k <- widenedChanges] `shouldContain` [CompatibilityStrengthened]
+      [ckFacet k | Additive k <- widenedChanges] `shouldContain` ["query-freshness"]
+      categoryChanged <- checkedServiceFromText "readmodel-migration-scope-category-changed.keiro" (toLanguage5 "  freshness = wait-for-head category \"other\"\n" source)
+      [ckCode k | Breaking k <- diffServices legacyStrong categoryChanged] `shouldContain` [QueryFreshnessChanged]
+      immediate <- checkedServiceFromText "readmodel-migration-reverse-immediate.keiro" (toLanguage5 "  freshness = immediate\n" source)
+      let reverseStrengthened = diffServices immediate legacyStrong
+      any isBreaking reverseStrengthened `shouldBe` False
+      [ckCode k | Additive k <- reverseStrengthened] `shouldContain` [CompatibilityStrengthened]
+      legacyEventual <- checkedServiceFromText "readmodel-migration-reverse-legacy-eventual.keiro" (T.replace legacyStrongPolicy legacyEventualPolicy source)
+      waitCategory <- checkedServiceFromText "readmodel-migration-reverse-wait.keiro" (toLanguage5 "  freshness = wait-for-head category \"reservation\"\n" source)
+      [ckCode k | Breaking k <- diffServices waitCategory legacyEventual] `shouldContain` [QueryFreshnessChanged]
+    it "keeps identical same-language freshness migration pairs free of policy findings" $ do
+      source <- readTestText "test/fixtures/readmodel-migration-l4.keiro"
+      let legacyStrongPolicy =
+            "  consistency = Strong\n  scope = category \"reservation\"\n  feed = subscription\n  subscription = \"hospital-capacity-transfer-decisions-sub\"\n"
+          language5Source =
+            T.replace "language keiro-dsl 4" "language keiro-dsl 5"
+              . T.replace legacyStrongPolicy "  freshness = immediate\n"
+              $ source
+          policyFacets = filter (\facet -> facet == "query-freshness" || "read-model-" `T.isPrefixOf` facet) . map (ckFacet . kindOfChange)
+      language4 <- checkedServiceFromText "readmodel-migration-identical-language-4.keiro" source
+      language5 <- checkedServiceFromText "readmodel-migration-identical-language-5.keiro" language5Source
+      policyFacets (diffServices language4 language4) `shouldBe` []
+      policyFacets (diffServices language5 language5) `shouldBe` []
 
   describe "module placement (M1)" $ do
     it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do

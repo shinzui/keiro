@@ -1,0 +1,49 @@
+language keiro-dsl 4
+context hospital-capacity
+
+id  TransferReservationId  prefix=rsv
+id  HospitalId             prefix=hosp
+id  CommandId              prefix=cmd
+
+enum PatientAcuity { RedTag=red YellowTag=yellow GreenTag=green }
+enum DivertStatus  { Open=open PartialDivert=partial-divert TotalDivert=total-divert }
+
+aggregate Reservation
+  regs
+    reservationId    TransferReservationId = placeholder
+    hospitalId       HospitalId            = placeholder
+    patientAcuity    PatientAcuity         = GreenTag
+  states Unrequested Held Confirmed
+
+  command RequestTransferReservation { reservationId hospitalId commandId patientAcuity divertStatus }
+  command ConfirmReservation         { reservationId hospitalId commandId }
+
+  event TransferReservationCreated   = fields(RequestTransferReservation)
+  event TransferReservationConfirmed { reservationId hospitalId commandId }
+
+  Unrequested -- RequestTransferReservation -->
+    guard cmd.divertStatus != DivertStatus.TotalDivert
+    emit  TransferReservationCreated
+    goto  Held
+  Held -- ConfirmReservation --> emit TransferReservationConfirmed ; goto Confirmed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection transfer_decisions key=reservationId
+    status-map { TransferReservationCreated=>held TransferReservationConfirmed=>done }
+
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+    status text required
+    decided_at timestamptz
+  }
+  version = 1
+  shape = "fnv1a:3717f6d9e3c44bd6"
+  consistency = Strong
+  scope = category "reservation"
+  feed = subscription
+  subscription = "hospital-capacity-transfer-decisions-sub"
+}

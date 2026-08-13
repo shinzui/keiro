@@ -1230,12 +1230,35 @@ readModelPairDiff env oldReadModel newReadModel =
         ++ [ breaking nodeName "read-model-subscription" nodeName DerivedIdentityChanged ("subscription changed '" <> oldSubscription <> "' -> '" <> newSubscription <> "'; the worker cursor remains under the old identity")
            | oldSubscription /= newSubscription
            ]
-    policyChanges
-      | rmSupply oldReadModel == OwnerDerivedSupply && rmSupply newReadModel == OwnerDerivedSupply =
-          [ breaking nodeName "query-freshness" nodeName QueryFreshnessChanged ("query freshness changed " <> renderFreshness (rmFreshness oldReadModel) <> " -> " <> renderFreshness (rmFreshness newReadModel) <> "; catalog and owning-group query policy identity changed")
-          | rmFreshness oldReadModel /= rmFreshness newReadModel
-          ]
-      | otherwise = legacyFeedChanges <> legacyConsistencyChanges <> legacyScopeChanges
+    -- There are three policy comparison shapes: catalog-owned on both sides,
+    -- legacy on both sides, or a migration between them. The mixed case uses
+    -- the normalized freshness matrix in docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md;
+    -- unlike two catalog-owned revisions, a migration strengthening is additive.
+    policyChanges = case (rmSupply oldReadModel, rmSupply newReadModel) of
+      (OwnerDerivedSupply, OwnerDerivedSupply) ->
+        [ breaking nodeName "query-freshness" nodeName QueryFreshnessChanged ("query freshness changed " <> renderFreshness (rmFreshness oldReadModel) <> " -> " <> renderFreshness (rmFreshness newReadModel) <> "; catalog and owning-group query policy identity changed")
+        | rmFreshness oldReadModel /= rmFreshness newReadModel
+        ]
+      (LegacyReadModelSupply {}, LegacyReadModelSupply {}) ->
+        legacyFeedChanges <> legacyConsistencyChanges <> legacyScopeChanges
+      _ -> migrationFreshnessChanges
+    migrationFreshnessChanges = case (rmFreshness oldReadModel, rmFreshness newReadModel) of
+      (oldFreshness, newFreshness)
+        | oldFreshness == newFreshness -> []
+      (FreshnessWaitForHead _, FreshnessImmediate) ->
+        [ breaking nodeName "query-freshness" nodeName QueryFreshnessChanged ("query freshness weakened " <> renderFreshness (rmFreshness oldReadModel) <> " -> immediate across the legacy consistency migration; callers lose the cursor-wait guarantee")
+        ]
+      (FreshnessImmediate, FreshnessWaitForHead _) ->
+        [ additive nodeName "query-freshness" nodeName CompatibilityStrengthened ("query freshness strengthened immediate -> " <> renderFreshness (rmFreshness newReadModel) <> " across the legacy consistency migration; callers gain a cursor-wait guarantee")
+        ]
+      (FreshnessWaitForHead oldWaitScope, FreshnessWaitForHead newWaitScope)
+        | scopeStrengthened oldWaitScope newWaitScope ->
+            [ additive nodeName "query-freshness" nodeName CompatibilityStrengthened ("query freshness head scope widened " <> renderScope oldWaitScope <> " -> " <> renderScope newWaitScope <> " across the legacy consistency migration")
+            ]
+        | otherwise ->
+            [ breaking nodeName "query-freshness" nodeName QueryFreshnessChanged ("query freshness head scope changed " <> renderScope oldWaitScope <> " -> " <> renderScope newWaitScope <> " across the legacy consistency migration; callers no longer wait on the same event surface")
+            ]
+      (FreshnessImmediate, FreshnessImmediate) -> []
     legacyFeedChanges =
       [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed oldFeed <> " -> " <> renderFeed newFeed <> "; projection wiring and rebuild identities changed")
       | Just oldFeed <- [legacyReadModelFeed oldReadModel],

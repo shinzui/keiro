@@ -46,10 +46,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the migration fixture `keiro-dsl/test/fixtures/readmodel-migration-l4.keiro`
+- [x] (2026-08-13 07:21 PDT) M1: add the migration fixture `keiro-dsl/test/fixtures/readmodel-migration-l4.keiro`
       and the new cross-language diff regression tests in `keiro-dsl/test/Main.hs`; run the
       focused suite and capture the red failure transcript into this plan.
-- [ ] M2: restructure `policyChanges` in `readModelPairDiff`
+- [x] (2026-08-13 07:25 PDT) M2: restructure `policyChanges` in `readModelPairDiff`
       (`keiro-dsl/src/Keiro/Dsl/Diff.hs`) into the three-case supply-shape split; focused
       suite green; commit tests and fix together.
 - [ ] M3: prove no false positives and zero corpus drift — full
@@ -80,6 +80,32 @@ implementation. Provide concise evidence.
   the language 4 to 5 runtime-semantics bump, is advisory (exit 0), and is out of scope
   here. Tests in this plan must therefore assert on breaking-ness and on the
   `query-freshness` / `read-model-scope` facets, not on "the change list is empty".
+- Implementation (2026-08-13): the four focused migration examples compiled and the
+  pre-fix run failed in the three intended mixed-supply cases. It found no breaking
+  `QueryFreshnessChanged`, fabricated `read-model-scope` for an equivalent rewrite, and
+  failed to classify a real scope change on `query-freshness`; identical same-language
+  pairs stayed clean.
+
+  ```text
+  diff (evolution classification)
+    classifies the legacy Strong to language-5 immediate freshness migration as breaking [✘]
+    keeps equivalent and strengthened freshness migrations non-breaking [✘]
+    classifies scope changes and reverse downgrades in the freshness migration by the normalized pair [✘]
+    keeps identical same-language freshness migration pairs free of policy findings [✔]
+
+  1) [] does not contain [QueryFreshnessChanged]
+  2) expected: []; but got: ["read-model-scope"]
+  3) ["read-model-scope"] does not contain ["query-freshness"]
+  4 examples, 3 failures
+  ```
+- Implementation (2026-08-13): the explicit owner/owner, legacy/legacy, and mixed
+  supply split made all four migration examples green while the existing read-model
+  classification group remained green.
+
+  ```text
+  freshness migration: 4 examples, 0 failures
+  read-model: 8 examples, 0 failures
+  ```
 
 (Add implementation discoveries below as work proceeds.)
 
