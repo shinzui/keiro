@@ -256,6 +256,18 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     group <- expectStore store (lookupProjectionRebuildGroup replayGroupId)
     group ^? _Just . #status `shouldBe` Just GroupRebuilding
 
+  it "applies merged multi-source chunks in ascending global order across buffer boundaries" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
+    appendStaggered store
+    validated <- expectValid (replayCatalog goodDecoder passingVerification)
+    _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+    report <-
+      expectStore store (startCatalogRebuild validated replayGroupId (options "staggered-run" 2))
+        >>= shouldBeRight
+    report ^. #runStatus `shouldBe` RebuildRunPromoted
+    expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
+      `shouldReturn` [1, 2, 3, 4, 7, 8, 9]
+
 data ReplayEvent = ReplayEvent !Int64
   deriving stock (Eq, Show)
 
@@ -398,6 +410,21 @@ appendInterleaved store =
       (StreamName "orders-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (40 :: Int64)),
       (StreamName "customers-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (50 :: Int64)),
       (StreamName "billing-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (60 :: Int64))
+    ]
+
+appendStaggered :: Store.KirokuStore -> IO ()
+appendStaggered store =
+  traverse_
+    (appendRaw store)
+    [ (StreamName "orders-1", NoStream, EventType "ReplayEvent", Aeson.toJSON (11 :: Int64)),
+      (StreamName "customers-1", NoStream, EventType "ReplayEvent", Aeson.toJSON (21 :: Int64)),
+      (StreamName "customers-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (22 :: Int64)),
+      (StreamName "customers-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (23 :: Int64)),
+      (StreamName "padding-1", NoStream, EventType "PaddingEvent", Aeson.Null),
+      (StreamName "padding-1", AnyVersion, EventType "PaddingEvent", Aeson.Null),
+      (StreamName "customers-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (24 :: Int64)),
+      (StreamName "orders-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (12 :: Int64)),
+      (StreamName "orders-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (13 :: Int64))
     ]
 
 appendCountingFixture :: Store.KirokuStore -> IO ()

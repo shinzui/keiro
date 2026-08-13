@@ -53,13 +53,15 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
       `cabal test keiro-test` passed 508 examples with 0 failures in 106.0253 seconds;
       `cabal bench keiro-bench --benchmark-options="-p rebuild --time-mode wall"` measured
       `rebuild/three-categories-200` at 52.8 ms +/- 5.2 ms before the fix.
-- [ ] Milestone 1: red test "applies merged multi-source chunks in ascending global order
-      across buffer boundaries" added to `keiro/test/ProjectionReplaySpec.hs`; observed
-      failing with trace `[1,2,3,8,4,7,9]` against expected `[1,2,3,4,7,8,9]` on
-      unmodified runner code; failing transcript recorded here.
-- [ ] Milestone 2: merge-horizon clamp and monotonic applied floor implemented in
-      `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs`; Milestone 1 test green; full
-      `cabal test keiro-test` green with zero edits to pre-existing examples.
+- [x] (2026-08-13T02:29:52Z) Milestone 1: added "applies merged multi-source chunks in
+      ascending global order across buffer boundaries" to
+      `keiro/test/ProjectionReplaySpec.hs`; against the unmodified runner the rebuild
+      promoted and the assertion failed exactly with expected `[1,2,3,4,7,8,9]` but got
+      `[1,2,3,8,4,7,9]` (1 example, 1 failure in 0.2057 seconds).
+- [x] (2026-08-13T02:29:52Z) Milestone 2: implemented the merge-horizon clamp and monotonic
+      applied floor in `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs`; the focused example
+      passed, `cabal build keiro` succeeded, and `cabal test keiro-test` passed all 509
+      examples with 0 failures in 101.9082 seconds without edits to pre-existing examples.
 - [ ] Milestone 3: deterministic seeded interleaving sweep added and green (all sweep
       cases apply strictly ascending order and promote).
 - [ ] Milestone 4: read-count proof re-run and actual call/row counts recorded here;

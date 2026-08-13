@@ -377,58 +377,86 @@ driveCatalogRebuild catalog groupId runId pageSize contract metrics =
             verifyAndPromote catalog groupId runId contract metrics
         | otherwise ->
             go
+              (appliedFloor report)
               [ emptySourcePage source
               | source <- report ^. #sources,
                 not (sourceComplete source)
               ]
 
-    go buffers = do
+    appliedFloor report =
+      List.foldl'
+        Prelude.max
+        (GlobalPosition 0)
+        [source ^. #cursorPosition | source <- report ^. #sources]
+
+    go appliedThrough buffers = do
       pages <- traverse refillSourcePage buffers
       let ordered = orderedCandidates pages
+          horizon = mergeHorizon pages
+          eligible =
+            Prelude.takeWhile
+              ((<= horizon) . (^. #globalPosition) . (^. #routedEvent))
+              ordered
+          chunk = Prelude.take (Prelude.fromIntegral pageSize) eligible
       case duplicatePosition ordered of
         Just duplicate -> do
           let detail = "duplicate global position in merged category history: " <> renderPosition duplicate
           recordFailure runId "replay.global-position-duplicate" detail Nothing Nothing (Just duplicate)
           Telemetry.recordProjectionRebuildFailures metrics 1
           pure (Left (CatalogRebuildInvariantFailed runId detail))
-        Nothing -> do
-          let chunk = Prelude.take (Prelude.fromIntegral pageSize) ordered
-          startedAt <- liftIO getCurrentTime
-          applied <- runTransaction (applyChunkTx runId contract fleet pages chunk)
-          case applied of
-            Left ChunkInactive ->
-              pure (Left (CatalogRebuildRunNotActive runId))
-            Left ChunkInterfered ->
-              inspectCatalogRebuildMaybe runId >>= continueFromReport
-            Left (ChunkDecode failure) -> do
-              recordFailure
-                runId
-                "replay.decode-failure"
-                (failure ^. #decodeDetail)
-                (Just (failure ^. #decodeSource))
-                (Just (failure ^. #decodeProjection))
-                (Just (failure ^. #decodePosition))
+        Nothing
+          | Just regressed <- chunkRegression appliedThrough chunk -> do
+              let detail =
+                    "merged chunk regressed to global position "
+                      <> renderPosition regressed
+                      <> " at or below applied floor "
+                      <> renderPosition appliedThrough
+              recordFailure runId "replay.global-position-regression" detail Nothing Nothing (Just regressed)
               Telemetry.recordProjectionRebuildFailures metrics 1
-              pure
-                ( Left
-                    ( CatalogRebuildDecodeFailed
-                        runId
-                        (failure ^. #decodeSource)
-                        (failure ^. #decodeProjection)
-                        (failure ^. #decodePosition)
-                        (failure ^. #decodeError)
+              pure (Left (CatalogRebuildInvariantFailed runId detail))
+          | null chunk,
+            not (null ordered) -> do
+              let detail = "buffered merge stalled: candidates exist above the merge horizon " <> renderPosition horizon
+              recordFailure runId "replay.buffer-horizon-stalled" detail Nothing Nothing Nothing
+              Telemetry.recordProjectionRebuildFailures metrics 1
+              pure (Left (CatalogRebuildInvariantFailed runId detail))
+          | otherwise -> do
+              startedAt <- liftIO getCurrentTime
+              applied <- runTransaction (applyChunkTx runId contract fleet pages chunk)
+              case applied of
+                Left ChunkInactive ->
+                  pure (Left (CatalogRebuildRunNotActive runId))
+                Left ChunkInterfered ->
+                  inspectCatalogRebuildMaybe runId >>= continueFromReport
+                Left (ChunkDecode failure) -> do
+                  recordFailure
+                    runId
+                    "replay.decode-failure"
+                    (failure ^. #decodeDetail)
+                    (Just (failure ^. #decodeSource))
+                    (Just (failure ^. #decodeProjection))
+                    (Just (failure ^. #decodePosition))
+                  Telemetry.recordProjectionRebuildFailures metrics 1
+                  pure
+                    ( Left
+                        ( CatalogRebuildDecodeFailed
+                            runId
+                            (failure ^. #decodeSource)
+                            (failure ^. #decodeProjection)
+                            (failure ^. #decodePosition)
+                            (failure ^. #decodeError)
+                        )
                     )
-                )
-            Right () -> do
-              finishedAt <- liftIO getCurrentTime
-              Telemetry.recordProjectionRebuildPages metrics 1
-              Telemetry.recordProjectionRebuildEvents metrics (Prelude.fromIntegral (Prelude.length chunk))
-              Telemetry.recordProjectionRebuildPageDuration metrics (Prelude.realToFrac (diffUTCTime finishedAt startedAt) * 1000)
-              let advanced = advanceSourcePages pages chunk
-                  incomplete = filter (not . sourceComplete . (^. #pageSource)) advanced
-              if null incomplete
-                then verifyAndPromote catalog groupId runId contract metrics
-                else go incomplete
+                Right () -> do
+                  finishedAt <- liftIO getCurrentTime
+                  Telemetry.recordProjectionRebuildPages metrics 1
+                  Telemetry.recordProjectionRebuildEvents metrics (Prelude.fromIntegral (Prelude.length chunk))
+                  Telemetry.recordProjectionRebuildPageDuration metrics (Prelude.realToFrac (diffUTCTime finishedAt startedAt) * 1000)
+                  let advanced = advanceSourcePages pages chunk
+                      incomplete = filter (not . sourceComplete . (^. #pageSource)) advanced
+                  if null incomplete
+                    then verifyAndPromote catalog groupId runId contract metrics
+                    else go (chunkCeiling appliedThrough chunk) incomplete
 
     refillSourcePage page
       | null (page ^. #pageEvents) = readSourcePage pageSize (page ^. #pageSource)
@@ -517,6 +545,17 @@ orderedCandidates =
           ]
       )
 
+pageHorizon :: SourcePage -> GlobalPosition
+pageHorizon page
+  | page ^. #pageProvesExhaustion = page ^. #pageSource . #targetPosition
+  | otherwise =
+      case page ^. #pageEvents of
+        [] -> page ^. #pageSource . #cursorPosition
+        events -> Prelude.last events ^. #globalPosition
+
+mergeHorizon :: [SourcePage] -> GlobalPosition
+mergeHorizon = Prelude.minimum . Prelude.map pageHorizon
+
 duplicatePosition :: [RoutedEvent] -> Maybe GlobalPosition
 duplicatePosition candidates =
   listToMaybe
@@ -524,6 +563,18 @@ duplicatePosition candidates =
     | (left, right) <- List.zip candidates (Prelude.drop 1 candidates),
       left ^. #routedEvent . #globalPosition == right ^. #routedEvent . #globalPosition
     ]
+
+chunkRegression :: GlobalPosition -> [RoutedEvent] -> Maybe GlobalPosition
+chunkRegression appliedThrough = \case
+  routed : _
+    | routed ^. #routedEvent . #globalPosition <= appliedThrough ->
+        Just (routed ^. #routedEvent . #globalPosition)
+  _ -> Nothing
+
+chunkCeiling :: GlobalPosition -> [RoutedEvent] -> GlobalPosition
+chunkCeiling appliedThrough = \case
+  [] -> appliedThrough
+  chunk -> Prelude.last chunk ^. #routedEvent . #globalPosition
 
 data DecodeFailure = DecodeFailure
   { decodeSource :: !SourceId,
