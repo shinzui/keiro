@@ -15,7 +15,11 @@ module Keiro.ReadModel.Rebuild.Group
     GroupRebuildMetadata (..),
     CatalogRegistrationError (..),
     GroupAdoptionClass (..),
+    RegistrationAdoptionAction (..),
+    RegistrationAdoption (..),
+    OrphanedRegistration (..),
     CatalogAdoptionPlan (..),
+    CatalogAdoptionResult (..),
     CatalogAdoptionError (..),
     RebuildStartError (..),
     GroupTransitionError (..),
@@ -48,7 +52,7 @@ import Data.Functor (($>))
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, maybeToList)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
@@ -164,9 +168,39 @@ data GroupAdoptionClass
   | AdoptionStaleFormat !Text
   deriving stock (Eq, Show, Generic)
 
+-- | What adoption did, or in a preview will do, for one catalog registration.
+data RegistrationAdoptionAction
+  = RegistrationUpdate
+  | RegistrationInsert
+  deriving stock (Eq, Show, Generic)
+
+data RegistrationAdoption = RegistrationAdoption
+  { registryName :: !Text,
+    rebuildGroupId :: !RebuildGroupId,
+    action :: !RegistrationAdoptionAction
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | A registry row bound to a catalog group whose name no registration in the
+-- complete validated catalog claims.
+data OrphanedRegistration = OrphanedRegistration
+  { registryName :: !Text,
+    boundGroupId :: !RebuildGroupId
+  }
+  deriving stock (Eq, Show, Generic)
+
 data CatalogAdoptionPlan = CatalogAdoptionPlan
   { groupStates :: ![(RebuildGroupId, GroupAdoptionClass)],
-    removedGroups :: ![RebuildGroupId]
+    removedGroups :: ![RebuildGroupId],
+    registrations :: ![RegistrationAdoption],
+    orphanedRegistrations :: ![OrphanedRegistration]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionResult = CatalogAdoptionResult
+  { adoptedGroups :: ![GroupRebuildMetadata],
+    registrationOutcomes :: ![RegistrationAdoption],
+    removedOrphans :: ![OrphanedRegistration]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -360,6 +394,7 @@ previewCatalogAdoption ::
 previewCatalogAdoption catalog =
   runTransaction $ do
     registered <- Tx.statement () listGroupsStmt
+    registryRows <- Tx.statement () listQueryRegistrationBindingsStmt
     let registeredById = Map.fromList [(metadata ^. #rebuildGroupId, metadata) | metadata <- registered]
         catalogGroups =
           List.sortOn
@@ -380,10 +415,35 @@ previewCatalogAdoption catalog =
               metadata ^. #sliceFingerprint /= "$legacy-unmanaged",
               (metadata ^. #rebuildGroupId) `Set.notMember` catalogGroupSet
             ]
+        catalogRegistrationRows = List.sortOn (^. #registryName) (catalogRegistrations catalog)
+        catalogRegistrationNames = Set.fromList ((^. #registryName) <$> catalogRegistrationRows)
+        registeredNames = Set.fromList (Prelude.fst <$> registryRows)
+        registrationPlans =
+          [ RegistrationAdoption
+              { registryName = registration ^. #registryName,
+                rebuildGroupId = registration ^. #rebuildGroupId,
+                action =
+                  if (registration ^. #registryName) `Set.member` registeredNames
+                    then RegistrationUpdate
+                    else RegistrationInsert
+              }
+          | registration <- catalogRegistrationRows
+          ]
+        orphaned =
+          List.sortOn
+            (^. #registryName)
+            [ OrphanedRegistration name groupId
+            | (name, storedGroupId) <- registryRows,
+              name `Set.notMember` catalogRegistrationNames,
+              groupId <- maybeToList (either (Prelude.const Nothing) Just (mkRebuildGroupId storedGroupId)),
+              groupId `Set.member` catalogGroupSet
+            ]
     pure
       CatalogAdoptionPlan
         { groupStates = classify <$> catalogGroups,
-          removedGroups = removed
+          removedGroups = removed,
+          registrations = registrationPlans,
+          orphanedRegistrations = orphaned
         }
   where
     adoptionClass groupId stored
@@ -397,7 +457,7 @@ adoptCatalogGroups ::
   (Store :> es) =>
   ValidatedProjectionCatalog ->
   NonEmpty.NonEmpty RebuildGroupId ->
-  Eff es (Either CatalogAdoptionError [GroupRebuildMetadata])
+  Eff es (Either CatalogAdoptionError CatalogAdoptionResult)
 adoptCatalogGroups catalog requested =
   case List.find (`Set.notMember` catalogGroupSet) groupIds of
     Just groupId -> pure (Left (AdoptGroupNotInCatalog groupId))
@@ -414,25 +474,71 @@ adoptCatalogGroups catalog requested =
         | registration <- catalogRegistrations catalog,
           (registration ^. #rebuildGroupId) `Set.member` namedGroupSet
         ]
+    allRegistrationNames = Set.fromList ((^. #registryName) <$> catalogRegistrations catalog)
 
     adoptTx = do
       locked <- lockAll [] groupIds
       case locked of
         Left err -> Tx.condemn $> Left err
-        Right _ -> do
+        Right lockedGroups -> do
           for_ groupIds $ \groupId ->
             Tx.statement
               (rebuildGroupIdText groupId, sliceTextFor catalog groupId)
               adoptGroupSliceStmt
-          for_ registrations $ \registration ->
-            Tx.statement (queryRegistrationParams registration) adoptQueryRegistrationStmt
+          registrationResults <- traverse (reconcileRegistration lockedGroups) registrations
+          boundRows <- Tx.statement (rebuildGroupIdText <$> groupIds) lockGroupRegistrationsStmt
+          let groupByText = Map.fromList [(rebuildGroupIdText groupId, groupId) | groupId <- groupIds]
+              orphaned =
+                List.sortOn
+                  (^. #registryName)
+                  [ OrphanedRegistration name groupId
+                  | (name, storedGroupId) <- boundRows,
+                    name `Set.notMember` allRegistrationNames,
+                    groupId <- maybeToList (Map.lookup storedGroupId groupByText)
+                  ]
+          unless (null orphaned)
+            $ Tx.statement ((^. #registryName) <$> orphaned) deleteQueryRegistrationsStmt
           updated <- traverse (\groupId -> Tx.statement (rebuildGroupIdText groupId) lookupGroupStmt) groupIds
           pure
             ( Right
-                [ metadata
-                | Just metadata <- updated
-                ]
+                CatalogAdoptionResult
+                  { adoptedGroups = [metadata | Just metadata <- updated],
+                    registrationOutcomes = registrationResults,
+                    removedOrphans = orphaned
+                  }
             )
+
+    reconcileRegistration lockedGroups registration = do
+      existing <- Tx.statement (registration ^. #registryName) lookupQueryRegistrationStmt
+      action <-
+        case existing of
+          Just _ -> do
+            affected <- Tx.statement (queryRegistrationParams registration) adoptQueryRegistrationStmt
+            when (affected /= 1)
+              $ error "adoptTx: locked registration row vanished"
+            pure RegistrationUpdate
+          Nothing -> do
+            Tx.statement
+              (adoptionQueryRegistrationParams lockedGroups registration)
+              insertAdoptedQueryRegistrationStmt
+            pure RegistrationInsert
+      pure
+        RegistrationAdoption
+          { registryName = registration ^. #registryName,
+            rebuildGroupId = registration ^. #rebuildGroupId,
+            action
+          }
+
+    adoptionQueryRegistrationParams lockedGroups registration =
+      let (name, version, shape, groupId) = queryRegistrationParams registration
+          status =
+            case List.find ((== registration ^. #rebuildGroupId) . (^. #rebuildGroupId)) lockedGroups of
+              Just metadata -> case metadata ^. #status of
+                GroupLive -> "live"
+                GroupFailed -> "abandoned"
+                _ -> error "adoptTx: non-adoptable group reached registration insert"
+              Nothing -> error "adoptTx: registration group was not locked"
+       in (name, version, shape, groupId, status)
 
     lockAll accumulated = \case
       [] -> pure (Right (Prelude.reverse accumulated))
@@ -943,6 +1049,24 @@ insertQueryRegistrationStmt =
     )
     D.noResult
 
+insertAdoptedQueryRegistrationStmt :: Statement (Text, Int64, Text, Text, Text) ()
+insertAdoptedQueryRegistrationStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_read_models
+      (name, version, shape_hash, rebuild_group_id, status, last_built_at)
+    VALUES ($1, $2, $3, $4, $5,
+            CASE WHEN $5 = 'live' THEN now() ELSE NULL END)
+    """
+    ( contrazip5
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
 lookupQueryRegistrationStmt :: Statement Text (Maybe RegisteredQueryRow)
 lookupQueryRegistrationStmt =
   preparable
@@ -992,7 +1116,7 @@ adoptGroupSliceStmt =
     )
     D.noResult
 
-adoptQueryRegistrationStmt :: Statement (Text, Int64, Text, Text) ()
+adoptQueryRegistrationStmt :: Statement (Text, Int64, Text, Text) Int64
 adoptQueryRegistrationStmt =
   preparable
     """
@@ -1009,6 +1133,40 @@ adoptQueryRegistrationStmt =
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
+    D.rowsAffected
+
+listQueryRegistrationBindingsStmt :: Statement () [(Text, Text)]
+listQueryRegistrationBindingsStmt =
+  preparable
+    """
+    SELECT name, rebuild_group_id
+    FROM keiro.keiro_read_models
+    ORDER BY name
+    """
+    E.noParams
+    (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+
+lockGroupRegistrationsStmt :: Statement [Text] [(Text, Text)]
+lockGroupRegistrationsStmt =
+  preparable
+    """
+    SELECT name, rebuild_group_id
+    FROM keiro.keiro_read_models
+    WHERE rebuild_group_id = ANY($1)
+    ORDER BY name
+    FOR UPDATE
+    """
+    (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+    (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+
+deleteQueryRegistrationsStmt :: Statement [Text] ()
+deleteQueryRegistrationsStmt =
+  preparable
+    """
+    DELETE FROM keiro.keiro_read_models
+    WHERE name = ANY($1)
+    """
+    (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
     D.noResult
 
 deleteOrphanLegacyGroupsStmt :: Statement () ()

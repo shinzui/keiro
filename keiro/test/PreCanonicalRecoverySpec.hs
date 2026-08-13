@@ -71,8 +71,8 @@ spec fixture = describe "pre-canonical rebuild recovery" $ around (withFreshStor
     adopted <-
       expectStore store (adoptCatalogGroups healthy (Catalog.mainGroupId :| []))
         >>= shouldBeRight
-    map (^. #status) adopted `shouldBe` [GroupFailed]
-    map (^. #sliceFingerprint) adopted
+    map (^. #status) (adopted ^. #adoptedGroups) `shouldBe` [GroupFailed]
+    map (^. #sliceFingerprint) (adopted ^. #adoptedGroups)
       `shouldBe` [currentSlice healthy]
     _ <- expectStore store (registerProjectionCatalog healthy) >>= shouldBeRight
 

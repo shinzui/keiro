@@ -12,6 +12,7 @@ module CatalogSpec
     auditTargetId,
     mainGroupId,
     additiveGroupId,
+    counterBinding,
   )
 where
 

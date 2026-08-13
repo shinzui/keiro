@@ -50,18 +50,18 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: red test in `keiro/test/CatalogEvolutionSpec.hs` proving a renamed
+- [x] (2026-08-13 04:16Z) Milestone 1: red test in `keiro/test/CatalogEvolutionSpec.hs` proving a renamed
       query registration is silently no-opped and its old-name row stranded.
-- [ ] Milestone 1: red test in `keiro/test/CatalogEvolutionSpec.hs` proving an added
+- [x] (2026-08-13 04:16Z) Milestone 1: red test in `keiro/test/CatalogEvolutionSpec.hs` proving an added
       query registration gets no row from adoption.
-- [ ] Milestone 1: red tests in `keiro-ops/test/Main.hs` proving the non-forced adopt
+- [x] (2026-08-13 04:16Z) Milestone 1: red tests in `keiro-ops/test/Main.hs` proving the non-forced adopt
       preview carries no scope annotation and does not mirror execution's
       group-not-in-catalog refusal.
-- [ ] Milestone 1: red transcripts captured in this plan's Validation section notes.
-- [ ] Milestone 2: registration disposition types, reworked `adoptTx`, orphan detection
+- [x] (2026-08-13 04:16Z) Milestone 1: red transcripts captured in Surprises & Discoveries.
+- [x] (2026-08-13 04:26Z) Milestone 2: registration disposition types, reworked `adoptTx`, orphan detection
       and deletion, and registration-aware `previewCatalogAdoption` in
       `keiro/src/Keiro/ReadModel/Rebuild/Group.hs`; facade exports updated.
-- [ ] Milestone 2: `keiro/test/CatalogEvolutionSpec.hs` updated and extended;
+- [x] (2026-08-13 04:26Z) Milestone 2: `keiro/test/CatalogEvolutionSpec.hs` updated and extended;
       `cabal test keiro-test` green.
 - [ ] Milestone 3: scoped preview, v2 report envelopes, and JSON in
       `keiro/src/Keiro/Projection/Catalog/Operations.hs`.
@@ -79,7 +79,22 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The red library baseline failed only on the two intended zero-row UPDATE symptoms:
+  renamed registration shape expected `Just "catalog-counter-query-renamed-v1"` but got
+  `Nothing`, and added registration group expected `Just "counter-group"` but got
+  `Nothing` (six focused examples, two failures).
+- The red ops baseline failed only on the intended v1 asymmetries: scoped preview headers
+  expected `name/kind/state/scope/stored/current` but got
+  `group/state/stored_slice/current_slice`, and an unknown requested group returned
+  `PreviewRequired` with schema `keiro/catalog-adoption-preview/v1` instead of a typed
+  refusal (four focused examples, two failures).
+- The registry-complete implementation passes all eight focused catalog-adoption examples,
+  including rename, add, out-of-scope move protection, and failed stale-format insertion,
+  and the full `keiro-test` suite passes 540 examples with zero failures.
+- A missing registration inserted while adopting a failed stale-format group cannot be
+  marked `live`: doing so would reopen a query model while EP-3 deliberately preserves the
+  group's recovery fence. The insertion now mirrors the locked group lifecycle as
+  `abandoned` with no `last_built_at`; the focused recovery/adoption test pins that rule.
 
 
 ## Decision Log
@@ -154,6 +169,14 @@ Record every decision made while working on the plan.
   lands second reconciles.
   Rationale: MasterPlan 39's Integration Points section assigns exactly this split.
   Date: 2026-08-12
+- Decision: When adoption inserts a previously missing registration for a failed
+  stale-format group, insert it as `abandoned` with no last-built timestamp; insertions
+  for live groups remain `live` and are stamped at adoption time.
+  Rationale: EP-3 made a failed pre-canonical group deliberately adoptable without
+  reopening its fence. A newly inserted `live` registration would contradict that group
+  lifecycle and permit query traffic to appear healthy before recovery. Mirroring the
+  locked group state keeps catalog acceptance separate from rebuild recovery.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective

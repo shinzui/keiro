@@ -253,11 +253,11 @@ adoptCatalogGroups ::
 adoptCatalogGroups (ProjectionCatalogOperations catalog) groups =
   Rebuild.adoptCatalogGroups catalog groups <&> \case
     Left err -> Left (CatalogOpsAdoptionRefused err)
-    Right metadata ->
+    Right result ->
       Right
         CatalogAdoptionOutcome
           { reportSchema = "keiro/catalog-adoption-outcome/v1",
-            adoptedGroups = metadata
+            adoptedGroups = result ^. #adoptedGroups
           }
 
 startGroupRebuild ::

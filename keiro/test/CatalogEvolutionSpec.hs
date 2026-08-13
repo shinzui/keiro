@@ -19,7 +19,7 @@ import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog qualified as CatalogApi
 import Keiro.Projection.Catalog.Operations qualified as Operations
-import Keiro.ReadModel (lookupReadModel)
+import Keiro.ReadModel (ReadModel (..), ReadModelStatus (Abandoned), lookupReadModel)
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
@@ -150,12 +150,144 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     adopted <-
       expectStore store (adoptCatalogGroups current (Catalog.mainGroupId :| []))
         >>= shouldBeRight
-    map (^. #status) adopted `shouldBe` [GroupFailed]
-    map (^. #sliceFingerprint) adopted
+    map (^. #status) (adopted ^. #adoptedGroups) `shouldBe` [GroupFailed]
+    map (^. #sliceFingerprint) (adopted ^. #adoptedGroups)
       `shouldBe` [sliceText current Catalog.mainGroupId]
+
+  it "adopts a renamed query registration completely" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql catalogFixtureSql))
+    current <- expectValid (rebuildableCatalog Catalog.validCatalog)
+    renamed <- expectValid renamedCatalog
+    _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    let oldSlice = sliceText current Catalog.mainGroupId
+        newSlice = sliceText renamed Catalog.mainGroupId
+    expectStore store (registerProjectionCatalog renamed)
+      `shouldReturn` Left (RegisteredGroupSliceDrift Catalog.mainGroupId oldSlice newSlice)
+    plan <- expectStore store (previewCatalogAdoption renamed)
+    plan ^. #registrations
+      `shouldContain` [RegistrationAdoption "catalog-counter-query-renamed" Catalog.mainGroupId RegistrationInsert]
+    plan ^. #orphanedRegistrations
+      `shouldContain` [OrphanedRegistration "catalog-counter-query" Catalog.mainGroupId]
+    result <-
+      expectStore store (adoptCatalogGroups renamed (Catalog.mainGroupId :| []))
+        >>= shouldBeRight
+    result ^. #registrationOutcomes
+      `shouldContain` [RegistrationAdoption "catalog-counter-query-renamed" Catalog.mainGroupId RegistrationInsert]
+    result ^. #removedOrphans
+      `shouldBe` [OrphanedRegistration "catalog-counter-query" Catalog.mainGroupId]
+    renamedRow <- expectStore store (lookupReadModel "catalog-counter-query-renamed")
+    renamedRow ^? _Just . #shapeHash
+      `shouldBe` Just "catalog-counter-query-renamed-v1"
+    oldRow <- expectStore store (lookupReadModel "catalog-counter-query")
+    oldRow `shouldBe` Nothing
+    registered <- expectStore store (registerProjectionCatalog renamed)
+    registered `shouldSatisfy` isRight
+
+  it "inserts an added query registration during adoption" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql catalogFixtureSql))
+    current <- expectValid (rebuildableCatalog Catalog.validCatalog)
+    added <- expectValid addedQueryCatalog
+    _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    plan <- expectStore store (previewCatalogAdoption added)
+    plan ^. #registrations
+      `shouldContain` [RegistrationAdoption "catalog-added-query" Catalog.mainGroupId RegistrationInsert]
+    plan ^. #orphanedRegistrations `shouldBe` []
+    result <-
+      expectStore store (adoptCatalogGroups added (Catalog.mainGroupId :| []))
+        >>= shouldBeRight
+    result ^. #registrationOutcomes
+      `shouldContain` [RegistrationAdoption "catalog-added-query" Catalog.mainGroupId RegistrationInsert]
+    result ^. #removedOrphans `shouldBe` []
+    addedRow <- expectStore store (lookupReadModel "catalog-added-query")
+    addedRow ^? _Just . #rebuildGroupId
+      `shouldBe` Just (rebuildGroupIdText Catalog.mainGroupId)
+
+  it "does not orphan a query registration moved to an out-of-scope group" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql catalogFixtureSql))
+    current <- expectValid (rebuildableCatalog Catalog.additiveCatalog)
+    _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    expectStore
+      store
+      ( Store.runTransaction
+          ( Tx.statement
+              ("catalog-additive-query", rebuildGroupIdText Catalog.mainGroupId)
+              setQueryGroupStmt
+          )
+      )
+    plan <- expectStore store (previewCatalogAdoption current)
+    plan ^. #orphanedRegistrations `shouldBe` []
+    result <-
+      expectStore store (adoptCatalogGroups current (Catalog.mainGroupId :| []))
+        >>= shouldBeRight
+    result ^. #removedOrphans `shouldBe` []
+    movedRow <- expectStore store (lookupReadModel "catalog-additive-query")
+    movedRow ^? _Just . #rebuildGroupId
+      `shouldBe` Just (rebuildGroupIdText Catalog.mainGroupId)
+
+  it "keeps an inserted registration fenced when adopting a failed stale-format group" $ \store -> do
+    expectStore store (Store.runTransaction (Tx.sql catalogFixtureSql))
+    current <- expectValid (rebuildableCatalog Catalog.validCatalog)
+    renamed <- expectValid renamedCatalog
+    _ <- expectStore store (registerProjectionCatalog current) >>= shouldBeRight
+    handle <-
+      expectStore store (beginGroupRebuild current Catalog.mainGroupId (request "failed-insert"))
+        >>= shouldBeRight
+    _ <-
+      expectStore store (abandonGroupRebuild handle (RebuildFailure "operator.abandoned" "fence insert"))
+        >>= shouldBeRight
+    let stale = "slice-v1:" <> Text.replicate 64 "b"
+    expectStore
+      store
+      (Store.runTransaction (Tx.statement (rebuildGroupIdText Catalog.mainGroupId, stale) setStoredSliceStmt))
+    _ <-
+      expectStore store (adoptCatalogGroups renamed (Catalog.mainGroupId :| []))
+        >>= shouldBeRight
+    renamedRow <- expectStore store (lookupReadModel "catalog-counter-query-renamed")
+    renamedRow ^? _Just . #status `shouldBe` Just Abandoned
 
 changedCatalog :: ProjectionCatalog
 changedCatalog = changeCatalog (rebuildableCatalog Catalog.validCatalog)
+
+renamedCatalog :: ProjectionCatalog
+renamedCatalog =
+  let base = rebuildableCatalog Catalog.validCatalog
+   in base {queryModels = renameCounterQuery <$> base ^. #queryModels}
+
+renameCounterQuery :: SomeQueryModelBinding -> SomeQueryModelBinding
+renameCounterQuery (SomeQueryModelBinding binding)
+  | binding ^. #readModel . #name == "catalog-counter-query" =
+      SomeQueryModelBinding
+        binding
+          { readModel =
+              (binding ^. #readModel)
+                { name = "catalog-counter-query-renamed",
+                  shapeHash = "catalog-counter-query-renamed-v1"
+                }
+          }
+  | otherwise = SomeQueryModelBinding binding
+
+addedQueryCatalog :: ProjectionCatalog
+addedQueryCatalog =
+  let base = rebuildableCatalog Catalog.validCatalog
+   in base
+        { queryModels =
+            base ^. #queryModels
+              <> [SomeQueryModelBinding addedQueryBinding]
+        }
+
+addedQueryBinding :: QueryModelBinding Text ()
+addedQueryBinding =
+  Catalog.counterBinding
+    { queryModelId = queryModelIdentity "added-query",
+      readModel =
+        (Catalog.counterBinding ^. #readModel)
+          { name = "catalog-added-query",
+            shapeHash = "catalog-added-query-v1"
+          },
+      rebuildGroup = Catalog.mainGroupId,
+      observedTargets = [Catalog.counterTargetId],
+      claimSite = claimSiteIdentity "catalog:added-query"
+    }
 
 rebuildableCatalog :: ProjectionCatalog -> ProjectionCatalog
 rebuildableCatalog catalog =
@@ -213,6 +345,18 @@ runId identity =
     Left err -> error (Text.unpack err)
     Right value -> value
 
+queryModelIdentity :: Text -> QueryModelId
+queryModelIdentity identity =
+  case mkQueryModelId identity of
+    Left err -> error (show err)
+    Right value -> value
+
+claimSiteIdentity :: Text -> ClaimSite
+claimSiteIdentity identity =
+  case mkClaimSite identity of
+    Left err -> error (show err)
+    Right value -> value
+
 expectValid :: ProjectionCatalog -> IO ValidatedProjectionCatalog
 expectValid catalog =
   case validateProjectionCatalog catalog of
@@ -256,6 +400,20 @@ setStoredSliceStmt =
     UPDATE keiro.keiro_projection_rebuild_groups
     SET slice_fingerprint = $2
     WHERE group_id = $1
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+setQueryGroupStmt :: Statement (Text, Text) ()
+setQueryGroupStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_read_models
+    SET rebuild_group_id = $2
+    WHERE name = $1
     """
     ( contrazip2
         (E.param (E.nonNullable E.text))
