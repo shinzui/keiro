@@ -40,7 +40,7 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
+import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..), SubscriptionName (..))
 import Kiroku.Store.Types
   ( CategoryName (..),
     EventData (..),
@@ -442,6 +442,10 @@ redeliverySpec fixture =
                        replicate 2 capturedHead,
                        3
                      )
+        secondOutcomes <- redeliverAuditEvents store validated auditTotalsProjection events
+        secondTotal <- expectStore store (Store.runTransaction (Tx.statement () auditTotalStmt))
+        (secondOutcomes, secondTotal)
+          `shouldBe` (replicate 3 CatalogAsyncDuplicate, 60)
 
       it "promotion leaves redelivery safe for a preserve-and-reconcile async projection" $ \store -> do
         expectStore store (Store.runTransaction (Tx.sql redeliveryFixtureSql))
@@ -460,6 +464,113 @@ redeliverySpec fixture =
         liveApplies <- expectStore store (Store.runTransaction (Tx.statement () auditEntryAppliesStmt))
         (outcomes, liveApplies)
           `shouldBe` (replicate 3 CatalogAsyncDuplicate, replicate 3 1)
+
+      it "resumes a verification failure with redelivery safety and an honest fence" $ \store -> do
+        expectStore store (Store.runTransaction (Tx.sql redeliveryFixtureSql))
+        events <- appendAuditEvents store
+        faulted <- expectValid (redeliveryCatalog ClearAuditTotals failingVerification)
+        _ <- expectStore store (registerProjectionCatalog faulted) >>= shouldBeRight
+        liveApplyAuditEvents store faulted auditTotalsProjection events
+        (firstEvent, lastEvent) <-
+          case events of
+            [first, _, last] -> pure (first, last)
+            _ -> expectationFailure "expected exactly three audit events" >> error "unreachable"
+        let GlobalPosition capturedHead = lastEvent ^. #globalPosition
+            slowerFloor = GlobalPosition (capturedHead Prelude.- 1)
+        expectStore
+          store
+          ( Store.runTransaction
+              (Tx.statement ("audit-subscription", 1, capturedHead Prelude.- 1) setAuditMemberCheckpointStmt)
+          )
+        beforeRebuild <-
+          expectStore store (collectAsyncDedupBackfill faulted auditGroupId 2 (GlobalPosition capturedHead))
+            >>= shouldBeRight
+        (beforeRebuild ^. #backfillFloors, Prelude.length (beforeRebuild ^. #backfillPairs))
+          `shouldBe` ([("audit-subscription", slowerFloor)], 1)
+
+        failed <-
+          expectStore
+            store
+            (startCatalogRebuild faulted auditGroupId (options "redelivery-resume-run" 2))
+        case failed of
+          Left (CatalogRebuildVerificationFailed failedRun _ _) ->
+            failedRun `shouldBe` runId "redelivery-resume-run"
+          other -> expectationFailure ("expected verification failure, got " <> show other)
+        failedReport <-
+          expectStore store (inspectCatalogRebuild (runId "redelivery-resume-run"))
+            >>= shouldBeRight
+        failedReport ^. #runStatus `shouldBe` RebuildRunFailed
+        group <- expectStore store (lookupProjectionRebuildGroup auditGroupId)
+        fmap (^. #status) group `shouldBe` Just GroupRebuilding
+        expectStore store (Store.runTransaction (Tx.statement () auditCheckpointsStmt))
+          `shouldReturn` [0, 0]
+        expectStore store (Store.runTransaction (Tx.statement "audit-async" auditDedupCountStmt))
+          `shouldReturn` 0
+        fenced <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog faulted auditProjectionId auditTotalsProjection firstEvent)
+            )
+        fenced `shouldBe` CatalogAsyncFenced auditGroupId (runId "redelivery-resume-run")
+
+        repaired <- expectValid (redeliveryCatalog ClearAuditTotals passingVerification)
+        report <-
+          expectStore
+            store
+            (resumeCatalogRebuild repaired (runId "redelivery-resume-run") (options "ignored" 2))
+            >>= shouldBeRight
+        report ^. #runStatus `shouldBe` RebuildRunPromoted
+        firstOutcomes <- redeliverAuditEvents store repaired auditTotalsProjection events
+        secondOutcomes <- redeliverAuditEvents store repaired auditTotalsProjection events
+        total <- expectStore store (Store.runTransaction (Tx.statement () auditTotalStmt))
+        checkpoints <- expectStore store (Store.runTransaction (Tx.statement () auditCheckpointsStmt))
+        dedupCount <- expectStore store (Store.runTransaction (Tx.statement "audit-async" auditDedupCountStmt))
+        (firstOutcomes, secondOutcomes, total, checkpoints, dedupCount)
+          `shouldBe` ( replicate 3 CatalogAsyncDuplicate,
+                       replicate 3 CatalogAsyncDuplicate,
+                       60,
+                       replicate 2 capturedHead,
+                       3
+                     )
+
+      it "reports vanished checkpoint rows and resumes promotion after repair" $ \store -> do
+        expectStore store (Store.runTransaction (Tx.sql redeliveryFixtureSql))
+        events <- appendAuditEvents store
+        deleting <- expectValid (redeliveryCatalog ClearAuditTotals deletingVerification)
+        _ <- expectStore store (registerProjectionCatalog deleting) >>= shouldBeRight
+        liveApplyAuditEvents store deleting auditTotalsProjection events
+
+        failed <-
+          expectStore
+            store
+            (startCatalogRebuild deleting auditGroupId (options "redelivery-missing-run" 2))
+        case failed of
+          Left (CatalogRebuildPromotionCheckpointsMissing failedRun missing) ->
+            (failedRun, missing)
+              `shouldBe` (runId "redelivery-missing-run", [SubscriptionName "audit-subscription"])
+          other -> expectationFailure ("expected missing checkpoints, got " <> show other)
+        failedReport <-
+          expectStore store (inspectCatalogRebuild (runId "redelivery-missing-run"))
+            >>= shouldBeRight
+        (failedReport ^. #runStatus, failedReport ^. #failureEvidence . _Just . #failureCode)
+          `shouldBe` (RebuildRunFailed, "promotion.checkpoints-missing")
+        group <- expectStore store (lookupProjectionRebuildGroup auditGroupId)
+        fmap (^. #status) group `shouldBe` Just GroupRebuilding
+
+        expectStore store (Store.runTransaction (Tx.sql restoreAuditSubscriptionsSql))
+        repaired <- expectValid (redeliveryCatalog ClearAuditTotals passingVerification)
+        report <-
+          expectStore
+            store
+            (resumeCatalogRebuild repaired (runId "redelivery-missing-run") (options "ignored" 2))
+            >>= shouldBeRight
+        outcomes <- redeliverAuditEvents store repaired auditTotalsProjection events
+        total <- expectStore store (Store.runTransaction (Tx.statement () auditTotalStmt))
+        checkpoints <- expectStore store (Store.runTransaction (Tx.statement () auditCheckpointsStmt))
+        let GlobalPosition capturedHead = report ^. #capturedHead
+        (report ^. #runStatus, outcomes, total, checkpoints)
+          `shouldBe` (RebuildRunPromoted, replicate 3 CatalogAsyncDuplicate, 60, replicate 2 capturedHead)
 
 data ReplayEvent = ReplayEvent !Int64
   deriving stock (Eq, Show)
@@ -485,6 +596,11 @@ passingVerification = verificationWith (pure (Right ()))
 
 failingVerification :: RebuildVerification
 failingVerification = verificationWith (pure (Left "fault injected after committed pages"))
+
+deletingVerification :: RebuildVerification
+deletingVerification =
+  verificationWith
+    (Tx.sql "DELETE FROM subscriptions WHERE subscription_name = 'audit-subscription'" >> pure (Right ()))
 
 delayedVerification :: RebuildVerification
 delayedVerification = verificationWith (Tx.sql "SELECT pg_sleep(1)" >> pure (Right ()))
@@ -1153,6 +1269,19 @@ redeliveryFixtureSql =
     ('audit-subscription', 1, 2, 0);
   """
 
+restoreAuditSubscriptionsSql :: ByteString
+restoreAuditSubscriptionsSql =
+  """
+  INSERT INTO subscriptions (
+    subscription_name,
+    consumer_group_member,
+    consumer_group_size,
+    last_seen
+  ) VALUES
+    ('audit-subscription', 0, 2, 0),
+    ('audit-subscription', 1, 2, 0);
+  """
+
 insertTraceStmt :: Statement (Int64, Text, Int64) ()
 insertTraceStmt =
   preparable
@@ -1211,6 +1340,23 @@ setAuditCheckpointStmt =
     WHERE subscription_name = $1
     """
     (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+setAuditMemberCheckpointStmt :: Statement (Text, Int32, Int64) ()
+setAuditMemberCheckpointStmt =
+  preparable
+    """
+    UPDATE subscriptions
+    SET last_seen = $3,
+        updated_at = now()
+    WHERE subscription_name = $1
+      AND consumer_group_member = $2
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nonNullable E.int8))
+    )
     D.noResult
 
 auditTotalStmt :: Statement () Int64

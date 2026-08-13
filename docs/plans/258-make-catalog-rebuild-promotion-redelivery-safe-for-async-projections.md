@@ -74,7 +74,7 @@ This section must always reflect the actual current state of the work.
       the promote transaction; `CatalogRebuildPromotionCheckpointsMissing` added.
 - [x] (2026-08-13 05:03Z) M3: M1 red tests now pass; whole `cabal test keiro-test`
       green with 542 examples and zero failures.
-- [ ] M4: resume-path test (verification failure, then repaired resume promotes with
+- [x] (2026-08-13 05:08Z) M4: resume-path test (verification failure, then repaired resume promotes with
       backfill) passing; fenced-while-failed and multi-member checkpoint assertions
       passing.
 - [ ] M5: ADR-31 amended; docs corrected (`docs/user/read-models-and-projections.md`,
@@ -107,6 +107,13 @@ implementation. Provide concise evidence.
   persisted runner format: promotion restored three dedup rows, advanced both member
   checkpoints to the captured head, and repeated worker delivery returned only
   `CatalogAsyncDuplicate`. The full `keiro-test` suite then passed 542 examples.
+- The recovery matrix passed four focused database examples: verification failure left
+  the group rebuilding with checkpoints `[0,0]`, zero dedup rows, and a truthful
+  `CatalogAsyncFenced`; repaired resume restored the promotion proof. A verification
+  hook that deleted the declared rows produced
+  `CatalogRebuildPromotionCheckpointsMissing` and also resumed successfully after the
+  rows were repaired. The pre-rebuild helper proof derived the subscription floor from
+  the slower of two members.
 
 
 ## Decision Log
