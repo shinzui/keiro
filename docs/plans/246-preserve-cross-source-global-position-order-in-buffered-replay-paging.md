@@ -68,9 +68,13 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
       failures in 3.1837 seconds). After restoring the runner from the pre-fix comparison,
       the full `cabal test keiro-test` suite passed all 527 examples with 0 failures in
       101.2817 seconds.
-- [ ] Milestone 4: read-count proof re-run and actual call/row counts recorded here;
-      rebuild benchmark re-run post-fix and number recorded here next to the pre-fix
-      number.
+- [x] (2026-08-13T02:41:29Z) Milestone 4: the unmodified read-count proof passed with 11
+      category reads and exactly 18 rows: billing `(3 calls, 6 rows)`, customers `(4, 6)`,
+      orders `(4, 6)`, and no all-stream reads. The post-fix
+      `rebuild/three-categories-200` benchmark measured 53.2 ms +/- 3.8 ms versus the
+      same-session pre-fix 52.8 ms +/- 5.2 ms, a 0.8% mean increase within measurement
+      noise and well inside the 15% acceptance bound. The temporary diagnostic print was
+      removed; `git status --short` returned clean before this plan update.
 - [ ] Milestone 5: `keiro/CHANGELOG.md` Unreleased entry added;
       `docs/user/read-models-and-projections.md` ordering guarantee sentence added; ADR
       distillation pass done (expected outcome: no ADR change — confirm and record);
