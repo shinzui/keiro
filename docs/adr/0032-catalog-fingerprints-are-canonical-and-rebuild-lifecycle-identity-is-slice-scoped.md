@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
-description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires explicit transactional adoption, and gives pre-canonical runs a fenced recovery path.
-timestamp: 2026-08-13T03:41:31Z
+description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires scoped registry-complete transactional adoption, and gives pre-canonical runs a fenced recovery path.
+timestamp: 2026-08-13T04:36:36Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -91,16 +91,34 @@ validates the entire set before updating anything, requires every row to be
 registered and `live`, except that a `failed` group whose stored fingerprint
 lacks the canonical `slice-v2:` prefix is also adoptable while remaining
 fenced. Every other non-live group, including a canonical `failed` group, is
-refused. Adoption then updates group slices and reconciles bound query model
-version, shape, and group metadata in one transaction. An unchanged group is a
-successful idempotent outcome. Adoption never changes application-owned tables,
-never clears failure evidence, and never starts a rebuild.
+refused. Adoption then updates group slices and reconciles every in-scope query
+registration in the same transaction: an existing row is updated, a missing row
+is inserted, and the result reports `adopted` or `inserted` for each catalog
+registration it touched. A registration inserted for a failed stale-format
+group remains `abandoned` with no last-built timestamp, so accepting catalog
+metadata never lifts the recovery fence.
+
+Adoption may also delete an old-name registry row, reported as
+`orphaned-old-name`, only when all three conditions hold: the non-forced preview
+listed the deletion by name, the row is bound to a group selected for this
+adoption, and no registration anywhere in the complete validated catalog claims
+that name. A name claimed by an out-of-scope group is a move, not an orphan, and
+is preserved. Registry rows are externally observable lifecycle facts, so a
+permanently `live` old-name row for a model no application serves is less
+truthful than reviewed deletion. An unchanged group is a successful idempotent
+outcome. Adoption never changes application-owned tables, never clears failure
+evidence, and never starts a rebuild.
 
 The embedded `keiro-ops rebuild adopt GROUP...` command wraps those library
-operations. Without `--force` it is read-only, shows stored and current slices,
-and prints the exact force invocation. With `--force` it reports the library's
-actual adopted rows. The standalone binary cannot mount the command because it
-does not contain the application's validated catalog.
+operations. Without `--force` it is read-only and renders a whole-catalog preview
+whose group, registration, and orphan rows explicitly say `adopt` or `skip` for
+the named scope. It refuses a requested group absent from the catalog exactly as
+forced execution would, warns when an out-of-scope changed or stale-format group
+will still refuse startup registration, shows stored and current slices, and
+prints the exact force invocation. With `--force` it reports the library's actual
+per-group, per-registration, and removed-orphan outcomes. The standalone binary
+cannot mount the command because it does not contain the application's validated
+catalog.
 
 Migration `0024` is a pre-0.12 clean break. It renames the group column to
 `slice_fingerprint` and stamps existing runs' `group_slice_fingerprint` with
@@ -140,6 +158,9 @@ contract break when the catalog's group slice is unchanged.
   startup or rebuild errors; the runtime never auto-adopts them.
 - Adoption is metadata coordination, not data migration. Operators separately
   decide whether application rows require a schema migration or rebuild.
+- The previewed scope is the executed scope. Out-of-scope drift remains visible,
+  and adoption reports every registry update, insertion, and reviewed old-name
+  deletion instead of claiming success after a zero-row update.
 - Query models moving between groups require coordinated review of every
   affected group; ordinary registration continues to expose any half-adopted
   move as drift.

@@ -183,6 +183,16 @@ Record every decision made while working on the plan.
   Rationale: writing recovery against the final contract encoding, as MasterPlan 39
   sequencing requires, is achieved by not depending on the encoding at all.
   Date: 2026-08-12
+- Decision: Plan 249 landed after this recovery plan and its v2 adoption vocabulary is
+  the single reporting contract for the recovery sequence. Sentinel status and abandon
+  preview retain the run table's `group_slice`; the adoption step reports the selected
+  group plus any registration update/insert and removed old-name rows through the same
+  scoped preview and outcome used by ordinary catalog evolution.
+  Rationale: recovery was intentionally built by composing the ordinary abandon, adopt,
+  and fresh-start operations. Consuming `CatalogAdoptionResult` and the v2 adoption
+  envelopes preserves that single path. The updated end-to-end ops test proves the group
+  remains `failed` after adoption and avoids a recovery-specific table or result type.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -207,7 +217,9 @@ pinned by the native migration suite. The broader failed -> rebuilding transitio
 the pre-canonical recovery/adoption boundary are distilled into ADR-26 and ADR-32, so no
 task-local decision remains to be promoted. The final `just verify` run exited 0. There
 are no known gaps in EP-3; EP-4 retains ownership of reshaping the adoption result and
-preview vocabulary while preserving these lifecycle preconditions.
+preview vocabulary while preserving these lifecycle preconditions. EP-4 subsequently
+landed that vocabulary, and the recovery tests now consume its v2 adoption group row and
+structured result without changing sentinel or fence semantics.
 
 
 ## Context and Orientation

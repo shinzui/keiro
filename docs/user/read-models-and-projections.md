@@ -271,9 +271,15 @@ requested group in sorted order, requires all of them to be registered and
 `live`, except that a `failed` group with a stale-format fingerprint may be
 adopted while it remains fenced. Canonical `failed` groups and all `rebuilding`
 groups are still refused. Adoption updates slices and reconciles bound
-query-model version, shape, and group metadata in one transaction. It does not
-rebuild or migrate application-owned rows; start a rebuild separately when the
-catalog change invalidates persisted data.
+query-model version, shape, and group metadata in one transaction, updating an
+existing registration or inserting a missing one. `CatalogAdoptionResult`
+reports each registration as adopted or inserted. It also reports and deletes an
+`orphaned-old-name` row only when the preview named it, it is bound to a group
+selected for adoption, and no registration anywhere in the complete catalog
+claims the name; an out-of-scope move is therefore preserved. A registration
+inserted for a failed stale-format group stays abandoned with its group fence.
+Adoption does not rebuild or migrate application-owned rows; start a rebuild
+separately when the catalog change invalidates persisted data.
 
 Before crossing an identity or runner format boundary, completing or explicitly
 abandoning every active catalog rebuild is recommended but not enforced. Migration
@@ -425,8 +431,8 @@ versioned JSON envelopes:
 - `keiro/catalog-inventory/v2`;
 - `keiro/catalog-rebuild-preview/v2`;
 - `keiro/catalog-registered-rebuild-preview/v2`; and
-- `keiro/catalog-adoption-preview/v1`;
-- `keiro/catalog-adoption-outcome/v1`; and
+- `keiro/catalog-adoption-preview/v2`;
+- `keiro/catalog-adoption-outcome/v2`; and
 - `keiro/catalog-rebuild-run/v1`.
 
 Every subscription in inventory and rebuild JSON includes
@@ -438,7 +444,10 @@ database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
 `rebuild list|preview|start|status|resume|abandon|adopt` renders the same reports and
 requires preview plus `--force` for mutations. Applications therefore do not
-maintain a second rebuild map. The
+maintain a second rebuild map. An adoption preview shows the complete catalog but marks
+each group, registration, and orphan as `adopt` or `skip` for the requested groups. It
+warns by name when skipped drift will still block startup, and refuses a requested group
+that the catalog does not contain before printing a force invocation. The
 [Jitsurei rebuild rehearsal](../guides/run-and-operate-jitsurei.md#rehearse-a-catalog-rebuild)
 shows the exact embedded commands against the disposable example database.
 

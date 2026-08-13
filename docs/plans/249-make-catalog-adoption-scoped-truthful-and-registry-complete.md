@@ -67,11 +67,11 @@ This section must always reflect the actual current state of the work.
       `keiro/src/Keiro/Projection/Catalog/Operations.hs`.
 - [x] (2026-08-13 04:34Z) Milestone 3: scoped rendering and wiring in `keiro-ops/src/Keiro/Ops/Rebuild.hs`;
       `cabal test keiro-ops-test` green.
-- [ ] Milestone 4: ADR-32 adoption contract amended; `okf validate` green.
-- [ ] Milestone 4: `docs/user/read-models-and-projections.md`, `keiro/CHANGELOG.md`, and
+- [x] (2026-08-13 04:38Z) Milestone 4: ADR-32 adoption contract amended; `okf validate` green.
+- [x] (2026-08-13 04:38Z) Milestone 4: `docs/user/read-models-and-projections.md`, `keiro/CHANGELOG.md`, and
       `keiro-ops/CHANGELOG.md` updated.
-- [ ] Milestone 4: vocabulary reconciliation with plan 248 checked and recorded.
-- [ ] Milestone 4: `just verify` green; MasterPlan 39 registry row updated.
+- [x] (2026-08-13 04:38Z) Milestone 4: vocabulary reconciliation with plan 248 checked and recorded.
+- [x] (2026-08-13 04:46Z) Milestone 4: `just verify` green; MasterPlan 39 registry row updated.
 
 
 ## Surprises & Discoveries
@@ -99,6 +99,14 @@ implementation. Provide concise evidence.
   `keiro-ops-test` suite (41 examples), and the complete `keiro-test` suite (540 examples).
   The ops assertions cover the v2 schema tags, exact six-/four-column table shapes,
   preview-time unknown-group refusal, and the JSON list of out-of-scope drift.
+- ADR-32's registry-complete amendment and bundle log pass the strict architecture
+  profile (`okf validate`: 33 concepts). Plan 248 had landed first as expected; its
+  recovery path required no second result vocabulary, only consumption of the v2
+  adoption rows while retaining the separate run `group_slice` column.
+- The final `just verify` gate exited zero with 540 `keiro-test`, 41
+  `keiro-ops-test`, 58 `keiro-pgmq-test` (two expected pending), 701
+  `keiro-dsl-test`, 23 `jitsurei-test`, and 29 migration examples, plus all
+  architecture, scaffold, build, and generated-artifact checks green.
 
 
 ## Decision Log
@@ -181,6 +189,17 @@ Record every decision made while working on the plan.
   lifecycle and permit query traffic to appear healthy before recovery. Mirroring the
   locked group state keeps catalog acceptance separate from rebuild recovery.
   Date: 2026-08-13
+- Decision: Reconcile the already-landed plan 248 recovery path by keeping its run
+  `group_slice` reporting unchanged and routing its adoption step through this plan's
+  v2 group/registration/orphan table and JSON vocabulary; there is no second
+  recovery-only adoption result.
+  Rationale: plan 248 deliberately composed abandon, ordinary adoption, and fresh start.
+  Its database and ops recovery tests now consume `CatalogAdoptionResult` and the scoped
+  group row while preserving the `failed` fence. If that adoption inserts a registration,
+  the fenced-insertion rule records it as abandoned until the fresh rebuild promotes.
+  This satisfies the MasterPlan integration point without weakening either plan's
+  lifecycle preconditions or duplicating an operator surface.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -190,7 +209,20 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-13. Catalog adoption now produces one reviewed plan whose scope is
+identical in preview and execution. The preview refuses unknown requested groups, marks
+every catalog group, registration action, and old-name deletion as `adopt` or `skip`, and
+names out-of-scope drift that will continue to block startup. The forced outcome reports
+the exact group, registration, and removed-orphan rows committed by the transaction
+through the final v2 envelopes.
+
+The library transaction is registry-complete: it updates existing registrations, inserts
+missing ones, and deletes only previewed old-name rows bound to selected groups and
+unclaimed anywhere in the validated catalog. Rename, addition, out-of-scope move, and
+failed stale-format recovery cases are database-backed. The recovery integration retains
+EP-3's fence: an inserted registration for a failed group remains abandoned until a fresh
+rebuild promotes. ADR-32, user docs, and both package changelogs record the stable
+contract. The final repository gate passed; no known EP-4 gaps remain.
 
 
 ## Context and Orientation

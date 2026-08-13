@@ -36,8 +36,18 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   columns), so an operator can terminate a bounded drain on durable progress and
   identify the workflow definitions blocking convergence.
 
+### Changed
+
+- `rebuild adopt` now renders scope-annotated group, registration, and old-name rows and
+  reports the forced transaction through `keiro/catalog-adoption-preview/v2` and
+  `keiro/catalog-adoption-outcome/v2` JSON envelopes. Preview refuses a requested group
+  absent from the catalog with `AdoptGroupNotInCatalog`, matching forced execution.
+
 ### Fixed
 
+- The non-forced `rebuild adopt` preview now distinguishes the named groups it will adopt
+  from out-of-scope catalog drift and warns when skipped groups will still refuse startup
+  registration.
 - `rebuild status` and the non-forced `rebuild abandon` preview now work for
   pre-canonical runs, enabling the documented abandon, adopt, and fresh-start
   recovery sequence without direct SQL.

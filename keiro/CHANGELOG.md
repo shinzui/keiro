@@ -81,6 +81,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Catalog adoption no longer silently succeeds after a zero-row query-registration
+  update. It updates or inserts every selected catalog registration and deletes a
+  previewed renamed-model row only when no registration in the complete catalog claims
+  the old name, all in the slice-adoption transaction.
 - A database upgraded by migration 0024 while a catalog rebuild was
   `rebuilding` or `failed` can now recover entirely through supported APIs:
   abandon the pre-canonical run, adopt the fenced stale-format group, and start
@@ -102,6 +106,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- `adoptCatalogGroups` now returns `CatalogAdoptionResult`, including adopted group
+  metadata, per-registration update/insert outcomes, and removed old-name rows.
+  `CatalogAdoptionPlan` likewise adds planned registration actions and orphan rows; code
+  constructing or exhaustively matching either result must handle the registry-complete
+  contract.
 - `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of
   `Bool`, distinguishing an acquired lease from a live foreign lease, crash
   pacing, and an instance that became unavailable. `ResumeSummary` adds
