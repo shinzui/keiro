@@ -86,7 +86,7 @@ No cross-repository ADR bears on this MasterPlan.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | Complete |
-| 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | In Progress |
+| 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | Complete |
 | 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | Not Started |
 | 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | Not Started |
 
@@ -137,10 +137,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 (250) M2: `policyChanges` supply-shape split (owner/owner, legacy/legacy, mixed → `migrationFreshnessChanges` on normalized freshness)
 - [x] EP-1 (250) M3: no-false-positive proofs, corpus zero-drift, CLI gate transcripts (weakening blocks, equivalent/strengthened stay green)
 - [x] EP-1 (250) M4: migration-table docs, changelog, `just verify`
-- [ ] EP-2 (251) M1: red bounded-drain test over a due sleep with no timer worker (currently every pass reports `advanced=1`)
-- [ ] EP-2 (251) M2: append-witness through `WorkflowRunOptions`, `classifyOutcome` replacing `bumpForOutcome`, new `sleepDue` blocked category, Haddock drain recipe rewrite
-- [ ] EP-2 (251) M3: keiro-ops `sleep_due` column + two-pass resume-once CLI test (`advanced=0, sleep_due=1` both passes)
-- [ ] EP-2 (251) M4: docs, ADR-23/ADR-25 amendments, changelogs (supersede plan 239's unreleased bullet), `just verify`
+- [x] EP-2 (251) M1: red bounded-drain test over a due sleep with no timer worker (every pass reported `advanced=1` before the fix)
+- [x] EP-2 (251) M2: append-witness through `WorkflowRunOptions`, `classifyOutcome` replacing `bumpForOutcome`, new `sleepDue` blocked category, Haddock drain recipe rewrite
+- [x] EP-2 (251) M3: keiro-ops `sleep_due` column + two-pass resume-once CLI test (`advanced=0, sleep_due=1` both passes)
+- [x] EP-2 (251) M4: docs, ADR-23/ADR-25 amendments, changelogs (supersede plan 239's unreleased bullet), `just verify`
 - [ ] EP-3 (252) M1: three red cursorless tests (waitFor fast-fail + timing + no spurious metric; Strong and PositionWait override parity; cursorless startRebuild lifecycle)
 - [ ] EP-3 (252) M2: waitFor through the cursor-authority predicate; `runQueryWith` reimplemented as a translation onto `runQueryWithFreshness`
 - [ ] EP-3 (252) M3: cursorless `startRebuild` skips the checkpoint reset (typed, documented); scaffold audit confirming no keiro-dsl change
@@ -178,6 +178,11 @@ interactions between child plans. Provide concise evidence.
   seam or any durable architecture boundary. Its normalized migration classifier, user
   documentation, zero-drift corpus proof, and full `just verify` gate are green. EP-4's
   soft dependency is satisfied, so its later `Diff.hs` threading cleanup is unblocked.
+- EP-2 completed on 2026-08-13 without changing workflow discovery, storage schema,
+  or another child plan's files. Its red proof exhausted five drain passes over one
+  unchanged due sleep; the corrected pass reports `advanced = 0, sleepDue = 1`, and
+  the full `just verify` gate (including all generated workflow/DSL conformance
+  packages) remained green.
 
 
 ## Decision Log
@@ -210,3 +215,7 @@ docs/adr/. Keep task-local execution and coordination details here.
 - 2026-08-13: EP-1 completed. The language migration diff now blocks query-freshness
   weakenings, keeps equivalent/strengthened migrations non-breaking, preserves both
   same-language contracts, and documents the gate. EP-2, EP-3, and EP-4 remain.
+- 2026-08-13: EP-2 completed. Resume summaries now count only durable movement,
+  classify replay-only due sleeps as `sleepDue`, expose the timer-worker remedy in
+  `keiro-ops` and user documentation, and terminate the bounded drain truthfully.
+  ADR 0023 and ADR 0025 contain the durable contract. EP-3 and EP-4 remain.
