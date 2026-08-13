@@ -375,6 +375,7 @@ import OpenTelemetry.Trace.Core
     SpanKind,
     getSpanContext,
   )
+import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
 import ReadModelSpec qualified
@@ -397,6 +398,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogEvolutionSpec.spec fixture
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
+  PreCanonicalRecoverySpec.spec fixture
   ProjectionReplaySpec.spec fixture
   ReadModelSpec.spec
 

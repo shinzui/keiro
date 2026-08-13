@@ -61,8 +61,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: keiro-migrations test pinning the exact post-0024 shape of a mid-rebuild database (passes immediately).
-- [ ] M1: new `keiro/test/PreCanonicalRecoverySpec.hs` reproducing every refusal and asserting the full recovery sequence (red), registered in `keiro/keiro.cabal` and `keiro/test/Main.hs`; committed failing.
+- [x] (2026-08-13 03:34Z) M1: keiro-migrations test pinning the exact post-0024 shape of a mid-rebuild database (passes immediately).
+- [x] (2026-08-13 03:34Z) M1: new `keiro/test/PreCanonicalRecoverySpec.hs` reproducing every refusal and asserting the full recovery sequence (red), registered in `keiro/keiro.cabal` and `keiro/test/Main.hs`; committed failing.
 - [ ] M2: `preCanonicalRunSliceSentinel` and `canonicalSlicePrefix` constants in `Keiro.ReadModel.Rebuild.Group`, exported through the facade where needed.
 - [ ] M2: sentinel-aware `abandonCatalogRebuild` (new `abandonPreCanonicalGroupRebuild` + statement in Group.hs; sentinel branch in Runner.hs).
 - [ ] M2: `CatalogRebuildRunPreCanonical` constructor; `resumeCatalogRebuild` refuses sentinel runs with it; abandon/resume test stages green.
@@ -78,9 +78,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. One pre-existing gap discovered during planning is recorded in Context and
-Orientation: a `failed` rebuild group has never been able to begin a fresh rebuild
-through any supported API, since the first commit of the group lifecycle, `8a670c10`.)
+- The migration-level fixture applied the real 0024 ledger entry after two pre-0024 run
+  shapes and passed with both `group_slice_fingerprint` values equal to
+  `'$pre-canonical'` (`cabal test keiro-migrations-test`: 29 examples, 0 failures).
+  The runtime recovery spec is red at the intended first missing contract: compilation
+  stops because `CatalogRebuildRunPreCanonical` does not exist yet. This makes M2's typed
+  refusal part of the executable definition rather than accepting the old contract
+  mismatch accidentally.
 
 
 ## Decision Log

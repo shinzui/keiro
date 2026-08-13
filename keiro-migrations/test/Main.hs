@@ -313,6 +313,31 @@ main = hspec $ do
                          ("legacy-rebuilding", 8, "shape-rebuilding", "rebuilding", "$legacy-read-model:legacy-rebuilding", "rebuilding", Just "$legacy-read-model:legacy-rebuilding", Nothing)
                        ]
 
+    it "0024 stamps in-flight rebuild runs with the pre-canonical sentinel" $ do
+      fullPlan <- requirePlan
+      kiroku <- requireRight Kiroku.kirokuMigrations
+      priorKeiro <-
+        requireRight
+          ( migrationComponentFromEmbeddedSql
+              "keiro"
+              (Set.singleton "kiroku")
+              (NonEmpty.fromList (take 23 (toList embeddedMigrationEntries)))
+          )
+      priorPlan <- requireRight (frameworkMigrationPlan kiroku priorKeiro)
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+        _ <- runMigrationPlan defaultRunOptions settings priorPlan >>= requireRight
+        withConnection settings $ \connection ->
+          useSession connection (Session.script preCanonicalRebuildFixtureSql)
+        report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
+        Prelude.drop 31 (reportOutcomes report) `shouldBe` [AppliedNow]
+        withConnection settings $ \connection -> do
+          rows <- useSession connection (Session.statement () preCanonicalRebuildShapeStatement)
+          rows
+            `shouldBe` [ ("upgrade-failed", Text.replicate 64 "b", "upgrade-run-failed", "$pre-canonical"),
+                         ("upgrade-rebuilding", Text.replicate 64 "a", "upgrade-run-live", "$pre-canonical")
+                       ]
+
     it "enforces replay source, adapter, and verification membership constraints" $ do
       plan <- requirePlan
       result <- withMigratedDatabase plan $ \connection -> do
@@ -513,6 +538,53 @@ replayProgressFixtureSql =
     (run_id, verification_id, verification_version)
   VALUES ('constraint-run', 'verify', 'v1');
   """
+
+preCanonicalRebuildFixtureSql :: Text
+preCanonicalRebuildFixtureSql =
+  """
+  INSERT INTO keiro.keiro_projection_rebuild_groups
+    (group_id, catalog_fingerprint, status, active_run_id, requested_by, request_reason, started_at)
+  VALUES
+    ('upgrade-rebuilding', repeat('a', 64), 'rebuilding', 'upgrade-run-live', 'ops', 'mid-rebuild upgrade fixture', now()),
+    ('upgrade-failed', repeat('b', 64), 'failed', 'upgrade-run-failed', 'ops', 'abandoned before upgrade', now());
+  UPDATE keiro.keiro_projection_rebuild_groups
+    SET failed_at = now(), failure_code = 'operator.abandoned', failure_detail = 'abandoned with the old binary'
+    WHERE group_id = 'upgrade-failed';
+  INSERT INTO keiro.keiro_projection_rebuild_runs
+    (run_id, group_id, catalog_fingerprint, contract_fingerprint, runner_format, captured_head, page_size, status)
+  VALUES
+    ('upgrade-run-live', 'upgrade-rebuilding', repeat('a', 64), 'contract-v2:' || repeat('c', 64), 'keiro/projection-replay/v2', 6, 100, 'running');
+  INSERT INTO keiro.keiro_projection_rebuild_runs
+    (run_id, group_id, catalog_fingerprint, contract_fingerprint, runner_format, captured_head, page_size, status, failed_at, failure_code, failure_detail)
+  VALUES
+    ('upgrade-run-failed', 'upgrade-failed', repeat('b', 64), 'contract-v2:' || repeat('d', 64), 'keiro/projection-replay/v2', 6, 100, 'failed', now(), 'operator.abandoned', 'abandoned with the old binary');
+  """
+
+preCanonicalRebuildShapeStatement :: Statement () [(Text, Text, Text, Text)]
+preCanonicalRebuildShapeStatement =
+  Statement.preparable
+    """
+    SELECT groups.group_id,
+           groups.slice_fingerprint,
+           runs.run_id,
+           runs.group_slice_fingerprint
+    FROM keiro.keiro_projection_rebuild_groups AS groups
+    JOIN keiro.keiro_projection_rebuild_runs AS runs
+      ON runs.group_id = groups.group_id
+    WHERE groups.group_id IN ('upgrade-rebuilding', 'upgrade-failed')
+    ORDER BY groups.group_id
+    """
+    Encoders.noParams
+    ( Decoders.rowList
+        ( (,,,)
+            <$> column Decoders.text
+            <*> column Decoders.text
+            <*> column Decoders.text
+            <*> column Decoders.text
+        )
+    )
+  where
+    column = Decoders.column . Decoders.nonNullable
 
 legacyGroupUpgradeStatement ::
   Statement () [(Text, Int64, Text, Text, Text, Text, Maybe Text, Maybe Text)]
