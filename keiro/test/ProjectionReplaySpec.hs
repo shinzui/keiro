@@ -17,6 +17,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
+import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpose, passthrough)
 import Effectful.Error.Static (Error)
@@ -268,6 +269,31 @@ spec fixture = describe "catalog replay runner" $ around (withFreshStore fixture
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 7, 8, 9]
 
+  describe "cross-source ordering sweep"
+    $ traverse_
+      ( \(seed, pageSize) ->
+          it ("preserves ascending order for seed " <> show seed <> " at page size " <> show pageSize) $ \store -> do
+            expectStore store (Store.runTransaction (Tx.sql replayFixtureSql))
+            expectedPositions <- appendSweep store seed 14
+            validated <- expectValid (replayCatalog goodDecoder passingVerification)
+            _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+            report <-
+              expectStore
+                store
+                ( startCatalogRebuild
+                    validated
+                    replayGroupId
+                    (options ("sweep-" <> Text.pack (show seed) <> "-" <> Text.pack (show pageSize)) pageSize)
+                )
+                >>= shouldBeRight
+            report ^. #runStatus `shouldBe` RebuildRunPromoted
+            expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
+              `shouldReturn` expectedPositions
+            map (^. #exhaustedThrough) (report ^. #sources)
+              `shouldBe` replicate 3 (Just (GlobalPosition 14))
+      )
+      [(seed, pageSize) | seed <- [1 .. 6], pageSize <- [1, 2, 3]]
+
 data ReplayEvent = ReplayEvent !Int64
   deriving stock (Eq, Show)
 
@@ -426,6 +452,37 @@ appendStaggered store =
       (StreamName "orders-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (12 :: Int64)),
       (StreamName "orders-1", AnyVersion, EventType "ReplayEvent", Aeson.toJSON (13 :: Int64))
     ]
+
+sweepStep :: Word64 -> Word64
+sweepStep seed = seed Prelude.* 6364136223846793005 Prelude.+ 1442695040888963407
+
+sweepCategories :: Word64 -> Int -> [Text]
+sweepCategories seed count =
+  Prelude.take
+    count
+    [ ["orders", "customers", "billing", "padding"]
+        Prelude.!! Prelude.fromIntegral ((state `Prelude.div` 7) `Prelude.mod` 4)
+    | state <- Prelude.iterate sweepStep (sweepStep seed)
+    ]
+
+appendSweep :: Store.KirokuStore -> Word64 -> Int -> IO [Int64]
+appendSweep store seed count = go Map.empty [] indexedCategories
+  where
+    indexedCategories = Prelude.zip ([1 ..] :: [Int64]) (sweepCategories seed count)
+
+    go _ expected [] = pure (Prelude.reverse expected)
+    go seen expected ((position, category) : remaining) = do
+      appendRaw
+        store
+        ( StreamName (category <> "-sweep"),
+          if Map.member category seen then AnyVersion else NoStream,
+          if category == "padding" then EventType "PaddingEvent" else EventType "ReplayEvent",
+          if category == "padding" then Aeson.Null else Aeson.toJSON position
+        )
+      go
+        (Map.insert category () seen)
+        (if category == "padding" then expected else position : expected)
+        remaining
 
 appendCountingFixture :: Store.KirokuStore -> IO ()
 appendCountingFixture store =

@@ -62,8 +62,12 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
       applied floor in `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs`; the focused example
       passed, `cabal build keiro` succeeded, and `cabal test keiro-test` passed all 509
       examples with 0 failures in 101.9082 seconds without edits to pre-existing examples.
-- [ ] Milestone 3: deterministic seeded interleaving sweep added and green (all sweep
-      cases apply strictly ascending order and promote).
+- [x] (2026-08-13T02:34:54Z) Milestone 3: added the deterministic six-seed by three-page-size
+      interleaving sweep; all 18 cases promoted, exhausted all three sources through
+      position 14, and produced the exact ascending non-padding trace (18 examples, 0
+      failures in 3.1837 seconds). After restoring the runner from the pre-fix comparison,
+      the full `cabal test keiro-test` suite passed all 527 examples with 0 failures in
+      101.2817 seconds.
 - [ ] Milestone 4: read-count proof re-run and actual call/row counts recorded here;
       rebuild benchmark re-run post-fix and number recorded here next to the pre-fix
       number.
@@ -76,7 +80,15 @@ random-interleaving sweep, the existing read-count proof, and the replay paging 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: the deterministic sweep catches more than the hand-authored page-size-2
+  fixture. With only the runner fix reversibly removed, six of 18 cases failed: seed/page
+  pairs 1/2, 2/2, 4/3, 5/2, 5/3, and 6/2. For example, seed 4 at page size 3 produced
+  `[1,2,3,4,5,7,6,9,10,12,14,13]` instead of
+  `[1,2,3,4,5,6,7,9,10,12,13,14]`. Page-size-1 cases all remained ordered, matching the
+  buffering analysis because a one-event buffer cannot retain a partially consumed
+  horizon.
+  Evidence: pre-fix comparison run reported 18 examples and 6 failures in 3.0438 seconds;
+  restoring the committed runner made all 18 examples pass.
 
 
 ## Decision Log
