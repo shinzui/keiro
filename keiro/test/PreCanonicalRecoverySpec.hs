@@ -40,10 +40,11 @@ spec fixture = describe "pre-canonical rebuild recovery" $ around (withFreshStor
       `shouldReturn` Left (CatalogRebuildRunPreCanonical strandedRun Catalog.mainGroupId)
     expectStore store (adoptCatalogGroups healthy (Catalog.mainGroupId :| []))
       `shouldReturn` Left (AdoptGroupNotLive Catalog.mainGroupId GroupRebuilding (Just strandedRun))
-    expectStore store (startCatalogRebuild healthy Catalog.mainGroupId (options "before-recovery"))
-      `shouldSatisfy` \case
-        Left (CatalogRebuildStartFailed RebuildGroupSliceDrift {}) -> True
-        _ -> False
+    beforeRecovery <-
+      expectStore store (startCatalogRebuild healthy Catalog.mainGroupId (options "before-recovery"))
+    beforeRecovery `shouldSatisfy` \case
+      Left (CatalogRebuildStartFailed RebuildGroupSliceDrift {}) -> True
+      _ -> False
 
     abandoned <-
       expectStore

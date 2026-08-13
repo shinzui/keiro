@@ -63,9 +63,9 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-13 03:34Z) M1: keiro-migrations test pinning the exact post-0024 shape of a mid-rebuild database (passes immediately).
 - [x] (2026-08-13 03:34Z) M1: new `keiro/test/PreCanonicalRecoverySpec.hs` reproducing every refusal and asserting the full recovery sequence (red), registered in `keiro/keiro.cabal` and `keiro/test/Main.hs`; committed failing.
-- [ ] M2: `preCanonicalRunSliceSentinel` and `canonicalSlicePrefix` constants in `Keiro.ReadModel.Rebuild.Group`, exported through the facade where needed.
-- [ ] M2: sentinel-aware `abandonCatalogRebuild` (new `abandonPreCanonicalGroupRebuild` + statement in Group.hs; sentinel branch in Runner.hs).
-- [ ] M2: `CatalogRebuildRunPreCanonical` constructor; `resumeCatalogRebuild` refuses sentinel runs with it; abandon/resume test stages green.
+- [x] (2026-08-13 03:37Z) M2: `preCanonicalRunSliceSentinel` and `canonicalSlicePrefix` constants in `Keiro.ReadModel.Rebuild.Group`, exported through the facade where needed.
+- [x] (2026-08-13 03:37Z) M2: sentinel-aware `abandonCatalogRebuild` (new `abandonPreCanonicalGroupRebuild` + statement in Group.hs; sentinel branch in Runner.hs).
+- [x] (2026-08-13 03:37Z) M2: `CatalogRebuildRunPreCanonical` constructor; `resumeCatalogRebuild` refuses sentinel runs with it; abandon/resume test stages green.
 - [ ] M3: adoption accepts fenced stale-format groups (`adoptTx` lock precondition); begin accepts `failed` groups (`beginGroupRebuild` status guard); full recovery spec green.
 - [ ] M3: amend `docs/adr/0032` and `docs/adr/0026` in the same change; `okf log add` entries; `okf validate` passes.
 - [ ] M4: sentinel-aware `Operations.inspectGroupRebuild`; `group_slice` column in keiro-ops run tables; keiro-ops recovery transcript test green.
@@ -85,6 +85,11 @@ implementation. Provide concise evidence.
   stops because `CatalogRebuildRunPreCanonical` does not exist yet. This makes M2's typed
   refusal part of the executable definition rather than accepting the old contract
   mismatch accidentally.
+- The M2 targeted run reached exactly the planned boundary: the running-run abandon and
+  replaced-active-run refusal examples pass, the main recovery example advances through
+  typed resume refusal and idempotent abandon, then fails at the first M3 operation with
+  `AdoptGroupNotLive ... GroupFailed`. This proves the sentinel path does not depend on
+  the catalog slice or resume contract while leaving adoption closed until M3.
 
 
 ## Decision Log

@@ -36,6 +36,7 @@
 -- zero-downtime rebuilds must build that orchestration above this lifecycle API.
 module Keiro.ReadModel.Rebuild
   ( -- * Catalog rebuild groups
+    preCanonicalRunSliceSentinel,
     RebuildRunId,
     mkRebuildRunId,
     rebuildRunIdText,

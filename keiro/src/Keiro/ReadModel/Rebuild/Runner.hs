@@ -68,11 +68,13 @@ import Keiro.ReadModel.Rebuild.Group
     RebuildRunId,
     RebuildStartError,
     abandonGroupRebuild,
+    abandonPreCanonicalGroupRebuild,
     beginGroupRebuild,
     completionTokenForHandle,
     finishGroupRebuildTx,
     groupRebuildHandleFor,
     mkRebuildRunId,
+    preCanonicalRunSliceSentinel,
     rebuildRunIdText,
   )
 import Keiro.Telemetry (KeiroMetrics)
@@ -111,6 +113,9 @@ data CatalogRebuildError
   | CatalogRebuildStartAfterCapturedHead !GlobalPosition !GlobalPosition
   | CatalogRebuildContractMismatch !RebuildRunId !Text !Text
   | CatalogRebuildSliceMismatch !RebuildRunId !Text !Text
+  | -- | The run predates canonical slice identity and must be abandoned,
+    -- adopted, and started fresh rather than resumed.
+    CatalogRebuildRunPreCanonical !RebuildRunId !RebuildGroupId
   | CatalogRebuildGroupMissing !RebuildGroupId
   | CatalogRebuildRunNotActive !RebuildRunId
   | CatalogRebuildDecodeFailed !RebuildRunId !SourceId !Text !GlobalPosition !ReplayDecodeError
@@ -271,21 +276,30 @@ resumeCatalogRebuild catalog runId options
   | otherwise = do
       inspectCatalogRebuildMaybe runId >>= \case
         Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
-        Just report -> do
-          let groupId = report ^. #rebuildGroupId
-              expected = report ^. #contractFingerprint
-          case rebuildContract catalog groupId of
-            Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
-            Just actual ->
-              if expected /= actual
-                then pure (Left (CatalogRebuildContractMismatch runId expected actual))
-                else do
-                  resumed <- runTransaction (resumeRunTx runId (options ^. #replayPageSize) actual)
-                  if resumed
-                    then do
-                      Telemetry.recordProjectionRebuildResumes (options ^. #rebuildMetrics) 1
-                      driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) actual (options ^. #rebuildMetrics)
-                    else pure (Left (CatalogRebuildRunNotActive runId))
+        Just report
+          | report ^. #groupSliceFingerprint == preCanonicalRunSliceSentinel ->
+              pure
+                ( Left
+                    ( CatalogRebuildRunPreCanonical
+                        runId
+                        (report ^. #rebuildGroupId)
+                    )
+                )
+          | otherwise -> do
+              let groupId = report ^. #rebuildGroupId
+                  expected = report ^. #contractFingerprint
+              case rebuildContract catalog groupId of
+                Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+                Just actual ->
+                  if expected /= actual
+                    then pure (Left (CatalogRebuildContractMismatch runId expected actual))
+                    else do
+                      resumed <- runTransaction (resumeRunTx runId (options ^. #replayPageSize) actual)
+                      if resumed
+                        then do
+                          Telemetry.recordProjectionRebuildResumes (options ^. #rebuildMetrics) 1
+                          driveCatalogRebuild catalog groupId runId (options ^. #replayPageSize) actual (options ^. #rebuildMetrics)
+                        else pure (Left (CatalogRebuildRunNotActive runId))
 
 inspectCatalogRebuild ::
   (Store :> es) =>
@@ -325,29 +339,45 @@ abandonCatalogRebuild ::
 abandonCatalogRebuild catalog runId failure =
   inspectCatalogRebuildMaybe runId >>= \case
     Nothing -> pure (Left (CatalogRebuildRunNotFound runId))
-    Just report -> do
-      let groupId = report ^. #rebuildGroupId
-          stored = report ^. #groupSliceFingerprint
-      case groupSliceFingerprintText <$> Catalog.groupSliceFingerprint catalog groupId of
-        Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
-        Just current ->
-          if stored /= current
-            then pure (Left (CatalogRebuildSliceMismatch runId stored current))
-            else case groupRebuildHandleFor catalog groupId runId of
-              Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
-              Just handle -> do
-                abandoned <- abandonGroupRebuild handle failure
-                case abandoned of
-                  Left err -> pure (Left (CatalogRebuildAbandonFailed err))
-                  Right _ -> do
-                    recordFailure
-                      runId
-                      (failure ^. #failureCode)
-                      (failure ^. #failureDetail)
-                      Nothing
-                      Nothing
-                      Nothing
-                    inspectCatalogRebuild runId
+    Just report
+      | report ^. #groupSliceFingerprint == preCanonicalRunSliceSentinel ->
+          case report ^. #runStatus of
+            RebuildRunRunning -> abandonPreCanonical report
+            RebuildRunFailed -> abandonPreCanonical report
+            _ -> pure (Left (CatalogRebuildRunNotActive runId))
+      | otherwise -> do
+          let groupId = report ^. #rebuildGroupId
+              stored = report ^. #groupSliceFingerprint
+          case groupSliceFingerprintText <$> Catalog.groupSliceFingerprint catalog groupId of
+            Nothing -> pure (Left (CatalogRebuildGroupMissing groupId))
+            Just current ->
+              if stored /= current
+                then pure (Left (CatalogRebuildSliceMismatch runId stored current))
+                else case groupRebuildHandleFor catalog groupId runId of
+                  Nothing -> pure (Left (CatalogRebuildRunNotActive runId))
+                  Just handle -> do
+                    abandoned <- abandonGroupRebuild handle failure
+                    recordAbandonment abandoned
+  where
+    abandonPreCanonical report = do
+      abandoned <-
+        abandonPreCanonicalGroupRebuild
+          (report ^. #rebuildGroupId)
+          runId
+          failure
+      recordAbandonment abandoned
+
+    recordAbandonment = \case
+      Left err -> pure (Left (CatalogRebuildAbandonFailed err))
+      Right _ -> do
+        recordFailure
+          runId
+          (failure ^. #failureCode)
+          (failure ^. #failureDetail)
+          Nothing
+          Nothing
+          Nothing
+        inspectCatalogRebuild runId
 
 captureHead :: (Store :> es) => Eff es GlobalPosition
 captureHead = do

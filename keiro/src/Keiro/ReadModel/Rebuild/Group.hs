@@ -4,7 +4,9 @@
 -- catalog-derived live-writer paths. The public facade is
 -- "Keiro.ReadModel.Rebuild".
 module Keiro.ReadModel.Rebuild.Group
-  ( RebuildRunId,
+  ( preCanonicalRunSliceSentinel,
+    canonicalSlicePrefix,
+    RebuildRunId,
     mkRebuildRunId,
     rebuildRunIdText,
     RebuildRequest (..),
@@ -36,6 +38,7 @@ module Keiro.ReadModel.Rebuild.Group
     finishGroupRebuild,
     finishGroupRebuildTx,
     abandonGroupRebuild,
+    abandonPreCanonicalGroupRebuild,
     lockProjectionGroupsTx,
   )
 where
@@ -86,6 +89,17 @@ import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude (not, null, (&&))
 import Prelude qualified
+
+-- | Sentinel that migration 0024 stamps into
+-- @keiro_projection_rebuild_runs.group_slice_fingerprint@ for runs begun
+-- before canonical slice identity existed. Handled only by the recovery
+-- paths: always abandonable, never resumable, never a valid identity.
+preCanonicalRunSliceSentinel :: Text
+preCanonicalRunSliceSentinel = "$pre-canonical"
+
+-- | Prefix of the current canonical group-slice format (ADR-32).
+canonicalSlicePrefix :: Text
+canonicalSlicePrefix = "slice-v2:"
 
 -- | Stable operator-supplied identity for one rebuild attempt.
 newtype RebuildRunId = RebuildRunId Text
@@ -290,7 +304,7 @@ registerProjectionCatalogTx catalog = do
         if stored == currentText
           then registerGroups (metadata : accumulated) rest
           else
-            if "slice-v2:" `Text.isPrefixOf` stored
+            if canonicalSlicePrefix `Text.isPrefixOf` stored
               then pure (Left (RegisteredGroupSliceDrift groupId stored currentText))
               else pure (Left (RegisteredGroupStaleFingerprint groupId stored))
 
@@ -374,7 +388,7 @@ previewCatalogAdoption catalog =
   where
     adoptionClass groupId stored
       | stored == current = AdoptionUnchanged
-      | "slice-v2:" `Text.isPrefixOf` stored = AdoptionSliceChanged stored current
+      | canonicalSlicePrefix `Text.isPrefixOf` stored = AdoptionSliceChanged stored current
       | otherwise = AdoptionStaleFormat stored
       where
         current = sliceTextFor catalog groupId
@@ -592,6 +606,46 @@ abandonGroupRebuild handle failure =
       Just metadata -> do
         Tx.statement (rebuildGroupIdText (handleGroup handle)) markGroupQueriesAbandonedStmt
         pure (Right metadata)
+
+-- | Abandon a run stamped by migration 0024 before canonical slice identity
+-- existed. This recovery transition deliberately does not compare a catalog
+-- slice: the sentinel is evidence that no meaningful slice was persisted.
+-- Failed groups are returned unchanged so retries preserve the first failure
+-- evidence.
+abandonPreCanonicalGroupRebuild ::
+  (Store :> es) =>
+  RebuildGroupId ->
+  RebuildRunId ->
+  RebuildFailure ->
+  Eff es (Either GroupTransitionError GroupRebuildMetadata)
+abandonPreCanonicalGroupRebuild groupId runId failure =
+  runTransaction $ do
+    locked <- Tx.statement (rebuildGroupIdText groupId) lockGroupForUpdateStmt
+    case locked of
+      Just metadata
+        | metadata ^. #activeRunId == Just runId ->
+            case metadata ^. #status of
+              GroupFailed -> pure (Right metadata)
+              GroupRebuilding -> do
+                abandoned <-
+                  Tx.statement
+                    ( rebuildGroupIdText groupId,
+                      rebuildRunIdText runId,
+                      failure ^. #failureCode,
+                      failure ^. #failureDetail
+                    )
+                    abandonPreCanonicalGroupStmt
+                case abandoned of
+                  Nothing -> inactive
+                  Just updated -> do
+                    Tx.statement (rebuildGroupIdText groupId) markGroupQueriesAbandonedStmt
+                    pure (Right updated)
+              _ -> inactive
+      _ -> inactive
+  where
+    inactive =
+      Tx.condemn
+        $> Left (RebuildHandleNoLongerActive groupId runId)
 
 lockProjectionGroupsTx :: [RebuildGroupId] -> Tx.Transaction ProjectionWriteFence
 lockProjectionGroupsTx = go . List.sort . Set.toList . Set.fromList
@@ -812,6 +866,31 @@ abandonGroupStmt =
     """
     ( contrazip5
         (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.rowMaybe groupMetadataDecoder)
+
+abandonPreCanonicalGroupStmt :: Statement (Text, Text, Text, Text) (Maybe GroupRebuildMetadata)
+abandonPreCanonicalGroupStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_projection_rebuild_groups
+    SET status = 'failed',
+        failed_at = now(),
+        failure_code = $3,
+        failure_detail = $4,
+        updated_at = now()
+    WHERE group_id = $1
+      AND active_run_id = $2
+      AND status = 'rebuilding'
+    RETURNING group_id, slice_fingerprint, status, active_run_id,
+              requested_by, request_reason, started_at, completed_at, failed_at,
+              failure_code, failure_detail
+    """
+    ( contrazip4
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
