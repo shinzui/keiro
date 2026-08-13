@@ -337,11 +337,12 @@ adoptionNote =
 runResult :: CatalogRunReport -> OpsResult
 runResult report =
   OpsResult
-    { headers = ["run", "group", "status", "captured_head", "sources", "adapters", "verifications"],
+    { headers = ["run", "group", "status", "group_slice", "captured_head", "sources", "adapters", "verifications"],
       rows =
         [ [ rebuildRunIdText run.rebuildRunId,
             rebuildGroupIdText run.rebuildGroupId,
             Text.pack (show run.runStatus),
+            run.groupSliceFingerprint,
             globalPositionText run.capturedHead,
             showText (length run.sources),
             showText (length run.adapters),

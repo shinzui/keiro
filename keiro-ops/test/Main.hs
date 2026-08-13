@@ -198,6 +198,133 @@ spec fixture = do
           )
       begun `shouldSatisfy` isRight
 
+    it "recovers a pre-canonical stranded run through preview and force" $ \store -> do
+      expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")
+      let strandedRun = opsRebuildRunId "ops-stranded-run"
+          freshRun = opsRebuildRunId "ops-recovery-fresh"
+          passingCatalog = opsCatalog "ops-codec-v1"
+          failingHook =
+            Catalog.RebuildVerification
+              { verificationId = "ops-pre-canonical-verification",
+                verificationVersion = "v1",
+                verifyRebuild = pure (Left "fault injected by keiro-ops recovery spec")
+              }
+      healthy <- expectValidatedCatalog passingCatalog
+      faulted <- expectValidatedCatalog (opsCatalogWithVerifications [failingHook] passingCatalog)
+      _ <- expectStore store (Rebuild.registerProjectionCatalog faulted)
+      initial <-
+        expectStore
+          store
+          ( Rebuild.startCatalogRebuild
+              faulted
+              opsGroupId
+              ( Rebuild.defaultRebuildOptions
+                  Rebuild.RebuildRequest
+                    { rebuildRunId = strandedRun,
+                      requestedBy = "keiro-ops-test",
+                      requestReason = "strand a pre-canonical run",
+                      replayFrom = GlobalPosition 0
+                    }
+              )
+          )
+      initial `shouldSatisfy` \case
+        Left Rebuild.CatalogRebuildVerificationFailed {} -> True
+        _ -> False
+      expectStore store $ runTransaction $ do
+        Tx.sql
+          "UPDATE keiro.keiro_projection_rebuild_runs SET group_slice_fingerprint = '$pre-canonical', contract_fingerprint = 'contract-v2:' || repeat('c', 64), runner_format = 'keiro/projection-replay/v2' WHERE run_id = 'ops-stranded-run'"
+        Tx.sql
+          "UPDATE keiro.keiro_projection_rebuild_groups SET slice_fingerprint = repeat('a', 64) WHERE group_id = 'ops-group'"
+
+      let operations = CatalogOperations.projectionCatalogOperations healthy
+          previewEnv =
+            OpsEnv
+              { store,
+                outputMode = HumanTable,
+                force = False,
+                schemaDrift = [],
+                allowSchemaDrift = False
+              }
+          forceEnv =
+            OpsEnv
+              { store,
+                outputMode = HumanTable,
+                force = True,
+                schemaDrift = [],
+                allowSchemaDrift = False
+              }
+          abandon =
+            OpsRebuild.Abandon
+              OpsRebuild.AbandonOptions
+                { runId = strandedRun,
+                  failureCode = "operator.pre-canonical",
+                  failureDetail = "discard run stranded by migration 0024"
+                }
+
+      status <- OpsRebuild.runCommand previewEnv operations (OpsRebuild.Status strandedRun)
+      case status of
+        Succeeded result -> do
+          result.headers
+            `shouldBe` ["run", "group", "status", "group_slice", "captured_head", "sources", "adapters", "verifications"]
+          result.rows `shouldSatisfy` \case
+            [row] -> row !! 3 == "$pre-canonical"
+            _ -> False
+        other -> expectationFailure ("expected sentinel status, got " <> show other)
+
+      abandonPreview <- OpsRebuild.runCommand previewEnv operations abandon
+      case abandonPreview of
+        PreviewRequired result invocation -> do
+          result.rows `shouldSatisfy` \case
+            [row] -> row !! 3 == "$pre-canonical"
+            _ -> False
+          invocation `shouldSatisfy` Text.isSuffixOf "'--force'"
+        other -> expectationFailure ("expected abandon preview, got " <> show other)
+
+      abandoned <- OpsRebuild.runCommand forceEnv operations abandon
+      case abandoned of
+        Succeeded result ->
+          result.rows `shouldSatisfy` \case
+            [row] -> row !! 2 == "RebuildRunFailed"
+            _ -> False
+        other -> expectationFailure ("expected forced abandon, got " <> show other)
+
+      let adopt = OpsRebuild.Adopt (OpsRebuild.AdoptOptions (NonEmpty.singleton opsGroupId))
+      adoptionPreview <- OpsRebuild.runCommand previewEnv operations adopt
+      case adoptionPreview of
+        PreviewRequired result _ ->
+          result.rows `shouldSatisfy` \case
+            row : _ -> row !! 1 == "stale-format"
+            _ -> False
+        other -> expectationFailure ("expected adoption preview, got " <> show other)
+      adopted <- OpsRebuild.runCommand forceEnv operations adopt
+      case adopted of
+        Succeeded result ->
+          result.rows `shouldSatisfy` \case
+            [row] -> row !! 1 == "failed" && Text.isPrefixOf "slice-v2:" (row !! 2)
+            _ -> False
+        other -> expectationFailure ("expected forced adoption, got " <> show other)
+
+      promoted <-
+        OpsRebuild.runCommand
+          forceEnv
+          operations
+          ( OpsRebuild.Start
+              OpsRebuild.StartOptions
+                { groupId = opsGroupId,
+                  runId = freshRun,
+                  requestedBy = "keiro-ops-test",
+                  reason = "fresh canonical recovery run",
+                  replayFrom = GlobalPosition 0,
+                  pageSize = 100
+                }
+          )
+      case promoted of
+        Succeeded result ->
+          result.rows `shouldSatisfy` \case
+            [row] -> row !! 2 == "RebuildRunPromoted"
+            _ -> False
+        other -> expectationFailure ("expected promoted fresh run, got " <> show other)
+
   describe "durable checkpoint inventory" do
     it "mounts both read-only commands in the standalone tree without a lag alias" do
       isParseSuccess (parseOps Ops.emptyAppHooks ["stream", "subscriptions"]) `shouldBe` True
@@ -1081,6 +1208,15 @@ opsCatalog codecFingerprint =
       projectionSets = [Catalog.SomeProjectionSet opsProjectionSet]
     }
 
+opsCatalogWithVerifications :: [Catalog.RebuildVerification] -> Catalog.ProjectionCatalog -> Catalog.ProjectionCatalog
+opsCatalogWithVerifications verifications catalog =
+  catalog
+    { Catalog.rebuildGroups =
+        [ group {Catalog.verificationHooks = verifications}
+        | group <- catalog.rebuildGroups
+        ]
+    }
+
 opsProjectionSet :: Catalog.ProjectionSet OpsCatalogEvent
 opsProjectionSet =
   Catalog.ProjectionSet
@@ -1124,7 +1260,11 @@ opsTargetId = catalogIdentity Catalog.mkTargetId "ops-target"
 
 opsRunId :: Rebuild.RebuildRunId
 opsRunId =
-  case Rebuild.mkRebuildRunId "ops-adoption-run" of
+  opsRebuildRunId "ops-adoption-run"
+
+opsRebuildRunId :: Text -> Rebuild.RebuildRunId
+opsRebuildRunId identity =
+  case Rebuild.mkRebuildRunId identity of
     Left err -> error (Text.unpack err)
     Right value -> value
 

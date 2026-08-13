@@ -49,6 +49,7 @@ import Keiro.ReadModel.Rebuild
     abandonCatalogRebuild,
     inspectCatalogRebuild,
     lookupProjectionRebuildGroup,
+    preCanonicalRunSliceSentinel,
     rebuildRunIdText,
     resumeCatalogRebuild,
     startCatalogRebuild,
@@ -278,15 +279,18 @@ inspectGroupRebuild ::
 inspectGroupRebuild (ProjectionCatalogOperations catalog) runId =
   inspectCatalogRebuild runId <&> \case
     Left err -> Left (CatalogOpsRebuildError err)
-    Right report ->
-      case Keiro.Projection.Catalog.groupSliceFingerprint catalog (report ^. #rebuildGroupId) of
-        Nothing -> Left (CatalogOpsUnknownGroup (report ^. #rebuildGroupId))
-        Just currentSlice ->
-          let expected = groupSliceFingerprintText currentSlice
-              actual = report ^. #groupSliceFingerprint
-           in if actual == expected
-                then Right (catalogRunReport report)
-                else Left (CatalogOpsRunSliceMismatch runId expected actual)
+    Right report
+      | report ^. #groupSliceFingerprint == preCanonicalRunSliceSentinel ->
+          Right (catalogRunReport report)
+      | otherwise ->
+          case Keiro.Projection.Catalog.groupSliceFingerprint catalog (report ^. #rebuildGroupId) of
+            Nothing -> Left (CatalogOpsUnknownGroup (report ^. #rebuildGroupId))
+            Just currentSlice ->
+              let expected = groupSliceFingerprintText currentSlice
+                  actual = report ^. #groupSliceFingerprint
+               in if actual == expected
+                    then Right (catalogRunReport report)
+                    else Left (CatalogOpsRunSliceMismatch runId expected actual)
 
 resumeGroupRebuild ::
   (IOE :> es, Store :> es) =>

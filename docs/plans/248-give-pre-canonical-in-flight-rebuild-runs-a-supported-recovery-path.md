@@ -68,7 +68,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 03:37Z) M2: `CatalogRebuildRunPreCanonical` constructor; `resumeCatalogRebuild` refuses sentinel runs with it; abandon/resume test stages green.
 - [x] (2026-08-13 03:44Z) M3: adoption accepts fenced stale-format groups (`adoptTx` lock precondition); begin accepts `failed` groups (`beginGroupRebuild` status guard); full recovery spec green.
 - [x] (2026-08-13 03:44Z) M3: amend `docs/adr/0032` and `docs/adr/0026` in the same change; `okf log add` entries; `okf validate` passes.
-- [ ] M4: sentinel-aware `Operations.inspectGroupRebuild`; `group_slice` column in keiro-ops run tables; keiro-ops recovery transcript test green.
+- [x] (2026-08-13 03:48Z) M4: sentinel-aware `Operations.inspectGroupRebuild`; `group_slice` column in keiro-ops run tables; keiro-ops recovery transcript test green.
 - [ ] M5: user docs (`docs/user/read-models-and-projections.md`, `docs/user/operations.md`), changelogs (`keiro/CHANGELOG.md`, `keiro-ops/CHANGELOG.md` Unreleased), full `just verify` gate.
 - [ ] MasterPlan 39 registry row for EP-3 updated to Complete; Outcomes & Retrospective written.
 
@@ -95,6 +95,10 @@ implementation. Provide concise evidence.
   existing statement clears failure evidence before preparing the new run. The full
   `keiro-test` suite passed (535 examples, 0 failures), and strict ADR validation passed
   with 33 concepts.
+- The operator-neutral sentinel inspection branch must precede catalog membership as well
+  as slice comparison: the run itself carries all evidence needed for status and abandon
+  preview. The end-to-end human-table transcript passed, followed by the complete
+  `keiro-ops-test` suite (39 examples, 0 failures).
 
 
 ## Decision Log
