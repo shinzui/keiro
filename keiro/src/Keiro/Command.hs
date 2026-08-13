@@ -788,16 +788,28 @@ runDomainCommand options handler@DomainCommandHandler {eventStream = validatedEv
     recordDomainCommandOutcome options mSpan attemptNo outcome
     pure outcome
 
-domainCommandAttempts ::
-  forall phi rs s ci co rejection noOp es.
-  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+-- | The optimistic-concurrency attempt loop shared by the plain and
+-- transactional domain command runners: hydrate, detect a conflict fixpoint,
+-- prepare the plan, classify a silent decision, or hand an accepted batch to
+-- the caller's append action. The append action receives the retry
+-- continuation so 'retryOrFail' can re-enter the loop.
+domainCommandAttemptLoop ::
+  forall phi rs s ci co rejection noOp outcome es.
+  (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
   RunCommandOptions ->
   DomainCommandHandler phi rs s ci co rejection noOp ->
   Stream (EventStream phi rs s ci co) ->
   ci ->
-  Maybe Span ->
-  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp), Int)
-domainCommandAttempts options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command mSpan =
+  (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp -> outcome) ->
+  ( (Int -> Maybe (StoreError, StreamVersion) -> Eff es (Either CommandError outcome, Int)) ->
+    Int ->
+    Hydrated rs s ->
+    NonEmpty co ->
+    [EventData] ->
+    Eff es (Either CommandError outcome, Int)
+  ) ->
+  Eff es (Either CommandError outcome, Int)
+domainCommandAttemptLoop options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command wrapSilent appendAction =
   attempt 1 Nothing
   where
     eventStream' = unvalidated validatedEventStream
@@ -815,16 +827,33 @@ domainCommandAttempts options handler@DomainCommandHandler {eventStream = valida
             Right (DomainCommandSilent silentDecision result) ->
               pure
                 ( Right
-                    DomainCommandOutcome
-                      { decision = domainDecisionFromSilent silentDecision,
-                        result
-                      },
+                    ( wrapSilent
+                        DomainCommandOutcome
+                          { decision = domainDecisionFromSilent silentDecision,
+                            result
+                          }
+                    ),
                   attemptNo
                 )
             Right (DomainCommandAppend current' events encoded) ->
-              appendOnce attemptNo current' events encoded
+              appendAction attempt attemptNo current' events encoded
+{-# INLINE domainCommandAttemptLoop #-}
 
-    appendOnce attemptNo current events encoded = do
+domainCommandAttempts ::
+  forall phi rs s ci co rejection noOp es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  Maybe Span ->
+  Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp), Int)
+domainCommandAttempts options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command mSpan =
+  domainCommandAttemptLoop options handler targetStream command Prelude.id appendOnce
+  where
+    eventStream' = unvalidated validatedEventStream
+
+    appendOnce retry attemptNo current events encoded = do
       liftIO (options ^. #beforeAppend)
       appended <-
         tryError @StoreError
@@ -844,7 +873,7 @@ domainCommandAttempts options handler@DomainCommandHandler {eventStream = valida
               attemptNo
             )
         Left (_, storeError) ->
-          retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+          retryOrFail options retry attemptNo (current ^. #streamVersion) storeError
 
 -- | Like 'runCommand', but run @afterAppend@ inside the /same/ transaction
 -- as the append, so a read-model write commits atomically with the events.
@@ -1010,35 +1039,11 @@ domainSqlCommandAttempts ::
   Maybe Span ->
   Eff es (Either CommandError (DomainSqlCommandOutcome (EventStream phi rs s ci co) co rejection noOp a), Int)
 domainSqlCommandAttempts options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command afterAppend mSpan =
-  attempt 1 Nothing
+  domainCommandAttemptLoop options handler targetStream command DomainSqlCommandSilent appendWithSqlOnce
   where
     eventStream' = unvalidated validatedEventStream
 
-    attempt attemptNo lastConflict = do
-      hydrated <- hydrate options eventStream' targetStream
-      either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
-
-    runPlan attemptNo lastConflict current =
-      case conflictFixpoint lastConflict (current ^. #streamVersion) of
-        Just err -> pure (Left err, attemptNo)
-        Nothing ->
-          case prepareDomainCommandPlan options handler eventStream' targetStream current command of
-            Left err -> pure (Left err, attemptNo)
-            Right (DomainCommandSilent silentDecision result) ->
-              pure
-                ( Right
-                    ( DomainSqlCommandSilent
-                        DomainCommandOutcome
-                          { decision = domainDecisionFromSilent silentDecision,
-                            result
-                          }
-                    ),
-                  attemptNo
-                )
-            Right (DomainCommandAppend current' events encoded) ->
-              appendWithSqlOnce attemptNo current' events encoded
-
-    appendWithSqlOnce attemptNo current events encoded = do
+    appendWithSqlOnce retry attemptNo current events encoded = do
       liftIO (options ^. #beforeAppend)
       store <- getKirokuStore
       enriched <- liftIO (enrichEventsIO store encoded)
@@ -1079,9 +1084,9 @@ domainSqlCommandAttempts options handler@DomainCommandHandler {eventStream = val
         Right (Right (_, Left userValue)) ->
           pure (Right (DomainSqlCommandRolledBack userValue), attemptNo)
         Right (Left storeError) ->
-          retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+          retryOrFail options retry attemptNo (current ^. #streamVersion) storeError
         Left (_, storeError) ->
-          retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+          retryOrFail options retry attemptNo (current ^. #streamVersion) storeError
 
 prepareDomainCommandPlan ::
   (BoolAlg phi (RegFile rs, ci)) =>

@@ -72,6 +72,7 @@ module Keiro.Workflow.Awakeable
 where
 
 import Control.Exception (Exception)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
@@ -79,7 +80,7 @@ import Data.UUID.V4 qualified as UUID.V4
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
-import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes, seedMovedAcrossEncodings)
+import Keiro.DeterministicId (deterministicIdProbes, identitySeedBytes, legacySeedBytes)
 import Keiro.Prelude
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -238,23 +239,17 @@ allocateAwakeableId ::
   Text ->
   Eff es AwakeableId
 allocateAwakeableId name wid gen label
-  | gen <= 0 = do
-      let current = deterministicAwakeableId name wid label
-          seedMoved = seedMovedAcrossEncodings (awakeableSeed name wid label)
-      currentRow <- lookupAwakeable (awakeableIdToUuid current)
-      case currentRow of
-        Just _ -> pure current
-        Nothing
-          | seedMoved -> do
-              let legacy = legacyDeterministicAwakeableId name wid label
-              legacyRow <- lookupAwakeable (awakeableIdToUuid legacy)
-              case legacyRow of
-                Just _ -> pure legacy
-                Nothing -> freshAwakeableId
-          | otherwise -> freshAwakeableId
-  | otherwise = AwakeableId <$> liftIO UUID.V4.nextRandom
+  | gen <= 0 = adopt (NonEmpty.toList probes)
+  | otherwise = freshAwakeableId
   where
+    probes = fmap AwakeableId (deterministicIdProbes (awakeableSeed name wid label))
     freshAwakeableId = AwakeableId <$> liftIO UUID.V4.nextRandom
+    adopt [] = freshAwakeableId
+    adopt (candidate : rest) = do
+      row <- lookupAwakeable (awakeableIdToUuid candidate)
+      case row of
+        Just _ -> pure candidate
+        Nothing -> adopt rest
 
 -- | Allocate an awakeable under an ordinal label (the @N@th awakeable in a run
 -- becomes @ord:N@). Convenient, but its determinism is __conditional__: adding or

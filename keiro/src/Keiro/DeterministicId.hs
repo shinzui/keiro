@@ -12,6 +12,7 @@ module Keiro.DeterministicId
   ( identitySeedBytes,
     legacySeedBytes,
     seedMovedAcrossEncodings,
+    deterministicIdProbes,
   )
 where
 
@@ -19,6 +20,8 @@ import Data.ByteString qualified as ByteString
 import Data.Char (isAscii)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
+import Data.UUID (UUID)
+import Data.UUID.V5 qualified as UUID.V5
 import Data.Word (Word8)
 import Keiro.Prelude
 
@@ -52,3 +55,15 @@ legacySeedBytes = fmap (fromIntegral . fromEnum) . Text.unpack
 -- bytes for this seed. ASCII is byte-identical under both encodings.
 seedMovedAcrossEncodings :: Text -> Bool
 seedMovedAcrossEncodings = not . Text.all isAscii
+
+-- | Ordered candidate ids for one deterministic-id seed under the ADR 24
+-- compatibility bridge: the current UTF-8-derived id first, the frozen
+-- pre-UTF-8 id second only when the seed's bytes differ across encodings.
+-- This is the single source of truth for the dual-probe policy; call sites
+-- must not restate the ordering or the moved-seed condition.
+deterministicIdProbes :: Text -> NonEmpty UUID
+deterministicIdProbes seed =
+  UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes seed)
+    :| [ UUID.V5.generateNamed UUID.V5.namespaceURL (legacySeedBytes seed)
+       | seedMovedAcrossEncodings seed
+       ]

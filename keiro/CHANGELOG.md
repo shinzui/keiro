@@ -8,6 +8,9 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `Keiro.DeterministicId.deterministicIdProbes` centralizes the unchanged
+  current-first, legacy-only-for-moved-seeds compatibility order shared by
+  process-manager preflights and generation-0 awakeable adoption.
 - `QueryFreshness`, `HeadScope`, `QueryCursorAuthority`, `ReadModelBlueprint`, truthful
   read-model builders, and `runQueryWithFreshness`. Immediate reads need no cursor;
   captured-head and caller-position waits require one durable cursor and fail with typed

@@ -48,6 +48,7 @@ library
     Keiro.DeadLetter
     Keiro.DeadLetter.Replay
     Keiro.DeadLetter.Schema
+    Keiro.DeterministicId
     Keiro.Inbox
     Keiro.Inbox.Kafka
     Keiro.Inbox.Schema
@@ -93,7 +94,6 @@ library
 
   other-modules:
     Keiro.Command.Domain
-    Keiro.DeterministicId
     Keiro.Projection.Types
     Keiro.ReadModel.Rebuild.Group
     Keiro.ReadModel.Rebuild.Runner

@@ -52,11 +52,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Extract the shared domain-command attempt driver in `keiro/src/Keiro/Command.hs` (Item 3).
-- [ ] M1: Hoist `deterministicIdProbes` into `keiro/src/Keiro/DeterministicId.hs`; convert the process-manager probe list and the awakeable adoption cascade (Item 6).
-- [ ] M1: Add the pure probe-composition examples; run `cabal test keiro-test` green with the plan-240 golden vectors untouched.
-- [ ] M1: Run the command benchmark baseline guard (the `command` pattern of `just bench-regression`) green on a quiet machine.
-- [ ] M1: keiro CHANGELOG entry for the new `deterministicIdProbes` export; commit.
+- [x] (2026-08-13 09:10Z) M1: Extract the shared domain-command attempt driver in `keiro/src/Keiro/Command.hs` (Item 3).
+- [x] (2026-08-13 09:10Z) M1: Hoist `deterministicIdProbes` into `keiro/src/Keiro/DeterministicId.hs`; convert the process-manager probe list and the awakeable adoption cascade (Item 6).
+- [x] (2026-08-13 09:10Z) M1: Add the pure probe-composition examples; run `cabal test keiro-test` green with the plan-240 golden vectors untouched (550 examples).
+- [ ] M1/M5: Re-run the complete command benchmark baseline guard on a quiet host; the busy-host full samples failed unchanged control cases while targeted domain/control ratios and fan-out cases remained equivalent (evidence below).
+- [x] (2026-08-13 09:10Z) M1: keiro CHANGELOG entry for the new `deterministicIdProbes` export; commit.
 - [ ] M2: Add the message-parameterized reader to `keiro-ops/src/Keiro/Ops/Parse.hs`; delete the four `nonNegativeInt64Reader` copies and `generationReader` (Item 4).
 - [ ] M2: Run `cabal test keiro-ops-test` green; keiro-ops CHANGELOG entry; commit.
 - [ ] M3: Derive the `outcome` selector guard and body from one selector list in `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` (Item 5).
@@ -75,13 +75,49 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- M1 implementation (2026-08-13) found that `Keiro.DeterministicId` was still a
+  Cabal `other-module`, despite the plan promising a new
+  `Keiro.DeterministicId.deterministicIdProbes` public export. The external-style
+  `keiro-test` suite proved the mismatch at compile time:
+
+  ```text
+  Could not load module ‘Keiro.DeterministicId’.
+  it is a hidden module in the package ‘keiro-0.11.0.0’
+  ```
+
+  M1 therefore moves the module to `exposed-modules`; no existing symbol changes
+  and the new helper becomes importable exactly as the plan and changelog state.
+- M1's first full command benchmark run was invalidated by a busy host: the
+  untouched `router-fanout.1000` case varied from 4.109 seconds to 1.012 seconds
+  and then 2.513 seconds, against a 0.629-second baseline, while
+  `domain.accepted-large` immediately reran at 5.78 milliseconds (80% faster
+  than its baseline). System load was 4.56/7.30/13.81 with unrelated desktop
+  processes consuming the cores. The runtime suite and smaller command cases
+  are green; the complete guard remains an explicit M1/M5 item to rerun on a
+  quiet sample.
+- M1's post-`INLINE` full rerun made the environmental issue conclusive: the
+  unchanged legacy `control.accepted-1` case failed 48% over baseline while the
+  extracted domain case measured `0.97x` control; router and process-manager
+  fan-outs, including both 1000-target cases, all passed. The relevant excerpt:
+
+  ```text
+  control.accepted-1: FAIL, 4.30 ms, 48% more than baseline
+  domain.accepted-1:  FAIL, 4.16 ms, 0.97x, 32% more than baseline
+  router-fanout.1000: OK, 662 ms, same as baseline
+  process-manager-fanout.1000: OK, 632 ms, 9% more than baseline
+  ```
 
 
 ## Decision Log
 
 Record every decision made while working on the plan.
 
+- Decision: Expose the existing `Keiro.DeterministicId` module in
+  `keiro/keiro.cabal` when adding `deterministicIdProbes`.
+  Rationale: the plan and changelog make the helper a public module-qualified API,
+  while Cabal's prior `other-modules` classification made that API impossible to
+  import and caused the external-style package test to fail at compilation.
+  Date: 2026-08-13
 - Decision: Milestones are package-scoped commits — one keiro commit (Items 3 and 6), one
   keiro-ops commit (Item 4), and two keiro-dsl commits (Items 5+7, then Items 1+2). No
   milestone spans packages. keiro-dsl is split into two commits, not one, because Item 7

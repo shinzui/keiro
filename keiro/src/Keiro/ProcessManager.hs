@@ -161,7 +161,7 @@ import Keiro.Command
     runCommandWithSql,
   )
 import Keiro.DeadLetter (DispatchDeadLetter (..), DispatcherKind (..), recordDispatchDeadLetter)
-import Keiro.DeterministicId (identitySeedBytes, legacySeedBytes, seedMovedAcrossEncodings)
+import Keiro.DeterministicId (deterministicIdProbes, legacySeedBytes)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
@@ -468,7 +468,8 @@ ackForCommandError delay err
 -- 'Keiro.Router.deterministicRouterCommandId' instead, retaining this positional
 -- id only as a transition probe for pre-upgrade router dispatches.
 --
--- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
+-- The seed is hashed as UTF-8 bytes
+-- ('Keiro.DeterministicId.identitySeedBytes'), which is
 -- byte-identical to the original codepoint encoding for ASCII seeds and
 -- collision-free for the rest; see
 -- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
@@ -496,14 +497,11 @@ legacyDeterministicCommandId managerName correlationId sourceEventId emitIndex =
 
 -- | Candidate ids for a process-manager write, ordered with the current UTF-8
 -- append id first and the frozen legacy id second only when the seed contains
--- non-ASCII text. This is the single source of truth for the compatibility
--- probe described by ADR 0024.
+-- non-ASCII text. 'deterministicIdProbes' is the single source of truth for
+-- the compatibility probe described by ADR 0024.
 deterministicCommandIdProbes :: Text -> Text -> EventId -> Int -> NonEmpty EventId
 deterministicCommandIdProbes managerName correlationId sourceEventId emitIndex =
-  let seed = commandIdSeed managerName correlationId sourceEventId emitIndex
-      current = EventId (UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes seed))
-      legacy = EventId (UUID.V5.generateNamed UUID.V5.namespaceURL (legacySeedBytes seed))
-   in current :| [legacy | seedMovedAcrossEncodings seed]
+  fmap EventId (deterministicIdProbes (commandIdSeed managerName correlationId sourceEventId emitIndex))
 
 commandIdSeed :: Text -> Text -> EventId -> Int -> Text
 commandIdSeed managerName correlationId sourceEventId emitIndex =

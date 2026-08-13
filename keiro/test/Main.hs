@@ -29,6 +29,7 @@ import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, diffUTCTime, second
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString, fromWords64)
 import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
@@ -90,6 +91,7 @@ import Keiro.DeadLetter.Replay
     listSubscriptionDeadLetters,
     replaySubscriptionDeadLetters,
   )
+import Keiro.DeterministicId (deterministicIdProbes, identitySeedBytes, legacySeedBytes)
 import Keiro.EventStream (Terminality (..))
 import Keiro.EventStream.Validate
   ( EventStreamWarning (..),
@@ -10102,6 +10104,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       NonEmpty.toList (deterministicCommandIdProbes "counter-pm" "\x4E2D\x6587" sourceEventId 0)
         `shouldBe` [ deterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId 0,
                      legacyDeterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId 0
+                   ]
+
+    it "builds one current probe for an ASCII seed" $ do
+      let seed = "keiro:probe:ascii"
+      NonEmpty.toList (deterministicIdProbes seed)
+        `shouldBe` [UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes seed)]
+
+    it "orders the current and legacy probes for a non-ASCII seed" $ do
+      let seed = "keiro:probe:\x4E2D"
+      NonEmpty.toList (deterministicIdProbes seed)
+        `shouldBe` [ UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes seed),
+                     UUID.V5.generateNamed UUID.V5.namespaceURL (legacySeedBytes seed)
                    ]
 
   describe "Keiro.Workflow.Sleep" $ do

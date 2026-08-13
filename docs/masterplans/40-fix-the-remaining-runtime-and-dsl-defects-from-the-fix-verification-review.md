@@ -88,7 +88,7 @@ No cross-repository ADR bears on this MasterPlan.
 | 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | Complete |
 | 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | Complete |
 | 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | Complete |
-| 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | Not Started |
+| 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
