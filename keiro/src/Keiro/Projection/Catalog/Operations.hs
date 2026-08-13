@@ -8,6 +8,8 @@ module Keiro.Projection.Catalog.Operations
     RebuildPreview (..),
     RegisteredRebuildPreview (..),
     CatalogAdoptionGroupPreview (..),
+    CatalogAdoptionRegistrationPreview (..),
+    CatalogAdoptionOrphanPreview (..),
     CatalogAdoptionReport (..),
     CatalogAdoptionOutcome (..),
     CatalogRunReport (..),
@@ -26,17 +28,20 @@ where
 
 import Data.Aeson qualified as Aeson
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (mapMaybe)
+import Data.Set qualified as Set
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.ReadModel (HeadScope (..))
 import Keiro.ReadModel.Rebuild
-  ( CatalogAdoptionError,
+  ( CatalogAdoptionError (..),
     CatalogRebuildError,
     GroupAdoptionClass (..),
     GroupLifecycleStatus (..),
     GroupRebuildMetadata,
+    OrphanedRegistration (..),
     RebuildAdapterProgress,
     RebuildFailure,
     RebuildFailureEvidence,
@@ -46,6 +51,8 @@ import Keiro.ReadModel.Rebuild
     RebuildRunStatus (..),
     RebuildSourceProgress,
     RebuildVerificationProgress,
+    RegistrationAdoption (..),
+    RegistrationAdoptionAction (..),
     abandonCatalogRebuild,
     inspectCatalogRebuild,
     lookupProjectionRebuildGroup,
@@ -108,21 +115,43 @@ data CatalogAdoptionGroupPreview = CatalogAdoptionGroupPreview
   { rebuildGroupId :: !RebuildGroupId,
     classification :: !GroupAdoptionClass,
     storedSlice :: !(Maybe Text),
-    currentSlice :: !Text
+    currentSlice :: !Text,
+    inScope :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionRegistrationPreview = CatalogAdoptionRegistrationPreview
+  { registryName :: !Text,
+    rebuildGroupId :: !RebuildGroupId,
+    action :: !RegistrationAdoptionAction,
+    inScope :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogAdoptionOrphanPreview = CatalogAdoptionOrphanPreview
+  { registryName :: !Text,
+    boundGroupId :: !RebuildGroupId,
+    inScope :: !Bool
   }
   deriving stock (Eq, Show, Generic)
 
 data CatalogAdoptionReport = CatalogAdoptionReport
   { reportSchema :: !Text,
     catalogFingerprint :: !Text,
+    requestedGroups :: ![RebuildGroupId],
     groups :: ![CatalogAdoptionGroupPreview],
-    removedGroups :: ![RebuildGroupId]
+    registrations :: ![CatalogAdoptionRegistrationPreview],
+    orphanedRegistrations :: ![CatalogAdoptionOrphanPreview],
+    removedGroups :: ![RebuildGroupId],
+    outOfScopeChangedGroups :: ![RebuildGroupId]
   }
   deriving stock (Eq, Show, Generic)
 
 data CatalogAdoptionOutcome = CatalogAdoptionOutcome
   { reportSchema :: !Text,
-    adoptedGroups :: ![GroupRebuildMetadata]
+    adoptedGroups :: ![GroupRebuildMetadata],
+    registrationOutcomes :: ![RegistrationAdoption],
+    removedOrphans :: ![OrphanedRegistration]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -234,16 +263,37 @@ previewRegisteredGroupRebuild operations wantedGroup =
 previewCatalogAdoption ::
   (Store :> es) =>
   ProjectionCatalogOperations ->
-  Eff es CatalogAdoptionReport
-previewCatalogAdoption (ProjectionCatalogOperations catalog) = do
-  plan <- Rebuild.previewCatalogAdoption catalog
-  pure
-    CatalogAdoptionReport
-      { reportSchema = "keiro/catalog-adoption-preview/v1",
-        catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
-        groups = map (groupPreview catalog) (plan ^. #groupStates),
-        removedGroups = plan ^. #removedGroups
-      }
+  NonEmpty RebuildGroupId ->
+  Eff es (Either CatalogOpsError CatalogAdoptionReport)
+previewCatalogAdoption (ProjectionCatalogOperations catalog) wantedGroups =
+  case List.find (`Set.notMember` catalogGroupIds) requested of
+    Just groupId -> pure (Left (CatalogOpsAdoptionRefused (AdoptGroupNotInCatalog groupId)))
+    Nothing -> do
+      plan <- Rebuild.previewCatalogAdoption catalog
+      pure
+        ( Right
+            CatalogAdoptionReport
+              { reportSchema = "keiro/catalog-adoption-preview/v2",
+                catalogFingerprint = catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog),
+                requestedGroups = requested,
+                groups = map (groupPreview catalog requestedSet) (plan ^. #groupStates),
+                registrations = map (registrationPreview requestedSet) (plan ^. #registrations),
+                orphanedRegistrations = map (orphanPreview requestedSet) (plan ^. #orphanedRegistrations),
+                removedGroups = plan ^. #removedGroups,
+                outOfScopeChangedGroups =
+                  [ groupId
+                  | (groupId, adoptionClass) <- plan ^. #groupStates,
+                    changedAdoptionClass adoptionClass,
+                    Set.notMember groupId requestedSet
+                  ]
+              }
+        )
+  where
+    requested = List.sort (Set.toList requestedSet)
+    requestedSet = Set.fromList (NonEmpty.toList wantedGroups)
+    catalogGroupIds =
+      Set.fromList
+        (map (^. #rebuildGroupId) (catalogInventory catalog ^. #inventoryGroups))
 
 adoptCatalogGroups ::
   (Store :> es) =>
@@ -256,8 +306,10 @@ adoptCatalogGroups (ProjectionCatalogOperations catalog) groups =
     Right result ->
       Right
         CatalogAdoptionOutcome
-          { reportSchema = "keiro/catalog-adoption-outcome/v1",
-            adoptedGroups = result ^. #adoptedGroups
+          { reportSchema = "keiro/catalog-adoption-outcome/v2",
+            adoptedGroups = result ^. #adoptedGroups,
+            registrationOutcomes = result ^. #registrationOutcomes,
+            removedOrphans = result ^. #removedOrphans
           }
 
 startGroupRebuild ::
@@ -370,15 +422,21 @@ instance Aeson.ToJSON CatalogAdoptionReport where
     Aeson.object
       [ "schema" Aeson..= (report ^. #reportSchema),
         "catalogFingerprint" Aeson..= (report ^. #catalogFingerprint),
+        "requestedGroups" Aeson..= map rebuildGroupIdText (report ^. #requestedGroups),
         "groups" Aeson..= map adoptionGroupValue (report ^. #groups),
-        "removedGroups" Aeson..= map rebuildGroupIdText (report ^. #removedGroups)
+        "registrations" Aeson..= map adoptionRegistrationValue (report ^. #registrations),
+        "orphanedRegistrations" Aeson..= map adoptionOrphanPreviewValue (report ^. #orphanedRegistrations),
+        "removedGroups" Aeson..= map rebuildGroupIdText (report ^. #removedGroups),
+        "outOfScopeChangedGroups" Aeson..= map rebuildGroupIdText (report ^. #outOfScopeChangedGroups)
       ]
 
 instance Aeson.ToJSON CatalogAdoptionOutcome where
   toJSON report =
     Aeson.object
       [ "schema" Aeson..= (report ^. #reportSchema),
-        "adoptedGroups" Aeson..= map groupMetadataValue (report ^. #adoptedGroups)
+        "adoptedGroups" Aeson..= map groupMetadataValue (report ^. #adoptedGroups),
+        "registrationOutcomes" Aeson..= map registrationOutcomeValue (report ^. #registrationOutcomes),
+        "removedOrphans" Aeson..= map removedOrphanValue (report ^. #removedOrphans)
       ]
 
 instance Aeson.ToJSON CatalogRunReport where
@@ -552,8 +610,8 @@ groupMetadataValue metadata =
       "failureDetail" Aeson..= (metadata ^. #failureDetail)
     ]
 
-groupPreview :: ValidatedProjectionCatalog -> (RebuildGroupId, GroupAdoptionClass) -> CatalogAdoptionGroupPreview
-groupPreview catalog (groupId, adoptionClass) =
+groupPreview :: ValidatedProjectionCatalog -> Set.Set RebuildGroupId -> (RebuildGroupId, GroupAdoptionClass) -> CatalogAdoptionGroupPreview
+groupPreview catalog requestedSet (groupId, adoptionClass) =
   CatalogAdoptionGroupPreview
     { rebuildGroupId = groupId,
       classification = adoptionClass,
@@ -562,7 +620,8 @@ groupPreview catalog (groupId, adoptionClass) =
         AdoptionUnchanged -> Just current
         AdoptionSliceChanged stored _ -> Just stored
         AdoptionStaleFormat stored -> Just stored,
-      currentSlice = current
+      currentSlice = current,
+      inScope = Set.member groupId requestedSet
     }
   where
     current =
@@ -571,14 +630,82 @@ groupPreview catalog (groupId, adoptionClass) =
         groupSliceFingerprintText
         (Keiro.Projection.Catalog.groupSliceFingerprint catalog groupId)
 
+registrationPreview :: Set.Set RebuildGroupId -> RegistrationAdoption -> CatalogAdoptionRegistrationPreview
+registrationPreview requestedSet registration =
+  CatalogAdoptionRegistrationPreview
+    { registryName = registration ^. #registryName,
+      rebuildGroupId = registration ^. #rebuildGroupId,
+      action = registration ^. #action,
+      inScope = Set.member (registration ^. #rebuildGroupId) requestedSet
+    }
+
+orphanPreview :: Set.Set RebuildGroupId -> OrphanedRegistration -> CatalogAdoptionOrphanPreview
+orphanPreview requestedSet orphan =
+  CatalogAdoptionOrphanPreview
+    { registryName = orphan ^. #registryName,
+      boundGroupId = orphan ^. #boundGroupId,
+      inScope = Set.member (orphan ^. #boundGroupId) requestedSet
+    }
+
 adoptionGroupValue :: CatalogAdoptionGroupPreview -> Aeson.Value
 adoptionGroupValue group =
   Aeson.object
     [ "groupId" Aeson..= rebuildGroupIdText (group ^. #rebuildGroupId),
       "state" Aeson..= adoptionStateText (group ^. #classification),
       "storedSlice" Aeson..= (group ^. #storedSlice),
-      "currentSlice" Aeson..= (group ^. #currentSlice)
+      "currentSlice" Aeson..= (group ^. #currentSlice),
+      "inScope" Aeson..= (group ^. #inScope)
     ]
+
+adoptionRegistrationValue :: CatalogAdoptionRegistrationPreview -> Aeson.Value
+adoptionRegistrationValue registration =
+  Aeson.object
+    [ "name" Aeson..= (registration ^. #registryName),
+      "groupId" Aeson..= rebuildGroupIdText (registration ^. #rebuildGroupId),
+      "action" Aeson..= registrationActionText (registration ^. #action),
+      "inScope" Aeson..= (registration ^. #inScope)
+    ]
+
+adoptionOrphanPreviewValue :: CatalogAdoptionOrphanPreview -> Aeson.Value
+adoptionOrphanPreviewValue orphan =
+  Aeson.object
+    [ "name" Aeson..= (orphan ^. #registryName),
+      "groupId" Aeson..= rebuildGroupIdText (orphan ^. #boundGroupId),
+      "inScope" Aeson..= (orphan ^. #inScope)
+    ]
+
+registrationOutcomeValue :: RegistrationAdoption -> Aeson.Value
+registrationOutcomeValue registration =
+  Aeson.object
+    [ "name" Aeson..= (registration ^. #registryName),
+      "groupId" Aeson..= rebuildGroupIdText (registration ^. #rebuildGroupId),
+      "outcome" Aeson..= registrationOutcomeText (registration ^. #action)
+    ]
+
+removedOrphanValue :: OrphanedRegistration -> Aeson.Value
+removedOrphanValue orphan =
+  Aeson.object
+    [ "name" Aeson..= (orphan ^. #registryName),
+      "groupId" Aeson..= rebuildGroupIdText (orphan ^. #boundGroupId),
+      "outcome" Aeson..= ("orphaned-old-name" :: Text)
+    ]
+
+registrationActionText :: RegistrationAdoptionAction -> Text
+registrationActionText = \case
+  RegistrationUpdate -> "update"
+  RegistrationInsert -> "insert"
+
+registrationOutcomeText :: RegistrationAdoptionAction -> Text
+registrationOutcomeText = \case
+  RegistrationUpdate -> "adopted"
+  RegistrationInsert -> "inserted"
+
+changedAdoptionClass :: GroupAdoptionClass -> Bool
+changedAdoptionClass = \case
+  AdoptionSliceChanged {} -> True
+  AdoptionStaleFormat {} -> True
+  AdoptionNew -> False
+  AdoptionUnchanged -> False
 
 adoptionStateText :: GroupAdoptionClass -> Text
 adoptionStateText = \case

@@ -51,10 +51,16 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     report <-
       expectStore
         store
-        (Operations.previewCatalogAdoption (Operations.projectionCatalogOperations changed))
-    report ^. #reportSchema `shouldBe` "keiro/catalog-adoption-preview/v1"
+        ( Operations.previewCatalogAdoption
+            (Operations.projectionCatalogOperations changed)
+            (Catalog.mainGroupId :| [])
+        )
+        >>= shouldBeRight
+    report ^. #reportSchema `shouldBe` "keiro/catalog-adoption-preview/v2"
+    report ^. #requestedGroups `shouldBe` [Catalog.mainGroupId]
     map (^. #classification) (report ^. #groups)
       `shouldBe` [AdoptionSliceChanged oldSlice newSlice]
+    map (^. #inScope) (report ^. #groups) `shouldBe` [True]
     map (^. #currentSlice) (report ^. #groups) `shouldBe` [newSlice]
     report ^. #removedGroups `shouldBe` []
 
@@ -66,7 +72,7 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
             (Catalog.mainGroupId :| [])
         )
         >>= shouldBeRight
-    outcome ^. #reportSchema `shouldBe` "keiro/catalog-adoption-outcome/v1"
+    outcome ^. #reportSchema `shouldBe` "keiro/catalog-adoption-outcome/v2"
     let adopted = outcome ^. #adoptedGroups
     map (^. #sliceFingerprint) adopted `shouldBe` [newSlice]
     metadata <- expectStore store (lookupReadModel "catalog-counter-query")

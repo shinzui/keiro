@@ -160,11 +160,12 @@ spec fixture = do
       preview <- OpsRebuild.runCommand previewEnv operations command
       case preview of
         PreviewRequired result invocation -> do
-          result.headers `shouldBe` ["group", "state", "stored_slice", "current_slice"]
+          result.headers `shouldBe` ["name", "kind", "state", "scope", "stored", "current"]
           case result.rows of
-            [group, state, stored, currentSlice] : _ -> do
+            [group, "group", state, scope, stored, currentSlice] : _ -> do
               group `shouldBe` "ops-group"
               state `shouldBe` "slice-changed"
+              scope `shouldBe` "adopt"
               stored `shouldSatisfy` Text.isPrefixOf "slice-v2:"
               currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v2:"
               stored `shouldNotBe` currentSlice
@@ -178,8 +179,13 @@ spec fixture = do
       applied <- OpsRebuild.runCommand (opsEnv True store) operations command
       case applied of
         Succeeded result -> do
-          result.headers `shouldBe` ["group", "status", "slice_fingerprint"]
-          map (take 2) result.rows `shouldBe` [["ops-group", "live"]]
+          result.headers `shouldBe` ["name", "kind", "outcome", "detail"]
+          result.rows `shouldSatisfy` any (\row -> take 3 row == ["ops-group", "group", "live"])
+          case result.jsonValue of
+            Aeson.Object fields ->
+              KeyMap.lookup "schema" fields
+                `shouldBe` Just (Aeson.String "keiro/catalog-adoption-outcome/v2")
+            value -> expectationFailure ("expected adoption outcome JSON object, got " <> show value)
         other -> expectationFailure ("expected adoption outcome, got " <> show other)
       registeredChanged <- expectStore store (Rebuild.registerProjectionCatalog changed)
       registeredChanged `shouldSatisfy` isRight
@@ -197,6 +203,41 @@ spec fixture = do
                 }
           )
       begun `shouldSatisfy` isRight
+
+    it "annotates preview scope and warns about out-of-scope drift" $ \store -> do
+      expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY); CREATE TABLE app.ops_catalog_b (id bigint PRIMARY KEY)")
+      current <- expectValidatedCatalog (opsCatalogPair "ops-codec-a-v1" "ops-codec-b-v1")
+      changed <- expectValidatedCatalog (opsCatalogPair "ops-codec-a-v2" "ops-codec-b-v2")
+      registered <- expectStore store (Rebuild.registerProjectionCatalog current)
+      registered `shouldSatisfy` isRight
+      let operations = CatalogOperations.projectionCatalogOperations changed
+          command = OpsRebuild.Adopt (OpsRebuild.AdoptOptions (NonEmpty.singleton opsGroupId))
+      preview <- OpsRebuild.runCommand (opsEnv False store) operations command
+      case preview of
+        PreviewRequired result _ -> do
+          result.headers `shouldBe` ["name", "kind", "state", "scope", "stored", "current"]
+          result.rows `shouldSatisfy` any (\row -> take 4 row == ["ops-group", "group", "slice-changed", "adopt"])
+          result.rows `shouldSatisfy` any (\row -> take 4 row == ["ops-group-b", "group", "slice-changed", "skip"])
+          case result.jsonValue of
+            Aeson.Object fields -> do
+              KeyMap.lookup "schema" fields
+                `shouldBe` Just (Aeson.String "keiro/catalog-adoption-preview/v2")
+              KeyMap.lookup "outOfScopeChangedGroups" fields
+                `shouldBe` Just (Aeson.toJSON (["ops-group-b"] :: [Text]))
+            value -> expectationFailure ("expected adoption preview JSON object, got " <> show value)
+          renderHuman result `shouldSatisfy` Text.isInfixOf "out-of-scope"
+          renderHuman result `shouldSatisfy` Text.isInfixOf "ops-group-b"
+        other -> expectationFailure ("expected scoped adoption preview, got " <> show other)
+
+    it "refuses an adoption preview for a group absent from the catalog" $ \store -> do
+      changed <- expectValidatedCatalog (opsCatalog "ops-codec-v2")
+      let missingGroup = catalogIdentity Catalog.mkRebuildGroupId "ops-group-missing"
+          operations = CatalogOperations.projectionCatalogOperations changed
+          command = OpsRebuild.Adopt (OpsRebuild.AdoptOptions (NonEmpty.singleton missingGroup))
+      preview <- OpsRebuild.runCommand (opsEnv False store) operations command
+      case preview of
+        Failed message -> message `shouldSatisfy` Text.isInfixOf "AdoptGroupNotInCatalog"
+        other -> expectationFailure ("expected adoption preview refusal, got " <> show other)
 
     it "recovers a pre-canonical stranded run through preview and force" $ \store -> do
       expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")
@@ -296,14 +337,14 @@ spec fixture = do
       case adoptionPreview of
         PreviewRequired result _ ->
           result.rows `shouldSatisfy` \case
-            row : _ -> row !! 1 == "stale-format"
+            row : _ -> row !! 1 == "group" && row !! 2 == "stale-format"
             _ -> False
         other -> expectationFailure ("expected adoption preview, got " <> show other)
       adopted <- OpsRebuild.runCommand forceEnv operations adopt
       case adopted of
         Succeeded result ->
           result.rows `shouldSatisfy` \case
-            [row] -> row !! 1 == "failed" && Text.isPrefixOf "slice-v2:" (row !! 2)
+            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v2:" (row !! 3)
             _ -> False
         other -> expectationFailure ("expected forced adoption, got " <> show other)
 
@@ -1211,6 +1252,41 @@ opsCatalog codecFingerprint =
       projectionSets = [Catalog.SomeProjectionSet opsProjectionSet]
     }
 
+opsCatalogPair :: Text -> Text -> Catalog.ProjectionCatalog
+opsCatalogPair firstCodec secondCodec =
+  let first = opsCatalog firstCodec
+   in first
+        { Catalog.sources =
+            first.sources
+              <> [ Catalog.SourceDeclaration
+                     { sourceId = opsSourceBId,
+                       sourceScope = Catalog.CategorySource (CategoryName "ops-catalog-b"),
+                       codecFingerprint = secondCodec,
+                       claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:source-b"
+                     }
+                 ],
+          Catalog.targets =
+            first.targets
+              <> [ Catalog.TargetDeclaration
+                     { targetId = opsTargetBId,
+                       qualifiedTable = Catalog.QualifiedTable "app" "ops_catalog_b",
+                       resetPolicy = Catalog.ClearBeforeReplay,
+                       dependsOn = [],
+                       claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:target-b"
+                     }
+                 ],
+          Catalog.rebuildGroups =
+            first.rebuildGroups
+              <> [ Catalog.RebuildGroupDeclaration
+                     { rebuildGroupId = opsGroupBId,
+                       orderedTargets = [opsTargetBId],
+                       verificationHooks = [],
+                       claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:group-b"
+                     }
+                 ],
+          Catalog.projectionSets = first.projectionSets <> [Catalog.SomeProjectionSet opsProjectionSetB]
+        }
+
 opsCatalogWithVerifications :: [Catalog.RebuildVerification] -> Catalog.ProjectionCatalog -> Catalog.ProjectionCatalog
 opsCatalogWithVerifications verifications catalog =
   catalog
@@ -1252,6 +1328,38 @@ opsProjectionDefinition =
       claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:projection"
     }
 
+opsProjectionSetB :: Catalog.ProjectionSet OpsCatalogEvent
+opsProjectionSetB =
+  Catalog.ProjectionSet
+    { projectionSource = opsSourceBId,
+      projectionDefinitions = NonEmpty.singleton opsProjectionDefinitionB,
+      claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:set-b"
+    }
+
+opsProjectionDefinitionB :: Catalog.ProjectionDefinition OpsCatalogEvent
+opsProjectionDefinitionB =
+  Catalog.ProjectionDefinition
+    { projectionId = catalogIdentity Catalog.mkProjectionId "ops-owner-b",
+      rebuildGroup = opsGroupBId,
+      ownedTargets = NonEmpty.singleton opsTargetBId,
+      replayPolicy =
+        Catalog.Replayable
+          Catalog.ReplayAdapter
+            { decodeForReplay = const Catalog.ReplayIrrelevant,
+              applyForReplay = \_ _ -> pure ()
+            },
+      handlers =
+        NonEmpty.singleton
+          ( Catalog.InlineHandler
+              Projection.InlineProjection
+                { name = "ops-inline-b",
+                  apply = \_ _ -> pure ()
+                }
+              (catalogIdentity Catalog.mkClaimSite "ops-test:inline-handler-b")
+          ),
+      claimSite = catalogIdentity Catalog.mkClaimSite "ops-test:projection-b"
+    }
+
 opsGroupId :: Catalog.RebuildGroupId
 opsGroupId = catalogIdentity Catalog.mkRebuildGroupId "ops-group"
 
@@ -1260,6 +1368,15 @@ opsSourceId = catalogIdentity Catalog.mkSourceId "ops-source"
 
 opsTargetId :: Catalog.TargetId
 opsTargetId = catalogIdentity Catalog.mkTargetId "ops-target"
+
+opsGroupBId :: Catalog.RebuildGroupId
+opsGroupBId = catalogIdentity Catalog.mkRebuildGroupId "ops-group-b"
+
+opsSourceBId :: Catalog.SourceId
+opsSourceBId = catalogIdentity Catalog.mkSourceId "ops-source-b"
+
+opsTargetBId :: Catalog.TargetId
+opsTargetBId = catalogIdentity Catalog.mkTargetId "ops-target-b"
 
 opsRunId :: Rebuild.RebuildRunId
 opsRunId =

@@ -63,9 +63,9 @@ This section must always reflect the actual current state of the work.
       `keiro/src/Keiro/ReadModel/Rebuild/Group.hs`; facade exports updated.
 - [x] (2026-08-13 04:26Z) Milestone 2: `keiro/test/CatalogEvolutionSpec.hs` updated and extended;
       `cabal test keiro-test` green.
-- [ ] Milestone 3: scoped preview, v2 report envelopes, and JSON in
+- [x] (2026-08-13 04:34Z) Milestone 3: scoped preview, v2 report envelopes, and JSON in
       `keiro/src/Keiro/Projection/Catalog/Operations.hs`.
-- [ ] Milestone 3: scoped rendering and wiring in `keiro-ops/src/Keiro/Ops/Rebuild.hs`;
+- [x] (2026-08-13 04:34Z) Milestone 3: scoped rendering and wiring in `keiro-ops/src/Keiro/Ops/Rebuild.hs`;
       `cabal test keiro-ops-test` green.
 - [ ] Milestone 4: ADR-32 adoption contract amended; `okf validate` green.
 - [ ] Milestone 4: `docs/user/read-models-and-projections.md`, `keiro/CHANGELOG.md`, and
@@ -95,6 +95,10 @@ implementation. Provide concise evidence.
   marked `live`: doing so would reopen a query model while EP-3 deliberately preserves the
   group's recovery fence. The insertion now mirrors the locked group lifecycle as
   `abandoned` with no `last_built_at`; the focused recovery/adoption test pins that rule.
+- The final scoped preview and outcome passed all four focused ops examples, the complete
+  `keiro-ops-test` suite (41 examples), and the complete `keiro-test` suite (540 examples).
+  The ops assertions cover the v2 schema tags, exact six-/four-column table shapes,
+  preview-time unknown-group refusal, and the JSON list of out-of-scope drift.
 
 
 ## Decision Log

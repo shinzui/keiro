@@ -37,11 +37,14 @@ import Keiro.ReadModel.Rebuild
   ( GroupAdoptionClass (..),
     GroupLifecycleStatus (..),
     GroupRebuildMetadata (..),
+    OrphanedRegistration (..),
     RebuildFailure (..),
     RebuildOptions (..),
     RebuildRequest (..),
     RebuildRunId,
     RebuildRunReport (..),
+    RegistrationAdoption (..),
+    RegistrationAdoptionAction (..),
     defaultRebuildOptions,
     mkRebuildRunId,
     rebuildRunIdText,
@@ -206,7 +209,7 @@ runCommand env operations = \case
     | env.force ->
         runCatalogAction env (adoptCatalogGroups operations options.groups) (Succeeded . adoptionOutcomeResult)
     | otherwise ->
-        runCatalogAction env (Right <$> previewCatalogAdoption operations) $ \report ->
+        runCatalogAction env (previewCatalogAdoption operations options.groups) $ \report ->
           PreviewRequired (adoptionPreviewResult report) (forceInvocation env (adoptArguments options))
 
 startRebuildOptions :: StartOptions -> RebuildOptions
@@ -286,35 +289,116 @@ registeredPreviewResult report =
 adoptionPreviewResult :: CatalogAdoptionReport -> OpsResult
 adoptionPreviewResult report =
   OpsResult
-    { headers = ["group", "state", "stored_slice", "current_slice"],
+    { headers = ["name", "kind", "state", "scope", "stored", "current"],
       rows =
         [ [ rebuildGroupIdText group.rebuildGroupId,
+            "group",
             adoptionStateText group.classification,
+            adoptionScopeText group.inScope,
             maybe "" id group.storedSlice,
             group.currentSlice
           ]
         | group <- report.groups
         ]
-          <> [ [rebuildGroupIdText groupId, "removed", "", ""]
+          <> [ [rebuildGroupIdText groupId, "group", "removed", "skip", "", ""]
              | groupId <- report.removedGroups
              ]
-          <> [["note", adoptionNote, "", ""]],
+          <> [ [ registration.registryName,
+                 "registration",
+                 registrationActionText registration.action,
+                 adoptionScopeText registration.inScope,
+                 "",
+                 ""
+               ]
+             | registration <- report.registrations
+             ]
+          <> [ [ orphan.registryName,
+                 "registration",
+                 "orphaned-old-name",
+                 adoptionScopeText orphan.inScope,
+                 rebuildGroupIdText orphan.boundGroupId,
+                 ""
+               ]
+             | orphan <- report.orphanedRegistrations
+             ]
+          <> [["note", adoptionNote, "", "", "", ""]]
+          <> warningRows,
       jsonValue = Aeson.toJSON report
     }
+  where
+    warningRows =
+      [ [ "note",
+          "warning: out-of-scope groups still drift and will fail startup registration until adopted: "
+            <> renderGroupIds report.outOfScopeChangedGroups,
+          "",
+          "",
+          "",
+          ""
+        ]
+      | not (null report.outOfScopeChangedGroups)
+      ]
+        <> [ [ "note",
+               "warning: requested groups not yet registered; --force will refuse: "
+                 <> renderGroupIds requestedNewGroups,
+               "",
+               "",
+               "",
+               ""
+             ]
+           | not (null requestedNewGroups)
+           ]
+    requestedNewGroups =
+      [ group.rebuildGroupId
+      | group <- report.groups,
+        group.inScope,
+        group.classification == AdoptionNew
+      ]
 
 adoptionOutcomeResult :: CatalogAdoptionOutcome -> OpsResult
 adoptionOutcomeResult outcome =
   OpsResult
-    { headers = ["group", "status", "slice_fingerprint"],
+    { headers = ["name", "kind", "outcome", "detail"],
       rows =
         [ [ rebuildGroupIdText metadata.rebuildGroupId,
+            "group",
             lifecycleStatusText metadata.status,
             metadata.sliceFingerprint
           ]
         | metadata <- outcome.adoptedGroups
-        ],
+        ]
+          <> [ [ registration.registryName,
+                 "registration",
+                 registrationOutcomeText registration.action,
+                 rebuildGroupIdText registration.rebuildGroupId
+               ]
+             | registration <- outcome.registrationOutcomes
+             ]
+          <> [ [ orphan.registryName,
+                 "registration",
+                 "orphaned-old-name",
+                 rebuildGroupIdText orphan.boundGroupId
+               ]
+             | orphan <- outcome.removedOrphans
+             ],
       jsonValue = Aeson.toJSON outcome
     }
+
+adoptionScopeText :: Bool -> Text
+adoptionScopeText True = "adopt"
+adoptionScopeText False = "skip"
+
+registrationActionText :: RegistrationAdoptionAction -> Text
+registrationActionText = \case
+  RegistrationUpdate -> "update"
+  RegistrationInsert -> "insert"
+
+registrationOutcomeText :: RegistrationAdoptionAction -> Text
+registrationOutcomeText = \case
+  RegistrationUpdate -> "adopted"
+  RegistrationInsert -> "inserted"
+
+renderGroupIds :: [RebuildGroupId] -> Text
+renderGroupIds = Text.intercalate ", " . map rebuildGroupIdText
 
 adoptionStateText :: GroupAdoptionClass -> Text
 adoptionStateText = \case
