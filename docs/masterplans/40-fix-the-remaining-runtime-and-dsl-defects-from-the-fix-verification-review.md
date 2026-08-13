@@ -87,7 +87,7 @@ No cross-repository ADR bears on this MasterPlan.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Report legacy strong-consistency weakening across the language 4 to 5 migration in diff | docs/plans/250-report-legacy-strong-consistency-weakening-across-the-language-4-to-5-migration-in-diff.md | None | None | Complete |
 | 2 | Count only durable progress in workflow resume summaries | docs/plans/251-count-only-durable-progress-in-workflow-resume-summaries.md | None | None | Complete |
-| 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | In Progress |
+| 3 | Fail fast on cursorless strong waits in the legacy read-model API | docs/plans/252-fail-fast-on-cursorless-strong-waits-in-the-legacy-read-model-api.md | None | None | Complete |
 | 4 | Apply the deferred consolidation cleanups from the fix verification review | docs/plans/253-apply-the-deferred-consolidation-cleanups-from-the-fix-verification-review.md | None | EP-1 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -141,10 +141,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 (251) M2: append-witness through `WorkflowRunOptions`, `classifyOutcome` replacing `bumpForOutcome`, new `sleepDue` blocked category, Haddock drain recipe rewrite
 - [x] EP-2 (251) M3: keiro-ops `sleep_due` column + two-pass resume-once CLI test (`advanced=0, sleep_due=1` both passes)
 - [x] EP-2 (251) M4: docs, ADR-23/ADR-25 amendments, changelogs (supersede plan 239's unreleased bullet), `just verify`
-- [ ] EP-3 (252) M1: three red cursorless tests (waitFor fast-fail + timing + no spurious metric; Strong and PositionWait override parity; cursorless startRebuild lifecycle)
-- [ ] EP-3 (252) M2: waitFor through the cursor-authority predicate; `runQueryWith` reimplemented as a translation onto `runQueryWithFreshness`
-- [ ] EP-3 (252) M3: cursorless `startRebuild` skips the checkpoint reset (typed, documented); scaffold audit confirming no keiro-dsl change
-- [ ] EP-3 (252) M4: docs, changelog, gates
+- [x] EP-3 (252) M1: three cursorless tests (two red wait proofs with timing/metric assertions; pre-fix rebuild lifecycle green through Hasql, correcting the direct-SQL planning inference)
+- [x] EP-3 (252) M2: waitFor through the cursor-authority predicate; `runQueryWith` reimplemented as a translation onto `runQueryWithFreshness`
+- [x] EP-3 (252) M3: cursorless `startRebuild` skips the checkpoint reset (typed, documented); scaffold audit confirming no keiro-dsl change
+- [x] EP-3 (252) M4: docs, changelog, ADR distillation, standalone 548-example runtime suite, and full `just verify`
 - [ ] EP-4 (253) M1: keiro consolidation (shared command-attempt driver; shared deterministic-id probe helper) with golden vectors untouched + command benchmark guard
 - [ ] EP-4 (253) M2: keiro-ops reader consolidation into `Keiro.Ops.Parse`
 - [ ] EP-4 (253) M3: keiro-dsl surface (single `outcomeSelectors` source; delete dead `pureRefusals`/`constraintPlan` exports)
@@ -188,6 +188,10 @@ interactions between child plans. Provide concise evidence.
   unchanged due sleep; the corrected pass reports `advanced = 0, sleepDue = 1`, and
   the full `just verify` gate (including all generated workflow/DSL conformance
   packages) remained green.
+- EP-3 completed on 2026-08-13 without changing cursor-bearing waits, Kiroku reset
+  semantics, or generated DSL bytes. All wait entry points now share the typed
+  cursor-authority boundary, cursorless rebuild skips its nonexistent checkpoint reset,
+  and the standalone 548-example runtime suite plus full `just verify` gate passed.
 
 
 ## Decision Log
@@ -224,3 +228,8 @@ docs/adr/. Keep task-local execution and coordination details here.
   classify replay-only due sleeps as `sleepDue`, expose the timer-worker remedy in
   `keiro-ops` and user documentation, and terminate the bounded drain truthfully.
   ADR 0023 and ADR 0025 contain the durable contract. EP-3 and EP-4 remain.
+- 2026-08-13: EP-3 completed. Cursorless waits now fail fast through the same typed
+  boundary across truthful, direct, and deprecated APIs without recording false timeout
+  metrics; cursorless rebuilds explicitly skip a checkpoint reset they cannot own. The
+  scaffold audit required no generated-code change, ADR distillation required no durable
+  decision update, and the full repository gate passed. EP-4 remains.

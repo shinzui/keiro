@@ -80,9 +80,12 @@ This section must always reflect the actual current state of the work.
 - [x] M4: updated `docs/user/read-models-and-projections.md`,
   `docs/user/api-reference.md`, and `keiro/CHANGELOG.md` with the verified fail-fast
   and typed cursorless rebuild contracts.
-- [ ] M4: run `cabal test keiro-test` in full, then `just verify`; record results; update
-  the MasterPlan 40 registry row for this plan; complete the living sections and the ADR
-  distillation pass (expected outcome: no ADR change — see Decision Log).
+- [x] M4: full `cabal test keiro-test` passed 548 examples with zero failures in
+  107.7838 seconds; `just verify` then passed end to end, including the repeated
+  548-example runtime suite, 58 PGMQ examples (two expected pending), 42 operations
+  examples, 705 main DSL examples, all 39 conformance-corpus invocations, 23 Jitsurei
+  examples, and 29 migration examples. The MasterPlan registry and living sections are
+  complete, and the ADR distillation pass confirmed that no ADR change is warranted.
 
 
 ## Surprises & Discoveries
@@ -199,7 +202,30 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-13. Every public waiting entry point now crosses the same typed
+cursor-authority boundary. `waitFor` fails fast with a self-describing
+`ReadModelMissingCursor` position request, while deprecated `runQueryWith` translates
+its legacy override onto `runQueryWithFreshness`; neither cursorless path polls or emits
+a false timeout metric. Cursor-bearing behavior remains on the existing implementation
+and the 0.11 compatibility fixture still compiles.
+
+The unmanaged rebuild lifecycle now branches on `QueryCursorAuthority` and skips the
+Kiroku checkpoint reset for `NoQueryCursor`, while retaining the reset unchanged for a
+durable cursor. The generated-scaffold audit found no mismatched generated call site and
+therefore required no `keiro-dsl` change. Runtime/user documentation and the changelog
+state both contracts.
+
+The main lesson is that a direct SQL expression was not a faithful reproduction of the
+Hasql `text[]` parameter path: the planned SQLSTATE 22021 failure did not reproduce in
+the database-backed regression. Executable evidence narrowed the rebuild defect to its
+actual typed ownership violation without weakening the fix. The final standalone
+runtime suite passed 548 examples with zero failures, and the complete `just verify`
+gate passed.
+
+The final ADR distillation re-read ADR 0031, ADR 0033, and Kiroku ADR 4 at
+`mori://shinzui/kiroku/okf/adrs/concepts/ADR-4`. The change neither redefines reachable
+wait targets nor changes durable-checkpoint reset semantics; it applies the existing
+missing-cursor capability contract consistently. No ADR was amended or created.
 
 
 ## Context and Orientation
