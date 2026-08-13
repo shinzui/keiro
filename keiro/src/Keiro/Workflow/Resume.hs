@@ -36,8 +36,9 @@
 --   a /parent/ once a child finishes: the child's completion journals the
 --   parent's awaited @child:\<id\>@ 'StepRecorded', and the next resume pass
 --   re-invokes the parent (registered here) so it proceeds past its child-wait.
--- * __'ResumeSummary'__ ('discovered', 'resumed', 'completed', 'stillSuspended',
---   'unknownName', 'failed', 'transientErrors', 'leaseSkipped') — the per-pass
+-- * __'ResumeSummary'__ ('discovered', 'advanced', 'resumed', 'completed',
+--   'stillSuspended', 'unknownName', 'failed', 'transientErrors',
+--   'leaseSkipped', 'paced', 'sleepDue', 'unregisteredNames') — the per-pass
 --   observability record. EP-44 reads it for the @keiro.workflow.resumed@
 --   instrument (and may thread a @Maybe KeiroMetrics@ into
 --   'WorkflowResumeOptions' \/ 'resumeWorkflowsOnce' following the
@@ -92,7 +93,7 @@ import Control.Concurrent (threadDelay)
 import Control.Exception qualified as Exception
 import Control.Monad (forever)
 import Data.Aeson qualified as Aeson
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -137,7 +138,14 @@ import Keiro.Workflow
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (ChildRow, lookupChild, markChildFailedTx)
-import Keiro.Workflow.Instance (ClaimOutcome (..), claimInstance, recordCrashTx, releaseInstance)
+import Keiro.Workflow.Instance
+  ( ClaimOutcome (..),
+    WorkflowStatus (..),
+    claimInstance,
+    lookupInstance,
+    recordCrashTx,
+    releaseInstance,
+  )
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
@@ -281,8 +289,11 @@ defaultResumeLogEvent event =
 data ResumeSummary = ResumeSummary
   { -- | Unfinished workflows 'findUnfinishedWorkflowIds' returned this pass.
     discovered :: !Int,
-    -- | Candidates whose durable journal or terminal state moved this pass.
-    -- Use this, not 'discovered', as the bounded-drain continuation signal.
+    -- | Candidates whose durable state moved this pass: a fresh journal append
+    -- committed by the re-invocation, a terminal failure recorded at the crash
+    -- ceiling, or an external wake observed to have flipped the row back to
+    -- running mid-pass. A replay-only re-suspension is not an advance. Use this,
+    -- not 'discovered', as the bounded-drain continuation signal.
     advanced :: !Int,
     -- | Workflows re-invoked (found in the registry and run).
     resumed :: !Int,
@@ -301,6 +312,12 @@ data ResumeSummary = ResumeSummary
     leaseSkipped :: !Int,
     -- | Candidates whose crash-backoff gate is still in the future.
     paced :: !Int,
+    -- | Candidates that re-suspended without durable movement while their
+    -- instance row still carries an already-due wake hint. Discovery returns
+    -- them every pass by design, but only a timer-worker fire (or operator
+    -- repair of a cancelled sleep timer) can move them, so a bounded drain must
+    -- report them as blocked rather than spin. See ADR 23 and ADR 25.
+    sleepDue :: !Int,
     -- | Deduplicated workflow names absent from the application registry.
     unregisteredNames :: !(Set Text)
   }
@@ -320,6 +337,7 @@ emptyResumeSummary =
       transientErrors = 0,
       leaseSkipped = 0,
       paced = 0,
+      sleepDue = 0,
       unregisteredNames = Set.empty
     }
 
@@ -340,6 +358,7 @@ instance Semigroup ResumeSummary where
         transientErrors = transientErrors a + transientErrors b,
         leaseSkipped = leaseSkipped a + leaseSkipped b,
         paced = paced a + paced b,
+        sleepDue = sleepDue a + sleepDue b,
         unregisteredNames = Set.union (unregisteredNames a) (unregisteredNames b)
       }
 
@@ -371,8 +390,10 @@ instance Monoid ResumeSummary where
 --
 -- A bounded drain repeats while the previous summary reports @advanced > 0@.
 -- When a pass advances nothing, the remaining candidates are blocked in place
--- by pacing, unregistered definitions, leases, or transient errors and the
--- caller must stop and report them rather than spin on 'discovered'.
+-- by pacing, unregistered definitions, leases, transient errors, or due sleeps
+-- awaiting a timer worker ('sleepDue'), and the caller must stop and report
+-- them rather than spin on 'discovered'. A replay-only re-suspension reports no
+-- advance.
 --
 -- Idempotent: a completed workflow has a @__workflow_completed__@ index row and
 -- so drops out of discovery; re-invoking an unfinished one twice converges to the
@@ -390,9 +411,12 @@ resumeWorkflowsOnce = resumeWorkflowsOnceUpTo maxBound
 -- 'resumeWorkflowsOnce'; a non-positive limit performs the discovery query but
 -- advances no workflow. The summary's 'discovered' count is the number admitted
 -- to this pass, not a drain-termination signal: paced crash retries and
--- unregistered workflow names remain discoverable without leaving the pool.
+-- unregistered workflow names and due sleeps awaiting their timer worker remain
+-- discoverable without leaving the pool. A replay-only re-suspension reports no
+-- advance.
 -- Repeat bounded passes while the previous summary reports @advanced > 0@;
--- stop and report the remaining blocked candidates when @advanced == 0@.
+-- stop and report the remaining blocked candidates when @advanced == 0@,
+-- including 'sleepDue'.
 resumeWorkflowsOnceUpTo ::
   forall es.
   (IOE :> es, Store :> es, Error StoreError :> es) =>
@@ -464,36 +488,41 @@ resumeWorkflowsOnceUpTo limit opts registry = do
               pure emptyResumeSummary {leaseSkipped = 1}
             ClaimAcquired -> do
               progressedRef <- liftIO (newIORef False)
+              appendedRef <- liftIO (newIORef False)
               ( do
                   attempt <-
                     Error.catchError
                       @StoreError
-                      (AdvOk <$> driveInstance owner name wid runDef)
+                      (AdvOk <$> driveInstance appendedRef owner name wid runDef)
                       (\_ e -> pure (AdvTransient e))
                       `catch` (\WorkflowLeaseLost -> pure AdvLeaseLost)
                       `catchSync` (pure . AdvCrashed)
                   recordWorkflowResumed mMetrics 1
-                  (delta, progressed) <- handleAttempt emptyResumeSummary name wid attempt
+                  appended <- liftIO (readIORef appendedRef)
+                  (delta, progressed) <- handleAttempt appended emptyResumeSummary name wid attempt
                   liftIO (writeIORef progressedRef progressed)
                   pure delta
                 )
                 `finally` do
                   progressed <- liftIO (readIORef progressedRef)
                   releaseInstance owner progressed name wid
-    driveInstance :: (Aeson.ToJSON a) => Text -> WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
-    driveInstance owner name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
+    driveInstance :: (Aeson.ToJSON a) => IORef Bool -> Text -> WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
+    driveInstance appendedRef owner name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
       mChild <- lookupChild widText wnameText
       let runOpts =
             runOptions opts
               & #leaseHeartbeat
               .~ Just LeaseHeartbeat {owner, ttl = leaseTtl opts}
+              & #onJournalAppend
+              .~ Just (writeIORef appendedRef True)
       case mChild of
         Just _ -> runChildWorkflow runOpts name wid (runDef wid)
         Nothing -> runWorkflowWith runOpts name wid (runDef wid)
-    handleAttempt :: ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es (ResumeSummary, Bool)
-    handleAttempt acc name@(WorkflowName wnameText) wid@(WorkflowId widText) = \case
+    handleAttempt :: Bool -> ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es (ResumeSummary, Bool)
+    handleAttempt appended acc name@(WorkflowName wnameText) wid@(WorkflowId widText) = \case
       AdvOk outcome -> do
-        pure (bumpForOutcome outcome acc, True)
+        delta <- classifyOutcome appended name wid outcome acc
+        pure (delta, True)
       AdvTransient err -> do
         let rendered = Text.pack (show err)
         liftIO $ logEvent opts (ResumeTransientError wnameText widText rendered)
@@ -596,28 +625,42 @@ throwOnAppendConflict = \case
   JournalRefusedTerminal {} -> pure ()
   _ -> pure ()
 
--- | Fold one re-invocation's outcome into the running summary. The existential
--- result @a@ is discarded here, so it never escapes the registry.
-bumpForOutcome :: WorkflowOutcome a -> ResumeSummary -> ResumeSummary
-bumpForOutcome outcome acc = case outcome of
-  Completed _ -> bumped {completed = completed bumped + 1}
-  Suspended -> bumped {stillSuspended = stillSuspended bumped + 1}
-  -- A workflow cancelled between discovery and re-invocation short-circuits to
-  -- 'Cancelled' (EP-43); count it as re-invoked but neither completed nor
-  -- suspended. (A cancelled workflow also drops out of discovery, so this is a
-  -- rare race, not the steady state.)
-  Cancelled -> bumped
-  Failed -> bumped
-  -- A workflow that rotated via continueAsNew (EP-48) returns 'ContinuedAsNew':
-  -- it is re-invoked but neither completed nor suspended this pass. Its new
-  -- generation has no terminal marker, so 'findUnfinishedWorkflowIds' still
-  -- reports it and the next pass drives the rotated generation forward.
-  ContinuedAsNew -> bumped
+-- | Fold one re-invocation's outcome into the running summary, counting
+-- 'advanced' only for durable movement. The existential result is discarded.
+classifyOutcome ::
+  (IOE :> es, Store :> es) =>
+  Bool ->
+  WorkflowName ->
+  WorkflowId ->
+  WorkflowOutcome a ->
+  ResumeSummary ->
+  Eff es ResumeSummary
+classifyOutcome appended name wid outcome acc = case outcome of
+  Completed _ -> pure base {completed = completed base + 1}
+  ContinuedAsNew -> pure base
+  Cancelled -> pure base
+  Failed -> pure base
+  Suspended
+    | appended -> pure base {stillSuspended = stillSuspended base + 1}
+    | otherwise -> do
+        now <- liftIO getCurrentTime
+        row <- lookupInstance name wid
+        let suspendedBase = base {stillSuspended = stillSuspended base + 1}
+        pure $ case row of
+          Just r
+            | r ^. #status == WfSuspended,
+              Just wake <- r ^. #wakeAfter,
+              wake <= now ->
+                suspendedBase {sleepDue = sleepDue suspendedBase + 1}
+          Just r
+            | r ^. #status == WfRunning ->
+                suspendedBase {advanced = advanced suspendedBase + 1}
+          _ -> suspendedBase
   where
-    bumped =
+    base =
       acc
-        { advanced = advanced acc + 1,
-          resumed = resumed acc + 1
+        { resumed = resumed acc + 1,
+          advanced = advanced acc + (if appended then 1 else 0)
         }
 
 -- | Poll-and-resume loop: run 'resumeWorkflowsOnce' on the configured

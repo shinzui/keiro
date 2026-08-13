@@ -8239,6 +8239,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             transientErrors = 0,
             leaseSkipped = 0,
             paced = 0,
+            sleepDue = 0,
             unregisteredNames = Set.empty
           }
       -- Step 1 short-circuited; steps 2 and 3 ran exactly once.
@@ -8285,6 +8286,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             transientErrors = 0,
             leaseSkipped = 0,
             paced = 0,
+            sleepDue = 0,
             unregisteredNames = Set.empty
           }
       readIORef counter >>= \c -> c `shouldBe` 1
@@ -8326,6 +8328,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             transientErrors = 0,
             leaseSkipped = 0,
             paced = 0,
+            sleepDue = 0,
             unregisteredNames = Set.singleton "orphan"
           }
       -- The journal is unchanged: still one step, no completion.
@@ -10761,6 +10764,43 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` (2, 1, 1, 0)
       unregisteredNames blocked `shouldBe` Set.singleton "drain-ghost"
 
+    it "a bounded drain loop terminates over a due sleep with no timer worker" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "drain-due-sleep"
+          wid = WorkflowId "dds-1"
+          opts = defaultWorkflowResumeOptions & #logEvent .~ const (pure ())
+          registry =
+            Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "wait") (-1)))
+          pass = Store.runStoreIO storeHandle (resumeWorkflowsOnce opts registry)
+          drain 0 acc = pure acc
+          drain n acc = do
+            Right summary <- pass
+            if advanced summary > 0
+              then drain (n - 1 :: Int) (acc <> [summary])
+              else pure (acc <> [summary])
+      -- Arm the sleep with an already-due fire time. No timer worker ever fires it.
+      Right Suspended <-
+        Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "wait") (-1))
+      readIORef counter `shouldReturn` 1
+      passes <- drain 5 []
+      length passes `shouldBe` 1
+      case passes of
+        [summary] ->
+          (discovered summary, resumed summary, stillSuspended summary, advanced summary, sleepDue summary)
+            `shouldBe` (1, 1, 1, 0, 1)
+        other -> expectationFailure ("expected one drain pass, got " <> show other)
+      Right blocked <- pass
+      (discovered blocked, stillSuspended blocked, advanced blocked, sleepDue blocked)
+        `shouldBe` (1, 1, 0, 1)
+      -- Replay-only: neither step body re-ran.
+      readIORef counter `shouldReturn` 1
+      -- The candidate is still discoverable, blocked on the timer worker rather than lost.
+      Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+      row ^. #status `shouldBe` Instance.WfSuspended
+      Right hint <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+      hint `shouldSatisfy` isJust
+
   describe "Keiro.Workflow terminal boundaries" $ around (withFreshStore fixture) $ do
     -- The asymmetry this closes: cancellation stopped a run at the next step
     -- boundary, terminal failure did not. Before the append transaction checked
@@ -11888,7 +11928,7 @@ expectedMixedResumeSummary :: ResumeSummary
 expectedMixedResumeSummary =
   emptyResumeSummary
     { discovered = 4,
-      advanced = 3,
+      advanced = 2,
       resumed = 3,
       completed = 1,
       stillSuspended = 1,

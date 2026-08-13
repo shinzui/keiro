@@ -407,7 +407,14 @@ data WorkflowRunOptions = WorkflowRunOptions
     -- | Resume-worker lease coordinates. When present, fresh workflow
     --     boundaries renew the lease and throw 'WorkflowLeaseLost' if another owner
     --     has taken it. 'Nothing' keeps direct runs free of lease traffic.
-    leaseHeartbeat :: !(Maybe LeaseHeartbeat)
+    leaseHeartbeat :: !(Maybe LeaseHeartbeat),
+    -- | When 'Just', invoked for every fresh journal-append boundary this run
+    --     commits: an executed step, a patch decision, the patch-set record, the
+    --     completion marker, or a generation rotation. Replays, idempotent
+    --     re-appends, refused appends, and wake-source writes that touch no
+    --     journal do not fire it. The resume worker uses this witness to count
+    --     durable movement per candidate. 'Nothing' observes nothing.
+    onJournalAppend :: !(Maybe (IO ()))
   }
   deriving stock (Generic)
 
@@ -422,7 +429,8 @@ defaultWorkflowRunOptions =
       metrics = Nothing,
       tracer = Nothing,
       activePatches = Set.empty,
-      leaseHeartbeat = Nothing
+      leaseHeartbeat = Nothing,
+      onJournalAppend = Nothing
     }
 
 -- ---------------------------------------------------------------------------
@@ -558,6 +566,7 @@ runWorkflowWith options name wid action = do
     -- records nothing and opens no span — the no-op idiom holds end to end.
     mMetrics = options ^. #metrics
     mTracer = options ^. #tracer
+    fireAppendWitness = for_ (options ^. #onJournalAppend) liftIO
     runActive :: Int -> Eff es (WorkflowOutcome a)
     runActive gen =
       -- EP-44: maintain the process-wide live-run count and sample the
@@ -584,8 +593,7 @@ runWorkflowWith options name wid action = do
               `catch` ( \(WorkflowRotate seedJson) ->
                           RunOutcome
                             <$> rotateGeneration
-                              mMetrics
-                              (options ^. #activePatches)
+                              options
                               name
                               wid
                               gen
@@ -610,6 +618,7 @@ runWorkflowWith options name wid action = do
                 -- policy fired).
                 appendCompletion name wid gen now >>= \case
                   JournalAppended appendResult -> do
+                    fireAppendWitness
                     when
                       ( shouldSnapshot
                           (options ^. #snapshotPolicy)
@@ -653,7 +662,9 @@ runWorkflowWith options name wid action = do
               let encoded = Aeson.toJSON (map unPatchId (Set.toList patches))
               now <- liftIO getCurrentTime
               appendJournal name wid runGen (StepRecorded patchSetStepName encoded now) >>= \case
-                JournalAppended {} -> pure (Map.insert patchSetStepName encoded initial)
+                JournalAppended {} -> do
+                  fireAppendWitness
+                  pure (Map.insert patchSetStepName encoded initial)
                 JournalAlreadyPresent stored -> pure (Map.insert patchSetStepName stored initial)
                 -- This runs only on a fresh journal, which by definition carries
                 -- no terminal marker, so a refusal is an invariant violation
@@ -695,6 +706,7 @@ runWorkflowWith options name wid action = do
             case appendOutcome of
               JournalAppended appendResult -> do
                 -- Miss: @act@ ran and was journaled — a fresh execution.
+                fireAppendWitness
                 recordWorkflowStepExecuted mMetrics 1
                 newMap <-
                   liftIO
@@ -784,6 +796,7 @@ runWorkflowWith options name wid action = do
             appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
             case appendOutcome of
               JournalAppended {} -> do
+                fireAppendWitness
                 liftIO
                   ( atomicModifyIORef' journalRef $ \m ->
                       (Map.insert key encoded m, ())
@@ -910,15 +923,16 @@ appendCompletion name wid gen now =
 rotateGeneration ::
   forall a es.
   (IOE :> es, Store :> es, Error StoreError :> es) =>
-  Maybe KeiroMetrics ->
-  Set PatchId ->
+  WorkflowRunOptions ->
   WorkflowName ->
   WorkflowId ->
   Int ->
   Aeson.Value ->
   Eff es (WorkflowOutcome a)
-rotateGeneration mMetrics patches name wid gen seedJson = do
+rotateGeneration options name wid gen seedJson = do
   let nextGen = gen + 1
+      mMetrics = options ^. #metrics
+      patches = options ^. #activePatches
       encodedPatches = Aeson.toJSON (map unPatchId (Set.toList patches))
       patchEvent =
         StepRecorded patchSetStepName encodedPatches
@@ -979,6 +993,12 @@ rotateGeneration mMetrics patches name wid gen seedJson = do
       Just seedOutcome -> do
         throwOnConflict seedOutcome
         traverse_ throwOnConflict patchOutcome
+        when
+          ( journalAppended rotationOutcome
+              || journalAppended seedOutcome
+              || maybe False journalAppended patchOutcome
+          )
+          (for_ (options ^. #onJournalAppend) liftIO)
         let seedValue = recordedValue seedJson seedOutcome
             snapshotState =
               maybe
@@ -1020,6 +1040,9 @@ rotateGeneration mMetrics patches name wid gen seedJson = do
     recordedValue fallback = \case
       JournalAlreadyPresent stored -> stored
       _ -> fallback
+    journalAppended = \case
+      JournalAppended {} -> True
+      _ -> False
 
 -- | Snapshot a workflow state after its journal append has committed. The
 -- snapshot is advisory: a store failure is counted and cannot turn the

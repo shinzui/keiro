@@ -56,11 +56,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the red drain test "a bounded drain loop terminates over a due sleep with no timer worker" to `keiro/test/Main.hs` (existing-fields assertions only, so it compiles pre-fix) and record its failure output in Concrete Steps.
-- [ ] M2: add `onJournalAppend :: !(Maybe (IO ()))` to `WorkflowRunOptions` in `keiro/src/Keiro/Workflow.hs`, default `Nothing`, and invoke it at every fresh-append site (step, patch, patch-set, completion, rotation).
-- [ ] M2: reshape `ResumeSummary` with `sleepDue :: !Int`; thread a per-candidate append witness through `advance`/`driveInstance`; replace `bumpForOutcome` with append-aware outcome classification including the post-suspension instance-row check.
-- [ ] M2: rewrite the `advanced` field doc, the module-header field recap, and the `resumeWorkflowsOnce`/`resumeWorkflowsOnceUpTo` drain recipes in `Resume.hs`.
-- [ ] M2: update existing `keiro-test` assertions (full-record `ResumeSummary` constructions gain `sleepDue = 0`; `expectedMixedResumeSummary.advanced` drops from 3 to 2), extend the M1 test with `sleepDue` assertions, run `cabal test keiro-test` green.
+- [x] (2026-08-13 14:52Z) M1: added the red drain test "a bounded drain loop terminates over a due sleep with no timer worker" to `keiro/test/Main.hs` using only existing summary fields, and recorded the bound-exhaustion failure below.
+- [x] (2026-08-13 14:58Z) M2: added `onJournalAppend :: !(Maybe (IO ()))` to `WorkflowRunOptions`, defaulted it to `Nothing`, and invoked it at every fresh-append site (step, patch, patch-set, completion, rotation).
+- [x] (2026-08-13 14:58Z) M2: reshaped `ResumeSummary` with `sleepDue :: !Int`, threaded a per-candidate append witness through `advance`/`driveInstance`, and replaced `bumpForOutcome` with append-aware classification plus the post-suspension instance-row check.
+- [x] (2026-08-13 14:58Z) M2: rewrote the `advanced` field documentation, module-header field recap, and both bounded-drain recipes in `Resume.hs`.
+- [x] (2026-08-13 14:58Z) M2: updated every full-record summary assertion, changed `expectedMixedResumeSummary.advanced` from 3 to 2, extended the due-sleep test with stable `sleepDue` assertions, and passed all 545 `keiro-test` examples.
 - [ ] M3: render `sleep_due` in `keiro-ops` `resumeSummaryResult` (column + JSON key) and add the due-sleep CLI test; `cabal test keiro-ops-test` green.
 - [ ] M4: update `docs/guides/durable-workflows.md`, `docs/user/durable-workflows.md`, and `docs/user/operations.md` drain/summary text.
 - [ ] M4: CHANGELOG entries — rewrite the keiro Unreleased breaking-change bullet from plan 239 to the final shape; extend the keiro-ops Unreleased resume-once bullet.
@@ -702,21 +702,42 @@ Iterate on the new drain test (hspec substring match):
 cabal test keiro-test --test-options='--match "due sleep with no timer worker"'
 ```
 
-Expected BEFORE the M2 fix — run once after writing the M1 test and capture the
-real output here (the shape to expect):
+Observed BEFORE the M2 fix:
 
 ```text
 Keiro.Workflow exact discovery
-  a bounded drain loop terminates over a due sleep with no timer worker FAILED [1]
+  a bounded drain loop terminates over a due sleep with no timer worker [✘]
 
-  1) ... expected: 1
-          but got: 5
+Failures:
 
+  test/Main.hs:10784:21:
+  1) Keiro.Workflow exact discovery a bounded drain loop terminates over a due sleep with no timer worker
+       expected: 1
+        but got: 5
+
+Finished in 0.1812 seconds
 1 example, 1 failure
 ```
 
 (`5` is the drain bound: every pre-fix pass reports `advanced = 1`, so the loop
-never stops on its own.) Expected AFTER the fix: `1 example, 0 failures`. To
+never stops on its own.) Observed AFTER the fix:
+
+```text
+Keiro.Workflow exact discovery
+  a bounded drain loop terminates over a due sleep with no timer worker [✔]
+
+Finished in 0.1702 seconds
+1 example, 0 failures
+```
+
+The full runtime suite also passed:
+
+```text
+Finished in 103.4349 seconds
+545 examples, 0 failures
+```
+
+To
 re-demonstrate the failure later, stash the fix and rerun:
 
 ```bash
