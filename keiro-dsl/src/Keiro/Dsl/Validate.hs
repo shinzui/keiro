@@ -54,7 +54,7 @@ import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Integration.Event qualified as Event
 import Numeric (showHex)
@@ -757,6 +757,7 @@ validateService service =
   validateCheckedSpec
     (checkedLanguageContract service)
     (checkedTypeGraph service)
+    (checkedProjectionSupplies service)
     (checkedSpec service)
 
 -- | Compatibility wrapper for callers that have only a normalized graph. It
@@ -765,9 +766,9 @@ validateService service =
 validateSpec :: Spec -> [Diagnostic]
 validateSpec = validateService . legacyCheckedService
 
-validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
-validateCheckedSpec languageContract typeGraphResult spec =
-  sortOn line (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract spec ++ concatMap (validateNode languageContract typeGraphResult spec) (specNodes spec))
+validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
+validateCheckedSpec languageContract typeGraphResult supplyAnalysis spec =
+  sortOn line (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) (specNodes spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -1935,8 +1936,8 @@ validPostgresIdentifier identifier =
           && T.all (\character -> asciiLower character || (character >= '0' && character <= '9') || character == '_') rest
 
 -- | Rules over namespaces shared by the whole specification.
-specLevelRules :: EffectiveLanguageContract -> Spec -> [Diagnostic]
-specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ runtimeIdentities ++ duplicateRuntimeIdentities ++ catalogRules ++ ruleDiagnostics
+specLevelRules :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
+specLevelRules languageContract supplyAnalysis spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ duplicateDeclarations ++ runtimeIdentities ++ duplicateRuntimeIdentities ++ catalogRules ++ ruleDiagnostics
   where
     duplicateNodes =
       [ mkErr (locLine loc) DuplicateNodeName $
@@ -1990,7 +1991,7 @@ specLevelRules languageContract spec = duplicateNodes ++ duplicateEnumMembers ++
         <> [("process", procName process, procLoc process) | NProcess process <- specNodes spec]
         <> [("router", rtName router, rtLoc router) | NRouter router <- specNodes spec]
     catalogRules
-      | hasProjectionCatalog languageContract = validateProjectionCatalogFleet spec
+      | hasProjectionCatalog languageContract = validateProjectionCatalogFleet supplyAnalysis spec
       | otherwise = []
     ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
 
@@ -2011,22 +2012,22 @@ nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
-validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> Node -> [Diagnostic]
-validateNode languageContract typeGraphResult spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
-validateNode languageContract _typeGraphResult spec (NProcess p) = validateProcess languageContract spec p
-validateNode languageContract typeGraphResult spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
-validateNode languageContract _typeGraphResult _spec (NContract contract) = validateContract languageContract contract
-validateNode languageContract _typeGraphResult spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
-validateNode languageContract _typeGraphResult spec (NEmit e) = validateEmit languageContract spec e
-validateNode languageContract _typeGraphResult spec (NPublisher p) = validatePublisher languageContract spec p
-validateNode languageContract _typeGraphResult _spec (NWorkqueue w) = validateWorkqueue languageContract w
-validateNode languageContract _typeGraphResult spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
-validateNode languageContract _typeGraphResult spec (NReadModel readModel) = validateReadModel languageContract spec readModel
-validateNode languageContract _typeGraphResult _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
-validateNode languageContract _typeGraphResult spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
-validateNode languageContract _typeGraphResult spec (NProjectionOwner owner) = validateProjectionOwner languageContract spec owner
-validateNode _languageContract _typeGraphResult _spec (NWorkflow w) = validateWorkflow w
-validateNode _languageContract _typeGraphResult spec (NOperation o) = validateOperation spec o
+validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> Node -> [Diagnostic]
+validateNode languageContract typeGraphResult _supplyAnalysis spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NProcess p) = validateProcess languageContract spec p
+validateNode languageContract typeGraphResult _supplyAnalysis spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
+validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NContract contract) = validateContract languageContract contract
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NEmit e) = validateEmit languageContract spec e
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NPublisher p) = validatePublisher languageContract spec p
+validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NWorkqueue w) = validateWorkqueue languageContract w
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NPgmqDispatch d) = validatePgmqDispatch languageContract spec d
+validateNode languageContract _typeGraphResult supplyAnalysis spec (NReadModel readModel) = validateReadModel languageContract supplyAnalysis spec readModel
+validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
+validateNode languageContract _typeGraphResult supplyAnalysis spec (NProjectionOwner owner) = validateProjectionOwner languageContract supplyAnalysis spec owner
+validateNode _languageContract _typeGraphResult _supplyAnalysis _spec (NWorkflow w) = validateWorkflow w
+validateNode _languageContract _typeGraphResult _supplyAnalysis spec (NOperation o) = validateOperation spec o
 
 validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
 validateContract languageContract contract =
@@ -2307,8 +2308,8 @@ resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   | name `notElem` [rmName readModel | NReadModel readModel <- specNodes spec]
   ]
 
-validateProjectionCatalogFleet :: Spec -> [Diagnostic]
-validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> sourceOrdering <> supplyDiagnostics
+validateProjectionCatalogFleet :: ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
+validateProjectionCatalogFleet supplyAnalysis spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> sourceOrdering <> supplyDiagnostics
   where
     targets = [target | NProjectionTarget target <- specNodes spec]
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
@@ -2393,7 +2394,7 @@ validateProjectionCatalogFleet spec = physicalDuplicates <> groupOwnership <> pr
     sourceScopeText owner
       | ownerUsesAllStreams owner = "all-stream"
       | otherwise = "category-scoped"
-    supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics (projectionSupplyIssues (analyzeProjectionSupplies spec))
+    supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics (projectionSupplyIssues supplyAnalysis)
 
 projectionSupplyIssueDiagnostics :: ProjectionSupplyIssue -> [Diagnostic]
 projectionSupplyIssueDiagnostics = \case
@@ -2484,8 +2485,8 @@ validateRebuildGroup languageContract spec groupNode
           || length (rgTargets groupNode) /= Set.size (Set.fromList (rgTargets groupNode))
       ]
 
-validateProjectionOwner :: EffectiveLanguageContract -> Spec -> ProjectionOwnerNode -> [Diagnostic]
-validateProjectionOwner languageContract spec owner
+validateProjectionOwner :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> ProjectionOwnerNode -> [Diagnostic]
+validateProjectionOwner languageContract supplyAnalysis spec owner
   | not (hasProjectionCatalog languageContract) = []
   | otherwise = noSources <> noTargets <> unknownGroup <> outsideGroup <> sourceRules <> identityRules <> checkpointRules <> asyncQueryBinding <> replayRules
   where
@@ -2557,7 +2558,7 @@ validateProjectionOwner languageContract spec owner
       | poDelivery owner == DeliverySubscription,
         null
           [ ()
-          | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+          | supply <- resolvedProjectionSupplies supplyAnalysis,
             supplyProjectionOwner supply == poName owner
           ]
       ]
@@ -2580,8 +2581,8 @@ validateProjectionOwner languageContract spec owner
            ]
 
 -- | Validate captured identity, feed semantics, and the declared column surface.
-validateReadModel :: EffectiveLanguageContract -> Spec -> ReadModelNode -> [Diagnostic]
-validateReadModel languageContract spec readModel =
+validateReadModel :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> ReadModelNode -> [Diagnostic]
+validateReadModel languageContract supplyAnalysis spec readModel =
   shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ freshnessCapability ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
   where
     readModelLine = locLine (rmLoc readModel)
@@ -2680,7 +2681,7 @@ validateReadModel languageContract spec readModel =
       where
         resolvedOwner = do
           ownerName <- case [ supplyProjectionOwner supply
-                            | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+                            | supply <- resolvedProjectionSupplies supplyAnalysis,
                               supplyQueryModel supply == rmName readModel
                             ] of
             [name] -> Just name

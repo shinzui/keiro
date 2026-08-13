@@ -19,6 +19,7 @@ module Keiro.Dsl.SemanticContract
     checkedLanguageContract,
     checkedSpec,
     checkedTypeGraph,
+    checkedProjectionSupplies,
     checkedServiceWithSpec,
     checkedSource,
     checkedService,
@@ -51,6 +52,7 @@ import Keiro.Dsl.LanguageVersion
     runtimeProfileFoldSegments,
     runtimeProfileIdentifier,
   )
+import Keiro.Dsl.ProjectionSupply (ProjectionSupplyAnalysis, analyzeProjectionSupplies)
 import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 
 -- | One effective released-language selection plus the runtime-semantics
@@ -159,7 +161,8 @@ runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . effectiveRunt
 data CheckedService = CheckedService
   { serviceLanguageContract :: !EffectiveLanguageContract,
     serviceSpec :: !Spec,
-    serviceTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph
+    serviceTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph,
+    serviceProjectionSupplies :: ProjectionSupplyAnalysis
   }
 
 checkedLanguageContract :: CheckedService -> EffectiveLanguageContract
@@ -172,6 +175,12 @@ checkedSpec = serviceSpec
 -- never serialized and is deliberately excluded from Eq and Show.
 checkedTypeGraph :: CheckedService -> Either (NonEmpty TypeGraphError) TypeGraph
 checkedTypeGraph = serviceTypeGraph
+
+-- | Shared, lazily forced projection-supply analysis of 'checkedSpec'. This
+-- derived value is never serialized and is deliberately excluded from Eq and
+-- Show.
+checkedProjectionSupplies :: CheckedService -> ProjectionSupplyAnalysis
+checkedProjectionSupplies = serviceProjectionSupplies
 
 -- | Replace a service's spec while preserving its effective language contract
 -- and rebuilding the lazy whole-spec analysis cache for the replacement.
@@ -212,7 +221,8 @@ checkedServiceForContract languageContract spec =
   CheckedService
     { serviceLanguageContract = languageContract,
       serviceSpec = spec,
-      serviceTypeGraph = resolveTypeGraph spec
+      serviceTypeGraph = resolveTypeGraph spec,
+      serviceProjectionSupplies = analyzeProjectionSupplies spec
     }
 
 -- | Compatibility bridge for callers that historically supplied only 'Spec'.

@@ -62,10 +62,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 09:25Z) M3: Derive the `outcome` selector guard and body from one selector list in `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` (Item 5).
 - [x] (2026-08-13 09:25Z) M3: Delete the `pureRefusals` and `constraintPlan` exports and definitions from `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` (Item 7).
 - [x] (2026-08-13 09:25Z) M3: Run `cabal test keiro-dsl:tests` (705 main examples plus all conformance targets) and `just conformance-corpus-policy` (39 of 39 entries) green; keiro-dsl CHANGELOG Breaking Changes entry; commit.
-- [ ] M4: Confirm plan 250 (EP-1) is Complete in MasterPlan 40's registry; re-verify Diff.hs line references against HEAD.
-- [ ] M4: Add the lazy `checkedProjectionSupplies` cache to `CheckedService`; thread it through Validate, Scaffold, ScaffoldRecord, and Harness; hoist per-side analyses in Diff (Item 1).
-- [ ] M4: Adopt the cached `checkedTypeGraph` and a per-side symbols table on the replay-impact path (Item 2).
-- [ ] M4: Run `cabal test keiro-dsl:tests`, `just conformance-corpus-policy`, and `just corpus-regen` + clean `git status --short`; keiro-dsl CHANGELOG entry; commit.
+- [x] (2026-08-13 16:32Z) M4: Confirm plan 250 (EP-1) is Complete in MasterPlan 40's registry; re-verify Diff.hs line references against HEAD.
+- [x] (2026-08-13 16:32Z) M4: Add the lazy `checkedProjectionSupplies` cache to `CheckedService`; thread it through Validate, Scaffold, ScaffoldRecord, and Harness; hoist per-side analyses in Diff (Item 1).
+- [x] (2026-08-13 16:32Z) M4: Adopt the cached `checkedTypeGraph` and a per-side symbols table on the replay-impact path (Item 2).
+- [x] (2026-08-13 16:32Z) M4: Run `cabal test keiro-dsl:tests` (705 main examples plus all conformance targets), `just conformance-corpus-policy` (39 of 39), and `just corpus-regen` with zero generated drift; keiro-dsl CHANGELOG entry; commit.
 - [ ] M5: Full `just verify` green; re-run the command benchmark guard; record evidence in this plan.
 - [ ] M5: ADR distillation pass (expected outcome: no ADR changes — see Decision Log); update MasterPlan 40's registry row to Complete; final Outcomes & Retrospective entry.
 
@@ -106,6 +106,11 @@ implementation. Provide concise evidence.
   router-fanout.1000: OK, 662 ms, same as baseline
   process-manager-fanout.1000: OK, 632 ms, 9% more than baseline
   ```
+- M4's corpus regeneration reported every generated artifact unchanged after the
+  cache threading. The acceptance grep leaves projection-supply analysis only at
+  `CheckedService` construction, the two Spec-only compatibility wrappers, and
+  the old/new diff-side hoists; `ReplayImpact.hs` has no remaining direct
+  `resolveTypeGraph` or `aggregateSymbols spec` call.
 
 
 ## Decision Log

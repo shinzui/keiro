@@ -33,7 +33,7 @@ import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractIdentity, queryContractIdentityKey)
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedSpec, effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedProjectionSupplies, checkedSpec, effectiveLanguageContract)
 import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
 import Keiro.Dsl.SidecarNames (contextLedgerFileName)
 import System.FilePath (isAbsolute, splitDirectories)
@@ -283,7 +283,7 @@ projectionCatalogFacts spec = projectionCatalogFactsWith spec (analyzeProjection
 
 projectionCatalogFactsForService :: CheckedService -> [Text]
 projectionCatalogFactsForService service =
-  projectionCatalogFactsWith (checkedSpec service) (analyzeProjectionSupplies (checkedSpec service))
+  projectionCatalogFactsWith (checkedSpec service) (checkedProjectionSupplies service)
 
 projectionCatalogFactsWith :: Spec -> ProjectionSupplyAnalysis -> [Text]
 projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (specNodes spec) <> map supplyFact supplies)

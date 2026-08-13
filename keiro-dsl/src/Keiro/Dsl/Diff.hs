@@ -1185,14 +1185,16 @@ routerDecideSurfaceDiff oldRouter newRouter =
 
 readModelDiff :: DiffEnv -> [Change]
 readModelDiff env =
-  concatMap (uncurry (readModelPairDiff env)) (prMatched paired)
+  concatMap (uncurry (readModelPairDiff env oldSupplies newSupplies)) (prMatched paired)
     ++ concatMap addedReadModelDiff (prAdded paired)
     ++ concatMap removedReadModelDiff (prRemoved paired)
   where
     paired = pairByName nodeReadModel rmName env
+    oldSupplies = analyzeProjectionSupplies (deOld env)
+    newSupplies = analyzeProjectionSupplies (deNew env)
 
-readModelPairDiff :: DiffEnv -> ReadModelNode -> ReadModelNode -> [Change]
-readModelPairDiff env oldReadModel newReadModel =
+readModelPairDiff :: DiffEnv -> ProjectionSupplyAnalysis -> ProjectionSupplyAnalysis -> ReadModelNode -> ReadModelNode -> [Change]
+readModelPairDiff env oldSupplies newSupplies oldReadModel newReadModel =
   versionChanges
     ++ shapeChanges
     ++ identityChanges
@@ -1281,17 +1283,17 @@ readModelPairDiff env oldReadModel newReadModel =
           [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
     bindingChanges =
       [ breaking nodeName "read-model-catalog-binding" nodeName CatalogQueryBindingChanged "query-model rebuild group, observed target set, resolved projection supplier, or backing target changed; persisted lifecycle identity and rebuild completeness changed"
-      | bindingIdentity (deOld env) oldReadModel /= bindingIdentity (deNew env) newReadModel
+      | bindingIdentity oldSupplies oldReadModel /= bindingIdentity newSupplies newReadModel
       ]
-    bindingIdentity spec readModel =
+    bindingIdentity supplyAnalysis readModel =
       ( rmGroup readModel,
         Set.fromList (rmObservedTargets readModel),
-        resolvedSupplier spec readModel,
+        resolvedSupplier supplyAnalysis readModel,
         effectiveBacking readModel
       )
-    resolvedSupplier spec readModel =
+    resolvedSupplier supplyAnalysis readModel =
       case [ supplyProjectionOwner supply
-           | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies spec),
+           | supply <- resolvedProjectionSupplies supplyAnalysis,
              supplyQueryModel supply == rmName readModel
            ] of
         [ownerName] -> Just ownerName

@@ -37,9 +37,9 @@ import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForServi
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
-import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (semanticImpact)
-import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
+import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), TypeGraphError, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
 data AggregateImpact = AggregateImpact
@@ -156,7 +156,7 @@ catalogReplayImpactServices oldService newService
       ]
     oldMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor oldService)
     newMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor newService)
-    projectionImpactFor service = case resolveTypeGraph (checkedSpec service) of
+    projectionImpactFor service = case checkedTypeGraph service of
       Left _ -> Nothing
       Right graph -> Just (ProjectionImpact.projectionMappedImpact service (semanticImpact graph))
     operationFingerprint = fmap (\(ProjectionImpact.ProjectionOperationalImpact _ _ _ _ _ fingerprint) -> fingerprint)
@@ -185,7 +185,7 @@ replayImpactServices oldService newService = do
   traverse_ (aggregateFoldSurfaceForService newService . snd) (Map.toList newAggregates)
   resolvedImpacts <-
     traverse
-      (\(name, oldAggregate) -> fmap ((,) name) (maybe (pure (removedAggregateImpact oldAggregate)) (matchedAggregateImpact oldService newService oldAggregate) (Map.lookup name newAggregates)))
+      (\(name, oldAggregate) -> fmap ((,) name) (maybe (pure (removedAggregateImpact oldAggregate)) (matchedAggregateImpact oldService newService oldContext newContext oldAggregate) (Map.lookup name newAggregates)))
       oldAggregates
   pure $ case Map.filter hasImpact (Map.fromList resolvedImpacts) of
     filtered
@@ -194,8 +194,20 @@ replayImpactServices oldService newService = do
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
-    oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes oldSpec]
-    newAggregates = Map.fromList [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes newSpec]
+    oldGraphResult = checkedTypeGraph oldService
+    newGraphResult = checkedTypeGraph newService
+    oldSymbols = aggregateSymbolsFromGraphResult oldGraphResult oldSpec
+    newSymbols = aggregateSymbolsFromGraphResult newGraphResult newSpec
+    oldContext = ReplaySurfaceContext oldSpec oldGraphResult oldSymbols
+    newContext = ReplaySurfaceContext newSpec newGraphResult newSymbols
+    oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes (surfaceSpec oldContext)]
+    newAggregates = Map.fromList [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes (surfaceSpec newContext)]
+
+data ReplaySurfaceContext = ReplaySurfaceContext
+  { surfaceSpec :: !Spec,
+    surfaceGraphResult :: Either (NE.NonEmpty TypeGraphError) TypeGraph,
+    surfaceSymbols :: AggregateSymbols
+  }
 
 hasImpact :: AggregateImpact -> Bool
 hasImpact impact =
@@ -209,8 +221,8 @@ removedAggregateImpact aggregate =
       includeSnapshotStreams = True
     }
 
-matchedAggregateImpact :: CheckedService -> CheckedService -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
-matchedAggregateImpact oldService newService oldAggregate newAggregate = do
+matchedAggregateImpact :: CheckedService -> CheckedService -> ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
+matchedAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate = do
   oldSurface <- aggregateFoldSurfaceForService oldService oldAggregate
   newNonTransitionSurface <-
     aggregateFoldSurfaceForService
@@ -226,18 +238,16 @@ matchedAggregateImpact oldService newService oldAggregate newAggregate = do
         includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
       }
   where
-    oldSpec = checkedSpec oldService
-    newSpec = checkedSpec newService
     oldEventTypes = Set.fromList (evName <$> aggEvents oldAggregate)
-    decodeAffected = decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate
+    decodeAffected = decodeSurfaceAffected oldContext newContext oldAggregate newAggregate
     mappedRegisterChanged =
-      mappedRegisterSurface oldSpec oldAggregate
-        /= mappedRegisterSurface newSpec newAggregate
+      mappedRegisterSurface oldContext oldAggregate
+        /= mappedRegisterSurface newContext newAggregate
     (transitionAffected, transitionFoldChanged) =
       changedTransitionEvents (aggTransitions oldAggregate) (aggTransitions newAggregate)
 
-decodeSurfaceAffected :: Spec -> Spec -> Aggregate -> Aggregate -> Set Name
-decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate =
+decodeSurfaceAffected :: ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Set Name
+decodeSurfaceAffected oldContext newContext oldAggregate newAggregate =
   removedOrChanged <> wireAffected
   where
     newEvents = Map.fromList [(evName event, event) | event <- aggEvents newAggregate]
@@ -245,7 +255,7 @@ decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate =
       Set.fromList
         [ evName oldEvent
         | oldEvent <- aggEvents oldAggregate,
-          maybe True ((/= eventSurface oldSpec oldAggregate oldEvent) . eventSurface newSpec newAggregate) (Map.lookup (evName oldEvent) newEvents)
+          maybe True ((/= eventSurface oldContext oldAggregate oldEvent) . eventSurface newContext newAggregate) (Map.lookup (evName oldEvent) newEvents)
         ]
     wireAffected
       | aggWire oldAggregate == aggWire newAggregate = Set.empty
@@ -261,14 +271,14 @@ eventDecodeSurface aggregate event =
     ]
   )
 
-eventSurface :: Spec -> Aggregate -> Event -> ((Int, Maybe (Int, Hole), [(Name, Text, Maybe TypeExpr)]), [(Name, Text)])
-eventSurface spec aggregate event =
-  (eventDecodeSurface aggregate event, mappedFieldSurface spec aggregate event)
+eventSurface :: ReplaySurfaceContext -> Aggregate -> Event -> ((Int, Maybe (Int, Hole), [(Name, Text, Maybe TypeExpr)]), [(Name, Text)])
+eventSurface context aggregate event =
+  (eventDecodeSurface aggregate event, mappedFieldSurface context aggregate event)
 
-mappedFieldSurface :: Spec -> Aggregate -> Event -> [(Name, Text)]
-mappedFieldSurface spec aggregate event = mapped <> nominal
+mappedFieldSurface :: ReplaySurfaceContext -> Aggregate -> Event -> [(Name, Text)]
+mappedFieldSurface context aggregate event = mapped <> nominal
   where
-    mapped = case resolveTypeGraph spec of
+    mapped = case surfaceGraphResult context of
       Left _ -> []
       Right graph ->
         [ (aggregateFieldName field, wireFingerprint graph typeName)
@@ -276,17 +286,17 @@ mappedFieldSurface spec aggregate event = mapped <> nominal
           TRef typeName <- maybeToList (aggregateFieldType field),
           Map.member (MappedKey typeName) (tgDeclarations graph)
         ]
-    symbols = aggregateSymbols spec
+    symbols = surfaceSymbols context
     nominal =
       [ (aggregateFieldName field, nominalSurface resolved)
       | field <- eventFields aggregate event,
         Right (AggregateNominal resolved) <- [inferAggregateFieldType symbols aggregate EventFieldUse field]
       ]
 
-mappedRegisterSurface :: Spec -> Aggregate -> [(Name, Name, Text)]
-mappedRegisterSurface spec aggregate = mapped <> nominal
+mappedRegisterSurface :: ReplaySurfaceContext -> Aggregate -> [(Name, Name, Text)]
+mappedRegisterSurface context aggregate = mapped <> nominal
   where
-    mapped = case resolveTypeGraph spec of
+    mapped = case surfaceGraphResult context of
       Left _ -> []
       Right graph ->
         [ (regName register, typeName, wireFingerprint graph typeName)
@@ -294,7 +304,7 @@ mappedRegisterSurface spec aggregate = mapped <> nominal
           TRef typeName <- [regType register],
           Map.member (MappedKey typeName) (tgDeclarations graph)
         ]
-    symbols = aggregateSymbols spec
+    symbols = surfaceSymbols context
     nominal =
       [ (regName register, resolvedNominalName resolved, nominalSurface resolved)
       | register <- aggRegs aggregate,

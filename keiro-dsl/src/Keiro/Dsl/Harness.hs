@@ -59,7 +59,7 @@ import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (aggregateMappedClosure, semanticImpact)
 import Keiro.Dsl.TypeGraph
 
@@ -234,7 +234,7 @@ harnessReadModelForService :: Context -> CheckedService -> ReadModelNode -> [Sca
 harnessReadModelForService ctx service readModel =
   [ ScaffoldModule
       { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs"),
-        moduleText = emitReadModelHarness genPrefix ctx (checkedSpec service) readModel,
+        moduleText = emitReadModelHarness genPrefix ctx (checkedSpec service) (checkedProjectionSupplies service) readModel,
         kind = Generated,
         origin = "readmodel " <> rmName readModel <> locSuffix (rmLoc readModel)
       }
@@ -242,8 +242,8 @@ harnessReadModelForService ctx service readModel =
   where
     genPrefix = genPrefixFor ctx (pascal (rmName readModel))
 
-emitReadModelHarness :: Text -> Context -> Spec -> ReadModelNode -> Text
-emitReadModelHarness genPrefix ctx spec readModel =
+emitReadModelHarness :: Text -> Context -> Spec -> ProjectionSupplyAnalysis -> ReadModelNode -> Text
+emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedRecordDot]
       <> [ generatedBanner,
@@ -337,7 +337,7 @@ emitReadModelHarness genPrefix ctx spec readModel =
     supply =
       find
         ((== rmName readModel) . supplyQueryModel)
-        (resolvedProjectionSupplies (analyzeProjectionSupplies spec))
+        (resolvedProjectionSupplies supplyAnalysis)
     resolvedOwner = do
       resolved <- supply
       find

@@ -148,7 +148,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-4 (253) M1: keiro consolidation (shared command-attempt driver; shared deterministic-id probe helper) with golden vectors untouched + command benchmark guard
 - [x] EP-4 (253) M2: keiro-ops reader consolidation into `Keiro.Ops.Parse`
 - [x] EP-4 (253) M3: keiro-dsl surface (single `outcomeSelectors` source; delete dead `pureRefusals`/`constraintPlan` exports)
-- [ ] EP-4 (253) M4 (after EP-1): `checkedProjectionSupplies` derived field threaded through Validate/Scaffold/Harness/Diff; ReplayImpact adopts `checkedTypeGraph`
+- [x] EP-4 (253) M4 (after EP-1): `checkedProjectionSupplies` derived field threaded through Validate/Scaffold/Harness/Diff; ReplayImpact adopts `checkedTypeGraph`
 - [ ] EP-4 (253) M5: `just verify`, benchmark guard, registry update
 
 

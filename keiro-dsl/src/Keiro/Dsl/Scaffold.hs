@@ -138,7 +138,7 @@ import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint, p
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -4099,7 +4099,7 @@ scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
 ownerDerivedCursor :: CheckedService -> ReadModelNode -> Maybe Text
 ownerDerivedCursor service readModel = do
   ownerName <- case [ supplyProjectionOwner supply
-                    | supply <- resolvedProjectionSupplies (analyzeProjectionSupplies (checkedSpec service)),
+                    | supply <- resolvedProjectionSupplies (checkedProjectionSupplies service),
                       supplyQueryModel supply == rmName readModel
                     ] of
     [name] -> Just name
@@ -4145,7 +4145,7 @@ scaffoldProjectionCatalogForService ctx service =
     (projectionAggregateSourceFingerprintForService service)
     ctx
     (checkedSpec service)
-    (analyzeProjectionSupplies (checkedSpec service))
+    (checkedProjectionSupplies service)
 
 scaffoldProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> ProjectionSupplyAnalysis -> [ScaffoldModule]
 scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
