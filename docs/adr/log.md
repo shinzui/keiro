@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-08-13
+* **Decision**: Accepted schema-versioned target generations for online projection rebuilds.
+* **Decision**: Defined canonical identity placement for projection revisions, schema provisioners, generations, and external read contracts.
+* **Decision**: Required protected source history and transactional dedup backfill for targeted stream repair.
+* **Decision**: Defined operator ownership for application-provisioned schema generations and embedded cutover commands.
+* **Decision**: Clarified that applications own desired DDL while ADR-34 delegates schema-generation orchestration to Keiro.
 * **Update**: Amend ADR 0025 so advanced counts append-witnessed durable movement and due replay-only sleeps become an actionable blocked category (plan 251).
 * **Update**: Amend ADR 0023 so due-hint rediscovery reports sleepDue instead of advanced while remaining discoverable for timer-worker repair (plan 251).
 * **Update**: Amend ADR-31 with atomic promotion-time async dedup backfill, multi-member checkpoint advancement, and typed missing-row recovery (plan 258).

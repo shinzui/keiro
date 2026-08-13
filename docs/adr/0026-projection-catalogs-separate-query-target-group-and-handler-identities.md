@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-13T03:41:31Z
+timestamp: 2026-08-13T17:46:56Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -149,11 +149,13 @@ something single-catalog validation can discover.
 
 The SQL boundary stays deliberately unchecked. A declaration states intent but
 does not prove that an unrestricted `Hasql.Transaction.Transaction` writes only
-declared targets. Applications continue to own table DDL, migrations, row
-codecs, and SQL handler bodies. Keiro may own only its registry, fence, and
-rebuild-progress schema. A future target-scoped SQL capability can strengthen
-this boundary without retroactively pretending the current catalog provides
-that proof.
+declared targets. Applications continue to own desired table DDL, migrations,
+row codecs, SQL handler bodies, and schema validation semantics. Under
+[ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md),
+an application may hand an explicit provisioner and validator to Keiro, which
+then owns transaction, generation, replay, fencing, promotion, and retirement
+orchestration. That delegation does not make Keiro the author of application
+schema or a static verifier of opaque SQL.
 
 A rebuild group is also the durable database lifecycle and live-writer fence.
 It moves through `live -> rebuilding -> live` after verified promotion, or
@@ -256,9 +258,11 @@ dedup rows are not completion evidence.
   catalog consumers, groups, targets, observing read models, replay policy, and
   aggregate-source fingerprints as distinct facts. A query-only, command-only,
   or register-only mapping change leaves catalog source fingerprints unchanged.
-- Online shadow-table cutover, dynamic plugin discovery, automatic
-  application-table creation, replay of external side effects, and static proof
-  of arbitrary SQL writes remain outside this decision.
+- Online schema-versioned cutover is governed by ADR 0034: application-supplied
+  provisioners create desired schemas while Keiro orchestrates their lifecycle.
+  Dynamic plugin discovery, inferred or automatic application-schema design,
+  replay of external side effects, and static proof of arbitrary SQL writes
+  remain outside this decision.
 
 
 ## Related decisions
@@ -275,6 +279,9 @@ dedup rows are not completion evidence.
 - [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
   makes fingerprint preimages injective and scopes durable rebuild compatibility
   to each group.
+- [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
+  extends physical targets with schema-versioned generations and projection revisions
+  while preserving application ownership of desired DDL and SQL.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
   implements truthful query freshness, derived cursor authority, and the 0.12
   compatibility window.

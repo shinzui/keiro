@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
 description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires scoped registry-complete transactional adoption, and gives pre-canonical runs a fenced recovery path.
-timestamp: 2026-08-13T04:36:36Z
+timestamp: 2026-08-13T17:46:56Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -147,6 +147,20 @@ or group-slice identity. Stored `contract-v3:` values and
 old runtime or abandon it. Abandon compares slices, so it remains available across this
 contract break when the catalog's group slice is unchanged.
 
+ADR 0034 adds projection revisions and physical target generations. The next
+pre-0.12 canonical format revision must include, in the owning group slice, projection
+revision identity, target schema version, provisioner and validator identity/version,
+expected shape identity, canonical promotion-object mapping, and stream-scoped repair
+policy. Versioned external read contracts add their contract identity/version, result
+shape, compatible revision set, immutable SQL signature, implementation identity, and
+surface generation. Function closures and observed database OIDs remain excluded: the
+former are not canonical data and the latter are run-specific evidence. Each active
+rebuild run separately persists candidate revision, observed schema fingerprint,
+relation identity, ordered adapters, and runner format in its resume contract. The
+implementing plans allocate new prefixes once for this clean break and document the
+upgrade/abandon path; they do not silently append these facts to `catalog-v3:` or
+`slice-v2:`.
+
 
 ## Consequences
 
@@ -174,6 +188,10 @@ contract break when the catalog's group slice is unchanged.
   fence, then start a fresh rebuild. A sentinel can never authorize resume or promotion.
 - Derived supplier lookup adds no duplicate owner edge, but normalized query freshness
   and the cursor selected from that relationship are explicit query-binding identity.
+- Schema/provisioner/revision and external read-contract changes affect only their
+  owning group slices and whole-catalog provenance, while run-specific relation OIDs and
+  observed schema evidence belong to resume/cutover identity rather than catalog
+  identity.
 
 
 ## Alternatives considered
@@ -197,6 +215,9 @@ contract break when the catalog's group slice is unchanged.
   requires the adoption command to wrap the supported library transaction.
 - [ADR 0031](0031-subscription-checkpoint-policy-is-catalog-identity-and-replay-safety.md)
   makes missing-checkpoint policy one of the group-slice replay facts.
+- [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
+  defines the projection revision, target generation, provisioning, and serving epoch
+  facts whose canonical identity this decision scopes.
 - [ExecPlan 237](../plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md)
   implements and verifies this decision.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)

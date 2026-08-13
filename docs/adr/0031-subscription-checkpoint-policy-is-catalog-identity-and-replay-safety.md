@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Subscription checkpoint policy is catalog identity and replay safety
 description: Keiro fingerprints every explicit missing-checkpoint policy, rejects unsafe head seeding, and brackets catalog replay with atomic dedup and checkpoint restoration.
-timestamp: 2026-08-13T05:10:57Z
+timestamp: 2026-08-13T17:46:56Z
 docId: ADR-31
 status: Accepted
 date: 2026-08-11
@@ -63,14 +63,22 @@ Kiroku's table.
 
 Catalog rebuild promotion restores the other half of this replay-safety boundary. After replay and
 verification succeed, Keiro reads each declared subscription's durable floor (the minimum across
-its persisted consumer-group members) and pages immutable source history over the interval
-@(floor, captured head]@. For each replayable async projection it derives the event identity through
+its persisted consumer-group members) and pages source history protected from hard deletion for
+the active run over the interval @(floor, captured head]@. For each replayable async projection it derives the event identity through
 that projection's own `idempotencyKey`, then backfills `keiro_projection_dedup` and advances every
 persisted member of the declared subscriptions to the captured head through the same Kiroku exact-
 position reset primitive used by preparation. The inserts, checkpoint advance, completion proof,
 and group transition to live commit in one transaction. A missing declared row condemns promotion
 with typed evidence and leaves the run resumable; Keiro still never invents checkpoint topology.
 Inline-only groups skip this work.
+
+Targeted per-stream reprojection uses the same deduplication rule with a different
+checkpoint consequence. While holding the group exclusively, it replays one complete
+retained stream into the persisted serving projection revision and inserts that
+projection's ordinary deduplication keys for every replayed event in the repair
+transaction. It does not advance the shared subscription checkpoint because doing so
+could skip unrelated streams. Later delivery observes the dedup rows, performs no
+projection effect, and checkpoints through the ordinary worker path.
 
 A policy-only DSL change emits `CatalogCheckpointPolicyChanged`. Its compatibility vector marks the
 generated consumer build breaking and requires stop-the-world operational review, but marks
@@ -96,6 +104,11 @@ does not itself reset a checkpoint or rebuild application data.
 - Async application remains exactly-once per retained dedup window across an offline catalog
   rebuild, including an in-flight delivery parked on the rebuild fence. Idempotent handler SQL is
   still useful defense in depth after operator pruning moves an event outside that window.
+- Targeted stream repair also treats deduplication as correctness state. It backfills
+  affected keys atomically and leaves shared checkpoints unchanged; handler idempotence
+  alone is not sufficient repair evidence.
+- Rebuild code may call history at or below a captured head immutable only while an
+  owner-provided retention or hard-delete serialization guarantee is active.
 - Renaming a subscription or losing a checkpoint remains operationally significant. Operators must
   repair missing state or change the declaration; Keiro does not synthesize topology.
 - Changing only `checkpointOnMissing` changes the catalog fingerprint even though the persisted
@@ -135,3 +148,8 @@ does not itself reset a checkpoint or rebuild application data.
   implements the candidate-language and evolution-tooling boundary.
 - [ExecPlan 258](../plans/258-make-catalog-rebuild-promotion-redelivery-safe-for-async-projections.md)
   restores async redelivery safety at catalog rebuild promotion.
+- [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
+  requires source-retention evidence for online candidate replay and cutover.
+- [ExecPlan 257](../plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md)
+  applies the deduplication rule to one-stream transactional repair without advancing
+  a shared checkpoint.

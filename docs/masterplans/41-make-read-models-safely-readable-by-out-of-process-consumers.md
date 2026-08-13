@@ -10,288 +10,392 @@ intention: "intention_01kzw6dkhje7qvw6w321pwyv12"
 # Make read models safely readable by out-of-process consumers
 
 This MasterPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
+Decision Log, and Outcomes & Retrospective must be kept current as work proceeds. If
+durable project context changes, update or create ADRs in `docs/adr/` in the same
+change.
 
 
 ## Vision & Scope
 
 This MasterPlan implements
 `docs/improvement-requests/make-read-models-safely-readable-by-out-of-process-consumers.md`
-(IR-22) in full — all four requested capabilities — before the 0.12.0.0 release.
+(IR-22) before the 0.12.0.0 release. Its primary availability use case is a projection
+schema change: create the desired new schema beside the serving projection, reconstruct
+it from retained event history, catch it up while the old generation remains live, and
+promote it atomically. The same machinery also repairs data corruption or changed
+projection logic when the physical schema is unchanged.
 
-Keiro's group-fenced offline rebuild is enforced entirely at Haskell call boundaries. A
-non-Haskell process holding its own PostgreSQL connection and issuing `SELECT` against a
-read-model target participates in none of them: during a rebuild of a group containing a
-`ClearBeforeReplay` target it observes a truncated table, then a progressively refilling
-one — a coherent, queryable, *historical* picture of the world — with nothing to tell it
-anything is wrong. The requesting consumer (`mori://tan/notification-render-service`,
-Keiro's only consumer today, splitting into a Keiro service plus a stateless TypeScript
-render process that reads the read model over SQL) found the hazard in design review and
-is hand-rolling a mitigation it would delete in favor of a sanctioned one. With wide
-adoption the goal after 0.12, every future out-of-process reader would otherwise
-rediscover and re-solve the same hazard, each differently, most wrongly.
+Today Keiro's group fence exists only at Haskell call boundaries. A process with an
+independent PostgreSQL connection can issue `SELECT` directly against a target while an
+offline rebuild has truncated it and is progressively replaying history. The result is
+not an error; it is a coherent but obsolete picture that can cause successful downstream
+actions with incorrect data. The requesting consumer,
+`mori://tan/notification-render-service`, found this during design review while
+separating an event-sourced service from a stateless TypeScript renderer.
 
-After this MasterPlan completes: an external SQL reader has a sanctioned read surface
-that fails loudly — with a documented, distinguishable error — whenever the backing
-group is not in live service, instead of silently returning historical rows; a
-documented, compatibility-promised status relation exposes each rebuild group's
-identity, applied position, and live-service state to any SQL client; a catalog rebuild
-can replay into a new versioned target alongside the live one and cut over atomically,
-so external readers never lose service and the fence becomes a backstop rather than a
-maintenance window; and an operator can reproject a single stream into a
-row-per-aggregate model without taking a group-wide fence. The documentation states
-plainly, in both the user guide and the runtime-patterns standard, that the in-process
-fence does not protect out-of-process readers and names the sanctioned alternative.
+After this MasterPlan completes:
 
-This lands before 0.12.0.0 because every contract it defines — the error code, the
-status relation's columns, the external-consumer declaration, the versioned rebuild
-protocol's persisted metadata — becomes a compatibility promise at the first stable
-release; defining them one release later means either breaking early adopters or
-carrying compatibility shims forever. Whatever surface the external-consumer declaration
-adds to the `.keiro` language must land while language 5 is still a candidate, because
-candidate amendments are legal only pre-publication (the same constraint that gated
-MasterPlan 36).
+- a catalog represents application-defined projection revisions and durable physical
+  target generations, including their schema versions and verified shape;
+- a schema-changing rebuild provisions candidate generations from application-supplied
+  DDL, replays and validates them without disturbing the serving generation, then uses
+  a short bounded fence for final catch-up and atomic promotion;
+- live writers dispatch through the persisted serving projection revision and fail
+  closed if the running binary cannot supply it;
+- an external SQL reader calls a versioned, guarded contract rather than selecting a
+  physical target directly, and receives documented, distinguishable failures for
+  unavailable or incompatible contracts;
+- a versioned status relation reports serving availability and serving position
+  separately from candidate-rebuild lifecycle and progress;
+- an operator can transactionally reproject one stream into a row-per-aggregate model,
+  including the deduplication evidence that prevents later async redelivery from
+  reapplying the repair.
 
-Excluded: IR-25 (declarative payload mappings, deferred to language 6), any change to
-the in-process fence semantics delivered by IR-20, and release mechanics. The rebuild
-correctness fixes this work builds on are MasterPlan 39's, not this plan's.
+The architecture is fixed by
+`docs/adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md`.
+Applications continue to own desired table DDL, column semantics, indexes, constraints,
+dependent objects, projection SQL, and compatibility functions. Keiro owns generation
+name allocation, lifecycle metadata, fencing, replay, validation orchestration,
+checkpoint and deduplication coordination, atomic promotion, retirement, and safe
+destructive operations. A restricted clone provisioner supports same-schema repair;
+it is not the schema-evolution mechanism.
+
+This lands before 0.12.0.0 because the generation model, public SQL contracts,
+SQLSTATEs, and catalog fingerprint fields become compatibility promises at the first
+stable release. Any `.keiro` additions must land while language 5 is still a candidate.
+
+Excluded: declarative payload mappings from IR-25; automatic schema inference or a
+general schema-diff engine; replay of external side effects; perpetual dual-write to
+retired schemas; and release mechanics. A breaking consumer schema requires a new
+read-contract version or an application-provided compatibility implementation. Merely
+retaining the retired table does not make it current.
 
 
 ## Decomposition Strategy
 
-The four IR-22 capabilities map to four plans, ordered by the IR's own value ranking and
-by dependency: the status relation (EP-1) is the shared vocabulary everything else
-speaks; the fence (EP-2) is the correctness gap and consumes EP-1's liveness vocabulary;
-versioned cutover (EP-3) is the availability capability that makes the fence a
-non-event and extends both EP-1's relation and EP-2's read surface; per-stream
-reprojection (EP-4) shrinks how often any of it matters. The IR's fourth deliverable —
-documentation of the hazard — is not a separate plan: EP-2 owns the local documentation
-(`docs/user/read-models-and-projections.md`), since the sanctioned read surface is what
-the documentation must name, and the cross-repository runtime-patterns standard
-(`keiro-runtime-patterns`) is recorded as an external follow-up in the Integration
-Points section.
+The work remains four child ExecPlans, but their order changes after architecture
+validation. The generation and cutover protocol must define the durable lifecycle,
+serving-revision, schema-provisioning, and position vocabulary before either public SQL
+contract freezes it.
 
-EP-3 deliberately revisits a stated ownership stance. The runtime-patterns standard
-says Keiro never creates, migrates, or swaps application-owned tables; IR-22
-conditionally asks for the framework to own a versioned target lifecycle, and the user
-has decided (2026-08-12) to implement it rather than close it. That boundary change is a
-first-order architectural decision and must produce a new ADR in `docs/adr/` defining
-what Keiro now owns (versioned physical targets it creates and swaps) and what remains
-application-owned (the declared table shape and its DDL evolution).
+EP-1, plan 256, establishes schema-versioned projection revisions, target generations,
+application provisioning, revision-aware writers, replay, validation, bounded cutover,
+and retirement. It includes a PostgreSQL proof milestone before public API or schema
+contracts are frozen. Kiroku has now delivered the protected replay-history contract
+requested by `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-6` in
+`kiroku-store` 0.7.0.0 and `kiroku-store-migrations` 0.3.2.0, so EP-1 can start.
 
-Relevant ADRs, read during planning:
-`docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md`
-(the four identities this MasterPlan attaches to: the fence is a group property, the
-sanctioned read a query-binding property, the privacy a target property; IR-22 depends
-on that separation, and its cross-repository motivation
-`mori://shinzui/mori/okf/adrs/concepts/ADR-20` — one catalogued owner per live table —
-is what makes an external read API well defined),
-`docs/adr/0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md`
-(group slices and adoption; versioned targets and the external-consumer declaration
-extend the slice preimage and therefore interact with its prefix-bump rules),
-`docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`
-(the cutover and reprojection operator surfaces must wrap library APIs), and
-`docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md` (Keiro's own
-schema — where the status relation lives — is migration-owned; the relation ships as a
-keiro-migrations change).
+EP-2, plan 254, publishes `keiro_read.projection_group_status_v1` after EP-1 has defined
+the stored generation model. Its external prerequisite,
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-5`, is complete in
+`kiroku-store-migrations` 0.3.1.0 as the stable
+`kiroku.subscription_checkpoints_v1` relation. Keiro will not create a durable view
+dependency on Kiroku's private `kiroku.subscriptions` table.
+
+EP-3, plan 255, builds the sanctioned external read surface on EP-1's generation
+binding and EP-2's availability vocabulary. It grants external roles only execution of
+guarded, versioned functions. Keiro may generate a safe all-row function for small
+models, while applications provide efficient keyed functions that invoke the same guard
+inside the same statement. Raw generated target views receive no external `SELECT`
+grant.
+
+EP-4, plan 257, adds targeted per-stream repair. It can proceed largely independently,
+but it uses the same group lock and read-availability semantics and must backfill the
+affected projection's deduplication keys in the repair transaction.
+
+Durable cross-plan choices belong in ADR-34 and the existing projection ADRs. Task-local
+PostgreSQL evidence and operational transcripts stay in the child plans.
 
 
 ## Exec-Plan Registry
 
-| # | Title | Path | Hard Deps | Soft Deps | Status |
-|---|-------|------|-----------|-----------|--------|
-| 1 | Publish a documented projection status relation for external readers | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | None | External: MP-39 EP-3/EP-4 | Not Started |
-| 2 | Fence out-of-process read-model reads behind a sanctioned SQL surface | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | None | EP-1 | Not Started |
-| 3 | Rebuild into versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | EP-1, EP-2; external: MP-39 EP-1, EP-2, EP-5 | None | Not Started |
-| 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | None | EP-2 | Not Started |
+| # | Title | Path | Hard Deps | Soft / Integration Deps | Status |
+|---|-------|------|-----------|-------------------------|--------|
+| 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | Not Started |
+| 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Not Started |
+| 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Not Started |
+| 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Not Started |
 
-Status values: Not Started, In Progress, Complete, Cancelled.
-Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
+Status values are Not Started, In Progress, Complete, and Cancelled. Registry numbers
+define the EP labels used in this MasterPlan; filenames keep their existing stable plan
+IDs.
 
 
 ## Dependency Graph
 
-EP-1 has no dependency inside this MasterPlan and should land first: it defines the
-external vocabulary (group identity, applied position, live-service state) that EP-2's
-error surface and EP-3's version visibility extend. It soft-depends on MasterPlan 39's
-EP-3 and EP-4 (`docs/masterplans/39-fix-the-catalog-rebuild-replay-and-adoption-defects-from-the-fix-verification-review.md`)
-only because those plans finalize the group lifecycle metadata (pre-canonical recovery,
-adoption reporting) the relation exposes; it can be drafted and largely implemented
-against current state.
+EP-1 is the architectural root. Its replay-correction prerequisites in MasterPlan 39
+are complete: plan 246 fixes ordered paging, plan 247 fixes replay adapter order in the
+resume contract, and plan 258 makes deduplication backfill plus checkpoint advance part
+of promotion. Schema-changing replay must reuse those correctness primitives rather
+than fork them. Its source-retention prerequisite is also satisfied: the release for
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-6` publishes renewable
+history-retention leases in `kiroku-store` 0.7.0.0 and their migration in
+`kiroku-store-migrations` 0.3.2.0.
 
-EP-2 soft-depends on EP-1: the fence's "group is not live" error and the status
-relation must agree on what liveness means and how a group is identified, but the fence
-is implementable against the registration tables directly if EP-1 has not landed.
+EP-2 begins after EP-1 because it reports facts owned by the generation protocol:
+serving revision and epoch, serving applied position, active candidate generation,
+candidate progress, and orthogonal read/write availability. Its former external blocker
+is resolved: `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-5` publishes the
+frozen `kiroku.subscription_checkpoints_v1` relation in
+`kiroku-store-migrations` 0.3.1.0. A Haskell API remains insufficient for a PostgreSQL
+view, and another library's private table is not a supported cross-schema contract.
 
-EP-3 hard-depends on EP-1 and EP-2 within this MasterPlan — it adds version columns to
-the status relation and must keep the sanctioned read surface stable across cutover,
-which is only meaningful once both exist — and hard-depends externally on MasterPlan
-39's EP-1 and EP-2, because it rebuilds on the same replay path whose ordering and
-resume-contract defects those plans fix; building the versioned protocol on the broken
-pager would bake the corruption into the new path. It also hard-depends on MasterPlan
-39's EP-5 (plan 258, added 2026-08-13): the offline promotion's dedup-backfill and
-checkpoint-advance helpers that EP-5 introduces are the same primitives EP-3's promote
-transaction reuses for the versioned path.
+EP-3 begins after EP-1 and EP-2. Its guard reads stable persisted availability rather
+than embedding a closed list of lifecycle states, and its managed read contracts bind
+to serving generations. Cutover invokes its object-level reconciliation in the same
+promotion transaction.
 
-EP-4 soft-depends on EP-2: targeted reprojection deliberately takes no group-wide
-fence, and its plan must state how an external reader's view (through EP-2's surface)
-behaves during a targeted reprojection. It can proceed in parallel with EP-3.
+EP-4's Kiroku prerequisite is satisfied by `kiroku-store` 0.7.0.0 and
+`kiroku-store-migrations` 0.3.2.0. It uses `lockStreamHistoryForReplayTx` followed by
+`readStreamForwardTx` in the same transaction; it does not acquire the long-rebuild
+retention lease used by EP-1. EP-4 can otherwise proceed in parallel once its
+implementation is reconciled with the final group-lock type. It pauses writers for the
+selected group for the duration of one transaction but does not change lifecycle or
+take readers out of service.
 
-The critical path is therefore EP-1, EP-2, EP-3, with EP-4 parallel to EP-3 after EP-2,
-and MasterPlan 39 ahead of EP-3.
+The critical path is therefore EP-1 → EP-2 → EP-3. EP-4 is parallel. All external
+prerequisites on that graph are satisfied. EP-1 is the next child to implement; EP-4
+may begin in parallel subject to its soft serving-revision integration with EP-1.
 
 
 ## Integration Points
 
-The status relation (EP-1, extended by EP-3) is a keiro-schema database object shipped
-through `keiro-migrations` per
-`docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md`. EP-1 defines
-its name, columns, and compatibility promise; EP-3 may only add columns (versioned
-target visibility), never rename or repurpose, because the relation is an external
-contract from the moment EP-1 documents it.
+The shared catalog types live in `keiro/src/Keiro/Projection/Catalog.hs`. EP-1 owns
+`ProjectionRevisionId`, target schema/provisioner identity, physical-target-parametric
+handlers, and the relation between serving and candidate revisions. EP-3 attaches
+versioned external read contracts to those revisions. Both plans must use one canonical
+fingerprint representation and apply ADR-32's prefix-bump rules.
 
-The external-consumer declaration and the generated read surface (EP-2, consumed by
-EP-3) span the runtime catalog (`keiro/src/Keiro/Projection/Catalog.hs` and the
-registration schema in `keiro/src/Keiro/ReadModel/Rebuild/Group.hs`) and, if the chosen
-shape includes it, the `.keiro` language surface in `keiro-dsl` (grammar, validation,
-lowering, generated catalog output, diff, fingerprints). EP-2 defines the declaration
-and the read-surface identity (function names, documented SQLSTATE); EP-3 must preserve
-that identity across cutover — external readers must observe the same functions
-returning new-version rows after an atomic swap, which constrains EP-3 to route the
-generated surface through an indirection EP-2 must design for (the read function
-resolves the current live physical target rather than baking in a table name). This
-shared indirection is the single most important interface in the MasterPlan; EP-2 owns
-it, EP-3 consumes it, and any change requires updating both plans.
+The private lifecycle schema is owned by `keiro-migrations`. EP-1 owns generation,
+revision, run-target, and serving-binding tables. EP-2 owns the public
+`keiro_read.projection_group_status_v1` relation and its supported column semantics.
+EP-3 owns managed read-contract metadata and generated functions in `keiro_read`.
+Public relations are versioned; incompatible evolution creates `v2`, never silently
+repurposes `v1`.
 
-Any `.keiro` language addition from EP-2 amends candidate language 5 and must land
-before the Candidate-to-Stable registry flip in the release mechanics; the slice
-fingerprint consequences fall under
-`docs/adr/0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md`
-prefix-bump rules (pre-0.12 formats are still unreleased, so clean breaks are legal).
+The runtime writer boundary is shared by EP-1 and EP-4. `lockProjectionGroupsTx` must
+return the persisted serving revision as well as availability. Inline and async paths
+select handlers for that revision while holding the group lock and refuse an unknown
+revision before application SQL. EP-4 uses the exclusive group lock and executes the
+same revision's stream-scoped handler.
 
-`ProjectionCatalogOperations` (`keiro/src/Keiro/ReadModel/Rebuild/*`, the operator
-library surface wrapped by `keiro-ops`) is extended by EP-3 (cutover protocol,
-versioned lifecycle commands) and EP-4 (per-stream reprojection). EP-3 defines any new
-lifecycle vocabulary; EP-4 reuses it. Both wrap through `keiro-ops` per
-`docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`.
+The promotion transaction is shared by all first three plans. EP-1 owns its order:
+lock group and run; finish tail replay; verify source retention, replay completion,
+candidate schema and application invariants; install deduplication and checkpoint
+evidence; acquire all serving/staging relation locks in deterministic order under one
+bounded deadline; revalidate relation identities, schema fingerprints, and dependencies;
+swap the complete group; update the serving revision and epoch; reconcile managed
+read-contract bindings; and commit. EP-2 observes the committed metadata. EP-3 may add
+object reconciliation steps but may not create an independent cutover transaction.
 
-Cross-repository follow-ups this MasterPlan records but does not own: the
-runtime-patterns standard (`keiro-runtime-patterns`, currently stating the rebuild is
-offline and Keiro never swaps tables) must be updated after EP-2 and EP-3 land — its
-read-models and projection-catalogs pages both change; and
-`mori://tan/notification-render-service` should be notified when EP-2 lands so it can
-replace its hand-rolled SQL mitigation with the generated surface (its
-`docs/SPLIT-PULL-ALTERNATIVE.md` documents the mitigation this work supersedes).
+The schema-provisioning boundary is application-owned. A provisioner receives allocated
+physical names and creates a complete candidate schema transactionally. The built-in
+clone provisioner is gated to a small, enumerated PostgreSQL subset. Application
+provisioners may support richer DDL, but both paths must provide an expected shape and
+dependency contract that Keiro can recheck immediately before promotion. External event
+hard deletion is refused or serialized while a rebuild depends on that history.
 
-ADR obligations: EP-2 produces an ADR for the external read contract (declaration,
-SQLSTATE, what is promised to non-Haskell readers); EP-3 produces the versioned-target
-ownership ADR described in the Decomposition Strategy; EP-1 and EP-4 amend
-`docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md`
-and ADR-32 as their deliverables touch those contracts.
+The Kiroku integration now has two concrete owner-published boundaries. EP-2 reads the
+frozen `kiroku.subscription_checkpoints_v1` relation shipped by
+`kiroku-store-migrations` 0.3.1.0. EP-1 acquires, renews, and releases a durable
+history-retention lease through `acquireHistoryRetentionLeaseTx`,
+`renewHistoryRetentionLeaseTx`, and `releaseHistoryRetentionLeaseTx`; EP-4 instead uses
+`lockStreamHistoryForReplayTx` and `readStreamForwardTx` for one transaction. Keiro must
+raise its direct bounds to `kiroku-store >=0.7 && <0.8` and
+`kiroku-store-migrations ^>=0.3.2.0` when implementation begins. The release contracts
+are recorded by `mori://shinzui/kiroku/plans/72-publish-a-stable-sql-subscription-checkpoint-relation`
+and `mori://shinzui/kiroku/plans/73-protect-replay-history-with-retention-leases-and-stream-guards`.
+
+Cross-repository documentation is an integration deliverable, not a vague repository
+name. Update
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-read-models-and-projections` and
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-projection-catalogs` after EP-1 and
+EP-3 land. The first URI resolves now; the second is the intended canonical handle for
+`runtime-patterns/keiro/projection-catalogs.md` and awaits a registry refresh. Notify
+`mori://tan/notification-render-service` when the versioned read contract is available.
+
+Relevant local decisions are:
+
+- `docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md`;
+- `docs/adr/0026-projection-catalogs-separate-query-target-group-and-handler-identities.md`;
+- `docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`;
+- `docs/adr/0031-subscription-checkpoint-policy-is-catalog-identity-and-replay-safety.md`;
+- `docs/adr/0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md`;
+- `docs/adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md`.
 
 
 ## Progress
 
-Track milestone-level progress across all child plans. Each entry names the child plan
-and the milestone. This section provides an at-a-glance view of the entire initiative.
-
-- [ ] EP-1 (254) M1: migration `0025-keiro-projection-group-status.sql` (cursor-binding table + status view + COMMENTs), schema-gate extension to views, keiro-migrations fixtures
-- [ ] EP-1 (254) M2: registration/adoption reconcile the cursor-binding table (idempotent, no fingerprint change)
-- [ ] EP-1 (254) M3: `Keiro.ReadModel.Rebuild.Status` accessor + live→rebuilding→live lifecycle proof
-- [ ] EP-1 (254) M4-M5: column-contract docs with compatibility promise + SQL recipes, new ADR + ADR-9/ADR-26 amendments, changelogs, jitsurei psql transcript, `just verify`
-- [ ] EP-2 (255) M1: `externalReaders` runtime declaration, validation diagnostics, fingerprint-stability proof (`catalog-v3:`/`slice-v2:` unchanged)
-- [ ] EP-2 (255) M2: migration `0026.sql` (`keiro_read` schema); generated guard (`KR001`/`KR002`) + per-target views + per-binding read functions reconciled at registration; IR acceptance test + hazard characterization; psql transcript
-- [ ] EP-2 (255) M3: language-5 `external-readers` clause (parser/pretty-print/validation/lowering/diff `CatalogQueryExternalReadersChanged`), fixtures, corpus regen, ADR-16 amendment
-- [ ] EP-2 (255) M4: hazard docs, new ADR (external read contract), jitsurei adoption, changelogs, `just verify`
-- [ ] EP-3 (256) M1: versioned DDL prototype (`LIKE ... INCLUDING ALL` coverage, concurrent-reader rename-swap proof, sequence resync, 63-byte naming)
-- [ ] EP-3 (256) M2: persisted lifecycle (statuses `rebuilding-versioned`/`cutover`, `target_mode`, run-targets table, additive 254 columns) + guard serving-set regeneration
-- [ ] EP-3 (256) M3: `PhysicalTargets` parametric write boundary (runtime + DSL scaffold holes)
-- [ ] EP-3 (256) M4: converging replay (staging writes, catch-up rounds, contract-v4 resume)
-- [ ] EP-3 (256) M5: atomic cutover (tail replay, verification, dedup backfill, checkpoint advance, rename swap, external-read view re-point) + concurrent-reader acceptance + crash-resume
-- [ ] EP-3 (256) M6-M7: drain/drop + ops surface; ownership ADR, ADR-32 amendment, docs, four changelogs, `just verify`
-- [ ] EP-4 (257) M1: `ReplayableStreamScoped` policy + `declareStreamScopedRows` combinator + fingerprint-neutrality proof
-- [ ] EP-4 (257) M2: single-transaction reproject runner (group lock without lifecycle fence, in-tx stream read, delete-then-replay, completeness guard, nine typed refusals)
-- [ ] EP-4 (257) M3-M4: operations wrappers + `keiro-ops rebuild reproject` with two-phase force and transcript
-- [ ] EP-4 (257) M5: docs, ADR-26 amendment + ADR-32 exclusion note, changelogs, `just verify`
+- [x] (2026-08-13T22:35:58Z) External Kiroku IR-6 prerequisite: verified the exported
+  retention-lease and stream-guard APIs in released `kiroku-store` 0.7.0.0 and migration
+  `0010` in released `kiroku-store-migrations` 0.3.2.0. Other cohort uploads do not block
+  Keiro's direct dependencies.
+- [ ] EP-1 (256) M1: PostgreSQL proof covers explicit new-schema provisioning, object
+  identity, dependency behavior, deterministic locking, rollback, and reader blocking.
+- [ ] EP-1 (256) M2: projection-revision and target-generation catalog contract,
+  fingerprints, validation, DSL/code-generation changes, and bridge-deployment fixtures.
+- [ ] EP-1 (256) M3: private generation/revision lifecycle schema, OID and shape evidence,
+  persisted cutover options, Kiroku IR-6 retention lease, and idempotent provisioning.
+- [ ] EP-1 (256) M4: revision-aware live writers and physical-target-parametric replay and
+  verification paths, with unknown-revision fail-closed tests.
+- [ ] EP-1 (256) M5: converging replay, bounded final fence, deterministic all-target
+  locks, schema/dependency revalidation, atomic cutover, crash-resume, and concurrent
+  reader/writer acceptance.
+- [ ] EP-1 (256) M6: explicit retirement/drop, operator commands, ADR-26/28/31/32
+  reconciliation, documentation, changelogs, and full verification.
+- [x] (2026-08-13T22:35:58Z) EP-2 (254) M1: Kiroku IR-5's frozen
+  `kiroku.subscription_checkpoints_v1` contract verified in released
+  `kiroku-store-migrations` 0.3.1.0; no dependency on a private Kiroku table.
+- [ ] EP-2 (254) M2: versioned public status relation reports serving and candidate facts
+  independently, with schema-gate coverage and grants documentation.
+- [ ] EP-2 (254) M3-M4: typed accessor, lifecycle proofs, docs, ADR, changelogs,
+  out-of-process transcript, and full verification.
+- [ ] EP-3 (255) M1: versioned external-read declarations, registry validation,
+  fingerprints, and rolling-version compatibility diagnostics.
+- [ ] EP-3 (255) M2: stable guard plus managed per-contract functions, no raw external
+  view grants, application keyed-function integration, security and concurrency tests.
+- [ ] EP-3 (255) M3-M4: candidate language-5 surface, dependency-aware object
+  reconciliation, documentation, ADR, adoption evidence, and full verification.
+- [ ] EP-4 (257) M1-M2: stream-scoped policy and one-transaction repair with explicit
+  truncation refusal, group writer pause, and transactional deduplication backfill.
+- [ ] EP-4 (257) M3-M5: operations wrappers, two-phase CLI, concurrency tests,
+  documentation, ADR reconciliation, changelogs, and full verification.
 
 
 ## Surprises & Discoveries
 
-Document cross-plan insights, dependency changes, scope adjustments, or unexpected
-interactions between child plans. Provide concise evidence.
-
-- The expected-schema gate (`SchemaCheck.hs`) snapshots only `relkind='r'`, so
-  shipping EP-1's view requires the format extension ADR-9 anticipated — explicit M1
-  work in plan 254. The legacy single-model rebuild path transitions only
-  `keiro_read_models` and leaves its singleton group row `live`, so the status view
-  computes `service_state` as a fail-safe conjunction of group and model-row status.
-- Generated code constructs `QueryModelBinding` positionally, so EP-2's new
-  declaration field forces an emitter fix and corpus regeneration in the same
-  milestone (plan 255 M1).
-- The migration body lint forbids `search_path` and the schema gate has no `pg_proc`
-  arm, so EP-2's generated objects cannot ship as migrations: the `keiro_read` schema
-  ships as migration 0026 while its contents are registration-reconciled at startup —
-  which is also what lets EP-3 re-point views transactionally at cutover.
-- EP-4 drafting found that reading the stream before the reprojection transaction is
-  unsound (a concurrent inline commit between read and lock would be silently
-  erased); the plan reads in-transaction through kiroku-store's exported
-  `readStreamForwardStmt`. Soft-deleted/truncated streams are refused because
-  per-stream reads hide history that `$all` replay sees.
+- The original versioned plan cloned the live table, so it could not implement the
+  principal schema-change use case. PostgreSQL cloning also leaves material DDL,
+  dependency, privilege, and object-name gaps; serial defaults may keep their old
+  sequence dependency.
+- Query-model `version` and `shape_hash` identify a query contract, not a physical
+  target generation. A separate target-level generation and projection-revision model
+  is required.
+- The original status design conflated a candidate replay cursor with the serving
+  generation's applied position and treated `rebuilding-versioned` as non-live even
+  though the old generation remains available. Lifecycle, read availability, write
+  availability, serving progress, and candidate progress are orthogonal.
+- Plan 254's checkpoint-regression acceptance became stale when MasterPlan 39 plan 258
+  made deduplication backfill and checkpoint advance atomic at promotion. Generation
+  epochs, not position regression, identify replacement data.
+- A Keiro-owned view over private `kiroku.subscriptions` would make a future Kiroku DDL
+  migration fail through PostgreSQL dependency tracking. This required an
+  owner-published SQL contract from `mori://shinzui/kiroku`; IR-5's released relation
+  now supplies it.
+- PostgreSQL views bind relation identity, not a textual table name. Promotion must
+  explicitly reconcile every managed dependent object, and unsupported external
+  dependencies must block promotion or be declared to an application provisioner.
+- An all-row PL/pgSQL wrapper is fail-safe but prevents predicate pushdown. Efficient
+  readers need application-supplied keyed functions that call the Keiro guard; granting
+  `SELECT` on an unguarded target view would recreate the original hazard.
+- Dropping and recreating the whole `keiro_read` schema is incompatible with
+  consumer-owned wrappers and rolling deployments. Managed objects require individual
+  versioned reconciliation and explicit retirement.
+- Plan 257's original acceptance of async duplicate reapplication contradicts ADR-31
+  and completed plan 258. Targeted repair must write deduplication evidence in the same
+  transaction, while leaving the shared subscription checkpoint unchanged.
+- Source history at or below a rebuild head is not inherently immutable because Kiroku
+  supports hard deletion. Online rebuilds require an enforced retention or serialization
+  contract rather than an assumption.
+- Kiroku implemented IR-6 as two deliberately different tools. Renewable leases protect
+  long fan-in rebuilds and conservatively refuse destructive SQL while active;
+  transaction-scoped stream guards protect one stream repair by row-lock ordering. EP-1
+  and EP-4 must not collapse these protocols into one abstraction.
+- At 2026-08-13T22:35:58Z, Hackage already resolved the two packages Keiro needs from
+  Kiroku's in-progress release cohort: `kiroku-store` 0.7.0.0 and
+  `kiroku-store-migrations` 0.3.2.0. Uploads of unrelated adapter/observability packages
+  can finish independently of this MasterPlan.
 
 
 ## Decision Log
 
-- Decision: Implement all four IR-22 capabilities before 0.12.0.0, including the
-  conditional capability 3 (versioned rebuild with atomic cutover).
-  Rationale: user decision 2026-08-12 after the fix verification review. Every contract
-  IR-22 defines becomes a compatibility promise at the first stable release, keiro has
-  exactly one consumer today (the IR's requester), and the versioned-rebuild rewrite of
-  the replay path should happen once, on top of MasterPlan 39's corrected runner, not
-  twice.
+- Decision: Implement all four IR-22 capabilities before 0.12.0.0.
+  Rationale: they define the first stable external-reader and rebuild contracts, and
+  schema-changing online rebuild is the primary availability use case.
   Date: 2026-08-12
-- Decision: Order the capabilities status relation, fence, cutover, reprojection, with
-  the status relation first.
-  Rationale: the relation is pure vocabulary — cheap, dependency-free, and everything
-  else references its definitions of group identity, position, and liveness.
-  Date: 2026-08-12
-- Decision: EP-3 hard-depends on MasterPlan 39 EP-1 and EP-2.
-  Rationale: it rewrites the replay path those plans fix; building the versioned
-  protocol on the defective pager or the order-blind resume contract would carry both
-  defects into the new protocol's first release.
-  Date: 2026-08-12
-- Decision: The hazard documentation ships inside EP-2 rather than as a separate plan;
-  the runtime-patterns (cross-repository) update is recorded as a follow-up, not a
-  child plan.
-  Rationale: the documentation's content is the sanctioned surface EP-2 builds, and
-  this repository's MasterPlan cannot gate on another repository's change.
-  Date: 2026-08-12
-- Decision (post-drafting reconciliation): keiro-migrations numbering is EP-1 = 0025,
-  EP-2 = 0026, EP-3 = next free at landing time; new-ADR handles are allocated with
-  `okf id next` at landing time and never assumed in advance (three child plans
-  allocate ADRs).
-  Rationale: EP-1 and EP-2 were drafted in parallel and both claimed 0025/ADR-34; the
-  dependency order fixes the sequence.
-  Date: 2026-08-12
-- Decision (post-drafting reconciliation): EP-2's generated guard is deliberately
-  fail-safe — any status other than `live` raises `KR001`, unknown statuses included —
-  and EP-3 owns both extensions the cutover needs: regenerating the guard to classify
-  `rebuilding-versioned`/`cutover` as serving, and re-pointing the
-  `keiro_read."target__<targetId>"` views (`CREATE OR REPLACE VIEW`) inside the
-  cutover transaction, because PostgreSQL views bind table OIDs and do not follow
-  renames. EP-3's original draft assumed per-call name resolution; corrected to
-  match EP-2's frozen view-based contract.
-  Rationale: EP-2 lands first and cannot know future lifecycle states; fail-safe
-  defaults plus explicit later extension keeps external readers safe at every
-  intermediate commit.
-  Date: 2026-08-12
+- Decision: Treat schema-changing rebuild as the general case and same-schema repair as
+  the restricted clone special case.
+  Rationale: projection rebuilds principally populate changed schemas; cloning the old
+  shape cannot deliver that outcome.
+  Date: 2026-08-13
+- Decision: Applications own desired generation DDL through versioned provisioners;
+  Keiro owns generation lifecycle and atomic promotion.
+  Rationale: Keiro cannot infer application schema from opaque SQL, while applications
+  should not reimplement replay and cutover correctness. ADR-34 records the boundary.
+  Date: 2026-08-13
+- Decision: Reorder the plans to generation protocol, status relation, sanctioned read
+  contracts, with targeted repair parallel.
+  Rationale: public status and read surfaces must consume the final serving/candidate
+  vocabulary rather than freeze the offline lifecycle first.
+  Date: 2026-08-13
+- Decision: A stable status contract is versioned and separates serving facts from
+  candidate rebuild facts.
+  Rationale: online rebuild keeps the old generation live; reporting staging progress as
+  applied serving progress is false, and an unversioned additive contract still breaks
+  consumers that decode complete rows.
+  Date: 2026-08-13
+- Decision: Do not reference Kiroku private relations from a persisted Keiro object.
+  Rationale: schema ownership applies to reads as well as writes; the owner must publish
+  the stable SQL checkpoint relation needed by an external status view.
+  Date: 2026-08-13
+- Decision: External roles receive guarded function execution, not raw target-view
+  selection, and breaking consumer schemas use explicit read-contract versions.
+  Rationale: guard-plus-view discipline is bypassable, and retaining a retired target
+  cannot keep an incompatible contract current without an explicit compatibility or
+  dual-write implementation.
+  Date: 2026-08-13
+- Decision: Promotion uses one bounded all-target lock phase with OID, schema,
+  dependency, and revision revalidation.
+  Rationale: application migrations do not participate in the group-row lock; replay
+  evidence alone cannot prove that the objects being swapped are still the objects that
+  were provisioned and validated.
+  Date: 2026-08-13
+- Decision: Targeted reprojection backfills projection deduplication keys but does not
+  advance the group subscription checkpoint.
+  Rationale: deduplication prevents the repaired events from being applied again;
+  advancing a shared checkpoint could skip unrelated streams.
+  Date: 2026-08-13
+- Decision: Track the owner-published SQL checkpoint relation as
+  `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-5` and replay-history
+  protection as `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-6`.
+  Rationale: both contracts change Kiroku-owned schema or lifecycle behavior and must be
+  implemented, released, and adopted through explicit cross-repository artifacts rather
+  than private SQL in Keiro.
+  Date: 2026-08-13
+- Decision: Resume with EP-1 and adopt Kiroku's released IR-5/IR-6 contracts at
+  `kiroku-store >=0.7 && <0.8` and `kiroku-store-migrations ^>=0.3.2.0`.
+  Rationale: authoritative Hackage metadata and upstream annotated tags agree on the
+  required releases. The remaining uploads in Kiroku's wider package cohort are not
+  dependencies of Keiro's status, rebuild, or targeted-repair implementations.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original vision. Before marking the MasterPlan complete,
-distill durable project context from this MasterPlan and its child ExecPlans into
-docs/adr/. Keep task-local execution and coordination details here.
+The architecture-validation phase completed before implementation. It replaced a
+same-schema clone-and-swap design with first-class application-provisioned schema
+generations, corrected the status and targeted-repair semantics, and made upstream SQL
+ownership and source-retention requirements explicit. Both upstream package prerequisites
+are now released, so the MasterPlan is unblocked and resumes at EP-1 Milestone 1; EP-4 is
+also externally unblocked and may proceed in parallel. Implementation outcomes and
+runtime evidence remain to be recorded as the child plans complete.
 
-(To be filled during and after implementation.)
+
+## Revision Note
+
+Revised 2026-08-13 after pre-implementation architecture review and user discussion.
+The revision makes schema-changing rebuilds the primary use case, introduces
+projection revisions and durable target generations, reorders the dependency graph,
+removes private Kiroku-table coupling, versions the status and read contracts, hardens
+PostgreSQL DDL and cutover validation, and corrects targeted reprojection deduplication.
+
+Revised again on 2026-08-13 after creating the owning Kiroku improvement requests.
+External checkpoint and replay-retention prerequisites now use the exact canonical IR-5
+and IR-6 references throughout the MasterPlan and affected child ExecPlans.
+
+Revised again on 2026-08-13 after Kiroku implemented the requested contracts and began
+the release-cohort upload. The required Keiro packages are already published and tagged:
+IR-5 is available through `kiroku-store-migrations` 0.3.1.0, and IR-6 through
+`kiroku-store` 0.7.0.0 plus `kiroku-store-migrations` 0.3.2.0. The external blockers are
+marked satisfied, the concrete lease/guard ownership split is recorded, and EP-1 is the
+next implementable child plan.

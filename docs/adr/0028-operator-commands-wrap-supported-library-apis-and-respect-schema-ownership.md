@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-08-12T17:04:23Z
+timestamp: 2026-08-13T17:46:56Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -90,6 +90,14 @@ embedding binary; the CLI never invents a database representation of those value
 preview and mutation call the supported slice-adoption operations from
 [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md).
 
+Schema-versioned rebuild commands follow the same boundary. An application-owned
+provisioner and validator define the desired target schema; the supported Keiro library
+operation supplies allocated physical names and owns the transaction, replay, cutover,
+and retirement protocol. Commands that start, resume, promote, or abandon such a run
+are embedded-only because they require the compiled catalog revisions. Database-only
+inspection and dependency-aware retired-generation drop may remain standalone. A
+command never substitutes inferred DDL or private Kiroku SQL for a missing owner API.
+
 
 ## Consequences
 
@@ -118,6 +126,9 @@ preview and mutation call the supported slice-adoption operations from
   the event-count interpretation.
 - A future TUI or web console can reuse the command handlers and application hooks;
   it does not receive permission to bypass the library boundary.
+- Application-provisioned schema generations do not transfer schema authorship to
+  Keiro. Keiro owns orchestration evidence and safe destructive previews; the
+  application remains responsible for DDL meaning and compatibility validation.
 
 
 ## References
@@ -134,3 +145,6 @@ preview and mutation call the supported slice-adoption operations from
   capability boundary.
 - [ADR 0033](0033-consistency-waits-target-reachable-visible-heads.md) separates
   the authoritative append counter from reachable wait and distance targets.
+- [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
+  defines the application-provisioner and Keiro-orchestration boundary for online
+  schema-changing projection rebuilds.
