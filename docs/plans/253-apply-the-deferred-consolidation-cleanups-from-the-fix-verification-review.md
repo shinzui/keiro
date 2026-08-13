@@ -57,8 +57,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-13 09:10Z) M1: Add the pure probe-composition examples; run `cabal test keiro-test` green with the plan-240 golden vectors untouched (550 examples).
 - [ ] M1/M5: Re-run the complete command benchmark baseline guard on a quiet host; the busy-host full samples failed unchanged control cases while targeted domain/control ratios and fan-out cases remained equivalent (evidence below).
 - [x] (2026-08-13 09:10Z) M1: keiro CHANGELOG entry for the new `deterministicIdProbes` export; commit.
-- [ ] M2: Add the message-parameterized reader to `keiro-ops/src/Keiro/Ops/Parse.hs`; delete the four `nonNegativeInt64Reader` copies and `generationReader` (Item 4).
-- [ ] M2: Run `cabal test keiro-ops-test` green; keiro-ops CHANGELOG entry; commit.
+- [x] (2026-08-13 09:15Z) M2: Add the message-parameterized reader to `keiro-ops/src/Keiro/Ops/Parse.hs`; delete the four `nonNegativeInt64Reader` copies and `generationReader` (Item 4).
+- [x] (2026-08-13 09:15Z) M2: Run `cabal test keiro-ops-test` green (43 examples); keiro-ops CHANGELOG entry; commit.
 - [ ] M3: Derive the `outcome` selector guard and body from one selector list in `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` (Item 5).
 - [ ] M3: Delete the `pureRefusals` and `constraintPlan` exports and definitions from `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` (Item 7).
 - [ ] M3: Run `cabal test keiro-dsl:tests` and `just conformance-corpus-policy` green; keiro-dsl CHANGELOG Breaking Changes entry; commit.

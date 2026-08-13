@@ -26,7 +26,7 @@ import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (nonNegativeIntReader, positiveIntReader, readBoundedIntegral)
+import Keiro.Ops.Parse (nonNegativeIntReader, nonNegativeReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.ReadModel (storeHeadPosition)
@@ -76,7 +76,7 @@ commandParser =
     showParser =
       Show
         <$> streamArgument
-        <*> (StreamVersion <$> option nonNegativeInt64Reader (long "from" <> metavar "VERSION" <> Opt.value 0 <> showDefault <> help "Exclusive stream-version cursor"))
+        <*> (StreamVersion <$> option (nonNegativeReader "expected a non-negative stream version") (long "from" <> metavar "VERSION" <> Opt.value 0 <> showDefault <> help "Exclusive stream-version cursor"))
         <*> option positiveIntReader (long "limit" <> metavar "N" <> Opt.value 100 <> showDefault <> help "Maximum events")
 
 truncateParser :: Parser TruncateCommand
@@ -89,7 +89,7 @@ truncateParser =
     setParser =
       SetTruncateBefore
         <$> streamArgument
-        <*> (StreamVersion <$> argument nonNegativeInt64Reader (metavar "VERSION"))
+        <*> (StreamVersion <$> argument (nonNegativeReader "expected a non-negative stream version") (metavar "VERSION"))
         <*> optional expectedParser
         <*> switch (long "skip-preflight" <> help "Bypass snapshot coverage checking (dangerous)")
     expectedParser =
@@ -109,12 +109,6 @@ eventIdArgument = EventId <$> argument uuidReader (metavar "EVENT_ID")
 
 uuidReader :: ReadM UUID
 uuidReader = eitherReader $ \raw -> maybe (Left "expected a UUID event id") Right (UUID.fromString raw)
-
-nonNegativeInt64Reader :: ReadM Int64
-nonNegativeInt64Reader = eitherReader $ \raw ->
-  case readBoundedIntegral raw of
-    Just n | n >= 0 -> Right n
-    _ -> Left "expected a non-negative stream version"
 
 isMutation :: Command -> Bool
 isMutation = \case

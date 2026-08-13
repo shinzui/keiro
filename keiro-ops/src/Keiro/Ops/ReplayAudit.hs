@@ -9,12 +9,11 @@ module Keiro.Ops.ReplayAudit
 where
 
 import Data.Aeson (Value, object, (.=))
-import Data.Int (Int64)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Ops.Env (OpsEnv (..))
-import Keiro.Ops.Parse (positiveIntReader, readBoundedIntegral)
+import Keiro.Ops.Parse (nonNegativeReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.ReplayAudit qualified as Audit
 import Kiroku.Store.Effect (runStoreIO)
@@ -52,7 +51,7 @@ commandParser =
             <*> optional (Text.pack <$> strOption (long "category" <> metavar "CATEGORY" <> help "Run only the configured audit target for this category"))
             <*> optional (option positiveIntReader (long "budget" <> metavar "STREAMS" <> help "Maximum streams to inspect in this invocation"))
             <*> option positiveIntReader (long "parallelism" <> metavar "N" <> Optparse.value 4 <> showDefault <> help "Maximum concurrent stream audits")
-            <*> optional (GlobalPosition <$> option nonNegativeInt64Reader (long "resume-from" <> metavar "POSITION" <> help "Resume after this global-position checkpoint"))
+            <*> optional (GlobalPosition <$> option (nonNegativeReader "expected a non-negative global position") (long "resume-from" <> metavar "POSITION" <> help "Resume after this global-position checkpoint"))
         )
 
 auditModeParser :: Parser Audit.AuditMode
@@ -64,12 +63,6 @@ auditModeParser =
                     <*> switch (long "include-snapshots" <> help "Include streams selected through snapshot event types")
                 )
         )
-
-nonNegativeInt64Reader :: ReadM Int64
-nonNegativeInt64Reader = eitherReader $ \raw ->
-  case readBoundedIntegral raw of
-    Just value | value >= 0 -> Right value
-    _ -> Left "expected a non-negative global position"
 
 runCommand :: OpsEnv -> OpsAuditConfig -> Command -> IO OpsOutcome
 runCommand env config (Audit options) =

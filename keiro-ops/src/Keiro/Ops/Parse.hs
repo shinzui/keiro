@@ -3,6 +3,7 @@ module Keiro.Ops.Parse
     parseDuration,
     readBoundedIntegral,
     positiveIntReader,
+    nonNegativeReader,
     nonNegativeIntReader,
   )
 where
@@ -68,10 +69,15 @@ positiveIntReader = eitherReader $ \raw ->
     _ -> Left "expected a positive integer"
 
 nonNegativeIntReader :: ReadM Int
-nonNegativeIntReader = eitherReader $ \raw ->
+nonNegativeIntReader = nonNegativeReader "expected a non-negative integer"
+
+-- | A bounded, non-negative integral reader whose failure message names the
+-- domain concept being parsed (global position, stream version, generation).
+nonNegativeReader :: forall a. (Integral a, Bounded a) => String -> ReadM a
+nonNegativeReader message = eitherReader $ \raw ->
   case readBoundedIntegral raw of
-    Just n | n >= 0 -> Right n
-    _ -> Left "expected a non-negative integer"
+    Just value | value >= 0 -> Right value
+    _ -> Left message
 
 durationFactor :: Char -> Maybe Double
 durationFactor = \case

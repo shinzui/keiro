@@ -36,7 +36,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Codec (decodeRecorded)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader, positiveIntReader, readBoundedIntegral)
+import Keiro.Ops.Parse (durationReader, nonNegativeReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Workflow.Awakeable (AwakeableId (..), cancelAwakeable, signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
@@ -178,7 +178,7 @@ inspectOptionsParser :: Parser InspectOptions
 inspectOptionsParser =
   InspectOptions
     <$> workflowRefParser
-    <*> optional (option generationReader (long "generation" <> metavar "N" <> help "Journal generation; defaults to current"))
+    <*> optional (option (nonNegativeReader "expected a non-negative generation") (long "generation" <> metavar "N" <> help "Journal generation; defaults to current"))
 
 workflowRefParser :: Parser WorkflowRef
 workflowRefParser =
@@ -233,12 +233,6 @@ payloadReader = eitherReader $ \raw ->
    in case Aeson.eitherDecodeStrict' (Text.Encoding.encodeUtf8 rawText) of
         Left err -> Left ("invalid JSON payload: " <> err)
         Right value -> Right (PayloadArg rawText value)
-
-generationReader :: ReadM Int
-generationReader = eitherReader $ \raw ->
-  case readBoundedIntegral raw of
-    Just value | value >= 0 -> Right value
-    _ -> Left "expected a non-negative generation"
 
 workflowStatusReader :: ReadM Instance.WorkflowStatus
 workflowStatusReader = eitherReader $ \case

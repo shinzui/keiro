@@ -22,7 +22,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (nonNegativeIntReader, readBoundedIntegral)
+import Keiro.Ops.Parse (nonNegativeIntReader, nonNegativeReader)
 import Keiro.Ops.Render
 import Keiro.Snapshot.Schema
 import Keiro.Workflow.Snapshot (workflowStateCodecVersion, workflowStateShapeHash)
@@ -70,7 +70,7 @@ commandParser =
     preflightParser =
       TruncationPreflight
         <$> streamOption
-        <*> (StreamVersion <$> option nonNegativeInt64Reader (long "before" <> metavar "VERSION" <> help "Proposed Kiroku truncate-before version"))
+        <*> (StreamVersion <$> option (nonNegativeReader "expected a non-negative stream version") (long "before" <> metavar "VERSION" <> help "Proposed Kiroku truncate-before version"))
         <*> optional expectedParser
     expectedParser =
       ExpectedDiscriminators
@@ -83,12 +83,6 @@ streamOption = textOption "stream" "NAME" "Kiroku stream name"
 
 textOption :: String -> String -> String -> Parser Text
 textOption name metavarText helpText = Text.pack <$> strOption (long name <> metavar metavarText <> help helpText)
-
-nonNegativeInt64Reader :: ReadM Int64
-nonNegativeInt64Reader = eitherReader $ \raw ->
-  case readBoundedIntegral raw of
-    Just n | n >= 0 -> Right n
-    _ -> Left "expected a non-negative stream version"
 
 isMutation :: Command -> Bool
 isMutation = \case

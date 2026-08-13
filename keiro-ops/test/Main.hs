@@ -140,6 +140,14 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["wf", "gc", "run-once", "--retention", "30d", "--batch", "100"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full", "--resume-from", "0"]) `shouldBe` True
 
+    it "shares non-negative admission across global positions, stream versions, and generations" do
+      let rebuild position = ["rebuild", "start", "ops-group", "--run-id", "ops-run", "--requested-by", "test", "--reason", "test", "--from", position]
+          snapshot version = ["snapshot", "truncation-preflight", "--stream", "orders-1", "--before", version]
+          stream version = ["stream", "show", "orders-1", "--from", version]
+          workflow generation = ["wf", "steps", "orders", "1", "--generation", generation]
+      mapM_ (\args -> isParseFailure (parseOps embeddedHooks args) `shouldBe` True) [rebuild "-1", snapshot "-1", stream "-1", workflow "-1"]
+      mapM_ (\args -> isParseSuccess (parseOps embeddedHooks args) `shouldBe` True) [rebuild "0", snapshot "0", stream "0", workflow "0"]
+
   describe "catalog rebuild adoption" $ around (withFreshStore fixture) do
     it "previews exact slice changes and adopts them only with force" $ \store -> do
       expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")

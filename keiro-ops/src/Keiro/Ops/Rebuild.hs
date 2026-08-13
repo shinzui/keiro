@@ -15,7 +15,7 @@ module Keiro.Ops.Rebuild
 where
 
 import Data.Aeson qualified as Aeson
-import Data.Int (Int32, Int64)
+import Data.Int (Int32)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -23,7 +23,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (readBoundedIntegral)
+import Keiro.Ops.Parse (nonNegativeReader, readBoundedIntegral)
 import Keiro.Ops.Render
 import Keiro.Projection.Catalog
   ( CatalogInventory (..),
@@ -112,7 +112,7 @@ startOptionsParser =
     <*> runIdOption
     <*> textOption "requested-by" "IDENTITY" "Operator or automation identity"
     <*> textOption "reason" "TEXT" "Reason for this rebuild"
-    <*> (GlobalPosition <$> option nonNegativeInt64Reader (long "from" <> metavar "POSITION" <> Optparse.value 0 <> showDefault <> help "Inclusive replay start position"))
+    <*> (GlobalPosition <$> option (nonNegativeReader "expected a non-negative global position") (long "from" <> metavar "POSITION" <> Optparse.value 0 <> showDefault <> help "Inclusive replay start position"))
     <*> option positiveInt32Reader (long "page-size" <> metavar "N" <> Optparse.value 500 <> showDefault <> help "Events fetched per replay page")
 
 resumeOptionsParser :: Parser ResumeOptions
@@ -154,12 +154,6 @@ firstShow = either (Left . show) Right
 
 firstText :: Either Text value -> Either String value
 firstText = either (Left . Text.unpack) Right
-
-nonNegativeInt64Reader :: ReadM Int64
-nonNegativeInt64Reader = eitherReader $ \raw ->
-  case readBoundedIntegral raw of
-    Just value | value >= 0 -> Right value
-    _ -> Left "expected a non-negative global position"
 
 positiveInt32Reader :: ReadM Int32
 positiveInt32Reader = eitherReader $ \raw ->

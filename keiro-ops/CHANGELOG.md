@@ -8,6 +8,9 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Added
 
+- `Keiro.Ops.Parse.nonNegativeReader`, a message-parameterized bounded reader
+  now shared by global-position, stream-version, and generation options without
+  changing their accepted values or domain-specific errors.
 - A standalone, schema-checked operations console for Keiro- and Kiroku-owned
   database operations, with human tables and stable JSON generated from the
   same result values.
