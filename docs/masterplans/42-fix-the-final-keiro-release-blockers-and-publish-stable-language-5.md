@@ -167,8 +167,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 M2: add or migrate a real Language 5 workflow proof, flip the registry maturity, regenerate the corpus, and update user documentation
 - [x] EP-4 M3: run the complete blocker matrix and record fresh approval reviews at the post-fix commit
 - [x] EP-5 M0: repair the release runbook and Mori inventory to cover all six publishable packages
-- [ ] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
-- [ ] EP-5 M2: update the six package versions/internal bounds and seven changelogs, then pass every release gate
+- [x] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
+- [x] EP-5 M2: update the six package versions/internal bounds and seven changelogs, pass every pre-commit release gate, and reserve the clean-tree corpus wrapper for its documented post-commit boundary
 - [ ] EP-5 M3: obtain final approval, commit with plan trailers, create and push annotated package tags
 - [ ] EP-5 M4: publish packages and documentation in dependency order, verify live URLs, and create the GitHub release
 
@@ -200,6 +200,11 @@ interactions between child plans. Provide concise evidence.
   predate its creation and list only five publishable packages. EP-5 must repair both inventories
   and publish `keiro-ops` last; omitting it would leave the newly documented operator surface
   unavailable to consumers.
+- The 0.12 package-version bump necessarily refreshes generated conformance provenance: 433
+  tracked corpus files each change only their `keiro-dsl 0.11.0.0` banner to `0.12.0.0`.
+  Complete regeneration is byte-idempotent after that refresh. The clean-corpus wrapper must be
+  rerun after the approved release commit and before any tag because it deliberately refuses the
+  required uncommitted banner delta.
 - EP-1 found that the frozen Language 4 skeleton corpus compiles its generated
   `WorkflowRuntime`, so removing the ordinary deterministic awakeable export required an explicit
   runtime-support update in that otherwise frozen corpus. EP-4 must keep the file in the Language
@@ -303,7 +308,21 @@ candidate `fb4de1e782ee01a18bf6337a89bea5b877de733a`: Language 5 is the sole sta
 authoring contract, Language 4 remains explicit published compatibility, clean corpus
 regeneration is unchanged, and the complete fresh-database repository gate passes. REV-7 through
 REV-12 are full commit-pinned approvals of the six original identities, while REV-1 through REV-6
-remain immutable evidence of the defects that prompted the initiative. The post-bundle
-fresh-database repository gate also passes with all 12 review records present. EP-5 is now the only
-remaining child and may begin with its read-only release derivation; version edits and all
-externally visible release actions remain behind its explicit user approvals.
+  remain immutable evidence of the defects that prompted the initiative. The post-bundle
+  fresh-database repository gate also passes with all 12 review records present. EP-5 is now the only
+  remaining child and may begin with its read-only release derivation; version edits and all
+  externally visible release actions remain behind its explicit user approvals.
+- EP-5 re-derived 261 commits and changes in all six publishable packages after
+  `keiro-0.11.0.0`, confirming the proposed 0.12.0.0 major bump. All default dependencies are on
+  Hackage; the only unpublished git-pinned Codd packages are unreachable behind a default-off
+  manual flag. Early `cabal check` and source-distribution construction pass for all packages,
+  but archive inspection found that every package omits the root BSD-3-Clause license. Packaging
+  that license in all six archives is therefore part of the first approval's metadata scope.
+- EP-5 staged the approved 0.12.0.0 metadata, all ten bounded internal dependency updates, seven
+  reconciled changelogs, six package-local license payloads, and the mechanically regenerated
+  conformance provenance. Formatting, Nix, build, package checks/tests, source archives, and
+  Hackage-formatted Haddock archives pass. The 433 generated corpus changes are exactly one
+  0.11.0.0-to-0.12.0.0 banner replacement apiece, and full regeneration is byte-idempotent.
+  Because the exact corpus wrapper requires a Git-clean corpus, it remains a mandatory
+  post-release-commit and pre-tag gate. All proposed local/remote tags and Hackage 0.12.0.0 pages
+  are absent, and no commit, tag, push, or upload has occurred at the final approval boundary.

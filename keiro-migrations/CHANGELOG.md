@@ -6,6 +6,16 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.12.0.0 — 2026-08-14
+
+### Breaking Changes
+
+- Requires `kiroku-store >=0.7 && <0.8` and
+  `kiroku-store-migrations ^>=0.3.2.0`. Kiroku migration `0010` supplies the renewable
+  history-retention lease required by online replay.
+
+### New Features
+
 - Migration `0030.sql` makes the external-read guard lock the lifecycle row before
   re-reading mutable contract metadata under a matching shared lock. A reader queued
   behind promotion therefore receives retryable `KR001` when its statement snapshot
@@ -14,14 +24,6 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 - Migration `0029.sql` adds bounded, run-scoped async-dedup staging, persisted
   admission/preparation evidence, and private database-clock deadline helpers for
   schema-versioned writer-fence and cumulative promotion-lock attempts.
-
-### Breaking Changes
-
-- Requires `kiroku-store >=0.7 && <0.8` and
-  `kiroku-store-migrations ^>=0.3.2.0`. Kiroku migration `0010` supplies the renewable
-  history-retention lease required by online replay.
-
-### Added
 
 - Migration `0028.sql` permits an implementation-backed compatibility wrapper
   to retain a zero-argument public signature while a breaking projection shape
@@ -52,6 +54,9 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   pre-existing `suspended` instance to `running` once so it is re-examined
   through the new suspend/wake arbitration. Forward-only and idempotent.
 
+### Other Changes
+
+- The source distribution now includes the BSD-3-Clause license file.
 ## [0.11.0.0] - 2026-08-05
 
 No changes this release. Released with the package set for the `keiro-dsl`

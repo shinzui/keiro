@@ -6,7 +6,86 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
-### Added
+## 0.12.0.0 — 2026-08-14
+
+### Breaking Changes
+
+- Generated `WorkflowRuntime` modules no longer expose the pure
+  `awaitAwakeableId` coordinate helper. They instead expose an abstract
+  `AwaitBinding`, one value per declared await, and `allocateDeclaredAwait`, which
+  allocates through the runtime and returns the opaque `AwakeableId` together with
+  its await action. Compiled generated-runtime consumers now need the direct
+  dependencies required by that effectful allocation surface.
+- Removes the zero-caller Spec-only `pureRefusals` and `constraintPlan` shims
+  from `Keiro.Dsl.ScaffoldRun`. Use `pureRefusalsForService` and
+  `constraintPlanForService`; callers that genuinely have only a `Spec` can
+  cross the compatibility boundary explicitly with `legacyCheckedService`.
+- The public DSL AST replaces read-model `rmConsistency`/`rmScope`/`rmFeed`/
+  `rmSubscription` with `rmFreshness` and `rmSupply`, replaces projection-owner
+  `poFeed` with `poDelivery`, and adds `ProjectionDelivery`,
+  `QueryFreshnessNode`, and `ReadModelSupply`. `DiagnosticCode` gains the
+  catalog cursor/source-ordering and delivery/freshness evolution cases.
+  Exhaustive consumers and direct record construction must migrate; released
+  source-language behavior is unchanged.
+- Removes the semantic-only planning and check entry points from
+  `Keiro.Dsl.ScaffoldRun`: `planServiceScaffold`, `planServiceScaffoldWithGoldens`,
+  `planServiceScaffoldWithRuntimePackage`,
+  `planServiceScaffoldWithRuntimePackageAndGoldens`, `planScaffold`,
+  `planScaffoldWithGoldens`, and `checkServiceDiagnostics`. Once behavior provenance
+  became part of planning, these wrappers could only derive a `CompatibilityLineOnly`
+  source index, whose behavior-source join refuses every aggregate transition and
+  rejection anchor — so they refused every transition-bearing service that they
+  planned cleanly under 0.11.0.0. Migrate by parsing with `parseSourceDocument` and
+  passing the document's `documentSourceIndex` to `planIndexedServiceScaffold`,
+  `planIndexedServiceScaffoldWithGoldens`,
+  `planIndexedServiceScaffoldWithRuntimePackage`,
+  `planIndexedServiceScaffoldWithRuntimePackageAndGoldens`, or
+  `checkIndexedServiceDiagnostics`. A `Spec` constructed programmatically can still
+  be planned by building a complete exact index with
+  `Keiro.Dsl.SourceIndex.exactSemanticSourceIndex` over `semanticSourceSubjects`,
+  taking responsibility for the spans it asserts. The Spec-only module-set builders
+  (`scaffoldModules`, `scaffoldModulesWithGoldens`) and every execution entry point
+  are unchanged.
+- The public DSL AST adds `DomainOutcomeTypes`, `TransitionOutcome`, outcome
+  fields to `Aggregate`/`Transition`, and corresponding located duplicate
+  evidence. `LanguageFeature`, `RuntimeCapability`, and `DiagnosticCode` gain
+  typed-outcome cases, and `BehaviorRequirement` gains
+  `requirementDomainOutcome`; exhaustive consumers and direct record
+  construction must be updated. The syntax and generated API exist only in
+  candidate language 5.
+- The public DSL AST changes `WqField.wqfType` from `Name` to
+  `QueuePayloadType`, adds `wqfLoc`, and adds optional `queryTypes` to
+  `ReadModelNode`. `UseSite`, `MappedRootKind`, `MappedConsumer`,
+  `TypeGraphError`, `DiagnosticCode`, and `TypeGraph` gain mapped
+  queue/read-model/projection cases or fields; exhaustive consumers and direct
+  record construction must be updated. Existing language-1–4 source and
+  generated meaning is unchanged.
+- `WorkspaceMember` gains `wmSourceIndex`, `WorkspaceSpec` gains `wsSourceIndex`, and
+  `composeWorkspace` now accepts `ParsedSourceDocument` inputs. `DiagnosticCode` gains
+  `WorkspaceSourceIndexInvalid`; exhaustive matches and direct record construction must be
+  extended. Bare-`Spec` adapters remain available but expose only `CompatibilityLineOnly`
+  positions rather than fabricated exact columns.
+- `BehaviorRequirement` gains stable `requirementOrigin` and optional
+  `requirementExactLocation` fields; `Refusal` and `DiagnosticCode` gain behavior-source-anchor
+  cases. Exhaustive library consumers must extend their matches. Scaffold and check planning now
+  require a complete exact source index and refuse missing, inexact, duplicate, or colliding
+  behavior anchors before writes.
+- `ScaffoldRecord` and `WorkspaceRecord` gain optional semantic-impact snapshots;
+  `ScaffoldReport` and `WorkspaceScaffoldReport` gain typed semantic and generated-artifact impact
+  fields. Exhaustive direct record construction must initialize the new fields. Standalone
+  scaffolding now reports an existing byte-identical generated module as `Unchanged`, matching the
+  workspace path instead of rewriting it.
+- Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
+  `Harness` into the context `StructuralConformance` module, which must be added to the consuming
+  Cabal module inventory; the context `BehaviorSourceMap` and additive ledger `semantic-impact`
+  row must be added at the same baseline. Compile the runtime package and run the generated service
+  conformance target after reconciling the Cabal fragment. Unrelated aggregate files are now
+  byte-stable when a declaration outside their semantic closure changes, and source-only movement
+  rewrites the source map rather than behavior contracts or create-once witnesses.
+- Requires `kiroku-store >=0.7 && <0.8`, keeping generated conformance and
+  runtime fixtures on the same Kiroku effect surface as Keiro 0.12.
+
+### New Features
 
 - Publishes Language 5 as the sole stable and default authoring contract. Language 4 remains an
   immutable published compatibility contract. The conformance manifest now records explicit
@@ -91,17 +170,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   persist an additive `semantic-impact` row, and current diff CLI JSON appends `semanticImpact` to
   `keiro-dsl/diff-report/1`; legacy ledgers retain an explicitly unavailable old baseline.
 
-### Changed
-
-- Check, scaffold, harness, and diff paths now share one projection-supply
-  analysis per run and per diff side, while replay-impact planning reads each
-  checked service's cached type graph. Diagnostics, generated bytes, scaffold
-  records, and diff reports are unchanged.
-- Source-span capture now uses Megaparsec's offset-derived consumed chunk instead of repeatedly
-  measuring the complete remaining `Text` suffix. Exact half-open spans, parser compatibility, and
-  generated service behavior are unchanged; the effect is limited to DSL parse-time tooling.
-
-### Fixed
+### Bug Fixes
 
 - Generated await helper names now use the same suffix-aware derivation in
   validation and emission, so colliding declarations such as `foo-bar` and
@@ -120,83 +189,21 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   words are contextual rather than globally reserved, so language-5 sources may also use
   `outcome` as an identifier while retaining typed accepted, rejected, and no-op clauses.
 
-### Breaking Changes
+### Other Changes
 
-- Generated `WorkflowRuntime` modules no longer expose the pure
-  `awaitAwakeableId` coordinate helper. They instead expose an abstract
-  `AwaitBinding`, one value per declared await, and `allocateDeclaredAwait`, which
-  allocates through the runtime and returns the opaque `AwakeableId` together with
-  its await action. Compiled generated-runtime consumers now need the direct
-  dependencies required by that effectful allocation surface.
-- Removes the zero-caller Spec-only `pureRefusals` and `constraintPlan` shims
-  from `Keiro.Dsl.ScaffoldRun`. Use `pureRefusalsForService` and
-  `constraintPlanForService`; callers that genuinely have only a `Spec` can
-  cross the compatibility boundary explicitly with `legacyCheckedService`.
-- The public DSL AST replaces read-model `rmConsistency`/`rmScope`/`rmFeed`/
-  `rmSubscription` with `rmFreshness` and `rmSupply`, replaces projection-owner
-  `poFeed` with `poDelivery`, and adds `ProjectionDelivery`,
-  `QueryFreshnessNode`, and `ReadModelSupply`. `DiagnosticCode` gains the
-  catalog cursor/source-ordering and delivery/freshness evolution cases.
-  Exhaustive consumers and direct record construction must migrate; released
-  source-language behavior is unchanged.
-- Removes the semantic-only planning and check entry points from
-  `Keiro.Dsl.ScaffoldRun`: `planServiceScaffold`, `planServiceScaffoldWithGoldens`,
-  `planServiceScaffoldWithRuntimePackage`,
-  `planServiceScaffoldWithRuntimePackageAndGoldens`, `planScaffold`,
-  `planScaffoldWithGoldens`, and `checkServiceDiagnostics`. Once behavior provenance
-  became part of planning, these wrappers could only derive a `CompatibilityLineOnly`
-  source index, whose behavior-source join refuses every aggregate transition and
-  rejection anchor — so they refused every transition-bearing service that they
-  planned cleanly under 0.11.0.0. Migrate by parsing with `parseSourceDocument` and
-  passing the document's `documentSourceIndex` to `planIndexedServiceScaffold`,
-  `planIndexedServiceScaffoldWithGoldens`,
-  `planIndexedServiceScaffoldWithRuntimePackage`,
-  `planIndexedServiceScaffoldWithRuntimePackageAndGoldens`, or
-  `checkIndexedServiceDiagnostics`. A `Spec` constructed programmatically can still
-  be planned by building a complete exact index with
-  `Keiro.Dsl.SourceIndex.exactSemanticSourceIndex` over `semanticSourceSubjects`,
-  taking responsibility for the spans it asserts. The Spec-only module-set builders
-  (`scaffoldModules`, `scaffoldModulesWithGoldens`) and every execution entry point
-  are unchanged.
-- The public DSL AST adds `DomainOutcomeTypes`, `TransitionOutcome`, outcome
-  fields to `Aggregate`/`Transition`, and corresponding located duplicate
-  evidence. `LanguageFeature`, `RuntimeCapability`, and `DiagnosticCode` gain
-  typed-outcome cases, and `BehaviorRequirement` gains
-  `requirementDomainOutcome`; exhaustive consumers and direct record
-  construction must be updated. The syntax and generated API exist only in
-  candidate language 5.
-- The public DSL AST changes `WqField.wqfType` from `Name` to
-  `QueuePayloadType`, adds `wqfLoc`, and adds optional `queryTypes` to
-  `ReadModelNode`. `UseSite`, `MappedRootKind`, `MappedConsumer`,
-  `TypeGraphError`, `DiagnosticCode`, and `TypeGraph` gain mapped
-  queue/read-model/projection cases or fields; exhaustive consumers and direct
-  record construction must be updated. Existing language-1–4 source and
-  generated meaning is unchanged.
-- `WorkspaceMember` gains `wmSourceIndex`, `WorkspaceSpec` gains `wsSourceIndex`, and
-  `composeWorkspace` now accepts `ParsedSourceDocument` inputs. `DiagnosticCode` gains
-  `WorkspaceSourceIndexInvalid`; exhaustive matches and direct record construction must be
-  extended. Bare-`Spec` adapters remain available but expose only `CompatibilityLineOnly`
-  positions rather than fabricated exact columns.
-- `BehaviorRequirement` gains stable `requirementOrigin` and optional
-  `requirementExactLocation` fields; `Refusal` and `DiagnosticCode` gain behavior-source-anchor
-  cases. Exhaustive library consumers must extend their matches. Scaffold and check planning now
-  require a complete exact source index and refuse missing, inexact, duplicate, or colliding
-  behavior anchors before writes.
-- `ScaffoldRecord` and `WorkspaceRecord` gain optional semantic-impact snapshots;
-  `ScaffoldReport` and `WorkspaceScaffoldReport` gain typed semantic and generated-artifact impact
-  fields. Exhaustive direct record construction must initialize the new fields. Standalone
-  scaffolding now reports an existing byte-identical generated module as `Unchanged`, matching the
-  workspace path instead of rewriting it.
-- Regenerate mapped-service output once: declaration-wide assertions moved from every aggregate
-  `Harness` into the context `StructuralConformance` module, which must be added to the consuming
-  Cabal module inventory; the context `BehaviorSourceMap` and additive ledger `semantic-impact`
-  row must be added at the same baseline. Compile the runtime package and run the generated service
-  conformance target after reconciling the Cabal fragment. Unrelated aggregate files are now
-  byte-stable when a declaration outside their semantic closure changes, and source-only movement
-  rewrites the source map rather than behavior contracts or create-once witnesses.
-- Requires `kiroku-store >=0.7 && <0.8`, keeping generated conformance and
-  runtime fixtures on the same Kiroku effect surface as Keiro 0.12.
-
+- Requires `keiro-core ^>=0.12.0.0`, matching the stable Language 5 runtime
+  contract and the lockstep package release.
+- The source distribution now includes the BSD-3-Clause license file.
+- Regenerates the 39-entry checked-in conformance corpus so every generated
+  provenance banner records `keiro-dsl 0.12.0.0`; generated behavior and all
+  non-banner bytes remain unchanged.
+- Check, scaffold, harness, and diff paths now share one projection-supply
+  analysis per run and per diff side, while replay-impact planning reads each
+  checked service's cached type graph. Diagnostics, generated bytes, scaffold
+  records, and diff reports are unchanged.
+- Source-span capture now uses Megaparsec's offset-derived consumed chunk instead of repeatedly
+  measuring the complete remaining `Text` suffix. Exact half-open spans, parser compatibility, and
+  generated service behavior are unchanged; the effect is limited to DSL parse-time tooling.
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

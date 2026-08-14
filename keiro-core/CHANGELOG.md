@@ -6,10 +6,16 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.12.0.0 — 2026-08-14
+
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.6 && <0.7`, keeping the core package on the same
+- Requires `kiroku-store >=0.7 && <0.8`, keeping the core package on the same
   released Kiroku effect surface as the rest of the workspace.
+
+### Other Changes
+
+- The source distribution now includes the BSD-3-Clause license file.
 
 ## [0.11.0.0] - 2026-08-05
 

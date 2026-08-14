@@ -6,7 +6,103 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
-### Added
+## 0.12.0.0 — 2026-08-14
+
+### Breaking Changes
+
+- `Keiro.Workflow.Awakeable` no longer exports
+  `deterministicAwakeableId` or `legacyDeterministicAwakeableId`. Compatibility
+  tooling that must inspect generation-0 rows should import
+  `generation0AwakeableId` or `preUtf8Generation0AwakeableId` from
+  `Keiro.Workflow.Awakeable.Compatibility`; ordinary workflow code must retain and
+  pass the `AwakeableId` returned by allocation.
+- The schema-versioned rebuild resume contract advances to
+  `versioned-contract-v3` and its persisted runner to
+  `keiro/versioned-rebuild/v3`. The contract adds run-scoped dedup staging and a
+  persisted promotion admission limit. Complete active v2 versioned runs with the old
+  runtime or abandon them before upgrading; they cannot resume under v3.
+- `adoptCatalogGroups` now returns `CatalogAdoptionResult`, including adopted group
+  metadata, per-registration update/insert outcomes, and removed old-name rows.
+  `CatalogAdoptionPlan` likewise adds planned registration actions and orphan rows; code
+  constructing or exhaustively matching either result must handle the registry-complete
+  contract.
+- `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of
+  `Bool`, distinguishing an acquired lease from a live foreign lease, crash
+  pacing, and an instance that became unavailable. `ResumeSummary` adds
+  `advanced`, `paced`, `sleepDue`, and `unregisteredNames`; `advanced` counts
+  only a fresh journal append by the re-invocation, a terminal failure recorded
+  at the crash ceiling, or an external wake observed mid-pass. Replay-only
+  re-suspensions and terminal short-circuit races report no advance, so bounded
+  drains terminate on every reachable pool. `WorkflowRunOptions` adds
+  `onJournalAppend`; direct record constructions must initialize it, while
+  `defaultWorkflowRunOptions` users are unaffected.
+
+- The catalog rebuild resume contract advances to `contract-v4:` and the persisted runner
+  format to `keiro/projection-replay/v4`. The contract now pins replay-adapter application
+  order. `CatalogRebuildError` gains `CatalogRebuildSliceMismatch`, and
+  `abandonCatalogRebuild` compares group slices rather than resume contracts.
+
+- Canonical identity advances to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
+  `keiro/projection-replay/v3`; catalog inventory and rebuild preview JSON advance to v2.
+  Stored `slice-v1:` groups require preview and explicit live-group adoption. An active v2
+  replay cannot resume under the v3 runner: complete it with the old runtime or abandon it
+  before upgrading and adopting metadata.
+- Catalog fingerprints, group metadata, rebuild contracts, and grouped errors
+  use the new canonical slice identity. `GroupRebuildMetadata.catalogFingerprint`
+  is now `sliceFingerprint`; fingerprint-drift errors are slice-specific; and
+  `RebuildRunReport` adds `groupSliceFingerprint`. Persisted replay format is
+  `keiro/projection-replay/v3`. Complete or abandon active catalog rebuilds before
+  migration `0024` or the v3 runner cutover, then explicitly adopt stale group rows.
+
+- Requires `kiroku-store >=0.7 && <0.8`. Direct constructors of
+  `SubscriptionDeclaration` and exhaustive matches on grouped
+  `RebuildStartError` must adopt the explicit checkpoint lifecycle surface.
+  `KeiroMetrics` gains the
+  `projectionGlobalPositionDistance` gauge field; code constructing that record
+  directly must initialize it. Exhaustive custom Kiroku interpreters must also
+  implement the 0.5 checkpoint lifecycle, 0.6 visible-head effect surface, and
+  0.7 renewable history-retention lease surface.
+- Requires `keiro-core ^>=0.12.0.0` and `shibuya-core ^>=0.9.0.0`, replacing
+  the 0.11 package-family and Shibuya 0.8 bounds.
+- `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
+  constructor. The journal-append transaction now declines an ordinary
+  `StepRecorded` append into a workflow generation that already carries a
+  `__workflow_cancelled__` or `__workflow_failed__` marker, and reports which
+  marker refused it. A refusal is not an error: the wake source should settle
+  its own durable row and deliver nothing. `appendJournalEntry` /
+  `appendJournalEntryReturningId` absorb it and return normally, so only code
+  that pattern-matches on `JournalAppendOutcome` needs to change.
+
+- A workflow that is terminally *failed* now stops at the next step boundary,
+  as a cancelled one already did. Previously the failure marker was checked only
+  at run entry, so a direct `runWorkflow` call that overlapped the resume
+  worker's `WorkflowFailed` marker kept executing fresh side effects. Runs that
+  relied on that behaviour will now return `Failed` at the boundary.
+
+- `Keiro.Workflow.Instance.markInstanceSuspended` is replaced by
+  `markInstanceSuspendedAwaiting :: WorkflowName -> WorkflowId -> Int -> Text ->
+  Eff es ()`, which takes the run's generation and the awaited step name and
+  arbitrates the suspended-status write against a concurrent wake delivery.
+
+- `Keiro.Workflow.Instance.recordCrashTx` returns `Maybe Int32` instead of
+  `Int32`. `Nothing` means the workflow reached a terminal status between
+  crashing and having that crash recorded, so no attempt was counted — an
+  ordinary race, not an error.
+
+- `Keiro.Workflow.Gc.gcWorkflowsOnce` and `runWorkflowGcWorker` gain an
+  `Error StoreError :> es` constraint, which they need to isolate a failing
+  deletion. Callers running them under `runStoreIO` are unaffected.
+
+- `Keiro.Workflow.Resume.ResumeLogEvent` gains a `ResumeCrashRecordSkipped
+  !Text !Text` constructor (workflow name, workflow id). Only code that
+  pattern-matches exhaustively on `ResumeLogEvent` needs to change.
+
+- `Keiro.Workflow.Resume.WorkflowResumeOptions` gains a
+  `maxConcurrentAdvances :: !Int` field. Only code that builds the record
+  without `defaultWorkflowResumeOptions` needs to change; the default is 1,
+  which is the behaviour every previous release had.
+
+### New Features
 
 - Projection revisions now bind every live closure to its exact inline owner or
   subscription/dedup delivery capability. Catalog validation requires one handler per
@@ -138,7 +234,50 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   most the requested number of candidates. `resumeWorkflowsOnce` retains its
   unbounded compatibility behavior and delegates to the bounded function.
 
-### Fixed
+- `Keiro.Projection.Catalog.Operations` derives versioned JSON inventory,
+  pure/registered rebuild previews, and start/inspect/resume/abandon actions
+  from one `ValidatedProjectionCatalog`. Callers cannot provide replacement
+  targets, sources, handlers, subscriptions, or dedup lists.
+
+- `Keiro.ReadModel.Rebuild.abandonCatalogRebuild` records explicit failure
+  evidence against both the durable run and its catalog group while retaining
+  the writer fence.
+
+- `Keiro.Workflow.Schema.terminalMarkers` / `terminalMarkersTx` report which
+  stopping terminal markers a workflow generation carries, in one query.
+
+- `Keiro.Workflow.Schema.workflowStepLockKey` exposes the per-step advisory-lock
+  key derivation shared by the append path and the suspend write.
+
+- `Keiro.Workflow.Gc.runWorkflowGcWorkerWith` takes a `Text -> IO ()` logging
+  hook, mirroring the resume worker's `logEvent`. It reports both a failed pass
+  and a partial one (fewer workflows collected than scanned).
+
+- A resume pass can advance several workflows at once. Set
+  `WorkflowResumeOptions.maxConcurrentAdvances` above 1 and `resumeWorkflowsOnce`
+  advances that many candidates concurrently, so one slow step body no longer
+  delays every other workflow in the pass. It is safe by construction —
+  discovery returns one row per instance, each advance holds its own lease, and
+  the append path's per-step advisory lock already serializes same-step writers
+  across processes — but it multiplies in-flight database traffic, so size it
+  against the store's connection-pool headroom. The default of 1 preserves the
+  previous sequential behaviour exactly. `logEvent` may now be called from
+  several threads and must be thread-safe when concurrency is enabled.
+
+- `Keiro.Workflow.Resume.ResumeSummary` has `Semigroup` and `Monoid` instances
+  that add fields, so per-candidate deltas combine into a pass summary that does
+  not depend on the order candidates finish in.
+
+- `Keiro.Timer.drainDueTimersWith` / `drainDueTimers` claim and fire up to a
+  caller-supplied number of due timers in one pass, returning how many were
+  processed. Per-timer semantics are `runTimerWorkerWith`'s, unchanged; the
+  requeue-and-gauge preamble now runs once per batch instead of once per timer,
+  so a backlog of due timers no longer drains at one row per poll tick.
+  `Keiro.Workflow.Sleep.drainWorkflowSleepTimers` is the batched sibling of
+  `runWorkflowTimerWorker`, routing sleeps and process-manager timers the same
+  way. `runTimerWorker` / `runTimerWorkerWith` are unchanged.
+
+### Bug Fixes
 
 - `Keiro.version` now renders Cabal's generated package metadata instead of a stale
   hand-maintained literal, so diagnostics and telemetry automatically follow each release.
@@ -202,173 +341,6 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   adopts in-flight generation-0 awakeables rather than orphaning them. See ADR
   0024 for the operator-attested removal criteria.
 
-### Breaking Changes
-
-- `Keiro.Workflow.Awakeable` no longer exports
-  `deterministicAwakeableId` or `legacyDeterministicAwakeableId`. Compatibility
-  tooling that must inspect generation-0 rows should import
-  `generation0AwakeableId` or `preUtf8Generation0AwakeableId` from
-  `Keiro.Workflow.Awakeable.Compatibility`; ordinary workflow code must retain and
-  pass the `AwakeableId` returned by allocation.
-- The schema-versioned rebuild resume contract advances to
-  `versioned-contract-v3` and its persisted runner to
-  `keiro/versioned-rebuild/v3`. The contract adds run-scoped dedup staging and a
-  persisted promotion admission limit. Complete active v2 versioned runs with the old
-  runtime or abandon them before upgrading; they cannot resume under v3.
-- `adoptCatalogGroups` now returns `CatalogAdoptionResult`, including adopted group
-  metadata, per-registration update/insert outcomes, and removed old-name rows.
-  `CatalogAdoptionPlan` likewise adds planned registration actions and orphan rows; code
-  constructing or exhaustively matching either result must handle the registry-complete
-  contract.
-- `Keiro.Workflow.Instance.claimInstance` now returns `ClaimOutcome` instead of
-  `Bool`, distinguishing an acquired lease from a live foreign lease, crash
-  pacing, and an instance that became unavailable. `ResumeSummary` adds
-  `advanced`, `paced`, `sleepDue`, and `unregisteredNames`; `advanced` counts
-  only a fresh journal append by the re-invocation, a terminal failure recorded
-  at the crash ceiling, or an external wake observed mid-pass. Replay-only
-  re-suspensions and terminal short-circuit races report no advance, so bounded
-  drains terminate on every reachable pool. `WorkflowRunOptions` adds
-  `onJournalAppend`; direct record constructions must initialize it, while
-  `defaultWorkflowRunOptions` users are unaffected.
-
-- The catalog rebuild resume contract advances to `contract-v4:` and the persisted runner
-  format to `keiro/projection-replay/v4`. The contract now pins replay-adapter application
-  order. `CatalogRebuildError` gains `CatalogRebuildSliceMismatch`, and
-  `abandonCatalogRebuild` compares group slices rather than resume contracts.
-
-- Canonical identity advances to `catalog-v3:`, `slice-v2:`, `contract-v3:`, and
-  `keiro/projection-replay/v3`; catalog inventory and rebuild preview JSON advance to v2.
-  Stored `slice-v1:` groups require preview and explicit live-group adoption. An active v2
-  replay cannot resume under the v3 runner: complete it with the old runtime or abandon it
-  before upgrading and adopting metadata.
-- Catalog fingerprints, group metadata, rebuild contracts, and grouped errors
-  use the new canonical slice identity. `GroupRebuildMetadata.catalogFingerprint`
-  is now `sliceFingerprint`; fingerprint-drift errors are slice-specific; and
-  `RebuildRunReport` adds `groupSliceFingerprint`. Persisted replay format is
-  `keiro/projection-replay/v3`. Complete or abandon active catalog rebuilds before
-  migration `0024` or the v3 runner cutover, then explicitly adopt stale group rows.
-
-### Deprecated
-
-- `ConsistencyMode`, `StrongScope`, `Strong`, `Eventual`, `PositionWait`,
-  `defaultStrongWaitOptions`, `runQueryWith`, and the legacy `ReadModel` waiting/cursor
-  record fields remain source-compatible in 0.12 and are scheduled for removal in 0.13.
-  Use the truthful freshness/cursor façade; legacy `PositionWait` with no target retains
-  its historical immediate behavior during the migration window.
-
-- Requires `kiroku-store >=0.7 && <0.8`. Direct constructors of
-  `SubscriptionDeclaration` and exhaustive matches on grouped
-  `RebuildStartError` must adopt the explicit checkpoint lifecycle surface.
-  `KeiroMetrics` gains the
-  `projectionGlobalPositionDistance` gauge field; code constructing that record
-  directly must initialize it. Exhaustive custom Kiroku interpreters must also
-  implement the 0.5 checkpoint lifecycle, 0.6 visible-head effect surface, and
-  0.7 renewable history-retention lease surface.
-- `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
-  constructor. The journal-append transaction now declines an ordinary
-  `StepRecorded` append into a workflow generation that already carries a
-  `__workflow_cancelled__` or `__workflow_failed__` marker, and reports which
-  marker refused it. A refusal is not an error: the wake source should settle
-  its own durable row and deliver nothing. `appendJournalEntry` /
-  `appendJournalEntryReturningId` absorb it and return normally, so only code
-  that pattern-matches on `JournalAppendOutcome` needs to change.
-
-- A workflow that is terminally *failed* now stops at the next step boundary,
-  as a cancelled one already did. Previously the failure marker was checked only
-  at run entry, so a direct `runWorkflow` call that overlapped the resume
-  worker's `WorkflowFailed` marker kept executing fresh side effects. Runs that
-  relied on that behaviour will now return `Failed` at the boundary.
-
-- `Keiro.Workflow.Instance.markInstanceSuspended` is replaced by
-  `markInstanceSuspendedAwaiting :: WorkflowName -> WorkflowId -> Int -> Text ->
-  Eff es ()`, which takes the run's generation and the awaited step name and
-  arbitrates the suspended-status write against a concurrent wake delivery.
-
-- `Keiro.Workflow.Instance.recordCrashTx` returns `Maybe Int32` instead of
-  `Int32`. `Nothing` means the workflow reached a terminal status between
-  crashing and having that crash recorded, so no attempt was counted — an
-  ordinary race, not an error.
-
-- `Keiro.Workflow.Gc.gcWorkflowsOnce` and `runWorkflowGcWorker` gain an
-  `Error StoreError :> es` constraint, which they need to isolate a failing
-  deletion. Callers running them under `runStoreIO` are unaffected.
-
-- `Keiro.Workflow.Resume.ResumeLogEvent` gains a `ResumeCrashRecordSkipped
-  !Text !Text` constructor (workflow name, workflow id). Only code that
-  pattern-matches exhaustively on `ResumeLogEvent` needs to change.
-
-- `Keiro.Workflow.Resume.WorkflowResumeOptions` gains a
-  `maxConcurrentAdvances :: !Int` field. Only code that builds the record
-  without `defaultWorkflowResumeOptions` needs to change; the default is 1,
-  which is the behaviour every previous release had.
-
-### Changed
-
-- Bounded workflow drains repeat while `ResumeSummary.advanced > 0`, not while
-  `discovered > 0`. `discovered` remains the admitted pool size; `advanced`
-  counts only fresh journal appends, crash-ceiling terminal failures, and
-  externally delivered wakes observed mid-pass. Replay-only re-suspensions,
-  paced retries, unregistered workflow names, foreign leases, transient errors,
-  and due sleeps remain blocked in place; due sleeps are reported separately as
-  `sleepDue`.
-
-- Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
-  instance only when its status is `running`, or `suspended` with a due
-  `wake_after`. A workflow parked on an awakeable, a child, or a future-dated
-  sleep is no longer re-claimed, replayed, and re-suspended on every resume
-  pass, so idle cost no longer scales with the number of parked workflows.
-  Every path that resolves or abandons a wake writes the instance row in the
-  same transaction; a third-party wake source that transitions its own durable
-  row without appending to the journal must now flip the owning instance row
-  itself. See `docs/adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md`.
-
-- `Keiro.Workflow.Awakeable.cancelAwakeable` flips the owning workflow's
-  instance row to `running` in the same transaction as the cancellation, so the
-  workflow is discovered and can observe the cancellation. Its signature is
-  unchanged; `Keiro.Workflow.Awakeable.Schema.cancelAwakeableTx` now returns
-  `Maybe (Text, Text)` (the owner's name and id) instead of `Bool`.
-
-- `Keiro.Workflow.Sleep.workflowSleepFireAction` clears `wake_after` only when
-  its journal append is fresh, so a stale re-fire can no longer erase the wake
-  hint written by a later sleep's first arm.
-
-- The resume worker no longer unions `findRunningChildIds` into discovery; a
-  freshly spawned child is already discovered through the instance row
-  `spawnChild` writes. The query remains exported for operator inspection.
-
-- Fewer database round-trips per workflow step: the run-entry terminal probe is
-  one query instead of two, the terminal boundary check rides the append
-  transaction instead of costing a separate query before and after each action,
-  and `claimInstance` no longer resolves `MAX(generation)` on every claim.
-
-### Documentation
-
-- `Keiro.Workflow`'s overview gains a "Writing a custom wake source" section
-  stating the four obligations a third-party wake source owes — a durable row
-  keyed by the logical workflow, delivery under the awaited step name, an arm
-  that re-checks the row and re-delivers, and an instance-row write on every
-  lifecycle transition — with the rotation race spelled out on
-  `appendJournalEntryReturningId`. The same contract is written for adopters in
-  `docs/guides/durable-workflows.md` and `docs/user/durable-workflows.md`.
-
-- `continueAsNew` documents that rotating abandons any awakeable id already
-  handed out: the next generation re-runs the allocation step and hands out a
-  fresh one, so the holder must be re-notified from that step. Stated on
-  `continueAsNew`, on `Keiro.Workflow.Awakeable.awakeableNamed`, and in the
-  guide.
-
-- A "what suspension costs" section in both durable-workflow documents, the
-  roadmap, and the production-status page: parked workflows are free, and the
-  costs that remain are due sleeps awaiting a timer worker, crash retries, and
-  journal replay under the default `snapshotPolicy = Never`.
-
-- Corrected drift: `recordStepTx`'s haddock named a two-column conflict key that
-  has been four columns since migration 0008, and `Keiro.Workflow.Gc` now states
-  that collecting a terminal parent deliberately detaches its still-running
-  children.
-
-### Fixed
-
 - Awakeable cancellation now serializes with a concurrent suspend write under
   the awaited step's advisory lock. Suspend arbitration also consults a valid
   `awk:` awakeable row after an absent step-index result, keeping the instance
@@ -412,51 +384,76 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   command). The derivation is now frozen and pinned by fixtures: see
   `docs/adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md`.
 
-### Added
+### Other Changes
 
-- `Keiro.Projection.Catalog.Operations` derives versioned JSON inventory,
-  pure/registered rebuild previews, and start/inspect/resume/abandon actions
-  from one `ValidatedProjectionCatalog`. Callers cannot provide replacement
-  targets, sources, handlers, subscriptions, or dedup lists.
+- `ConsistencyMode`, `StrongScope`, `Strong`, `Eventual`, `PositionWait`,
+  `defaultStrongWaitOptions`, `runQueryWith`, and the legacy `ReadModel` waiting/cursor
+  record fields remain source-compatible in 0.12 and are scheduled for removal in 0.13.
+  Use the truthful freshness/cursor façade; legacy `PositionWait` with no target retains
+  its historical immediate behavior during the migration window.
 
-- `Keiro.ReadModel.Rebuild.abandonCatalogRebuild` records explicit failure
-  evidence against both the durable run and its catalog group while retaining
-  the writer fence.
+- The source distribution now includes the BSD-3-Clause license file.
 
-- `Keiro.Workflow.Schema.terminalMarkers` / `terminalMarkersTx` report which
-  stopping terminal markers a workflow generation carries, in one query.
+- Bounded workflow drains repeat while `ResumeSummary.advanced > 0`, not while
+  `discovered > 0`. `discovered` remains the admitted pool size; `advanced`
+  counts only fresh journal appends, crash-ceiling terminal failures, and
+  externally delivered wakes observed mid-pass. Replay-only re-suspensions,
+  paced retries, unregistered workflow names, foreign leases, transient errors,
+  and due sleeps remain blocked in place; due sleeps are reported separately as
+  `sleepDue`.
 
-- `Keiro.Workflow.Schema.workflowStepLockKey` exposes the per-step advisory-lock
-  key derivation shared by the append path and the suspend write.
+- Workflow discovery is now exact: `findUnfinishedWorkflowIds` returns an
+  instance only when its status is `running`, or `suspended` with a due
+  `wake_after`. A workflow parked on an awakeable, a child, or a future-dated
+  sleep is no longer re-claimed, replayed, and re-suspended on every resume
+  pass, so idle cost no longer scales with the number of parked workflows.
+  Every path that resolves or abandons a wake writes the instance row in the
+  same transaction; a third-party wake source that transitions its own durable
+  row without appending to the journal must now flip the owning instance row
+  itself. See `docs/adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md`.
 
-- `Keiro.Workflow.Gc.runWorkflowGcWorkerWith` takes a `Text -> IO ()` logging
-  hook, mirroring the resume worker's `logEvent`. It reports both a failed pass
-  and a partial one (fewer workflows collected than scanned).
+- `Keiro.Workflow.Awakeable.cancelAwakeable` flips the owning workflow's
+  instance row to `running` in the same transaction as the cancellation, so the
+  workflow is discovered and can observe the cancellation. Its signature is
+  unchanged; `Keiro.Workflow.Awakeable.Schema.cancelAwakeableTx` now returns
+  `Maybe (Text, Text)` (the owner's name and id) instead of `Bool`.
 
-- A resume pass can advance several workflows at once. Set
-  `WorkflowResumeOptions.maxConcurrentAdvances` above 1 and `resumeWorkflowsOnce`
-  advances that many candidates concurrently, so one slow step body no longer
-  delays every other workflow in the pass. It is safe by construction —
-  discovery returns one row per instance, each advance holds its own lease, and
-  the append path's per-step advisory lock already serializes same-step writers
-  across processes — but it multiplies in-flight database traffic, so size it
-  against the store's connection-pool headroom. The default of 1 preserves the
-  previous sequential behaviour exactly. `logEvent` may now be called from
-  several threads and must be thread-safe when concurrency is enabled.
+- `Keiro.Workflow.Sleep.workflowSleepFireAction` clears `wake_after` only when
+  its journal append is fresh, so a stale re-fire can no longer erase the wake
+  hint written by a later sleep's first arm.
 
-- `Keiro.Workflow.Resume.ResumeSummary` has `Semigroup` and `Monoid` instances
-  that add fields, so per-candidate deltas combine into a pass summary that does
-  not depend on the order candidates finish in.
+- The resume worker no longer unions `findRunningChildIds` into discovery; a
+  freshly spawned child is already discovered through the instance row
+  `spawnChild` writes. The query remains exported for operator inspection.
 
-- `Keiro.Timer.drainDueTimersWith` / `drainDueTimers` claim and fire up to a
-  caller-supplied number of due timers in one pass, returning how many were
-  processed. Per-timer semantics are `runTimerWorkerWith`'s, unchanged; the
-  requeue-and-gauge preamble now runs once per batch instead of once per timer,
-  so a backlog of due timers no longer drains at one row per poll tick.
-  `Keiro.Workflow.Sleep.drainWorkflowSleepTimers` is the batched sibling of
-  `runWorkflowTimerWorker`, routing sleeps and process-manager timers the same
-  way. `runTimerWorker` / `runTimerWorkerWith` are unchanged.
+- Fewer database round-trips per workflow step: the run-entry terminal probe is
+  one query instead of two, the terminal boundary check rides the append
+  transaction instead of costing a separate query before and after each action,
+  and `claimInstance` no longer resolves `MAX(generation)` on every claim.
 
+- `Keiro.Workflow`'s overview gains a "Writing a custom wake source" section
+  stating the four obligations a third-party wake source owes — a durable row
+  keyed by the logical workflow, delivery under the awaited step name, an arm
+  that re-checks the row and re-delivers, and an instance-row write on every
+  lifecycle transition — with the rotation race spelled out on
+  `appendJournalEntryReturningId`. The same contract is written for adopters in
+  `docs/guides/durable-workflows.md` and `docs/user/durable-workflows.md`.
+
+- `continueAsNew` documents that rotating abandons any awakeable id already
+  handed out: the next generation re-runs the allocation step and hands out a
+  fresh one, so the holder must be re-notified from that step. Stated on
+  `continueAsNew`, on `Keiro.Workflow.Awakeable.awakeableNamed`, and in the
+  guide.
+
+- A "what suspension costs" section in both durable-workflow documents, the
+  roadmap, and the production-status page: parked workflows are free, and the
+  costs that remain are due sleeps awaiting a timer worker, crash retries, and
+  journal replay under the default `snapshotPolicy = Never`.
+
+- Corrected drift: `recordStepTx`'s haddock named a two-column conflict key that
+  has been four columns since migration 0008, and `Keiro.Workflow.Gc` now states
+  that collecting a terminal parent deliberately detaches its still-running
+  children.
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

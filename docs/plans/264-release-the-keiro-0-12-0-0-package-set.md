@@ -37,13 +37,14 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] M0: add `keiro-ops` and `keiro-migrations` to the Mori package inventory and repair the repository release skill to cover all six publishable packages
-- [ ] M1: re-derive the last release, changed packages, PVP bump, internal graph, generated-module re-exports, and Hackage prerequisites
-- [ ] M1: present the proposed 0.12.0.0 bump and changelog reconciliation to the user and obtain confirmation before edits
-- [ ] M2: update all six package versions, every internal PVP bound, and the root plus six package changelogs
-- [ ] M2: build source distributions and inspect package contents without publishing
-- [ ] M3: run formatting, full verification, Nix, `cabal check`, package tests, source-distribution, and Haddock gates
+- [x] M1: re-derive the last release, changed packages, PVP bump, internal graph, generated-module re-exports, and Hackage prerequisites
+- [x] M1: present the proposed 0.12.0.0 bump and changelog reconciliation to the user and obtain confirmation before edits
+- [x] M2: update all six package versions, every internal PVP bound, and the root plus six package changelogs
+- [x] M2: build source distributions and inspect package contents without publishing
+- [x] M3: run formatting, full verification, Nix, `cabal check`, package tests, source-distribution, and Haddock gates; defer only the exact clean-tree corpus wrapper under its documented post-commit contract
 - [ ] M3: show the complete release diff and obtain final user approval before commit/tag/push/upload
 - [ ] M4: create the release commit and six annotated tags, then push them
+- [ ] M4: immediately after the approved release commit, run `just conformance-corpus-policy` and stop before tags if it fails
 - [ ] M4: publish source and documentation archives in dependency order and verify every live URL
 - [ ] M4: create and verify the GitHub release, then close the MasterPlan and distill any durable ADR context
 
@@ -71,6 +72,40 @@ implementation. Provide concise evidence.
   seven package records: the six publishable packages plus internal `keiro-test-support`. The
   registered project mirror remains stale until a later registry refresh, so release derivation
   uses the verified local inventory rather than treating the cached five-package view as current.
+- Implementation re-counts 261 commits after `keiro-0.11.0.0`; all six publishable package
+  directories changed. Public removals/renames, the Language 5 publication contract, new
+  `DiagnosticCode`/AST constructors, and load-bearing dependency-bound changes make 0.12.0.0 a
+  PVP major release rather than a minor or patch release.
+- Every default-build external dependency has a live Hackage preferred-version entry satisfying
+  the declared bounds. `codd`, `codd-extras`, and the not-yet-published `keiro-ops` return 404;
+  only the first two appear behind `legacy-codd-tools` (`default: False`, `manual: True`). An
+  isolated default solver run for the `keiro-migrations` source distribution selects the
+  published `pg-migrate*` stack and never selects either unpublished Codd package.
+- Exact upstream tags exist for every Keiro-owned resolved dependency and almost every resolved
+  third-party dependency. `aeson-casing` 0.2.0.0 and `base16-bytestring` 1.0.2.0 are live Hackage
+  releases whose upstream repositories do not contain matching tags; `optparse-applicative`
+  0.19.0.0 uses the upstream tag `0.19.0`. The two absent optional provenance tags do not make a
+  default dependency unreachable and do not require widening an accepted bound.
+- All six pre-edit `cabal check` runs and all six source-distribution builds pass. Archive
+  inspection finds the changelog and required runtime/migration payloads, but none of the six
+  archives contains the root BSD-3-Clause `LICENSE`. Release preparation must add a package-local
+  license file and declare it in every publishable manifest before the final source-distribution
+  gate.
+- The first post-bump `just verify` run passed migrations, Jitsurei, the 611-example Keiro suite,
+  PGMQ and ops suites, all 43 DSL suites, diagrams, OKF validation, and policy checks until the
+  final corpus drift guard. Regeneration changed exactly 433 tracked files by one line each:
+  every change replaced only a `keiro-dsl 0.11.0.0` provenance banner with `0.12.0.0`. A second
+  39-entry regeneration passed every corpus consistency check and preserved the aggregate
+  SHA-256 of the complete tracked `keiro-dsl/test` tree, proving the refreshed corpus idempotent.
+  The exact clean-corpus wrapper cannot pass until those required banners are committed because
+  it intentionally refuses any staged or unstaged corpus delta; rerun it immediately after the
+  approved release commit and before tags or publication.
+- Isolated pre-bump solver runs succeed for `keiro-core`, `keiro-pgmq`, `keiro-migrations`, and
+  `keiro-dsl`. The current-version `keiro` and `keiro-ops` archives cannot solve against the
+  already-published `keiro-core-0.11.0.0`, whose old Hackage metadata still constrains
+  `kiroku-store <0.4`; this is the expected shared-version collision that the 0.12.0.0 core-first
+  publication order resolves, not evidence that the final source set may be uploaded out of
+  order.
 
 
 ## Decision Log
@@ -100,6 +135,18 @@ Record every decision made while working on the plan.
   Rationale: Hackage publication is immutable and the dependency chain must never advertise a
   package whose required same-version predecessor failed to publish.
   Date: 2026-08-14
+- Decision: Prepare the shared 0.12.0.0 package metadata, reconciled changelogs, internal bounds,
+  and package-local BSD-3-Clause license payloads after the user approved the first release gate.
+  Rationale: The major bump matches the highest PVP impact, and the added license payloads close
+  the only defect found by early source-distribution inspection.
+  Date: 2026-08-14
+- Decision: Include the mechanically regenerated 0.12.0.0 provenance banners in the release
+  commit, and run the exact clean-corpus policy immediately after that commit but before tagging.
+  Rationale: A package-version bump necessarily changes generated provenance. The policy exposes
+  that delta and then requires a clean Git baseline, so its exact wrapper is structurally
+  impossible before the commit; exhaustive one-line auditing and idempotent regeneration provide
+  the equivalent pre-commit evidence without weakening the post-commit gate.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -115,6 +162,47 @@ matrix, upload order, URL verification, Hackage summary, and GitHub tag table. `
 the public `keiro-migrations` and `keiro-ops` library records with descriptions matching their
 package manifests; `mori show --full` parses it and reports the expected seven total records when
 the internal test-support library is included. Package versions and changelogs remain untouched.
+
+Milestone 1's read-only derivation completed at the first approval gate, where the user approved
+the six-package 0.12.0.0 release in the fixed dependency order. Hackage and isolated-solver
+evidence establish that every default dependency is published and that the Codd git pin is
+unreachable by default. The metadata edit must also package the BSD-3-Clause license in every
+source distribution. The root and package changelogs need one reconciled dated section each;
+`keiro-pgmq` needs a new Unreleased section for its PGMQ/Shibuya dependency upgrade, and
+`keiro-core` needed its stale Kiroku 0.6 bound note replaced with the actual 0.7 bound. No package
+version, internal bound, changelog, or license declaration was edited before confirmation.
+
+Milestone 2 prepares the user-approved 0.12.0.0 metadata without publishing it. All six manifests
+carry the shared version and package-local BSD-3-Clause license declaration; all ten previously
+bounded internal dependencies now require the 0.12 family. The root and six package changelogs
+retain empty Unreleased sections above one dated release section, and the current sections use
+only the canonical Breaking Changes, New Features, Bug Fixes, and Other Changes categories. All
+six source distributions build and contain byte-identical license files, changelogs, manifests,
+and their required runtime/migration payloads. An isolated project made solely from those six
+archives resolves every default library/executable without the repository's Codd git pin.
+The package-version change also refreshes 433 generated DSL corpus banners to 0.12.0.0. Every
+corpus delta is provenance-only, and a second complete regeneration is byte-idempotent.
+
+Milestone 3 completes the pre-commit release matrix. `nix fmt` made no changes; `nix flake
+check`, `cabal build all --enable-tests`, all six `cabal check` runs, and the explicit five-suite
+package test command pass. The package suites report 611 Keiro examples, 707 primary DSL
+examples, 58 PGMQ examples with two documented pending integration cases, 47 ops examples, and a
+passing migrations suite. `Keiro.version` reports 0.12.0.0 from package metadata. All six final
+source archives and all six Hackage-formatted Haddock archives build successfully; every source
+archive contains its manifest, changelog, and byte-identical BSD-3-Clause license. Haddock emits
+pre-existing missing-link, ambiguous-name, and coverage warnings, most visibly in `keiro-ops`,
+but produces valid gzip archives for every package and `cabal check` reports no warnings.
+
+The functional and policy work inside `just verify` passes through migrations, Jitsurei, the
+package suites, all 43 DSL suites, diagrams, OKF validation, and the non-corpus policies. Its
+final clean-corpus wrapper correctly rejects the required staged 433-file provenance refresh.
+Every one of those files has exactly one 0.11.0.0 banner deletion and one 0.12.0.0 banner
+addition, and a complete allow-dirty regeneration is byte-idempotent with aggregate tracked-test
+tree SHA-256
+`54c9bd853f49c15e467cd5a7f9dc9281316572c1f908fb7c3a85a46af205f0a8` before and after.
+The exact wrapper remains a hard post-commit, pre-tag gate. Local tags, remote tags, and exact
+Hackage 0.12.0.0 package pages are absent for all six release names. No publication action has
+been taken.
 
 
 ## Context and Orientation

@@ -4,6 +4,21 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
+## Unreleased
+
+## 0.12.0.0 — 2026-08-14
+
+### Breaking Changes
+
+- Requires `keiro-core ^>=0.12.0.0`, the PGMQ package family
+  `>=0.5 && <0.6`, `shibuya-core ^>=0.9.0.0`, and
+  `shibuya-pgmq-adapter ^>=0.14.0.0`, replacing the 0.11 release's
+  Keiro-core 0.11, PGMQ 0.4, Shibuya 0.8, and adapter 0.12 bounds.
+
+### Other Changes
+
+- The source distribution now includes the BSD-3-Clause license file.
+
 ## [0.11.0.0] - 2026-08-05
 
 No user-facing changes beyond the lockstep `keiro-core ^>=0.11.0.0` bound.

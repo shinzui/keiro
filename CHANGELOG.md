@@ -6,8 +6,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+## 0.12.0.0 — 2026-08-14
+
 ### Breaking Changes
 
+- **keiro**, **keiro-pgmq**, **keiro-dsl**, **keiro-ops**: require the
+  lockstep 0.12.0.0 Keiro package family through PVP-compatible internal
+  bounds. `keiro-ops` joins the public package set for the first time.
+- **keiro**: `Keiro.Workflow.Awakeable` no longer exports deterministic
+  generation-0 id derivation. Compatibility inspection moves to
+  `Keiro.Workflow.Awakeable.Compatibility`; ordinary callers must retain the
+  opaque `AwakeableId` returned by allocation.
+- **keiro-dsl**: generated workflow runtimes replace the pure
+  `awaitAwakeableId` coordinate helper with abstract `AwaitBinding` values and
+  effectful `allocateDeclaredAwait` allocation.
 - **keiro-dsl**: publishes Language 5 as the sole stable and default authoring contract;
   `currentStableLanguageVersion`, new skeletons, and standard new-service CI guidance now select
   version 5. Language 4 remains published and byte-compatible under explicit compatibility
@@ -45,30 +57,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   handler-order changes; exhaustive consumers must be extended. Languages 1–4
   retain their published parse and runtime meaning.
 
-### Bug Fixes
-
-- **jitsurei**: the durable order-fulfillment example now publishes the opaque
-  `AwakeableId` returned by allocation through an idempotent application
-  callback, signals that exact id, and fails closed unless the parent and child
-  complete and remain terminal after restart. Its PostgreSQL regression covers
-  retry in the publication action-to-journal crash window.
-- **keiro**: awakeable cancellation and suspension now arbitrate under the same
-  awaited-step advisory lock. A stale suspend write observes a terminal
-  awakeable row and leaves its owner running, so cancellation can no longer
-  strand an exact-discovery workflow as permanently invisible suspended work.
-- **keiro**: bounded resume drains now continue on durable `advanced` work,
-  rather than the repeatedly discoverable pool size. Paced retries,
-  unregistered workflow names, foreign leases, and transient errors stop and
-  report honestly instead of making a drain-until-zero loop spin forever.
-- **keiro**: Strong and `WaitForHead EntireVisibleLog` read-model queries now
-  target the newest visible event instead of Kiroku's authoritative append
-  counter, so a caught-up query no longer times out after workflow garbage
-  collection hard-deletes the newest journal events. Projection position
-  distance uses the same reachable head and returns zero when no visible work
-  remains.
-
 ### New Features
 
+- **keiro**, **keiro-ops**: add bounded, group-fenced targeted stream
+  reprojection against the exact serving revision, with preview/force operator
+  workflows, dedup backfill, verification, and explicit admission limits.
+- **keiro**, **keiro-migrations**, **keiro-dsl**, **keiro-ops**: add versioned
+  external-read contracts, guarded `keiro_read` SQL surfaces, Language 5
+  declarations and generated bindings, and dependency-aware inspection and
+  retirement operations.
 - **keiro**, **keiro-migrations**: publish the frozen owner-rights
   `keiro_read.projection_group_status_v1` contract with typed Haskell accessors. It
   separates read/write availability and serving revision/epoch/checkpoint progress from
@@ -197,6 +194,36 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   inline multi-target, async, clear, and preserve paths. Language 5 is amended
   in place until publication; no language 6 contract is allocated.
 
+### Bug Fixes
+
+- **keiro**: `Keiro.version` is now derived from Cabal's generated package
+  metadata, eliminating the stale hand-maintained literal.
+- **jitsurei**: the durable order-fulfillment example now publishes the opaque
+  `AwakeableId` returned by allocation through an idempotent application
+  callback, signals that exact id, and fails closed unless the parent and child
+  complete and remain terminal after restart. Its PostgreSQL regression covers
+  retry in the publication action-to-journal crash window.
+- **keiro**: awakeable cancellation and suspension now arbitrate under the same
+  awaited-step advisory lock. A stale suspend write observes a terminal
+  awakeable row and leaves its owner running, so cancellation can no longer
+  strand an exact-discovery workflow as permanently invisible suspended work.
+- **keiro**: bounded resume drains now continue on durable `advanced` work,
+  rather than the repeatedly discoverable pool size. Paced retries,
+  unregistered workflow names, foreign leases, and transient errors stop and
+  report honestly instead of making a drain-until-zero loop spin forever.
+- **keiro**: Strong and `WaitForHead EntireVisibleLog` read-model queries now
+  target the newest visible event instead of Kiroku's authoritative append
+  counter, so a caught-up query no longer times out after workflow garbage
+  collection hard-deletes the newest journal events. Projection position
+  distance uses the same reachable head and returns zero when no visible work
+  remains.
+
+### Other Changes
+
+- All six published source distributions now carry their BSD-3-Clause license
+  file explicitly.
+- **keiro-dsl**: refreshes the checked-in conformance corpus provenance from
+  0.11.0.0 to 0.12.0.0; regeneration is otherwise byte-identical.
 ## [0.11.0.0] - 2026-08-05
 
 ### Breaking Changes

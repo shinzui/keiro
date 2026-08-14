@@ -6,7 +6,16 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## Unreleased
 
-### Added
+## 0.12.0.0 — 2026-08-14
+
+### Breaking Changes
+
+- Requires `kiroku-store >=0.7 && <0.8` for explicit checkpoint lifecycle, the
+  public transaction-composable reset API, and the visible-head query used by
+  the operator position commands, plus the renewable retention evidence required by
+  schema-versioned rebuilds.
+
+### New Features
 
 - Embedded `rebuild reproject-stream GROUP PROJECTION STREAM` previews exact serving
   revision, target, dedup, stream-history, and work-admission facts and executes only
@@ -56,14 +65,7 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   durable progress, identify missing workflow definitions, and distinguish due
   sleeps that require the timer worker rather than another resume pass.
 
-### Changed
-
-- `rebuild adopt` now renders scope-annotated group, registration, and old-name rows and
-  reports the forced transaction through `keiro/catalog-adoption-preview/v2` and
-  `keiro/catalog-adoption-outcome/v2` JSON envelopes. Preview refuses a requested group
-  absent from the catalog with `AdoptGroupNotInCatalog`, matching forced execution.
-
-### Fixed
+### Bug Fixes
 
 - The non-forced `rebuild adopt` preview now distinguishes the named groups it will adopt
   from out-of-scope catalog drift and warns when skipped groups will still refuse startup
@@ -72,9 +74,12 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   pre-canonical runs, enabling the documented abandon, adopt, and fresh-start
   recovery sequence without direct SQL.
 
-### Breaking Changes
+### Other Changes
 
-- Requires `kiroku-store >=0.7 && <0.8` for explicit checkpoint lifecycle, the
-  public transaction-composable reset API, and the visible-head query used by
-  the operator position commands, plus the renewable retention evidence required by
-  schema-versioned rebuilds.
+- First public release. Requires `keiro ^>=0.12.0.0`,
+  `keiro-migrations ^>=0.12.0.0`, and `keiro-pgmq ^>=0.12.0.0`.
+- The source distribution now includes the BSD-3-Clause license file.
+- `rebuild adopt` now renders scope-annotated group, registration, and old-name rows and
+  reports the forced transaction through `keiro/catalog-adoption-preview/v2` and
+  `keiro/catalog-adoption-outcome/v2` JSON envelopes. Preview refuses a requested group
+  absent from the catalog with `AdoptGroupNotInCatalog`, matching forced execution.
