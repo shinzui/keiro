@@ -57,6 +57,10 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
 - [x] (2026-08-14T06:11:25Z) M4: schema-changing cutover integration, docs, ADR,
   Jitsurei/external-client evidence, downstream runtime-pattern and consumer-plan updates,
   changelogs, security review, and the isolated repository-wide `just verify` gate are complete.
+- [x] (2026-08-14T10:37:48Z) EP-5 adversarial follow-up: all-row calls enforce a
+  100-row limit, keyed implementations prove their exact set result, retirement grants
+  are overload-specific, and the guard revalidates contract state after locking while
+  refusing statement snapshots that cross a serving-epoch promotion.
 
 
 ## Surprises & Discoveries
@@ -108,6 +112,16 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   rejects the repository's existing `assist` and `includes` configuration keys. The
   plan-only notification passed `git diff --check` and was committed with the broken
   hook bypassed; no dependency or configuration file changed.
+- Documentation alone did not make the all-row surface bounded. The PL/pgSQL wrapper
+  materialized arbitrarily many rows, so an ordinary growing projection could create
+  uncontrolled memory and latency. Fetching at most 101 rows and raising `KR004` above
+  the fixed 100-row contract makes the small-model boundary executable.
+- A locking read in `READ COMMITTED` can observe a row version committed while it
+  waited, but the enclosing function statement retains its earlier PostgreSQL snapshot.
+  The original guard could therefore authorize the promoted revision and then return an
+  empty result through stale managed-object visibility. Re-reading the contract after
+  the group lock is necessary but not sufficient; an epoch change must return retryable
+  `KR001` so the caller starts a fresh statement snapshot.
 
 
 ## Decision Log
@@ -171,6 +185,20 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   Rationale: PostgreSQL forbids the guard's `FOR SHARE` lifecycle lock in a read-only
   transaction, and removing the lock would reintroduce the authorization/cutover race.
   Date: 2026-08-14
+- Decision: Fix the generated all-row boundary at 100 rows and reserve `KR004` for
+  atomic overflow refusal.
+  Rationale: a universal pre-0.12 limit keeps Candidate Language 5 and runtime catalogs
+  simple while turning the documented small-model restriction into a hard resource
+  bound. A caller-side predicate cannot evade the limit; larger models use a keyed
+  contract.
+  Date: 2026-08-14
+- Decision: Return retryable `KR001` when the calling statement's pre-lock epoch differs
+  from the epoch observed under the group lock.
+  Rationale: PostgreSQL cannot refresh the already-started wrapper statement's complete
+  catalog/relation snapshot after waiting for promotion. A new statement is the only
+  safe way to read the rebound generation; returning old, empty, or mixed data is not
+  acceptable.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -201,6 +229,16 @@ runtime-pattern concepts were refreshed, indexed, source-watermarked, and commit
 was revised to consume the shipped ABI and committed as `8264d92`. No known EP-3 work
 remains.
 
+The EP-5 adversarial review found and closed two high findings. Generated all-row
+wrappers now read no more than 101 rows and fail atomically with `KR004` above the
+100-row boundary. Migration 0030 changes the guard lock order to group then contract,
+revalidates retirement after waiting, and raises retryable `KR001` when a statement
+snapshot crosses promotion; a fresh retry observes the rebound generation. The same
+review added exact keyed set-result verification and exact-signature retirement grant
+reporting. Separate-session regressions cover a slow guarded reader against the bounded
+promotion deadline, a reader queued behind actual physical promotion, and retirement
+committing while a reader waits for the lifecycle lock.
+
 
 ## Context and Orientation
 
@@ -219,8 +257,10 @@ The guard and outer function execute in one caller transaction. The guard takes
 same row before table locks and metadata changes. Therefore either the read locks first
 and completes against the old serving generation before promotion proceeds, or cutover
 locks first and the read waits until the new metadata and managed object bindings commit.
-The reader cannot authorize against one generation and execute against another
-half-promoted generation.
+In the latter case the calling statement still owns its pre-wait snapshot, so the guard
+returns retryable `KR001` on the serving-epoch change and a fresh statement reads the
+new generation. The reader cannot authorize against one generation and execute against
+another half-promoted generation.
 
 The `keiro_read` schema is created by plan 254. Private lifecycle and managed-object
 metadata remain in `keiro`; external roles need no `USAGE` there. Security-definer
@@ -279,9 +319,10 @@ outer wrapper. The wrapper performs the guard, then forwards arguments positiona
 the fully qualified inner implementation and returns its contract type. The external
 role cannot execute the inner implementation or read its underlying relation.
 
-For all-row mode Keiro owns both guard and query wrapper, returning the complete rows of
-a private managed binding view. Documentation limits this mode to bounded/small models
-and explains that caller-side `WHERE` does not reduce work inside the function.
+For all-row mode Keiro owns both guard and query wrapper, returning up to 100 complete
+rows from a private managed binding view. The wrapper fetches at most 101 rows and fails
+atomically with `KR004` above that boundary; caller-side `WHERE` does not reduce work or
+bypass the limit inside the function.
 
 
 ### Managed object metadata and reconciliation
@@ -324,6 +365,7 @@ and serving revision in structured message/detail fields without data payloads:
 KR001  projection temporarily unavailable; retry according to service policy
 KR002  external read contract unknown, inactive, or retired; deployment/configuration error
 KR003  external read contract incompatible with serving revision or shape; consumer migration required
+KR004  all-row external read exceeds the fixed 100-row result boundary; use keyed access
 ```
 
 Unknown lifecycle values do not need special handling: `reads_allowed = false` is the
@@ -371,7 +413,8 @@ Database tests on a second connection must prove:
 - offline rebuild returns `KR001`, never empty/partial rows;
 - online candidate replay continues returning the complete old serving result;
 - a reader holding the group shared lock completes before cutover; a reader arriving
-  after cutover waits and then sees only the promoted result;
+  before cutover commits waits, receives retryable `KR001` on the crossed epoch, and
+  sees only the promoted result after starting a fresh statement;
 - unknown/retired contracts return `KR002`;
 - incompatible revision/shape returns `KR003`;
 - a role with only documented grants cannot select the target or private binding view;
@@ -444,7 +487,8 @@ privilege observes:
 
 1. `KR001` during an offline rebuild instead of empty or historical rows.
 2. Complete old-generation results throughout online candidate replay.
-3. A wait, never mixed data, during the bounded promotion transaction.
+3. Old data when the reader locked first, or retryable `KR001` when its statement
+   snapshot crosses a bounded promotion; a fresh retry sees only the promoted result.
 4. Complete new-generation results after compatible promotion.
 5. `KR003` for a breaking old contract and success through the new contract version.
 6. `KR002` after explicit contract retirement.
@@ -531,3 +575,9 @@ Revised 2026-08-14 after Milestone 4 implementation. Promotion now reconciles ex
 contracts atomically, operations expose inspection and dependency-previewed retirement,
 ADR-36 and Jitsurei freeze the contract, both downstream repositories have durable
 updates, and the complete isolated repository gate passes. This closes the ExecPlan.
+
+Revised 2026-08-14 after the EP-5 adversarial review. The all-row promise now has a
+fixed 100-row runtime limit and `KR004`; private implementations must return the exact
+declared set type; grant preview is overload-specific; and migration 0030 makes readers
+that wait across promotion retry from a fresh statement snapshot instead of reading
+through stale catalog visibility.

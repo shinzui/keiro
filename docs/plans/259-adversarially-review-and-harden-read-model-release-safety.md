@@ -59,7 +59,11 @@ cross-plan release gate.
     `7b57e639`, and `1b71f0d6`, integrated through `353e8d3c` and `9f985f76`;
     checkpoint/cardinality, promotion atomicity, restricted-role, query-plan, and
     pre-0026 rolling-upgrade evidence pass with no critical or high finding.
-  - [ ] EP-3 guarded external-read contract review.
+  - [x] (2026-08-14T10:49:34Z) EP-3 guarded external-read contract reviewed at
+    `c71294bd`, `80a88063`, `79a9b82a`, `89ebe409`, and `8eba3134`, integrated
+    through `353e8d3c` and `9f985f76`; the unbounded all-row and crossed-promotion
+    snapshot findings are fixed, and privilege, overload, rolling-upgrade, retirement,
+    query-plan, and exact-result evidence passes with no open critical or high finding.
   - [ ] EP-4 targeted stream-repair review.
 - [ ] M5: cross-plan fault injection, bridge/rolling-upgrade evidence, ADR and contract
   reconciliation, changelogs, corpus replay, and `just verify` pass; MasterPlan 41 is
@@ -112,6 +116,13 @@ cross-plan release gate.
   expose the complete old tuple until commit and the complete new tuple after commit.
   A separate-session test that holds the transition open for one second observed no
   mixed serving/candidate state.
+- The built-in all-row wrapper documented a small-model boundary but did not enforce
+  one. An outer predicate cannot reduce the work already performed inside a set-returning
+  wrapper, so the surface needed an atomic runtime cardinality refusal.
+- PostgreSQL can let a locking read observe metadata committed while it waited while
+  retaining the calling statement's older snapshot for the later projection query. The
+  first real promotion race reproduced an authorized empty result; post-lock metadata
+  revalidation alone was insufficient without an epoch-crossing retry fence.
 
 
 ## Decision Log
@@ -196,6 +207,18 @@ cross-plan release gate.
   status contract if complete-member detection is required; Keiro v1 will not read the
   private `kiroku.subscriptions` table or silently change its frozen meaning.
   Date: 2026-08-14
+- Decision: Limit the generated all-row contract to at most 100 rows and raise `KR004`
+  before returning any row when its private binding contains 101 or more.
+  Rationale: the built-in wrapper is deliberately a small-model convenience, and an
+  executable, fail-atomic limit prevents projection growth or caller-side filtering
+  from turning it into an uncontrolled materialization path.
+  Date: 2026-08-14
+- Decision: Return retryable `KR001` when a guarded read's pre-lock serving epoch
+  differs from the epoch observed after acquiring the lifecycle lock.
+  Rationale: the calling PostgreSQL statement cannot adopt every catalog and relation
+  change from a promotion it waited behind. A fresh statement is the safe boundary for
+  observing the rebound generation.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -246,9 +269,9 @@ cross-plan release gate.
   in 0.566 ms; and the public keyed wrapper returned one row in 0.763 ms. The private
   keyed statement used `Index Scan` on `bench_versioned_keyed_g1_t1_pkey` and executed
   in 0.008 ms. The benchmark asserts the all-row result is exactly 100 so its sequential
-  scan cannot be reported as a selective-query result; whether the stable contract also
-  needs a runtime cardinality admission limit remains an explicit EP-3 adversarial
-  review question in M4.
+  scan cannot be reported as a selective-query result. The EP-3 review subsequently
+  made that fixture cardinality the fixed runtime boundary: exactly 100 rows succeed
+  and 101 fail atomically with `KR004`.
 - `cabal test keiro:keiro-test` passes all 598 examples after the performance changes.
   An initial `just bench-regression` run exposed and led to correction of benchmark
   database contamination: the read-model fixture now uses a separate fresh migrated
@@ -318,6 +341,64 @@ Bounded follow-up: publish expected member topology in a Kiroku v2 public relati
 consume it only through a future Keiro v2 status contract. Until then, Keiro continues
 to require every bound subscription, floor every published member, fail closed for
 missing whole subscriptions or cursor authority, and avoid private Kiroku storage.
+
+### M4 EP-3 adversarial review — guarded external reads
+
+The reviewed delivery commits are `c71294bd` (catalog/runtime contract), `80a88063`
+(migration and reconciliation), `79a9b82a` (candidate language), `89ebe409` (cutover
+integration), and `8eba3134` (documentation and consumers). The review used the current
+integrated tree through `353e8d3c` and `9f985f76`, because bounded promotion attempts
+and measured query shapes are part of the public read behavior.
+
+The review attacked generated identifiers and dynamic SQL quoting, fixed `search_path`,
+function ownership and `SECURITY DEFINER`, `PUBLIC` revocation, exact role grants,
+overloaded signatures, private implementation access, result-type replacement, rolling
+surface generations, consumer-owned dependents, compatibility, promotion races, and
+retirement races. It also exercised exactly 100 and 101 all-row results, a caller-side
+predicate, a 10,000-row indexed keyed implementation, and a deliberately slow reader
+against the bounded promotion attempt.
+
+Two high findings were reproduced and fixed. First, the generated all-row wrapper
+materialized an unbounded result despite its documented small-model purpose. It now
+fetches at most 101 rows, returns at most 100, and raises `KR004` before returning a
+partial result on overflow; applying an outer predicate does not bypass the boundary.
+Second, a reader statement whose snapshot began before a physical promotion could wait
+for the lifecycle lock, authorize against the newly committed metadata, and then return
+an empty result through its older relation/catalog snapshot. Forward migration 0030
+replaces the guard in place, locks group then contract, revalidates retirement, and
+raises retryable `KR001` when the serving epoch crossed while the statement waited. A
+fresh statement then reads only the rebound generation.
+
+Two lower-severity correctness ambiguities were closed in the same review rather than
+left as residuals. Registration now requires a keyed private implementation to return
+`SETOF` the exact public composite type, not merely accept the declared arguments.
+Retirement grant preview resolves the exact `regprocedure` and ACL entries, so an
+unmanaged overload no longer appears to be a dependent grant of the zero-argument
+contract and survives retirement unchanged. The migration upgrade regression proves
+0030 preserves the guard function OID and revoked `PUBLIC` execute privilege.
+
+The focused reproduction commands and final results were:
+
+    cabal test keiro-migrations:keiro-migrations-test
+    # 34 examples, 0 failures; includes the 0029 -> 0030 in-place upgrade
+    cabal test keiro:keiro-test --test-options='--match "managed external read contracts"'
+    # 6 examples, 0 failures
+    cabal test keiro:keiro-test --test-options='--match "schema-versioned cutover concurrency"'
+    # 6 examples, 0 failures
+    cabal test keiro:keiro-test --test-options='--match "external"'
+    # 11 examples, 0 failures
+
+The slow-reader regression holds the group share lock while promotion attempts its
+exclusive group lock, observes the typed `promotion-group` deadline within 350 ms, and
+then succeeds after the reader exits. The physical-promotion regression returns
+`KR001` from the statement that crossed the epoch and succeeds on a fresh call. A
+retirement transaction that commits while a reader waits is re-read after the group
+lock and returns `KR002`. The keyed private statement retains its primary-key index
+scan at 10,000 rows; external roles retain only schema usage and wrapper execution and
+cannot execute the private implementation or read targets/bindings directly.
+
+There are no open critical or high EP-3 findings and no medium/low residual introduced
+by this review.
 
 
 ## Context and Orientation

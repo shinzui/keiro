@@ -1665,8 +1665,9 @@ revision order is identity-neutral. Removing a contract, adding a version, chang
 compatibility set, and changing the query-derived result shape have distinct diff
 findings.
 
-All-row functions are for bounded models because caller predicates cannot be pushed
-through their procedural wrapper. The create-once projection-catalog hole module also
+All-row functions enforce the runtime's fixed 100-row boundary because caller predicates
+cannot be pushed through their procedural wrapper; overflow raises `KR004` before any
+partial result is returned. The create-once projection-catalog hole module also
 scaffolds a `<contract>V<version>KeyedExternalRead` helper. Applications supply typed
 SQL arguments and an application-owned private implementation function to that helper;
 external roles still receive only the generated guarded wrapper. Language 5 does not

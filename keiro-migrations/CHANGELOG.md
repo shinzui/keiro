@@ -6,6 +6,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+- Migration `0030.sql` makes the external-read guard lock the lifecycle row before
+  re-reading mutable contract metadata under a matching shared lock. A reader queued
+  behind promotion therefore receives retryable `KR001` when its statement snapshot
+  crosses the serving epoch; its next statement validates and reads the rebound
+  generation from one committed authority.
 - Migration `0029.sql` adds bounded, run-scoped async-dedup staging, persisted
   admission/preparation evidence, and private database-clock deadline helpers for
   schema-versioned writer-fence and cumulative promotion-lock attempts.

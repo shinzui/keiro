@@ -613,7 +613,7 @@ An additive physical column therefore does not silently widen a v1 result. Renam
 removing, retyping, or otherwise changing the public row shape requires a new composite
 type and contract version.
 
-The built-in all-row form is for bounded, small projections:
+The built-in all-row form is for projections with at most 100 rows:
 
 ```haskell
 AllRowsExternalRead
@@ -628,10 +628,12 @@ AllRowsExternalRead
   }
 ```
 
-Its procedural wrapper materializes the complete function result; a caller predicate
-cannot be pushed into the physical table. Use an application-owned keyed implementation
-for high-cardinality access. Keiro's outer wrapper still performs the guard and forwards
-the declared arguments, while the private SQL function can use an index:
+Its procedural wrapper reads at most 101 rows and raises `KR004` without returning a
+partial result when the 100-row boundary is exceeded. A caller predicate cannot be
+pushed into the physical table and does not bypass that check. Use an application-owned
+keyed implementation for high-cardinality access. Keiro's outer wrapper still performs
+the guard and forwards the declared arguments, while the private SQL function can use
+an index:
 
 ```haskell
 KeyedExternalRead
@@ -652,9 +654,10 @@ KeyedExternalRead
   }
 ```
 
-The private implementation must already exist with the declared argument signature.
-Registration revokes `PUBLIC` execution from it. Keiro never grants the external role
-access to that function or its relation.
+The private implementation must already exist with the declared argument signature and
+must return a set of the declared composite result type. Registration refuses a result
+mismatch and revokes `PUBLIC` execution from a valid implementation. Keiro never grants
+the external role access to that function or its relation.
 
 Deploy result types and the application-owned projection schema before catalog
 registration. Then grant the client only the public wrapper and the type visibility it
@@ -695,12 +698,16 @@ Handle the stable SQLSTATEs by code, not message text:
 
 | SQLSTATE | Meaning | Client action |
 |---|---|---|
-| `KR001` | The group is temporarily unavailable, normally during an offline rebuild or failure fence. | Retry with bounded backoff according to the application's availability policy. |
+| `KR001` | The group is temporarily unavailable, or the statement waited across a committed serving-epoch change. | Retry the complete call as a new read-write statement with bounded backoff. |
 | `KR002` | The contract is unknown, pending retirement, or retired. | Stop retrying; check deployment version, grants, and contract retirement. |
 | `KR003` | The serving revision or result shape is incompatible with this contract version. | Migrate to the compatible function version or deploy an explicit compatibility implementation. |
+| `KR004` | An all-row contract exceeds its fixed 100-row boundary. | Replace the call with a reviewed keyed contract; an outer `WHERE` does not avoid the limit. |
 
 During candidate replay the old serving revision and its compatible function remain
-active. An additive physical change may keep v1 and atomically rebind it at promotion.
+active. A read already holding the lifecycle lock completes against that generation. A
+read queued behind the promotion receives `KR001` if its statement snapshot crossed the
+serving epoch; retrying as a new statement reads the promoted binding. An additive
+physical change may keep v1 and atomically rebind it at promotion.
 A breaking change deploys v1 and v2 declarations together; v2 remains metadata-only
 until its compatible revision is promoted, then its wrapper appears in that promotion
 transaction. The old v1 wrapper fails with `KR003` after cutover. It remains current

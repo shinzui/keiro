@@ -53,12 +53,17 @@ row `FOR SHARE`, checks persisted `reads_allowed`, contract state, serving revis
 serving/result shape while holding that lock, and returns data in the same transaction.
 Versioned promotion takes the conflicting lifecycle lock before swapping objects and
 metadata. A reader therefore completes entirely against the old serving generation or
-waits and then validates against the new one; it cannot authorize against one and read
-the other half-promoted.
+waits for promotion. Because PostgreSQL fixes the calling statement snapshot before the
+function takes its lock, the guard compares the pre-lock and locked serving epochs. If
+promotion committed while the statement waited, the guard returns retryable `KR001`;
+the caller's next statement validates and reads the new generation. It never authorizes
+against one epoch and reads another half-promoted or stale-snapshot generation.
 
-The guard reports stable SQLSTATE `KR001` for temporary unavailability, `KR002` for an
-unknown or retired contract, and `KR003` for a serving revision or result-shape
-incompatibility. Messages and detail remain diagnostic rather than machine contracts.
+The guard reports stable SQLSTATE `KR001` for temporary unavailability or a statement
+snapshot that crossed promotion, `KR002` for an unknown or retired contract, and `KR003`
+for a serving revision or result-shape incompatibility. An all-row wrapper reports
+`KR004` when the private binding contains more than 100 rows. Messages and detail remain
+diagnostic rather than machine contracts.
 Because PostgreSQL prohibits `FOR SHARE` in a read-only transaction, external calls use
 an ordinary read-write transaction even though the wrapper returns rows only. The lock
 is not weakened to accommodate a read-only connection mode.
@@ -69,12 +74,14 @@ composite type's ordered attribute names rather than `SELECT *`, so additive phy
 columns do not widen an existing contract. An incompatible public shape creates a new
 result type and contract version.
 
-The built-in all-row wrapper is limited to bounded, small read models. Its procedural
-set-returning boundary materializes the complete inner result and prevents an outer
-predicate from being pushed into the table. High-cardinality reads use an
+The built-in all-row wrapper is limited to at most 100 rows. It selects at most 101 rows
+and raises `KR004` before returning any result when that boundary is exceeded. Its
+procedural set-returning boundary prevents an outer predicate from being pushed into
+the table. High-cardinality reads use an
 application-owned keyed function whose declared argument signature Keiro verifies.
-Keiro wraps that function with the same guard and typed forwarding, revokes `PUBLIC`
-from the private implementation, and never grants consumers access to it.
+Keiro also verifies that the function returns a set of the declared composite result
+type, wraps it with the same guard and typed forwarding, revokes `PUBLIC` from the
+private implementation, and never grants consumers access to it.
 
 Contract reconciliation is transactional with catalog registration, reviewed adoption,
 versioned-rebuild start, and promotion. A contract whose compatible revision is not
@@ -107,6 +114,9 @@ or generated private bindings.
 - Offline fences fail reads with `KR001`; online candidate replay keeps the old serving
   contract usable without exposing staging progress.
 - Promotion and external-surface rebinding share one transaction and lock order.
+- A reader whose statement snapshot crosses a committed serving epoch receives
+  retryable `KR001`; it never returns stale or empty data under the new authority.
+- All-row calls return at most 100 rows or fail atomically with `KR004`.
 - Additive physical columns can preserve an old row ABI, while breaking changes require
   a new contract version or an explicit compatibility implementation.
 - External client pools must permit read-write transactions for sanctioned reads.

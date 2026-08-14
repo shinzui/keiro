@@ -43,6 +43,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as PoolConfig
+import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as TxSessions
@@ -930,6 +931,134 @@ spec fixture = do
             afterPromotion ^? _Just . #servingEpoch `shouldBe` Just 1
             afterPromotion ^? _Just . #activeRunId `shouldBe` Just Nothing
             afterPromotion ^? _Just . #candidateRevisionId `shouldBe` Just Nothing
+
+      it "bounds promotion behind a slow guarded reader and resumes after it exits" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupExternalBridge store
+            (catalog, physicalTargets) <- validatedBridgeFrom compatibleExternalReadCatalog
+            registerBridge store catalog
+            runScript store servingOnlyRowsSql
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            appendVersionedEvents store "versioned-external-slow-reader" 2
+            let request =
+                  versionedRequest "versioned-external-slow-reader" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 100
+            _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+            prepared <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            prepared ^. #promotionPrepared `shouldBe` True
+
+            readerDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          Tx.sql "SET LOCAL application_name = 'keiro-slow-guarded-reader'"
+                          rows <- Tx.statement () externalV1RowsStmt
+                          Tx.sql "SELECT pg_sleep(1)"
+                          pure rows
+                      )
+                  )
+                  >>= putMVar readerDone
+            waitForNamedSession pool "keiro-slow-guarded-reader" 50
+
+            startedAt <- getCurrentTime
+            timedOut <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            finishedAt <- getCurrentTime
+            timedOut
+              `shouldBe` Right
+                (Left (VersionedCutoverDeadlineExceeded (request ^. #rebuildRunId) "promotion-group"))
+            diffUTCTime finishedAt startedAt `shouldSatisfy` (< 0.35)
+            oldRows <- expectPoolUsage =<< takeMVar readerDone
+            oldRows `shouldBe` [(100, 42)]
+
+            promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            promoted ^. #phase `shouldBe` VersionedPromoted
+
+      it "refuses a reader whose statement snapshot crosses promotion and succeeds on retry" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupExternalBridge store
+            (catalog, physicalTargets) <- validatedBridgeFrom compatibleExternalReadCatalog
+            registerBridge store catalog
+            runScript store servingOnlyRowsSql
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            let request =
+                  versionedRequest "versioned-external-late-reader" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 2000
+            _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+            prepared <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            prepared ^. #promotionPrepared `shouldBe` True
+
+            targetHolderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Read
+                      ( do
+                          count <- Tx.statement () counterCountStmt
+                          Tx.sql "SELECT pg_sleep(1)"
+                          pure count
+                      )
+                  )
+                  >>= putMVar targetHolderDone
+            waitForCounterReader pool 50
+
+            promoterDone <- newEmptyMVar
+            _ <-
+              forkIO
+                ( Store.runStoreIO
+                    store
+                    (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+                    >>= putMVar promoterDone
+                )
+            waitForPromotionGroupLock pool 50
+
+            lateReaderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      (Tx.statement () externalV1RowsStmt)
+                  )
+                  >>= putMVar lateReaderDone
+            threadDelay 150_000
+            isEmptyMVar lateReaderDone `shouldReturn` True
+
+            _ <- expectPoolUsage =<< takeMVar targetHolderDone
+            promotedResult <- takeMVar promoterDone
+            promoted <-
+              case promotedResult of
+                Left err -> expectationFailure (show err) >> error "unreachable"
+                Right result -> requireRight result
+            promoted ^. #phase `shouldBe` VersionedPromoted
+            crossedEpoch <- takeMVar lateReaderDone
+            crossedEpoch `shouldSatisfy` hasSqlState "KR001"
+            promotedRows <-
+              expectPoolUsage
+                =<< Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      (Tx.statement () externalV1RowsStmt)
+                  )
+            promotedRows `shouldBe` []
+            runStatement store () servingCountsStmt `shouldReturn` (0, 0)
 
   describe "targeted stream reprojection" $
     around (withFreshStore fixture) $ do
@@ -1895,6 +2024,24 @@ waitForGroupRowLock pool remaining = do
     then pure ()
     else threadDelay 20_000 >> waitForGroupRowLock pool (remaining - 1)
 
+waitForPromotionGroupLock :: Pool.Pool -> Int -> IO ()
+waitForPromotionGroupLock _ 0 = expectationFailure "promotion did not acquire its group lock in time"
+waitForPromotionGroupLock pool remaining = do
+  locked <-
+    expectPoolUsage
+      =<< Pool.use pool (Session.statement () promotionGroupLockStmt)
+  if locked
+    then pure ()
+    else threadDelay 20_000 >> waitForPromotionGroupLock pool (remaining - 1)
+
+waitForNamedSession :: Pool.Pool -> Text -> Int -> IO ()
+waitForNamedSession _ _ 0 = expectationFailure "named session did not acquire the group share lock in time"
+waitForNamedSession pool applicationName remaining = do
+  locked <- expectPoolUsage =<< Pool.use pool (Session.statement applicationName namedSessionGroupShareStmt)
+  if locked
+    then pure ()
+    else threadDelay 20_000 >> waitForNamedSession pool applicationName (remaining - 1)
+
 expectStore ::
   Store.KirokuStore ->
   Eff '[Store, Error StoreError, IOE] value ->
@@ -2291,6 +2438,39 @@ groupRowShareLockStmt =
     )
     """
     E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+promotionGroupLockStmt :: Statement () Bool
+promotionGroupLockStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_locks
+      WHERE relation = 'keiro.keiro_projection_rebuild_groups'::regclass
+        AND mode = 'RowShareLock'
+        AND granted
+        AND pid <> pg_backend_pid()
+    )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+namedSessionGroupShareStmt :: Statement Text Bool
+namedSessionGroupShareStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_stat_activity AS activity
+      JOIN pg_catalog.pg_locks AS locks
+        ON locks.pid = activity.pid
+      WHERE activity.application_name = $1
+        AND locks.relation = 'keiro.keiro_projection_rebuild_groups'::regclass
+        AND locks.mode = 'RowShareLock'
+        AND locks.granted
+    )
+    """
+    (E.param (E.nonNullable E.text))
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
 statusPromotionUpdateAndSleepSql :: ByteString

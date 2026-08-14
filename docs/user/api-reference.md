@@ -376,13 +376,15 @@ Types and functions:
 - `previewExternalReadContractRetirement`; and
 - `retireExternalReadContract`.
 
-Reconciliation verifies stable composite result types and private keyed function
+Reconciliation verifies stable composite result types and exact private keyed set-result
 signatures, persists monotonic contract metadata, and installs only contracts compatible
 with the persisted serving revision. The transaction-composable form is used by catalog
 registration, reviewed adoption, versioned-rebuild start, and atomic promotion. Public
-wrappers hold the group lifecycle lock, enforce `KR001`/`KR002`/`KR003`, and expose no
-raw target privilege. Retirement is explicit and reports execute grants plus ordinary
-PostgreSQL dependencies before changing contract state.
+wrappers hold the group lifecycle lock, enforce `KR001`/`KR002`/`KR003`, cap all-row
+results at 100 with `KR004`, and expose no raw target privilege. A statement that waited
+across promotion receives `KR001` and must retry against a fresh snapshot. Retirement is
+explicit and reports exact-signature execute grants plus ordinary PostgreSQL dependencies
+before changing contract state.
 
 ## `Keiro.Connection`
 

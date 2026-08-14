@@ -33,7 +33,7 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Test.Hspec
-import Prelude (any, (-), (=<<))
+import Prelude (all, any, length, not, (&&), (-), (=<<))
 
 spec :: Fixture -> Spec
 spec fixture =
@@ -117,6 +117,7 @@ spec fixture =
             incompatible <- Pool.use pool (Session.statement () allRowsStmt)
             incompatible `shouldSatisfy` hasSqlState "KR003"
             expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
+            runScript pool unmanagedOverloadSql
 
             contract <- onlyContract catalog
             retirementPreview <-
@@ -129,6 +130,8 @@ spec fixture =
                 >>= shouldBeRight
             retirementPreview ^. #executeGrants
               `shouldSatisfy` any (Text.isPrefixOf "external_reader:EXECUTE")
+            retirementPreview ^. #executeGrants
+              `shouldSatisfy` all (not . Text.isPrefixOf "external_overload_reader:EXECUTE")
             retired <-
               expectStore
                 store
@@ -139,6 +142,82 @@ spec fixture =
             retired `shouldSatisfy` \case Right value -> value ^. #currentState == "retired"; Left _ -> False
             retiredRead <- Pool.use pool (Session.statement () allRowsStmt)
             retiredRead `shouldSatisfy` hasSqlState "KR002"
+            runStatement pool 7 unmanagedOverloadStmt `shouldReturn` 7
+
+      it "enforces the all-row small-model boundary before returning partial results" $ \connectionString ->
+        withPool connectionString $ \pool ->
+          Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
+            runScript pool allRowsFixtureSql
+            catalog <- expectValid Catalog.bridgeCatalog
+            register store catalog
+            runScript pool activateV1Sql
+            expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
+
+            runScript pool seedAllRowsBoundarySql
+            boundary <- runStatement pool () allRowsStmt
+            length boundary `shouldBe` 100
+
+            runScript pool "INSERT INTO app.counter (id, total) VALUES (101, 1010)"
+            overflow <- Pool.use pool (Session.statement () allRowsStmt)
+            overflow `shouldSatisfy` hasSqlState "KR004"
+            selectiveOverflow <- Pool.use pool (Session.statement () selectiveAllRowsStmt)
+            selectiveOverflow `shouldSatisfy` hasSqlState "KR004"
+
+      it "revalidates retirement after a reader waits for the lifecycle lock" $ \connectionString ->
+        withPool connectionString $ \pool ->
+          Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
+            runScript pool allRowsFixtureSql
+            catalog <- expectValid Catalog.bridgeCatalog
+            register store catalog
+            runScript pool activateV1Sql
+            expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
+            contract <- onlyContract catalog
+
+            holderDone <- newEmptyMVar
+            _ <-
+              forkIO
+                $ Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          Tx.sql "SET LOCAL application_name = 'keiro-retirement-group-holder'"
+                          Tx.sql retirementGroupHoldSql
+                      )
+                  )
+                >>= putMVar holderDone
+            waitForApplication pool "keiro-retirement-group-holder" 100
+
+            readerDone <- newEmptyMVar
+            _ <-
+              forkIO
+                $ Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          Tx.sql "SET LOCAL application_name = 'keiro-retirement-racing-reader'"
+                          Tx.statement () allRowsStmt
+                      )
+                  )
+                >>= putMVar readerDone
+            waitForApplicationLock pool "keiro-retirement-racing-reader" 100
+
+            retired <-
+              expectStore
+                store
+                ( retireExternalReadContract
+                    (contract ^. #readContractId)
+                    (contract ^. #contractVersion)
+                )
+            retired `shouldSatisfy` \case Right value -> value ^. #currentState == "retired"; Left _ -> False
+            isEmptyMVar readerDone `shouldReturn` True
+
+            _ <- expectUsage =<< takeMVar holderDone
+            racedRead <- takeMVar readerDone
+            racedRead `shouldSatisfy` hasSqlState "KR002"
 
       it "refuses rolling downgrades and preserves consumer-owned dependents" $ \connectionString ->
         withPool connectionString $ \pool ->
@@ -186,6 +265,24 @@ spec fixture =
                 Tx.sql "SET LOCAL enable_seqscan = off"
                 Tx.statement () keyedPlanStmt
             Text.unlines plan `shouldSatisfy` Text.isInfixOf "Index Scan"
+
+      it "refuses a keyed implementation whose set result differs from the public row type" $ \connectionString ->
+        withPool connectionString $ \pool ->
+          Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
+            runScript pool mismatchedKeyedFixtureSql
+            baseCatalog <- expectValid (Catalog.bridgeCatalog {externalReadContracts = []})
+            register store baseCatalog
+            runScript pool activateV1Sql
+            catalog <- expectValid keyedCatalog
+
+            reconciled <- expectStore store (reconcileExternalReadContracts catalog)
+            reconciled
+              `shouldSatisfy` \case
+                Left (ExternalReadPrivateImplementationResultMismatch implementation resultType) ->
+                  implementation == QualifiedFunction "app_private" "lookup_counter"
+                    && resultType == QualifiedSqlType "app_contract" "counter_row_v1"
+                _ -> False
+            runStatement pool () publicKeyedWrapperMissingStmt `shouldReturn` True
 
 register :: Store.KirokuStore -> ValidatedProjectionCatalog -> IO ()
 register store catalog = do
@@ -310,12 +407,23 @@ isSqlFailure :: Either error value -> Bool
 isSqlFailure = \case Left _ -> True; Right _ -> False
 
 waitForReader :: Pool.Pool -> Int -> IO ()
-waitForReader _ 0 = expectationFailure "external reader did not enter its lock-holding transaction"
-waitForReader pool remaining = do
-  active <- runStatement pool () readerActiveStmt
+waitForReader pool = waitForApplication pool "keiro-external-lock-reader"
+
+waitForApplication :: Pool.Pool -> Text -> Int -> IO ()
+waitForApplication _ _ 0 = expectationFailure "external session did not become active"
+waitForApplication pool applicationName remaining = do
+  active <- runStatement pool applicationName readerActiveStmt
   if active
     then pure ()
-    else threadDelay 10_000 >> waitForReader pool (remaining - 1)
+    else threadDelay 10_000 >> waitForApplication pool applicationName (remaining - 1)
+
+waitForApplicationLock :: Pool.Pool -> Text -> Int -> IO ()
+waitForApplicationLock _ _ 0 = expectationFailure "external session did not wait for its lock"
+waitForApplicationLock pool applicationName remaining = do
+  waiting <- runStatement pool applicationName readerWaitingStmt
+  if waiting
+    then pure ()
+    else threadDelay 10_000 >> waitForApplicationLock pool applicationName (remaining - 1)
 
 allRowsFixtureSql :: ByteString
 allRowsFixtureSql =
@@ -349,6 +457,30 @@ keyedFixtureSql =
          WHERE counter.id = counter_id
        $lookup$;
        """
+
+mismatchedKeyedFixtureSql :: ByteString
+mismatchedKeyedFixtureSql =
+  allRowsFixtureSql
+    <> """
+       CREATE SCHEMA app_private;
+       CREATE FUNCTION app_private.lookup_counter(counter_id bigint)
+       RETURNS SETOF bigint
+       LANGUAGE sql
+       STABLE
+       AS $lookup$
+         SELECT counter.id
+         FROM app.counter AS counter
+         WHERE counter.id = counter_id
+       $lookup$;
+       """
+
+seedAllRowsBoundarySql :: ByteString
+seedAllRowsBoundarySql =
+  """
+  INSERT INTO app.counter (id, total)
+  SELECT ordinal, ordinal * 10
+  FROM generate_series(3, 100) AS ordinals(ordinal);
+  """
 
 activateV1Sql :: ByteString
 activateV1Sql =
@@ -463,6 +595,37 @@ grantKeyedReaderSql =
   GRANT EXECUTE ON FUNCTION keiro_read.counter_reader_v1(bigint) TO external_reader;
   """
 
+unmanagedOverloadSql :: ByteString
+unmanagedOverloadSql =
+  """
+  DO $role$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_roles
+      WHERE rolname = 'external_overload_reader'
+    ) THEN
+      CREATE ROLE external_overload_reader NOLOGIN;
+    END IF;
+  END
+  $role$;
+  CREATE FUNCTION keiro_read.counter_reader_v1(requested bigint)
+  RETURNS bigint
+  LANGUAGE sql
+  AS $overload$ SELECT requested $overload$;
+  REVOKE ALL ON FUNCTION keiro_read.counter_reader_v1(bigint) FROM PUBLIC;
+  GRANT EXECUTE ON FUNCTION keiro_read.counter_reader_v1(bigint)
+    TO external_overload_reader;
+  """
+
+retirementGroupHoldSql :: ByteString
+retirementGroupHoldSql =
+  """
+  UPDATE keiro.keiro_projection_rebuild_groups
+  SET updated_at = updated_at
+  WHERE group_id = 'counter-group';
+  SELECT pg_sleep(1);
+  """
+
 consumerDependentSql :: ByteString
 consumerDependentSql =
   """
@@ -480,6 +643,27 @@ allRowsStmt =
     "SELECT id, total FROM keiro_read.counter_reader_v1() ORDER BY id"
     E.noParams
     (D.rowList ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
+
+selectiveAllRowsStmt :: Statement () [(Int64, Int64)]
+selectiveAllRowsStmt =
+  preparable
+    "SELECT id, total FROM keiro_read.counter_reader_v1() WHERE id = 1"
+    E.noParams
+    (D.rowList ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
+
+unmanagedOverloadStmt :: Statement Int64 Int64
+unmanagedOverloadStmt =
+  preparable
+    "SELECT keiro_read.counter_reader_v1($1)"
+    (E.param (E.nonNullable E.int8))
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
+publicKeyedWrapperMissingStmt :: Statement () Bool
+publicKeyedWrapperMissingStmt =
+  preparable
+    "SELECT pg_catalog.to_regprocedure('keiro_read.counter_reader_v1(bigint)') IS NULL"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
 
 rawTargetStmt :: Statement () Int64
 rawTargetStmt =
@@ -537,17 +721,30 @@ securityFactsStmt =
         )
     )
 
-readerActiveStmt :: Statement () Bool
+readerActiveStmt :: Statement Text Bool
 readerActiveStmt =
   preparable
     """
     SELECT EXISTS (
       SELECT 1 FROM pg_catalog.pg_stat_activity
-      WHERE application_name = 'keiro-external-lock-reader'
+      WHERE application_name = $1
         AND state = 'active'
     )
     """
-    E.noParams
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+readerWaitingStmt :: Statement Text Bool
+readerWaitingStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_stat_activity
+      WHERE application_name = $1
+        AND wait_event_type = 'Lock'
+    )
+    """
+    (E.param (E.nonNullable E.text))
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
 consumerDependentExistsStmt :: Statement () Bool

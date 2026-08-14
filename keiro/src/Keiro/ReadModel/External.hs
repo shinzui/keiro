@@ -60,6 +60,7 @@ data ExternalReadReconciliationError
   | ExternalReadResultTypeMissing !QualifiedSqlType
   | ExternalReadResultTypeNotComposite !QualifiedSqlType
   | ExternalReadPrivateImplementationMissing !QualifiedFunction
+  | ExternalReadPrivateImplementationResultMismatch !QualifiedFunction !QualifiedSqlType
   | ExternalReadImmutableSignatureConflict !ExternalReadContractId !ExternalReadContractVersion
   | ExternalReadDefinitionGenerationConflict !ExternalReadContractId !ExternalReadContractVersion !Int
   | ExternalReadSurfaceDowngrade !ExternalReadContractId !ExternalReadContractVersion !Int !Int
@@ -245,9 +246,21 @@ reconcileExternalReadContractsForGroupsTx catalog selectedGroups =
       case spec ^. #privateImplementation of
         Nothing -> pure (Right ())
         Just implementation -> do
-          exists <- Tx.statement (privateRegprocedure spec implementation) functionExistsStmt
-          if exists
-            then do
+          resultMatches <-
+            Tx.statement
+              (privateRegprocedure spec implementation, renderSqlType (spec ^. #resultType))
+              privateImplementationResultStmt
+          case resultMatches of
+            Nothing -> pure (Left (ExternalReadPrivateImplementationMissing implementation))
+            Just False ->
+              pure
+                ( Left
+                    ( ExternalReadPrivateImplementationResultMismatch
+                        implementation
+                        (spec ^. #resultType)
+                    )
+                )
+            Just True -> do
               Tx.sql
                 ( Text.Encoding.encodeUtf8
                     ( "REVOKE ALL ON FUNCTION "
@@ -258,7 +271,6 @@ reconcileExternalReadContractsForGroupsTx catalog selectedGroups =
                     )
                 )
               pure (Right ())
-            else pure (Left (ExternalReadPrivateImplementationMissing implementation))
 
     reconcileObjects spec resultColumns requestedDefinitionHash = do
       typeRecorded <-
@@ -487,10 +499,7 @@ wrapperSql spec =
       "SECURITY DEFINER",
       "SET search_path = pg_catalog",
       "AS $keiro_external_read$",
-      "BEGIN",
-      "  PERFORM " <> qualifyTable "keiro_read" "guard_external_read_v1" <> "(" <> quoteLiteral (externalReadContractIdText (spec ^. #contractId)) <> ", " <> Text.pack (show (externalReadContractVersionValue (spec ^. #contractVersion))) <> ");",
-      "  RETURN QUERY SELECT * FROM " <> source <> ";",
-      "END",
+      body,
       "$keiro_external_read$"
     ]
   where
@@ -505,6 +514,52 @@ wrapperSql spec =
       case spec ^. #privateImplementation of
         Nothing -> qualifyTable "keiro" (bindingViewName spec)
         Just implementation -> qualifyFunction implementation <> "(" <> arguments <> ")"
+    guardSql =
+      "  PERFORM "
+        <> qualifyTable "keiro_read" "guard_external_read_v1"
+        <> "("
+        <> quoteLiteral (externalReadContractIdText (spec ^. #contractId))
+        <> ", "
+        <> Text.pack (show (externalReadContractVersionValue (spec ^. #contractVersion)))
+        <> ");"
+    body =
+      case spec ^. #contractKind of
+        InventoryAllRowsExternalRead ->
+          Text.unlines
+            [ "DECLARE",
+              "  returned_rows bigint;",
+              "BEGIN",
+              guardSql,
+              "  RETURN QUERY SELECT * FROM " <> source <> " LIMIT " <> Text.pack (show allRowsExternalReadFetchLimit) <> ";",
+              "  GET DIAGNOSTICS returned_rows = ROW_COUNT;",
+              "  IF returned_rows > " <> Text.pack (show allRowsExternalReadLimit) <> " THEN",
+              "    RAISE EXCEPTION USING",
+              "      ERRCODE = 'KR004',",
+              "      MESSAGE = 'all-row external read exceeds its bounded result limit',",
+              "      DETAIL = " <> quoteLiteral allRowsLimitDetail <> ";",
+              "  END IF;",
+              "END"
+            ]
+        InventoryKeyedExternalRead ->
+          Text.unlines
+            [ "BEGIN",
+              guardSql,
+              "  RETURN QUERY SELECT * FROM " <> source <> ";",
+              "END"
+            ]
+    allRowsLimitDetail =
+      "contract="
+        <> externalReadContractIdText (spec ^. #contractId)
+        <> " version="
+        <> Text.pack (show (externalReadContractVersionValue (spec ^. #contractVersion)))
+        <> " row_limit="
+        <> Text.pack (show allRowsExternalReadLimit)
+
+allRowsExternalReadLimit :: Int
+allRowsExternalReadLimit = 100
+
+allRowsExternalReadFetchLimit :: Int
+allRowsExternalReadFetchLimit = 101
 
 contractParams ::
   ExternalReadSpec ->
@@ -853,6 +908,21 @@ relationExistsStmt =
     (E.param (E.nonNullable E.text))
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
+privateImplementationResultStmt :: Statement (Text, Text) (Maybe Bool)
+privateImplementationResultStmt =
+  preparable
+    """
+    SELECT procedures.proretset
+       AND procedures.prorettype = pg_catalog.to_regtype($2)
+    FROM pg_catalog.pg_proc AS procedures
+    WHERE procedures.oid = pg_catalog.to_regprocedure($1)
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.rowMaybe (D.column (D.nonNullable D.bool)))
+
 functionExistsStmt :: Statement Text Bool
 functionExistsStmt =
   preparable
@@ -981,12 +1051,28 @@ retirementGrantsStmt :: Statement (Text, Int32) [Text]
 retirementGrantsStmt =
   preparable
     """
-    SELECT DISTINCT grants.grantee || ':' || grants.privilege_type
+    SELECT DISTINCT
+      coalesce(grantees.rolname, 'PUBLIC') || ':' || privileges.privilege_type
     FROM keiro.keiro_external_read_contracts AS contracts
-    JOIN information_schema.routine_privileges AS grants
-      ON grants.specific_schema = 'keiro_read'
-     AND grants.routine_name = contracts.public_function_name
+    JOIN pg_catalog.pg_proc AS procedures
+      ON procedures.oid = pg_catalog.to_regprocedure(
+        pg_catalog.format(
+          '%I.%I(%s)',
+          'keiro_read',
+          contracts.public_function_name,
+          pg_catalog.array_to_string(contracts.argument_types, ',')
+        )
+      )
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      coalesce(
+        procedures.proacl,
+        pg_catalog.acldefault('f', procedures.proowner)
+      )
+    ) AS privileges
+    LEFT JOIN pg_catalog.pg_roles AS grantees
+      ON grantees.oid = privileges.grantee
     WHERE contracts.contract_id = $1 AND contracts.contract_version = $2
+      AND privileges.privilege_type = 'EXECUTE'
     ORDER BY 1
     """
     ( contrazip2

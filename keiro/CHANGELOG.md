@@ -28,7 +28,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   Canonical identity advances to `catalog-v5:` and `slice-v4:`.
 - `Keiro.ReadModel.External` reconciles those declarations into execute-only,
   security-definer functions in `keiro_read`, backed by private managed bindings and a
-  lifecycle guard with stable `KR001`/`KR002`/`KR003` SQLSTATEs. Registration,
+  lifecycle guard with stable `KR001`/`KR002`/`KR003` SQLSTATEs. The adversarial release
+  pass makes crossed-promotion snapshots fail retryably with `KR001`, caps all-row
+  results at 100 with `KR004`, verifies exact keyed set-result types, and reports grants
+  for the selected overload only. Registration,
   reviewed adoption, versioned-rebuild start, and promotion perform reconciliation in
   their own transaction; retirement is explicit and dependency/grant previewed.
   All-row bindings project only the stable composite type's attributes, candidate

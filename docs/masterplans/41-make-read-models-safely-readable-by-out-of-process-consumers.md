@@ -98,8 +98,9 @@ dependency on Kiroku's private `kiroku.subscriptions` table.
 
 EP-3, plan 255, builds the sanctioned external read surface on EP-1's generation
 binding and EP-2's availability vocabulary. It grants external roles only execution of
-guarded, versioned functions. Keiro may generate a safe all-row function for small
-models, while applications provide efficient keyed functions that invoke the same guard
+guarded, versioned functions. Keiro may generate a safe all-row function with a fixed
+100-row limit for small models, while applications provide efficient keyed functions
+that invoke the same guard
 inside the same statement. Raw generated target views receive no external `SELECT`
 grant.
 
@@ -528,6 +529,9 @@ passing `just verify`.
 EP-3 is complete: versioned all-row and keyed contracts expose execute-only guarded SQL
 functions, atomically follow compatible promotion, fail explicitly across breaking or
 retired versions, and survive rolling registrations without schema-wide replacement.
+The EP-5 adversarial pass subsequently added a 100-row all-row limit (`KR004`), exact
+keyed set-result validation, post-lock contract revalidation, and retryable `KR001` when
+a statement snapshot crosses promotion.
 Candidate Language 5, operations, ADR-36, Jitsurei, user guidance, runtime patterns, and
 the requesting consumer's plan all consume the shipped ABI. Its repeated isolated gate
 passed 586 core, 58 PGMQ, 44 operations, 706 main DSL, 24 Jitsurei, and 32 migration
