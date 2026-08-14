@@ -20,6 +20,7 @@ import Data.Text.Encoding.Error (lenientDecode)
 -- "-- pg-migrate: no-transaction" leading comment, which review gates.
 data LintConfig = LintConfig
   { requiredQualifier :: Text,
+    additionalQualifiers :: [Text],
     exemptFiles :: [FilePath]
   }
   deriving stock (Eq, Show)
@@ -38,7 +39,8 @@ lintViolations config sources =
         body = Text.Encoding.decodeUtf8With lenientDecode bytes
         statements = map Text.strip . Text.splitOn ";" $ stripCommentLines body
 
-    requiredLower = Text.toCaseFold (requiredQualifier config)
+    allowedQualifiers =
+      Text.toCaseFold <$> (requiredQualifier config : additionalQualifiers config)
 
     searchPathViolation file body =
       [ "migration body mentions search_path: " <> Text.pack file
@@ -49,10 +51,13 @@ lintViolations config sources =
       case statementTarget statement of
         Nothing -> []
         Just target
-          | requiredLower `Text.isPrefixOf` Text.toCaseFold (cleanTarget target) -> []
+          | any
+              (`Text.isPrefixOf` Text.toCaseFold (cleanTarget target))
+              allowedQualifiers ->
+              []
           | otherwise ->
               [ "migration DDL target is not qualified with "
-                  <> requiredQualifier config
+                  <> Text.intercalate " or " (requiredQualifier config : additionalQualifiers config)
                   <> " in "
                   <> Text.pack file
                   <> ": "
@@ -66,6 +71,10 @@ statementTarget statement
       targetAfter ["create", "table"] wordsOriginal
   | lower `startsWithWords` ["alter", "table"] =
       targetAfter ["alter", "table"] wordsOriginal
+  | lower `startsWithWords` ["create", "view"] =
+      targetAfter ["create", "view"] wordsOriginal
+  | lower `startsWithWords` ["create", "or", "replace", "view"] =
+      targetAfter ["create", "or", "replace", "view"] wordsOriginal
   | lower `startsWithWords` ["drop", "index"] =
       targetAfter ["drop", "index"] wordsOriginal
   | lower `startsWithWords` ["create", "index"] =

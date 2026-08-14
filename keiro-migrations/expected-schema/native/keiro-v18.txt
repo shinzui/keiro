@@ -80,6 +80,10 @@ column	keiro_outbox.updated_at	timestamp with time zone not null default now()
 column	keiro_projection_dedup.applied_at	timestamp with time zone not null default now()
 column	keiro_projection_dedup.event_id	uuid not null
 column	keiro_projection_dedup.projection_name	text not null
+column	keiro_projection_group_cursors.group_id	text not null
+column	keiro_projection_group_cursors.position_basis	text not null
+column	keiro_projection_group_cursors.subscription_names	text[] not null default ARRAY[]::text[]
+column	keiro_projection_group_cursors.updated_at	timestamp with time zone not null default now()
 column	keiro_projection_rebuild_adapters.adapter_order	integer not null
 column	keiro_projection_rebuild_adapters.apply_count	bigint not null default 0
 column	keiro_projection_rebuild_adapters.completed_through	bigint
@@ -297,6 +301,14 @@ constraint	keiro_projection_dedup.keiro_projection_dedup_applied_at_not_null	NOT
 constraint	keiro_projection_dedup.keiro_projection_dedup_event_id_not_null	NOT NULL event_id
 constraint	keiro_projection_dedup.keiro_projection_dedup_pkey	PRIMARY KEY (projection_name, event_id)
 constraint	keiro_projection_dedup.keiro_projection_dedup_projection_name_not_null	NOT NULL projection_name
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_basis_chk	CHECK ((position_basis = ANY (ARRAY['append'::text, 'checkpoint'::text, 'unmanaged'::text])))
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_group_id_fkey	FOREIGN KEY (group_id) REFERENCES keiro.keiro_projection_rebuild_groups(group_id) ON DELETE CASCADE
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_group_id_not_null	NOT NULL group_id
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_pkey	PRIMARY KEY (group_id)
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_position_basis_not_null	NOT NULL position_basis
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_subscription_names_chk	CHECK (((array_position(subscription_names, NULL::text) IS NULL) AND (((position_basis = 'checkpoint'::text) AND (cardinality(subscription_names) > 0)) OR ((position_basis = ANY (ARRAY['append'::text, 'unmanaged'::text])) AND (cardinality(subscription_names) = 0)))))
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_subscription_names_not_null	NOT NULL subscription_names
+constraint	keiro_projection_group_cursors.keiro_projection_group_cursors_updated_at_not_null	NOT NULL updated_at
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_adapter_order_not_null	NOT NULL adapter_order
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_apply_count_not_null	NOT NULL apply_count
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_completed_chk	CHECK (((completed_through IS NULL) OR (completed_through >= 0)))
@@ -496,6 +508,7 @@ index	keiro_outbox_source_message_id_key	CREATE UNIQUE INDEX keiro_outbox_source
 index	keiro_outbox_source_order_idx	CREATE INDEX keiro_outbox_source_order_idx ON keiro.keiro_outbox USING btree (source, created_at, outbox_id) WHERE (status <> ALL (ARRAY['sent'::text, 'dead'::text]))
 index	keiro_projection_dedup_applied_at_idx	CREATE INDEX keiro_projection_dedup_applied_at_idx ON keiro.keiro_projection_dedup USING btree (applied_at)
 index	keiro_projection_dedup_pkey	CREATE UNIQUE INDEX keiro_projection_dedup_pkey ON keiro.keiro_projection_dedup USING btree (projection_name, event_id)
+index	keiro_projection_group_cursors_pkey	CREATE UNIQUE INDEX keiro_projection_group_cursors_pkey ON keiro.keiro_projection_group_cursors USING btree (group_id)
 index	keiro_projection_rebuild_adapters_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_adapters_pkey ON keiro.keiro_projection_rebuild_adapters USING btree (run_id, source_id, projection_id)
 index	keiro_projection_rebuild_adapters_run_id_adapter_order_key	CREATE UNIQUE INDEX keiro_projection_rebuild_adapters_run_id_adapter_order_key ON keiro.keiro_projection_rebuild_adapters USING btree (run_id, adapter_order)
 index	keiro_projection_rebuild_groups_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_groups_pkey ON keiro.keiro_projection_rebuild_groups USING btree (group_id)
@@ -536,6 +549,7 @@ table	keiro_dead_letters	kind=r
 table	keiro_inbox	kind=r
 table	keiro_outbox	kind=r
 table	keiro_projection_dedup	kind=r
+table	keiro_projection_group_cursors	kind=r
 table	keiro_projection_rebuild_adapters	kind=r
 table	keiro_projection_rebuild_groups	kind=r
 table	keiro_projection_rebuild_promotion_objects	kind=r
@@ -552,3 +566,4 @@ table	keiro_timers	kind=r
 table	keiro_workflow_children	kind=r
 table	keiro_workflow_steps	kind=r
 table	keiro_workflows	kind=r
+view	keiro_read.projection_group_status_v1	columns=1:group_id text,2:lifecycle_phase text,3:reads_allowed boolean,4:writes_allowed boolean,5:serving_revision_id text,6:serving_epoch bigint,7:serving_position_basis text,8:serving_applied_position bigint,9:active_run_id text,10:candidate_revision_id text,11:candidate_rebuild_position bigint,12:candidate_rebuild_head bigint,13:query_models text[],14:rebuild_started_at timestamp with time zone,15:last_promoted_at timestamp with time zone,16:failed_at timestamp with time zone,17:failure_code text,18:failure_detail text

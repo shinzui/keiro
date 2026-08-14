@@ -101,7 +101,8 @@ renderSchemaDrift drift =
             <> actualDefinition
             <> ")"
 
--- | Read a sorted canonical snapshot of tables, columns, constraints, and indexes.
+-- | Read a sorted canonical snapshot of tables, columns, constraints, indexes,
+-- and ordered view column signatures in one schema.
 snapshotSchema :: Text -> Session Text
 snapshotSchema schema =
   Text.unlines <$> Session.statement schema schemaSnapshotStatement
@@ -111,7 +112,8 @@ expectedSchemaSnapshot :: Text
 expectedSchemaSnapshot =
   $(embedTextFile "expected-schema/native/keiro-v18.txt")
 
--- | Compare the live @keiro@ schema with the embedded PostgreSQL 18 snapshot.
+-- | Compare the live @keiro@ and @keiro_read@ schemas with the embedded
+-- PostgreSQL 18 snapshot.
 verifyExpectedSchema ::
   Settings.Settings ->
   IO (Either MigrationError [SchemaDrift])
@@ -135,7 +137,10 @@ verifyExpectedSchema settings = do
       serverVersionNumber <- Session.statement () serverVersionStatement
       let majorVersion = fromIntegral serverVersionNumber `div` 10000
       if majorVersion == (18 :: Int)
-        then Right <$> snapshotSchema "keiro"
+        then do
+          privateSchema <- snapshotSchema "keiro"
+          publicSchema <- snapshotSchema "keiro_read"
+          pure (Right (privateSchema <> publicSchema))
         else pure (Left (UnsupportedPostgresVersion majorVersion))
 
 snapshotObjects :: Text -> Map Text (Text, Text)
@@ -212,6 +217,23 @@ schemaSnapshotStatement =
         JOIN pg_namespace n ON n.oid = ct.relnamespace
         WHERE n.nspname = $1
           AND configured.search_path = 'pg_catalog'
+      UNION ALL
+      SELECT 'view' || E'\t' || n.nspname || '.' || c.relname || E'\t'
+             || 'columns='
+             || string_agg(
+                  a.attnum::text || ':' || a.attname || ' '
+                    || format_type(a.atttypid, a.atttypmod),
+                  ',' ORDER BY a.attnum
+                ) AS line
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid
+        WHERE n.nspname = $1
+          AND c.relkind = 'v'
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+          AND configured.search_path = 'pg_catalog'
+        GROUP BY n.nspname, c.relname
     ) snapshot
     ORDER BY line COLLATE "C"
     """

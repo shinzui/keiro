@@ -9,7 +9,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Either (isLeft)
 import Data.Foldable (toList)
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
 import Data.List (findIndex, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
@@ -54,7 +54,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
   describe "native Keiro migration definition" $ do
-    it "tracks twenty-five native files in manifest order" $ do
+    it "tracks twenty-six native files in manifest order" $ do
       directory <- findMigrationsDirectory
       manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
       manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -67,7 +67,7 @@ main = hspec $ do
         bytes <- ByteString.readFile (directory </> nativeName)
         lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-    it "builds component keiro with dependency kiroku and twenty-five migrations" $ do
+    it "builds component keiro with dependency kiroku and twenty-six migrations" $ do
       plan <- requirePlan
       let PlanDescription components = planDescription plan
       case toList components of
@@ -80,7 +80,7 @@ main = hspec $ do
             componentNameText keiroName `shouldBe` "keiro"
             dependencyName <- requireRight (componentName "kiroku")
             keiroDependencies `shouldBe` Set.singleton dependencyName
-            length keiroEntries `shouldBe` 25
+            length keiroEntries `shouldBe` 26
         actual -> expectationFailure ("unexpected plan description: " <> show actual)
       validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -126,7 +126,12 @@ main = hspec $ do
             )
 
   describe "migration body lint" $ do
-    let config = LintConfig {requiredQualifier = "keiro.", exemptFiles = []}
+    let config =
+          LintConfig
+            { requiredQualifier = "keiro.",
+              additionalQualifiers = ["keiro_read."],
+              exemptFiles = []
+            }
 
     it "flags an unqualified DDL target" $ do
       let violations =
@@ -143,13 +148,19 @@ main = hspec $ do
         [("9999-fixture.sql", "SET search_path TO keiro;")]
         `shouldSatisfy` (not . null)
 
+    it "accepts a versioned view in the public read schema" $ do
+      lintViolations
+        config
+        [("9999-fixture.sql", "CREATE VIEW keiro_read.status_v1 AS SELECT 1;")]
+        `shouldBe` []
+
     it "ignores comment-only mentions" $ do
       lintViolations
         config
         [("9999-fixture.sql", "-- Never set search_path in a migration.\nSELECT 1;")]
         `shouldBe` []
 
-    it "passes all 25 embedded native bodies" $ do
+    it "passes all 26 embedded native bodies" $ do
       lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
 
   describe "startup handshake" $ do
@@ -163,7 +174,7 @@ main = hspec $ do
             plan
             >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
-        length (Keiro.pendingMigrations handshake) `shouldBe` 35
+        length (Keiro.pendingMigrations handshake) `shouldBe` 36
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -189,7 +200,7 @@ main = hspec $ do
         handshake <-
           missingMigrations defaultRunOptions provider plan >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` drop 10 (planMigrationIds plan)
-        length (Keiro.pendingMigrations handshake) `shouldBe` 25
+        length (Keiro.pendingMigrations handshake) `shouldBe` 26
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -221,7 +232,9 @@ main = hspec $ do
       snapshotPath <- findNativeExpectedSchema
       regenerate <- maybe False (const True) <$> lookupEnv "KEIRO_REGENERATE_EXPECTED_SCHEMA"
       result <- withMigratedDatabase plan $ \connection -> do
-        actual <- useSession connection (snapshotSchema "keiro")
+        privateSchema <- useSession connection (snapshotSchema "keiro")
+        publicSchema <- useSession connection (snapshotSchema "keiro_read")
+        let actual = privateSchema <> publicSchema
         if regenerate
           then do
             Text.IO.writeFile snapshotPath actual
@@ -245,6 +258,7 @@ main = hspec $ do
             ( Session.script
                 """
                 DROP INDEX keiro.keiro_outbox_pending_idx;
+                DROP VIEW keiro_read.projection_group_status_v1;
                 ALTER TABLE keiro.keiro_outbox
                   ALTER COLUMN correlation_id TYPE character varying(64)
                   USING correlation_id::text;
@@ -258,6 +272,9 @@ main = hspec $ do
         rendered
           `shouldSatisfy` any
             (Text.isInfixOf "keiro_outbox.correlation_id")
+        rendered
+          `shouldSatisfy` any
+            (Text.isInfixOf "keiro_read.projection_group_status_v1")
 
   describe "fresh native databases" $ do
     it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
@@ -266,14 +283,49 @@ main = hspec $ do
         assertSchema connection
         let provider = providerFor connection
         rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 35 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 36 AlreadyApplied
         verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
         case verified of
           VerificationReport verificationIssues applied pending unknown -> do
             verificationIssues `shouldBe` []
-            length applied `shouldBe` 35
+            length applied `shouldBe` 36
             pending `shouldBe` []
             unknown `shouldBe` []
+      either (expectationFailure . show) pure result
+
+    it "publishes the frozen status shape through an isolated reader grant" $ do
+      plan <- requirePlan
+      result <- withMigratedDatabase plan $ \connection -> do
+        useSession connection (Session.script projectionStatusFixtureSql)
+        columns <-
+          useSession connection (Session.statement () projectionStatusColumnsStatement)
+        columns
+          `shouldBe` [ ("group_id", "text"),
+                       ("lifecycle_phase", "text"),
+                       ("reads_allowed", "boolean"),
+                       ("writes_allowed", "boolean"),
+                       ("serving_revision_id", "text"),
+                       ("serving_epoch", "bigint"),
+                       ("serving_position_basis", "text"),
+                       ("serving_applied_position", "bigint"),
+                       ("active_run_id", "text"),
+                       ("candidate_revision_id", "text"),
+                       ("candidate_rebuild_position", "bigint"),
+                       ("candidate_rebuild_head", "bigint"),
+                       ("query_models", "text[]"),
+                       ("rebuild_started_at", "timestamp with time zone"),
+                       ("last_promoted_at", "timestamp with time zone"),
+                       ("failed_at", "timestamp with time zone"),
+                       ("failure_code", "text"),
+                       ("failure_detail", "text")
+                     ]
+        contractHealthy <-
+          useSession connection (Session.statement () projectionStatusContractStatement)
+        contractHealthy `shouldBe` True
+        withProjectionReaderRole connection $ do
+          readerHealthy <-
+            useSession connection (Session.statement () projectionReaderFactsStatement)
+          readerHealthy `shouldBe` True
       either (expectationFailure . show) pure result
 
     it "serializes concurrent composed applies" $ do
@@ -285,7 +337,7 @@ main = hspec $ do
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
         sort [reportOutcomes first, reportOutcomes second]
-          `shouldBe` sort [replicate 35 AppliedNow, replicate 35 AlreadyApplied]
+          `shouldBe` sort [replicate 36 AppliedNow, replicate 36 AlreadyApplied]
 
     it "upgrades singleton read-model rows into deterministic rebuild groups" $ do
       fullPlan <- requirePlan
@@ -304,7 +356,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script legacyReadModelFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 31 (reportOutcomes report) `shouldBe` replicate 4 AppliedNow
+        Prelude.drop 31 (reportOutcomes report) `shouldBe` replicate 5 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () legacyGroupUpgradeStatement)
           rows
@@ -330,7 +382,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script preCanonicalRebuildFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 33 (reportOutcomes report) `shouldBe` replicate 2 AppliedNow
+        Prelude.drop 33 (reportOutcomes report) `shouldBe` replicate 3 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () preCanonicalRebuildShapeStatement)
           rows
@@ -499,7 +551,7 @@ main = hspec $ do
           `shouldBe` replicate 7 AlreadyApplied
             <> replicate 3 AppliedNow
             <> replicate 16 AlreadyApplied
-            <> replicate 9 AppliedNow
+            <> replicate 10 AppliedNow
 
         verifiedAfterUp <-
           verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
@@ -518,6 +570,145 @@ legacyReadModelFixtureSql =
     ('legacy-rebuilding', 8, 'shape-rebuilding', '2026-01-01 00:00:00+00', 'rebuilding', '2026-01-02 00:00:00+00'),
     ('legacy-abandoned', 9, 'shape-abandoned', '2026-01-01 00:00:00+00', 'abandoned', '2026-01-03 00:00:00+00');
   """
+
+projectionStatusFixtureSql :: Text
+projectionStatusFixtureSql =
+  """
+  INSERT INTO keiro.keiro_projection_rebuild_groups
+    (group_id, slice_fingerprint, status, active_run_id,
+     reads_allowed, writes_allowed, started_at)
+  VALUES
+    ('status-contract-group', 'slice-v1:status-contract', 'rebuilding',
+     'status-contract-run', false, false, '2026-08-13 12:00:00+00');
+
+  INSERT INTO keiro.keiro_projection_group_cursors
+    (group_id, position_basis, subscription_names)
+  VALUES ('status-contract-group', 'append', ARRAY[]::TEXT[]);
+
+  INSERT INTO keiro.keiro_projection_rebuild_runs
+    (run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
+     contract_fingerprint, runner_format, captured_head, page_size)
+  VALUES
+    ('status-contract-run', 'status-contract-group', 'catalog-status-contract',
+     'slice-v1:status-contract', 'contract-v2:status-contract',
+     'keiro/projection-replay/v2', 10, 100);
+
+  INSERT INTO keiro.keiro_projection_rebuild_sources
+    (run_id, source_id, source_scope, category, cursor_position, target_position)
+  VALUES
+    ('status-contract-run', 'orders', 'category', 'orders', 7, 10),
+    ('status-contract-run', 'customers', 'category', 'customers', 4, 10);
+
+  INSERT INTO keiro.keiro_read_models
+    (name, version, shape_hash, status, rebuild_group_id)
+  VALUES
+    ('orders.summary', 1, 'shape-summary', 'rebuilding', 'status-contract-group'),
+    ('orders.by-customer', 1, 'shape-by-customer', 'rebuilding', 'status-contract-group');
+  """
+
+projectionStatusColumnsStatement :: Statement () [(Text, Text)]
+projectionStatusColumnsStatement =
+  Statement.preparable
+    """
+    SELECT attribute.attname::TEXT, format_type(attribute.atttypid, attribute.atttypmod)
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = attribute.attrelid
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'keiro_read'
+      AND relation.relname = 'projection_group_status_v1'
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+    ORDER BY attribute.attnum
+    """
+    Encoders.noParams
+    ( Decoders.rowList
+        ( (,)
+            <$> column Decoders.text
+            <*> column Decoders.text
+        )
+    )
+  where
+    column = Decoders.column . Decoders.nonNullable
+
+projectionStatusContractStatement :: Statement () Bool
+projectionStatusContractStatement =
+  Statement.preparable
+    """
+    SELECT
+      lifecycle_phase = 'rebuilding'
+      AND NOT reads_allowed
+      AND NOT writes_allowed
+      AND serving_revision_id IS NULL
+      AND serving_epoch = 0
+      AND serving_position_basis = 'append'
+      AND serving_applied_position IS NULL
+      AND active_run_id = 'status-contract-run'
+      AND candidate_revision_id IS NULL
+      AND candidate_rebuild_position = 4
+      AND candidate_rebuild_head = 10
+      AND query_models = ARRAY['orders.by-customer', 'orders.summary']::TEXT[]
+      AND rebuild_started_at IS NOT NULL
+      AND last_promoted_at IS NULL
+      AND failed_at IS NULL
+      AND failure_code IS NULL
+      AND failure_detail IS NULL
+    FROM keiro_read.projection_group_status_v1
+    WHERE group_id = 'status-contract-group'
+    """
+    Encoders.noParams
+    (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+projectionReaderFactsStatement :: Statement () Bool
+projectionReaderFactsStatement =
+  Statement.preparable
+    """
+    SELECT
+      has_schema_privilege(current_user, 'keiro_read', 'USAGE')
+      AND has_table_privilege(
+        current_user,
+        'keiro_read.projection_group_status_v1',
+        'SELECT'
+      )
+      AND NOT has_schema_privilege(current_user, 'keiro', 'USAGE')
+      AND NOT has_schema_privilege(current_user, 'kiroku', 'USAGE')
+      AND (
+        SELECT count(*) = 1
+        FROM keiro_read.projection_group_status_v1
+        WHERE group_id = 'status-contract-group'
+      )
+    """
+    Encoders.noParams
+    (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+backendPidStatement :: Statement () Int32
+backendPidStatement =
+  Statement.preparable
+    "SELECT pg_backend_pid()"
+    Encoders.noParams
+    (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int4)))
+
+withProjectionReaderRole :: Connection.Connection -> IO value -> IO value
+withProjectionReaderRole connection action = do
+  backendPid <- useSession connection (Session.statement () backendPidStatement)
+  let roleName = "keiro_projection_reader_test_" <> Text.pack (show backendPid)
+      install =
+        Text.unlines
+          [ "CREATE ROLE " <> roleName <> " NOLOGIN;",
+            "GRANT USAGE ON SCHEMA keiro_read TO " <> roleName <> ";",
+            "GRANT SELECT ON keiro_read.projection_group_status_v1 TO " <> roleName <> ";",
+            "SET ROLE " <> roleName <> ";"
+          ]
+      cleanup =
+        Text.unlines
+          [ "RESET ROLE;",
+            "REVOKE ALL ON keiro_read.projection_group_status_v1 FROM " <> roleName <> ";",
+            "REVOKE ALL ON SCHEMA keiro_read FROM " <> roleName <> ";",
+            "DROP ROLE " <> roleName <> ";"
+          ]
+  useSession connection (Session.script install)
+  action `finally` useSession connection (Session.script cleanup)
 
 replayProgressFixtureSql :: Text
 replayProgressFixtureSql =
@@ -663,12 +854,12 @@ importFixture sourceSchema = do
       `shouldBe` replicate 7 AlreadyApplied
         <> replicate 3 AppliedNow
         <> replicate 16 AlreadyApplied
-        <> replicate 9 AppliedNow
+        <> replicate 10 AppliedNow
     verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
     case verifiedAfterCanaries of
       VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
     rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-    reportOutcomes rerun `shouldBe` replicate 35 AlreadyApplied
+    reportOutcomes rerun `shouldBe` replicate 36 AlreadyApplied
     second <-
       importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
         >>= requireRight
@@ -678,7 +869,7 @@ importFixture sourceSchema = do
       sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
       sourceRows `shouldBe` 23
       facts <- useSession connection (Session.statement () importFactsStatement)
-      facts `shouldBe` (35, 23, True)
+      facts `shouldBe` (36, 23, True)
 
 postCoddImportPendingIssues :: IO [VerificationIssue]
 postCoddImportPendingIssues =
@@ -699,7 +890,8 @@ postCoddImportPendingIssues =
         ("keiro", "0022"),
         ("keiro", "0023"),
         ("keiro", "0024"),
-        ("keiro", "0025")
+        ("keiro", "0025"),
+        ("keiro", "0026")
       ]
 
 assertPoisonedLedger :: Settings.Settings -> Expectation
@@ -737,7 +929,8 @@ nativeMigrationFiles =
     "0022.sql",
     "0023.sql",
     "0024.sql",
-    "0025.sql"
+    "0025.sql",
+    "0026.sql"
   ]
 
 findMigrationsDirectory :: IO FilePath
@@ -913,10 +1106,15 @@ schemaFactsStatement =
       (to_regnamespace('kiroku') IS NOT NULL),
       (to_regclass('kiroku.events') IS NOT NULL),
       (to_regnamespace('keiro') IS NOT NULL),
+      (to_regnamespace('keiro_read') IS NOT NULL),
       (to_regclass('keiro.keiro_inbox') IS NOT NULL),
       (to_regclass('keiro.keiro_outbox') IS NOT NULL),
       (to_regclass('keiro.keiro_timers') IS NOT NULL),
       (to_regclass('keiro.keiro_workflows') IS NOT NULL),
+      (to_regclass('keiro.keiro_projection_group_cursors') IS NOT NULL),
+      (to_regclass('keiro_read.projection_group_status_v1') IS NOT NULL),
+      (obj_description(to_regnamespace('keiro_read'), 'pg_namespace') =
+        'Versioned, owner-rights read contracts for out-of-process Keiro consumers.'),
       (obj_description(to_regnamespace('kiroku'), 'pg_namespace') = 'Managed by pg-migrate component kiroku through 0010'),
       (obj_description(to_regnamespace('keiro'), 'pg_namespace') = 'Managed by pg-migrate component keiro through 0017-schema-management-comment')
     ) AS checks(ok)

@@ -14,6 +14,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Added
 
+- Migration `0026.sql` publishes the frozen, owner-rights
+  `keiro_read.projection_group_status_v1` relation and private derived cursor authority.
+  The PostgreSQL 18 schema verifier now fingerprints ordered public-view column
+  signatures, and migration tests prove narrow-reader privileges and v1 null semantics.
 - Migration `0025.sql` persists projection revisions, target generations, serving
   epochs and availability, versioned run/cutover policy, relation/schema evidence,
   promotion-object mappings, replay-source progress, and Kiroku retention handles.
