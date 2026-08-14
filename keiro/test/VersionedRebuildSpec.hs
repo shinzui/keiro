@@ -325,6 +325,23 @@ spec fixture = do
         let request = versionedRequest "versioned-promote" physicalTargets
         _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
 
+        rebuildingStatus <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+        rebuildingStatus ^? _Just . #lifecyclePhase
+          `shouldBe` Just "rebuilding-versioned"
+        rebuildingStatus ^? _Just . #readsAllowed `shouldBe` Just True
+        rebuildingStatus ^? _Just . #writesAllowed `shouldBe` Just True
+        rebuildingStatus ^? _Just . #servingRevisionId
+          `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v1"))
+        rebuildingStatus ^? _Just . #servingEpoch `shouldBe` Just 0
+        rebuildingStatus ^? _Just . #activeRunId
+          `shouldBe` Just (Just (request ^. #rebuildRunId))
+        rebuildingStatus ^? _Just . #candidateRevisionId
+          `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v2"))
+        rebuildingStatus ^? _Just . #candidateRebuildPosition
+          `shouldBe` Just (Just (GlobalPosition 0))
+        rebuildingStatus ^? _Just . #candidateRebuildHead
+          `shouldBe` Just (Just (GlobalPosition 0))
+
         final <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
 
         final ^. #phase `shouldBe` VersionedPromoted
@@ -335,6 +352,17 @@ spec fixture = do
         runStatement store () promotedLifecycleFactsStmt
           `shouldReturn` ("serving-versioned", True, True, "counter-v2", 1, "promoted", 2, 2, 1)
         runStatement store () promotedCounterShapeStmt `shouldReturn` True
+        promotedStatus <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+        promotedStatus ^? _Just . #lifecyclePhase
+          `shouldBe` Just "serving-versioned"
+        promotedStatus ^? _Just . #servingRevisionId
+          `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v2"))
+        promotedStatus ^? _Just . #servingEpoch `shouldBe` Just 1
+        promotedStatus ^? _Just . #activeRunId `shouldBe` Just Nothing
+        promotedStatus ^? _Just . #candidateRevisionId `shouldBe` Just Nothing
+        promotedStatus ^? _Just . #candidateRebuildPosition `shouldBe` Just Nothing
+        promotedStatus ^? _Just . #candidateRebuildHead `shouldBe` Just Nothing
+        promotedStatus ^? _Just . #lastPromotedAt `shouldSatisfy` maybe False isJust
 
       it "converges across two replay rounds while live v1 stays serving and backfills async dedup" $ \store -> do
         setupBridge store

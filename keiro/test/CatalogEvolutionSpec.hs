@@ -64,6 +64,17 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     map (^. #currentSlice) (report ^. #groups) `shouldBe` [newSlice]
     report ^. #removedGroups `shouldBe` []
 
+    expectStore
+      store
+      ( Store.runTransaction
+          ( Tx.sql
+              "UPDATE keiro.keiro_projection_group_cursors SET position_basis = 'unmanaged', subscription_names = ARRAY[]::TEXT[] WHERE group_id = 'counter-group'"
+          )
+      )
+    beforeAdoption <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    beforeAdoption ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionUnmanaged
+
     outcome <-
       expectStore
         store
@@ -75,6 +86,9 @@ spec fixture = describe "catalog evolution adoption" $ around (withFreshStore fi
     outcome ^. #reportSchema `shouldBe` "keiro/catalog-adoption-outcome/v2"
     let adopted = outcome ^. #adoptedGroups
     map (^. #sliceFingerprint) adopted `shouldBe` [newSlice]
+    afterAdoption <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    afterAdoption ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionCheckpoint
     metadata <- expectStore store (lookupReadModel "catalog-counter-query")
     metadata ^? _Just . #version `shouldBe` Just 2
     metadata ^? _Just . #shapeHash

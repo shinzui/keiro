@@ -71,6 +71,10 @@ module Keiro.ReadModel.Rebuild
     previewCatalogAdoption,
     adoptCatalogGroups,
     lookupProjectionRebuildGroup,
+    ServingPositionBasis (..),
+    ProjectionGroupStatusV1 (..),
+    listProjectionGroupStatuses,
+    lookupProjectionGroupStatus,
     beginGroupRebuild,
     resetDeclaredSubscriptions,
     insertProjectionDedupBatchStmt,
@@ -138,6 +142,7 @@ import Keiro.Prelude
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
 import Keiro.ReadModel.Rebuild.Runner
+import Keiro.ReadModel.Rebuild.Status
 import Keiro.ReadModel.Rebuild.Versioned
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.SQL (visibleGlobalHeadPositionStmt)

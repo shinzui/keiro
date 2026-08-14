@@ -181,12 +181,28 @@ catalogReplaySpec fixture = describe "catalog replay runner" $ around (withFresh
     failedReport <- expectStore store (inspectCatalogRebuild (runId "decode-run")) >>= shouldBeRight
     map (^. #cursorPosition) (failedReport ^. #sources)
       `shouldBe` replicate 3 (GlobalPosition 0)
+    interruptedStatus <- expectStore store (lookupProjectionGroupStatus replayGroupId)
+    interruptedStatus ^? _Just . #lifecyclePhase `shouldBe` Just "rebuilding"
+    interruptedStatus ^? _Just . #readsAllowed `shouldBe` Just False
+    interruptedStatus ^? _Just . #writesAllowed `shouldBe` Just False
+    interruptedStatus ^? _Just . #activeRunId
+      `shouldBe` Just (Just (runId "decode-run"))
+    interruptedStatus ^? _Just . #candidateRebuildPosition
+      `shouldBe` Just (Just (GlobalPosition 0))
+    interruptedStatus ^? _Just . #candidateRebuildHead
+      `shouldBe` Just (Just (GlobalPosition 6))
 
     repaired <- expectValid (replayCatalog goodDecoder passingVerification)
     resumed <-
       expectStore store (resumeCatalogRebuild repaired (runId "decode-run") (options "ignored" 2))
         >>= shouldBeRight
     resumed ^. #runStatus `shouldBe` RebuildRunPromoted
+    promotedStatus <- expectStore store (lookupProjectionGroupStatus replayGroupId)
+    promotedStatus ^? _Just . #lifecyclePhase `shouldBe` Just "live"
+    promotedStatus ^? _Just . #readsAllowed `shouldBe` Just True
+    promotedStatus ^? _Just . #activeRunId `shouldBe` Just Nothing
+    promotedStatus ^? _Just . #candidateRebuildPosition `shouldBe` Just Nothing
+    promotedStatus ^? _Just . #candidateRebuildHead `shouldBe` Just Nothing
     expectStore store (Store.runTransaction (Tx.statement () tracePositionsStmt))
       `shouldReturn` [1, 2, 3, 4, 5, 6]
 

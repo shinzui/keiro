@@ -399,7 +399,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             orderProjectionSet
       pure ()
 
-    it "rebuilds an incompatible schema beside live V1 and atomically serves V2" $ \(_store, StoreRunner runner) -> do
+    it "rebuilds an incompatible schema beside live V1 and atomically serves V2" $ \(store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
       Right (Right _) <-
         runner $
@@ -441,6 +441,18 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       Right (Right started) <-
         runner $ CatalogOperations.startVersionedGroupRebuild orderCatalogOperations options
       started ^. #run . #phase `shouldBe` VersionedReplayRunning
+      externalStarted <-
+        externalProjectionStatus store (rebuildGroupIdText orderReportingGroupId)
+      externalStarted
+        `shouldSatisfy` \(phase, readable, servingRevision, epoch, activeRun, candidateRevision, candidatePosition, candidateHead) ->
+          phase == "rebuilding-versioned"
+            && readable
+            && servingRevision == Just (projectionRevisionIdText (orderReportingRevisionV1 ^. #revisionId))
+            && epoch == 0
+            && activeRun == Just (rebuildRunIdText runId)
+            && candidateRevision == Just (projectionRevisionIdText (orderReportingRevisionV2 ^. #revisionId))
+            && isJust candidatePosition
+            && isJust candidateHead
 
       Right (Right (ProjectionCommandApplied _)) <-
         runner $
@@ -470,6 +482,18 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       promoted <- drive (20 :: Int)
       promoted ^. #run . #servingRevisionId
         `shouldBe` orderReportingRevisionV2 ^. #revisionId
+      externalPromoted <-
+        externalProjectionStatus store (rebuildGroupIdText orderReportingGroupId)
+      externalPromoted
+        `shouldSatisfy` \(phase, readable, servingRevision, epoch, activeRun, candidateRevision, candidatePosition, candidateHead) ->
+          phase == "serving-versioned"
+            && readable
+            && servingRevision == Just (projectionRevisionIdText (orderReportingRevisionV2 ^. #revisionId))
+            && epoch == 1
+            && activeRun == Nothing
+            && candidateRevision == Nothing
+            && candidatePosition == Nothing
+            && candidateHead == Nothing
 
       Right (Right (ProjectionCommandApplied _)) <-
         runner $
@@ -1042,6 +1066,46 @@ recordedNotice :: Pool.Pool -> OrderId -> IO (Maybe (Text, Text))
 recordedNotice pool orderId =
   either (fail . show) pure
     =<< Pool.use pool (Session.statement (orderIdText orderId) lookupShipmentNotice)
+
+externalProjectionStatus ::
+  Store.KirokuStore ->
+  Text ->
+  IO (Text, Bool, Maybe Text, Int64, Maybe Text, Maybe Text, Maybe Int64, Maybe Int64)
+externalProjectionStatus store groupId =
+  either (fail . show) pure
+    =<< Pool.use
+      (store ^. #pool)
+      (Session.statement groupId externalProjectionStatusStmt)
+
+externalProjectionStatusStmt ::
+  Statement Text (Text, Bool, Maybe Text, Int64, Maybe Text, Maybe Text, Maybe Int64, Maybe Int64)
+externalProjectionStatusStmt =
+  preparable
+    """
+    SELECT lifecycle_phase,
+           reads_allowed,
+           serving_revision_id,
+           serving_epoch,
+           active_run_id,
+           candidate_revision_id,
+           candidate_rebuild_position,
+           candidate_rebuild_head
+    FROM keiro_read.projection_group_status_v1
+    WHERE group_id = $1
+    """
+    (E.param (E.nonNullable E.text))
+    ( D.singleRow
+        ( (,,,,,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.bool)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.int8)
+            <*> D.column (D.nullable D.int8)
+        )
+    )
 
 mainQueueDepth :: JobRuntime -> IO Int64
 mainQueueDepth runtime =

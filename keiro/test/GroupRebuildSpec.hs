@@ -34,7 +34,8 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Subscription.Types
-  ( SubscriptionCheckpointKey (..),
+  ( MissingCheckpointPolicy (FromBeginning),
+    SubscriptionCheckpointKey (..),
     SubscriptionName (..),
   )
 import Kiroku.Store.Types
@@ -77,6 +78,63 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     stored ^? _Just . #sliceFingerprint
       `shouldBe` fmap groupSliceFingerprintText (CatalogApi.groupSliceFingerprint validated Catalog.mainGroupId)
 
+  it "publishes conservative checkpoint status without reading private Kiroku storage" $ \store -> do
+    validated <- expectValid Catalog.catalogWithMissingSubscription
+    _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+
+    initial <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    initial ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionCheckpoint
+    initial ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+    initial ^? _Just . #queryModels
+      `shouldBe` Just ["catalog-audit-query", "catalog-counter-query"]
+
+    _ <-
+      expectStore
+        store
+        ( Store.initializeSubscriptionCheckpoint
+            (SubscriptionName "catalog-async-subscription")
+            0
+            FromBeginning
+        )
+        >>= shouldBeRight
+    incomplete <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    incomplete ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+
+    _ <-
+      expectStore
+        store
+        ( Store.initializeSubscriptionCheckpoint
+            (SubscriptionName "catalog-missing-subscription")
+            0
+            FromBeginning
+        )
+        >>= shouldBeRight
+    _ <-
+      expectStore
+        store
+        ( Store.runTransaction
+            ( Store.resetSubscriptionCheckpointsTx
+                (SubscriptionName "catalog-async-subscription" :| [])
+                (GlobalPosition 8)
+            )
+        )
+    _ <-
+      expectStore
+        store
+        ( Store.runTransaction
+            ( Store.resetSubscriptionCheckpointsTx
+                (SubscriptionName "catalog-missing-subscription" :| [])
+                (GlobalPosition 5)
+            )
+        )
+
+    complete <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    complete ^? _Just . #servingAppliedPosition
+      `shouldBe` Just (Just (GlobalPosition 5))
+    statuses <- expectStore store listProjectionGroupStatuses
+    map (^. #groupId) statuses `shouldBe` [Catalog.mainGroupId]
+
   it "registers an additive catalog without disturbing the existing group slice" $ \store -> do
     current <- expectValid Catalog.validCatalog
     additive <- expectValid Catalog.additiveCatalog
@@ -101,6 +159,10 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
       `shouldBe` Just (rebuildGroupIdText Catalog.mainGroupId)
     newQuery ^? _Just . #rebuildGroupId
       `shouldBe` Just (rebuildGroupIdText Catalog.additiveGroupId)
+    additiveStatus <- expectStore store (lookupProjectionGroupStatus Catalog.additiveGroupId)
+    additiveStatus ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionAppend
+    additiveStatus ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
 
   it "prepares a mixed preserve-parent/clear-child group and derives reset state" $ \store -> do
     expectStore store (Store.runTransaction (Tx.sql mixedFixtureSql))
@@ -123,6 +185,15 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
       `shouldBe` [ SubscriptionCheckpointKey (SubscriptionName "catalog-async-subscription") 0,
                    SubscriptionCheckpointKey (SubscriptionName "catalog-async-subscription") 1
                  ]
+    rebuildingStatus <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    rebuildingStatus ^? _Just . #lifecyclePhase `shouldBe` Just "rebuilding"
+    rebuildingStatus ^? _Just . #readsAllowed `shouldBe` Just False
+    rebuildingStatus ^? _Just . #writesAllowed `shouldBe` Just False
+    rebuildingStatus ^? _Just . #activeRunId
+      `shouldBe` Just (Just (runId "mixed-run"))
+    rebuildingStatus ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+    rebuildingStatus ^? _Just . #candidateRevisionId `shouldBe` Just Nothing
+    rebuildingStatus ^? _Just . #candidateRebuildPosition `shouldBe` Just Nothing
     facts <- expectStore store (Store.runTransaction (Tx.statement () preparationFactsStmt))
     facts `shouldBe` (1, 0, 0, 2, 3)
 
@@ -144,6 +215,11 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
         >>= shouldBeRight
     abandoned ^. #status `shouldBe` GroupFailed
     abandoned ^. #failureCode `shouldBe` Just "verification-failed"
+    failedStatus <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    failedStatus ^? _Just . #lifecyclePhase `shouldBe` Just "failed"
+    failedStatus ^? _Just . #readsAllowed `shouldBe` Just False
+    failedStatus ^? _Just . #failureCode
+      `shouldBe` Just (Just "verification-failed")
     secondAbandon <-
       expectStore
         store

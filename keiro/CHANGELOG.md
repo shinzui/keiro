@@ -8,6 +8,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- `ProjectionGroupStatusV1`, `ServingPositionBasis`,
+  `listProjectionGroupStatuses`, and `lookupProjectionGroupStatus` decode the frozen
+  public SQL status contract. Catalog registration and reviewed adoption now reconcile
+  per-group append/checkpoint cursor authority transactionally.
 - Projection catalogs now declare executable `ProjectionRevision` bridges, total
   `PhysicalTargets` mappings, per-target schema/provisioner/validator contracts, and
   ordered promotion names. Canonical identity advances to `catalog-v4:` and

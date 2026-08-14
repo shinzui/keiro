@@ -348,6 +348,7 @@ registerProjectionCatalogTx catalog = do
       case revisionsResult of
         Left err -> Tx.condemn $> Left err
         Right () -> do
+          reconcileCursorAuthorities groupIds
           queriesResult <- registerQueries queryRegistrations
           case queriesResult of
             Left err -> Tx.condemn $> Left err
@@ -364,6 +365,12 @@ registerProjectionCatalogTx catalog = do
       | revision <- catalogInventory catalog ^. #inventoryProjectionRevisions
       ]
     queryRegistrations = catalogRegistrations catalog
+
+    reconcileCursorAuthorities =
+      traverse_ $ \groupId ->
+        Tx.statement
+          (cursorAuthorityParams catalog groupId)
+          upsertGroupCursorAuthorityStmt
 
     registerGroups accumulated = \case
       [] -> pure (Right (Prelude.reverse accumulated))
@@ -550,6 +557,10 @@ adoptCatalogGroups catalog requested =
                   (rebuildGroupIdText groupId, projectionRevisionIdText revisionId, slice)
                   adoptProjectionRevisionStmt
               )
+          for_ groupIds $ \groupId ->
+            Tx.statement
+              (cursorAuthorityParams catalog groupId)
+              upsertGroupCursorAuthorityStmt
           registrationResults <- traverse (reconcileRegistration lockedGroups) registrations
           boundRows <- Tx.statement (rebuildGroupIdText <$> groupIds) lockGroupRegistrationsStmt
           let groupByText = Map.fromList [(rebuildGroupIdText groupId, groupId) | groupId <- groupIds]
@@ -640,6 +651,37 @@ sliceTextFor catalog groupId =
     (error "sliceTextFor: catalog inventory group has no slice")
     groupSliceFingerprintText
     (groupSliceFingerprint catalog groupId)
+
+cursorAuthorityParams ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  (Text, Text, [Text])
+cursorAuthorityParams catalog groupId =
+  ( rebuildGroupIdText groupId,
+    if null subscriptionNames then "append" else "checkpoint",
+    subscriptionNames
+  )
+  where
+    inventory = catalogInventory catalog
+    subscriptionNamesById =
+      Map.fromList
+        [ (subscription ^. #subscriptionId, subscription ^. #subscriptionName)
+        | subscription <- inventory ^. #inventorySubscriptions
+        ]
+    subscriptionIds =
+      Set.fromList
+        [ subscriptionId
+        | projection <- inventory ^. #inventoryProjections,
+          projection ^. #rebuildGroupId == groupId,
+          Catalog.InventoryAsyncHandler _ subscriptionId _ <- projection ^. #handlers
+        ]
+    subscriptionNames =
+      List.sort
+        [ fromMaybe
+            (error "cursorAuthorityParams: validated handler has no subscription")
+            (Map.lookup subscriptionId subscriptionNamesById)
+        | subscriptionId <- Set.toList subscriptionIds
+        ]
 
 lookupProjectionRebuildGroup ::
   (Store :> es) =>
@@ -1055,6 +1097,25 @@ registerProjectionRevisionStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.singleRow (D.column (D.nonNullable D.text)))
+
+upsertGroupCursorAuthorityStmt :: Statement (Text, Text, [Text]) ()
+upsertGroupCursorAuthorityStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_group_cursors
+      (group_id, position_basis, subscription_names)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (group_id) DO UPDATE
+      SET position_basis = EXCLUDED.position_basis,
+          subscription_names = EXCLUDED.subscription_names,
+          updated_at = now()
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+    )
+    D.noResult
 
 adoptProjectionRevisionStmt :: Statement (Text, Text, Text) ()
 adoptProjectionRevisionStmt =
