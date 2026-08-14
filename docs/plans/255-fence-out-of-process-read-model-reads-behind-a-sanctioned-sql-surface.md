@@ -45,7 +45,7 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
 
 ## Progress
 
-- [ ] M1: runtime read-contract declarations, version/shape/revision validation,
+- [x] (2026-08-14T03:56:13Z) M1: runtime read-contract declarations, version/shape/revision validation,
   canonical fingerprints, managed-object identity, and rolling-definition diagnostics
   are implemented and tested.
 - [ ] M2: migration and registration reconciliation install the stable guard,
@@ -77,6 +77,14 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   consume persisted `reads_allowed` and contract compatibility, not lifecycle names.
 - A single unversioned function cannot serve mutually incompatible row shapes. Physical
   atomicity does not remove the need for consumer-contract migration.
+- EP-1's placeholder catalog edge retained only contract ID and compatible revisions.
+  Replacing it with the complete declaration necessarily advances canonical catalog
+  identity from `catalog-v4`/`slice-v3` to `catalog-v5`/`slice-v4`; the existing
+  preview-and-adopt workflow is the supported pre-0.12 transition for stored slices.
+- An all-row wrapper cannot safely declare `RETURNS SETOF` using the serving table's row
+  type because PostgreSQL binds that signature to the table OID that promotion retires.
+  Both all-row and keyed contracts therefore name a stable result composite type; the
+  physical binding remains private and replaceable.
 
 
 ## Decision Log
@@ -123,12 +131,30 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   Rationale: Keiro documents exact least-privilege grants but does not create roles or
   assume role-management authority in migrations.
   Date: 2026-08-13
+- Decision: Both all-row and keyed public wrappers declare an application-visible,
+  schema-qualified result composite type, while Keiro owns the guarded wrapper and
+  private generation binding.
+  Rationale: a named contract type makes the public function signature independent of
+  the physical serving table OID and gives registration an immutable result signature
+  to fingerprint and verify.
+  Date: 2026-08-14
+- Decision: Advance canonical identity to `catalog-v5:` and `slice-v4:` when the full
+  external read declaration replaces EP-1's compatibility placeholder.
+  Rationale: contract version, query/result shape, SQL signature, implementation
+  identity/version, compatibility set, and surface generation are durable owning-slice
+  facts under ADR-32 and cannot be added under the old prefix.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
 
 Architecture review changed the plan from a guard-plus-public-view convention into a
-privilege-enforced, versioned function contract. Implementation remains Not Started.
+privilege-enforced, versioned function contract. Milestone 1 is complete: the validated
+catalog now owns full all-row/keyed declarations, stable SQL result signatures,
+deterministic diagnostics, evolution inventory, and `catalog-v5`/`slice-v4` identity.
+The focused evidence is 24 catalog examples, 7 canonical-preimage examples, a complete
+workspace build, and strict validation of 35 ADR concepts. Database reconciliation,
+language-5 syntax, cutover integration, and final release evidence remain.
 
 
 ## Context and Orientation
@@ -179,6 +205,7 @@ data ExternalReadContract
       { contractId :: ExternalReadContractId
       , contractVersion :: ExternalReadContractVersion
       , queryModelName :: Text
+      , resultContractType :: QualifiedType
       , resultShapeHash :: Text
       , compatibleRevisions :: NonEmpty ProjectionRevisionId
       , surfaceGeneration :: Int
@@ -435,3 +462,8 @@ external access, versions reader contracts independently from physical generatio
 checks revision and shape compatibility, supports efficient keyed inner implementations,
 reconciles managed objects individually, and prevents rolling registrations from
 downgrading the surface.
+
+Revised 2026-08-14 after Milestone 1 implementation. The runtime contract now gives
+both access modes a stable qualified result type, replaces EP-1's placeholder revision
+edge with the complete validated declaration, and records the required
+`catalog-v5`/`slice-v4` canonical identity cutover.

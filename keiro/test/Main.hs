@@ -14626,7 +14626,7 @@ catalogInlineProjectionCatalog =
         [ catalogInlineProjectionRevision catalogInlineRevisionV1Id 101,
           catalogInlineProjectionRevision catalogInlineRevisionV2Id 202
         ],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

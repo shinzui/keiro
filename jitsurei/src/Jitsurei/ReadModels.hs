@@ -251,7 +251,7 @@ jitsureiProjectionCatalogDefinition =
             }
         ],
       projectionRevisions = [orderReportingRevisionV1, orderReportingRevisionV2],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions =
         [ SubscriptionDeclaration
             { subscriptionId = orderAuditSubscriptionId,

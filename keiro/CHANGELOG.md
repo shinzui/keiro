@@ -8,14 +8,17 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- Projection catalogs now declare versioned all-row and keyed external read contracts,
+  including validated query/shape/revision compatibility, immutable SQL signatures,
+  application-owned keyed implementation identity, and monotonic surface generations.
+  Canonical identity advances to `catalog-v5:` and `slice-v4:`.
 - `ProjectionGroupStatusV1`, `ServingPositionBasis`,
   `listProjectionGroupStatuses`, and `lookupProjectionGroupStatus` decode the frozen
   public SQL status contract. Catalog registration and reviewed adoption now reconcile
   per-group append/checkpoint cursor authority transactionally.
 - Projection catalogs now declare executable `ProjectionRevision` bridges, total
   `PhysicalTargets` mappings, per-target schema/provisioner/validator contracts, and
-  ordered promotion names. Canonical identity advances to `catalog-v4:` and
-  `slice-v3:`. Candidate Language 5 accepts `projection-revision` blocks and scaffolds
+  ordered promotion names. Candidate Language 5 accepts `projection-revision` blocks and scaffolds
   transaction-local provision, validation, live, replay, and verification holes.
 - `Keiro.ReadModel.Rebuild` now implements durable schema-versioned target generations,
   converging candidate replay beside a live serving revision, renewable Kiroku history

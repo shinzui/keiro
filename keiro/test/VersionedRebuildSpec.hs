@@ -544,7 +544,7 @@ spec fixture = do
         contractBlocked ^. #droppable `shouldBe` False
 
         noContractCatalog <-
-          fst <$> validatedBridgeFrom (runtimeBridgeCatalog {readContractRevisionReferences = []})
+          fst <$> validatedBridgeFrom (runtimeBridgeCatalog {externalReadContracts = []})
         dependencyBlocked <-
           expectStore
             store
@@ -667,7 +667,7 @@ runtimeV1OnlyCatalog :: ProjectionCatalog
 runtimeV1OnlyCatalog =
   runtimeBridgeCatalog
     { projectionRevisions = [runtimeRevision "v1" bridgeRevisionV1],
-      readContractRevisionReferences = []
+      externalReadContracts = []
     }
 
 cloneBridgeCatalog :: ProjectionCatalog

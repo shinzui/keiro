@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
 description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires scoped registry-complete transactional adoption, and gives pre-canonical runs a fenced recovery path.
-timestamp: 2026-08-13T17:46:56Z
+timestamp: 2026-08-14T03:50:00Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -43,7 +43,7 @@ Keiro hashes a typed canonical preimage tree. Text nodes encode their UTF-8 byte
 length before their bytes; list and record nodes encode a distinguishing tag,
 child count, and recursively encoded children. Every structural boundary is
 therefore recoverable without delimiter escaping. Whole-catalog fingerprints
-use the `catalog-v4:` prefix and group-slice fingerprints use `slice-v3:`.
+use the `catalog-v5:` prefix and group-slice fingerprints use `slice-v4:`.
 Prefix changes are mandatory when the canonical identity contract changes.
 
 A group slice contains only the normalized catalog facts that can affect that
@@ -62,7 +62,7 @@ second fingerprint field. Changing an authoritative owner or observed-target fac
 changes the owning catalog/group identity, while merely adding or reading the derived
 accessor changes no fingerprint or format prefix.
 
-The preceding v3/v2 revision normalized a projection declaration's set-valued owned targets and
+The preceding v4/v3 revision normalized a projection declaration's set-valued owned targets and
 adds each query's normalized freshness plus optional resolved subscription identity to
 the whole catalog and owning group slice. Immediate query models serialize no cursor
 when none is unambiguously available. Waiting query models serialize the one cursor
@@ -89,7 +89,7 @@ registered non-legacy groups absent from the new catalog. Adoption accepts a
 non-empty set of reviewed group IDs, sorts and deduplicates them, locks and
 validates the entire set before updating anything, requires every row to be
 registered and `live`, except that a `failed` group whose stored fingerprint
-lacks the canonical `slice-v3:` prefix is also adoptable while remaining
+lacks the canonical `slice-v4:` prefix is also adoptable while remaining
 fenced. Every other non-live group, including a canonical `failed` group, is
 refused. Adoption then updates group slices and reconciles every in-scope query
 registration in the same transaction: an existing row is updated, a missing row
@@ -140,21 +140,23 @@ against the previous group slice cannot be resumed or adopted in place;
 operators complete it with the old runtime or explicitly abandon it before upgrading,
 then preview and adopt the group metadata.
 
-The v4 contract revision adds replay-adapter application order without changing catalog
+The v4 replay-contract revision adds replay-adapter application order without changing catalog
 or group-slice identity. Stored `contract-v3:` values and
 `keiro/projection-replay/v3` runs are refused on resume by the v4 runner. Because the
 0.12 formats remain unreleased, there is no migration: complete a persisted run with the
 old runtime or abandon it. Abandon compares slices, so it remains available across this
 contract break when the catalog's group slice is unchanged.
 
-ADR 0034 adds projection revisions and physical target generations. The v4/v3
+ADR 0034 adds projection revisions and physical target generations. The v5/v4
 pre-0.12 canonical format includes, in the owning group slice, projection
 revision identity, target schema version, provisioner and validator identity/version,
-expected shape identity, ordered canonical promotion-object mapping, handler/replay/
-verification identity, and compatible revision references from read contracts.
-Versioned external read contracts add their remaining contract identity/version, result
-shape, immutable SQL signature, implementation identity, and surface generation when
-that surface lands. Function closures and observed database OIDs remain excluded: the
+expected shape identity, ordered canonical promotion-object mapping, and handler/replay/
+verification identity. Versioned external read contracts add their complete contract
+identity/version, query and rebuild-group binding, generated public function name,
+all-row or keyed mode, ordered argument and result type signature, private implementation
+identity/version, result shape, compatible revision set, and surface generation. Reordering
+the compatible revision set is identity-neutral; changing membership changes only the owning
+group slice and whole-catalog provenance. Function closures and observed database OIDs remain excluded: the
 former are not canonical data and the latter are run-specific evidence. Each active
 rebuild run separately persists candidate revision, observed schema fingerprint,
 relation identity, ordered adapters, and runner format in its resume contract. This is
@@ -199,6 +201,10 @@ can never be used to reinterpret an existing run.
   owning group slices and whole-catalog provenance, while run-specific relation OIDs and
   observed schema evidence belong to resume/cutover identity rather than catalog
   identity.
+- The v5/v4 pre-0.12 catalog cutover makes every stored `slice-v3:` registration stale;
+  operators use the existing preview-and-adopt workflow after ensuring no old-format run
+  remains active. The bump is required because the earlier placeholder stored only contract
+  ID and compatible revisions, not the public SQL signature or deployment generation.
 
 
 ## Alternatives considered

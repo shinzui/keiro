@@ -420,11 +420,10 @@ spec = describe "Keiro.Projection.Catalog" $ do
           invalid =
             bridgeCatalog
               { projectionRevisions = [malformedV1, partialV2, bridgeRevisionV2],
-                readContractRevisionReferences =
-                  [ ReadContractRevisionReference
-                      "counter-reader"
-                      (revision "counter-v3" :| [])
-                      (site "catalog:counter-reader")
+                externalReadContracts =
+                  [ counterReadContract
+                      & #compatibleRevisions
+                      .~ (revision "counter-v3" :| [])
                   ]
               }
           diagnostics = diagnosticsFor invalid
@@ -463,6 +462,116 @@ spec = describe "Keiro.Projection.Catalog" $ do
         when (groupSliceFingerprint changed mainGroupId == groupSliceFingerprint baseline mainGroupId) $
           expectationFailure ("group slice fingerprint ignored revision " <> label <> " identity")
 
+  describe "external read contracts" $ do
+    it "validates and inventories a versioned all-row contract canonically" $ do
+      validated <- expectValid bridgeCatalog
+      catalogExternalReadContracts validated `shouldBe` [counterReadContract]
+      case catalogInventory validated ^. #inventoryExternalReadContracts of
+        [contract] -> do
+          contract ^. #readContractId `shouldBe` identityOrError mkExternalReadContractId "counter_reader"
+          contract ^. #contractVersion `shouldBe` ExternalReadContractVersion 1
+          contract ^. #functionName `shouldBe` "counter_reader_v1"
+          contract ^. #resultShapeHash `shouldBe` "catalog-counter-query-v1"
+          NonEmpty.toList (contract ^. #compatibleRevisions)
+            `shouldBe` [revision "counter-v1", revision "counter-v2"]
+        contracts -> expectationFailure ("unexpected contracts: " <> show contracts)
+
+      let reorderedContract = counterReadContract & #compatibleRevisions %~ NonEmpty.reverse
+      reordered <- expectValid (bridgeCatalog {externalReadContracts = [reorderedContract]})
+      catalogInventory reordered `shouldBe` catalogInventory validated
+      catalogFingerprint reordered `shouldBe` catalogFingerprint validated
+      groupSliceFingerprint reordered mainGroupId
+        `shouldBe` groupSliceFingerprint validated mainGroupId
+
+    it "accumulates query, shape, revision, SQL, collision, generation, and immutable-signature diagnostics" $ do
+      let unknownQuery = counterReadContract & #queryModelId .~ queryModel "missing-query"
+          wrongShape = counterReadContract & #resultShapeHash .~ "counter-v2-shape"
+          unknownRevision = counterReadContract & #compatibleRevisions .~ (revision "missing" :| [])
+          wrongOwnerCatalog =
+            bridgeCatalog
+              { projectionRevisions =
+                  [ bridgeRevisionV1,
+                    bridgeRevisionV2 & #rebuildGroup .~ otherGroupId
+                  ],
+                externalReadContracts =
+                  [ counterReadContract
+                      & #compatibleRevisions
+                      .~ (revision "counter-v2" :| [])
+                  ]
+              }
+          unsafeContract =
+            keyedCounterContractWith
+              "Unsafe-Reader"
+              [SqlFunctionArgument "bad-name" (QualifiedSqlType "pg_catalog" "text[]")]
+              (QualifiedSqlType "app_contract" "counter_row_v1")
+              (QualifiedFunction "app_private" "lookup_counter")
+              1
+          duplicateAndDrift = [counterReadContract, keyedCounterContract]
+          sharedImplementation = QualifiedFunction "app_private" "lookup_counter"
+          implementationCollision =
+            [ keyedCounterContract & #readContractId .~ identityOrError mkExternalReadContractId "counter_reader_one",
+              keyedCounterContractWith
+                "counter_reader_two"
+                [SqlFunctionArgument "counter_id" (QualifiedSqlType "pg_catalog" "text")]
+                (QualifiedSqlType "app_contract" "counter_row_v1")
+                sharedImplementation
+                1
+            ]
+          generationRegression =
+            [ counterReadContract & #surfaceGeneration .~ 2,
+              counterReadContract
+                & #contractVersion
+                .~ ExternalReadContractVersion 2
+                & #surfaceGeneration
+                .~ 1
+            ]
+          codesFor contracts = map (^. #diagnosticCode) (diagnosticsFor (bridgeCatalog {externalReadContracts = contracts}))
+      codesFor [unknownQuery] `shouldSatisfy` List.elem UnknownExternalReadQueryModel
+      codesFor [wrongShape] `shouldSatisfy` List.elem ExternalReadShapeMismatch
+      codesFor [unknownRevision] `shouldSatisfy` List.elem UnknownRevisionReference
+      map (^. #diagnosticCode) (diagnosticsFor wrongOwnerCatalog)
+        `shouldSatisfy` List.elem ExternalReadRevisionOwnershipMismatch
+      codesFor [unsafeContract] `shouldSatisfy` List.elem InvalidExternalReadSqlIdentifier
+      codesFor [unsafeContract] `shouldSatisfy` List.elem InvalidExternalReadSqlType
+      codesFor duplicateAndDrift `shouldSatisfy` List.elem DuplicateExternalReadContractVersion
+      codesFor duplicateAndDrift `shouldSatisfy` List.elem DuplicateExternalReadFunctionName
+      codesFor duplicateAndDrift `shouldSatisfy` List.elem ExternalReadImmutableSignatureDrift
+      codesFor implementationCollision `shouldSatisfy` List.elem ExternalReadImplementationCollision
+      codesFor generationRegression `shouldSatisfy` List.elem ExternalReadSurfaceGenerationRegression
+
+    it "fingerprints every contract fact in only the owning group slice" $ do
+      baseline <- expectValid bridgeCatalog
+      let variants =
+            [ counterReadContract & #readContractId .~ identityOrError mkExternalReadContractId "counter_reader_renamed",
+              counterReadContract & #contractVersion .~ ExternalReadContractVersion 2,
+              counterReadContract & #compatibleRevisions .~ (revision "counter-v2" :| []),
+              counterReadContract & #surfaceGeneration .~ 2,
+              keyedCounterContract,
+              keyedCounterContractWith
+                "counter_reader"
+                [SqlFunctionArgument "counter_id" (QualifiedSqlType "pg_catalog" "text")]
+                (QualifiedSqlType "app_contract" "counter_row_v1")
+                (QualifiedFunction "app_private" "lookup_counter")
+                2,
+              keyedCounterContractWith
+                "counter_reader"
+                [SqlFunctionArgument "counter_id" (QualifiedSqlType "pg_catalog" "uuid")]
+                (QualifiedSqlType "app_contract" "counter_row_v1")
+                (QualifiedFunction "app_private" "lookup_counter")
+                1,
+              keyedCounterContractWith
+                "counter_reader"
+                [SqlFunctionArgument "counter_id" (QualifiedSqlType "pg_catalog" "text")]
+                (QualifiedSqlType "app_contract" "counter_row_v2")
+                (QualifiedFunction "app_private" "lookup_counter")
+                1
+            ]
+      for_ variants $ \contract -> do
+        changed <- expectValid (bridgeCatalog {externalReadContracts = [contract]})
+        catalogFingerprint changed `shouldNotBe` catalogFingerprint baseline
+        groupSliceFingerprint changed mainGroupId
+          `shouldNotBe` groupSliceFingerprint baseline mainGroupId
+
   it "keeps baseline removal comparison separate from single-catalog validity" $ do
     previous <- expectValid validCatalog
     current <- expectValid smallerCatalog
@@ -473,6 +582,12 @@ spec = describe "Keiro.Projection.Catalog" $ do
     currentWithoutBridge <- expectValid validCatalog
     compareCatalogBaseline (catalogInventory previousBridge) (catalogInventory currentWithoutBridge)
       `shouldSatisfy` List.elem (ProjectionRevisionRemoved (revision "counter-v1"))
+    compareCatalogBaseline (catalogInventory previousBridge) (catalogInventory currentWithoutBridge)
+      `shouldSatisfy` List.elem
+        ( ExternalReadContractRemoved
+            (identityOrError mkExternalReadContractId "counter_reader")
+            (ExternalReadContractVersion 1)
+        )
 
   it "does not invoke an effectful callback for an invalid catalog" $ do
     effects <- newIORef (0 :: Int)
@@ -533,7 +648,7 @@ validCatalog =
       targets = [counterTarget, auditTarget],
       rebuildGroups = [validGroup],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [catalogSubscription],
       dedupKeys = [catalogDedup],
       queryModels =
@@ -547,12 +662,45 @@ bridgeCatalog :: ProjectionCatalog
 bridgeCatalog =
   validCatalog
     { projectionRevisions = [bridgeRevisionV1, bridgeRevisionV2],
-      readContractRevisionReferences =
-        [ ReadContractRevisionReference
-            "counter-reader"
-            (revision "counter-v1" :| [revision "counter-v2"])
-            (site "catalog:counter-reader")
-        ]
+      externalReadContracts = [counterReadContract]
+    }
+
+counterReadContract :: ExternalReadContract
+counterReadContract =
+  AllRowsExternalRead
+    { readContractId = identityOrError mkExternalReadContractId "counter_reader",
+      contractVersion = ExternalReadContractVersion 1,
+      queryModelId = counterQueryId,
+      resultContractType = QualifiedSqlType "app_contract" "counter_row_v1",
+      resultShapeHash = "catalog-counter-query-v1",
+      compatibleRevisions = revision "counter-v1" :| [revision "counter-v2"],
+      surfaceGeneration = 1,
+      claimSite = site "catalog:counter-reader"
+    }
+
+keyedCounterContract :: ExternalReadContract
+keyedCounterContract =
+  keyedCounterContractWith
+    "counter_reader"
+    [SqlFunctionArgument "counter_id" (QualifiedSqlType "pg_catalog" "text")]
+    (QualifiedSqlType "app_contract" "counter_row_v1")
+    (QualifiedFunction "app_private" "lookup_counter")
+    1
+
+keyedCounterContractWith :: Text -> [SqlFunctionArgument] -> QualifiedSqlType -> QualifiedFunction -> Int -> ExternalReadContract
+keyedCounterContractWith identity functionArguments resultType implementation implementationVersion =
+  KeyedExternalRead
+    { readContractId = identityOrError mkExternalReadContractId identity,
+      contractVersion = ExternalReadContractVersion 1,
+      queryModelId = counterQueryId,
+      arguments = functionArguments,
+      resultContractType = resultType,
+      privateImplementation = implementation,
+      privateImplementationVersion = implementationVersion,
+      resultShapeHash = "catalog-counter-query-v1",
+      compatibleRevisions = revision "counter-v1" :| [revision "counter-v2"],
+      surfaceGeneration = 1,
+      claimSite = site "catalog:counter-reader-keyed"
     }
 
 bridgeRevisionV1 :: ProjectionRevision
@@ -866,7 +1014,7 @@ reverseCatalog catalog =
       targets = reverse (catalog ^. #targets),
       rebuildGroups = reverse (catalog ^. #rebuildGroups),
       projectionRevisions = reverse (catalog ^. #projectionRevisions),
-      readContractRevisionReferences = reverse (catalog ^. #readContractRevisionReferences),
+      externalReadContracts = reverse (catalog ^. #externalReadContracts),
       subscriptions = reverse (catalog ^. #subscriptions),
       dedupKeys = reverse (catalog ^. #dedupKeys),
       queryModels = reverse (catalog ^. #queryModels),

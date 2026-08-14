@@ -652,7 +652,7 @@ replayCatalog decoder verification =
             }
         ],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
@@ -758,7 +758,7 @@ redeliveryCatalogWithReplayability projectionKind verification replayable =
             }
         ],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions =
         [ SubscriptionDeclaration
             { subscriptionId = auditSubscriptionId,
@@ -956,7 +956,7 @@ pairCatalog swapOrder decoder =
             }
         ],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],

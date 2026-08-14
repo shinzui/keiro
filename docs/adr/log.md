@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-14
+* **Update**: Advance catalog/slice identity to v5/v4 and include the complete versioned external-read SQL contract (plan 255).
 * **Update**: Bind online serving and candidate lifecycle to the frozen public status vocabulary (plan 254).
 * **Update**: Persist catalog-derived group cursor authority during registration and adoption (plan 254).
 * **Update**: Cover ordered public-view signatures in live schema verification (plan 254).

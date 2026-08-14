@@ -83,6 +83,8 @@ import Keiro.Projection.Catalog
     catalogFingerprintText,
     catalogInventory,
     catalogProjectionRevision,
+    externalReadContractIdText,
+    externalReadContractVersionValue,
     groupSliceFingerprint,
     groupSliceFingerprintText,
     mkPhysicalTargets,
@@ -1591,9 +1593,11 @@ previewRetiredGenerationTx catalog generation
 
 generationReadContracts :: ValidatedProjectionCatalog -> ProjectionRevisionId -> [Text]
 generationReadContracts catalog revisionId =
-  [ reference ^. #readContractId
-  | reference <- catalogInventory catalog ^. #inventoryReadContractRevisionReferences,
-    revisionId `elem` NonEmpty.toList (reference ^. #compatibleRevisions)
+  [ externalReadContractIdText (contract ^. #readContractId)
+      <> "/v"
+      <> Text.pack (show (externalReadContractVersionValue (contract ^. #contractVersion)))
+  | contract <- catalogInventory catalog ^. #inventoryExternalReadContracts,
+    revisionId `elem` NonEmpty.toList (contract ^. #compatibleRevisions)
   ]
 
 retiredDropBlockers :: VersionedRetiredGenerationPreview -> [Text]

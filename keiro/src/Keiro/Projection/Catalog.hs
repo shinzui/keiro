@@ -23,6 +23,8 @@ module Keiro.Projection.Catalog
     SubscriptionId,
     DedupKeyId,
     ProjectionRevisionId,
+    ExternalReadContractId,
+    ExternalReadContractVersion (..),
     TargetGenerationId (..),
     TargetSchemaVersion (..),
     ClaimSite,
@@ -35,6 +37,7 @@ module Keiro.Projection.Catalog
     mkSubscriptionId,
     mkDedupKeyId,
     mkProjectionRevisionId,
+    mkExternalReadContractId,
     mkClaimSite,
     projectionIdText,
     targetIdText,
@@ -44,6 +47,8 @@ module Keiro.Projection.Catalog
     subscriptionIdText,
     dedupKeyIdText,
     projectionRevisionIdText,
+    externalReadContractIdText,
+    externalReadContractVersionValue,
     claimSiteText,
 
     -- * Declarations
@@ -63,7 +68,11 @@ module Keiro.Projection.Catalog
     RevisionReplayAdapter (..),
     RevisionVerification (..),
     ProjectionRevision (..),
-    ReadContractRevisionReference (..),
+    QualifiedFunction (..),
+    QualifiedSqlType (..),
+    SqlFunctionArgument (..),
+    ExternalReadContract (..),
+    externalReadFunctionName,
     TargetResetPolicy (..),
     TargetDeclaration (..),
     RebuildVerification (..),
@@ -113,7 +122,8 @@ module Keiro.Projection.Catalog
     InventoryTargetProvisioner (..),
     InventoryRevisionHandler (..),
     InventoryProjectionRevision (..),
-    InventoryReadContractRevisionReference (..),
+    ExternalReadContractKind (..),
+    InventoryExternalReadContract (..),
     ProjectionHandlerCapability (..),
     ResolvedQuerySupply (..),
     CatalogFingerprint,
@@ -142,6 +152,7 @@ module Keiro.Projection.Catalog
     catalogRegistrations,
     catalogProjectionRevisions,
     catalogProjectionRevision,
+    catalogExternalReadContracts,
     asyncProjectionRegistrations,
     catalogAsyncIdempotencyKeys,
     replayAdapterMetadata,
@@ -210,6 +221,12 @@ newtype DedupKeyId = DedupKeyId Text
 newtype ProjectionRevisionId = ProjectionRevisionId Text
   deriving stock (Eq, Ord, Show, Generic)
 
+newtype ExternalReadContractId = ExternalReadContractId Text
+  deriving stock (Eq, Ord, Show, Generic)
+
+newtype ExternalReadContractVersion = ExternalReadContractVersion Int
+  deriving stock (Eq, Ord, Show, Generic)
+
 newtype TargetGenerationId = TargetGenerationId UUID
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -249,6 +266,9 @@ mkDedupKeyId = mkIdentity DedupKeyId
 mkProjectionRevisionId :: Text -> Either CatalogIdentityError ProjectionRevisionId
 mkProjectionRevisionId = mkIdentity ProjectionRevisionId
 
+mkExternalReadContractId :: Text -> Either CatalogIdentityError ExternalReadContractId
+mkExternalReadContractId = mkIdentity ExternalReadContractId
+
 mkClaimSite :: Text -> Either CatalogIdentityError ClaimSite
 mkClaimSite = mkIdentity ClaimSite
 
@@ -275,6 +295,12 @@ dedupKeyIdText (DedupKeyId value) = value
 
 projectionRevisionIdText :: ProjectionRevisionId -> Text
 projectionRevisionIdText (ProjectionRevisionId value) = value
+
+externalReadContractIdText :: ExternalReadContractId -> Text
+externalReadContractIdText (ExternalReadContractId value) = value
+
+externalReadContractVersionValue :: ExternalReadContractVersion -> Int
+externalReadContractVersionValue (ExternalReadContractVersion value) = value
 
 claimSiteText :: ClaimSite -> Text
 claimSiteText (ClaimSite value) = value
@@ -417,15 +443,66 @@ data ProjectionRevision = ProjectionRevision
   }
   deriving stock (Generic)
 
--- | Minimal compatibility edge consumed by later external-read work. It lets
--- this catalog reject a read contract whose compatible revision vanished
--- without prematurely defining the SQL surface owned by plan 255.
-data ReadContractRevisionReference = ReadContractRevisionReference
-  { readContractId :: !Text,
-    compatibleRevisions :: !(NonEmpty ProjectionRevisionId),
-    claimSite :: !ClaimSite
+-- | A fully qualified application-owned PostgreSQL function. Keiro quotes both
+-- identifiers when generating a keyed wrapper and never accepts raw SQL here.
+data QualifiedFunction = QualifiedFunction
+  { functionSchema :: !Text,
+    functionName :: !Text
   }
   deriving stock (Eq, Ord, Show, Generic)
+
+-- | A fully qualified PostgreSQL type used in a public function signature.
+-- Keeping schema and type names separate lets the SQL generator quote them
+-- independently instead of interpolating an unchecked type expression.
+data QualifiedSqlType = QualifiedSqlType
+  { typeSchema :: !Text,
+    typeName :: !Text
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data SqlFunctionArgument = SqlFunctionArgument
+  { argumentName :: !Text,
+    argumentType :: !QualifiedSqlType
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | One versioned, privilege-enforced SQL read surface. The public function
+-- name is derived from the contract identity and version so it cannot drift
+-- from catalog identity. Keyed implementations remain application-owned;
+-- Keiro owns only the guarded outer wrapper.
+data ExternalReadContract
+  = AllRowsExternalRead
+      { readContractId :: !ExternalReadContractId,
+        contractVersion :: !ExternalReadContractVersion,
+        queryModelId :: !QueryModelId,
+        resultContractType :: !QualifiedSqlType,
+        resultShapeHash :: !Text,
+        compatibleRevisions :: !(NonEmpty ProjectionRevisionId),
+        surfaceGeneration :: !Int,
+        claimSite :: !ClaimSite
+      }
+  | KeyedExternalRead
+      { readContractId :: !ExternalReadContractId,
+        contractVersion :: !ExternalReadContractVersion,
+        queryModelId :: !QueryModelId,
+        arguments :: ![SqlFunctionArgument],
+        resultContractType :: !QualifiedSqlType,
+        privateImplementation :: !QualifiedFunction,
+        privateImplementationVersion :: !Int,
+        resultShapeHash :: !Text,
+        compatibleRevisions :: !(NonEmpty ProjectionRevisionId),
+        surfaceGeneration :: !Int,
+        claimSite :: !ClaimSite
+      }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Stable public function name in @keiro_read@. Contract identifiers are
+-- validated as lower-case SQL identifiers before this value reaches SQL.
+externalReadFunctionName :: ExternalReadContract -> Text
+externalReadFunctionName contract =
+  externalReadContractIdText (contract ^. #readContractId)
+    <> "_v"
+    <> Text.pack (show (externalReadContractVersionValue (contract ^. #contractVersion)))
 
 -- | How a target is prepared before replay. This is deliberately independent
 -- from whether a projection handler is replay-safe.
@@ -616,7 +693,7 @@ data ProjectionCatalog = ProjectionCatalog
     targets :: ![TargetDeclaration],
     rebuildGroups :: ![RebuildGroupDeclaration],
     projectionRevisions :: ![ProjectionRevision],
-    readContractRevisionReferences :: ![ReadContractRevisionReference],
+    externalReadContracts :: ![ExternalReadContract],
     subscriptions :: ![SubscriptionDeclaration],
     dedupKeys :: ![DedupKeyDeclaration],
     queryModels :: ![SomeQueryModelBinding],
@@ -631,7 +708,7 @@ emptyProjectionCatalog =
       targets = [],
       rebuildGroups = [],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
@@ -692,6 +769,17 @@ data CatalogDiagnosticCode
   | ProjectionRevisionMissingSchemaValidation
   | ProjectionRevisionPhysicalTargetsNotTotal
   | InvalidProjectionRevisionIdentity
+  | DuplicateExternalReadContractVersion
+  | DuplicateExternalReadFunctionName
+  | UnknownExternalReadQueryModel
+  | ExternalReadShapeMismatch
+  | ExternalReadRevisionOwnershipMismatch
+  | InvalidExternalReadContractIdentity
+  | InvalidExternalReadSqlIdentifier
+  | InvalidExternalReadSqlType
+  | ExternalReadImplementationCollision
+  | ExternalReadSurfaceGenerationRegression
+  | ExternalReadImmutableSignatureDrift
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 diagnosticCodeText :: CatalogDiagnosticCode -> Text
@@ -744,6 +832,17 @@ diagnosticCodeText = \case
   ProjectionRevisionMissingSchemaValidation -> "catalog.projection-revision-missing-schema-validation"
   ProjectionRevisionPhysicalTargetsNotTotal -> "catalog.projection-revision-physical-targets-not-total"
   InvalidProjectionRevisionIdentity -> "catalog.invalid-projection-revision-identity"
+  DuplicateExternalReadContractVersion -> "catalog.external-read-duplicate-contract-version"
+  DuplicateExternalReadFunctionName -> "catalog.external-read-duplicate-function-name"
+  UnknownExternalReadQueryModel -> "catalog.external-read-unknown-query-model"
+  ExternalReadShapeMismatch -> "catalog.external-read-shape-mismatch"
+  ExternalReadRevisionOwnershipMismatch -> "catalog.external-read-revision-ownership-mismatch"
+  InvalidExternalReadContractIdentity -> "catalog.external-read-invalid-contract-identity"
+  InvalidExternalReadSqlIdentifier -> "catalog.external-read-invalid-sql-identifier"
+  InvalidExternalReadSqlType -> "catalog.external-read-invalid-sql-type"
+  ExternalReadImplementationCollision -> "catalog.external-read-implementation-collision"
+  ExternalReadSurfaceGenerationRegression -> "catalog.external-read-surface-generation-regression"
+  ExternalReadImmutableSignatureDrift -> "catalog.external-read-immutable-signature-drift"
 
 data CatalogDiagnostic = CatalogDiagnostic
   { diagnosticCode :: !CatalogDiagnosticCode,
@@ -820,9 +919,25 @@ data InventoryProjectionRevision = InventoryProjectionRevision
   }
   deriving stock (Eq, Ord, Show, Generic)
 
-data InventoryReadContractRevisionReference = InventoryReadContractRevisionReference
-  { readContractId :: !Text,
-    compatibleRevisions :: !(NonEmpty ProjectionRevisionId)
+data ExternalReadContractKind
+  = InventoryAllRowsExternalRead
+  | InventoryKeyedExternalRead
+  deriving stock (Eq, Ord, Show, Generic)
+
+data InventoryExternalReadContract = InventoryExternalReadContract
+  { readContractId :: !ExternalReadContractId,
+    contractVersion :: !ExternalReadContractVersion,
+    queryModelId :: !QueryModelId,
+    rebuildGroupId :: !RebuildGroupId,
+    functionName :: !Text,
+    contractKind :: !ExternalReadContractKind,
+    arguments :: ![SqlFunctionArgument],
+    resultContractType :: !QualifiedSqlType,
+    privateImplementation :: !(Maybe QualifiedFunction),
+    privateImplementationVersion :: !(Maybe Int),
+    resultShapeHash :: !Text,
+    compatibleRevisions :: !(NonEmpty ProjectionRevisionId),
+    surfaceGeneration :: !Int
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -889,7 +1004,7 @@ data CatalogInventory = CatalogInventory
     inventoryGroups :: ![InventoryGroup],
     inventoryProjections :: ![InventoryProjection],
     inventoryProjectionRevisions :: ![InventoryProjectionRevision],
-    inventoryReadContractRevisionReferences :: ![InventoryReadContractRevisionReference],
+    inventoryExternalReadContracts :: ![InventoryExternalReadContract],
     inventoryQueryModels :: ![InventoryQueryModel],
     inventorySubscriptions :: ![InventorySubscription],
     inventoryDedupKeys :: ![InventoryDedupKey]
@@ -957,6 +1072,7 @@ data CatalogEvolution
   | RebuildGroupRemoved !RebuildGroupId
   | ProjectionRemoved !ProjectionId
   | ProjectionRevisionRemoved !ProjectionRevisionId
+  | ExternalReadContractRemoved !ExternalReadContractId !ExternalReadContractVersion
   | QueryModelRemoved !QueryModelId
   | SubscriptionRemoved !SubscriptionId
   | DedupKeyRemoved !DedupKeyId
@@ -1122,6 +1238,7 @@ validateProjectionCatalog catalog =
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
             <> projectionRevisionDiagnostics catalog
+            <> externalReadContractDiagnostics catalog queryFacts
         )
 
 -- | Validate and invoke a consumer only on success. This is the pure boundary
@@ -1262,15 +1379,15 @@ groupSliceFingerprint validated wantedGroup = do
   group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
   pure
     . GroupSliceFingerprint
-    . hashPreimage "slice-v3"
+    . hashPreimage "slice-v4"
     $ PRecord
-      "keiro/catalog-group-slice/v3"
+      "keiro/catalog-group-slice/v4"
       [ PText (rebuildGroupIdText wantedGroup),
         groupPreimage group,
         PList (targetPreimage <$> targets),
         PList (projectionPreimage <$> projections),
         PList (projectionRevisionPreimage <$> revisions),
-        PList (readContractRevisionReferencePreimage <$> readContractReferences),
+        PList (externalReadContractPreimage <$> externalReadContracts),
         PList (sourcePreimage <$> sources),
         PList (queryPreimage <$> queries),
         PList (subscriptionPreimage <$> subscriptions),
@@ -1291,14 +1408,10 @@ groupSliceFingerprint validated wantedGroup = do
       filter
         ((== wantedGroup) . (^. #rebuildGroupId))
         (inventory ^. #inventoryProjectionRevisions)
-    revisionIds = Set.fromList (map (^. #revisionId) revisions)
-    readContractReferences =
+    externalReadContracts =
       filter
-        ( any (`Set.member` revisionIds)
-            . NonEmpty.toList
-            . (^. #compatibleRevisions)
-        )
-        (inventory ^. #inventoryReadContractRevisionReferences)
+        ((== wantedGroup) . (^. #rebuildGroupId))
+        (inventory ^. #inventoryExternalReadContracts)
     sourceIds = Set.fromList (map (^. #sourceId) projections)
     sources = filter ((`Set.member` sourceIds) . (^. #sourceId)) (inventory ^. #inventorySources)
     queries =
@@ -1346,6 +1459,12 @@ catalogProjectionRevision ::
   Maybe ProjectionRevision
 catalogProjectionRevision validated wanted =
   List.find ((== wanted) . (^. #revisionId)) (catalogProjectionRevisions validated)
+
+-- | Runtime declarations retained behind the validated boundary. Results are
+-- sorted so registration is independent of source declaration order.
+catalogExternalReadContracts :: ValidatedProjectionCatalog -> [ExternalReadContract]
+catalogExternalReadContracts validated =
+  List.sort (validated ^. #originalCatalog . #externalReadContracts)
 
 asyncProjectionRegistrations ::
   ValidatedProjectionCatalog ->
@@ -1496,6 +1615,11 @@ compareCatalogBaseline previous current =
         <> removedEntries RebuildGroupRemoved (^. #rebuildGroupId) (previous ^. #inventoryGroups) (current ^. #inventoryGroups)
         <> removedEntries ProjectionRemoved (^. #projectionId) (previous ^. #inventoryProjections) (current ^. #inventoryProjections)
         <> removedEntries ProjectionRevisionRemoved (^. #revisionId) (previous ^. #inventoryProjectionRevisions) (current ^. #inventoryProjectionRevisions)
+        <> removedEntries
+          (uncurry ExternalReadContractRemoved)
+          (\entry -> (entry ^. #readContractId, entry ^. #contractVersion))
+          (previous ^. #inventoryExternalReadContracts)
+          (current ^. #inventoryExternalReadContracts)
         <> removedEntries QueryModelRemoved (^. #queryModelId) (previous ^. #inventoryQueryModels) (current ^. #inventoryQueryModels)
         <> removedEntries SubscriptionRemoved (^. #subscriptionId) (previous ^. #inventorySubscriptions) (current ^. #inventorySubscriptions)
         <> removedEntries DedupKeyRemoved (^. #dedupKeyId) (previous ^. #inventoryDedupKeys) (current ^. #inventoryDedupKeys)
@@ -1556,9 +1680,31 @@ duplicateDiagnostics catalog facts queryFacts =
     <> duplicateBy DuplicateDedupName (\value -> value) (^. #dedupName) (^. #claimSite) (catalog ^. #dedupKeys)
     <> duplicateBy DuplicateProjectionId projectionIdText factProjectionId factSite facts
     <> duplicateBy DuplicateProjectionRevisionId projectionRevisionIdText (^. #revisionId) (^. #claimSite) (catalog ^. #projectionRevisions)
+    <> duplicateBy
+      DuplicateExternalReadContractVersion
+      renderExternalReadContractKey
+      externalReadContractKey
+      (^. #claimSite)
+      (catalog ^. #externalReadContracts)
+    <> duplicateBy
+      DuplicateExternalReadFunctionName
+      id
+      externalReadFunctionName
+      (^. #claimSite)
+      (catalog ^. #externalReadContracts)
     <> duplicateBy DuplicateQueryModelId queryModelIdText factQueryModelId factQuerySite queryFacts
     <> duplicateBy DuplicateQueryModelRegistryName (\value -> value) factRegistryName factQuerySite queryFacts
     <> concatMap duplicateTargetsInGroup (catalog ^. #rebuildGroups)
+
+renderExternalReadContractKey :: (ExternalReadContractId, ExternalReadContractVersion) -> Text
+renderExternalReadContractKey (contractId, version) =
+  externalReadContractIdText contractId
+    <> "/v"
+    <> Text.pack (show (externalReadContractVersionValue version))
+
+externalReadContractKey :: ExternalReadContract -> (ExternalReadContractId, ExternalReadContractVersion)
+externalReadContractKey contract =
+  (contract ^. #readContractId, contract ^. #contractVersion)
 
 duplicateBy ::
   (Ord key) =>
@@ -2131,7 +2277,7 @@ verificationDiagnostics catalog = concatMap verificationGroupDiagnostics (catalo
 
 projectionRevisionDiagnostics :: ProjectionCatalog -> [CatalogDiagnostic]
 projectionRevisionDiagnostics catalog =
-  concatMap revisionDiagnostics revisions <> readContractDiagnostics
+  concatMap revisionDiagnostics revisions
   where
     revisions = catalog ^. #projectionRevisions
     groupsById =
@@ -2140,7 +2286,6 @@ projectionRevisionDiagnostics catalog =
         | group <- catalog ^. #rebuildGroups
         ]
     declaredTargets = Set.fromList [target ^. #targetId | target <- catalog ^. #targets]
-    declaredRevisionIds = Set.fromList [revision ^. #revisionId | revision <- revisions]
 
     revisionDiagnostics revision =
       unknownGroup
@@ -2239,19 +2384,226 @@ projectionRevisionDiagnostics catalog =
             invalid identity || version < 1
           ]
 
-    readContractDiagnostics =
-      [ diagnostic
-          UnknownRevisionReference
-          (reference ^. #readContractId <> "/" <> projectionRevisionIdText revisionId)
-          [reference ^. #claimSite]
-          "read contract references a projection revision absent from the catalog"
-      | reference <- catalog ^. #readContractRevisionReferences,
-        revisionId <- NonEmpty.toList (reference ^. #compatibleRevisions),
-        revisionId `Set.notMember` declaredRevisionIds
-      ]
-
     invalid value = Text.null value || Text.strip value /= value
     renderTargetSet = Text.intercalate "," . map targetIdText . Set.toAscList
+
+externalReadContractDiagnostics :: ProjectionCatalog -> [QueryFacts] -> [CatalogDiagnostic]
+externalReadContractDiagnostics catalog queryFacts =
+  concatMap contractDiagnostics contracts
+    <> implementationCollisions
+    <> immutableSignatureDrift
+    <> surfaceGenerationRegressions
+  where
+    contracts = catalog ^. #externalReadContracts
+    queriesById = Map.fromList [(factQueryModelId query, query) | query <- queryFacts]
+    revisionsById =
+      Map.fromList
+        [ (revision ^. #revisionId, revision)
+        | revision <- catalog ^. #projectionRevisions
+        ]
+
+    contractDiagnostics contract =
+      identityDiagnostics contract
+        <> sqlIdentifierDiagnostics contract
+        <> sqlTypeDiagnostics contract
+        <> queryDiagnostics contract
+        <> revisionDiagnostics contract
+
+    identityDiagnostics contract =
+      [ diagnostic
+          InvalidExternalReadContractIdentity
+          (renderExternalReadContractKey (externalReadContractKey contract))
+          [contract ^. #claimSite]
+          "contract identity, version, surface generation, result shape, and keyed implementation version must be valid positive immutable facts"
+      | invalidIdentity contract
+      ]
+
+    invalidIdentity contract =
+      invalidText (externalReadContractIdText (contract ^. #readContractId))
+        || externalReadContractVersionValue (contract ^. #contractVersion) < 1
+        || contract ^. #surfaceGeneration < 1
+        || invalidText (contract ^. #resultShapeHash)
+        || case contract of
+          AllRowsExternalRead {} -> False
+          KeyedExternalRead {arguments = keyedArguments, privateImplementationVersion = implementationVersion} ->
+            null keyedArguments || implementationVersion < 1
+
+    sqlIdentifierDiagnostics contract =
+      [ diagnostic
+          InvalidExternalReadSqlIdentifier
+          (renderExternalReadContractKey (externalReadContractKey contract) <> "/" <> identity)
+          [contract ^. #claimSite]
+          "generated SQL identifiers must be lower-case PostgreSQL identifiers containing only letters, digits, and underscores"
+      | identity <- contractSqlIdentifiers contract,
+        not (safeSqlIdentifier identity)
+      ]
+
+    sqlTypeDiagnostics contract =
+      [ diagnostic
+          InvalidExternalReadSqlType
+          (renderExternalReadContractKey (externalReadContractKey contract) <> "/" <> renderQualifiedType sqlType)
+          [contract ^. #claimSite]
+          "SQL contract types must be represented by separately validated schema and type identifiers"
+      | sqlType <- contractSqlTypes contract,
+        not (safeQualifiedType sqlType)
+      ]
+
+    queryDiagnostics contract =
+      case Map.lookup (contract ^. #queryModelId) queriesById of
+        Nothing ->
+          [ diagnostic
+              UnknownExternalReadQueryModel
+              (queryModelIdText (contract ^. #queryModelId))
+              [contract ^. #claimSite]
+              "external read contract references a query model absent from the catalog"
+          ]
+        Just query ->
+          [ diagnostic
+              ExternalReadShapeMismatch
+              (renderExternalReadContractKey (externalReadContractKey contract))
+              [contract ^. #claimSite, factQuerySite query]
+              ( "external read result shape does not match query model; expected="
+                  <> factShapeHash query
+                  <> ", supplied="
+                  <> contract ^. #resultShapeHash
+              )
+          | contract ^. #resultShapeHash /= factShapeHash query
+          ]
+
+    revisionDiagnostics contract =
+      concatMap (oneRevision contract) (NonEmpty.toList (contract ^. #compatibleRevisions))
+
+    oneRevision contract revisionId =
+      case Map.lookup revisionId revisionsById of
+        Nothing ->
+          [ diagnostic
+              UnknownRevisionReference
+              ( externalReadContractIdText (contract ^. #readContractId)
+                  <> "/"
+                  <> projectionRevisionIdText revisionId
+              )
+              [contract ^. #claimSite]
+              "external read contract references a projection revision absent from the catalog"
+          ]
+        Just revision ->
+          case Map.lookup (contract ^. #queryModelId) queriesById of
+            Nothing -> []
+            Just query ->
+              [ diagnostic
+                  ExternalReadRevisionOwnershipMismatch
+                  ( externalReadContractIdText (contract ^. #readContractId)
+                      <> "/"
+                      <> projectionRevisionIdText revisionId
+                  )
+                  [contract ^. #claimSite, revision ^. #claimSite, factQuerySite query]
+                  "compatible revision must own the query model's rebuild group and every observed target"
+              | revision ^. #rebuildGroup /= factQueryGroup query
+                  || not
+                    ( Set.fromList (factObservedTargets query)
+                        `Set.isSubsetOf` Map.keysSet (revision ^. #targetProvisioners)
+                    )
+              ]
+
+    implementationCollisions =
+      [ diagnostic
+          ExternalReadImplementationCollision
+          (renderQualifiedFunction function)
+          (List.sort (map (^. #claimSite) claims))
+          "a private keyed implementation may be owned by only one external read contract and may not occupy keiro_read"
+      | (function, claims) <- Map.toList implementations,
+        List.length claims > 1 || function ^. #functionSchema == "keiro_read"
+      ]
+      where
+        implementations =
+          Map.fromListWith
+            (<>)
+            [ (implementation, [contract])
+            | contract@KeyedExternalRead {privateImplementation = implementation} <- contracts
+            ]
+
+    immutableSignatureDrift =
+      [ diagnostic
+          ExternalReadImmutableSignatureDrift
+          (renderExternalReadContractKey key)
+          (List.sort (map (^. #claimSite) claims))
+          "the same contract identity/version declares more than one immutable public SQL signature"
+      | (key, claims) <- Map.toList contractsByKey,
+        List.length (List.nub (map externalReadImmutableSignature claims)) > 1
+      ]
+      where
+        contractsByKey = Map.fromListWith (<>) [(externalReadContractKey contract, [contract]) | contract <- contracts]
+
+    surfaceGenerationRegressions =
+      [ diagnostic
+          ExternalReadSurfaceGenerationRegression
+          ( externalReadContractIdText contractId
+              <> "/v"
+              <> Text.pack (show (externalReadContractVersionValue (later ^. #contractVersion)))
+          )
+          [earlier ^. #claimSite, later ^. #claimSite]
+          "a later contract version cannot declare a lower surface generation"
+      | (contractId, sameId) <- Map.toList contractsById,
+        earlier <- sameId,
+        later <- sameId,
+        earlier ^. #contractVersion < later ^. #contractVersion,
+        earlier ^. #surfaceGeneration > later ^. #surfaceGeneration
+      ]
+      where
+        contractsById = Map.fromListWith (<>) [(contract ^. #readContractId, [contract]) | contract <- contracts]
+
+    invalidText value = Text.null value || Text.strip value /= value
+
+contractSqlIdentifiers :: ExternalReadContract -> [Text]
+contractSqlIdentifiers contract =
+  externalReadContractIdText (contract ^. #readContractId)
+    : externalReadFunctionName contract
+    : case contract of
+      AllRowsExternalRead {} -> []
+      KeyedExternalRead {privateImplementation = implementation, arguments = keyedArguments} ->
+        implementation ^. #functionSchema
+          : implementation ^. #functionName
+          : map (^. #argumentName) keyedArguments
+
+contractSqlTypes :: ExternalReadContract -> [QualifiedSqlType]
+contractSqlTypes AllRowsExternalRead {resultContractType = resultType} = [resultType]
+contractSqlTypes KeyedExternalRead {resultContractType = resultType, arguments = keyedArguments} = resultType : map (^. #argumentType) keyedArguments
+
+safeSqlIdentifier :: Text -> Bool
+safeSqlIdentifier value =
+  case Text.uncons value of
+    Nothing -> False
+    Just (first, rest) ->
+      lower first && Text.all (\character -> lower character || digit character || character == '_') rest
+  where
+    lower character = character >= 'a' && character <= 'z'
+    digit character = character >= '0' && character <= '9'
+
+safeQualifiedType :: QualifiedSqlType -> Bool
+safeQualifiedType sqlType =
+  safeSqlIdentifier (sqlType ^. #typeSchema)
+    && safeSqlIdentifier (sqlType ^. #typeName)
+
+renderQualifiedType :: QualifiedSqlType -> Text
+renderQualifiedType sqlType = sqlType ^. #typeSchema <> "." <> sqlType ^. #typeName
+
+renderQualifiedFunction :: QualifiedFunction -> Text
+renderQualifiedFunction function = function ^. #functionSchema <> "." <> function ^. #functionName
+
+externalReadImmutableSignature :: ExternalReadContract -> Preimage
+externalReadImmutableSignature contract =
+  PRecord
+    "external-read-immutable-signature"
+    [ PText (externalReadFunctionName contract),
+      PText (queryModelIdText (contract ^. #queryModelId)),
+      PText (contract ^. #resultShapeHash),
+      qualifiedSqlTypePreimage (contract ^. #resultContractType),
+      case contract of
+        AllRowsExternalRead {} -> PRecord "all-rows" []
+        KeyedExternalRead {arguments = keyedArguments} ->
+          PRecord
+            "keyed"
+            [PList (sqlFunctionArgumentPreimage <$> keyedArguments)]
+    ]
 
 revisionRequirements :: ProjectionRevision -> [(Text, [TargetId])]
 revisionRequirements revision =
@@ -2375,15 +2727,14 @@ buildInventory catalog facts queryFacts =
       inventoryProjections = List.sort (map inventoryProjection facts),
       inventoryProjectionRevisions =
         List.sort (map inventoryProjectionRevision (catalog ^. #projectionRevisions)),
-      inventoryReadContractRevisionReferences =
+      inventoryExternalReadContracts =
         List.sort
-          [ InventoryReadContractRevisionReference
-              { readContractId = reference ^. #readContractId,
-                compatibleRevisions =
-                  NonEmpty.fromList
-                    (List.sort (NonEmpty.toList (reference ^. #compatibleRevisions)))
-              }
-          | reference <- catalog ^. #readContractRevisionReferences
+          [ inventoryExternalReadContract (factQueryGroup query) contract
+          | contract <- catalog ^. #externalReadContracts,
+            let query =
+                  fromMaybe
+                    (error "buildInventory: validated external read contract has no query model")
+                    (List.find ((== contract ^. #queryModelId) . factQueryModelId) queryFacts)
           ],
       inventoryQueryModels =
         List.sort
@@ -2424,6 +2775,33 @@ buildInventory catalog facts queryFacts =
       case [factProjectionId fact | fact <- facts, targetId `List.elem` factTargets fact] of
         owner : _ -> owner
         [] -> error "buildInventory: validated target has no owner"
+
+inventoryExternalReadContract :: RebuildGroupId -> ExternalReadContract -> InventoryExternalReadContract
+inventoryExternalReadContract groupId contract =
+  InventoryExternalReadContract
+    { readContractId = contract ^. #readContractId,
+      contractVersion = contract ^. #contractVersion,
+      queryModelId = contract ^. #queryModelId,
+      rebuildGroupId = groupId,
+      functionName = externalReadFunctionName contract,
+      contractKind = case contract of
+        AllRowsExternalRead {} -> InventoryAllRowsExternalRead
+        KeyedExternalRead {} -> InventoryKeyedExternalRead,
+      arguments = case contract of
+        AllRowsExternalRead {} -> []
+        KeyedExternalRead {arguments = keyedArguments} -> keyedArguments,
+      resultContractType = contract ^. #resultContractType,
+      privateImplementation = case contract of
+        AllRowsExternalRead {} -> Nothing
+        KeyedExternalRead {privateImplementation = implementation} -> Just implementation,
+      privateImplementationVersion = case contract of
+        AllRowsExternalRead {} -> Nothing
+        KeyedExternalRead {privateImplementationVersion = implementationVersion} -> Just implementationVersion,
+      resultShapeHash = contract ^. #resultShapeHash,
+      compatibleRevisions =
+        NonEmpty.fromList (List.sort (NonEmpty.toList (contract ^. #compatibleRevisions))),
+      surfaceGeneration = contract ^. #surfaceGeneration
+    }
 
 buildResolvedQuerySupplies :: CatalogInventory -> [ResolvedQuerySupply]
 buildResolvedQuerySupplies inventory =
@@ -2581,18 +2959,18 @@ inventoryProjectionRevision revision =
     }
 
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v4" . inventoryPreimage
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v5" . inventoryPreimage
 
 inventoryPreimage :: CatalogInventory -> Preimage
 inventoryPreimage inventory =
   PRecord
-    "keiro/catalog-inventory/v4"
+    "keiro/catalog-inventory/v5"
     [ PList (sourcePreimage <$> inventory ^. #inventorySources),
       PList (targetPreimage <$> inventory ^. #inventoryTargets),
       PList (groupPreimage <$> inventory ^. #inventoryGroups),
       PList (projectionPreimage <$> inventory ^. #inventoryProjections),
       PList (projectionRevisionPreimage <$> inventory ^. #inventoryProjectionRevisions),
-      PList (readContractRevisionReferencePreimage <$> inventory ^. #inventoryReadContractRevisionReferences),
+      PList (externalReadContractPreimage <$> inventory ^. #inventoryExternalReadContracts),
       PList (queryPreimage <$> inventory ^. #inventoryQueryModels),
       PList (subscriptionPreimage <$> inventory ^. #inventorySubscriptions),
       PList (dedupPreimage <$> inventory ^. #inventoryDedupKeys)
@@ -2687,16 +3065,47 @@ revisionHandlerPreimage tag handler =
       PList (PText . targetIdText <$> handler ^. #requiredTargets)
     ]
 
-readContractRevisionReferencePreimage :: InventoryReadContractRevisionReference -> Preimage
-readContractRevisionReferencePreimage reference =
+externalReadContractPreimage :: InventoryExternalReadContract -> Preimage
+externalReadContractPreimage contract =
   PRecord
-    "read-contract-revision-reference"
-    [ PText (reference ^. #readContractId),
+    "external-read-contract"
+    [ PText (externalReadContractIdText (contract ^. #readContractId)),
+      PText (Text.pack (show (externalReadContractVersionValue (contract ^. #contractVersion)))),
+      PText (queryModelIdText (contract ^. #queryModelId)),
+      PText (rebuildGroupIdText (contract ^. #rebuildGroupId)),
+      PText (contract ^. #functionName),
+      PText
+        ( case contract ^. #contractKind of
+            InventoryAllRowsExternalRead -> "all-rows"
+            InventoryKeyedExternalRead -> "keyed"
+        ),
+      PList (sqlFunctionArgumentPreimage <$> contract ^. #arguments),
+      qualifiedSqlTypePreimage (contract ^. #resultContractType),
+      maybe (PRecord "no-private-implementation" []) qualifiedFunctionPreimage (contract ^. #privateImplementation),
+      maybe (PRecord "no-private-implementation-version" []) (PText . Text.pack . show) (contract ^. #privateImplementationVersion),
+      PText (contract ^. #resultShapeHash),
       PList
         ( PText . projectionRevisionIdText
-            <$> NonEmpty.toList (reference ^. #compatibleRevisions)
-        )
+            <$> NonEmpty.toList (contract ^. #compatibleRevisions)
+        ),
+      PText (Text.pack (show (contract ^. #surfaceGeneration)))
     ]
+
+sqlFunctionArgumentPreimage :: SqlFunctionArgument -> Preimage
+sqlFunctionArgumentPreimage argument =
+  PRecord
+    "sql-function-argument"
+    [ PText (argument ^. #argumentName),
+      qualifiedSqlTypePreimage (argument ^. #argumentType)
+    ]
+
+qualifiedSqlTypePreimage :: QualifiedSqlType -> Preimage
+qualifiedSqlTypePreimage sqlType =
+  PRecord "qualified-sql-type" [PText (sqlType ^. #typeSchema), PText (sqlType ^. #typeName)]
+
+qualifiedFunctionPreimage :: QualifiedFunction -> Preimage
+qualifiedFunctionPreimage function =
+  PRecord "qualified-function" [PText (function ^. #functionSchema), PText (function ^. #functionName)]
 
 handlerPreimage :: InventoryHandler -> Preimage
 handlerPreimage = \case
@@ -2765,7 +3174,7 @@ renderInventory inventory =
         <> map renderGroup (inventory ^. #inventoryGroups)
         <> map renderProjection (inventory ^. #inventoryProjections)
         <> map renderProjectionRevision (inventory ^. #inventoryProjectionRevisions)
-        <> map renderReadContractRevisionReference (inventory ^. #inventoryReadContractRevisionReferences)
+        <> map renderExternalReadContract (inventory ^. #inventoryExternalReadContracts)
         <> map renderQuery (inventory ^. #inventoryQueryModels)
         <> map renderSubscription (inventory ^. #inventorySubscriptions)
         <> map renderDedup (inventory ^. #inventoryDedupKeys)
@@ -2829,16 +3238,31 @@ renderInventory inventory =
           Text.intercalate "," (map (renderRevisionHandler "replay") (revision ^. #replayAdapters)),
           Text.intercalate "," (map (renderRevisionHandler "verify") (revision ^. #verifications))
         ]
-    renderReadContractRevisionReference :: InventoryReadContractRevisionReference -> Text
-    renderReadContractRevisionReference reference =
+    renderExternalReadContract :: InventoryExternalReadContract -> Text
+    renderExternalReadContract contract =
       Text.intercalate
         "|"
-        [ "read-contract-revision-reference",
-          reference ^. #readContractId,
+        [ "external-read-contract",
+          externalReadContractIdText (contract ^. #readContractId),
+          Text.pack (show (externalReadContractVersionValue (contract ^. #contractVersion))),
+          queryModelIdText (contract ^. #queryModelId),
+          rebuildGroupIdText (contract ^. #rebuildGroupId),
+          contract ^. #functionName,
+          case contract ^. #contractKind of
+            InventoryAllRowsExternalRead -> "all-rows"
+            InventoryKeyedExternalRead -> "keyed",
+          Text.intercalate "," (map renderArgument (contract ^. #arguments)),
+          renderQualifiedType (contract ^. #resultContractType),
+          maybe "-" renderQualifiedFunction (contract ^. #privateImplementation),
+          maybe "-" (Text.pack . show) (contract ^. #privateImplementationVersion),
+          contract ^. #resultShapeHash,
           Text.intercalate
             ","
-            (map projectionRevisionIdText (NonEmpty.toList (reference ^. #compatibleRevisions)))
+            (map projectionRevisionIdText (NonEmpty.toList (contract ^. #compatibleRevisions))),
+          Text.pack (show (contract ^. #surfaceGeneration))
         ]
+    renderArgument :: SqlFunctionArgument -> Text
+    renderArgument argument = argument ^. #argumentName <> ":" <> renderQualifiedType (argument ^. #argumentType)
     renderQuery :: InventoryQueryModel -> Text
     renderQuery query =
       Text.intercalate

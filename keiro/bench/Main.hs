@@ -698,7 +698,7 @@ rebuildCatalogDeclaration =
             }
         ],
       projectionRevisions = [],
-      readContractRevisionReferences = [],
+      externalReadContracts = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
