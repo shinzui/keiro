@@ -93,7 +93,7 @@ identified it as local to `mori://shinzui/keiro`.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Make fresh awakeables opaque across the runtime and generated workflows | docs/plans/260-make-fresh-awakeables-opaque-across-the-runtime-and-generated-workflows.md | None | None | In Progress |
+| 1 | Make fresh awakeables opaque across the runtime and generated workflows | docs/plans/260-make-fresh-awakeables-opaque-across-the-runtime-and-generated-workflows.md | None | None | Complete |
 | 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | Not Started |
 | 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | Not Started |
 | 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | Not Started |
@@ -154,10 +154,10 @@ commits the release, tags, uploads, and creates the GitHub release.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: move deterministic generation-0 derivation out of the ordinary awakeable authoring surface while preserving frozen compatibility probes
-- [ ] EP-1 M2: replace generated coordinate derivation with opaque declared await bindings that return the live allocation id
-- [ ] EP-1 M3: make workflow-runtime conformance allocate, signal, resume, and complete against PostgreSQL; regenerate all affected outputs
-- [ ] EP-1 M4: run focused runtime/DSL gates, update changelogs, and amend ADR 24
+- [x] EP-1 M1: move deterministic generation-0 derivation out of the ordinary awakeable authoring surface while preserving frozen compatibility probes
+- [x] EP-1 M2: replace generated coordinate derivation with opaque declared await bindings that return the live allocation id
+- [x] EP-1 M3: make workflow-runtime conformance allocate, signal, resume, and complete against PostgreSQL; regenerate all affected outputs
+- [x] EP-1 M4: run focused runtime/DSL gates, update changelogs, and amend ADR 24
 - [ ] EP-2 M1: publish the actual allocated id from the Jitsurei workflow through an idempotent application callback
 - [ ] EP-2 M2: make the demo and a focused database test fail unless signal succeeds, completion is terminal, and restart discovery is empty
 - [ ] EP-2 M3: correct both workflow guides, API reference, signatures, and at-least-once crash-window guidance
@@ -204,6 +204,10 @@ interactions between child plans. Provide concise evidence.
   runtime-support update in that otherwise frozen corpus. EP-4 must keep the file in the Language
   4 compatibility lane and describe the change as the blocker repair, not as a Language 5 source
   migration or permission for unrelated predecessor rewrites.
+- EP-1's fresh-database full gate passed, but the Jitsurei demo still printed a failed awakeable
+  signal and a suspended final outcome while exiting successfully. EP-2 must turn those observations
+  into failing assertions and publish the real allocation id; a green repository gate is not yet
+  evidence that the teaching application satisfies the repaired runtime contract.
 
 
 ## Decision Log
@@ -248,4 +252,10 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 completed the runtime/generated identity repair at
+`b9cd3d28e90da216cf71fd07a7ee27869f34d6dd`: fresh awakeables are opaque across the ordinary
+public API and generated workflow surface, the full allocation-to-completion lifecycle is proven
+against PostgreSQL, the 39-entry corpus is current, and ADR 24 now owns the compatibility-only
+generation-0 boundary. Its focused and repository-wide validation evidence is recorded in
+ExecPlan 260. The initiative remains open; EP-2 is now the first registry-ordered eligible child,
+while independent EP-3 is also eligible.

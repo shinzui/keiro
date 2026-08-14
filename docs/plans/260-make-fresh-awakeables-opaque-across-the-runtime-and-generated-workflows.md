@@ -42,8 +42,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-14T14:23:53Z) M2: add collision and generated-surface tests for binding names and remove `awaitAwakeableId`
 - [x] (2026-08-14T14:23:53Z) M3: replace the tautological workflow-runtime executable with a PostgreSQL allocate/signal/resume/completion proof
 - [x] (2026-08-14T14:23:53Z) M3: regenerate every committed `WorkflowRuntime` output and reconcile the conformance corpus
-- [ ] M4: update the Keiro and keiro-dsl unreleased changelogs and amend ADR 24
-- [ ] M4: pass focused runtime, DSL, compiled conformance, corpus, and full repository gates
+- [x] (2026-08-14T14:45:31Z) M4: update the Keiro and keiro-dsl unreleased changelogs and amend ADR 24
+- [x] (2026-08-14T14:45:31Z) M4: pass focused runtime, DSL, compiled conformance, corpus, and full repository gates
 
 
 ## Surprises & Discoveries
@@ -74,6 +74,14 @@ implementation. Provide concise evidence.
   dependencies of every component that compiles `WorkflowRuntime`. The affected conformance
   components already had those workspace libraries available; their Cabal stanzas now declare
   the direct uses instead of relying on transitive exposure.
+- The default persistent `jitsurei` development database retained an older projection-catalog
+  fingerprint, so the first `just verify` attempt stopped before the test sweep. Running the same
+  gate against a newly migrated `jitsurei_plan260_verify` database passed; the temporary database
+  was removed afterwards. This was local validation state, not a code or migration failure.
+- The full Jitsurei demo still printed `signalAwakeable payment-webhook -> False` and a final
+  `Suspended` outcome while exiting successfully. That is the independently planned EP-2 blocker,
+  and confirms that EP-1 must not describe the application example as repaired merely because the
+  repository gate is green.
 
 
 ## Decision Log
@@ -116,7 +124,39 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. The ordinary runtime surface now exposes only opaque fresh allocation and
+signalling, while the two frozen generation-0 probes live under
+`Keiro.Workflow.Awakeable.Compatibility` and share their implementation with runtime adoption.
+Generated workflow runtimes expose an abstract `AwaitBinding`, one collision-checked value per
+declared await, and `allocateDeclaredAwait`; no generated or first-party application source uses
+either removed deterministic function name. The live conformance target proves allocation,
+successful signalling of the returned id, payload delivery, and completion against migrated
+PostgreSQL.
+
+The behavioral implementation is pinned by commits
+`3344fedc0eef59941e5dce42e1d1bdeca987ee8d` (runtime compatibility boundary) and
+`f4559fb5fce1bfa02ce8493db4c5d38b64dd7f12` (generator, corpus, and live proof). The
+release-contract documentation and ADR amendment are pinned by
+`b9cd3d28e90da216cf71fd07a7ee27869f34d6dd`. Final evidence on that integrated tree was:
+
+- `Keiro.Workflow.Awakeable`: 12 examples, 0 failures.
+- `keiro-dsl-test`: 707 examples, 0 failures; its focused workflow/operation group contained 14
+  examples, 0 failures.
+- Compiled workflow runtime, workflow-full, and frozen-skeleton targets: one test case each,
+  all passed; the live runtime printed all four expected `PASS` assertions. The generated service
+  runtime component also built successfully.
+- Conformance regeneration/policy: 39 of 39 invocations selected, with suite coverage,
+  record/disk consistency, Cabal inventory, and corpus checks all passing.
+- Strict ADR validation: 36 concepts accepted. `nix fmt` changed zero files.
+- Fresh-database `just verify`: core Keiro 610 examples; keiro-pgmq 58 examples with 2 documented
+  pending cases; keiro-ops 47 examples; the complete 43-suite DSL target including 707 main,
+  22 Haskell-name, and 9 import-planning examples; Jitsurei 24 examples; and migrations 34
+  examples all passed with zero failures. All documentation bundles, generated-name and extension
+  policies, diagrams, build-all, and the 39-invocation corpus gate passed as well.
+
+The durable public/compatibility distinction was distilled into amended ADR 24. The shared
+suffix-aware naming implementation and the one-file frozen-corpus repair are task-local execution
+choices governed by the existing naming policies and ADR 16, so no additional ADR was warranted.
 
 
 ## Context and Orientation
