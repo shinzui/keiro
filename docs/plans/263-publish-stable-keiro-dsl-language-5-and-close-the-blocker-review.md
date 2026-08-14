@@ -110,10 +110,10 @@ This section must always reflect the actual current state of the work.
   keiro-dsl/test/conformance-workspace-nominals/keiro-dsl-ledger.workspace.workspace-nominal-proof.txt
   keiro-dsl/test/conformance/keiro-dsl-ledger.context.hospital-capacity.txt
   ```
-- [x] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers; retain the pre-review forward-fix candidate at `5975ee147a3e4c00fb8eff097bd6c4a2b3add36b`
-- [ ] M3: run six full adversarial follow-up reviews at that exact commit and allocate new REV handles
-- [ ] M3: validate the review bundle and stop on any `changes-requested` outcome
-- [ ] M4: record closure evidence and mark the MasterPlan release gate ready for EP-5
+- [x] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers; retain the final reviewed code/documentation candidate at `fb4de1e782ee01a18bf6337a89bea5b877de733a`
+- [x] M3: run six full adversarial follow-up reviews at that exact commit and allocate REV-7 through REV-12
+- [x] M3: validate the 12-record review bundle; all six follow-ups are `approved` and no follow-up outcome is `changes-requested`
+- [x] M4: record closure evidence and mark the MasterPlan release gate ready for EP-5
 
 
 ## Surprises & Discoveries
@@ -162,6 +162,11 @@ implementation. Provide concise evidence.
   execution capability sketch still used the obsolete awakeable/child call shapes. No approval
   record was written against that state. These are forward-fixed before the reviewed SHA is
   finalized, and the documentation-acceptance search is repeated with historical records excluded.
+- The second sweep at the corrected commit found no further blocker. The six original records
+  retain their exact Git object ids, while REV-7 through REV-12 use the same subject/component
+  identities, full coverage, and reviewed SHA
+  `fb4de1e782ee01a18bf6337a89bea5b877de733a`; strict bundle validation accepts all 12 immutable
+  review events.
 
 
 ## Decision Log
@@ -207,6 +212,11 @@ Record every decision made while working on the plan.
   the predecessor round-trip test prevents a stable-pointer move from reinterpreting released
   `feed`/`consistency` syntax as Language 5.
   Date: 2026-08-14
+- Decision: Move the review SHA forward after correcting every current-state documentation
+  finding and repeat the entire repository gate before recording approvals.
+  Rationale: Commit-pinned review evidence cannot honestly approve a state that differs from the
+  corrected public contract, even when the corrections are documentation-only.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -226,9 +236,18 @@ validation, and all 707 DSL examples pass. Clean-tree repository verification an
 commit-pinned adversarial reviews remain before closure. At the pre-review code candidate
 `5975ee147a3e4c00fb8eff097bd6c4a2b3add36b`, a fresh database `just verify` run passes the live
 Jitsurei demo, every package build and test suite, all 39 corpus invocations, documentation and
-policy validation, and the 34-example migration suite. Only the six immutable follow-up reviews
-and their validation remain after the review-found documentation corrections are committed and
-the exact final candidate is reverified.
+policy validation, and the 34-example migration suite.
+
+Milestone 4 closes the blocker review against final code/documentation candidate
+`fb4de1e782ee01a18bf6337a89bea5b877de733a`. A new fresh-database `just verify` run passes the
+live Jitsurei completion/restart demonstration, 611 Keiro examples, 58 PGMQ examples with two
+documented pending cases, 47 operator examples, every DSL target including 707 main examples, 25
+Jitsurei examples, all 39 clean corpus invocations, documentation/policy checks, and 34 migration
+examples. REV-7 through REV-12 then approve the six original subject/component identities with
+full coverage at that exact SHA; strict validation accepts all 12 records and the six original
+findings remain byte-identical. The Language 5 and blocker gate is therefore closed, and EP-5 may
+begin its read-only release derivation and explicit user-approval gate. A final post-bundle
+fresh-database `just verify` run also exits zero with all 12 review concepts present.
 
 
 ## Context and Orientation

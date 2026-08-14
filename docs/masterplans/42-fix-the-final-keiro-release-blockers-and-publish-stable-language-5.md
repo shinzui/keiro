@@ -96,7 +96,7 @@ identified it as local to `mori://shinzui/keiro`.
 | 1 | Make fresh awakeables opaque across the runtime and generated workflows | docs/plans/260-make-fresh-awakeables-opaque-across-the-runtime-and-generated-workflows.md | None | None | Complete |
 | 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | Complete |
 | 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | Complete |
-| 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | In Progress |
+| 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | Complete |
 | 5 | Release the keiro 0.12.0.0 package set | docs/plans/264-release-the-keiro-0-12-0-0-package-set.md | EP-4 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -165,7 +165,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3 M2: make the focused test compare the public value with the authoritative package version and run the Keiro suite
 - [x] EP-4 M1: restructure conformance roles to preserve published Language 4 while making Language 5 the sole stable contract
 - [x] EP-4 M2: add or migrate a real Language 5 workflow proof, flip the registry maturity, regenerate the corpus, and update user documentation
-- [ ] EP-4 M3: run the complete blocker matrix and record fresh approval reviews at the post-fix commit
+- [x] EP-4 M3: run the complete blocker matrix and record fresh approval reviews at the post-fix commit
 - [ ] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
 - [ ] EP-5 M2: update the six package versions/internal bounds and seven changelogs, then pass every release gate
 - [ ] EP-5 M3: obtain final approval, commit with plan trailers, create and push annotated package tags
@@ -229,6 +229,11 @@ interactions between child plans. Provide concise evidence.
   workflow capability pseudocode, and four current corpus/router descriptions that still called
   Language 5 a candidate. Because review evidence is commit-pinned, no approval was recorded;
   the documentation is fixed forward and the final review SHA moves to the post-fix commit.
+- EP-4's corrected final candidate
+  `fb4de1e782ee01a18bf6337a89bea5b877de733a` passes a new clean fresh-database repository gate.
+  REV-7 through REV-12 approve the original six subject/component identities at that exact SHA;
+  strict validation accepts all 12 records and object hashes prove REV-1 through REV-6 were not
+  rewritten.
 
 
 ## Decision Log
@@ -290,5 +295,14 @@ fresh-database `just jitsurei` and full `just verify` gates passed.
 EP-3 completed the package-identity repair at `c3cd2bbbe7740a2a0ca7ee169c2564841c26aa50`:
 `Keiro.version` now renders Cabal's generated metadata, the test prevents both value drift and
 literal reintroduction, and a temporary metadata-only 0.11.0.1 build printed the new version.
-The focused, 611-example package, and fresh-database repository gates passed. The initiative
-remains open; EP-4 is the next registry-ordered eligible child.
+The focused, 611-example package, and fresh-database repository gates passed.
+
+EP-4 completed the language-publication and review gate with final reviewed code/documentation
+candidate `fb4de1e782ee01a18bf6337a89bea5b877de733a`: Language 5 is the sole stable published
+authoring contract, Language 4 remains explicit published compatibility, clean corpus
+regeneration is unchanged, and the complete fresh-database repository gate passes. REV-7 through
+REV-12 are full commit-pinned approvals of the six original identities, while REV-1 through REV-6
+remain immutable evidence of the defects that prompted the initiative. The post-bundle
+fresh-database repository gate also passes with all 12 review records present. EP-5 is now the only
+remaining child and may begin with its read-only release derivation; version edits and all
+externally visible release actions remain behind its explicit user approvals.
