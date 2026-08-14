@@ -163,8 +163,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 M3: correct both workflow guides, API reference, signatures, and at-least-once crash-window guidance
 - [x] EP-3 M1: replace the stale `Keiro.version` literal with Cabal-generated package metadata
 - [x] EP-3 M2: make the focused test compare the public value with the authoritative package version and run the Keiro suite
-- [ ] EP-4 M1: restructure conformance roles to preserve published Language 4 while making Language 5 the sole stable contract
-- [ ] EP-4 M2: add or migrate a real Language 5 workflow proof, flip the registry maturity, regenerate the corpus, and update user documentation
+- [x] EP-4 M1: restructure conformance roles to preserve published Language 4 while making Language 5 the sole stable contract
+- [x] EP-4 M2: add or migrate a real Language 5 workflow proof, flip the registry maturity, regenerate the corpus, and update user documentation
 - [ ] EP-4 M3: run the complete blocker matrix and record fresh approval reviews at the post-fix commit
 - [ ] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
 - [ ] EP-5 M2: update the six package versions/internal bounds and seven changelogs, then pass every release gate
@@ -215,6 +215,11 @@ interactions between child plans. Provide concise evidence.
 - EP-3's metadata-only probe changed `keiro/keiro.cabal` to 0.11.0.1 and the rebuilt public value
   printed 0.11.0.1 without a Haskell edit. The manifest was restored to 0.11.0.0, proving EP-5's
   release bump can remain owned by package metadata.
+- EP-4's full DSL gate found two hidden stable-pointer couplings: released feature diagnostics
+  selected the newest published language, and predecessor round-trip tests reparsed Language 4
+  syntax under the moving stable selector. The repair keeps released diagnostic text attached to
+  the published compatibility owner and makes Language 4 round trips explicit; all 707 DSL
+  examples then pass.
 
 
 ## Decision Log

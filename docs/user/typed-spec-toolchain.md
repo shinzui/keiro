@@ -1,4 +1,4 @@
-# Keiro DSL Language 4 Reference
+# Keiro DSL Language 5 Reference
 
 `keiro-dsl` is Keiro's build-time language for describing an event-sourced
 service. A checked `.keiro` source can generate Haskell domain types, codecs,
@@ -6,12 +6,13 @@ transducers, runtime wiring, conformance harnesses, and create-once modules for
 the behavior that remains application-owned. The generated application uses
 ordinary Keiro APIs; the DSL is not interpreted in production.
 
-This reference describes **Language 4 only**. Language 4 is the stable language
-for all new specifications and the only language users should author against.
-Every source in this guide therefore begins with:
+This reference describes **Language 5**, the published stable language and
+authoring default for new specifications. Language 4 remains a published,
+immutable compatibility contract; sections that compare predecessor behavior
+show Language 4 sources explicitly. New sources in this guide begin with:
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 5
 ```
 
 Use this page as both an introduction and a syntax reference. The shortest path
@@ -35,7 +36,7 @@ declarations and any combination of these node families:
 | `publisher` | Outbox ordering, retry, and stable identity policy. |
 | `workqueue` | PGMQ payload, ordering, provisioning, retry, and DLQ policy. |
 | `dispatch` | Read-model-driven fan-out and deduplicated queue enqueueing. |
-| `readmodel` | Registered SQL query identity and shape; released languages retain feed/consistency, while candidate Language 5 owns query freshness only. |
+| `readmodel` | Registered SQL query identity and shape; Languages 1–4 retain feed/consistency, while stable Language 5 owns query freshness only. |
 | `workflow` | Durable named steps, waits, sleeps, children, patches, and rotation. |
 | `operation` | Named command, query, signal, or workflow-run entry point. |
 
@@ -57,7 +58,7 @@ cabal run -v0 keiro-dsl -- scaffold service.keiro --out src
 The aggregate starter has this shape:
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 5
 context my-service
 
 id ThingId prefix=thing
@@ -134,7 +135,7 @@ cabal run -v0 keiro-dsl -- diff service.keiro --since HEAD^ --explain
 A complete source has this outer form:
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 5
 context hospital-capacity
 module Acme.Services
 layout collocated
@@ -543,7 +544,7 @@ behavior-key changes.
 After that baseline, a mapped declaration change rewrites use-specific output
 only for consumers that reach it through checked roots, plus the service
 structural module. Released languages expose aggregate command, private-event,
-and register roots. Candidate language 5 additionally lowers typed queue fields
+and register roots. Language 5 additionally lowers typed queue fields
 and read-model query pairs and derives aggregate-sourced projection consumers.
 Queue fields receive generated persisted JSON codecs; read-model query pairs
 receive generated Haskell aliases only. Public contracts and heterogeneous
@@ -757,7 +758,7 @@ clauses. Its create-once module supplies the implementation and a `FoldVersion`.
 Bump that token whenever hand-owned predicate or update behavior changes so
 snapshots and replay audits can detect the new fold.
 
-### Candidate Language 5 typed domain outcomes
+### Language 5 typed domain outcomes
 
 Language 5 can make every selected command result explicit without turning a
 business rejection into an event:
@@ -1064,7 +1065,7 @@ The mandatory `resolve stable` phrase acknowledges retry semantics: later
 attempts deduplicate targets already dispatched, but a resolver whose result
 changes can accumulate the union of targets seen across attempts.
 
-Candidate Language 5 also admits a checked, bounded selection:
+Language 5 also admits a checked, bounded selection:
 
 ```text
 resolve declarative {
@@ -1343,7 +1344,7 @@ the same reason, *adding* a payload row is a breaking change however it is
 spelled — a job already queued under the old shape does not contain it. Queue
 payload evolution is a persisted wire change and must go through `diff`.
 
-Candidate language 5 additionally reserves a colon form for a complete mapped
+Language 5 additionally reserves a colon form for a complete mapped
 type expression:
 
 ```text
@@ -1351,7 +1352,7 @@ jobData -> "job_data" : List (Optional ArtifactInfo)
 ```
 
 The colon is the language-5 feature boundary; languages 1 through 4 reject it
-at that token and retain their released scalar interpretation. Candidate
+at that token and retain their released scalar interpretation. Language 5
 scaffolding lowers the complete expression through the checked mapped graph,
 imports the exact application-owned Haskell types, and emits structural field
 codecs or opaque `ToJSON`/`FromJSON` boundaries. Required, optional, and
@@ -1417,7 +1418,7 @@ with the declared wire key and read-model check.
 
 The first form below is the published Languages 1–4 compatibility grammar. It
 keeps physical coordinates, delivery feed, and the historical consistency
-vocabulary on the read model. Candidate Language 5 uses the catalog form later
+vocabulary on the read model. Language 5 uses the catalog form later
 in this section and does not accept those delivery/consistency fields.
 
 ```text
@@ -1464,7 +1465,7 @@ schema-qualified table facts and create-once apply/query functions. Use the
 generated table constant in SQL rather than depending on PostgreSQL
 `search_path`.
 
-Candidate language 5 may declare the two type parameters of `ReadModel q r` as
+Language 5 may declare the two type parameters of `ReadModel q r` as
 one ordered pair after `columns`:
 
 ```text
@@ -1490,9 +1491,9 @@ read-model shape hash, catalog fingerprint, target reset policy, replay impact, 
 history. A legacy ledger without query-contract rows reports its baseline as unavailable rather
 than guessing that the old API was `()`.
 
-### Candidate Language 5 projection catalogs
+### Language 5 projection catalogs
 
-Language 5 is the current unreleased authoring candidate. It adds a closed
+Language 5 is the published stable authoring contract. It adds a closed
 projection catalog without changing the meaning of any language-1–4 source. Do
 not rewrite an existing language-4 workspace merely to follow the default; opt
 in when the service is ready to declare the complete read-side inventory.
@@ -1602,8 +1603,8 @@ name a non-empty observed-target set whose members all belong to one projection 
 in the same rebuild group. Several read models may observe different subsets of one
 owner's targets and resolve to that same owner. The owner handler is generated and
 selected once per event source, independently of query count. Do not repeat the
-relationship with an aggregate-local `projection <readmodel>` clause; candidate
-language 5 reports that as conflicting legacy ownership. A multi-target query's
+relationship with an aggregate-local `projection <readmodel>` clause; Language 5
+reports that as conflicting legacy ownership. A multi-target query's
 `backing = <target>` still selects one physical SQL table and does not stand in for the
 complete supplier check.
 
@@ -1644,7 +1645,7 @@ and owns live apply, replay apply, heterogeneous decoder, idempotency,
 revision provision/validation, physical-target-parametric live/replay, and verification
 bodies. Regeneration never overwrites reviewed hole code.
 
-Candidate Language 5 also supports the bounded all-row external-read contract:
+Language 5 also supports the bounded all-row external-read contract:
 
 ```text
 external-read order_totals_reader {
@@ -1820,7 +1821,7 @@ spec domain/project.keiro
 spec domain/shared.keiro
 ```
 
-Each member remains a complete source beginning with `language keiro-dsl 4`
+Each newly authored member remains a complete source beginning with `language keiro-dsl 5`
 and declaring the same `context`. The workspace manifest itself has no language
 preamble.
 
@@ -2080,7 +2081,7 @@ semantic validation. Canonical output discards comments and formatting.
 cabal run -v0 keiro-dsl -- check service.keiro
 cabal run -v0 keiro-dsl -- check service.keiro --emit
 cabal run -v0 keiro-dsl -- check service.keiro --explain-bindings
-cabal run -v0 keiro-dsl -- check service.keiro --min-language 4
+cabal run -v0 keiro-dsl -- check service.keiro --min-language 5
 cabal run -v0 keiro-dsl -- check service.keiro --deny-warnings
 cabal run -v0 keiro-dsl -- check service.keiro \
   --deny DeprecatedEventReplayHazard,WireSchemaVersionMismatch
@@ -2094,7 +2095,7 @@ cabal run -v0 keiro-dsl -- check service.keiro \
 `--emit` prints canonical source after successful validation.
 `--explain-bindings` lists consumer-owned binding obligations.
 `--min-language N` requires a registered released language version at least
-`N`; `--min-language 4` is the standard stable-contract gate.
+`N`; `--min-language 5` is the standard stable-contract gate for newly adopted services.
 `--deny-warnings` makes every warning fail this invocation without changing its
 severity. `--deny CODE[,CODE...]` applies the same exit policy selectively; it
 is repeatable, and the spelling is copied exactly from `warning[Code]`. A code
@@ -2121,13 +2122,13 @@ Both reports spell severity `"error"` or `"warning"`.
 
 ```bash
 cabal run -v0 keiro-dsl -- check service.keiro \
-  --min-language 4 \
+  --min-language 5 \
   --deny-warnings \
   --report-out build/keiro-check-report.json
 ```
 
 A red result means the source did not parse or compose, selected a language
-below 4, emitted an error, or emitted a warning denied by this invocation. The
+below 5, emitted an error, or emitted a warning denied by this invocation. The
 JSON report distinguishes those outcomes whenever a coded diagnostic could be
 produced. The report's parent directory is created if it does not exist.
 
@@ -2298,19 +2299,18 @@ before a write set exists. These checks are defense in depth, not a second
 semantic vocabulary.
 
 A source without a `language keiro-dsl N` preamble selects compatibility-only
-language 1. Declared languages 1 through 3 are compatibility-only, language 4
-remains the published stable contract, and candidate language 5 is the current
-development authoring default. Earlier languages do not gain language 5's catalog or mapped
+language 1. Declared languages 1 through 4 are published compatibility contracts, and language 5
+is the published stable contract and current authoring default. Earlier languages do not gain language 5's catalog or mapped
 consumer syntax or typed domain-outcome declarations/clauses.
 `check` and `scaffold`
 print one `language contract:` notice for those sources (workspace notices
 summarize member provenance); `diff` prints it for the working-tree side only.
-Use `--min-language 5` only after a service intentionally adopts the candidate
+Use `--min-language 5` after a service intentionally adopts the stable Language 5
 catalog and typed-outcome contract; mapped queue/query spellings, outcome
 exhaustiveness, generation, conformance, coverage, and evolution reporting are
 all checked before adoption.
-Existing language-4 CI may keep `--min-language 4` without
-triggering a mechanical rewrite.
+Existing Language-4 compatibility CI may keep `--min-language 4` without triggering a mechanical
+rewrite; new Language-5 services should use the standard `--min-language 5` gate.
 
 The warning policy follows the evidence boundary. Three warnings depend on
 operational history and therefore remain warnings: `DeprecatedEventReplayHazard`,
@@ -2352,7 +2352,7 @@ Diagnostics include a source line. Fix the specification first. If a generated
 harness later fails, fix the create-once behavior or evidence named by that
 harness; do not weaken the generated runtime boundary.
 
-Candidate catalog query-supply diagnostics are:
+Language 5 catalog query-supply diagnostics are:
 
 - `CatalogReadModelBindingMissing` when no observed target is declared;
 - `CatalogTargetUnknown` or `CatalogReadModelTargetOutsideGroup` for an invalid
@@ -2398,7 +2398,7 @@ policy can own it at the correct boundary.
 
 Before committing a new or changed service specification:
 
-- The first non-comment line is exactly `language keiro-dsl 4`.
+- The first non-comment line is exactly `language keiro-dsl 5` for a new or migrated service.
 - `check` exits zero for the whole source or workspace.
 - Every public/persisted field has an intentional type and wire spelling.
 - Aggregate time comes from command/input data, never a sampled clock.

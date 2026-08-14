@@ -238,14 +238,14 @@ version5 :: LanguageVersion
 version5 = LanguageVersion 5
 
 -- | The authoritative registry of recognized language contracts. Published
--- entries are append-only; the active pre-release candidate is amended in place.
+-- entries are append-only; any future pre-release candidate is amended in place.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
   LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 runtimeProfileV1 CompatibilityOnly PublishedLanguage
     :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly PublishedLanguage,
          LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly PublishedLanguage,
-         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 Stable PublishedLanguage,
-         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Candidate CandidateLanguage
+         LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 CompatibilityOnly PublishedLanguage,
+         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Stable PublishedLanguage
        ]
 
 profileV1 :: SyntaxProfile
@@ -477,13 +477,26 @@ sourceLanguageDiagnosticMessage diagnostic = detail
           <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)
         where
           requiredVersion =
-            case [ version
-                 | version <- NE.toList (sourceLanguageSupportedVersions diagnostic),
-                   Just definition <- [lookupLanguageDefinition version],
-                   definitionMaturity definition == PublishedLanguage
-                 ] of
-              [] -> NE.last (sourceLanguageSupportedVersions diagnostic)
-              published -> last published
+            case reverse publishedCompatibilityVersions of
+              latestCompatibility : _ -> latestCompatibility
+              [] -> case reverse publishedVersions of
+                latestPublished : _ -> latestPublished
+                [] -> NE.last (sourceLanguageSupportedVersions diagnostic)
+          supportedDefinitions =
+            [ (version, definition)
+            | version <- NE.toList (sourceLanguageSupportedVersions diagnostic),
+              Just definition <- [lookupLanguageDefinition version]
+            ]
+          publishedVersions =
+            [version | (version, definition) <- supportedDefinitions, definitionMaturity definition == PublishedLanguage]
+          -- Released compatibility diagnostics are byte-stable. Publishing a
+          -- successor must not rewrite the predecessor version they recommend.
+          publishedCompatibilityVersions =
+            [ version
+            | (version, definition) <- supportedDefinitions,
+              definitionMaturity definition == PublishedLanguage,
+              definitionSupport definition == CompatibilityOnly
+            ]
 
 -- | A parsed document with its source declaration preserved beside its graph.
 data ParsedSource = ParsedSource

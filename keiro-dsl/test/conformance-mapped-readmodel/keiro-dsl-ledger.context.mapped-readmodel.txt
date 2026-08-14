@@ -3,7 +3,7 @@ spec: keiro-dsl/test/fixtures/mapped-readmodel.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
-semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
+semantic-contract {"languageSupport":"stable","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
 naming-edition idiomatic-v1
 module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-readmodel structural conformance","path":"Generated/MappedReadmodel/StructuralConformance.hs"}
 module-role {"family":"AccountLookup","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural AccountLookup (line 15)","path":"Generated/MappedReadmodel/Structural/Shape/AccountLookup.hs"}

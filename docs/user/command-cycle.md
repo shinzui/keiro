@@ -131,7 +131,7 @@ its ordinary `CommandResult`. Apply it under the outer `Either` with `fmap`.
 An unmatched command remains `Left CommandRejected` and never reaches the
 adapter.
 
-For a candidate-language-5 aggregate with a `domain-outcomes` declaration,
+For a Language-5 aggregate with a `domain-outcomes` declaration,
 `keiro-dsl scaffold` constructs this handler in the generated event-stream
 module and exports it under the normalized aggregate name. For example:
 

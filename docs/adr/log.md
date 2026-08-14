@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-14
+* **Update**: Publish Language 5 as the sole stable authoring contract and pin Language 4 conformance as published compatibility evidence (plan 263).
 * **Update**: Amend ADR 0024: isolate generation-0 awakeable probes behind the compatibility module and require generated workflows to allocate opaque declared awaits (plan 260).
 * **Update**: Amend ADR-31, ADR-32, and ADR-34 with database-backed dedup staging, persisted admission identity, durable promotion preparation, absolute attempt deadlines, cumulative target locking, and recovery semantics (plan 259 M2).
 * **Update**: Bind projection revisions to exact inline or subscription delivery capabilities and advance canonical catalog/slice identity (ADR-26, ADR-31, ADR-34; plan 259 M1).

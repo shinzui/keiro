@@ -454,7 +454,7 @@ schema-version-1 `QueueCodec` backed by `keiroJobCodec`), and `QueuePolicy`
 still owns visibility timeout, batch size, and polling — `jobTuningFor` layers
 only the spec's ordering onto a tuning you supply.
 
-Candidate language 5 also accepts mapped payload rows such as
+Language 5 also accepts mapped payload rows such as
 `payload -> "payload" : QualificationPayload` and nested expressions such as
 `Optional QueueMetadata`. Structural declarations generate the exact object
 codec from their wire authority; opaque declarations use the application

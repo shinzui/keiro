@@ -1,16 +1,16 @@
 # Adopting Mapped Consumer Surfaces
 
-Candidate `keiro-dsl` language 5 can carry one mapped declaration through every
+Published stable `keiro-dsl` Language 5 can carry one mapped declaration through every
 supported private consumer surface: aggregate commands, private events and
 registers; persisted workqueue payloads; read-model query input/result types;
 and inline or catalog projections derived from an aggregate event source.
 
-This is an unreleased candidate contract. Fleet rollout requires both
+This is a published contract. Fleet rollout still requires both
 [MasterPlan 34](../masterplans/34-make-keiro-dsl-regeneration-semantically-local-and-source-stable-before-wide-adoption.md)
 and
 [MasterPlan 35](../masterplans/35-make-mapped-types-first-class-across-queues-read-models-and-projections-before-fleet-adoption.md)
 to be complete in the Keiro revision you intend to adopt. Passing those
-repository gates authorizes evaluation; it does not publish packages, migrate a
+repository gates authorizes adoption; it does not migrate a
 service, drain a queue, rebuild a projection, or apply application DDL.
 
 ## What Is Covered
@@ -47,7 +47,7 @@ Adopt one service at a time:
 3. Run `check` with binding and coverage evidence. Resolve every opaque or
    unsupported boundary deliberately.
 4. Scaffold once. Reconcile the generated Cabal fragment, fill new create-once
-   bindings and holes, and review the candidate-only generated tree. Do not edit
+   bindings and holes, and review the Language-5 generated tree. Do not edit
    generated files to make the corpus check pass.
 5. Compile and run the generated service conformance target. Persist the new
    semantic-impact ledger as the baseline; a legacy ledger correctly reports

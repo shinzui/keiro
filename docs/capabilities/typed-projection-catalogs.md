@@ -33,10 +33,10 @@ evidence:
     proves: "The pure catalog type projects missing-checkpoint policy into registration and inventory with stable rendering, ordering, and fingerprint input beside independent target-reset and replay policies."
   - kind: test
     resource: keiro-dsl/test/Main.hs
-    proves: "Candidate Language 5 separates owner delivery from query freshness, derives cursor authority from target ownership, requires one closed checkpoint-on-missing policy per subscription owner, rejects invalid waits or replay-unsafe placement, and classifies delivery and freshness changes independently."
+    proves: "Stable Language 5 separates owner delivery from query freshness, derives cursor authority from target ownership, requires one closed checkpoint-on-missing policy per subscription owner, rejects invalid waits or replay-unsafe placement, and classifies delivery and freshness changes independently."
   - kind: test
     resource: keiro-dsl/test/conformance-projection-catalog/Main.hs
-    proves: "The generated candidate-Language-5 catalog compiles and exposes FromCurrentHead unchanged through runtime inventory; companion conformance catalogs compile FromBeginning and FailIfMissing."
+    proves: "The generated stable-Language-5 catalog compiles and exposes FromCurrentHead unchanged through runtime inventory; companion conformance catalogs compile FromBeginning and FailIfMissing."
 ---
 
 # Typed projection catalogs and coordinated rebuilds
@@ -61,7 +61,7 @@ before replay. Coordinated rebuilds call Kiroku's public reset transaction,
 return the exact member keys moved, and condemn the whole preparation when any
 declared subscription has no persisted member.
 
-Candidate Language 5 requires the same choice as `checkpoint-on-missing =
+Stable Language 5 requires the same choice as `checkpoint-on-missing =
 from-beginning`, `from-current-head`, or `fail` on every subscription owner and
 forbids it on inline owners. Generated catalogs lower the choice directly to
 Kiroku. Structural diff reports a policy change as a breaking generated-catalog

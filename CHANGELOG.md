@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- **keiro-dsl**: publishes Language 5 as the sole stable and default authoring contract;
+  `currentStableLanguageVersion`, new skeletons, and standard new-service CI guidance now select
+  version 5. Language 4 remains published and byte-compatible under explicit compatibility
+  ownership, so existing Language-4 services may retain `--min-language 4` until an intentional
+  migration.
 - **keiro**: `Keiro.Workflow.Instance.claimInstance` now returns
   `ClaimOutcome` instead of `Bool`, distinguishing acquired, lease-held, paced,
   and unavailable outcomes. `ResumeSummary` adds `advanced`, `paced`, and

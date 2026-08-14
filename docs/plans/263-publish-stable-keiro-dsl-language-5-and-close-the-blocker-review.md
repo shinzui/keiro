@@ -37,8 +37,79 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: migrate the conformance baseline to explicit per-suite language ownership and preserve Language 4 as published compatibility
 - [x] M1: migrate the workflow evolution fixture and its three compiled lanes to Language 5 without weakening the Language 4 parser/corpus proofs
-- [ ] M2: make Language 5 the sole `Stable`/`PublishedLanguage` registry entry and make Language 4 `CompatibilityOnly`/`PublishedLanguage`
+- [x] M2: make Language 5 the sole `Stable`/`PublishedLanguage` registry entry and make Language 4 `CompatibilityOnly`/`PublishedLanguage`
 - [ ] M2: regenerate the affected corpus, update Language 5 documentation and ADR 16, and pass every DSL/repository gate
+- [x] M2: pass ADR validation, all focused Language 5 lanes, and the full 707-example `keiro-dsl-test` suite; prove dirty-tree corpus regeneration is idempotent
+- [ ] M2: commit the intentional corpus transition, then run the clean-tree corpus policy and fresh-database `just verify` gate at the release-candidate SHA
+- [x] M3: stage the release-candidate change with explicit paths; `git diff --cached --name-only` reports exactly:
+
+  ```text
+  CHANGELOG.md
+  README.md
+  docs/adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md
+  docs/adr/log.md
+  docs/capabilities/typed-projection-catalogs.md
+  docs/corpus/keiro-dsl-corpus.md
+  docs/guides/README.md
+  docs/guides/brownfield-migration-and-transducer-modeling.md
+  docs/guides/choosing-a-projection.md
+  docs/guides/choosing-keiro-dsl.md
+  docs/guides/evolution-and-replayability.md
+  docs/guides/project-read-models.md
+  docs/masterplans/42-fix-the-final-keiro-release-blockers-and-publish-stable-language-5.md
+  docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md
+  docs/user/README.md
+  docs/user/api-reference.md
+  docs/user/command-cycle.md
+  docs/user/deploy-ordering.md
+  docs/user/mapped-consumer-adoption.md
+  docs/user/migration-ownership.md
+  docs/user/read-models-and-projections.md
+  docs/user/typed-spec-toolchain.md
+  docs/user/work-queues.md
+  keiro-dsl/CHANGELOG.md
+  keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs
+  keiro-dsl/test/Keiro/Dsl/ConformanceBaseline.hs
+  keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs
+  keiro-dsl/test/Main.hs
+  keiro-dsl/test/conformance-aggregate-scalars/keiro-dsl-ledger.context.aggregate-scalars.txt
+  keiro-dsl/test/conformance-baseline.json
+  keiro-dsl/test/conformance-behavior-complete/keiro-dsl-ledger.context.behavior-complete.txt
+  keiro-dsl/test/conformance-coldstart/keiro-dsl-ledger.context.billing.txt
+  keiro-dsl/test/conformance-contract/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-declarative-router/keiro-dsl-ledger.context.transfer-routing.txt
+  keiro-dsl/test/conformance-dispatch-full/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-domain-outcomes/keiro-dsl-ledger.context.domain-outcomes.txt
+  keiro-dsl/test/conformance-import-planning/keiro-dsl-ledger.context.import-planning-collisions.txt
+  keiro-dsl/test/conformance-intake-full/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-intake-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-mapped-queue/keiro-dsl-ledger.context.mapped-queue.txt
+  keiro-dsl/test/conformance-mapped-readmodel/keiro-dsl-ledger.context.mapped-readmodel.txt
+  keiro-dsl/test/conformance-newsurface/keiro-dsl-ledger.context.transfer-routing.txt
+  keiro-dsl/test/conformance-nominal-scalars/keiro-dsl-ledger.context.nominal-scalars.txt
+  keiro-dsl/test/conformance-process-full/keiro-dsl-ledger.context.surge-demo.txt
+  keiro-dsl/test/conformance-process-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-process/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-projection-catalog/keiro-dsl-ledger.context.catalog-demo.txt
+  keiro-dsl/test/conformance-publisher-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-queue-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-queue/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-readmodel-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-replay/keiro-dsl-ledger.context.replay-divergence.txt
+  keiro-dsl/test/conformance-router-full/keiro-dsl-ledger.context.incident-paging.txt
+  keiro-dsl/test/conformance-router-runtime/keiro-dsl-ledger.context.incident-paging.txt
+  keiro-dsl/test/conformance-router/keiro-dsl-ledger.context.incident-paging.txt
+  keiro-dsl/test/conformance-scalar-expressions/keiro-dsl-ledger.context.aggregate-scalar-expressions.txt
+  keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-ledger.workspace.workspace-proof.txt
+  keiro-dsl/test/conformance-snapshot/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-structural/keiro-dsl-ledger.context.structural-conformance.txt
+  keiro-dsl/test/conformance-v2/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-workflow-full/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-workflow-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-workflow/keiro-dsl-ledger.context.hospital-capacity.txt
+  keiro-dsl/test/conformance-workspace-nominals/keiro-dsl-ledger.workspace.workspace-nominal-proof.txt
+  keiro-dsl/test/conformance/keiro-dsl-ledger.context.hospital-capacity.txt
+  ```
 - [ ] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers
 - [ ] M3: run six full adversarial follow-up reviews at that exact commit and allocate new REV handles
 - [ ] M3: validate the review bundle and stop on any `changes-requested` outcome
@@ -67,6 +138,18 @@ implementation. Provide concise evidence.
   its three pairs of generated workflow modules plus provenance ledgers. The focused baseline
   passed 2 examples, and all three workflow lanes passed, including the live PostgreSQL proof
   that allocates, signals, resumes, and completes with the opaque id.
+- Publishing Language 5 exposed two moving-pointer couplings in the full DSL suite. The feature
+  diagnostic selected the newest published supporting language and rewrote a frozen Language 4
+  diagnostic to version 5; legacy read-model round-trip tests also reparsed Language 4 syntax
+  under the moving stable pointer. Diagnostics now retain the latest published compatibility
+  owner, while predecessor round trips select Language 4 explicitly. The full 707-example suite
+  passes without changing the released golden.
+- `keiro-dsl-corpus-regen check` deliberately refuses any dirty corpus path, including the 36
+  intended one-line ledger maturity changes in this plan. Running `regenerate --allow-dirty`
+  before and after the final source changes produced the same corpus diff SHA-256
+  `6e2e6de9408098319523b6e356ec7c4c61d14b9cad10696f579e296c31481590`; every generated module
+  reported unchanged. The strict clean-tree policy therefore runs immediately after the
+  release-candidate commit rather than treating its pre-commit refusal as drift.
 
 
 ## Decision Log
@@ -100,6 +183,18 @@ Record every decision made while working on the plan.
   Rationale: An adversarial review is evidence gathering, not a ceremonial checkbox. Any new
   blocker must stop publication and be fixed before this plan completes.
   Date: 2026-08-14
+- Decision: Keep released feature-diagnostic text attached to the latest published compatibility
+  owner when a successor becomes stable.
+  Rationale: Publication changes the authoring recommendation, not the diagnostic bytes of an
+  immutable predecessor. A Language-5-only feature still names Language 5 because it has no
+  published compatibility owner.
+  Date: 2026-08-14
+- Decision: Reparse historical fixture renderings under their explicit recorded language instead
+  of `currentStableLanguageVersion`.
+  Rationale: A rendered semantic graph does not carry source provenance. Supplying Language 4 in
+  the predecessor round-trip test prevents a stable-pointer move from reinterpreting released
+  `feed`/`consistency` syntax as Language 5.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -109,7 +204,14 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 2 publishes Language 5 in the registry without rewriting Language 4 behavior. The
+schema-2 baseline now owns eight stable Language 5 suites, 27 published-compatibility Language 4
+suites, three compatibility proofs, and one version-independent comparison. Corpus regeneration
+changes only the maturity row in 36 ledgers; all generated Haskell is unchanged. User guidance,
+the corpus inventory, capability and guide references, changelogs, and ADR 16 now describe the
+published split. Focused Language 5 suites, the live PostgreSQL workflow proof, strict ADR
+validation, and all 707 DSL examples pass. Clean-tree repository verification and the six
+commit-pinned adversarial reviews remain before closure.
 
 
 ## Context and Orientation

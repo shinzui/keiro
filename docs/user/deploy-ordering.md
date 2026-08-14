@@ -97,7 +97,7 @@ emits `RouterDecideSurfaceChanged` and `ProcessDecideSurfaceChanged` advisories
 for spec-visible edits. Hole-only decide changes remain invisible to the
 differ, so the drain rule still applies whenever hand-owned logic changes.
 
-Candidate Language 5 declarative routers add checked `coordinationImpact`.
+Language 5 declarative routers add checked `coordinationImpact`.
 Increase the selection version for a semantic fingerprint change, then follow
 the same drain procedure. The bump records review intent but deliberately does
 not alter deterministic target-command ids: redelivery still forms a stable

@@ -32,7 +32,7 @@ are adopting:
   `ValidatedEventStream` boundary, and `runCommand`.
 - [Replayability Safety](../user/replay-safety.md) explains the validation
   guarantee that keeps unchecked streams out of command runners.
-- [Keiro DSL Language 4 Reference](../user/typed-spec-toolchain.md) covers the
+- [Keiro DSL Language 5 Reference](../user/typed-spec-toolchain.md) covers the
   complete stable language, the spec/check/scaffold loop, generated ownership,
   compatibility vectors, coverage reports, and historical comparison tooling.
 - [Choosing `keiro-dsl`](choosing-keiro-dsl.md) compares the benefits, costs,

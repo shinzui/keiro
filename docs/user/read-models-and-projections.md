@@ -113,9 +113,9 @@ Existing callers remain source-compatible. The `unmanagedInlineProjections`,
 `unmanagedAsyncProjection`, and `unmanagedReadModel` wrappers label values that
 remain outside catalog validation while an application migrates incrementally.
 
-### Generate the catalog from candidate Language 5
+### Generate the catalog from Language 5
 
-`keiro-dsl` language 5 is the current unreleased candidate. Its checked graph
+`keiro-dsl` Language 5 is the published stable authoring contract. Its checked graph
 owns the same runtime catalog described above. Language 1–4 meanings and
 generated banners remain unchanged; an existing service adopts 5 explicitly
 when it is ready to describe every physical target, rebuild group, projection
@@ -194,7 +194,7 @@ rejected before generation. Caller-specific read-your-write remains a Haskell
 `WaitForPosition` override with the command's returned position, not static DSL
 source.
 
-Candidate Language 5 requires exactly one `checkpoint-on-missing` choice for
+Language 5 requires exactly one `checkpoint-on-missing` choice for
 each subscription owner and forbids the field on inline owners. Use
 `from-beginning` to consume retained history, `from-current-head` to begin with
 future events, or `fail` to require an operator-provisioned row. A replayable
@@ -212,9 +212,9 @@ the author or a future upgrade tool must add the target, group, owner, source,
 reset/replay policies, handler order, and query binding. Target declarations do
 not create or migrate the table.
 
-Migrate candidate sources mechanically:
+Migrate sources written against the earlier Language 5 spelling mechanically:
 
-| Previous candidate spelling | Language 5 spelling |
+| Earlier Language 5 spelling | Published Language 5 spelling |
 |---|---|
 | projection-owner `feed = inline | subscription` | `delivery = inline | subscription` |
 | read model `consistency = Eventual` plus either feed | `freshness = immediate`; remove read-model `feed` and `subscription` |
@@ -228,7 +228,7 @@ lose the cursor-wait guarantee. A scope-preserving `wait-for-head <scope>` rewri
 an `Eventual` to `immediate` rewrite report no policy change; strengthenings and head-
 scope widenings across the migration are additive `CompatibilityStrengthened` findings.
 
-These are candidate-only rewrites. Languages 1–4 retain their published
+These are Language-5-only rewrites. Languages 1–4 retain their published
 `feed`, `consistency`, and `scope` grammar and generated behavior.
 
 Scaffolding emits one generated
@@ -259,7 +259,7 @@ reported for recompilation/review without being described as replayable.
 Category and all-history owners remain visible as unsupported heterogeneous
 typed boundaries and never receive an invented mapped declaration.
 
-See [Typed Specifications](typed-spec-toolchain.md#candidate-language-5-projection-catalogs)
+See [Typed Specifications](typed-spec-toolchain.md#language-5-projection-catalogs)
 for the complete syntax and validation rules.
 
 ## Register And Fence Catalog Groups
@@ -798,7 +798,7 @@ The hand-written `jitsureiProjectionCatalog` is executable adoption evidence:
 one catalog drives managed inline application, async application, registration,
 preview, a mixed clear/preserve rebuild, verification failure, fencing, repair,
 resume, and promotion. Its application-owned replay adapter omits the
-live-only side effect. The candidate-language-5
+live-only side effect. The stable-Language-5
 `keiro-dsl-conformance-projection-catalog` service supplies the generated path:
 it imports only `Generated.CatalogDemo.ProjectionCatalog` and proves the same
 inventory dimensions—four targets, mixed policies, a target dependency, two
@@ -826,7 +826,7 @@ Do not flip a preamble or replace all paths at once. Use this sequence:
 6. Build and validate the catalog while compatibility runners still operate;
    compare its inventory with the recorded fleet.
 7. Switch startup registration and live selection to the catalog, then switch
-   rebuild/operations, and adopt candidate language-5 generation only after the
+   rebuild/operations, and adopt Language-5 generation only after the
    hand-written inventory is understood.
 8. Retire unmanaged compatibility calls only after inventory and persisted
    baseline/diff evidence agree.
@@ -834,7 +834,7 @@ Do not flip a preamble or replace all paths at once. Use this sequence:
 Validation is deliberately closed-world. It cannot discover an undeclared
 table or prove what arbitrary SQL writes. Removing an owner while retaining its
 target is a validation error; removing the entire target and owner together
-requires `compareCatalogBaseline` or candidate-language-5 diff evidence because
+requires `compareCatalogBaseline` or Language-5 diff evidence because
 the new catalog alone cannot prove that a declaration used to exist. Keiro never
 creates or migrates application targets.
 

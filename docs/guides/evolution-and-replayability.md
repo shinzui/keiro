@@ -512,7 +512,7 @@ re-runs the *current* handler against the stored source event.
 
 ## Changing typed domain outcomes
 
-Candidate language 5 treats outcome annotations as forward command behavior,
+Language 5 treats outcome annotations as forward command behavior,
 not persisted fold behavior. Changing a declared rejection/no-op type or a
 transition's accepted/rejected/no-op kind or reason produces
 `DomainOutcomeTypesChanged` or `DomainTransitionOutcomeChanged` in semantic
@@ -545,7 +545,7 @@ requires an explicit guarded silent transition, not a fallback classifier arm.
 
 ## Changing a projection catalog
 
-Candidate language 5 makes read-side ownership an evolution surface instead of
+Language 5 makes read-side ownership an evolution surface instead of
 an application-maintained list. Run `keiro-dsl diff` before changing any
 target, group, owner, source, feed identity, replay policy, or query binding.
 The differ reports target addition/removal/location/reset/dependency changes,
@@ -703,7 +703,7 @@ same rule.
 `keiroJobCodec` (a versioned `{v,t,data}` envelope with the full upcaster-chain
 story and a `JobPayloadFromFuture` rolling-deploy retry). Generated workqueues
 now expose a schema-version-1 `QueueCodec` backed by `keiroJobCodec`; payload
-rows in candidate language 5 may resolve structural or opaque mapped type
+rows in Language 5 may resolve structural or opaque mapped type
 expressions, but a mapped declaration edit does not synthesize a queue upcaster
 or silently bump that envelope. `diff` names the exact queue consumer and
 queued-job history consequence. Hand-written queues choose either codec

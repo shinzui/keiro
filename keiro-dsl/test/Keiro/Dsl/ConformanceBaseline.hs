@@ -10,7 +10,16 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.FrontendCompatibility (SourceExpectation (..), observeSource, readRepoText)
 import Keiro.Dsl.Grammar (Spec (..))
-import Keiro.Dsl.LanguageVersion (currentAuthoringLanguageVersion, currentStableLanguageVersion, languageVersionNumber)
+import Keiro.Dsl.LanguageVersion
+  ( LanguageDefinition (..),
+    LanguageMaturity (..),
+    LanguageSupport (..),
+    currentAuthoringLanguageVersion,
+    currentStableLanguageVersion,
+    languageVersion,
+    languageVersionNumber,
+    lookupLanguageDefinition,
+  )
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName (..))
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext)
@@ -131,9 +140,8 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
       `shouldBe` ([] :: [Text])
     forM_ (baselineCompiledSuites baseline) $ \suite -> do
       suiteRole suite
-        `shouldSatisfy` (`elem` ["stable-primary", "candidate-primary", "compatibility-proof", "version-independent"])
-      suiteLanguageVersion suite
-        `shouldBe` primaryVersionForRole baseline (suiteRole suite)
+        `shouldSatisfy` (`elem` ["stable-primary", "published-compatibility", "compatibility-proof", "version-independent"])
+      validateSuiteLanguageOwnership baseline suite
       suiteReason suite `shouldSatisfy` (not . T.null . T.strip)
       directory <- resolveRepoDirectory ("keiro-dsl" </> suiteDirectory suite)
       doesDirectoryExist directory `shouldReturn` True
@@ -179,11 +187,44 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
               )
         Nothing -> pure ()
 
-primaryVersionForRole :: ConformanceBaseline -> Text -> Maybe Natural
-primaryVersionForRole baseline role = case role of
-  "stable-primary" -> Just (baselineStableLanguageVersion baseline)
-  "candidate-primary" -> Just (baselineAuthoringLanguageVersion baseline)
-  _ -> Nothing
+validateSuiteLanguageOwnership :: ConformanceBaseline -> CompiledSuite -> IO ()
+validateSuiteLanguageOwnership baseline suite = case (suiteRole suite, suiteLanguageVersion suite) of
+  ("stable-primary", Just rawVersion) -> do
+    rawVersion `shouldBe` baselineStableLanguageVersion baseline
+    definition <- requireRegisteredDefinition suite rawVersion
+    definitionSupport definition `shouldBe` Stable
+    definitionMaturity definition `shouldBe` PublishedLanguage
+  ("published-compatibility", Just rawVersion) -> do
+    rawVersion `shouldNotBe` baselineStableLanguageVersion baseline
+    definition <- requireRegisteredDefinition suite rawVersion
+    definitionSupport definition `shouldBe` CompatibilityOnly
+    definitionMaturity definition `shouldBe` PublishedLanguage
+  ("compatibility-proof", Nothing) -> pure ()
+  ("version-independent", Nothing) -> pure ()
+  (role, version) ->
+    expectationFailure
+      ( T.unpack
+          ( suiteComponent suite
+              <> " has invalid language ownership for role "
+              <> role
+              <> ": "
+              <> T.pack (show version)
+          )
+      )
+
+requireRegisteredDefinition :: CompiledSuite -> Natural -> IO LanguageDefinition
+requireRegisteredDefinition suite rawVersion =
+  case languageVersion rawVersion >>= lookupLanguageDefinition of
+    Just definition -> pure definition
+    Nothing -> do
+      expectationFailure
+        ( T.unpack
+            ( suiteComponent suite
+                <> " owns unregistered language "
+                <> T.pack (show rawVersion)
+            )
+        )
+      fail "unregistered conformance language owner"
 
 expectedStableGeneratedPaths :: CompiledSuite -> IO [FilePath]
 expectedStableGeneratedPaths suite = case suiteGeneration suite of

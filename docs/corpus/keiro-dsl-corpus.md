@@ -2,24 +2,27 @@
 
 Worked examples of the typed-spec toolchain: the curated `.keiro` fixtures below, every compiled
 conformance component, and every mutation/gate script. Paths are relative to `keiro-dsl/` in the
-keiro repository. Start with the stable Language-4 fixture for a surface, then use its negative or
-diff variants to see the exact guardrails.
+keiro repository. Start with the stable Language-5 fixture for a Language-5-exclusive surface,
+or the published-compatibility Language-4 fixture for an inherited surface, then use its negative
+or diff variants to see the exact guardrails.
 
-## Published stable baseline and candidate lane
+## Published stable and compatibility lanes
 
-Language 4 remains the published stable contract; unreleased Language 5 is the development
-authoring candidate. The machine-checked baseline contains 245 fixture sources: 230 declared
-Language-4 sources, two focused Language-5 sources, and 13 named historical/source-selection
-exceptions. It also accounts for all 36 compiled conformance components: 30 `stable-primary`
-suites, two `candidate-primary` suites, three focused compatibility proofs, and one
-version-independent codec comparison.
+Language 5 is the published stable contract and authoring default. Language 4 remains a published,
+immutable compatibility contract. The machine-checked baseline contains 245 fixture sources: 229
+declared Language-4 sources, three focused Language-5 sources, and 13 named
+historical/source-selection exceptions. It also accounts for all 39 compiled conformance
+components: eight `stable-primary` Language-5 suites, 27 `published-compatibility` Language-4
+suites, three focused compatibility proofs, and one version-independent codec comparison.
 
-Stable suites exercise syntax profile 2 and runtime semantics 3, including current TypeID-v7
-admission for generated aggregate IDs, typed `KindID` public-contract fields, nominal equality,
-and strict service-surface validation. The baseline checker loads each stable source or workspace,
-checks the selected service, and compares fresh non-writing scaffold plans with the committed
-Language-4 generated banners and exact module inventory. Skeleton coverage uses the union of all
-distinct stable starters.
+Stable suites exercise Language 5's syntax profile 4 and runtime semantics 4, including typed
+domain outcomes, mapped consumers, projection catalogs, declarative routing, and the live workflow
+allocate/signal/completion path. Published-compatibility suites preserve Language 4's syntax
+profile 3 and runtime semantics 3, including current TypeID-v7 admission for generated aggregate
+IDs, typed `KindID` public-contract fields, nominal equality, and strict service-surface validation.
+The baseline checker loads each primary source or workspace, checks the selected service, and
+compares fresh non-writing scaffold plans with the committed language-owned generated banners and
+exact module inventory. Skeleton coverage uses the union of all distinct published starters.
 
 ## Historical source-language lane
 
@@ -103,7 +106,7 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
 | `test/fixtures/process-bad-timer.keiro` | negative timer ceiling and dispatch field binding |
 | `test/fixtures/process-ghost-refs.keiro` | negative process command, timer, and projection references |
-| `test/fixtures/projection-catalog.keiro` | candidate language-5 target/group/owner/query catalog with versioned external-read lowering plus inline, async, clear, preserve, aggregate, and category coverage |
+| `test/fixtures/projection-catalog.keiro` | stable language-5 target/group/owner/query catalog with versioned external-read lowering plus inline, async, clear, preserve, aggregate, and category coverage |
 | `test/fixtures/readmodel-consistency-conflict.keiro` | negative projection/readmodel consistency conflict |
 | `test/fixtures/readmodel-dispatch-unresolved.keiro` | negative dispatch readmodel and column references |
 | `test/fixtures/readmodel-inline-unreferenced.keiro` | negative unowned inline readmodel feed |
@@ -185,8 +188,8 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 
 ## Primary compiled suites
 
-These 32 components compile the released Language-4 corpus plus the focused
-candidate Language-5 catalog and mapped-workqueue lanes and form the primary product baseline.
+These 35 generated-primary components compile the published-compatibility Language-4 corpus plus
+the stable Language-5 feature lanes and form the primary product baseline.
 
 | Component | Proves |
 | --- | --- |
@@ -209,7 +212,7 @@ candidate Language-5 catalog and mapped-workqueue lanes and form the primary pro
 | `test/conformance-queue/` (`keiro-dsl-conformance-queue`) | generated workqueue payload codec round-trips |
 | `test/conformance-queue-runtime/` (`keiro-dsl-conformance-queue-runtime`) | queue naming parity, ordering/provisioning, retry policy, and dispositions compile against live PGMQ |
 | `test/conformance-readmodel-runtime/` (`keiro-dsl-conformance-readmodel-runtime`) | readmodel registration/rebuild/query holes use live APIs and a qualified table |
-| `test/conformance-projection-catalog/` (`keiro-dsl-conformance-projection-catalog`) | candidate language-5 generated catalog validates one runtime inventory and compiles aggregate-codec replay, category decoding, inline multi-target, async, clear, and preserve declarations |
+| `test/conformance-projection-catalog/` (`keiro-dsl-conformance-projection-catalog`) | stable language-5 generated catalog validates one runtime inventory and compiles aggregate-codec replay, category decoding, inline multi-target, async, clear, and preserve declarations |
 | `test/conformance-dispatch-full/` (`keiro-dsl-conformance-dispatch-full`) | generated queue policy plus a filled worker assemble into a live PGMQ job |
 | `test/conformance-workflow/` (`keiro-dsl-conformance-workflow`) | generated workflow facts match hand-written, mutation-pinnable expectations |
 | `test/conformance-workflow-runtime/` (`keiro-dsl-conformance-workflow-runtime`) | workflow name, awakeable ids, patches, and continuation declarations compile against live runtime |

@@ -89,7 +89,7 @@ brownfield root with no event history, reconstructs the derived tables, blocks
 promotion on an unsafe retained row, proves writes remain fenced during repair,
 resumes the same run, and verifies the live-only side effect was not replayed.
 
-Candidate language 5 supplies the generated counterpart in
+Language 5 supplies the generated counterpart in
 `keiro-dsl/test/conformance-projection-catalog`: its program imports one
 `Generated.CatalogDemo.ProjectionCatalog` facade and checks the same inventory
 dimensions instead of reconstructing lists from generated leaf modules. Its

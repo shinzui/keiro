@@ -67,7 +67,7 @@ across two ledgers.
 
 ### Projection catalog targets are declarations, not migrations
 
-A `Keiro.Projection.Catalog.TargetDeclaration` or candidate language-5 DSL
+A `Keiro.Projection.Catalog.TargetDeclaration` or Language-5 DSL
 `target` names an application-owned qualified table and its rebuild reset
 policy. It does not create the schema, table, indexes, constraints, or row
 codec, and it does not prove that arbitrary handler SQL writes only that table.
@@ -85,7 +85,7 @@ from available history.
 Catalog validation is a closed-world check over declared facts. It rejects an
 owner removal that leaves its target behind, but if a change removes the owner
 and target together the new catalog cannot know they ever existed. Persist the
-old inventory and run `compareCatalogBaseline`, or use candidate-language-5 DSL
+old inventory and run `compareCatalogBaseline`, or use Language-5 DSL
 diff evidence, before applying the application migration that removes or moves
 the table. No catalog check can discover an undeclared table or prove which
 qualified objects arbitrary handler SQL writes.

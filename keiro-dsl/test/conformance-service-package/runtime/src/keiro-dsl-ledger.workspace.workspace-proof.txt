@@ -13,7 +13,7 @@ source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path"
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/beta.keiro","sourceForm":"declared"}
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/evidence.keiro","sourceForm":"declared"}
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"domain/shared.keiro","sourceForm":"declared"}
-semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/BehaviorSourceMap.hs","roleFamily":"BehaviorSourceMap","roleOwnerKind":"context","roleOwnerName":"context workspace-proof behavior source map"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals.hs","roleFamily":"Nominals","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal declarations"}
 module {"kind":"generated","path":"Proof/WorkspaceProof/Generated/Nominals/Internal.hs","roleFamily":"Internal","roleOwnerKind":"context","roleOwnerName":"context workspace-proof generated nominal ID internals"}

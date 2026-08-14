@@ -106,11 +106,11 @@ generated:
   `InlineProjection`, and `AsyncProjection` values directly. The runnable
   Jitsurei example uses this path in
   [`Jitsurei.ReadModels`](../../jitsurei/src/Jitsurei/ReadModels.hs).
-- Candidate `keiro-dsl` language 5 can generate a
+- Stable `keiro-dsl` Language 5 can generate a
   `Generated.<Context>.ProjectionCatalog` facade from `target`,
   `rebuild-group`, `projection-owner`, and catalog-bound `readmodel`
-  declarations. Language 5 is unreleased; adopting it is an explicit candidate
-  language upgrade, not a silent change to language 1–4 programs.
+  declarations. Adopting Language 5 is an explicit service migration, not a
+  silent change to language 1–4 programs.
 
 Generated code owns identities and wiring, but application code still owns
 table migrations, SQL queries, live apply functions, replay adapters, and

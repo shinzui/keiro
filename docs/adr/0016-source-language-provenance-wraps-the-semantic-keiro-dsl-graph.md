@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-14T04:55:00Z
+timestamp: 2026-08-14T16:33:53Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -62,22 +62,31 @@ publication maturity are distinct registry facts.** Each `LanguageDefinition` ca
 `currentStableLanguageVersion` selects exactly one published `Stable` entry, while
 `currentAuthoringLanguageVersion` selects the sole active candidate when one exists and otherwise
 falls back to stable. New skeletons and focused candidate conformance use the authoring selector;
-released compatibility baselines and stable-language policy use the stable selector. Language 4
-remains the published stable contract. Language 5 is the unreleased candidate and development
-authoring default. Languages 1 through 4 retain their immutable meaning; existing language-4
-sources, generated corpora, and scaffold ledgers are never silently demoted or rewritten. Moving
-the authoring pointer changes new-source and focused-test defaults, not any predecessor's behavior,
-support status, or publication status.
+released compatibility baselines and stable-language policy use the stable selector. Language 5
+is the published stable contract and authoring default. Language 4 remains published under
+`CompatibilityOnly`; Languages 1 through 4 retain their immutable meaning, source syntax, runtime
+profiles, generated corpora, and scaffold ledgers. Moving the authoring pointer changes new-source
+and focused-test defaults, not any predecessor's behavior or publication status.
+
+**Language 5 publication reclassifies support without rewriting predecessor evidence.** The
+publication transition records Language 5 as `Stable PublishedLanguage`, records Language 4 as
+`CompatibilityOnly PublishedLanguage`, and leaves no active candidate. The conformance baseline
+therefore assigns every generated-primary suite an explicit language owner: Language 5 suites are
+`stable-primary`, while unchanged Language 4 suites are `published-compatibility`. Compatibility
+and version-independent proofs carry no primary-language claim. The live workflow
+allocate/signal/completion proof is intentionally migrated to Language 5; Language 4 parser,
+fixture, skeleton, and generated-suite evidence stays owned by Language 4 rather than following a
+moving stable pointer.
 
 **Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
 profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
 Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
-`keiro-dsl/syntax-profile/2`, version 4 selects `keiro-dsl/syntax-profile/3`, and candidate 5
+`keiro-dsl/syntax-profile/2`, version 4 selects `keiro-dsl/syntax-profile/3`, and version 5
 selects `keiro-dsl/syntax-profile/4` for projection catalogs and mapped consumer surfaces.
 Versions 1 and 2 select
 `keiro-dsl/runtime-semantics/1`, while version 3 selects
 `keiro-dsl/runtime-semantics/2` and version 4 selects
-`keiro-dsl/runtime-semantics/3`. Candidate 5 selects
+`keiro-dsl/runtime-semantics/3`. Version 5 selects
 `keiro-dsl/runtime-semantics/4`. Runtime semantics 3 preserves version 3's
 aggregate ID and fold projection while enabling the separate public-contract
 TypeID admission capability; runtime semantics 4 adds the projection-catalog fingerprint
@@ -87,7 +96,7 @@ version number therefore enables neither syntax nor runtime behavior until its r
 chooses both values explicitly. The historical minimum-version query remains documentation and
 compatibility metadata only.
 
-Candidate syntax profile 4 also freezes the pre-publication projection/query split:
+Published syntax profile 4 freezes the Language 5 projection/query split:
 projection owners use `delivery = inline | subscription`, while catalog-bound read models use
 `freshness = immediate | wait-for-head entire-log | wait-for-head category "name"`. A Language 5
 read model cannot repeat `feed`, `subscription`, `consistency`, or `scope`; any durable cursor is
@@ -95,13 +104,13 @@ derived from its validated target owner. Static source has no caller-specific po
 Languages 1–4 continue to parse and render their historical fields through an explicit legacy
 supply representation, so normalization does not rewrite or reinterpret their published bytes.
 
-Candidate syntax profile 4 owns `ExternalReadContractSyntax` as a separate located feature.
+Published syntax profile 4 owns `ExternalReadContractSyntax` as a separate located feature.
 The top-level `external-read` declaration carries contract/version identity, a query reference,
 stable qualified SQL result type, compatible projection revisions, and surface generation. Its
 result-shape hash is not source syntax: lowering derives it from the checked read-model node so a
 second shape authority cannot enter the semantic graph. Multiple versions of one contract remain
 distinct source subjects. Languages 1–4 reject the `external-read` marker at the feature gate
-before catalog validation, and the candidate's parse/pretty round trip preserves the declaration
+before catalog validation, and Language 5's parse/pretty round trip preserves the declaration
 without adding the derived shape.
 
 **Version 2 is the first successor contract.** It registers consumer-owned
@@ -134,15 +143,15 @@ the predecessor's aggregate fingerprint segment; service-aware scaffold,
 manifest, durable ID-domain, and diff consumers still observe the new contract
 capability through `CheckedService`.
 
-**Candidate version 5 owns the mapped consumer source boundary.** A typed workqueue row spells
+**Version 5 owns the mapped consumer source boundary.** A typed workqueue row spells
 `field -> "wire" : TypeExpr`; the colon is the owned feature token, while the released lower-case
 `text`, `int`, and `bool` rows keep their prior meaning. A typed read model spells one ordered,
 atomic pair, `query input = TypeExpr` followed by `query result = TypeExpr`; a partial pair never
 enters the semantic graph. Versions 1 through 4 reject the colon or first `query` token with the
-language-feature diagnostic. Candidate 5 reuses its existing syntax-profile identifier and runtime
+language-feature diagnostic. Language 5 reuses its established syntax-profile identifier and runtime
 profile: mapped consumer compilation changes neither aggregate fold behavior nor the runtime
-fingerprint segment. Until queue and query generation are complete, candidate use is accepted by
-the parser but refused by stable semantic lowering-pending diagnostics.
+fingerprint segment. Queue and query generation, semantic-impact accounting, diffing, coverage,
+and compiled conformance are part of the published Language 5 contract.
 
 **Primary conformance may cover the active candidate and released predecessors concurrently.** An
 active authoring candidate gets focused positive, negative, generation, and compiled/runtime
@@ -248,9 +257,9 @@ fleet planning remain in
   precedent in [ExecPlan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md), and
   [ExecPlan 233](../plans/233-gate-the-outcome-reserved-words-on-the-language-5-syntax-profile.md)
   completed it by restoring `outcome` as an identifier in every language.
-- Candidate-5 queue and query type clauses are atomic, located feature surfaces. Registering them
-  does not widen languages 1–4 or permit scaffolding before their full lowerers land.
-- Candidate-5 external-read declarations are located feature surfaces whose runtime shape comes
+- Language-5 queue and query type clauses are atomic, located feature surfaces. Publishing them
+  does not widen languages 1–4.
+- Language-5 external-read declarations are located feature surfaces whose runtime shape comes
   from the referenced checked query. Source provenance records the declaration, while canonical
   catalog identity records the derived result shape; neither layer fabricates the other's fact.
 - A higher language version does not inherit a predecessor's feature set or runtime semantics by
@@ -262,6 +271,8 @@ fleet planning remain in
 - An active authoring candidate requires dedicated conformance in the same change, not wholesale
   migration of the existing corpus. Released-version corpora remain primary evidence for their own
   contracts until an intentional migration changes what they prove.
+- A publication transition gives each generated-primary conformance suite an explicit language
+  owner. Stable and published-compatibility suites cannot silently follow a global selector.
 - Source-aware tools can branch on frontend phase, stable code, and exact span without parsing
   human-readable Megaparsec output; compatibility callers retain the released text.
 - A version-2 expression is not accepted merely because its tokens parse. Its

@@ -391,12 +391,12 @@ run; switch startup registration and managed live selection; compare the
 catalog report with the recorded fleet; then move rebuild operations to
 `Keiro.Projection.Catalog.Operations`. Keep network calls and other live-only
 actions out of replay adapters, and require application verification before
-promotion. Candidate language 5 can generate the facade after the inventory is
+promotion. Language 5 can generate the facade after the inventory is
 understood; changing only the DSL preamble cannot infer any of these facts.
 
 The proof is closed-world. Validation cannot discover undeclared tables or
 inspect arbitrary SQL. Persist the old inventory and use
-`compareCatalogBaseline` (or candidate-language-5 diff) before removing a whole
+`compareCatalogBaseline` (or Language-5 diff) before removing a whole
 target/owner declaration, because the new catalog alone cannot report a fact
 that has vanished completely. Application migrations continue to own all target
 DDL throughout the cutover.

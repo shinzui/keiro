@@ -3,7 +3,7 @@ spec: keiro-dsl/test/fixtures/reservation-snapshot.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
-semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity behavior source map","path":"Generated/HospitalCapacity/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}

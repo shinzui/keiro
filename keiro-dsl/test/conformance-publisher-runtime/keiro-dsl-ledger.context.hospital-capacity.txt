@@ -3,7 +3,7 @@ spec: keiro-dsl/test/fixtures/emit.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
-semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
 naming-edition idiomatic-v1
 module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract emergency (line 4)","path":"Generated/HospitalCapacity/Emergency/Contract.hs"}
 module-role {"family":"Publisher","kind":"generated","ownerKind":"publisher","ownerName":"publisher hospitalPublisher (line 42)","path":"Generated/HospitalCapacity/HospitalPublisher/Publisher.hs"}

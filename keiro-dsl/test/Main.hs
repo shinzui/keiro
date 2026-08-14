@@ -163,7 +163,7 @@ main = hspec $ do
   frontendProfilesSpec
 
   describe "mapped consumer surface" $ do
-    it "parses and canonically round-trips candidate queue and query expressions as atomic forms" $ do
+    it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
       source <- mappedConsumerSurfaceSource
       parsed <- case parseSource "<mapped-consumer>" source of
         Left failure -> expectationFailure (show failure) >> fail "unreachable"
@@ -668,7 +668,7 @@ main = hspec $ do
       map snd surfaceFacts `shouldSatisfy` any (T.isInfixOf "workqueue-history:mapped_jobs")
       map snd surfaceFacts `shouldSatisfy` any (T.isInfixOf "projection-rebuild:catalog-projection:order_summary_writer:Orders:reporting")
 
-    it "keeps published-language facades byte-stable while extending the candidate facade" $ do
+    it "keeps predecessor facades byte-stable while extending the Language 5 facade" $ do
       published <- checkedServiceOf "test/fixtures/semantic-impact.keiro"
       candidate <- checkedServiceOf "test/fixtures/mapped-workqueue.keiro"
       serviceConformanceFactKeys published
@@ -754,7 +754,7 @@ main = hspec $ do
         `shouldSatisfy` Set.member (MappedProjectionRebuild (CatalogProjectionConsumer "order_summary_writer" "Orders") "reporting")
 
   describe "mapped surface qualification" $ do
-    it "selects every explicit and derived surface from one integrated candidate authority" $ do
+    it "selects every explicit and derived surface from one integrated Language 5 authority" $ do
       service <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
       workspace <- shouldComposeWorkspace "test/fixtures/projection-catalog.keiro-workspace"
       coverage <- shouldResolveCoverage "projection-catalog.keiro" (checkedSpec service)
@@ -880,7 +880,7 @@ main = hspec $ do
       addedPaths grownDelta `shouldBe` Set.empty
       removedPaths grownDelta `shouldBe` Set.empty
 
-    it "keeps candidate syntax gated and published service facades unchanged" $ do
+    it "keeps Language 5 syntax gated and predecessor service facades unchanged" $ do
       candidate <- checkedServiceOf "test/fixtures/projection-catalog.keiro"
       published <- checkedServiceOf "test/fixtures/consumer-types.keiro"
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -901,28 +901,28 @@ main = hspec $ do
       v4Contract <- maybe (expectationFailure "missing v4 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 4)
       v5Contract <- maybe (expectationFailure "missing v5 contract" >> fail "unreachable") pure (effectiveLanguageContractForVersion =<< languageVersion 5)
       effectiveLanguageSupport v1Contract `shouldBe` CompatibilityOnly
-      effectiveLanguageSupport v4Contract `shouldBe` Stable
-      effectiveLanguageSupport v5Contract `shouldBe` Candidate
+      effectiveLanguageSupport v4Contract `shouldBe` CompatibilityOnly
+      effectiveLanguageSupport v5Contract `shouldBe` Stable
       Aeson.toJSON v5Contract
         `shouldBe` object
           [ "languageVersion" .= (5 :: Int),
             "runtimeSemantics" .= ("keiro-dsl/runtime-semantics/4" :: T.Text),
-            "languageSupport" .= ("candidate" :: T.Text)
+            "languageSupport" .= ("stable" :: T.Text)
           ]
       Aeson.eitherDecode "{\"languageVersion\":1,\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/1\"}"
         `shouldBe` Right v1Contract
 
-    it "reports stable, candidate, and compatibility-only support through source inspection" $ do
-      (candidateCode, candidateOut, candidateErr) <- runKeiroDsl ["inspect", "test/fixtures/projection-catalog.keiro", "--format=json"]
-      candidateCode `shouldBe` ExitSuccess
-      candidateErr `shouldBe` ""
-      candidateOut `shouldContain` "\"languageVersion\":5"
-      candidateOut `shouldContain` "\"languageSupport\":\"candidate\""
-      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
+    it "reports stable and compatibility-only support through source inspection" $ do
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/projection-catalog.keiro", "--format=json"]
       stableCode `shouldBe` ExitSuccess
       stableErr `shouldBe` ""
-      stableOut `shouldContain` "\"languageVersion\":4"
+      stableOut `shouldContain` "\"languageVersion\":5"
       stableOut `shouldContain` "\"languageSupport\":\"stable\""
+      (predecessorCode, predecessorOut, predecessorErr) <- runKeiroDsl ["inspect", "test/fixtures/contract-v4.keiro", "--format=json"]
+      predecessorCode `shouldBe` ExitSuccess
+      predecessorErr `shouldBe` ""
+      predecessorOut `shouldContain` "\"languageVersion\":4"
+      predecessorOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       (compatibilityCode, compatibilityOut, compatibilityErr) <- runKeiroDsl ["inspect", "test/fixtures/language-v1.keiro", "--format=json"]
       compatibilityCode `shouldBe` ExitSuccess
       compatibilityErr `shouldBe` ""
@@ -936,7 +936,7 @@ main = hspec $ do
       legacyCode `shouldBe` ExitSuccess
       legacyOut `shouldBe` "OK\n"
       legacyErr `shouldContain` "language contract: effective keiro-dsl 1 (legacy-unversioned, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
-      legacyErr `shouldContain` "language-4 strict spec-surface validation is not applied"
+      legacyErr `shouldContain` "language-5 strict spec-surface validation is not applied"
 
       (stableCode, stableOut, stableErr) <- runKeiroDsl ["check", stablePath]
       stableCode `shouldBe` ExitSuccess
@@ -1715,7 +1715,7 @@ main = hspec $ do
         `shouldBe` [legacyFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
       legacyReplayImpactSpecs oldSpec newSpec `shouldBe` ReplayNeutral
 
-    it "exposes stable JSON inspection for a source and canonically ordered workspace members" $ do
+    it "exposes published support in source and workspace JSON inspection" $ do
       (sourceCode, sourceOut, sourceErr) <- runKeiroDsl ["inspect", "test/fixtures/reservation.keiro", "--format=json"]
       sourceCode `shouldBe` ExitSuccess
       sourceErr `shouldBe` ""
@@ -1726,17 +1726,23 @@ main = hspec $ do
       sourceOut `shouldContain` "\"effectiveLanguageVersion\":4"
       sourceOut `shouldContain` "\"effectiveSemanticContract\":{"
       sourceOut `shouldContain` "\"runtimeSemantics\":\"keiro-dsl/runtime-semantics/3\""
-      sourceOut `shouldContain` "\"languageSupport\":\"stable\""
+      sourceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
       workspaceCode `shouldBe` ExitSuccess
       workspaceErr `shouldBe` ""
       workspaceOut `shouldContain` "\"kind\":\"workspace\""
       workspaceOut `shouldContain` "\"service\":\"demo-project\""
       workspaceOut `shouldContain` "\"effectiveSemanticContract\":{"
-      workspaceOut `shouldContain` "\"languageSupport\":\"stable\""
+      workspaceOut `shouldContain` "\"languageSupport\":\"compatibility-only\""
       workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
+      (stableCode, stableOut, stableErr) <- runKeiroDsl ["inspect", "test/fixtures/workflow-evolution.keiro", "--format=json"]
+      stableCode `shouldBe` ExitSuccess
+      stableErr `shouldBe` ""
+      stableOut `shouldContain` "\"declaredLanguageVersion\":5"
+      stableOut `shouldContain` "\"effectiveLanguageVersion\":5"
+      stableOut `shouldContain` "\"languageSupport\":\"stable\""
 
-    it "keeps only the named source-version compatibility fixtures outside stable v4" $ do
+    it "keeps only the named source-version fixtures outside published Language 4" $ do
       fixtureTree <- treeSnapshot "test/fixtures"
       let outsideStableV4 =
             sort
@@ -1776,7 +1782,8 @@ main = hspec $ do
             "outcome-identifier-v5.keiro",
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
-            "projection-owner-multi-query.keiro"
+            "projection-owner-multi-query.keiro",
+            "workflow-evolution.keiro"
           ]
 
     it "checks v1 and inspects legacy explicitly" $ do
@@ -1858,7 +1865,7 @@ main = hspec $ do
             `shouldBe` map Just ["accepted", "rejected", "no-op"]
         aggregates -> expectationFailure ("unexpected outcome aggregates: " <> show aggregates)
 
-    it "gates the syntax to candidate language 5" $ do
+    it "gates the syntax to Language 5" $ do
       source <- readTestText "test/fixtures/domain-command-outcomes.keiro"
       case parseSource "domain-command-outcomes-v4.keiro" (T.replace "language keiro-dsl 5" "language keiro-dsl 4" source) of
         Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
@@ -2157,7 +2164,7 @@ main = hspec $ do
       implicitCodes <- codesFor "projection-freshness-implicit-owner.keiro" implicitOwner
       implicitCodes `shouldContain` [CatalogQueryWaitWithoutCompatibleCursor]
 
-    it "rejects the candidate legacy spellings with migration guidance" $ do
+    it "rejects the earlier Language 5 spellings with migration guidance" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
       let failureText name candidate = case parseSource name candidate of
             Left failure -> pure (renderParseFailure failure)
@@ -6100,7 +6107,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/hospital-surge.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
+        Right spec -> parseLanguage4RenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
       codes <- errorCodesOf "test/fixtures/hospital-surge.keiro"
       codes `shouldBe` []
@@ -6329,7 +6336,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/incident-paging/incident-paging.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
+        Right spec -> parseLanguage4RenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the incident-paging router with warnings only" $ do
       codes <- errorCodesOf "test/fixtures/incident-paging/incident-paging.keiro"
       codes `shouldBe` []
@@ -6763,7 +6770,7 @@ main = hspec $ do
           legacyReadModelScope inlineModel `shouldBe` Nothing
           legacyReadModelFeed inlineModel `shouldBe` Just RmInline
         nodes -> expectationFailure ("expected two readmodel nodes, got " <> show (length nodes))
-      parseStableRenderedSpec "in" spec `shouldBe` Right spec
+      parseLanguage4RenderedSpec "in" spec `shouldBe` Right spec
     it "accepts an aggregate projection without a consistency clause" $ do
       spec <- parseInlineSpec "<projection-without-consistency>" projectionWithoutConsistencySpec
       case [projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]] of
@@ -6867,7 +6874,7 @@ main = hspec $ do
       input <- readTestText "test/fixtures/workflow.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
-        Right spec -> parseStableRenderedSpec "in" spec `shouldBe` Right spec
+        Right spec -> parseLanguage4RenderedSpec "in" spec `shouldBe` Right spec
     it "accepts the workflow spec (await<->signal matches, run resolves)" $ do
       codes <- errorCodesOf "test/fixtures/workflow.keiro"
       codes `shouldBe` []
@@ -11663,7 +11670,7 @@ assertSkeletonUsesAuthoringLanguage kind = case skeletonFor kind of
     Right parsed -> do
       let service = checkedSource parsed
       effectiveContractLanguageVersion (checkedLanguageContract service) `shouldBe` currentAuthoringLanguageVersion
-      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Candidate
+      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Stable
       [code diagnostic | diagnostic <- validateService service, severity diagnostic == Error]
         `shouldBe` ([] :: [DiagnosticCode])
       scaffoldServiceModules (defaultContext (specContext (checkedSpec service))) service
@@ -12557,6 +12564,14 @@ parseStableRenderedSpec sourceName spec =
         <> T.pack (show (languageVersionNumber currentStableLanguageVersion))
         <> "\n"
         <> renderSpec spec
+
+parseLanguage4RenderedSpec :: FilePath -> Spec -> Either T.Text Spec
+parseLanguage4RenderedSpec sourceName spec =
+  case parseSource sourceName language4Source of
+    Left failure -> Left (renderParseFailure failure)
+    Right parsed -> Right (parsedSpec parsed)
+  where
+    language4Source = "language keiro-dsl 4\n" <> renderSpec spec
 
 shouldParseStableRenderedSpec :: FilePath -> Spec -> IO Spec
 shouldParseStableRenderedSpec sourceName spec =

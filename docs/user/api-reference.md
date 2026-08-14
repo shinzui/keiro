@@ -111,7 +111,7 @@ language-version-2 aggregate:
 - `Generated.<Context>.<Aggregate>.Transducer` exports the assembled transducer,
   the aggregate fold fingerprint, `BehaviorOwnership (GeneratedOwned,
   HoleOwned)`, and an aggregate-specific `...PredicateVerifications` action.
-- For a candidate-language-5 aggregate declaring typed outcomes,
+- For a Language-5 aggregate declaring typed outcomes,
   `Generated.<Context>.<Aggregate>.EventStream` additionally exports
   `<aggregate>DomainCommandHandler`. It pairs the validated stream with a pure
   classifier over the exact selected `EdgeRef` and uses only public
@@ -634,7 +634,7 @@ failed, empty, and dispatched selection outcomes. Before dispatch it sorts by
 physical target stream, collapses exact duplicate commands, rejects conflicting
 commands for one stream, and enforces a positive post-deduplication
 `RecipientLimit`. The worker maps empty and selection-failure outcomes through
-their independent closed policies. Generated candidate Language 5 routers use
+their independent closed policies. Generated Language 5 routers use
 this surface; the existing `Router` remains the arbitrary effectful fallback.
 
 See [Routers And Effectful Fan-Out](../guides/routers-and-effectful-fan-out.md)
@@ -904,7 +904,7 @@ occurrence, deterministic import requirements, and transitive mapped
 dependencies. Queue and read-model generators compose their own JSON or SQL
 policy around this plan rather than reconstructing type rendering.
 
-Candidate language 5 adds projection-target, rebuild-group, projection-owner,
+Language 5 adds projection-target, rebuild-group, projection-owner,
 query-binding nodes, typed workqueue fields, and atomic read-model query
 input/result clauses. Queue payload modules and read-model query-contract
 modules lower those mapped expressions through `ConsumerTypePlan` and the
