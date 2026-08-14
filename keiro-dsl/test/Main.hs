@@ -2080,9 +2080,12 @@ main = hspec $ do
       let spec = parsedSpec parsed
           targets = [target | NProjectionTarget target <- specNodes spec]
           groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+          externalReads = [externalRead | NExternalRead externalRead <- specNodes spec]
           owners = [owner | NProjectionOwner owner <- specNodes spec]
       map ptName targets `shouldBe` ["order_summary", "audit_log", "order_totals", "shipment_summary"]
       map rgName groups `shouldBe` ["reporting", "shipping"]
+      map (\externalRead -> (erName externalRead, erVersion externalRead, erQueryModel externalRead)) externalReads
+        `shouldBe` [("order_totals_reader", 1, "order_totals_lookup")]
       map poName owners `shouldBe` ["order_summary_writer", "shipment_writer", "audit_writer"]
       map poCheckpointOnMissing owners `shouldBe` [[], [], [CheckpointFromCurrentHead]]
 
@@ -2445,6 +2448,22 @@ main = hspec $ do
       incompleteRevision `shouldContain` [CatalogRevisionTargetSetMismatch]
       invalidRevisionIdentity <- mutationCodes (T.replace "provisioner-version = 1" "provisioner-version = 0")
       invalidRevisionIdentity `shouldContain` [CatalogRevisionIdentityInvalid]
+      invalidContractVersion <- mutationCodes (T.replace "external-read order_totals_reader {\n  version = 1" "external-read order_totals_reader {\n  version = 0")
+      invalidContractVersion `shouldContain` [CatalogExternalReadVersionInvalid]
+      missingExternalQuery <- mutationCodes (T.replace "query = order_totals_lookup" "query = missing_query")
+      missingExternalQuery `shouldContain` [CatalogExternalReadQueryUnknown]
+      multiTargetExternalQuery <- mutationCodes (T.replace "  targets = [ order_totals ]\n}\n\nexternal-read" "  targets = [ order_summary order_totals ]\n  backing = order_totals\n}\n\nexternal-read")
+      multiTargetExternalQuery `shouldContain` [CatalogExternalReadTargetCardinalityInvalid]
+      emptyCompatibility <- mutationCodes (T.replace "compatible-revisions = [ reporting_v1 reporting_v2 ]" "compatible-revisions = [ ]")
+      emptyCompatibility `shouldContain` [CatalogExternalReadCompatibilityInvalid]
+      unknownCompatibleRevision <- mutationCodes (T.replace "compatible-revisions = [ reporting_v1 reporting_v2 ]" "compatible-revisions = [ missing_revision ]")
+      unknownCompatibleRevision `shouldContain` [CatalogExternalReadRevisionUnknown]
+      wrongRevisionGroup <- mutationCodes (T.replace "query = order_totals_lookup" "query = shipmentLookup")
+      wrongRevisionGroup `shouldContain` [CatalogExternalReadRevisionGroupMismatch]
+      invalidResultIdentity <- mutationCodes (T.replace "result-schema = \"app_contract\"" "result-schema = \"app-contract\"")
+      invalidResultIdentity `shouldContain` [CatalogExternalReadIdentityInvalid]
+      invalidSurfaceGeneration <- mutationCodes (T.replace "surface-generation = 1" "surface-generation = 0")
+      invalidSurfaceGeneration `shouldContain` [CatalogExternalReadSurfaceGenerationInvalid]
 
     it "generates one facade, one create-once behavior surface, and durable ledger facts" $ do
       source <- readTestText "test/fixtures/projection-catalog.keiro"
@@ -2462,6 +2481,9 @@ main = hspec $ do
       facade `shouldSatisfy` T.isInfixOf "KirokuSubscription.FromCurrentHead"
       facade `shouldSatisfy` T.isInfixOf "Catalog.ProjectionRevision (must (Catalog.mkProjectionRevisionId \"reporting_v1\"))"
       facade `shouldSatisfy` T.isInfixOf "Catalog.TargetSchemaVersion \"v2\""
+      facade `shouldSatisfy` T.isInfixOf "Catalog.AllRowsExternalRead (must (Catalog.mkExternalReadContractId \"order_totals_reader\"))"
+      facade `shouldSatisfy` T.isInfixOf "Catalog.QualifiedSqlType \"app_contract\" \"order_totals_row_v1\""
+      facade `shouldSatisfy` T.isInfixOf "\"fnv1a:768a23d719dcb4d4\""
       facade `shouldSatisfy` T.isInfixOf "projectionCatalogQuerySupplies = Catalog.resolvedQuerySupplies validatedProjectionCatalog"
       facade `shouldSatisfy` T.isInfixOf "ordersInlineProjections = concat [orderSummaryWriterInlineProjections]"
       facade
@@ -2473,11 +2495,14 @@ main = hspec $ do
       holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer replay apply"
       holes `shouldSatisfy` T.isInfixOf "provisionReportingV2OrderSummary :: Catalog.TargetProvisioningContext"
       holes `shouldSatisfy` T.isInfixOf "applyReportingV2Live :: Catalog.PhysicalTargets"
+      holes `shouldSatisfy` T.isInfixOf "orderTotalsReaderV1KeyedExternalRead :: [Catalog.SqlFunctionArgument]"
+      holes `shouldSatisfy` T.isInfixOf "application-owned private SQL function"
       facts `shouldBe` sort facts
       facts `shouldSatisfy` any (T.isPrefixOf "target|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "owner|audit_writer|")
       facts `shouldSatisfy` any (T.isPrefixOf "delivery|audit_writer|subscription|")
       facts `shouldSatisfy` any (T.isPrefixOf "revision|reporting_v1|reporting|")
+      facts `shouldSatisfy` any (T.isPrefixOf "external-read|order_totals_reader|1|order_totals_lookup|app_contract.order_totals_row_v1|fnv1a:768a23d719dcb4d4|reporting_v1,reporting_v2|1|")
       facts `shouldSatisfy` any (T.isInfixOf "order_summary,v2,reporting-v2-order-summary")
       facts `shouldSatisfy` any (T.isPrefixOf "freshness|catalogAudit|immediate|")
       facts `shouldSatisfy` any (T.isPrefixOf "cursor|catalogAudit|catalog-demo-audit|")
@@ -2485,6 +2510,49 @@ main = hspec $ do
       facts `shouldSatisfy` any (T.isPrefixOf "supply|order_inline|order_summary_writer|reporting|order_summary|")
       facts `shouldSatisfy` any (T.isPrefixOf "supply|order_totals_lookup|order_summary_writer|reporting|order_totals|")
       facts `shouldSatisfy` any (T.isInfixOf "|from-current-head|explicit|")
+
+    it "distinguishes external-read versioning, retirement, compatibility, and derived result-shape changes" $ do
+      source <- readTestText "test/fixtures/projection-catalog.keiro"
+      baseline <- checkedServiceFromText "projection-catalog-external-read.keiro" source
+      let externalReadBlock version resultType =
+            T.unlines
+              [ "external-read order_totals_reader {",
+                "  version = " <> T.pack (show version),
+                "  query = order_totals_lookup",
+                "  result-schema = \"app_contract\"",
+                "  result-type = \"" <> resultType <> "\"",
+                "  compatible-revisions = [ reporting_v1 reporting_v2 ]",
+                "  surface-generation = 1",
+                "}",
+                ""
+              ]
+          v1Block = externalReadBlock (1 :: Int) "order_totals_row_v1"
+          codes candidate = map (ckCode . kindOfChange) (diffServices baseline candidate)
+      versionAdded <-
+        checkedServiceFromText
+          "projection-catalog-external-read-v2.keiro"
+          (T.replace v1Block (v1Block <> externalReadBlock (2 :: Int) "order_totals_row_v2") source)
+      retired <- checkedServiceFromText "projection-catalog-external-read-retired.keiro" (T.replace v1Block "" source)
+      compatibilityChanged <-
+        checkedServiceFromText
+          "projection-catalog-external-read-compatible.keiro"
+          (T.replace "compatible-revisions = [ reporting_v1 reporting_v2 ]" "compatible-revisions = [ reporting_v1 ]" source)
+      shapeChanged <-
+        checkedServiceFromText
+          "projection-catalog-external-read-shape.keiro"
+          (T.replace "shape = \"fnv1a:768a23d719dcb4d4\"" "shape = \"fnv1a:0000000000000000\"" source)
+      validateService versionAdded `shouldBe` []
+      codes versionAdded `shouldContain` [CatalogExternalReadVersionAdded]
+      codes retired `shouldContain` [CatalogExternalReadRetired]
+      codes compatibilityChanged `shouldContain` [CatalogExternalReadCompatibilityChanged]
+      codes shapeChanged `shouldContain` [CatalogExternalReadResultShapeChanged]
+
+      reordered <-
+        checkedServiceFromText
+          "projection-catalog-external-read-reordered.keiro"
+          (T.replace "compatible-revisions = [ reporting_v1 reporting_v2 ]" "compatible-revisions = [ reporting_v2 reporting_v1 ]" source)
+      projectionCatalogFactsForService reordered `shouldBe` projectionCatalogFactsForService baseline
+      codes reordered `shouldNotContain` [CatalogExternalReadCompatibilityChanged]
 
     it "preserves edited catalog behavior holes on regeneration" $
       withTempDirectory "keiro-dsl-projection-catalog-create-once" $ \out -> do
@@ -13656,6 +13724,7 @@ nodeTag = \case
   NProjectionTarget _ -> "projection-target"
   NRebuildGroup _ -> "rebuild-group"
   NProjectionRevision _ -> "projection-revision"
+  NExternalRead _ -> "external-read"
   NProjectionOwner _ -> "projection-owner"
   NWorkflow _ -> "workflow"
   NOperation _ -> "operation"

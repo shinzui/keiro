@@ -4159,7 +4159,7 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
           },
         ScaffoldModule
           { modulePath = modulePathFor (holePrefixFor ctx "ProjectionCatalog") "ProjectionCatalogHoles",
-            moduleText = emitProjectionCatalogHoles ctx owners revisions,
+            moduleText = emitProjectionCatalogHoles ctx spec owners revisions externalReads,
             kind = HoleStub,
             origin = "projection-catalog " <> contextName ctx
           }
@@ -4168,9 +4168,11 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
     catalogNodes = [() | node <- specNodes spec, isCatalogNode node]
     owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
     revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
+    externalReads = sortOn (\externalRead -> (erName externalRead, erVersion externalRead)) [externalRead | NExternalRead externalRead <- specNodes spec]
     isCatalogNode NProjectionTarget {} = True
     isCatalogNode NRebuildGroup {} = True
     isCatalogNode NProjectionRevision {} = True
+    isCatalogNode NExternalRead {} = True
     isCatalogNode NProjectionOwner {} = True
     isCatalogNode _ = False
 
@@ -4222,7 +4224,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
            "    " <> renderList targetExpr targets,
            "    " <> renderList groupExpr groups,
            "    " <> renderList revisionExpr revisions,
-           "    []",
+           "    " <> renderList externalReadExpr externalReads,
            "    " <> renderList subscriptionExpr asyncOwners,
            "    " <> renderList dedupExpr asyncOwners,
            "    " <> renderList queryExpr boundReadModels,
@@ -4255,6 +4257,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     targets = [target | NProjectionTarget target <- specNodes spec]
     groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
     revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
+    externalReads = sortOn (\externalRead -> (erName externalRead, erVersion externalRead)) [externalRead | NExternalRead externalRead <- specNodes spec]
     -- The catalog's list order is the declared total handler order. Keeping the
     -- sort here (rather than in the runtime) makes generated inventory and replay
     -- behavior agree even when declarations are arranged for readability.
@@ -4382,6 +4385,28 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         <> ") "
         <> renderList promotionObjectExpr (prtPromotionObjects target)
         <> ")"
+    externalReadExpr externalRead =
+      "Catalog.AllRowsExternalRead "
+        <> smart "mkExternalReadContractId" (erName externalRead)
+        <> " (Catalog.ExternalReadContractVersion "
+        <> T.pack (show (erVersion externalRead))
+        <> ") "
+        <> smart "mkQueryModelId" (erQueryModel externalRead)
+        <> " (Catalog.QualifiedSqlType "
+        <> tshow (erResultSchema externalRead)
+        <> " "
+        <> tshow (erResultType externalRead)
+        <> ") "
+        <> tshow (externalReadShape externalRead)
+        <> " "
+        <> nonEmptyList (smart "mkProjectionRevisionId") (erCompatibleRevisions externalRead)
+        <> " "
+        <> T.pack (show (erSurfaceGeneration externalRead))
+        <> " "
+        <> claim ("external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)))
+    externalReadShape externalRead = case [rmShape readModel | readModel <- readModels, rmName readModel == erQueryModel externalRead] of
+      shape : _ -> shape
+      [] -> "keiro-dsl invariant: validated external read query is missing"
     promotionObjectExpr promotionObject =
       "Catalog.PromotionObjectName "
         <> ( case rpoKind promotionObject of
@@ -4559,8 +4584,8 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
       [CheckpointFail] -> "KirokuSubscription.FailIfMissing"
       _ -> "error \"keiro-dsl invariant: validated subscription owner must declare exactly one checkpoint-on-missing policy\""
 
-emitProjectionCatalogHoles :: Context -> [ProjectionOwnerNode] -> [ProjectionRevisionNode] -> Text
-emitProjectionCatalogHoles ctx owners revisions =
+emitProjectionCatalogHoles :: Context -> Spec -> [ProjectionOwnerNode] -> [ProjectionRevisionNode] -> [ExternalReadNode] -> Text
+emitProjectionCatalogHoles ctx spec owners revisions externalReads =
   nl $
     [ "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it.",
       "module " <> moduleName,
@@ -4570,17 +4595,27 @@ emitProjectionCatalogHoles ctx owners revisions =
     ]
       ++ ["import " <> genPrefixFor ctx aggregateName <> ".Domain (" <> pascal aggregateName <> "Event)" | aggregateName <- aggregateSources]
       ++ ["import Data.Text (Text)" | not (null revisions)]
+      ++ ["import Data.List.NonEmpty (NonEmpty (..))" | not (null externalReads)]
       ++ [ "import Hasql.Transaction qualified as Tx",
            "import Keiro.Projection.Catalog qualified as Catalog",
            "import Kiroku.Store.Types (EventId, RecordedEvent)",
            ""
          ]
+      ++ ( if null externalReads
+             then []
+             else
+               [ "must :: Show error => Either error value -> value",
+                 "must = either (error . show) id",
+                 ""
+               ]
+         )
       ++ concatMap ownerStubs owners
       ++ concatMap revisionStubs revisions
+      ++ concatMap externalReadStubs externalReads
   where
     moduleName = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
     aggregateSources = nub [aggregateName | owner <- owners, CatalogAggregate aggregateName <- poSources owner]
-    exports = concatMap ownerExports owners <> concatMap revisionExports revisions
+    exports = concatMap ownerExports owners <> concatMap revisionExports revisions <> map externalReadKeyedName externalReads
     ownerExports owner =
       [pascal (poName owner) <> "Event" | not (isAggregateSource owner)]
         <> [ownerLiveApplyName owner]
@@ -4622,6 +4657,25 @@ emitProjectionCatalogHoles ctx owners revisions =
             revisionValidateName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction (Either [Catalog.TargetSchemaViolation] Catalog.TargetSchemaEvidence)",
             revisionValidateName revision target <> " = error \"HOLE: validate target " <> prtTarget target <> " for revision " <> prvName revision <> "\""
           ]
+    externalReadStubs externalRead =
+      [ "-- Keyed alternative for external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)) <> ".",
+        "-- Supply typed arguments plus an application-owned private SQL function; do not grant callers access to that inner function.",
+        externalReadKeyedName externalRead <> " :: [Catalog.SqlFunctionArgument] -> Catalog.QualifiedFunction -> Int -> Catalog.ExternalReadContract",
+        externalReadKeyedName externalRead <> " arguments privateImplementation privateImplementationVersion =",
+        "  Catalog.KeyedExternalRead",
+        "    " <> smart "mkExternalReadContractId" (erName externalRead),
+        "    (Catalog.ExternalReadContractVersion " <> T.pack (show (erVersion externalRead)) <> ")",
+        "    " <> smart "mkQueryModelId" (erQueryModel externalRead),
+        "    arguments",
+        "    (Catalog.QualifiedSqlType " <> tshow (erResultSchema externalRead) <> " " <> tshow (erResultType externalRead) <> ")",
+        "    privateImplementation",
+        "    privateImplementationVersion",
+        "    " <> tshow (externalReadShape externalRead),
+        "    " <> nonEmptyList (smart "mkProjectionRevisionId") (erCompatibleRevisions externalRead),
+        "    " <> T.pack (show (erSurfaceGeneration externalRead)),
+        "    " <> smart "mkClaimSite" ("external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)) <> " keyed helper"),
+        ""
+      ]
     replayStubs owner = case poReplay owner of
       ProjectionLiveOnly _ -> []
       ProjectionReplayExplicit ->
@@ -4653,6 +4707,13 @@ emitProjectionCatalogHoles ctx owners revisions =
     revisionLiveName revision = "apply" <> pascal (prvName revision) <> "Live"
     revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
     revisionVerificationName revision = "verify" <> pascal (prvName revision)
+    externalReadKeyedName externalRead = lowerFirst (pascal (erName externalRead)) <> "V" <> T.pack (show (erVersion externalRead)) <> "KeyedExternalRead"
+    externalReadShape externalRead = case [rmShape readModel | NReadModel readModel <- specNodes spec, rmName readModel == erQueryModel externalRead] of
+      shape : _ -> shape
+      [] -> "keiro-dsl invariant: validated external read query is missing"
+    smart constructor value = "(must (Catalog." <> constructor <> " " <> tshow value <> "))"
+    nonEmptyList _ [] = "error \"keiro-dsl invariant: validated external read has no compatible revisions\""
+    nonEmptyList render (value : values) = "(" <> render value <> " :| [" <> T.intercalate ", " (map render values) <> "])"
 
 catalogSourceId :: CatalogSource -> Text
 catalogSourceId CatalogAll = "all"

@@ -283,6 +283,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace service = do
       NProjectionTarget _ -> []
       NRebuildGroup _ -> []
       NProjectionRevision _ -> []
+      NExternalRead _ -> []
       NProjectionOwner _ -> []
       NWorkflow workflow -> harnessWorkflow ctx workflow
       NEmit _ -> []

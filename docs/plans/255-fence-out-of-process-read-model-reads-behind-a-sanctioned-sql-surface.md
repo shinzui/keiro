@@ -51,7 +51,7 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
 - [x] (2026-08-14T04:30:59Z) M2: migration and registration reconciliation install the stable guard,
   per-contract private bindings, generated all-row/keyed wrappers, explicit SQLSTATEs,
   secure privileges, and race-proof database tests without schema-wide drop/recreate.
-- [ ] M3: candidate language-5 all-row contract syntax, parser/pretty/lowering/diff,
+- [x] (2026-08-14T04:57:49Z) M3: candidate language-5 all-row contract syntax, parser/pretty/lowering/diff,
   generated runtime declarations, scaffolding for keyed inner functions, and corpus
   fixtures pass.
 - [ ] M4: schema-changing cutover integration, docs, ADR, Jitsurei/external-client
@@ -89,6 +89,10 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   guard's shared row lock is what closes the authorization/cutover race, callers must
   use an ordinary read-write transaction even though the public function only returns
   rows.
+- External-read node identity must include the declared contract version. Treating only
+  the stable contract name as node identity would make the required v1/v2 bridge
+  deployment fail source validation before runtime reconciliation can activate both
+  public functions.
 
 
 ## Decision Log
@@ -167,8 +171,14 @@ object metadata, explicit dependency-previewed retirement, and the fixed shared-
 guard. The migration suite passes 32 examples and the focused PostgreSQL suite passes
 three end-to-end scenarios covering lifecycle SQLSTATEs, cutover locking, least
 privilege, injection resistance, rolling downgrade refusal, dependency survival, and a
-selective keyed index plan. Language-5 syntax, final cutover fixtures, documentation,
-ADR reconciliation, and release evidence remain.
+selective keyed index plan. Milestone 3 adds candidate Language 5 `external-read`
+syntax, checked graph and pretty-print support, exact evolution findings, generated
+all-row runtime declarations, version-distinct node identity, and a create-once keyed
+contract helper whose result shape is derived from the checked query binding. The
+complete DSL corpus built successfully; all 706 unit examples except one stale feature
+profile expectation passed on the first full run, and the corrected profile expectation
+then passed its focused rerun. Final cutover fixtures, operational documentation, the
+external-contract ADR, Jitsurei evidence, and the repository-wide release gate remain.
 
 
 ## Context and Orientation
@@ -488,3 +498,10 @@ execute-only wrappers transactionally, and focused database evidence covers life
 security, rolling-generation, dependency, locking, and keyed-query behavior. The guard's
 shared lock also makes a read-write caller transaction an explicit operational
 requirement.
+
+Revised 2026-08-14 after Milestone 3 implementation. Candidate Language 5 now declares
+bounded all-row external reads with explicit versions and compatibility sets, derives
+the result shape from the checked query graph, emits the runtime catalog declaration,
+and scaffolds a keyed-contract helper without prematurely adding IR-25 payload mapping
+syntax. Diff and ledger evidence distinguish version addition, retirement,
+compatibility-set evolution, and derived result-shape change.

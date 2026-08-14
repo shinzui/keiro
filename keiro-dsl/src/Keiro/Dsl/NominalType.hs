@@ -386,6 +386,7 @@ nodeIdentityLocal = \case
   NProjectionTarget value -> ("target", ptName value, ptLoc value)
   NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
   NProjectionRevision value -> ("projection-revision", prvName value, prvLoc value)
+  NExternalRead value -> ("external-read", externalReadNodeIdentity value, erLoc value)
   NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
   NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
   NOperation value -> ("operation", opName value, opLoc value)

@@ -140,6 +140,7 @@ depsForNode service n = case n of
   NProjectionTarget {} -> ["keiro", "kiroku-store", "text"]
   NRebuildGroup {} -> ["keiro", "kiroku-store", "text"]
   NProjectionRevision {} -> ["containers", "hasql-transaction", "keiro", "kiroku-store", "text"]
+  NExternalRead {} -> ["keiro"]
   NProjectionOwner {} -> ["keiro", "kiroku-store", "text"]
   NWorkflow {} -> ["containers", "effectful-core", "keiro", "text"]
   NOperation {} -> ["effectful-core", "keiro", "text"]

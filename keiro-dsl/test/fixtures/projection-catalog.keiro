@@ -202,6 +202,15 @@ readmodel order_totals_lookup {
   targets = [ order_totals ]
 }
 
+external-read order_totals_reader {
+  version = 1
+  query = order_totals_lookup
+  result-schema = "app_contract"
+  result-type = "order_totals_row_v1"
+  compatible-revisions = [ reporting_v1 reporting_v2 ]
+  surface-generation = 1
+}
+
 workqueue qualification_jobs {
   queue logical = "catalog-demo.qualification-jobs"
   derive physical = "catalog_demo_qualification_jobs"

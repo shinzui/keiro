@@ -103,7 +103,7 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
 | `test/fixtures/process-bad-timer.keiro` | negative timer ceiling and dispatch field binding |
 | `test/fixtures/process-ghost-refs.keiro` | negative process command, timer, and projection references |
-| `test/fixtures/projection-catalog.keiro` | candidate language-5 target/group/owner/query catalog with inline, async, clear, preserve, aggregate, and category coverage |
+| `test/fixtures/projection-catalog.keiro` | candidate language-5 target/group/owner/query catalog with versioned external-read lowering plus inline, async, clear, preserve, aggregate, and category coverage |
 | `test/fixtures/readmodel-consistency-conflict.keiro` | negative projection/readmodel consistency conflict |
 | `test/fixtures/readmodel-dispatch-unresolved.keiro` | negative dispatch readmodel and column references |
 | `test/fixtures/readmodel-inline-unreferenced.keiro` | negative unowned inline readmodel feed |

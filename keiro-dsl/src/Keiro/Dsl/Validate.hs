@@ -260,6 +260,19 @@ data DiagnosticCode
   | CatalogProjectionRevisionChanged
   | CatalogProjectionRevisionRemoved
   | CatalogTargetSchemaChanged
+  | CatalogExternalReadIdentityInvalid
+  | CatalogExternalReadVersionInvalid
+  | CatalogExternalReadQueryUnknown
+  | CatalogExternalReadTargetCardinalityInvalid
+  | CatalogExternalReadCompatibilityInvalid
+  | CatalogExternalReadRevisionUnknown
+  | CatalogExternalReadRevisionGroupMismatch
+  | CatalogExternalReadSurfaceGenerationInvalid
+  | CatalogExternalReadRetired
+  | CatalogExternalReadVersionAdded
+  | CatalogExternalReadCompatibilityChanged
+  | CatalogExternalReadResultShapeChanged
+  | CatalogExternalReadContractChanged
   | CatalogOwnerChanged
   | CatalogOwnerRemoved
   | CatalogHandlerOrderChanged
@@ -1551,6 +1564,7 @@ validateNames languageContract typeGraphResult spec =
       NProjectionTarget target -> pascalizedNodeName "target" (ptName target) (ptLoc target)
       NRebuildGroup groupNode -> pascalizedNodeName "rebuild group" (rgName groupNode) (rgLoc groupNode)
       NProjectionRevision revision -> pascalizedNodeName "projection revision" (prvName revision) (prvLoc revision)
+      NExternalRead externalRead -> pascalizedNodeName "external read" (externalReadNodeIdentity externalRead) (erLoc externalRead)
       NProjectionOwner owner -> pascalizedNodeName "projection owner" (poName owner) (poLoc owner)
       NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
       NOperation _ -> []
@@ -1859,6 +1873,7 @@ validateNames languageContract typeGraphResult spec =
       NProjectionTarget value -> ("target", ptName value, ptLoc value)
       NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
       NProjectionRevision value -> ("projection-revision", prvName value, prvLoc value)
+      NExternalRead value -> ("external-read", externalReadNodeIdentity value, erLoc value)
       NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
       NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
       NOperation value -> ("operation", opName value, opLoc value)
@@ -2021,6 +2036,7 @@ nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
 nodeIdentity (NProjectionTarget target) = ("target", ptName target, ptLoc target)
 nodeIdentity (NRebuildGroup groupNode) = ("rebuild-group", rgName groupNode, rgLoc groupNode)
 nodeIdentity (NProjectionRevision revision) = ("projection-revision", prvName revision, prvLoc revision)
+nodeIdentity (NExternalRead externalRead) = ("external-read", externalReadNodeIdentity externalRead, erLoc externalRead)
 nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc owner)
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
@@ -2039,6 +2055,7 @@ validateNode languageContract _typeGraphResult supplyAnalysis spec (NReadModel r
 validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NProjectionTarget target) = validateProjectionTarget languageContract target
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NRebuildGroup groupNode) = validateRebuildGroup languageContract spec groupNode
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NProjectionRevision revision) = validateProjectionRevision languageContract spec revision
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NExternalRead externalRead) = validateExternalRead languageContract spec externalRead
 validateNode languageContract _typeGraphResult supplyAnalysis spec (NProjectionOwner owner) = validateProjectionOwner languageContract supplyAnalysis spec owner
 validateNode _languageContract _typeGraphResult _supplyAnalysis _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract _typeGraphResult _supplyAnalysis spec (NOperation o) = validateOperation spec o
@@ -2556,6 +2573,89 @@ validateProjectionRevision languageContract spec revisionNode
             names = concat [[rpoGenerationName object, rpoCanonicalName object] | object <- objects],
         any (not . validPostgresIdentifier) names
           || length names /= Set.size (Set.fromList names)
+      ]
+
+validateExternalRead :: EffectiveLanguageContract -> Spec -> ExternalReadNode -> [Diagnostic]
+validateExternalRead languageContract spec externalRead
+  | not (hasProjectionCatalog languageContract) = []
+  | otherwise =
+      invalidIdentity
+        <> invalidVersion
+        <> unknownQuery
+        <> invalidTargetCardinality
+        <> invalidCompatibility
+        <> unknownRevisions
+        <> revisionGroupMismatch
+        <> invalidSurfaceGeneration
+  where
+    diagnosticLine = locLine (erLoc externalRead)
+    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    revisions = [revision | NProjectionRevision revision <- specNodes spec]
+    matchingReadModels = [readModel | readModel <- readModels, rmName readModel == erQueryModel externalRead]
+    matchingGroup = case matchingReadModels of
+      readModel : _ -> rmGroup readModel
+      [] -> Nothing
+    invalidIdentity =
+      [ mkErr diagnosticLine CatalogExternalReadIdentityInvalid $
+          "external-read '"
+            <> erName externalRead
+            <> "' requires lower-case PostgreSQL identifiers for its contract, result schema, and result type"
+      | any
+          (not . validPostgresIdentifier)
+          [erName externalRead, erResultSchema externalRead, erResultType externalRead]
+      ]
+    invalidVersion =
+      [ mkErr diagnosticLine CatalogExternalReadVersionInvalid $
+          "external-read '" <> erName externalRead <> "' version must be at least 1"
+      | erVersion externalRead <= 0
+      ]
+    unknownQuery =
+      [ mkErr diagnosticLine CatalogExternalReadQueryUnknown $
+          "external-read '" <> erName externalRead <> "' references undeclared readmodel '" <> erQueryModel externalRead <> "'"
+      | null matchingReadModels
+      ]
+    invalidTargetCardinality =
+      [ mkErr diagnosticLine CatalogExternalReadTargetCardinalityInvalid $
+          "external-read '"
+            <> erName externalRead
+            <> "' is the bounded all-row form and its readmodel must observe exactly one target"
+      | readModel <- take 1 matchingReadModels,
+        length (rmObservedTargets readModel) /= 1
+      ]
+    compatibleRevisions = erCompatibleRevisions externalRead
+    invalidCompatibility =
+      [ mkErr diagnosticLine CatalogExternalReadCompatibilityInvalid $
+          "external-read '" <> erName externalRead <> "' must name at least one compatible projection revision without duplicates"
+      | null compatibleRevisions
+          || length compatibleRevisions /= Set.size (Set.fromList compatibleRevisions)
+      ]
+    unknownRevisions =
+      [ mkErr diagnosticLine CatalogExternalReadRevisionUnknown $
+          "external-read '" <> erName externalRead <> "' references undeclared projection revision '" <> revisionName <> "'"
+      | revisionName <- compatibleRevisions,
+        revisionName `notElem` map prvName revisions
+      ]
+    revisionGroupMismatch =
+      [ mkErr diagnosticLine CatalogExternalReadRevisionGroupMismatch $
+          "external-read '"
+            <> erName externalRead
+            <> "' binds readmodel group '"
+            <> queryGroup
+            <> "' but compatible revision '"
+            <> revisionName
+            <> "' belongs to group '"
+            <> prvGroup revision
+            <> "'"
+      | Just queryGroup <- [matchingGroup],
+        revisionName <- compatibleRevisions,
+        revision <- revisions,
+        prvName revision == revisionName,
+        prvGroup revision /= queryGroup
+      ]
+    invalidSurfaceGeneration =
+      [ mkErr diagnosticLine CatalogExternalReadSurfaceGenerationInvalid $
+          "external-read '" <> erName externalRead <> "' surface-generation must be at least 1"
+      | erSurfaceGeneration externalRead <= 0
       ]
 
 validateProjectionOwner :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> ProjectionOwnerNode -> [Diagnostic]

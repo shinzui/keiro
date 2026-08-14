@@ -645,6 +645,7 @@ data NodeFamily
   | FamProjectionTarget
   | FamRebuildGroup
   | FamProjectionRevision
+  | FamExternalRead
   | FamProjectionOwner
   | FamWorkflow
   | FamOperation
@@ -665,6 +666,7 @@ familyOf (NReadModel _) = FamReadModel
 familyOf (NProjectionTarget _) = FamProjectionTarget
 familyOf (NRebuildGroup _) = FamRebuildGroup
 familyOf (NProjectionRevision _) = FamProjectionRevision
+familyOf (NExternalRead _) = FamExternalRead
 familyOf (NProjectionOwner _) = FamProjectionOwner
 familyOf (NWorkflow _) = FamWorkflow
 familyOf (NOperation _) = FamOperation
@@ -723,6 +725,7 @@ familyRegistry =
     (FamProjectionTarget, DiffFamily projectionTargetDiff),
     (FamRebuildGroup, DiffFamily rebuildGroupDiff),
     (FamProjectionRevision, DiffFamily projectionRevisionDiff),
+    (FamExternalRead, DiffFamily externalReadDiff),
     (FamProjectionOwner, DiffFamily projectionOwnerDiff),
     (FamWorkflow, DiffFamily workflowDiff),
     (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
@@ -1131,6 +1134,10 @@ nodeProjectionRevision :: Node -> Maybe ProjectionRevisionNode
 nodeProjectionRevision (NProjectionRevision revision) = Just revision
 nodeProjectionRevision _ = Nothing
 
+nodeExternalRead :: Node -> Maybe ExternalReadNode
+nodeExternalRead (NExternalRead externalRead) = Just externalRead
+nodeExternalRead _ = Nothing
+
 nodeProjectionOwner :: Node -> Maybe ProjectionOwnerNode
 nodeProjectionOwner (NProjectionOwner owner) = Just owner
 nodeProjectionOwner _ = Nothing
@@ -1439,6 +1446,70 @@ projectionRevisionPairDiff oldRevision newRevision = groupChange <> schemaChange
                prtValidatorVersion newTarget,
                prtPromotionObjects newTarget
              )
+
+externalReadDiff :: DiffEnv -> [Change]
+externalReadDiff env =
+  concatMap (uncurry (externalReadPairDiff env)) (prMatched paired)
+    <> [ additive
+           (externalReadNodeIdentity externalRead)
+           "external-read-version"
+           (erName externalRead)
+           CatalogExternalReadVersionAdded
+           "new external read-contract version; grant execute only after its result type and wrapper are deployed"
+       | externalRead <- prAdded paired
+       ]
+    <> [ breaking
+           (externalReadNodeIdentity externalRead)
+           "external-read-retirement"
+           (erName externalRead)
+           CatalogExternalReadRetired
+           "external read-contract version removed; preview dependencies and retire it explicitly before removing the declaration"
+       | externalRead <- prRemoved paired
+       ]
+  where
+    paired = pairByName nodeExternalRead externalReadNodeIdentity env
+
+externalReadPairDiff :: DiffEnv -> ExternalReadNode -> ExternalReadNode -> [Change]
+externalReadPairDiff env oldExternalRead newExternalRead =
+  immutableChanges <> compatibilityChanges <> shapeChanges <> generationChanges
+  where
+    subject = externalReadNodeIdentity newExternalRead
+    immutableChanges =
+      [ breaking subject "external-read-contract" (erName newExternalRead) CatalogExternalReadContractChanged "query binding or public result type changed for an existing contract version; publish a new version"
+      | ( erQueryModel oldExternalRead,
+          erResultSchema oldExternalRead,
+          erResultType oldExternalRead
+        )
+          /= ( erQueryModel newExternalRead,
+               erResultSchema newExternalRead,
+               erResultType newExternalRead
+             )
+      ]
+    oldCompatibility = Set.fromList (erCompatibleRevisions oldExternalRead)
+    newCompatibility = Set.fromList (erCompatibleRevisions newExternalRead)
+    compatibilityChanges
+      | oldCompatibility == newCompatibility = []
+      | oldCompatibility `Set.isSubsetOf` newCompatibility =
+          [ additive subject "external-read-compatibility" (erName newExternalRead) CatalogExternalReadCompatibilityChanged "compatible projection-revision set widened; deploy the higher surface generation before promoting the added revision"
+          ]
+      | otherwise =
+          [ breaking subject "external-read-compatibility" (erName newExternalRead) CatalogExternalReadCompatibilityChanged "compatible projection-revision set narrowed or replaced for an existing contract version"
+          ]
+    shapeChanges =
+      [ breaking subject "external-read-result-shape" (erName newExternalRead) CatalogExternalReadResultShapeChanged "checked query result shape changed for an existing contract version; restore compatibility or publish a new version"
+      | externalReadShape (deOld env) oldExternalRead /= externalReadShape (deNew env) newExternalRead
+      ]
+    generationChanges
+      | erSurfaceGeneration oldExternalRead == erSurfaceGeneration newExternalRead = []
+      | erSurfaceGeneration oldExternalRead < erSurfaceGeneration newExternalRead =
+          [ advisory subject "external-read-surface-generation" (erName newExternalRead) CatalogExternalReadContractChanged "surface generation increased; roll out the newer declaration before older processes can reconcile"
+          ]
+      | otherwise =
+          [ breaking subject "external-read-surface-generation" (erName newExternalRead) CatalogExternalReadContractChanged "surface generation decreased; runtime reconciliation refuses this downgrade"
+          ]
+    externalReadShape spec externalRead = case [rmShape readModel | NReadModel readModel <- specNodes spec, rmName readModel == erQueryModel externalRead] of
+      shape : _ -> Just shape
+      [] -> Nothing
 
 projectionOwnerDiff :: DiffEnv -> [Change]
 projectionOwnerDiff env =

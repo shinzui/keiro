@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a registered parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-12T03:01:29Z
+timestamp: 2026-08-14T04:55:00Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -94,6 +94,15 @@ read model cannot repeat `feed`, `subscription`, `consistency`, or `scope`; any 
 derived from its validated target owner. Static source has no caller-specific position wait.
 Languages 1–4 continue to parse and render their historical fields through an explicit legacy
 supply representation, so normalization does not rewrite or reinterpret their published bytes.
+
+Candidate syntax profile 4 owns `ExternalReadContractSyntax` as a separate located feature.
+The top-level `external-read` declaration carries contract/version identity, a query reference,
+stable qualified SQL result type, compatible projection revisions, and surface generation. Its
+result-shape hash is not source syntax: lowering derives it from the checked read-model node so a
+second shape authority cannot enter the semantic graph. Multiple versions of one contract remain
+distinct source subjects. Languages 1–4 reject the `external-read` marker at the feature gate
+before catalog validation, and the candidate's parse/pretty round trip preserves the declaration
+without adding the derived shape.
 
 **Version 2 is the first successor contract.** It registers consumer-owned
 direct ID/enum/nominal bindings, `Integer`, typed scalar roots, literals,
@@ -241,6 +250,9 @@ fleet planning remain in
   completed it by restoring `outcome` as an identifier in every language.
 - Candidate-5 queue and query type clauses are atomic, located feature surfaces. Registering them
   does not widen languages 1–4 or permit scaffolding before their full lowerers land.
+- Candidate-5 external-read declarations are located feature surfaces whose runtime shape comes
+  from the referenced checked query. Source provenance records the declaration, while canonical
+  catalog identity records the derived result shape; neither layer fabricates the other's fact.
 - A higher language version does not inherit a predecessor's feature set or runtime semantics by
   ordering. Intentional reuse is visible as the same profile identifier in two registry entries.
 - Version 4 demonstrates that a successor runtime profile may preserve the

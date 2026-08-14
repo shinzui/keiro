@@ -67,6 +67,7 @@ frontendProfilesSpec = do
       forM_ allFeatures $ \feature -> do
         let minimumVersion = case feature of
               ProjectionCatalogSyntax -> version 5
+              ExternalReadContractSyntax -> version 5
               MappedConsumerSurfaceSyntax -> version 5
               DomainCommandOutcomeSyntax -> version 5
               DeclarativeRouterSelectionSyntax -> version 5
@@ -180,6 +181,7 @@ featureCases =
     FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
     FeatureCase FieldAliasSyntax "haskell" (featureBody FieldAliasSyntax),
     FeatureCase ProjectionCatalogSyntax "target" (featureBody ProjectionCatalogSyntax),
+    FeatureCase ExternalReadContractSyntax "external-read" (featureBody ExternalReadContractSyntax),
     FeatureCase DomainCommandOutcomeSyntax "domain-outcomes" (featureBody DomainCommandOutcomeSyntax),
     FeatureCase DomainCommandOutcomeSyntax "outcome" domainOutcomeClauseFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
@@ -230,6 +232,18 @@ featureBody = \case
         "  reset = preserve",
         "}"
       ]
+  ExternalReadContractSyntax ->
+    T.unlines
+      [ "context profile",
+        "external-read profile_reader {",
+        "  version = 1",
+        "  query = profiles",
+        "  result-schema = \"app_contract\"",
+        "  result-type = \"profile_row_v1\"",
+        "  compatible-revisions = [ profiles_v1 ]",
+        "  surface-generation = 1",
+        "}"
+      ]
   MappedConsumerSurfaceSyntax -> mappedQueueFeatureBody
   DomainCommandOutcomeSyntax ->
     T.unlines
@@ -243,7 +257,7 @@ featureBody = \case
   SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax]
 
 separatedProjectionQueryPolicyBody :: Text
 separatedProjectionQueryPolicyBody =

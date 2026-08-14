@@ -284,7 +284,7 @@ profileV4 =
                 DomainCommandOutcomeSyntax
                 ( Set.insert
                     MappedConsumerSurfaceSyntax
-                    (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3))
+                    (Set.insert ExternalReadContractSyntax (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3)))
                 )
             )
         )
@@ -361,6 +361,7 @@ data LanguageFeature
   | ExplicitTransitionImplementationSyntax
   | FieldAliasSyntax
   | ProjectionCatalogSyntax
+  | ExternalReadContractSyntax
   | MappedConsumerSurfaceSyntax
   | DomainCommandOutcomeSyntax
   | DeclarativeRouterSelectionSyntax

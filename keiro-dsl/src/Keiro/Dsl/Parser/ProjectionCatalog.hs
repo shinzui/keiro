@@ -3,13 +3,14 @@ module Keiro.Dsl.Parser.ProjectionCatalog
   ( pProjectionTarget,
     pRebuildGroup,
     pProjectionRevision,
+    pExternalRead,
     pProjectionOwner,
   )
 where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (ProjectionCatalogSyntax, SeparatedProjectionQueryPolicySyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (ExternalReadContractSyntax, ProjectionCatalogSyntax, SeparatedProjectionQueryPolicySyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
@@ -88,6 +89,32 @@ pProjectionRevision context = do
       _ <- symbol "->"
       canonicalName <- stringLit
       pure (PromotionObjectNode objectKind generationName canonicalName)
+
+pExternalRead :: FrontendContext -> P ExternalReadNode
+pExternalRead context = do
+  loc <- getLoc
+  marker <- withOwnedSpan (keyword "external-read")
+  requireLanguageFeatureAt context ExternalReadContractSyntax (spanOf marker)
+  name <- ident
+  _ <- symbol "{"
+  version <- symbol "version" *> symbol "=" *> boundedDecimal
+  queryModel <- symbol "query" *> symbol "=" *> ident
+  resultSchema <- symbol "result-schema" *> symbol "=" *> stringLit
+  resultType <- symbol "result-type" *> symbol "=" *> stringLit
+  compatibleRevisions <- symbol "compatible-revisions" *> symbol "=" *> brackets (many ident)
+  surfaceGeneration <- symbol "surface-generation" *> symbol "=" *> boundedDecimal
+  _ <- symbol "}"
+  pure
+    ExternalReadNode
+      { erName = name,
+        erVersion = version,
+        erQueryModel = queryModel,
+        erResultSchema = resultSchema,
+        erResultType = resultType,
+        erCompatibleRevisions = compatibleRevisions,
+        erSurfaceGeneration = surfaceGeneration,
+        erLoc = loc
+      }
 
 pProjectionOwner :: FrontendContext -> P ProjectionOwnerNode
 pProjectionOwner context = do

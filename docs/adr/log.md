@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-14
+* **Update**: Candidate Language 5 now owns located `external-read` syntax while lowering derives its result shape from the checked query graph (ADR-16, plan 255).
 * **Update**: Advance catalog/slice identity to v5/v4 and include the complete versioned external-read SQL contract (plan 255).
 * **Update**: Bind online serving and candidate lifecycle to the frozen public status vocabulary (plan 254).
 * **Update**: Persist catalog-derived group cursor authority during registration and adoption (plan 254).

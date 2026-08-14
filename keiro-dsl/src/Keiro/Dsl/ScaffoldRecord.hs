@@ -304,6 +304,20 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
             lineText (prvLoc revision)
           ]
       ]
+    nodeFacts (NExternalRead externalRead) =
+      [ T.intercalate
+          "|"
+          [ "external-read",
+            erName externalRead,
+            T.pack (show (erVersion externalRead)),
+            erQueryModel externalRead,
+            erResultSchema externalRead <> "." <> erResultType externalRead,
+            externalReadShape externalRead,
+            T.intercalate "," (sort (erCompatibleRevisions externalRead)),
+            T.pack (show (erSurfaceGeneration externalRead)),
+            lineText (erLoc externalRead)
+          ]
+      ]
     nodeFacts (NProjectionOwner owner) =
       [ T.intercalate
           "|"
@@ -354,6 +368,9 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
               ]
           ]
     nodeFacts _ = []
+    externalReadShape externalRead = case [rmShape readModel | NReadModel readModel <- specNodes spec, rmName readModel == erQueryModel externalRead] of
+      shape : _ -> shape
+      [] -> "missing-query"
     revisionTargetText target =
       T.intercalate
         ","

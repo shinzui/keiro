@@ -1506,6 +1506,8 @@ instance HasLocs RevisionTargetNode
 
 instance HasLocs ProjectionRevisionNode
 
+instance HasLocs ExternalReadNode
+
 instance HasLocs CatalogSource
 
 instance HasLocs CheckpointOnMissingNode

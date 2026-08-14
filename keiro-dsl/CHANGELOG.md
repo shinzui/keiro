@@ -8,6 +8,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Candidate Language 5 accepts bounded `external-read` declarations and lowers them to
+  versioned `AllRowsExternalRead` catalog contracts whose result shape is derived from
+  the checked query binding. Validation covers SQL identities, query/target cardinality,
+  revision compatibility, and surface generations; diff, ledger, pretty-print, and
+  workspace paths distinguish retirement, version addition, compatibility changes, and
+  result-shape changes. Create-once catalog holes include a typed keyed-contract helper
+  for application-owned private SQL implementations.
 - Candidate Language 5 accepts projection-revision bridges and generates catalog
   provisioner, schema-validator, physical-target live/replay, and verification holes.
   Revision/provisioner identities and ordered promotion names participate in canonical

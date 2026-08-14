@@ -25,8 +25,10 @@ module CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
   , applyReportingV2Live
   , applyReportingV2Replay
   , verifyReportingV2
+  , orderTotalsReaderV1KeyedExternalRead
   ) where
 
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Hasql.Transaction qualified as Tx
 import Generated.CatalogDemo.Orders.Domain (OrdersEvent)
@@ -95,6 +97,22 @@ applyReportingV2Replay _targets _recorded = pure (Right False)
 verifyReportingV2 :: Catalog.PhysicalTargets -> Tx.Transaction (Either Text ())
 verifyReportingV2 _targets = pure (Right ())
 
+-- Application-owned keyed alternative to the bounded generated all-row contract.
+orderTotalsReaderV1KeyedExternalRead :: [Catalog.SqlFunctionArgument] -> Catalog.QualifiedFunction -> Int -> Catalog.ExternalReadContract
+orderTotalsReaderV1KeyedExternalRead arguments privateImplementation privateImplementationVersion =
+  Catalog.KeyedExternalRead
+    (must (Catalog.mkExternalReadContractId "order_totals_reader"))
+    (Catalog.ExternalReadContractVersion 1)
+    (must (Catalog.mkQueryModelId "order_totals_lookup"))
+    arguments
+    (Catalog.QualifiedSqlType "app_contract" "order_totals_row_v1")
+    privateImplementation
+    privateImplementationVersion
+    "fnv1a:768a23d719dcb4d4"
+    (must (Catalog.mkProjectionRevisionId "reporting_v1") :| [must (Catalog.mkProjectionRevisionId "reporting_v2")])
+    1
+    (must (Catalog.mkClaimSite "external-read order_totals_reader v1 keyed helper"))
+
 provisionNothing :: Catalog.TargetProvisioningContext -> Tx.Transaction ()
 provisionNothing _context = pure ()
 
@@ -112,3 +130,6 @@ validateAs shape promotionObjects _context =
 
 promotion :: Catalog.PromotionObjectKind -> Text -> Text -> Catalog.PromotionObjectName
 promotion = Catalog.PromotionObjectName
+
+must :: Show error => Either error value -> value
+must = either (error . show) id

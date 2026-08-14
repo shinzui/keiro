@@ -264,6 +264,7 @@ docNode (NReadModel r) = docReadModel r
 docNode (NProjectionTarget target) = docProjectionTarget target
 docNode (NRebuildGroup groupNode) = docRebuildGroup groupNode
 docNode (NProjectionRevision revision) = docProjectionRevision revision
+docNode (NExternalRead externalRead) = docExternalRead externalRead
 docNode (NProjectionOwner owner) = docProjectionOwner owner
 docNode (NWorkflow w) = docWorkflow w
 docNode (NOperation o) = docOperation o
@@ -482,6 +483,19 @@ docProjectionRevision revision =
         <+> dquoted (rpoGenerationName promotionObject)
         <+> "->"
         <+> dquoted (rpoCanonicalName promotionObject)
+
+docExternalRead :: ExternalReadNode -> Doc ann
+docExternalRead externalRead =
+  vsep
+    [ "external-read" <+> pretty (erName externalRead) <+> "{",
+      indent 2 ("version =" <+> pretty (erVersion externalRead)),
+      indent 2 ("query =" <+> pretty (erQueryModel externalRead)),
+      indent 2 ("result-schema =" <+> dquoted (erResultSchema externalRead)),
+      indent 2 ("result-type =" <+> dquoted (erResultType externalRead)),
+      indent 2 ("compatible-revisions =" <+> bracketed (map pretty (erCompatibleRevisions externalRead))),
+      indent 2 ("surface-generation =" <+> pretty (erSurfaceGeneration externalRead)),
+      "}"
+    ]
 
 docProjectionOwner :: ProjectionOwnerNode -> Doc ann
 docProjectionOwner owner =

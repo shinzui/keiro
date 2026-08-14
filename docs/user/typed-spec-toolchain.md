@@ -1644,6 +1644,37 @@ and owns live apply, replay apply, heterogeneous decoder, idempotency,
 revision provision/validation, physical-target-parametric live/replay, and verification
 bodies. Regeneration never overwrites reviewed hole code.
 
+Candidate Language 5 also supports the bounded all-row external-read contract:
+
+```text
+external-read order_totals_reader {
+  version = 1
+  query = order_totals_lookup
+  result-schema = "app_contract"
+  result-type = "order_totals_row_v1"
+  compatible-revisions = [ reporting_v1 reporting_v2 ]
+  surface-generation = 1
+}
+```
+
+The generated `Catalog.AllRowsExternalRead` obtains its result-shape hash from the
+checked `readmodel`; the source cannot repeat or override it. The contract and SQL type
+names must be lower-case PostgreSQL identifiers, the query must observe exactly one
+target, and every compatible revision must belong to that query's group. Compatible
+revision order is identity-neutral. Removing a contract, adding a version, changing its
+compatibility set, and changing the query-derived result shape have distinct diff
+findings.
+
+All-row functions are for bounded models because caller predicates cannot be pushed
+through their procedural wrapper. The create-once projection-catalog hole module also
+scaffolds a `<contract>V<version>KeyedExternalRead` helper. Applications supply typed
+SQL arguments and an application-owned private implementation function to that helper;
+external roles still receive only the generated guarded wrapper. Language 5 does not
+attempt arbitrary query-payload mapping. A future implementation of
+[IR-25](../improvement-requests/make-derived-and-conditional-event-payload-mappings-declarative.md)
+can generate the same runtime `KeyedExternalRead` declaration without changing its
+contract.
+
 A source of `aggregate Name` derives its mapped consumer dependencies from
 that aggregate's private-event roots; inline aggregate projections use the
 same event authority. Neither relation inherits command-only or register-only

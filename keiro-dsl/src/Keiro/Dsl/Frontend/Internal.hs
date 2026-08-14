@@ -278,6 +278,7 @@ setNodeLoc loc = \case
   NProjectionTarget value -> NProjectionTarget value {ptLoc = loc}
   NRebuildGroup value -> NRebuildGroup value {rgLoc = loc}
   NProjectionRevision value -> NProjectionRevision value {prvLoc = loc}
+  NExternalRead value -> NExternalRead value {erLoc = loc}
   NProjectionOwner value -> NProjectionOwner value {poLoc = loc}
   NWorkflow
     WorkflowNode

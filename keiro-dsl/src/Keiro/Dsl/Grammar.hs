@@ -149,6 +149,8 @@ module Keiro.Dsl.Grammar
     PromotionObjectNode (..),
     RevisionTargetNode (..),
     ProjectionRevisionNode (..),
+    ExternalReadNode (..),
+    externalReadNodeIdentity,
     CatalogSource (..),
     CheckpointOnMissingNode (..),
     ProjectionReplayPolicy (..),
@@ -169,6 +171,7 @@ module Keiro.Dsl.Grammar
 where
 
 import Data.Text (Text)
+import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 
@@ -1326,6 +1329,27 @@ data ProjectionRevisionNode = ProjectionRevisionNode
   }
   deriving stock (Eq, Show, Generic)
 
+-- | Candidate language-5 declaration for one bounded all-row external SQL
+-- contract. The result shape is deliberately absent: lowering obtains it from
+-- the checked read-model binding so source and runtime identity cannot drift.
+data ExternalReadNode = ExternalReadNode
+  { erName :: !Name,
+    erVersion :: !Int,
+    erQueryModel :: !Name,
+    erResultSchema :: !Text,
+    erResultType :: !Text,
+    erCompatibleRevisions :: ![Name],
+    erSurfaceGeneration :: !Int,
+    erLoc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Top-level declaration identity. Several contract versions may coexist,
+-- so source-level duplicate detection keys by contract and version together.
+externalReadNodeIdentity :: ExternalReadNode -> Name
+externalReadNodeIdentity externalRead =
+  erName externalRead <> "_v" <> T.pack (show (erVersion externalRead))
+
 -- | A replay source selected by a projection owner.
 data CatalogSource
   = CatalogAggregate !Name
@@ -1441,6 +1465,7 @@ data Node
   | NProjectionTarget ProjectionTargetNode
   | NRebuildGroup RebuildGroupNode
   | NProjectionRevision ProjectionRevisionNode
+  | NExternalRead ExternalReadNode
   | NProjectionOwner ProjectionOwnerNode
   | NWorkflow WorkflowNode
   | NOperation OperationNode
