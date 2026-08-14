@@ -187,6 +187,19 @@ spec fixture = do
 
   describe "targeted stream repair command" $
     around (withFreshStore fixture) $ do
+      it "requires a positive event admission limit" $ \_ -> do
+        let command limit =
+              [ "rebuild",
+                "reproject-stream",
+                "ops-group",
+                "ops-projection",
+                "ops-1",
+                "--max-events",
+                limit
+              ]
+        isParseSuccess (parseOps embeddedHooks (command "100")) `shouldBe` True
+        isParseFailure (parseOps embeddedHooks (command "0")) `shouldBe` True
+
       it "classifies the command as mutating and renders a stable typed refusal" $ \store -> do
         let command =
               OpsRebuild.ReprojectStream
@@ -194,7 +207,8 @@ spec fixture = do
                   { groupId = either (error . show) Function.id (Catalog.mkRebuildGroupId "ops-group"),
                     projectionId = either (error . show) Function.id (Catalog.mkProjectionId "ops-projection"),
                     streamName = StreamName "orders-1",
-                    pageSize = 500
+                    pageSize = 500,
+                    maxEvents = 1000
                   }
         OpsRebuild.isMutation command `shouldBe` True
         outcome <- OpsRebuild.runCommand (opsEnv False store) emptyCatalogOperations command
@@ -215,6 +229,8 @@ spec fixture = do
             version = StreamVersion 1
             errors =
               [ Rebuild.StreamReprojectionInvalidPageSize 0,
+                Rebuild.StreamReprojectionInvalidMaxEvents 0,
+                Rebuild.StreamReprojectionEventLimitExceeded stream 2 1,
                 Rebuild.StreamReprojectionGroupUnregistered group,
                 Rebuild.StreamReprojectionActiveRebuild group (opsRebuildRunId "ops-active"),
                 Rebuild.StreamReprojectionGroupUnavailable group "failed" False False,
@@ -238,6 +254,8 @@ spec fixture = do
               ]
         map OpsRebuild.streamReprojectionErrorCode errors
           `shouldBe` [ "stream-reprojection-invalid-page-size",
+                       "stream-reprojection-invalid-max-events",
+                       "stream-reprojection-event-limit-exceeded",
                        "stream-reprojection-group-unregistered",
                        "stream-reprojection-active-rebuild",
                        "stream-reprojection-group-unavailable",

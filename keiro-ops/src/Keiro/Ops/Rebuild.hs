@@ -154,7 +154,8 @@ data ReprojectStreamOptions = ReprojectStreamOptions
   { groupId :: !RebuildGroupId,
     projectionId :: !ProjectionId,
     streamName :: !StreamName,
-    pageSize :: !Int32
+    pageSize :: !Int32,
+    maxEvents :: !Int64
   }
   deriving stock (Eq, Show)
 
@@ -189,6 +190,7 @@ reprojectStreamOptionsParser =
     <*> argument projectionReader (metavar "PROJECTION")
     <*> (StreamName . Text.pack <$> strArgument (metavar "STREAM"))
     <*> option positiveInt32Reader (long "page-size" <> metavar "N" <> Optparse.value 500 <> showDefault <> help "Events fetched per stream page")
+    <*> option positiveInt64Reader (long "max-events" <> metavar "N" <> Optparse.value 1000 <> showDefault <> help "Maximum locked stream event count admitted for one repair")
 
 versionedCommandParser :: Parser Command
 versionedCommandParser =
@@ -439,7 +441,8 @@ streamReprojectionRequest options =
     { rebuildGroupId = options.groupId,
       projectionId = options.projectionId,
       streamName = options.streamName,
-      pageSize = options.pageSize
+      pageSize = options.pageSize,
+      maxEvents = options.maxEvents
     }
 
 catalogVersionedStartOptions :: VersionedStartOptions -> CatalogVersionedStartOptions
@@ -772,7 +775,7 @@ externalReadRetirementResult report =
 streamReprojectionPreviewResult :: CatalogStreamReprojectionPreview -> OpsResult
 streamReprojectionPreviewResult report =
   OpsResult
-    { headers = ["group", "projection", "stream", "serving_revision", "targets", "dedup_keys", "stream_version", "soft_deleted", "truncate_before", "eligible", "refusal"],
+    { headers = ["group", "projection", "stream", "serving_revision", "targets", "dedup_keys", "stream_version", "event_count", "expected_dedup_claims", "max_events", "soft_deleted", "truncate_before", "eligible", "refusal"],
       rows =
         [ [ rebuildGroupIdText report.rebuildGroupId,
             projectionIdText report.projectionId,
@@ -781,6 +784,9 @@ streamReprojectionPreviewResult report =
             Text.intercalate "," (map (\target -> targetIdText target.targetId) report.targets),
             Text.intercalate "," (map (\dedup -> dedupKeyIdText dedup.dedupKeyId) report.affectedDedup),
             maybe "" streamVersionText report.streamVersion,
+            maybe "" showText report.eventCount,
+            maybe "" showText report.expectedDedupClaims,
+            showText report.maxEvents,
             boolText report.softDeleted,
             maybe "" streamVersionText report.truncateBefore,
             boolText report.eligible,
@@ -793,13 +799,14 @@ streamReprojectionPreviewResult report =
 streamReprojectionResult :: CatalogStreamReprojectionReport -> OpsResult
 streamReprojectionResult report =
   OpsResult
-    { headers = ["group", "projection", "stream", "serving_revision", "stream_version", "cleared_rows", "replayed", "applied", "dedup_inserted", "dedup_existing", "verified"],
+    { headers = ["group", "projection", "stream", "serving_revision", "stream_version", "max_events", "cleared_rows", "replayed", "applied", "dedup_inserted", "dedup_existing", "verified"],
       rows =
         [ [ rebuildGroupIdText repair.rebuildGroupId,
             projectionIdText repair.projectionId,
             streamNameText repair.streamName,
             projectionRevisionIdText repair.servingRevisionId,
             streamVersionText repair.streamVersion,
+            showText repair.maxEvents,
             Text.intercalate "," [targetIdText count.targetId <> ":" <> showText count.clearedRows | count <- repair.clearedRows],
             showText repair.replayedEvents,
             showText repair.appliedEvents,
@@ -926,7 +933,9 @@ reprojectStreamArguments options =
     projectionIdText options.projectionId,
     streamNameText options.streamName,
     "--page-size",
-    showText options.pageSize
+    showText options.pageSize,
+    "--max-events",
+    showText options.maxEvents
   ]
 
 forceInvocation :: OpsEnv -> [Text] -> Text
@@ -956,6 +965,8 @@ catalogOpsErrorText errorValue =
 streamReprojectionErrorCode :: StreamReprojectionError -> Text
 streamReprojectionErrorCode = \case
   StreamReprojectionInvalidPageSize {} -> "stream-reprojection-invalid-page-size"
+  StreamReprojectionInvalidMaxEvents {} -> "stream-reprojection-invalid-max-events"
+  StreamReprojectionEventLimitExceeded {} -> "stream-reprojection-event-limit-exceeded"
   StreamReprojectionGroupUnregistered {} -> "stream-reprojection-group-unregistered"
   StreamReprojectionActiveRebuild {} -> "stream-reprojection-active-rebuild"
   StreamReprojectionGroupUnavailable {} -> "stream-reprojection-group-unavailable"

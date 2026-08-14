@@ -3,6 +3,7 @@
 ## 2026-08-14
 * **Update**: Amend ADR-31, ADR-32, and ADR-34 with database-backed dedup staging, persisted admission identity, durable promotion preparation, absolute attempt deadlines, cumulative target locking, and recovery semantics (plan 259 M2).
 * **Update**: Bind projection revisions to exact inline or subscription delivery capabilities and advance canonical catalog/slice identity (ADR-26, ADR-31, ADR-34; plan 259 M1).
+* **Update**: Bound targeted per-stream reprojection with an exact locked-stream event admission limit before the group-wide writer fence (ADR-26, ADR-34; plans 257 and 259).
 * **Update**: Define stream-scoped projection ownership, serving-revision repair, transactional dedup backfill, and catalog/slice v6/v5 identity for targeted per-stream reprojection (ADR-26, ADR-31, ADR-32, ADR-34; plan 257).
 * **Add**: Require versioned execute-only guarded SQL contracts for out-of-process projection reads (ADR-36, plan 255).
 * **Update**: Reconcile catalog, slice, online generation, and frozen-status decisions with the guarded external-read contract (ADR-26, ADR-32, ADR-34, ADR-35; plan 255).

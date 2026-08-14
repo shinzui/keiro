@@ -269,6 +269,9 @@ data CatalogStreamReprojectionPreview = CatalogStreamReprojectionPreview
     targets :: ![InventoryTarget],
     affectedDedup :: ![InventoryDedupKey],
     streamVersion :: !(Maybe StreamVersion),
+    eventCount :: !(Maybe Int64),
+    expectedDedupClaims :: !(Maybe Integer),
+    maxEvents :: !Int64,
     softDeleted :: !Bool,
     truncateBefore :: !(Maybe StreamVersion),
     eligible :: !Bool,
@@ -580,16 +583,22 @@ previewStreamReprojection ::
   ProjectionCatalogOperations ->
   StreamReprojectionRequest ->
   Eff es (Either CatalogOpsError CatalogStreamReprojectionPreview)
-previewStreamReprojection (ProjectionCatalogOperations catalog) request =
-  if request ^. #pageSize <= 0
-    then
+previewStreamReprojection (ProjectionCatalogOperations catalog) request
+  | request ^. #pageSize <= 0 =
       pure
         ( Left
             ( CatalogOpsStreamReprojectionError
                 (StreamReprojectionInvalidPageSize (request ^. #pageSize))
             )
         )
-    else do
+  | request ^. #maxEvents <= 0 =
+      pure
+        ( Left
+            ( CatalogOpsStreamReprojectionError
+                (StreamReprojectionInvalidMaxEvents (request ^. #maxEvents))
+            )
+        )
+  | otherwise = do
       metadata <- lookupProjectionRebuildGroup (request ^. #rebuildGroupId)
       status <- lookupProjectionGroupStatus (request ^. #rebuildGroupId)
       case status >>= (^. #servingRevisionId) of
@@ -646,7 +655,7 @@ previewStreamReprojection (ProjectionCatalogOperations catalog) request =
                       pure
                         ( Right
                             CatalogStreamReprojectionPreview
-                              { reportSchema = "keiro/catalog-stream-reprojection-preview/v1",
+                              { reportSchema = "keiro/catalog-stream-reprojection-preview/v2",
                                 rebuildGroupId = request ^. #rebuildGroupId,
                                 projectionId = request ^. #projectionId,
                                 streamName = request ^. #streamName,
@@ -654,6 +663,11 @@ previewStreamReprojection (ProjectionCatalogOperations catalog) request =
                                 targets,
                                 affectedDedup = dedup,
                                 streamVersion = (^. #version) <$> streamInfo,
+                                eventCount = streamEventCount <$> streamInfo,
+                                expectedDedupClaims =
+                                  (\info -> toInteger (streamEventCount info) * toInteger (length dedup))
+                                    <$> streamInfo,
+                                maxEvents = request ^. #maxEvents,
                                 softDeleted = maybe False (isJust . (^. #deletedAt)) streamInfo,
                                 truncateBefore = (^. #truncateBefore) <$> streamInfo,
                                 eligible = isNothing refusal,
@@ -665,6 +679,10 @@ previewStreamReprojection (ProjectionCatalogOperations catalog) request =
                                     <> projectionIdText (request ^. #projectionId)
                                     <> " "
                                     <> streamNameText (request ^. #streamName)
+                                    <> " --page-size "
+                                    <> Text.pack (show (request ^. #pageSize))
+                                    <> " --max-events "
+                                    <> Text.pack (show (request ^. #maxEvents))
                                     <> " --force"
                               }
                         )
@@ -683,6 +701,7 @@ previewStreamReprojection (ProjectionCatalogOperations catalog) request =
           Just info
             | isJust (info ^. #deletedAt) -> Just "stream-soft-deleted"
             | info ^. #truncateBefore > StreamVersion 0 -> Just "stream-truncated"
+            | streamEventCount info > request ^. #maxEvents -> Just "stream-event-limit-exceeded"
             | otherwise -> Nothing
 
     sliceMatches maybeMetadata =
@@ -693,6 +712,10 @@ previewStreamReprojection (ProjectionCatalogOperations catalog) request =
 
     streamNameText (StreamName value) = value
 
+    streamEventCount info =
+      case info ^. #version of
+        StreamVersion value -> value
+
 reprojectCatalogStream ::
   (Store :> es) =>
   ProjectionCatalogOperations ->
@@ -701,7 +724,7 @@ reprojectCatalogStream ::
 reprojectCatalogStream (ProjectionCatalogOperations catalog) request =
   reprojectStream catalog request
     <&> first CatalogOpsStreamReprojectionError
-    <&> fmap (CatalogStreamReprojectionReport "keiro/catalog-stream-reprojection-outcome/v1")
+    <&> fmap (CatalogStreamReprojectionReport "keiro/catalog-stream-reprojection-outcome/v2")
 
 externalReadRetirementReport :: Text -> External.ExternalReadRetirementPreview -> CatalogExternalReadRetirementReport
 externalReadRetirementReport reportSchema retirement =
@@ -911,6 +934,9 @@ instance Aeson.ToJSON CatalogStreamReprojectionPreview where
         "targets" Aeson..= map targetValue (report ^. #targets),
         "affectedDedup" Aeson..= map dedupValue (report ^. #affectedDedup),
         "streamVersion" Aeson..= fmap streamVersionValue (report ^. #streamVersion),
+        "eventCount" Aeson..= (report ^. #eventCount),
+        "expectedDedupClaims" Aeson..= (report ^. #expectedDedupClaims),
+        "maxEvents" Aeson..= (report ^. #maxEvents),
         "softDeleted" Aeson..= (report ^. #softDeleted),
         "truncateBefore" Aeson..= fmap streamVersionValue (report ^. #truncateBefore),
         "eligible" Aeson..= (report ^. #eligible),
@@ -933,6 +959,7 @@ streamReprojectionValue report =
       "streamName" Aeson..= streamNameValue (report ^. #streamName),
       "servingRevisionId" Aeson..= projectionRevisionIdText (report ^. #servingRevisionId),
       "streamVersion" Aeson..= streamVersionValue (report ^. #streamVersion),
+      "maxEvents" Aeson..= (report ^. #maxEvents),
       "clearedRows"
         Aeson..= [ Aeson.object
                      [ "targetId" Aeson..= targetIdText (count ^. #targetId),

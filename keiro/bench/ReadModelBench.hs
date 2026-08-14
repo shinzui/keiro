@@ -384,7 +384,8 @@ repairScenarioBench fixture eventCount =
             { rebuildGroupId = (firstOrError "repair scenario group" scenario.scenarioGroups).groupId,
               projectionId,
               streamName = repairStreamName eventCount,
-              pageSize = 64
+              pageSize = 64,
+              maxEvents = fromIntegral eventCount
             }
     runStoreChecked fixture.store (reprojectStream fixture.catalog request) >>= \case
       Right report

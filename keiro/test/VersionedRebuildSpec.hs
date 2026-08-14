@@ -27,6 +27,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Functor.Contravariant ((>$<))
+import Data.Int (Int32)
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -1077,14 +1078,17 @@ spec fixture = do
         map (^. #dedupKeyId) (previewed ^. #affectedDedup)
           `shouldBe` [identity mkDedupKeyId "counter-dedup"]
         previewed ^. #streamVersion `shouldBe` Just (StreamVersion 2)
+        previewed ^. #eventCount `shouldBe` Just 2
+        previewed ^. #expectedDedupClaims `shouldBe` Just 2
+        previewed ^. #maxEvents `shouldBe` 1000
         previewed ^. #eligible `shouldBe` True
         previewed ^. #refusal `shouldBe` Nothing
         previewed ^. #forceOperation
-          `shouldBe` "rebuild reproject-stream counter-group audit-owner counter-1 --force"
-        previewed ^. #reportSchema `shouldBe` "keiro/catalog-stream-reprojection-preview/v1"
+          `shouldBe` "rebuild reproject-stream counter-group audit-owner counter-1 --page-size 1 --max-events 1000 --force"
+        previewed ^. #reportSchema `shouldBe` "keiro/catalog-stream-reprojection-preview/v2"
         case Aeson.toJSON previewed of
           Aeson.Object fields -> do
-            KeyMap.size fields `shouldBe` 13
+            KeyMap.size fields `shouldBe` 16
             all
               (`KeyMap.member` fields)
               [ "schema",
@@ -1095,6 +1099,9 @@ spec fixture = do
                 "targets",
                 "affectedDedup",
                 "streamVersion",
+                "eventCount",
+                "expectedDedupClaims",
+                "maxEvents",
                 "softDeleted",
                 "truncateBefore",
                 "eligible",
@@ -1107,7 +1114,7 @@ spec fixture = do
         repaired <-
           expectStore store (CatalogOperations.reprojectCatalogStream operations (streamRepairRequest "counter-1"))
             >>= requireRight
-        repaired ^. #reportSchema `shouldBe` "keiro/catalog-stream-reprojection-outcome/v1"
+        repaired ^. #reportSchema `shouldBe` "keiro/catalog-stream-reprojection-outcome/v2"
         case Aeson.toJSON repaired of
           Aeson.Object fields -> do
             KeyMap.size fields `shouldBe` 2
@@ -1117,6 +1124,7 @@ spec fixture = do
 
         repair ^. #servingRevisionId `shouldBe` identity mkProjectionRevisionId "counter-v2"
         repair ^. #streamVersion `shouldBe` StreamVersion 2
+        repair ^. #maxEvents `shouldBe` 1000
         repair ^. #clearedRows `shouldBe` [StreamClearCount auditTargetId 1]
         repair ^. #replayedEvents `shouldBe` 2
         repair ^. #appliedEvents `shouldBe` 2
@@ -1147,6 +1155,51 @@ spec fixture = do
         secondRepair ^. #dedupExisting `shouldBe` 2
         runStatement store () repairRowsStmt `shouldReturn` [(1, "3"), (2, "7")]
 
+      it "refuses an oversized stream before taking the group-wide repair fence" $ \store -> do
+        catalog <- prepareStreamRepair store streamRepairCatalog
+        appendRepairEvents store "counter-1" 1 (replicate 101 1)
+        runStatement store () seedSingleRepairRowStmt
+        let request = streamRepairRequest "counter-1" & #maxEvents .~ 100
+            operations = CatalogOperations.projectionCatalogOperations catalog
+
+        previewed <-
+          expectStore store (CatalogOperations.previewStreamReprojection operations request)
+            >>= requireRight
+        previewed ^. #eventCount `shouldBe` Just 101
+        previewed ^. #expectedDedupClaims `shouldBe` Just 101
+        previewed ^. #maxEvents `shouldBe` 100
+        previewed ^. #eligible `shouldBe` False
+        previewed ^. #refusal `shouldBe` Just "stream-event-limit-exceeded"
+
+        holderDone <- newEmptyMVar
+        _ <-
+          forkIO $
+            Store.runStoreIO
+              store
+              ( Store.runTransaction $ do
+                  Tx.sql "SET LOCAL application_name = 'keiro-repair-admission-group-holder'"
+                  _ <- Tx.statement (rebuildGroupIdText mainGroupId) sanctionedRepairReaderLockStmt
+                  Tx.sql "SELECT pg_sleep(0.75)"
+              )
+              >>= putMVar holderDone
+        waitForNamedSession (store ^. #pool) "keiro-repair-admission-group-holder" 50
+
+        startedAt <- getCurrentTime
+        refused <- expectStore store (reprojectStream catalog request)
+        finishedAt <- getCurrentTime
+        refused
+          `shouldBe` Left
+            ( StreamReprojectionEventLimitExceeded
+                (StreamName "counter-1")
+                101
+                100
+            )
+        diffUTCTime finishedAt startedAt `shouldSatisfy` (< 0.35)
+        runStatement store () repairRowsStmt `shouldReturn` [(1, "999")]
+        runStatement store () repairDedupCountStmt `shouldReturn` 0
+        holderResult <- takeMVar holderDone
+        holderResult `shouldBe` Right ()
+
       it "rolls clear, replay, and dedup back when verification fails" $ \store -> do
         _ <- prepareStreamRepair store streamRepairCatalog
         appendRepairEvents store "counter-1" 1 [1, 2]
@@ -1157,6 +1210,26 @@ spec fixture = do
         failed
           `shouldSatisfy` \case
             Left (StreamReprojectionVerificationFailed "forced verification failure") -> True
+            _ -> False
+        runStatement store () repairRowsStmt `shouldReturn` [(1, "999")]
+        runStatement store () repairDedupCountStmt `shouldReturn` 0
+
+      it "rolls back clearer and decode failures without dedup evidence" $ \store -> do
+        catalog <- prepareStreamRepair store streamRepairCatalog
+        appendRepairEvents store "counter-1" 1 [1]
+        runStatement store () seedSingleRepairRowStmt
+
+        clearerCatalog <- expectValidated (streamRepairCatalogWith clearFailureRepairPolicy)
+        clearerFailed <- expectStore store (reprojectStream clearerCatalog (streamRepairRequest "counter-1"))
+        clearerFailed `shouldBe` Left (StreamReprojectionClearFailed "forced clearer failure")
+        runStatement store () repairRowsStmt `shouldReturn` [(1, "999")]
+        runStatement store () repairDedupCountStmt `shouldReturn` 0
+
+        appendMalformedRepairEvent store "counter-1"
+        decodeFailed <- expectStore store (reprojectStream catalog (streamRepairRequest "counter-1"))
+        decodeFailed
+          `shouldSatisfy` \case
+            Left (StreamReprojectionDecodeFailed (StreamVersion 2) _) -> True
             _ -> False
         runStatement store () repairRowsStmt `shouldReturn` [(1, "999")]
         runStatement store () repairDedupCountStmt `shouldReturn` 0
@@ -1325,6 +1398,60 @@ spec fixture = do
         writerResult <- takeMVar writerDone
         writerResult `shouldBe` Right CatalogAsyncApplied
 
+      it "serializes hard deletion behind the stream guard" $ \store -> do
+        _ <- prepareStreamRepair store streamRepairCatalog
+        slowCatalog <- expectValidated (streamRepairCatalogWith (repairPolicy True False))
+        appendRepairEvents store "counter-1" 1 [1]
+        runStatement store () seedSingleRepairRowStmt
+
+        repairDone <- newEmptyMVar
+        _ <-
+          forkIO $
+            Store.runStoreIO store (reprojectStream slowCatalog (streamRepairRequest "counter-1"))
+              >>= putMVar repairDone
+        _ <- waitForApplicationPid (store ^. #pool) "keiro-stream-repair-after-clear" 50
+
+        deleteDone <- newEmptyMVar
+        _ <-
+          forkIO $
+            Store.runStoreIO store (Store.hardDeleteStream (StreamName "counter-1"))
+              >>= putMVar deleteDone
+        threadDelay 150_000
+        isEmptyMVar deleteDone `shouldReturn` True
+
+        repairResult <- takeMVar repairDone
+        repairResult `shouldSatisfy` \case Right (Right _) -> True; _ -> False
+        deleted <- takeMVar deleteDone
+        deleted `shouldSatisfy` \case Right (Just _) -> True; _ -> False
+        runStatement store () repairRowsStmt `shouldReturn` [(1, "1")]
+        missing <- expectStore store (reprojectStream slowCatalog (streamRepairRequest "counter-1"))
+        missing
+          `shouldSatisfy` \case
+            Left (StreamReprojectionHistoryUnavailable _) -> True
+            _ -> False
+
+      it "rolls target and dedup changes back when the repair backend is interrupted" $ \store -> do
+        _ <- prepareStreamRepair store streamRepairCatalog
+        slowCatalog <- expectValidated (streamRepairCatalogWith (repairPolicy True False))
+        appendRepairEvents store "counter-1" 1 [1]
+        runStatement store () seedSingleRepairRowStmt
+
+        repairDone <- newEmptyMVar
+        _ <-
+          forkIO $
+            Store.runStoreIO store (reprojectStream slowCatalog (streamRepairRequest "counter-1"))
+              >>= putMVar repairDone
+        backendPid <- waitForApplicationPid (store ^. #pool) "keiro-stream-repair-after-clear" 50
+        terminated <-
+          expectPoolUsage
+            =<< Pool.use (store ^. #pool) (Session.statement backendPid terminateBackendStmt)
+        terminated `shouldBe` True
+
+        interrupted <- takeMVar repairDone
+        interrupted `shouldSatisfy` isLeft
+        runStatement store () repairRowsStmt `shouldReturn` [(1, "999")]
+        runStatement store () repairDedupCountStmt `shouldReturn` 0
+
 validatedBridge :: IO (ValidatedProjectionCatalog, PhysicalTargets)
 validatedBridge = validatedBridgeFrom runtimeBridgeCatalog
 
@@ -1381,7 +1508,9 @@ repairPolicy pauseAfterClear failVerification =
           Right aggregateId -> do
             let auditTable = requireTargetFrom physicalTargets auditTargetId
             cleared <- Tx.statement aggregateId (deleteRepairRowStmt auditTable)
-            when pauseAfterClear (Tx.sql "SELECT pg_sleep(0.75)")
+            when pauseAfterClear $ do
+              Tx.sql "SET LOCAL application_name = 'keiro-stream-repair-after-clear'"
+              Tx.sql "SELECT pg_sleep(0.75)"
             pure (Right [StreamClearCount auditTargetId cleared]),
       streamReplayId = "runtime-audit/replay-stream",
       streamReplayVersion = 1,
@@ -1413,6 +1542,12 @@ repairPolicy pauseAfterClear failVerification =
       claimSite = identity mkClaimSite "versioned:runtime-audit-stream-repair"
     }
 
+clearFailureRepairPolicy :: StreamScopedReplay
+clearFailureRepairPolicy =
+  (repairPolicy False False)
+    { clearStreamRows = \_ _ -> pure (Left "forced clearer failure")
+    }
+
 prepareStreamRepair :: Store.KirokuStore -> ProjectionCatalog -> IO ValidatedProjectionCatalog
 prepareStreamRepair store catalogDefinition = do
   setupBridge store
@@ -1437,7 +1572,8 @@ streamRepairRequest stream =
     { rebuildGroupId = mainGroupId,
       projectionId = asyncProjectionId,
       streamName = StreamName stream,
-      pageSize = 1
+      pageSize = 1,
+      maxEvents = 1000
     }
 
 repairAggregateId :: StreamName -> Either Text Int64
@@ -2042,6 +2178,14 @@ waitForNamedSession pool applicationName remaining = do
     then pure ()
     else threadDelay 20_000 >> waitForNamedSession pool applicationName (remaining - 1)
 
+waitForApplicationPid :: Pool.Pool -> Text -> Int -> IO Int32
+waitForApplicationPid _ _ 0 = expectationFailure "named repair session did not become active in time" >> error "unreachable"
+waitForApplicationPid pool applicationName remaining = do
+  maybePid <- expectPoolUsage =<< Pool.use pool (Session.statement applicationName applicationPidStmt)
+  case maybePid of
+    Just pid -> pure pid
+    Nothing -> threadDelay 20_000 >> waitForApplicationPid pool applicationName (remaining - 1)
+
 expectStore ::
   Store.KirokuStore ->
   Eff '[Store, Error StoreError, IOE] value ->
@@ -2151,6 +2295,24 @@ appendRepairEvents store streamName aggregateId deltas = do
               correlationId = Nothing
             }
         | delta <- deltas
+        ]
+  appended `shouldSatisfy` isRight
+
+appendMalformedRepairEvent :: Store.KirokuStore -> Text -> IO ()
+appendMalformedRepairEvent store streamName = do
+  appended <-
+    Store.runStoreIO store $
+      Store.appendToStream
+        (StreamName streamName)
+        AnyVersion
+        [ EventData
+            { eventId = Nothing,
+              eventType = EventType "RepairDelta",
+              payload = Aeson.object ["malformed" Aeson..= True],
+              metadata = Nothing,
+              causationId = Nothing,
+              correlationId = Nothing
+            }
         ]
   appended `shouldSatisfy` isRight
 
@@ -2471,6 +2633,20 @@ namedSessionGroupShareStmt =
     )
     """
     (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+applicationPidStmt :: Statement Text (Maybe Int32)
+applicationPidStmt =
+  preparable
+    "SELECT pid FROM pg_catalog.pg_stat_activity WHERE application_name = $1 AND state = 'active' ORDER BY pid LIMIT 1"
+    (E.param (E.nonNullable E.text))
+    (D.rowMaybe (D.column (D.nonNullable D.int4)))
+
+terminateBackendStmt :: Statement Int32 Bool
+terminateBackendStmt =
+  preparable
+    "SELECT pg_catalog.pg_terminate_backend($1)"
+    (E.param (E.nonNullable E.int4))
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
 statusPromotionUpdateAndSleepSql :: ByteString

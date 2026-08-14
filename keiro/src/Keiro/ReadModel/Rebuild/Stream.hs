@@ -71,12 +71,15 @@ data StreamReprojectionRequest = StreamReprojectionRequest
   { rebuildGroupId :: !RebuildGroupId,
     projectionId :: !ProjectionId,
     streamName :: !StreamName,
-    pageSize :: !Int32
+    pageSize :: !Int32,
+    maxEvents :: !Int64
   }
   deriving stock (Eq, Show, Generic)
 
 data StreamReprojectionError
   = StreamReprojectionInvalidPageSize !Int32
+  | StreamReprojectionInvalidMaxEvents !Int64
+  | StreamReprojectionEventLimitExceeded !StreamName !Int64 !Int64
   | StreamReprojectionGroupUnregistered !RebuildGroupId
   | StreamReprojectionActiveRebuild !RebuildGroupId !RebuildRunId
   | StreamReprojectionGroupUnavailable !RebuildGroupId !Text !Bool !Bool
@@ -105,6 +108,7 @@ data StreamReprojectionReport = StreamReprojectionReport
     streamName :: !StreamName,
     servingRevisionId :: !ProjectionRevisionId,
     streamVersion :: !StreamVersion,
+    maxEvents :: !Int64,
     clearedRows :: ![StreamClearCount],
     replayedEvents :: !Int64,
     appliedEvents :: !Int64,
@@ -129,7 +133,14 @@ reprojectStreamTx ::
 reprojectStreamTx catalog request
   | request ^. #pageSize <= 0 =
       pure (Left (StreamReprojectionInvalidPageSize (request ^. #pageSize)))
-  | otherwise = do
+  | request ^. #maxEvents <= 0 =
+      pure (Left (StreamReprojectionInvalidMaxEvents (request ^. #maxEvents)))
+  | otherwise =
+      case validateStreamReprojectionAdmission catalog request of
+        Left err -> pure (Left err)
+        Right () -> lockHistoryAndRepair
+  where
+    lockHistoryAndRepair = do
       lockedHistory <- lockStreamHistoryForReplayTx (request ^. #streamName)
       case lockedHistory of
         Left unavailable ->
@@ -145,8 +156,21 @@ reprojectStreamTx catalog request
                         (streamInfo ^. #truncateBefore)
                     )
                 )
+          | streamEventCount streamInfo > request ^. #maxEvents ->
+              pure
+                ( Left
+                    ( StreamReprojectionEventLimitExceeded
+                        (request ^. #streamName)
+                        (streamEventCount streamInfo)
+                        (request ^. #maxEvents)
+                    )
+                )
           | otherwise -> lockGroupAndRepair streamInfo
-  where
+
+    streamEventCount streamInfo =
+      case streamInfo ^. #version of
+        StreamVersion value -> value
+
     -- Catalog command writers append first and acquire the group shared lock in
     -- their continuation. Taking the stream guard before the exclusive group
     -- fence preserves that global order and lets an already-appended writer
@@ -167,25 +191,22 @@ reprojectStreamTx catalog request
         ProjectionRepairServingBindingInvalid groupId revisionId detail ->
           pure (Left (StreamReprojectionServingBindingInvalid groupId revisionId detail))
         ProjectionRepairAllowed binding ->
-          case validateStreamReprojectionAdmission catalog request of
-            Left err -> pure (Left err)
-            Right () ->
-              case binding ^. #writeRevisionId of
-                Nothing ->
-                  pure
-                    ( Left
-                        ( StreamReprojectionGroupUnavailable
-                            (request ^. #rebuildGroupId)
-                            "unversioned"
-                            True
-                            True
-                        )
+          case binding ^. #writeRevisionId of
+            Nothing ->
+              pure
+                ( Left
+                    ( StreamReprojectionGroupUnavailable
+                        (request ^. #rebuildGroupId)
+                        "unversioned"
+                        True
+                        True
                     )
-                Just revisionId ->
-                  case catalogStreamScopedReplay catalog revisionId (request ^. #projectionId) of
-                    Nothing ->
-                      pure (Left (StreamReprojectionPolicyUnavailable revisionId (request ^. #projectionId)))
-                    Just policy -> runPolicy streamInfo binding revisionId policy
+                )
+            Just revisionId ->
+              case catalogStreamScopedReplay catalog revisionId (request ^. #projectionId) of
+                Nothing ->
+                  pure (Left (StreamReprojectionPolicyUnavailable revisionId (request ^. #projectionId)))
+                Just policy -> runPolicy streamInfo binding revisionId policy
 
     runPolicy streamInfo binding revisionId policy = do
       cleared <-
@@ -230,6 +251,7 @@ reprojectStreamTx catalog request
                                     streamName = request ^. #streamName,
                                     servingRevisionId = revisionId,
                                     streamVersion = streamInfo ^. #version,
+                                    maxEvents = request ^. #maxEvents,
                                     clearedRows = normalizedCounts,
                                     replayedEvents,
                                     appliedEvents,
@@ -380,6 +402,8 @@ validateStreamReprojectionAdmission ::
 validateStreamReprojectionAdmission catalog request
   | request ^. #pageSize <= 0 =
       Left (StreamReprojectionInvalidPageSize (request ^. #pageSize))
+  | request ^. #maxEvents <= 0 =
+      Left (StreamReprojectionInvalidMaxEvents (request ^. #maxEvents))
   | otherwise = do
       projection <-
         maybe

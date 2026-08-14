@@ -193,7 +193,9 @@ the application-owned clearer and verifier are the evidence that every selected 
 derived solely from the requested stream. A projection without that declaration is not
 eligible for targeted repair.
 
-Targeted repair first locks one complete retained Kiroku stream, then takes the same
+Targeted repair first locks one complete retained Kiroku stream and compares the locked
+event count with the request's positive reviewed maximum. An oversized stream is
+refused before acquiring the group-wide fence. An admitted repair then takes the same
 group row `FOR UPDATE` and resolves the persisted serving revision and its serving
 physical targets. It reads the guarded stream, clears only that stream's rows, replays
 it in order, verifies it, and backfills

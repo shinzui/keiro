@@ -52,7 +52,7 @@ cross-plan release gate.
 - [x] (2026-08-14T09:42:24Z) M3: steady-state versioned inline/async writes, status
   reads, guarded reads, and cutover/repair scale have comparative benchmarks with
   explicit regression budgets.
-- [ ] M4: the delivered implementations of plans 254, 255, and 257 have each passed a
+- [x] (2026-08-14T11:06:35Z) M4: the delivered implementations of plans 254, 255, and 257 have each passed a
   recorded adversarial correctness, concurrency, security, performance, and
   compatibility review; every critical/high finding is resolved.
   - [x] (2026-08-14T10:11:50Z) EP-2 status contract reviewed at `18eaf279`,
@@ -64,7 +64,11 @@ cross-plan release gate.
     through `353e8d3c` and `9f985f76`; the unbounded all-row and crossed-promotion
     snapshot findings are fixed, and privilege, overload, rolling-upgrade, retirement,
     query-plan, and exact-result evidence passes with no open critical or high finding.
-  - [ ] EP-4 targeted stream-repair review.
+  - [x] (2026-08-14T11:06:35Z) EP-4 targeted stream repair reviewed at
+    `34aa574e` and `e2e78401`; exact pre-fence work admission, long/truncated/deleted
+    history, hard deletion, writers/readers, dedup/checkpoint state, application
+    failures, and backend interruption pass with the unbounded writer-pause finding
+    fixed and no open critical or high finding.
 - [ ] M5: cross-plan fault injection, bridge/rolling-upgrade evidence, ADR and contract
   reconciliation, changelogs, corpus replay, and `just verify` pass; MasterPlan 41 is
   eligible to close.
@@ -123,6 +127,10 @@ cross-plan release gate.
   retaining the calling statement's older snapshot for the later projection query. The
   first real promotion race reproduced an authorized empty result; post-lock metadata
   revalidation alone was insufficient without an epoch-crossing retry fence.
+- Targeted repair's page size bounded process residency but not the total clearer,
+  replay, deduplication, and verification work performed while every group writer was
+  fenced. Locked `StreamInfo.version` is the exact race-free admission fact and is
+  available before the group lock.
 
 
 ## Decision Log
@@ -218,6 +226,12 @@ cross-plan release gate.
   Rationale: the calling PostgreSQL statement cannot adopt every catalog and relation
   change from a promotion it waited behind. A fresh statement is the safe boundary for
   observing the rebound generation.
+  Date: 2026-08-14
+- Decision: Require every targeted stream repair to admit the exact locked event count
+  against a positive request maximum before acquiring the group-wide writer fence.
+  Rationale: page-bounded replay is not an outage bound. Keeping the stream guard across
+  admission and repair prevents count drift, while preview/outcome v2 and the CLI force
+  invocation make any larger reviewed limit explicit.
   Date: 2026-08-14
 
 
@@ -399,6 +413,56 @@ cannot execute the private implementation or read targets/bindings directly.
 
 There are no open critical or high EP-3 findings and no medium/low residual introduced
 by this review.
+
+### M4 EP-4 adversarial review — targeted stream repair
+
+The reviewed delivery commits are `34aa574e` (catalog contract, runner, operations,
+CLI, and tests) and `e2e78401` (documentation, ADRs, and acceptance evidence). The
+review used the current tree through `091f371e`, including the final guarded-reader and
+overall cutover-deadline lock behavior that shares the group row with repair.
+
+The review attacked a 101-event stream against a maximum of 100, a stream truncated
+after version zero, soft deletion, supported hard deletion, an append-first writer, a
+new unrelated-stream writer, a sanctioned reader, async redelivery, pre-existing dedup
+rows, exact checkpoint preservation, clearer/decode/verifier failures, and termination
+of the PostgreSQL repair backend after clear. It also rechecked the global lock order:
+Kiroku stream guard, Keiro group row, serving bindings, application targets, dedup rows,
+then verification, all in one transaction.
+
+One high availability finding was reproduced and fixed. `pageSize` bounded each history
+page and the in-process event/dedup batch, but an arbitrary number of pages could still
+execute while the group row was held `FOR UPDATE`, pausing every group writer and
+guarded reader. `StreamReprojectionRequest` now requires a positive `maxEvents`. After
+taking the transaction-scoped stream guard, the runner compares the exact locked stream
+version with that maximum and refuses before acquiring the group-wide fence. Preview
+and outcome envelopes advance to v2; preview exposes event count, expected dedup claims,
+maximum, and an exact force invocation, while the CLI defaults to a reviewed 1,000-event
+limit and requires an explicit override to widen it.
+
+The focused reproduction commands and final results are:
+
+    cabal test keiro:keiro-test --test-options='--match "targeted stream reprojection"'
+    # 10 examples, 0 failures
+    cabal test keiro-ops:keiro-ops-test --test-options='--match "targeted stream repair command"'
+    # 3 examples, 0 failures
+    cabal build keiro:keiro-bench
+    # benchmark executable rebuilt with explicit repair maxima
+    cabal test jitsurei:jitsurei-test
+    # 24 examples, 0 failures
+
+The admission regression holds the group row in another session and proves the
+oversized repair returns `StreamReprojectionEventLimitExceeded` within 350 ms rather
+than waiting for that lock; target and dedup state remain unchanged. At admitted scale,
+M3 measured 10/100/1,000-event repair at 4.44/11.1/102 milliseconds on the recorded
+machine. Existing and new writers serialize in append-then-group order, the sanctioned
+reader observes only a complete result, redelivery is a deduplicated no-op, and the
+shared checkpoint remains exactly zero.
+
+Clearer, decode, and verifier refusals all condemn the transaction. A supported hard
+delete waits behind the stream guard and completes only after repair, while terminating
+the active backend during the post-clear pause rolls target and dedup changes back and
+releases both locks. There are no open critical or high EP-4 findings and no medium/low
+residual introduced by this review.
 
 
 ## Context and Orientation

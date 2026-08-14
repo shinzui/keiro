@@ -24,6 +24,10 @@ retained stream inside that transaction, removes only rows owned by that stream,
 serving projection revision, and backfills that projection's deduplication keys before
 commit.
 
+The request carries a positive reviewed event maximum. Keiro compares the exact locked
+stream version with that maximum before acquiring the group-wide repair fence, so a
+bounded page size cannot disguise an arbitrarily long writer pause.
+
 Readers never see the delete-and-refill intermediate state because the repair is one
 transaction. Keiro's guarded external readers briefly wait on the exclusive group lock;
 ordinary PostgreSQL readers see either the pre-repair or post-repair snapshot. Writers
@@ -57,6 +61,10 @@ This is EP-4 of
 - [x] (2026-08-14T07:45:54Z) M5: documentation, ADR reconciliation, changelogs,
   Jitsurei transcript, a clean committed-corpus `just verify`, and MasterPlan status
   updates are complete.
+- [x] (2026-08-14T11:06:35Z) EP-5 adversarial follow-up: locked stream event-count
+  admission refuses oversized work before the group fence; preview/CLI v2 expose the
+  count, expected dedup claims, and reviewed maximum; clearer, decode, hard-delete, and
+  backend-interruption regressions pass.
 
 
 ## Surprises & Discoveries
@@ -92,6 +100,10 @@ This is EP-4 of
   the inverse order and can deadlock an already-appended writer. Targeted repair must
   take the stream guard first, then the group fence; the guard blocks new target-stream
   appends while unrelated-stream writers are ordered by the later group fence.
+- Page-bounded replay controlled heap residency but not the total time under the
+  group-wide writer fence. The original request admitted an arbitrary stream, even
+  though locked `StreamInfo.version` already supplies its exact event count at the only
+  race-free pre-fence boundary.
 
 
 ## Decision Log
@@ -158,6 +170,13 @@ This is EP-4 of
   holding the stream guard until commit prevents a selected-stream append from entering
   between history capture and target replacement.
   Date: 2026-08-14
+- Decision: Require a positive `maxEvents` on every targeted-reprojection request and
+  enforce it against locked `StreamInfo.version` before the group-exclusive fence.
+  Rationale: page size bounds memory per replay statement, not total application work or
+  writer outage. The stream guard prevents the count from changing between admission
+  and repair, while preview v2 makes the event count, expected dedup claims, maximum,
+  and exact force invocation reviewable.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -168,6 +187,16 @@ codes, Jitsurei repair transcript, documentation, changelogs, and reconciled ADR
 Architecture review corrected both deduplication and lock-order semantics: repair inserts
 ordinary async redelivery evidence, and the stream guard precedes the group fence to
 match command writers' append-first order.
+
+The EP-5 adversarial review then closed one high availability finding: an arbitrary
+stream could previously enter the group-wide transaction because `pageSize` bounded
+only each page. `maxEvents` now refuses an oversized locked stream before the group
+fence. Preview v2 reports the exact event count, expected dedup claims, and reviewed
+maximum; outcome v2 records the admitted maximum. Separate regressions prove a 101-event
+stream with a maximum of 100 refuses without waiting behind a held group lock, supported
+hard delete serializes behind the stream guard, clearer/decode/verifier failures roll
+back target and dedup work, and terminating the repair backend after clear also restores
+the pre-transaction state.
 
 Focused catalog, runtime, operations, DSL projection-catalog, and Jitsurei tests pass.
 The final committed-corpus acceptance command,
@@ -275,22 +304,25 @@ The mutation executes these steps in one `runTxOnPool` transaction:
 1. Call `lockStreamHistoryForReplayTx`. Refuse its typed missing/reserved result or a
    returned `StreamInfo` that is soft-deleted or has `truncateBefore > 0`. Keep this
    guard through commit.
-2. Lock the group row `FOR UPDATE` and require a readable/writable serving state, no
+2. Require a positive request maximum and refuse when the locked stream version exceeds
+   it. This is the admission boundary and occurs before the group-wide fence.
+3. Lock the group row `FOR UPDATE` and require a readable/writable serving state, no
    active rebuild, matching registered slice, and a serving revision present in the
    compiled catalog.
-3. Resolve the requested projection under that revision and require
+4. Resolve the requested projection under that revision and require
    `ReplayableStreamScoped`.
-4. Execute `clearStreamRows` against serving physical targets and validate its exact
+5. Execute `clearStreamRows` against serving physical targets and validate its exact
    per-target count evidence.
-5. Page through the locked stream with `readStreamForwardTx` from `StreamVersion 0`
+6. Page through the locked stream with `readStreamForwardTx` from `StreamVersion 0`
    through the locked current version, decode through the application replay closure,
    and apply every event in order. The Kiroku transaction read does not run `decodeHook`;
    any decode failure condemns the complete repair transaction.
-6. Insert, page by page, the same deduplication keys ordinary async delivery would own
+7. Insert, page by page, the same deduplication keys ordinary async delivery would own
    for every replayed event, using `ON CONFLICT DO NOTHING`.
-7. Run the stream verification hook. Failure condemns the transaction, including all
+8. Run the stream verification hook. Failure condemns the transaction, including all
    preceding clear, replay, and dedup work.
-8. Return counts, versions, target IDs, and dedup inserted/existing counts; commit.
+9. Return the admitted maximum, counts, versions, target IDs, and dedup
+   inserted/existing counts; commit.
 
 The subscription checkpoint is neither reset nor advanced. The group lifecycle phase,
 serving revision, serving epoch, and read/write availability columns are unchanged.
@@ -302,7 +334,8 @@ Return structured errors for at least: unknown group; slice drift; group not in 
 eligible serving state; active rebuild; serving revision absent from the catalog;
 unknown projection; projection outside the group; projection not stream-scoped; target
 generation mismatch; missing stream; soft-deleted stream; truncated history; source or
-stream mismatch; decode failure; clearer failure; verification failure; dedup identity
+stream mismatch; invalid or exceeded event limit; decode failure; clearer failure;
+verification failure; dedup identity
 absence; and transaction/lock failure. Rendering may group these, but tests pin their
 constructors and stable operator codes.
 
@@ -342,6 +375,7 @@ Database-backed tests must prove:
 - a sanctioned external reader waits, while an ordinary snapshot sees only before or
   after state;
 - a forced failure after clear rolls back clear, replay, verification, and dedup;
+- a request over its event maximum refuses before waiting for the group fence;
 - existing dedup rows are idempotent and missing rows are backfilled;
 - redelivery after commit executes no affected handler body;
 - subscription checkpoints are unchanged;
@@ -353,8 +387,9 @@ Database-backed tests must prove:
 
 Extend `keiro/src/Keiro/Projection/Catalog/Operations.hs` with structured preview and
 mutation requests/results. Preview validates catalog/group/projection/stream identity and
-reports targets, serving revision, current stream version, truncation/deletion state,
-and the exact force operation, but performs no clear/replay/dedup mutation.
+reports targets, serving revision, current stream version, event count, expected dedup
+claims, reviewed maximum, truncation/deletion state, and the exact force operation, but
+performs no clear/replay/dedup mutation.
 
 The forced path calls the runner once. Do not duplicate transaction SQL in the operations
 module. Bump the operation envelope schema and add golden JSON/human rendering tests.
@@ -404,14 +439,15 @@ The feature is accepted when a real database test and Jitsurei transcript start 
 aggregate streams, deliberately corrupt one stream's projected row, and repair it while:
 
 1. the other stream's rows do not change;
-2. a concurrent group writer waits and commits after the repair;
-3. a concurrent sanctioned reader returns a complete before or after result;
-4. the repair transaction restores the selected row from complete event history;
-5. affected deduplication keys exist at commit;
-6. simulated async redelivery performs no projection effect;
-7. the durable subscription checkpoint is exactly unchanged;
-8. group lifecycle, serving revision, and serving epoch are unchanged;
-9. a truncated or deleted stream is refused without mutation.
+2. an oversized stream is refused before the group-wide writer fence;
+3. a concurrent group writer waits and commits after the repair;
+4. a concurrent sanctioned reader returns a complete before or after result;
+5. the repair transaction restores the selected row from complete event history;
+6. affected deduplication keys exist at commit;
+7. simulated async redelivery performs no projection effect;
+8. the durable subscription checkpoint is exactly unchanged;
+9. group lifecycle, serving revision, and serving epoch are unchanged;
+10. a truncated or deleted stream is refused without mutation.
 
 Handler idempotence alone is not acceptance evidence.
 
@@ -427,6 +463,8 @@ Preview is always read-only. Never recover a failed repair with manual checkpoin
 advance or dedup deletion. Correct the cause and repeat the supported operation. If
 history is truncated or deleted, use an application-specific recovery or a full rebuild
 from an authoritative replacement source; the command does not invent missing events.
+If the stream exceeds `maxEvents`, review its projected work and choose an explicit
+larger limit or use a full rebuild; reducing page size does not change admission.
 
 
 ## Interfaces and Dependencies
@@ -483,3 +521,8 @@ Revised on 2026-08-14 after implementation and acceptance. The delivered protoco
 orders the stream guard before the group fence to match append-first writers, keeps
 deduplication preparation page-bounded inside the repair transaction, and passes the
 complete committed-corpus repository verification gate.
+
+Revised on 2026-08-14 after the EP-5 adversarial review. Requests now admit the exact
+locked event count against `maxEvents` before the group fence; preview/outcome v2 expose
+that authority; and fault injection covers application failures, hard deletion, and
+backend interruption.

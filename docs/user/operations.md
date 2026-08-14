@@ -228,7 +228,7 @@ yourapp ops rebuild retired
 yourapp ops rebuild drop-retired GENERATION_UUID
 yourapp ops rebuild external-read CONTRACT VERSION
 yourapp ops rebuild retire-external-read CONTRACT VERSION
-yourapp ops rebuild reproject-stream GROUP PROJECTION STREAM --page-size 500
+yourapp ops rebuild reproject-stream GROUP PROJECTION STREAM --page-size 500 --max-events 1000
 ```
 
 For a runnable local mount with the real `jitsurei-order-reporting` group, see
@@ -251,9 +251,12 @@ records explicit failure evidence and does not expose partial data.
 
 `reproject-stream` is the narrow repair path for an explicitly stream-scoped
 projection in the persisted serving revision. Its preview reports the exact targets,
-dedup identities, stream version, deletion/truncation state, and force invocation. The
-forced operation holds the group writer fence for one transaction, refuses incomplete
-history or an active rebuild, replaces only that stream's rows, verifies them, and
+dedup identities, stream version/event count, expected dedup claims, reviewed event
+limit, deletion/truncation state, and force invocation. The locked stream count must be
+within `--max-events` before the group writer fence is acquired; increasing the default
+1000-event limit is an explicit operational review. The forced operation then holds the
+group writer fence for one transaction, refuses incomplete history or an active rebuild,
+replaces only that stream's rows, verifies them, and
 backfills dedup evidence without moving a subscription checkpoint. Use a full versioned
 rebuild for schema changes or projections whose rows combine several streams.
 

@@ -9,8 +9,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 ### Added
 
 - Embedded `rebuild reproject-stream GROUP PROJECTION STREAM` previews exact serving
-  revision, target, dedup, and stream-history facts and executes only with `--force`.
-  Human and v1 JSON outcomes report cleared rows, replay/application counts, dedup
+  revision, target, dedup, stream-history, and work-admission facts and executes only
+  with `--force`. The positive `--max-events` limit defaults to 1000 and is rechecked
+  against locked stream metadata before the group fence. Human and v2 JSON outcomes
+  report the admitted limit, cleared rows, replay/application counts, dedup
   inserted/existing counts, and verification; typed refusals have stable operator codes.
 
 - Embedded read-only `rebuild external-read CONTRACT VERSION` inspection and

@@ -182,7 +182,10 @@ assumes without enforcement that old history is immutable.
   separate active candidate fields; promotion clears the candidate fields atomically.
 - Targeted repair always executes the persisted serving revision against serving
   generations. An active rebuild, missing revision, incomplete binding, or slice drift
-  is a typed refusal before application target mutation.
+  is a typed refusal before application target mutation. Its transaction-scoped stream
+  guard exposes the exact retained event count; the request's positive maximum is
+  enforced before the group-wide writer fence, so page-bounded memory is not mistaken
+  for a bounded write outage.
 
 
 ## Alternatives considered

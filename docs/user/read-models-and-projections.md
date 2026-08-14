@@ -487,7 +487,9 @@ not eligible.
 
 Call `previewStreamReprojection operations request` for advisory database-backed facts,
 then `reprojectCatalogStream operations request` to execute. The forced path first locks
-the Kiroku stream history, then takes the group row `FOR UPDATE`, requires an idle
+the Kiroku stream history and compares its exact event count with the request's positive
+`maxEvents`. An oversized stream is refused before the group-wide repair fence. For an
+admitted stream it then takes the group row `FOR UPDATE`, requires an idle
 `serving-versioned` group with a matching slice, and resolves the persisted serving
 revision and physical targets. This matches catalog writers' append-then-group order.
 Soft-deleted streams and any `truncateBefore > 0` are refused.
@@ -770,8 +772,8 @@ versioned JSON envelopes:
 - `keiro/catalog-retired-drop-outcome/v1`;
 - `keiro/catalog-external-read-inspection/v1`; and
 - `keiro/catalog-external-read-retirement/v1`;
-- `keiro/catalog-stream-reprojection-preview/v1`; and
-- `keiro/catalog-stream-reprojection-outcome/v1`.
+- `keiro/catalog-stream-reprojection-preview/v2`; and
+- `keiro/catalog-stream-reprojection-outcome/v2`.
 
 Every subscription in inventory and rebuild JSON includes
 `checkpointOnMissing` with one of the stable values `FromBeginning`,

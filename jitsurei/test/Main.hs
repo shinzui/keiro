@@ -553,7 +553,8 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
               { rebuildGroupId = orderReportingGroupId,
                 projectionId = orderSummaryProjectionId,
                 streamName = StreamName "order-versioned-before",
-                pageSize = 1
+                pageSize = 1,
+                maxEvents = 1000
               }
       Right (Right repairPreview) <-
         runner $ CatalogOperations.previewStreamReprojection orderCatalogOperations repairRequest

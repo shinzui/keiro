@@ -544,7 +544,10 @@ and forced execution through the embedded CLI. Its clean acceptance gate passed 
 core, 58 PGMQ with two documented pending cases, 46 operations, 706 main DSL, 24
 Jitsurei, and 32 migration examples plus every conformance executable, strict OKF and
 repository policy, and the 39-entry no-drift corpus replay. EP-5 is now the sole active
-and final adversarial gate.
+and final adversarial gate. The EP-5 review subsequently closed an unbounded writer-pause
+finding: every targeted repair now admits the exact locked stream count against a
+positive reviewed maximum before taking the group-wide fence, with v2 preview/outcome
+evidence and hard-delete/interruption rollback tests.
 
 
 ## Revision Note

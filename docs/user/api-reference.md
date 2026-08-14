@@ -489,6 +489,10 @@ Types and functions:
 - `CatalogRebuildError` and `RebuildRunStatus`
 - `RebuildRunReport`, `RebuildSourceProgress`, `RebuildAdapterProgress`, and
   `RebuildVerificationProgress`
+- `StreamReprojectionRequest`, `StreamReprojectionError`, and
+  `StreamReprojectionReport`
+- `validateStreamReprojectionAdmission`
+- `reprojectStream` and `reprojectStreamTx`
 - `startCatalogRebuild`
 - `resumeCatalogRebuild`
 - `inspectCatalogRebuild`
@@ -506,6 +510,11 @@ promotion requires an opaque completion token from the replay runner. The
 runner captures an immutable Kiroku head, globally merges category pages,
 commits target writes with durable progress, enforces exact group-slice resume,
 and promotes only complete source/adapter/verification evidence. The
+targeted stream request requires both a positive page size and a positive
+`maxEvents`; the locked stream version is refused against that limit before the
+group-wide repair fence is acquired. The one-transaction repair then clears,
+replays, verifies, and backfills dedup evidence without changing a shared
+checkpoint. The
 single-read-model functions are an unmanaged compatibility path;
 `rebuild` and `promote` are only low-level status transitions.
 
