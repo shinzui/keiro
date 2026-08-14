@@ -64,6 +64,7 @@ module Keiro.Projection.Catalog
     TargetSchemaEvidence (..),
     TargetProvisioningContext (..),
     TargetProvisioner (..),
+    RevisionLiveDelivery (..),
     RevisionLiveHandler (..),
     RevisionReplayAdapter (..),
     RevisionVerification (..),
@@ -412,9 +413,18 @@ data TargetProvisioner = TargetProvisioner
   }
   deriving stock (Generic)
 
+-- | The exact catalog delivery boundary implemented by one revision handler.
+-- Revision selection may change physical SQL, but it must not turn an async
+-- subscription effect into command-time work (or vice versa).
+data RevisionLiveDelivery
+  = RevisionInlineDelivery !ProjectionId !Text
+  | RevisionSubscriptionDelivery !ProjectionId !SubscriptionId !DedupKeyId
+  deriving stock (Eq, Ord, Show, Generic)
+
 data RevisionLiveHandler = RevisionLiveHandler
   { handlerId :: !Text,
     handlerVersion :: !Int,
+    delivery :: !RevisionLiveDelivery,
     requiredTargets :: ![TargetId],
     runRevisionLive :: !(PhysicalTargets -> RecordedEvent -> Tx.Transaction ())
   }
@@ -803,6 +813,8 @@ data CatalogDiagnosticCode
   | ProjectionRevisionTargetSetDrift
   | ProjectionRevisionMissingSchemaValidation
   | ProjectionRevisionPhysicalTargetsNotTotal
+  | ProjectionRevisionLiveCapabilityMismatch
+  | ProjectionRevisionLiveTargetOwnershipMismatch
   | InvalidProjectionRevisionIdentity
   | DuplicateExternalReadContractVersion
   | DuplicateExternalReadFunctionName
@@ -872,6 +884,8 @@ diagnosticCodeText = \case
   ProjectionRevisionTargetSetDrift -> "catalog.projection-revision-target-set-drift"
   ProjectionRevisionMissingSchemaValidation -> "catalog.projection-revision-missing-schema-validation"
   ProjectionRevisionPhysicalTargetsNotTotal -> "catalog.projection-revision-physical-targets-not-total"
+  ProjectionRevisionLiveCapabilityMismatch -> "catalog.projection-revision-live-capability-mismatch"
+  ProjectionRevisionLiveTargetOwnershipMismatch -> "catalog.projection-revision-live-target-ownership-mismatch"
   InvalidProjectionRevisionIdentity -> "catalog.invalid-projection-revision-identity"
   DuplicateExternalReadContractVersion -> "catalog.external-read-duplicate-contract-version"
   DuplicateExternalReadFunctionName -> "catalog.external-read-duplicate-function-name"
@@ -952,6 +966,7 @@ data InventoryTargetProvisioner = InventoryTargetProvisioner
 data InventoryRevisionHandler = InventoryRevisionHandler
   { handlerId :: !Text,
     handlerVersion :: !Int,
+    delivery :: !(Maybe RevisionLiveDelivery),
     requiredTargets :: ![TargetId]
   }
   deriving stock (Eq, Ord, Show, Generic)
@@ -1299,7 +1314,7 @@ validateProjectionCatalog catalog =
             <> replayDiagnostics catalog facts
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
-            <> projectionRevisionDiagnostics catalog
+            <> projectionRevisionDiagnostics catalog facts
             <> streamScopedReplayDiagnostics catalog facts
             <> externalReadContractDiagnostics catalog queryFacts
         )
@@ -1442,9 +1457,9 @@ groupSliceFingerprint validated wantedGroup = do
   group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
   pure
     . GroupSliceFingerprint
-    . hashPreimage "slice-v5"
+    . hashPreimage "slice-v6"
     $ PRecord
-      "keiro/catalog-group-slice/v5"
+      "keiro/catalog-group-slice/v6"
       [ PText (rebuildGroupIdText wantedGroup),
         groupPreimage group,
         PList (targetPreimage <$> targets),
@@ -2352,8 +2367,8 @@ verificationDiagnostics catalog = concatMap verificationGroupDiagnostics (catalo
 
     invalid value = Text.null value || Text.strip value /= value
 
-projectionRevisionDiagnostics :: ProjectionCatalog -> [CatalogDiagnostic]
-projectionRevisionDiagnostics catalog =
+projectionRevisionDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [CatalogDiagnostic]
+projectionRevisionDiagnostics catalog facts =
   concatMap revisionDiagnostics revisions
   where
     revisions = catalog ^. #projectionRevisions
@@ -2372,6 +2387,8 @@ projectionRevisionDiagnostics catalog =
         <> missingReplay
         <> missingValidation
         <> nonTotalMappings
+        <> liveCapabilityMismatch
+        <> liveTargetOwnershipMismatch
         <> invalidIdentities
       where
         revisionIdentity = projectionRevisionIdText (revision ^. #revisionId)
@@ -2381,6 +2398,15 @@ projectionRevisionDiagnostics catalog =
         maybeGroup = Map.lookup (revision ^. #rebuildGroup) groupsById
         expectedTargets =
           Set.fromList $ maybe [] (^. #orderedTargets) maybeGroup
+        groupFacts = filter ((== revision ^. #rebuildGroup) . factGroupId) facts
+        expectedLive = List.sort (concatMap factLiveDeliveries groupFacts)
+        actualLive = List.sort (map (^. #delivery) (revision ^. #liveHandlers))
+        expectedTargetsByDelivery =
+          Map.fromList
+            [ (deliveryCapability, Set.fromList (factTargets fact))
+            | fact <- groupFacts,
+              deliveryCapability <- factLiveDeliveries fact
+            ]
         unknownGroup =
           [ diagnostic
               UnknownGroupReference
@@ -2451,6 +2477,33 @@ projectionRevisionDiagnostics catalog =
             isJust maybeGroup,
             required /= expectedTargets
           ]
+        liveCapabilityMismatch =
+          [ diagnostic
+              ProjectionRevisionLiveCapabilityMismatch
+              revisionIdentity
+              (site : map factSite groupFacts)
+              ( "revision live deliveries differ from the catalog owners; expected="
+                  <> renderLiveDeliveries expectedLive
+                  <> ", supplied="
+                  <> renderLiveDeliveries actualLive
+              )
+          | expectedLive /= actualLive
+          ]
+        liveTargetOwnershipMismatch =
+          [ diagnostic
+              ProjectionRevisionLiveTargetOwnershipMismatch
+              (revisionIdentity <> "/" <> handler ^. #handlerId)
+              (site : maybe [] (pure . factSite) (factForDelivery (handler ^. #delivery)))
+              ( "revision live handler targets differ from its supplying projection; expected="
+                  <> renderTargetSet owned
+                  <> ", supplied="
+                  <> renderTargetSet supplied
+              )
+          | handler <- revision ^. #liveHandlers,
+            Just owned <- [Map.lookup (handler ^. #delivery) expectedTargetsByDelivery],
+            let supplied = Set.fromList (handler ^. #requiredTargets),
+            supplied /= owned
+          ]
         invalidIdentities =
           [ diagnostic
               InvalidProjectionRevisionIdentity
@@ -2461,6 +2514,16 @@ projectionRevisionDiagnostics catalog =
             invalid identity || version < 1
           ]
 
+    factLiveDeliveries fact =
+      [ case handler of
+          InlineFacts name _ -> RevisionInlineDelivery (factProjectionId fact) name
+          AsyncFacts _ _ _ subscriptionId dedupId _ ->
+            RevisionSubscriptionDelivery (factProjectionId fact) subscriptionId dedupId
+      | handler <- factHandlers fact
+      ]
+    factForDelivery wanted =
+      List.find (List.elem wanted . factLiveDeliveries) facts
+    renderLiveDeliveries = Text.intercalate "," . map renderRevisionLiveDelivery
     invalid value = Text.null value || Text.strip value /= value
     renderTargetSet = Text.intercalate "," . map targetIdText . Set.toAscList
 
@@ -2777,12 +2840,9 @@ externalReadImmutableSignature contract =
 
 revisionRequirements :: ProjectionRevision -> [(Text, [TargetId])]
 revisionRequirements revision =
-  [ (handler ^. #handlerId, handler ^. #requiredTargets)
-  | handler <- revision ^. #liveHandlers
+  [ (adapter ^. #adapterId, adapter ^. #requiredTargets)
+  | adapter <- revision ^. #replayAdapters
   ]
-    <> [ (adapter ^. #adapterId, adapter ^. #requiredTargets)
-       | adapter <- revision ^. #replayAdapters
-       ]
     <> [ (verification ^. #revisionVerificationId, verification ^. #requiredTargets)
        | verification <- revision ^. #revisionVerifications
        ]
@@ -3109,6 +3169,7 @@ inventoryProjectionRevision revision =
         [ InventoryRevisionHandler
             (handler ^. #handlerId)
             (handler ^. #handlerVersion)
+            (Just (handler ^. #delivery))
             (List.sort (handler ^. #requiredTargets))
         | handler <- revision ^. #liveHandlers
         ],
@@ -3116,6 +3177,7 @@ inventoryProjectionRevision revision =
         [ InventoryRevisionHandler
             (adapter ^. #adapterId)
             (adapter ^. #adapterVersion)
+            Nothing
             (List.sort (adapter ^. #requiredTargets))
         | adapter <- revision ^. #replayAdapters
         ],
@@ -3123,6 +3185,7 @@ inventoryProjectionRevision revision =
         [ InventoryRevisionHandler
             (verification ^. #revisionVerificationId)
             (verification ^. #revisionVerificationVersion)
+            Nothing
             (List.sort (verification ^. #requiredTargets))
         | verification <- revision ^. #revisionVerifications
         ],
@@ -3144,12 +3207,12 @@ inventoryProjectionRevision revision =
     }
 
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v6" . inventoryPreimage
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v7" . inventoryPreimage
 
 inventoryPreimage :: CatalogInventory -> Preimage
 inventoryPreimage inventory =
   PRecord
-    "keiro/catalog-inventory/v6"
+    "keiro/catalog-inventory/v7"
     [ PList (sourcePreimage <$> inventory ^. #inventorySources),
       PList (targetPreimage <$> inventory ^. #inventoryTargets),
       PList (groupPreimage <$> inventory ^. #inventoryGroups),
@@ -3263,8 +3326,23 @@ revisionHandlerPreimage tag handler =
     tag
     [ PText (handler ^. #handlerId),
       PText (Text.pack (show (handler ^. #handlerVersion))),
+      maybe (PRecord "no-delivery" []) revisionLiveDeliveryPreimage (handler ^. #delivery),
       PList (PText . targetIdText <$> handler ^. #requiredTargets)
     ]
+
+revisionLiveDeliveryPreimage :: RevisionLiveDelivery -> Preimage
+revisionLiveDeliveryPreimage = \case
+  RevisionInlineDelivery projectionId handlerName ->
+    PRecord
+      "inline-delivery"
+      [PText (projectionIdText projectionId), PText handlerName]
+  RevisionSubscriptionDelivery projectionId subscriptionId dedupId ->
+    PRecord
+      "subscription-delivery"
+      [ PText (projectionIdText projectionId),
+        PText (subscriptionIdText subscriptionId),
+        PText (dedupKeyIdText dedupId)
+      ]
 
 externalReadContractPreimage :: InventoryExternalReadContract -> Preimage
 externalReadContractPreimage contract =
@@ -3542,8 +3620,22 @@ renderRevisionHandler kind handler =
     [ kind,
       handler ^. #handlerId,
       Text.pack (show (handler ^. #handlerVersion)),
+      maybe "-" renderRevisionLiveDelivery (handler ^. #delivery),
       commaSeparated targetIdText (handler ^. #requiredTargets)
     ]
+
+renderRevisionLiveDelivery :: RevisionLiveDelivery -> Text
+renderRevisionLiveDelivery = \case
+  RevisionInlineDelivery projectionId handlerName ->
+    Text.intercalate "/" ["inline", projectionIdText projectionId, handlerName]
+  RevisionSubscriptionDelivery projectionId subscriptionId dedupId ->
+    Text.intercalate
+      "/"
+      [ "subscription",
+        projectionIdText projectionId,
+        subscriptionIdText subscriptionId,
+        dedupKeyIdText dedupId
+      ]
 
 renderPromotionObject :: PromotionObjectName -> Text
 renderPromotionObject object =

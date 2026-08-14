@@ -1001,8 +1001,25 @@ revisionHandlerValue handler =
   Aeson.object
     [ "id" Aeson..= (handler ^. #handlerId),
       "version" Aeson..= (handler ^. #handlerVersion),
+      "delivery" Aeson..= fmap revisionLiveDeliveryValue (handler ^. #delivery),
       "requiredTargets" Aeson..= map targetIdText (handler ^. #requiredTargets)
     ]
+
+revisionLiveDeliveryValue :: RevisionLiveDelivery -> Aeson.Value
+revisionLiveDeliveryValue = \case
+  RevisionInlineDelivery projectionId handlerName ->
+    Aeson.object
+      [ "kind" Aeson..= ("inline" :: Text),
+        "projectionId" Aeson..= projectionIdText projectionId,
+        "handlerName" Aeson..= handlerName
+      ]
+  RevisionSubscriptionDelivery projectionId subscriptionId dedupId ->
+    Aeson.object
+      [ "kind" Aeson..= ("subscription" :: Text),
+        "projectionId" Aeson..= projectionIdText projectionId,
+        "subscriptionId" Aeson..= subscriptionIdText subscriptionId,
+        "dedupKeyId" Aeson..= dedupKeyIdText dedupId
+      ]
 
 streamScopedReplayValue :: InventoryStreamScopedReplay -> Aeson.Value
 streamScopedReplayValue replay =

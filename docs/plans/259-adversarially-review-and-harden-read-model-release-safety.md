@@ -43,9 +43,9 @@ cross-plan release gate.
 
 ## Progress
 
-- [ ] M1: revision live handlers retain exact inline or subscription delivery
-  authority; mixed-delivery versioned groups execute each non-idempotent effect once at
-  the declared boundary.
+- [x] (2026-08-14T08:05:14Z) M1: revision live handlers retain exact inline or
+  subscription delivery authority; mixed-delivery versioned groups execute each effect
+  once at the declared boundary before, during, and after promotion.
 - [ ] M2: writer-fence acquisition and promotion use a true overall deadline, expensive
   verification and deduplication preparation leave the exclusive-lock phase, and large
   dedup histories are staged and admitted before fencing.
@@ -61,7 +61,12 @@ cross-plan release gate.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The existing Jitsurei bridge test encoded the defect as expected behavior: its audit
+  row advanced after a command without subscription delivery. Splitting the revision
+  closure made the test fail until it explicitly delivered and redelivered the event.
+- Revision live target requirements cannot remain group-total after delivery identity
+  is restored. Replay adapters and revision verifiers still require the complete group,
+  while each live handler must require exactly its supplying projection's owned targets.
 
 
 ## Decision Log
@@ -89,6 +94,12 @@ cross-plan release gate.
   violation, or ordinary workload with uncontrolled memory/lock growth. Medium and low
   findings may remain only with an explicit owner, rationale, and bounded follow-up.
   Date: 2026-08-13
+- Decision: Include the inline handler name in inline revision-delivery identity in
+  addition to the supplying projection ID.
+  Rationale: projection definitions support several ordered inline handlers; retaining
+  the name prevents them from collapsing into one ambiguous capability while keeping
+  subscription identity anchored by its already-unique subscription and dedup IDs.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective

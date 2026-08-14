@@ -305,6 +305,8 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
         runner $
           Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
       let placed = Vector.head recorded
+      Right beforeAsync <- runner $ Store.runTransaction (Tx.statement () orderCatalogFactsStmt)
+      beforeAsync `shouldBe` (1, 1, 0, 1)
       Right CatalogAsyncApplied <-
         runner $
           Store.runTransaction
@@ -400,7 +402,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             orderProjectionSet
       pure ()
 
-    it "rebuilds an incompatible schema beside live V1 and atomically serves V2" $ \(store, StoreRunner runner) -> do
+    it "revision delivery routing preserves inline and async ownership across an incompatible V1/V2 rebuild" $ \(store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
       Right (Right _) <-
         runner $
@@ -517,7 +519,22 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             orderProjectionSet
 
       Right facts <- runner $ Store.runTransaction (Tx.statement () orderVersionedFactsStmt)
-      facts `shouldBe` (3, 3, 3, True)
+      facts `shouldBe` (3, 3, 2, True)
+
+      Right afterRecorded <-
+        runner $
+          Store.readStreamForward (StreamName "order-versioned-after") (StreamVersion 0) 10
+      let afterPlaced = Vector.head afterRecorded
+      Right CatalogAsyncApplied <-
+        runner $
+          Store.runTransaction
+            (applyAsyncProjectionFromCatalog jitsureiProjectionCatalog orderAuditProjectionId orderAuditAsyncProjection afterPlaced)
+      Right CatalogAsyncDuplicate <-
+        runner $
+          Store.runTransaction
+            (applyAsyncProjectionFromCatalog jitsureiProjectionCatalog orderAuditProjectionId orderAuditAsyncProjection afterPlaced)
+      Right finalFacts <- runner $ Store.runTransaction (Tx.statement () orderVersionedFactsStmt)
+      finalFacts `shouldBe` (3, 3, 3, True)
       oldContract <- runner $ Store.runTransaction (Tx.statement () orderSummaryExternalV1Stmt)
       oldContract
         `shouldSatisfy` \case

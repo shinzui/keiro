@@ -4341,13 +4341,8 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         <> " (Map.fromList "
         <> renderList (revisionTargetExpr revision) (prvTargets revision)
         <> ") "
-        <> "[Catalog.RevisionLiveHandler "
-        <> tshow (prvName revision <> "/live")
-        <> " 1 "
-        <> revisionRequiredTargets revision
-        <> " Holes."
-        <> revisionLiveName revision
-        <> "] "
+        <> renderList (revisionLiveHandlerExpr revision) (revisionOwners revision)
+        <> " "
         <> "[Catalog.RevisionReplayAdapter "
         <> tshow (prvName revision <> "/replay")
         <> " 1 "
@@ -4363,6 +4358,31 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         <> revisionVerificationName revision
         <> "] [] "
         <> claim ("projection-revision " <> prvName revision)
+    revisionOwners revision = [owner | owner <- owners, poGroup owner == prvGroup revision]
+    revisionLiveHandlerExpr revision owner =
+      "Catalog.RevisionLiveHandler "
+        <> tshow (prvName revision <> "/" <> poName owner <> "/live")
+        <> " 1 "
+        <> revisionLiveDeliveryExpr owner
+        <> " "
+        <> renderList (smart "mkTargetId") (poTargets owner)
+        <> " Holes."
+        <> revisionOwnerLiveName revision owner
+    revisionLiveDeliveryExpr owner = case poDelivery owner of
+      DeliveryInline ->
+        "(Catalog.RevisionInlineDelivery "
+          <> smart "mkProjectionId" (poName owner)
+          <> " "
+          <> tshow (poName owner)
+          <> ")"
+      DeliverySubscription ->
+        "(Catalog.RevisionSubscriptionDelivery "
+          <> smart "mkProjectionId" (poName owner)
+          <> " "
+          <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+          <> " "
+          <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+          <> ")"
     revisionTargetExpr revision target =
       "("
         <> smart "mkTargetId" (prtTarget target)
@@ -4556,7 +4576,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
     revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
     revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionLiveName revision = "apply" <> pascal (prvName revision) <> "Live"
+    revisionOwnerLiveName revision owner = "apply" <> pascal (prvName revision) <> pascal (poName owner) <> "Live"
     revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
     revisionVerificationName revision = "verify" <> pascal (prvName revision)
     groupIdName groupNode = lowerFirst (pascal (rgName groupNode)) <> "RebuildGroupId"
@@ -4638,19 +4658,23 @@ emitProjectionCatalogHoles ctx spec owners revisions externalReads =
         <> [""]
     revisionExports revision =
       concatMap (\target -> [revisionProvisionName revision target, revisionValidateName revision target]) (prvTargets revision)
-        <> [revisionLiveName revision, revisionReplayName revision, revisionVerificationName revision]
+        <> map (revisionOwnerLiveName revision) (revisionOwners revision)
+        <> [revisionReplayName revision, revisionVerificationName revision]
     revisionStubs revision =
       ["-- Projection revision " <> prvName revision <> "."]
         <> concatMap targetStubs (prvTargets revision)
-        <> [ revisionLiveName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction ()",
-             revisionLiveName revision <> " = error \"HOLE: apply live events for revision " <> prvName revision <> " through PhysicalTargets\"",
-             revisionReplayName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either Catalog.ReplayDecodeError Bool)",
+        <> concatMap liveStubs (revisionOwners revision)
+        <> [ revisionReplayName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either Catalog.ReplayDecodeError Bool)",
              revisionReplayName revision <> " = error \"HOLE: replay revision " <> prvName revision <> " through PhysicalTargets\"",
              revisionVerificationName revision <> " :: Catalog.PhysicalTargets -> Tx.Transaction (Either Text ())",
              revisionVerificationName revision <> " = error \"HOLE: verify revision " <> prvName revision <> " staging targets\"",
              ""
            ]
       where
+        liveStubs owner =
+          [ revisionOwnerLiveName revision owner <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction ()",
+            revisionOwnerLiveName revision owner <> " = error \"HOLE: apply " <> poName owner <> " live events for revision " <> prvName revision <> " through its owned PhysicalTargets\""
+          ]
         targetStubs target =
           [ revisionProvisionName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction ()",
             revisionProvisionName revision target <> " = error \"HOLE: provision target " <> prtTarget target <> " for revision " <> prvName revision <> "\"",
@@ -4704,7 +4728,8 @@ emitProjectionCatalogHoles ctx spec owners revisions externalReads =
     ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
     revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
     revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionLiveName revision = "apply" <> pascal (prvName revision) <> "Live"
+    revisionOwners revision = [owner | owner <- owners, poGroup owner == prvGroup revision]
+    revisionOwnerLiveName revision owner = "apply" <> pascal (prvName revision) <> pascal (poName owner) <> "Live"
     revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
     revisionVerificationName revision = "verify" <> pascal (prvName revision)
     externalReadKeyedName externalRead = lowerFirst (pascal (erName externalRead)) <> "V" <> T.pack (show (erVersion externalRead)) <> "KeyedExternalRead"

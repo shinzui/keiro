@@ -15,6 +15,7 @@ import CatalogSpec
     counterBinding,
     counterReadContract,
     counterTargetId,
+    inlineProjectionId,
     mainGroupId,
   )
 import Contravariant.Extras (contrazip2, contrazip3)
@@ -293,7 +294,7 @@ spec fixture = do
                 (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 1))
             )
         first `shouldBe` CatalogAsyncApplied
-        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        runStatement store () servingCountsStmt `shouldReturn` (0, 1)
         for_ (handle ^. #candidateGenerations) $ \generation ->
           rowCount store (generation ^. #physicalTable) `shouldReturn` 1
 
@@ -305,9 +306,10 @@ spec fixture = do
                 (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 2))
             )
         second `shouldBe` CatalogAsyncApplied
-        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        runStatement store () servingCountsStmt `shouldReturn` (0, 1)
         for_ (handle ^. #candidateGenerations) $ \generation ->
-          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+          rowCount store (generation ^. #physicalTable)
+            `shouldReturn` if generation ^. #targetId == counterTargetId then 1 else 2
 
         (v1Only, _) <- validatedBridgeFrom runtimeV1OnlyCatalog
         missing <-
@@ -321,9 +323,10 @@ spec fixture = do
             mainGroupId
             (identity mkProjectionRevisionId "counter-v2")
         runStatement store () dispatchDedupCountStmt `shouldReturn` 2
-        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        runStatement store () servingCountsStmt `shouldReturn` (0, 1)
         for_ (handle ^. #candidateGenerations) $ \generation ->
-          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+          rowCount store (generation ^. #physicalTable)
+            `shouldReturn` if generation ^. #targetId == counterTargetId then 1 else 2
 
       it "captures a durable final head and atomically promotes every target" $ \store -> do
         setupBridge store
@@ -1239,10 +1242,21 @@ runtimeRevision schema revision =
       ]
     & #liveHandlers
     .~ [ RevisionLiveHandler
-           ("runtime-live-" <> schema)
+           ("runtime-inline-live-" <> schema)
            1
-           [counterTargetId, auditTargetId]
-           (applyRuntimeLive schema)
+           (RevisionInlineDelivery inlineProjectionId "catalog-inline")
+           [counterTargetId]
+           (applyRuntimeCounter schema),
+         RevisionLiveHandler
+           ("runtime-async-live-" <> schema)
+           1
+           ( RevisionSubscriptionDelivery
+               asyncProjectionId
+               (identity mkSubscriptionId "counter-subscription")
+               (identity mkDedupKeyId "counter-dedup")
+           )
+           [auditTargetId]
+           (applyRuntimeAudit schema)
        ]
     & #replayAdapters
     .~ [ RevisionReplayAdapter
@@ -1257,13 +1271,16 @@ runtimeRevision schema revision =
 
 applyRuntimeLive :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
 applyRuntimeLive schema physicalTargets event = do
+  applyRuntimeCounter schema physicalTargets event
+  applyRuntimeAudit schema physicalTargets event
+
+applyRuntimeCounter :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRuntimeCounter schema physicalTargets event = do
   let counterTable = requireTarget counterTargetId
-      auditTable = requireTarget auditTargetId
       eventPosition = positionValue (event ^. #globalPosition)
       counterQualified = qualifyTable (counterTable ^. #schemaName) (counterTable ^. #tableName)
-      auditQualified = qualifyTable (auditTable ^. #schemaName) (auditTable ^. #tableName)
   if schema == "v1"
-    then do
+    then
       Tx.sql
         ( Text.Encoding.encodeUtf8
             ( "INSERT INTO "
@@ -1273,16 +1290,7 @@ applyRuntimeLive schema physicalTargets event = do
                 <> ", 10)"
             )
         )
-      Tx.sql
-        ( Text.Encoding.encodeUtf8
-            ( "INSERT INTO "
-                <> auditQualified
-                <> " (id, detail) VALUES ("
-                <> Text.pack (show eventPosition)
-                <> ", 'v1')"
-            )
-        )
-    else do
+    else
       Tx.sql
         ( Text.Encoding.encodeUtf8
             ( "INSERT INTO "
@@ -1292,6 +1300,32 @@ applyRuntimeLive schema physicalTargets event = do
                 <> ", 8, 2)"
             )
         )
+  where
+    requireTarget targetId =
+      fromMaybe
+        (error ("runtime live handler missing target " <> show targetId))
+        (resolvePhysicalTarget targetId physicalTargets)
+
+applyRuntimeAudit :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRuntimeAudit schema physicalTargets event = do
+  let auditTable =
+        fromMaybe
+          (error "runtime async live handler missing audit target")
+          (resolvePhysicalTarget auditTargetId physicalTargets)
+      eventPosition = positionValue (event ^. #globalPosition)
+      auditQualified = qualifyTable (auditTable ^. #schemaName) (auditTable ^. #tableName)
+  if schema == "v1"
+    then
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "INSERT INTO "
+                <> auditQualified
+                <> " (id, detail) VALUES ("
+                <> Text.pack (show eventPosition)
+                <> ", 'v1')"
+            )
+        )
+    else
       Tx.sql
         ( Text.Encoding.encodeUtf8
             ( "INSERT INTO "
@@ -1303,11 +1337,6 @@ applyRuntimeLive schema physicalTargets event = do
                 <> ")"
             )
         )
-  where
-    requireTarget targetId =
-      fromMaybe
-        (error ("runtime live handler missing target " <> show targetId))
-        (resolvePhysicalTarget targetId physicalTargets)
 
 positionValue :: GlobalPosition -> Int64
 positionValue (GlobalPosition value) = value

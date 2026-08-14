@@ -349,10 +349,18 @@ orderReportingRevision identity schemaVersion =
           ],
       liveHandlers =
         [ RevisionLiveHandler
-            { handlerId = identity <> "/live",
+            { handlerId = identity <> "/order-summary/live",
               handlerVersion = 1,
-              requiredTargets = orderReportingTargetIds,
-              runRevisionLive = applyRevisionRecorded schemaVersion
+              delivery = RevisionInlineDelivery orderSummaryProjectionId (orderSummaryInlineProjection ^. #name),
+              requiredTargets = [orderSummaryTargetId, orderLineTargetId],
+              runRevisionLive = applyRevisionOrderRecorded schemaVersion
+            },
+          RevisionLiveHandler
+            { handlerId = identity <> "/order-audit/live",
+              handlerVersion = 1,
+              delivery = RevisionSubscriptionDelivery orderAuditProjectionId orderAuditSubscriptionId orderAuditDedupId,
+              requiredTargets = [orderAuditTargetId],
+              runRevisionLive = applyRevisionAuditRecorded schemaVersion
             }
         ],
       replayAdapters =
@@ -461,11 +469,20 @@ verifyRevisionTargets targets = do
       orderReportingTargetIds
   pure $ if Prelude.all isJust present then Right () else Left "one or more revision targets are missing"
 
-applyRevisionRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
-applyRevisionRecorded schemaVersion targets recorded =
+applyRevisionOrderRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRevisionOrderRecorded schemaVersion targets recorded =
   case decodeRecorded orderCodec recorded of
     Left _ -> Tx.condemn
-    Right event -> applyRevisionEvent schemaVersion targets event recorded
+    Right event -> applyRevisionOrderRows schemaVersion targets event recorded
+
+applyRevisionAuditRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRevisionAuditRecorded schemaVersion targets recorded =
+  case decodeRecorded orderCodec recorded of
+    Left _ -> Tx.condemn
+    Right event -> do
+      let audit = requirePhysicalTarget orderAuditTargetId targets
+          position = globalPositionToInt (recorded ^. #globalPosition)
+      Tx.statement (position, eventStatus event) (revisionUpsertAuditStmt schemaVersion audit)
 
 replayRevisionRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either ReplayDecodeError Bool)
 replayRevisionRecorded schemaVersion targets recorded =

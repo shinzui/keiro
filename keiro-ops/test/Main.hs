@@ -287,8 +287,8 @@ spec fixture = do
               group `shouldBe` "ops-group"
               state `shouldBe` "slice-changed"
               scope `shouldBe` "adopt"
-              stored `shouldSatisfy` Text.isPrefixOf "slice-v5:"
-              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v5:"
+              stored `shouldSatisfy` Text.isPrefixOf "slice-v6:"
+              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v6:"
               stored `shouldNotBe` currentSlice
             otherRows -> expectationFailure ("unexpected adoption preview rows: " <> show otherRows)
           renderHuman result
@@ -465,7 +465,7 @@ spec fixture = do
       case adopted of
         Succeeded result ->
           result.rows `shouldSatisfy` \case
-            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v5:" (row !! 3)
+            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v6:" (row !! 3)
             _ -> False
         other -> expectationFailure ("expected forced adoption, got " <> show other)
 

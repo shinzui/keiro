@@ -14677,6 +14677,7 @@ catalogInlineProjectionRevision revisionId marker =
         [ RevisionLiveHandler
             ("catalog-inline-live-" <> projectionRevisionIdText revisionId)
             1
+            (RevisionInlineDelivery catalogInlineProjectionId "catalog-inline-counter")
             [catalogInlineTargetId]
             (\physicalTargets _recorded -> insertCatalogInlineRevisionMarker physicalTargets marker)
         ],

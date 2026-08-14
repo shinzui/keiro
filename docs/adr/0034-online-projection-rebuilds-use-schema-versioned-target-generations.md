@@ -66,6 +66,10 @@ versioned external read contracts. The catalog must contain both the serving rev
 and the candidate revision while an online rebuild is active. Live writers select the
 persisted serving revision while holding the ordinary group lock; if the running
 binary cannot supply that revision it fails closed before executing application SQL.
+Each live closure is additionally keyed by its catalog inline or subscription delivery
+capability and is restricted to that projection owner's targets. Revision selection
+chooses schema-specific SQL only; command-time and subscription-time authority remain
+separate before, during, and after a bridge deployment.
 The rebuild runner always applies the candidate revision to staging generations.
 Promotion changes the persisted serving revision and physical generations in the same
 transaction, so subsequent writers can execute only the candidate handlers.

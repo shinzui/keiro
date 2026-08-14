@@ -72,6 +72,13 @@ and group transition to live commit in one transaction. A missing declared row c
 with typed evidence and leaves the run resumable; Keiro still never invents checkpoint topology.
 Inline-only groups skip this work.
 
+Projection revisions preserve that same delivery identity. A revision's subscription
+handler names its projection, subscription, and dedup key, and the async path invokes
+only that handler after claiming the corresponding event identity. Inline command
+dispatch cannot execute the subscription closure or create its dedup evidence. This is
+required even when application SQL happens to be idempotent: handler idempotence cannot
+substitute for the declared delivery and retained redelivery authority.
+
 An online schema-versioned rebuild applies the same rule at its captured final head.
 Candidate replay does not rewind the live subscription while V1 continues serving.
 After the writer fence captures the final head, Keiro derives the retained redelivery

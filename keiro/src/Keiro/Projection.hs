@@ -42,6 +42,8 @@ module Keiro.Projection
 where
 
 import Contravariant.Extras (contrazip2)
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.UUID (UUID)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
@@ -69,14 +71,17 @@ import Keiro.EventStream.Validate (ValidatedEventStream)
 import Keiro.Prelude
 import Keiro.Projection.Catalog
   ( PhysicalTargets,
+    ProjectionHandler (..),
     ProjectionId,
     ProjectionRevisionId,
     ProjectionSet,
     RebuildGroupId,
-    RevisionLiveHandler,
+    RevisionLiveDelivery (..),
+    RevisionLiveHandler (..),
     SourceId,
     ValidatedProjectionCatalog,
     asyncProjectionRebuildGroup,
+    asyncProjectionRegistrations,
     catalogProjectionRevision,
     typedInlineProjectionsForGroup,
     typedProjectionRebuildGroups,
@@ -325,13 +330,20 @@ applyCatalogProjectionsTx catalog projectionSet groups pairs = do
           case catalogProjectionRevision catalog revisionId of
             Nothing -> error "applyCatalogProjectionsTx: locked revision disappeared from validated catalog"
             Just revision ->
-              traverse_
-                ( \handler ->
-                    traverse_
-                      (\(_, recorded) -> (handler ^. #runRevisionLive) (binding ^. #writePhysicalTargets) recorded)
-                      pairs
-                )
-                (revision ^. #liveHandlers)
+              let wantedDeliveries =
+                    [ RevisionInlineDelivery (definition ^. #projectionId) (projection ^. #name)
+                    | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+                      definition ^. #rebuildGroup == binding ^. #writeGroupId,
+                      handler <- NonEmpty.toList (definition ^. #handlers),
+                      InlineHandler projection _ <- [handler]
+                    ]
+               in traverse_
+                    ( \handler ->
+                        traverse_
+                          (\(_, recorded) -> (handler ^. #runRevisionLive) (binding ^. #writePhysicalTargets) recorded)
+                          pairs
+                    )
+                    (Prelude.filter ((`Prelude.elem` wantedDeliveries) . (^. #delivery)) (revision ^. #liveHandlers))
 
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
@@ -373,9 +385,13 @@ applyAsyncProjectionFromCatalog ::
   RecordedEvent ->
   Tx.Transaction CatalogAsyncApplyOutcome
 applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
-  case asyncProjectionRebuildGroup catalog projectionId (projection ^. #name) of
+  case List.find matchesRegistration (asyncProjectionRegistrations catalog) of
     Nothing -> pure (CatalogAsyncProjectionUnknown projectionId)
-    Just groupId -> do
+    Just registration -> do
+      let groupId =
+            fromMaybe
+              (error "applyAsyncProjectionFromCatalog: validated async registration has no projection group")
+              (asyncProjectionRebuildGroup catalog projectionId (projection ^. #name))
       fence <- lockProjectionGroupsTx catalog [groupId]
       case fence of
         ProjectionWritesAllowed [binding] -> do
@@ -386,11 +402,24 @@ applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
                 case catalogProjectionRevision catalog revisionId of
                   Nothing -> error "applyAsyncProjectionFromCatalog: locked revision disappeared from validated catalog"
                   Just revision ->
-                    applyRevisionAsyncProjectionUnfenced
-                      projection
-                      (binding ^. #writePhysicalTargets)
-                      (revision ^. #liveHandlers)
-                      recorded
+                    case List.find
+                      ( ( ==
+                            RevisionSubscriptionDelivery
+                              projectionId
+                              (registration ^. #subscriptionId)
+                              (registration ^. #dedupKeyId)
+                        )
+                          . (^. #delivery)
+                      )
+                      (revision ^. #liveHandlers) of
+                      Nothing ->
+                        error "applyAsyncProjectionFromCatalog: validated revision delivery disappeared"
+                      Just handler ->
+                        applyRevisionAsyncProjectionUnfenced
+                          projection
+                          (binding ^. #writePhysicalTargets)
+                          handler
+                          recorded
           pure $ case outcome of
             AsyncApplied -> CatalogAsyncApplied
             AsyncDuplicate -> CatalogAsyncDuplicate
@@ -406,21 +435,25 @@ applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
           pure (CatalogAsyncServingRevisionUnavailable missingGroup revisionId)
         ProjectionServingBindingInvalid invalidGroup revisionId detail ->
           pure (CatalogAsyncServingBindingInvalid invalidGroup revisionId detail)
+  where
+    matchesRegistration registration =
+      registration ^. #projectionId == projectionId
+        Prelude.&& registration ^. #projectionName == projection ^. #name
 
 applyRevisionAsyncProjectionUnfenced ::
   AsyncProjection ->
   PhysicalTargets ->
-  [RevisionLiveHandler] ->
+  RevisionLiveHandler ->
   RecordedEvent ->
   Tx.Transaction AsyncApplyOutcome
-applyRevisionAsyncProjectionUnfenced projection physicalTargets handlers recorded = do
+applyRevisionAsyncProjectionUnfenced projection physicalTargets handler recorded = do
   inserted <-
     Tx.statement
       (projection ^. #name, eventIdToUuid ((projection ^. #idempotencyKey) recorded))
       insertProjectionDedupStmt
   if inserted
     then do
-      traverse_ (\handler -> (handler ^. #runRevisionLive) physicalTargets recorded) handlers
+      (handler ^. #runRevisionLive) physicalTargets recorded
       pure AsyncApplied
     else pure AsyncDuplicate
 

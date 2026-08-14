@@ -416,9 +416,12 @@ spec = describe "Keiro.Projection.Catalog" $ do
               .~ [ RevisionLiveHandler
                      "counter-v2-live"
                      1
-                     [counterTargetId]
+                     (RevisionInlineDelivery inlineProjectionId (catalogInlineProjection ^. #name))
+                     [auditTargetId]
                      (\_ _ -> pure ())
                  ]
+              & #replayAdapters
+              %~ map (#requiredTargets .~ [counterTargetId])
           invalid =
             bridgeCatalog
               { projectionRevisions = [malformedV1, partialV2, bridgeRevisionV2],
@@ -437,7 +440,9 @@ spec = describe "Keiro.Projection.Catalog" $ do
           ProjectionRevisionWithoutReplayAdapter,
           ProjectionRevisionTargetSetDrift,
           ProjectionRevisionMissingSchemaValidation,
-          ProjectionRevisionPhysicalTargetsNotTotal
+          ProjectionRevisionPhysicalTargetsNotTotal,
+          ProjectionRevisionLiveCapabilityMismatch,
+          ProjectionRevisionLiveTargetOwnershipMismatch
         ]
         (\code -> diagnostics `shouldSatisfy` any ((== code) . (^. #diagnosticCode)))
       diagnosticsFor (reverseCatalog invalid) `shouldBe` diagnostics
@@ -821,9 +826,16 @@ bridgeRevision identity schema version =
           ],
       liveHandlers =
         [ RevisionLiveHandler
-            (identity <> "-live")
+            (identity <> "-counter-live")
             version
-            [counterTargetId, auditTargetId]
+            (RevisionInlineDelivery inlineProjectionId (catalogInlineProjection ^. #name))
+            [counterTargetId]
+            (\_ _ -> pure ()),
+          RevisionLiveHandler
+            (identity <> "-audit-live")
+            version
+            (RevisionSubscriptionDelivery asyncProjectionId asyncSubscriptionId asyncDedupId)
+            [auditTargetId]
             (\_ _ -> pure ())
         ],
       replayAdapters =

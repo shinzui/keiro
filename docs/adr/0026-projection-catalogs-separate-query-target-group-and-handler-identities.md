@@ -176,6 +176,15 @@ revision replays. The group lock returns the persisted serving revision, epoch, 
 physical targets as one closed-world binding. Promotion changes all of them atomically;
 an unknown revision or incomplete map is a typed refusal, not legacy-handler fallback.
 
+Each revision live handler retains the delivery capability of the catalog handler it
+implements. Inline identity contains the supplying projection and handler name;
+subscription identity contains the supplying projection, subscription, and dedup key.
+Every revision must cover every declared capability in its group exactly once, may not
+invent an extra capability, and may require only the targets owned by that projection.
+Command-time dispatch selects only inline capabilities from the typed projection set;
+subscription delivery claims its dedup key and invokes only the matching subscription
+capability. Selecting schema-specific SQL therefore never erases the delivery boundary.
+
 A projection revision may additionally declare one explicit `StreamScopedReplay`
 policy for a row-per-stream owner. The declaration names the exact complete target set
 owned by that projection, stable clearer/replay/verifier identities and versions, and

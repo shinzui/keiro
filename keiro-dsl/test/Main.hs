@@ -2494,7 +2494,8 @@ main = hspec $ do
       holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer live apply"
       holes `shouldSatisfy` T.isInfixOf "fill order_summary_writer replay apply"
       holes `shouldSatisfy` T.isInfixOf "provisionReportingV2OrderSummary :: Catalog.TargetProvisioningContext"
-      holes `shouldSatisfy` T.isInfixOf "applyReportingV2Live :: Catalog.PhysicalTargets"
+      holes `shouldSatisfy` T.isInfixOf "applyReportingV2OrderSummaryWriterLive :: Catalog.PhysicalTargets"
+      holes `shouldSatisfy` T.isInfixOf "applyReportingV2AuditWriterLive :: Catalog.PhysicalTargets"
       holes `shouldSatisfy` T.isInfixOf "orderTotalsReaderV1KeyedExternalRead :: [Catalog.SqlFunctionArgument]"
       holes `shouldSatisfy` T.isInfixOf "application-owned private SQL function"
       facts `shouldBe` sort facts

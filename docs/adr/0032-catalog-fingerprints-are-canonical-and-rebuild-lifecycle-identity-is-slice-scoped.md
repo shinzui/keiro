@@ -43,7 +43,7 @@ Keiro hashes a typed canonical preimage tree. Text nodes encode their UTF-8 byte
 length before their bytes; list and record nodes encode a distinguishing tag,
 child count, and recursively encoded children. Every structural boundary is
 therefore recoverable without delimiter escaping. Whole-catalog fingerprints
-use the `catalog-v6:` prefix and group-slice fingerprints use `slice-v5:`.
+use the `catalog-v7:` prefix and group-slice fingerprints use `slice-v6:`.
 Prefix changes are mandatory when the canonical identity contract changes.
 
 A group slice contains only the normalized catalog facts that can affect that
@@ -89,7 +89,7 @@ registered non-legacy groups absent from the new catalog. Adoption accepts a
 non-empty set of reviewed group IDs, sorts and deduplicates them, locks and
 validates the entire set before updating anything, requires every row to be
 registered and `live`, except that a `failed` group whose stored fingerprint
-lacks the canonical `slice-v5:` prefix is also adoptable while remaining
+lacks the canonical `slice-v6:` prefix is also adoptable while remaining
 fenced. Every other non-live group, including a canonical `failed` group, is
 refused. Adoption then updates group slices and reconciles every in-scope query
 registration in the same transaction: an existing row is updated, a missing row

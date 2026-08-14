@@ -8,12 +8,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- Projection revisions now bind every live closure to its exact inline owner or
+  subscription/dedup delivery capability. Catalog validation requires one handler per
+  declared capability and restricts it to the supplying projection's targets; command
+  and subscription paths dispatch only their matching closure. The canonical identity
+  advances to `catalog-v7:` and `slice-v6:`.
 - Projection revisions may declare explicit `StreamScopedReplay` policies. The targeted
   runner repairs one complete retained stream against the persisted serving revision in
   one group-fenced transaction, verifies exact target evidence, backfills ordinary async
   dedup keys, leaves subscription checkpoints unchanged, and refuses truncated/deleted
-  history, active rebuilds, slice drift, or incomplete serving bindings. Catalog identity
-  advances to `catalog-v6:` and `slice-v5:`.
+  history, active rebuilds, slice drift, or incomplete serving bindings.
 - `ProjectionCatalogOperations` adds database-backed targeted-reprojection preview and
   outcome reports with stable v1 JSON envelopes. Jitsurei demonstrates a V2 serving-row
   repair that leaves unrelated streams unchanged.

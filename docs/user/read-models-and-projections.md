@@ -70,7 +70,7 @@ The `ValidatedProjectionCatalog` constructor is hidden. Use
 `useProjectionCatalogM` when registration is effectful; it does not invoke the
 callback after failed validation. Inventory rendering and SHA-256 fingerprints normalize
 top-level declarations, query observed targets, and each projection's set-valued owned
-targets. Current `catalog-v6`/`slice-v5` identity includes normalized query freshness,
+targets. Current `catalog-v7`/`slice-v6` identity includes normalized query freshness,
 the optional subscription cursor resolved from the validated owner, and projection
 revision schema/provisioner/validator/handler/promotion identities. It also includes
 each external read contract's version, query/result shape, public SQL signature,
@@ -275,7 +275,7 @@ Success validated -> do
 ```
 
 Registration persists one row per rebuild group and binds each query model to
-that group in one transaction. Each group stores its canonical `slice-v5:`
+that group in one transaction. Each group stores its canonical `slice-v6:`
 fingerprint, so an unrelated additive group leaves existing registrations
 unchanged. Repeating the same slice is idempotent; a changed or pre-canonical
 stored slice is a typed startup error. Existing
@@ -428,8 +428,8 @@ missing participation evidence.
 The default page size is 500 and the persisted format is
 `keiro/projection-replay/v4` with a `contract-v4:` fingerprint. The contract covers the
 group slice plus replay-adapter source and projection identities in application order. A
-run retains the whole `catalog-v6:` fingerprint as provenance and separately stores the
-`slice-v5:` fingerprint used by its lifecycle fences. An unrelated catalog addition
+run retains the whole `catalog-v7:` fingerprint as provenance and separately stores the
+`slice-v6:` fingerprint used by its lifecycle fences. An unrelated catalog addition
 therefore does not strand an active run, while a genuine change to that group or its
 adapter application order still refuses resume. Optional metrics expose rebuild starts,
 resumes, committed pages/events, failures, promotions, and page duration. Durable reports
