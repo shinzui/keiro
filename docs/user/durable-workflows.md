@@ -29,8 +29,8 @@ The umbrella `Keiro` module does **not** re-export the workflow surface; import
 data Workflow :: Effect
 data WorkflowOutcome a = Completed a | Suspended | Cancelled | Failed | ContinuedAsNew
 
-runWorkflow     :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
-runWorkflowWith :: (IOE :> es, Store :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
+runWorkflow     :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
+runWorkflowWith :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 
 data WorkflowRunOptions = WorkflowRunOptions
   { snapshotPolicy :: SnapshotPolicy WorkflowState
@@ -61,22 +61,26 @@ counted as a lease skip rather than a crash.
 ```haskell
 step            :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a
 sleepNamed      :: (Workflow :> es, Store :> es, IOE :> es) => StepName -> NominalDiffTime -> Eff es ()
-awakeableNamed  :: (Workflow :> es, Store :> es, FromJSON a) => StepName -> Eff es (AwakeableId, Eff es a)
+awakeableNamed  :: (Workflow :> es, Store :> es, IOE :> es, FromJSON a) => StepName -> Eff es (AwakeableId, Eff es a)
 signalAwakeable :: (IOE :> es, Store :> es, ToJSON r) => AwakeableId -> r -> Eff es Bool
 cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool
 spawnChild      :: (Workflow :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (ChildHandle a)
-awaitChild      :: (Workflow :> es, Store :> es, FromJSON a) => ChildHandle a -> Eff es a
+awaitChild      :: (Workflow :> es, Store :> es, IOE :> es, FromJSON a) => ChildHandle a -> Eff es a
 cancelChild     :: (IOE :> es, Store :> es) => ChildHandle a -> Eff es Bool
 ```
 
-- `step name action` runs `action` once and journals its result; a replay returns
-  the recorded result without re-running the action.
+- `step name action` runs `action` and then journals its result. Once that record
+  is durable, replay returns it without re-running the action. A crash after an
+  external effect succeeds but before the journal append commits runs the action
+  again, so step effects are at-least-once and must be idempotent.
 - `sleepNamed name delta` arms a `keiro_timers` row and suspends; the timer
   worker's fire appends a `sleep:<name>` completion. `sleep delta` is the ordinal
   convenience form. Drain workflow-sleep timers with `runWorkflowTimerWorker`.
-- `awakeableNamed name` returns a deterministic `AwakeableId` and an `await`
-  action; the workflow suspends until `signalAwakeable` records the payload.
-  `deterministicAwakeableId name wid label` computes the id externally.
+- `awakeableNamed name` allocates an opaque, random `AwakeableId`, journals it
+  under `awkid:<name>`, and returns it with an `await` action. Publish or hand
+  that returned id to the external system before awaiting; it cannot be
+  recomputed from workflow coordinates. The publication action must upsert or
+  deduplicate on the id because it has the same at-least-once step boundary.
 - `spawnChild` records a child handle in the parent journal; `awaitChild` blocks
   the parent until the child completes. **Use a `WorkflowId` for the child that is
   distinct from the parent's** (discovery groups by `workflow_id`).
@@ -98,6 +102,9 @@ newtype PatchId = PatchId { unPatchId :: Text }
   returns the `ContinuedAsNew` outcome; the resume worker drives it forward on
   its current generation. Generation 0 keeps the legacy `wf:<name>-<id>` stream
   name; generation `g > 0` uses `wf:<name>-<id>#<g>`.
+  Any `awakeableNamed` allocation in the new generation returns a fresh opaque
+  id. Publish that new id again using an idempotent callback keyed by the id;
+  the id handed out by the prior generation no longer wakes the live one.
 - `patch pid` (EP-49) returns a **stable, journaled** branch decision: `True` for
   an instance that is fresh at this point (run the new logic), `False` for one
   already in flight when the patch shipped (keep the old logic). The decision is
@@ -126,11 +133,13 @@ data WorkflowJournalEvent
 
 Each instance journals to `wf:<name>-<id>` (generation 0; a rotated generation
 `g` lives on `wf:<name>-<id>#<g>`). The suspension primitives journal their
-completions as `StepRecorded` under reserved prefixes — `sleep:`, `awk:`,
-`child:` — never as new event types; the `patch` decision (EP-49) is likewise a
-`StepRecorded` under the `patch:` prefix, and `continueAsNew` (EP-48) adds the
-one terminal `WorkflowContinuedAsNew` rotation marker. The runtime keeps two tables in the `keiro`
-schema: `keiro_workflow_steps` (the step-lookup index that backs replay and
+completions as `StepRecorded` under reserved prefixes — `sleep:`, `awkid:`,
+`awk:`, `child:` — never as new event types. `awkid:<label>` holds the journaled
+opaque allocation; `awk:<uuid>` holds its resolved payload. The `patch` decision
+(EP-49) is likewise a `StepRecorded` under the `patch:` prefix, and
+`continueAsNew` (EP-48) adds the one terminal `WorkflowContinuedAsNew` rotation
+marker. The runtime keeps two tables in the `keiro` schema:
+`keiro_workflow_steps` (the step-lookup index that backs replay and
 unfinished-workflow discovery) and `keiro_awakeables` (pending external
 completions); child links live in `keiro_workflow_children`.
 
@@ -140,9 +149,9 @@ completions); child links live in `keiro_workflow_children`.
 data WorkflowDef es = forall a. (ToJSON a) => WorkflowDef { runDef :: WorkflowId -> Eff (Workflow : es) a }
 type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
 
-resumeWorkflowsOnce       :: (IOE :> es, Store :> es) => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
-resumeWorkflowsOnceUpTo   :: (IOE :> es, Store :> es) => Int -> WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
-runWorkflowResumeWorker   :: (IOE :> es, Store :> es) => WorkflowRegistry es -> Eff es ()
+resumeWorkflowsOnce       :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
+resumeWorkflowsOnceUpTo   :: (IOE :> es, Store :> es, Error StoreError :> es) => Int -> WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
+runWorkflowResumeWorker   :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowRegistry es -> Eff es ()
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 ```
 

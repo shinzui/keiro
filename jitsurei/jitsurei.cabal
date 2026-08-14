@@ -131,6 +131,7 @@ test-suite jitsurei-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
+  other-modules:  WorkflowGuideContract
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson                 >=2.2

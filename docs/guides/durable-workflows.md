@@ -15,13 +15,14 @@ cabal run jitsurei:exe:jitsurei-demo -- workflow
 
 ## What durable execution is, and when to use it
 
-A *durable workflow* is an ordinary imperative Haskell function of type
-`Workflow es a` whose side effects are recorded — "journaled" — at *named
+A *durable workflow* is an ordinary imperative Haskell function whose step
+results are recorded — "journaled" — at *named
 checkpoints*, so the function can pause (across a crash, a redeployment, or an
 idle wait) and resume by re-invoking it from the top while *short-circuiting* the
 checkpoints it already completed. "Short-circuit" means: on a re-run, a `step
-(StepName "charge") …` that already ran returns its recorded result instead of
-charging the card a second time.
+(StepName "charge") …` whose result is durable returns that recorded result.
+An external effect can still happen twice if the process crashes after the
+effect succeeds but before its result is journaled.
 
 Reach for a durable workflow when you have **a single long-running function that
 drives a multi-step process with in-line waits** — a sleep, an external callback,
@@ -43,14 +44,21 @@ A workflow is a `do`-block in the `Workflow` effect. Here is the parent
 order-fulfillment workflow verbatim from the source module:
 
 ```haskell
+type PublishPaymentAwakeable es = AwakeableId -> Eff es ()
+
 orderFulfillmentWorkflow ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  PublishPaymentAwakeable es ->
   OrderId ->
   Eff es Text
-orderFulfillmentWorkflow orderId = do
+orderFulfillmentWorkflow publishPaymentAwakeable orderId = do
   _reservation <- step (StepName "reserve-inventory") (reserveInventory orderId)
   sleepNamed (StepName "cooling-off") coolingOffDelay
-  (_awkId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+  (awakeableId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+  _publication <-
+    step
+      (StepName "publish-payment-webhook-id")
+      (publishPaymentAwakeable awakeableId)
   payment <- awaitPayment
   _charge <- step (StepName "charge") (chargeCard orderId payment)
   childHandle <- spawnChild shipOrderWorkflowName (shipChildId orderId) (shipOrderWorkflow orderId)
@@ -63,10 +71,13 @@ orderFulfillmentWorkflow orderId = do
 step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a
 ```
 
-`step (StepName "reserve-inventory") action` runs `action` once and journals its
-JSON-encoded result. On a replay it returns the recorded result without running
-`action` again — so the side effect happens at most once. The name (not the
-source position) is the identity, so reordering or inserting code elsewhere in
+`step (StepName "reserve-inventory") action` runs `action` and then journals its
+JSON-encoded result. Once that record commits, replay returns it without running
+`action` again. A crash after an external effect succeeds but before the append
+commits leaves no record, so the next run invokes `action` again. Step effects
+are therefore **at-least-once** across this action-to-journal window; use an
+application idempotency key for every external effect. The name (not the source
+position) is the journal identity, so reordering or inserting code elsewhere in
 the workflow does not corrupt an in-flight instance.
 
 **`sleepNamed` / `sleep` — a durable delay.**
@@ -86,15 +97,20 @@ the named form for anything that must survive a code edit mid-flight.
 external callback.**
 
 ```haskell
-awakeableNamed  :: (Workflow :> es, Store :> es, FromJSON a) => StepName -> Eff es (AwakeableId, Eff es a)
+awakeableNamed  :: (Workflow :> es, Store :> es, IOE :> es, FromJSON a) => StepName -> Eff es (AwakeableId, Eff es a)
 signalAwakeable :: (IOE :> es, Store :> es, ToJSON r) => AwakeableId -> r -> Eff es Bool
 cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool
 ```
 
-`awakeableNamed (StepName "payment-webhook")` returns a deterministic
-`AwakeableId` and an `await` action. The workflow blocks on `await` until an
-external system calls `signalAwakeable awkId payload`, which records the payload in
-the journal; the next run replays past the `await` and decodes the payload.
+`awakeableNamed (StepName "payment-webhook")` allocates an opaque, random
+`AwakeableId`, journals it under `awkid:payment-webhook`, and returns it with an
+`await` action. Publish that returned id to the external callback system before
+awaiting; it cannot be recomputed from the workflow name, id, and label. The
+workflow blocks on `await` until the external system calls
+`signalAwakeable awkId payload`, which records the payload in the journal; the
+next run replays past the `await` and decodes it. Publication is itself a
+journaled step action, so its callback must upsert or deduplicate on
+`AwakeableId` across the same at-least-once crash window.
 `cancelAwakeable awkId` abandons a stuck one — a workflow that re-enters a
 cancelled awakeable throws `WorkflowAwakeableCancelled`.
 
@@ -102,7 +118,7 @@ cancelled awakeable throws `WorkflowAwakeableCancelled`.
 
 ```haskell
 spawnChild  :: (Workflow :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (ChildHandle a)
-awaitChild  :: (Workflow :> es, Store :> es, FromJSON a) => ChildHandle a -> Eff es a
+awaitChild  :: (Workflow :> es, Store :> es, IOE :> es, FromJSON a) => ChildHandle a -> Eff es a
 cancelChild :: (IOE :> es, Store :> es) => ChildHandle a -> Eff es Bool
 ```
 
@@ -131,7 +147,7 @@ shipOrderWorkflow orderId =
 
 ```haskell
 data WorkflowOutcome a = Completed a | Suspended | Cancelled | Failed | ContinuedAsNew
-runWorkflow :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
+runWorkflow :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 ```
 
 `runWorkflow name wfId action` runs (or resumes) the workflow and returns
@@ -146,24 +162,28 @@ short-circuits completed steps.
 Every workflow instance owns a kiroku stream named `wf:<name>-<id>`
 (`workflowStreamName`). Each `step` appends a `StepRecorded` event; the terminal
 `WorkflowCompleted` event closes the journal. The suspension primitives journal
-their completions as the *same* `StepRecorded` event under reserved step-name
-prefixes — `sleep:`, `awk:`, `child:` — so the replay loop stays uniform and the
-codec never fragments. The journal from the demo run:
+their completions and allocations as the *same* `StepRecorded` event under
+reserved step-name prefixes — `sleep:`, `awkid:`, `awk:`, `child:` — so the
+replay loop stays uniform and the codec never fragments. The journal from the
+demo run:
 
 ```text
 [jitsurei:workflow] order-fulfillment journal (wf:order-fulfillment-workflow-20260603…)
   StreamVersion 1 … StepRecorded {stepName = "reserve-inventory", result = String "RES-workflow-…", …}
   StreamVersion 2 … StepRecorded {stepName = "sleep:cooling-off", result = Null, …}
-  StreamVersion 3 … StepRecorded {stepName = "awk:<uuid>", result = Object […paymentRef…amountCents…], …}
-  StreamVersion 4 … StepRecorded {stepName = "charge", result = String "CHG-workflow-…", …}
-  StreamVersion 5 … StepRecorded {stepName = "child:workflow-…-ship", result = Array [], …}
-  StreamVersion 6 … StepRecorded {stepName = "child:workflow-…-ship:result", result = String "TRK-…-ship", …}
-  StreamVersion 7 … WorkflowCompleted {…}
+  StreamVersion 3 … StepRecorded {stepName = "awkid:payment-webhook", result = String "<opaque-uuid>", …}
+  StreamVersion 4 … StepRecorded {stepName = "publish-payment-webhook-id", result = Array [], …}
+  StreamVersion 5 … StepRecorded {stepName = "awk:<opaque-uuid>", result = Object […paymentRef…amountCents…], …}
+  StreamVersion 6 … StepRecorded {stepName = "charge", result = String "CHG-workflow-…", …}
+  StreamVersion 7 … StepRecorded {stepName = "child:workflow-…-ship", result = Array [], …}
+  StreamVersion 8 … StepRecorded {stepName = "child:workflow-…-ship:result", result = Object (fromList [("ok", String "TRK-…-ship")]), …}
+  StreamVersion 9 … WorkflowCompleted {…}
 ```
 
-Note the awakeable is journaled under `awk:<uuid>` (the deterministic awakeable
-id), and a child contributes two entries: the `child:<id>` spawn record and the
-`child:<id>:result` completion the parent awaits.
+The opaque allocation is journaled under `awkid:payment-webhook`, publication
+has its own replay-skipping record, and the resolved payload is journaled under
+`awk:<opaque-uuid>`. A child contributes two entries: the `child:<id>` spawn
+record and the `child:<id>:result` completion the parent awaits.
 
 ## Versioning a running workflow: rename a step, or patch
 
@@ -223,7 +243,7 @@ A background **resume worker** finds workflows whose journal lacks a terminal
 ```haskell
 data WorkflowDef es = forall a. (ToJSON a) => WorkflowDef { runDef :: WorkflowId -> Eff (Workflow : es) a }
 type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
-resumeWorkflowsOnce :: (IOE :> es, Store :> es) => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
+resumeWorkflowsOnce :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ResumeSummary
 ```
 
 You supply a `WorkflowRegistry` mapping each workflow name to a `WorkflowDef` that
@@ -231,13 +251,27 @@ rebuilds the workflow body from its id alone (the worker only knows the journal'
 id). The example registers both the parent and the child:
 
 ```haskell
-jitsureiWorkflowRegistry :: (Store :> es, IOE :> es) => WorkflowRegistry es
-jitsureiWorkflowRegistry =
+jitsureiWorkflowRegistryWith ::
+  (Store :> es, IOE :> es) =>
+  PublishPaymentAwakeable es ->
+  WorkflowRegistry es
+jitsureiWorkflowRegistryWith publishPaymentAwakeable =
   Map.fromList
-    [ (orderFulfillmentWorkflowName, WorkflowDef (\wid -> orderFulfillmentWorkflow (orderIdFromWf wid)))
+    [ ( orderFulfillmentWorkflowName
+      , WorkflowDef
+          (\wid ->
+             orderFulfillmentWorkflow
+               (raise . publishPaymentAwakeable)
+               (orderIdFromWf wid))
+      )
     , (shipOrderWorkflowName, WorkflowDef (\wid -> shipOrderWorkflow (orderIdFromWf wid)))
     ]
 ```
+
+The direct run and every resume pass use the same application publisher. The
+convenience `jitsureiWorkflowRegistry` installs a visible logging publisher, but
+a real application uses `jitsureiWorkflowRegistryWith` to durably upsert the id
+into its callback system.
 
 `resumeWorkflowsOnce` runs one discover-and-reinvoke pass and returns a
 `ResumeSummary`
@@ -328,22 +362,31 @@ case outcome of
 and lease state; removes the current generation's derived failure-marker index
 row; and revives a failed child link when the instance is a child. It does not
 delete journal history. The old `WorkflowFailed` event remains for audit, and
-the next resume replays every completed step instead of repeating its side
-effects. If the workflow fails again in the same generation, a new failure event
-is appended. A failure sentinel already delivered to a parent journal is also
+the next resume skips every step whose result is already journaled. Any external
+effect whose step result never committed remains eligible to run again. If the
+workflow fails again in the same generation, a new failure event is appended. A
+failure sentinel already delivered to a parent journal is also
 immutable; resurrect the parent separately if its own terminal failure should
 be retried.
 
 ## Awakeables in depth
 
-The external signaller must target the *same* deterministic id the workflow
-registered. The example computes it without reading the journal back:
+The external signaller must target the same opaque id the workflow allocated.
+The example publishes the returned value inside a named step before it awaits:
 
 ```haskell
-paymentWebhookAwakeableId :: OrderId -> AwakeableId
-paymentWebhookAwakeableId orderId =
-  deterministicAwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
+(awakeableId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+_publication <-
+  step
+    (StepName "publish-payment-webhook-id")
+    (publishPaymentAwakeable awakeableId)
+payment <- awaitPayment
 ```
+
+`publishPaymentAwakeable` must upsert or deduplicate on `awakeableId`. If its
+external handoff succeeds and the process crashes before the publication step's
+journal append, replay calls it again with the same journaled allocation. Once
+that publication record is durable, replay skips the callback.
 
 `signalAwakeable` is idempotent and crash-safe: it returns `True` only on the
 `pending → completed` transition, but re-appends the stored payload to the journal
@@ -358,10 +401,11 @@ allocated id is journaled under an `awkid:<label>` step, and a rotation opens a
 generation whose journal has no such step, so the next run allocates a *fresh*
 id under the same label. A signal against the id you handed out before rotating
 settles that awakeable's own row and wakes nothing. If a workflow both rotates
-and hands ids to the outside world, re-notify the holder from the re-run
-allocation step — it runs exactly once per generation, which is precisely the
-hook you want. (The child-workflow analogue is deriving a fresh child id from
-the carried seed.)
+and hands ids to the outside world, publish again from the new generation's
+allocation path. The new generation allocates and publishes a fresh opaque id;
+the publisher still has at-least-once execution and must deduplicate on that new
+id. (The child-workflow analogue is deriving a fresh child id from the carried
+seed.)
 
 ## Writing your own wake source
 
@@ -534,6 +578,18 @@ cabal run jitsurei:exe:jitsurei-demo -- ops --help
 The demo runs the workflow to its first suspension, fires the cooling-off sleep
 timer, resumes past it, signals the payment-webhook awakeable, drives the resume
 worker until the parent and its child both complete, dumps both journals, and
-re-opens the store to prove the completed workflow is *not* re-executed from
-scratch. The full source is
+re-opens the store to prove the completed parent journal survived restart. Its
+essential proof is:
+
+```text
+published payment-webhook awakeable id: <opaque-uuid>
+signalAwakeable payment-webhook -> True
+final outcome: Completed "TRK-…-ship"
+durability proven: completed workflow journal survived restart
+```
+
+The command exits non-zero on missing publication, a `False` signal, exhausted
+timer or resume bounds, an unexpected outcome, a missing parent/child
+`WorkflowCompleted`, or remaining parent/child work after restart. The full
+source is
 [`../../jitsurei/src/Jitsurei/DurableWorkflow.hs`](../../jitsurei/src/Jitsurei/DurableWorkflow.hs).

@@ -40,8 +40,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-14T14:52:11Z) M1: journal an idempotent publication step using the real id returned by `awakeableNamed`
 - [x] (2026-08-14T15:00:00Z) M2: drive the demo with a captured published id and make every signal/completion/restart invariant fail closed
 - [x] (2026-08-14T15:00:00Z) M2: add a focused PostgreSQL Jitsurei regression that proves publication, successful signal, terminal completion, and no repeat publication after replay
-- [ ] M3: correct `docs/user/durable-workflows.md`, `docs/guides/durable-workflows.md`, API reference, and Jitsurei Haddocks
-- [ ] M3: add compile-owned guide signatures and complete a repository-wide stale-claim sweep
+- [x] (2026-08-14T15:05:21Z) M3: correct `docs/user/durable-workflows.md`, `docs/guides/durable-workflows.md`, API reference, and Jitsurei Haddocks
+- [x] (2026-08-14T15:05:21Z) M3: add compile-owned guide signatures and complete a repository-wide stale-claim sweep
 - [ ] M4: update the unreleased changelog and pass Jitsurei, documentation-adjacent, and full repository gates
 
 
@@ -68,6 +68,11 @@ implementation. Provide concise evidence.
   its publisher performs the idempotent external upsert and then throws once, before `step` can
   append. Exact discovery retries the workflow and the callback receives the same journaled
   opaque id a second time; after the publication record commits, replay does not call it again.
+- The live-surface stale-claim sweep has one workflow match after the rewrite: the Jitsurei
+  Haddock explicitly says the runtime does *not* make an uncommitted action at-most-once. Other
+  “at most once” and “exactly once” matches describe inbox, integration-event, projection,
+  acknowledgement, grammar, or typed-outcome deduplication contracts and are unrelated to
+  workflow step execution. No live deterministic-awakeable or removed-helper match remains.
 
 
 ## Decision Log

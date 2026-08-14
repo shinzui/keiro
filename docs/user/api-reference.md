@@ -679,7 +679,13 @@ modules directly, the same way you import `Keiro.Timer` or `Keiro.Outbox`.
   `workflowStreamName`.
 - `Keiro.Workflow.Sleep` — `sleepNamed` / `sleep` and `runWorkflowTimerWorker`.
 - `Keiro.Workflow.Awakeable` — `awakeableNamed` / `awakeable`,
-  `deterministicAwakeableId`, `signalAwakeable`, `cancelAwakeable`.
+  `signalAwakeable`, `cancelAwakeable`, and opaque `AwakeableId` rendering.
+  Fresh ids are allocated randomly, journaled, and must be published from the
+  returned value rather than reconstructed from workflow coordinates.
+- `Keiro.Workflow.Awakeable.Compatibility` — frozen
+  `generation0AwakeableId` and `preUtf8Generation0AwakeableId` probes for
+  inspecting or adopting generation-0 history only. They are not fresh-id
+  allocation APIs or signalling recipes for a new `awakeableNamed` call.
 - `Keiro.Workflow.Child` — `spawnChild`, `awaitChild`, `cancelChild`.
 - `Keiro.Workflow.Resume` — `resumeWorkflowsOnce`, `runWorkflowResumeWorker`,
   `runWorkflowResumeWorkerPush`, `WorkflowResumeOptions (..)`,
