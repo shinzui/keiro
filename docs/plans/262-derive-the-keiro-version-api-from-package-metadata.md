@@ -38,7 +38,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: render `Keiro.version` from `Paths_keiro.version` and remove the stale literal
 - [x] M2: make the focused test compare the public value with authoritative package metadata
 - [x] M2: add a regression guard against reintroducing a hand-maintained version literal
-- [ ] M3: update the unreleased Keiro changelog and pass focused, package, and full repository gates
+- [x] M3: update the unreleased Keiro changelog and pass focused, package, and full repository gates
 
 
 ## Surprises & Discoveries
@@ -56,6 +56,9 @@ implementation. Provide concise evidence.
   it remains internal rather than becoming an exposed Keiro API.
 - The focused post-change test reports two passing examples and renders 0.11.0.0 from Cabal's
   generated metadata. Neither `keiro/src` nor `keiro/test` retains the stale 0.4.0.0 literal.
+- Changing only the Cabal field to 0.11.0.1, rebuilding the library under that package identity,
+  and evaluating `Keiro.version` printed `"0.11.0.1"`. Restoring the field to 0.11.0.0 required
+  no Haskell edit, which is the same metadata-only transition EP-5 will use for 0.12.0.0.
 
 
 ## Decision Log
@@ -80,7 +83,23 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed. `Keiro.version :: Text` is source-compatible but now renders the generated
+`Paths_keiro.version`; Cabal is the only numeric authority. The test suite checks both metadata
+equality and source ownership, so copying a currently matching PVP literal back into the umbrella
+module cannot leave the regression green. `Paths_keiro` is internal to both components.
+
+Validation passed on 2026-08-14:
+
+- the focused metadata selector passed 2 examples with 0 failures;
+- `cabal test keiro-test` passed 611 examples with 0 failures;
+- `JITSUREI_DATABASE=jitsurei_plan262_verify just verify` passed the fresh-database demo,
+  workspace build, Keiro/PGMQ/ops/DSL/Jitsurei suites, 39-entry conformance corpus, documentation
+  and policy checks, and all 34 migration examples; and
+- the temporary Cabal-only 0.11.0.1 probe printed `"0.11.0.1"` before the manifest was restored
+  exactly to 0.11.0.0.
+
+No ADR was added: this removes duplicated package metadata without introducing an architectural
+boundary or long-lived compatibility policy.
 
 
 ## Context and Orientation

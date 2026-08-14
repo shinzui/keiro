@@ -140,6 +140,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- `Keiro.version` now renders Cabal's generated package metadata instead of a stale
+  hand-maintained literal, so diagnostics and telemetry automatically follow each release.
 - The durable-workflow reference and worked guide now document at-least-once
   step actions, opaque awakeable-id publication, fresh publication after
   `continueAsNew`, and the real `IOE` constraints. Compile-owned forwarding
