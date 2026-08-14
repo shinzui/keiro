@@ -1176,7 +1176,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             "--",
             "-fno-code",
             "-package",
-            "keiro",
+            "keiro-" <> showVersion Package.version,
             "test/ReplaySafetyTypeProbe.hs"
           ]
           ""
