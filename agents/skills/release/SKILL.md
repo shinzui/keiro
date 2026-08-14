@@ -1,6 +1,6 @@
 ---
 name: release
-description: Release the keiro Hackage packages (keiro-core, keiro, keiro-pgmq, keiro-migrations, keiro-dsl) together under one shared PVP version, in dependency order.
+description: Release the keiro Hackage packages (keiro-core, keiro, keiro-pgmq, keiro-migrations, keiro-dsl, keiro-ops) together under one shared PVP version, in dependency order.
 argument-hint: "[major|minor|patch]"
 disable-model-invocation: true
 allowed-tools: Read, Bash, Edit, Glob, Grep, Write, AskUserQuestion
@@ -23,24 +23,28 @@ released together, but each gets its **own annotated git tag**.
   - `C` — **minor**: backwards-compatible API additions (new exports, modules,
     instances).
   - `D` — **patch**: bug fixes, docs, internal-only or performance changes.
-- Because the packages are interdependent and share a version, the internal
+- Because the packages are interdependent and share a version, all internal
   version bounds (`keiro`, `keiro-pgmq`, and `keiro-dsl` depending on
-  `keiro-core`) must be bumped in lockstep with the release version.
+  `keiro-core`, plus `keiro-ops` depending on `keiro`, `keiro-pgmq`, and
+  `keiro-migrations`) must be bumped in lockstep with the release version.
 
 ## Packages (in dependency order)
 
 Publish in **this order** — dependencies first. `keiro`, `keiro-pgmq`, **and
-`keiro-dsl`** all depend on `keiro-core` at the library level. Only
-`keiro-migrations` has no internal library dependency.
+`keiro-dsl`** all depend on `keiro-core` at the library level.
+`keiro-migrations` has no internal library dependency. `keiro-ops` depends on
+`keiro`, `keiro-pgmq`, and `keiro-migrations`, so it is always last.
 
 1. **keiro-core** (`keiro-core/`) — core stream/codec/event contracts. No internal deps.
 2. **keiro** (`keiro/`) — the event-sourcing & workflow framework. Depends on `keiro-core`.
 3. **keiro-pgmq** (`keiro-pgmq/`) — PGMQ job-queue integration. Depends on `keiro-core`.
 4. **keiro-migrations** (`keiro-migrations/`) — schema migrations + `keiro-migrate` exe. No internal library deps.
 5. **keiro-dsl** (`keiro-dsl/`) — typed `.keiro` spec toolchain (library + `keiro-dsl` exe). Depends on `keiro-core`.
+6. **keiro-ops** (`keiro-ops/`) — embeddable operational command tree + `keiro-ops` exe. Depends on `keiro`, `keiro-pgmq`, and `keiro-migrations`.
 
-Do not assume the internal dependency graph from this list — re-derive it each
-release with `grep -n 'keiro-core' */*.cabal`. The 0.7.0.0 release found the
+Do not assume the internal dependency graph from this list — re-derive every
+internal-package occurrence from all six manifests each release with the scan
+in step 3. The 0.7.0.0 release found the
 skill's previous claim that "`keiro-dsl`'s library is standalone" to be false,
 and that its `keiro-core` dependency had shipped in 0.6.0.0 with **no version
 bound at all**.
@@ -143,7 +147,8 @@ release"), commit count since then, and which package directories changed.
 #### Version bump
 Set the new `version:` in every published package's cabal file:
 `keiro-core/keiro-core.cabal`, `keiro/keiro.cabal`, `keiro-pgmq/keiro-pgmq.cabal`,
-`keiro-migrations/keiro-migrations.cabal`, `keiro-dsl/keiro-dsl.cabal`.
+`keiro-migrations/keiro-migrations.cabal`, `keiro-dsl/keiro-dsl.cabal`,
+`keiro-ops/keiro-ops.cabal`.
 
 Leave `keiro-test-support` and `jitsurei` as they are unless you deliberately
 choose to bump them for consistency (they are not published).
@@ -152,12 +157,15 @@ choose to bump them for consistency (they are not published).
 Find every internal dependency first — do not work from a remembered list:
 
 ```bash
-grep -n 'keiro-core' */*.cabal
+rg -n -g '*.cabal' 'keiro-core|keiro-migrations|keiro-pgmq|(^|[ ,])keiro([ ,]|$)' \
+  keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops
 ```
 
 `keiro`, `keiro-pgmq`, and `keiro-dsl` all depend on `keiro-core`. Set each to a
 PVP-compatible bound matching the new version: `keiro-core ^>=A.B.C.D`. Update
 **every** stanza that carries an existing bound (library, test-suite, benchmark).
+Set `keiro-ops`'s bounded dependencies on `keiro`, `keiro-pgmq`, and
+`keiro-migrations` to that same shared version.
 
 If a stanza lists `keiro-core` with **no** bound, that is a defect, not a style
 choice — an unbounded internal dep lets a consumer solve a new major `keiro-core`
@@ -182,7 +190,7 @@ conformance suites **cannot** catch a miss here — they depend on `keiro-core`
 directly. 0.7.0.0 shipped `Keiro.Codec.IdDomain` and needed exactly this fix.
 
 #### Changelogs
-All five published packages now have a `CHANGELOG.md`, plus a root
+All six published packages have a `CHANGELOG.md`, plus a root
 `CHANGELOG.md` summarizing the release across packages (it feeds the GitHub
 release notes in step 7). All follow
 [Keep a Changelog](https://keepachangelog.com/) + PVP with dates in
@@ -255,7 +263,7 @@ nix flake check  # treefmt + pre-commit hooks gate
   version:
 
   ```bash
-  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl; do
+  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops; do
     git tag -a "$pkg-<version>" -m "$pkg <version>"
   done
   ```
@@ -266,7 +274,7 @@ nix flake check  # treefmt + pre-commit hooks gate
 ### 6. Publish to Hackage (in dependency order)
 
 For **each** publishable package, in the order
-`keiro-core → keiro → keiro-pgmq → keiro-migrations → keiro-dsl`:
+`keiro-core → keiro → keiro-pgmq → keiro-migrations → keiro-dsl → keiro-ops`:
 
 1. Re-confirm the package's dependencies are all on Hackage (see the
    prerequisite warning above). If a dependency reachable from the **default**
@@ -278,7 +286,8 @@ For **each** publishable package, in the order
    verify`, but a final per-package check is cheap): `keiro` → `cabal test
    keiro-test`, `keiro-pgmq` → `cabal test keiro-pgmq-test`, `keiro-migrations`
    → `cabal test keiro-migrations-test`, `keiro-dsl` → `cabal test
-   keiro-dsl-test`. `keiro-core` has no dedicated suite — skip.
+   keiro-dsl-test`, `keiro-ops` → `cabal test keiro-ops-test`. `keiro-core`
+   has no dedicated suite — skip.
 4. `cabal sdist` from `<pkg-dir>`, then upload **from the repo root**.
    Note the path: the tarball lands in the *workspace* `dist-newstyle/`, not in
    the package directory —
@@ -299,11 +308,11 @@ For **each** publishable package, in the order
 6. Report the Hackage URL:
    `https://hackage.haskell.org/package/<pkg>-<version>`.
 
-After all five, confirm each is actually live rather than trusting the upload
+After all six, confirm each is actually live rather than trusting the upload
 output — both the package page and its docs:
 
 ```bash
-for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl; do
+for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops; do
   echo "$p $(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>)" \
        "$(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>/docs/)"
 done
@@ -321,6 +330,7 @@ After all uploads, present a summary table:
 | keiro-pgmq | X.Y.Z.W | https://hackage.haskell.org/package/keiro-pgmq-X.Y.Z.W |
 | keiro-migrations | X.Y.Z.W | https://hackage.haskell.org/package/keiro-migrations-X.Y.Z.W |
 | keiro-dsl | X.Y.Z.W | https://hackage.haskell.org/package/keiro-dsl-X.Y.Z.W |
+| keiro-ops | X.Y.Z.W | https://hackage.haskell.org/package/keiro-ops-X.Y.Z.W |
 
 ### 7. Create the GitHub release (required)
 
@@ -343,7 +353,7 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
 ```
 
 - Include the per-package tag names in the Packages table alongside the Hackage
-  links — the release is anchored on `keiro-<version>` only, so the other four
+  links — the release is anchored on `keiro-<version>` only, so the other five
   tags are otherwise undiscoverable from the release page.
 - Verify it landed and is not a draft:
   `gh release view keiro-<version> --json tagName,isDraft,url`
@@ -354,7 +364,7 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
 - Always ask the user to **confirm the version bump and changelogs before
   committing**.
 - Always publish in dependency order: **keiro-core → keiro → keiro-pgmq →
-  keiro-migrations → keiro-dsl**.
+  keiro-migrations → keiro-dsl → keiro-ops**.
 - Never skip the gates: `nix fmt`, `just verify`, `cabal check`, `nix flake
   check`.
 - **Stop on any failure** — a failed gate, `cabal check`, or upload. Do not

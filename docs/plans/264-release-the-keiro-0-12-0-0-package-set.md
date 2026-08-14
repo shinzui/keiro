@@ -36,7 +36,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: add `keiro-ops` and `keiro-migrations` to the Mori package inventory and repair the repository release skill to cover all six publishable packages
+- [x] M0: add `keiro-ops` and `keiro-migrations` to the Mori package inventory and repair the repository release skill to cover all six publishable packages
 - [ ] M1: re-derive the last release, changed packages, PVP bump, internal graph, generated-module re-exports, and Hackage prerequisites
 - [ ] M1: present the proposed 0.12.0.0 bump and changelog reconciliation to the user and obtain confirmation before edits
 - [ ] M2: update all six package versions, every internal PVP bound, and the root plus six package changelogs
@@ -67,6 +67,10 @@ implementation. Provide concise evidence.
   unpublished test-support package because Hackage's default consumer build does not enable
   those suites; this known limitation must be reported, not “fixed” by publishing internal
   fixtures during the release.
+- The repository-local `mori show --full` reads the corrected `mori.dhall` directly and now lists
+  seven package records: the six publishable packages plus internal `keiro-test-support`. The
+  registered project mirror remains stale until a later registry refresh, so release derivation
+  uses the verified local inventory rather than treating the cached five-package view as current.
 
 
 ## Decision Log
@@ -105,7 +109,12 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 0 makes the durable release inputs agree before any metadata edit. The release skill
+now names all six publishable packages in its version files, internal bounds, tag loop, test
+matrix, upload order, URL verification, Hackage summary, and GitHub tag table. `mori.dhall` adds
+the public `keiro-migrations` and `keiro-ops` library records with descriptions matching their
+package manifests; `mori show --full` parses it and reports the expected seven total records when
+the internal test-support library is included. Package versions and changelogs remain untouched.
 
 
 ## Context and Orientation

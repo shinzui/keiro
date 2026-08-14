@@ -97,7 +97,7 @@ identified it as local to `mori://shinzui/keiro`.
 | 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | Complete |
 | 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | Complete |
 | 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | Complete |
-| 5 | Release the keiro 0.12.0.0 package set | docs/plans/264-release-the-keiro-0-12-0-0-package-set.md | EP-4 | None | Not Started |
+| 5 | Release the keiro 0.12.0.0 package set | docs/plans/264-release-the-keiro-0-12-0-0-package-set.md | EP-4 | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -166,6 +166,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4 M1: restructure conformance roles to preserve published Language 4 while making Language 5 the sole stable contract
 - [x] EP-4 M2: add or migrate a real Language 5 workflow proof, flip the registry maturity, regenerate the corpus, and update user documentation
 - [x] EP-4 M3: run the complete blocker matrix and record fresh approval reviews at the post-fix commit
+- [x] EP-5 M0: repair the release runbook and Mori inventory to cover all six publishable packages
 - [ ] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
 - [ ] EP-5 M2: update the six package versions/internal bounds and seven changelogs, then pass every release gate
 - [ ] EP-5 M3: obtain final approval, commit with plan trailers, create and push annotated package tags

@@ -39,11 +39,25 @@ in  Schema.Project::{
         , description = Some "PostgreSQL job-queue (PGMQ) integration for Keiro"
         }
       , Schema.Package::{
+        , name = "keiro-migrations"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some
+            "Embedded PostgreSQL schema migrations and migration runner for Keiro"
+        }
+      , Schema.Package::{
         , name = "keiro-dsl"
         , type = Schema.PackageType.Other "Toolchain"
         , language = Schema.Language.Haskell
         , description = Some
             "Typed-spec (.keiro) toolchain for aggregates, integration, queues, read models, routers, processes, and workflows: parse/check/scaffold/harness/diff. Authoring skill: agents/skills/keiro-dsl-authoring; corpus index: docs/corpus/keiro-dsl-corpus.md"
+        }
+      , Schema.Package::{
+        , name = "keiro-ops"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some
+            "Embeddable operational command tree and command-line interface for Keiro deployments"
         }
       ]
     , dependencies =
