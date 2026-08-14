@@ -69,9 +69,9 @@ cross-plan release gate.
     history, hard deletion, writers/readers, dedup/checkpoint state, application
     failures, and backend interruption pass with the unbounded writer-pause finding
     fixed and no open critical or high finding.
-- [ ] M5: cross-plan fault injection, bridge/rolling-upgrade evidence, ADR and contract
-  reconciliation, changelogs, corpus replay, and `just verify` pass; MasterPlan 41 is
-  eligible to close.
+- [x] (2026-08-14T11:37:38Z) M5: cross-plan fault injection,
+  bridge/rolling-upgrade evidence, ADR and contract reconciliation, changelogs, corpus
+  replay, and `just verify` pass; MasterPlan 41 is eligible to close.
 
 
 ## Surprises & Discoveries
@@ -131,6 +131,10 @@ cross-plan release gate.
   replay, deduplication, and verification work performed while every group writer was
   fenced. Locked `StreamInfo.version` is the exact race-free admission fact and is
   available before the group lock.
+- PostgreSQL event triggers and ordinary row triggers can inject failures after DDL,
+  lifecycle metadata, and managed-object statements without adding test hooks to the
+  production API. Because each trigger raises inside the real promotion transaction,
+  the regression observes the same rollback and retry semantics as a backend failure.
 
 
 ## Decision Log
@@ -232,6 +236,14 @@ cross-plan release gate.
   Rationale: page-bounded replay is not an outage bound. Keeping the stream guard across
   admission and repair prevents count drift, while preview/outcome v2 and the CLI force
   invocation make any larger reviewed limit explicit.
+  Date: 2026-08-14
+- Decision: Inject final promotion faults through disposable database DDL and row
+  triggers rather than a production callback surface.
+  Rationale: the release test must fail after real relation renames, metadata updates,
+  and managed-object writes while preserving the public API. Transaction-local raised
+  exceptions prove that each intermediate effect rolls back before any other session
+  can observe mixed authority, and dropping the trigger proves the same persisted run
+  resumes successfully.
   Date: 2026-08-14
 
 
@@ -464,6 +476,40 @@ the active backend during the post-clear pause rolls target and dedup changes ba
 releases both locks. There are no open critical or high EP-4 findings and no medium/low
 residual introduced by this review.
 
+### M5 final release-safety gate
+
+Commit `a68b2204` adds one integrated fault-injection scenario around a real
+incompatible v1/v2, mixed inline/async, two-target group. The scenario first stops at
+the durable final-head and staged-promotion boundaries. It then retries the same
+prepared run through a typed relation-lock timeout, an injected failure after the first
+table rename, an injected failure after the group metadata transition, and an injected
+failure after managed wrapper reconciliation. After every refusal or rollback, the
+candidate tables retain both replayed rows, status remains wholly on v1 epoch zero,
+the v1 sanctioned read returns its original row, and both serving tables retain their
+original rows. Removing each disposable database fault and retrying eventually promotes
+both targets together, retires the breaking v1 read with `KR003`, and serves v2.
+
+The final committed-tree gate used the isolated database
+`keiro_mp41_final_20260814` and passed:
+
+    JITSUREI_DATABASE=keiro_mp41_final_20260814 just verify
+    # keiro: 610 examples, 0 failures
+    # keiro-pgmq: 58 examples, 0 failures, 2 documented environment pendings
+    # keiro-ops: 47 examples, 0 failures
+    # keiro-dsl main suite: 706 examples, 0 failures; every declared conformance suite passed
+    # jitsurei: 24 examples, 0 failures; diagrams unchanged
+    # keiro-migrations: 34 examples, 0 failures; 30 native migrations
+    # ADR/research/capability validation: 36/17/15 concepts
+    # conformance corpus: 39 of 39 invocations, no drift
+
+M3's calibrated projection and read-model benchmark commands remain the performance
+gate because `just verify` intentionally excludes machine-sensitive benchmarks. Both
+direct baselines passed, the five-run sampler medians remained inside the published
+1.25 p95-latency and 0.90 throughput budgets, and the adversarial M4 fixes were folded
+into their scale fixtures. Public Haskell/SQL APIs, migration snapshot, operator JSON,
+language-5 output, runtime patterns, runbooks, ADRs, and changelogs are reconciled.
+There are no open critical or high findings. Plan 259 and MasterPlan 41 are complete.
+
 
 ## Context and Orientation
 
@@ -472,9 +518,8 @@ from another process. Its completed plan 256 introduced a projection revision, w
 selects schema-specific live/replay SQL, and a target generation, which is one physical
 instance of a logical projection table. A schema-versioned rebuild keeps the serving
 generation live while a candidate generation replays, then fences writers and swaps all
-targets in one transaction. Plan 254 is currently delivering the public status view,
-plan 255 will deliver guarded external SQL functions, and plan 257 will deliver
-one-stream repair.
+targets in one transaction. Completed plans 254, 255, and 257 deliver the public status
+view, guarded external-read contracts, and bounded targeted stream repair respectively.
 
 The first adversarial review of completed plan 256 found four concrete gaps that this
 plan must treat as failing baseline tests.

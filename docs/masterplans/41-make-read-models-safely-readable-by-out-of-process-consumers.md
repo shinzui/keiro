@@ -130,7 +130,7 @@ in the child plans.
 | 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Complete |
 | 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Complete |
 | 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Complete |
-| 5 | Adversarially review and harden read-model release safety | docs/plans/259-adversarially-review-and-harden-read-model-release-safety.md | EP-1 | Rolling integration with EP-2, EP-3, and EP-4; final gate waits for all three | In Progress |
+| 5 | Adversarially review and harden read-model release safety | docs/plans/259-adversarially-review-and-harden-read-model-release-safety.md | EP-1 | Rolling integration with EP-2, EP-3, and EP-4; final gate waits for all three | Complete |
 
 Status values are Not Started, In Progress, Complete, and Cancelled. Registry numbers
 define the EP labels used in this MasterPlan; filenames keep their existing stable plan
@@ -169,17 +169,14 @@ implementation is reconciled with the final group-lock type. It pauses writers f
 selected group for the duration of one transaction but does not change lifecycle or
 take readers out of service.
 
-EP-5 starts from EP-1 now rather than waiting for the rest of the initiative. Its first
-three milestones correct and benchmark the delivered revision/cutover protocol. Its
-rolling audit milestone consumes each of EP-2, EP-3, and EP-4 only after that child's
-implementation is complete. Its final integration milestone therefore cannot complete
-until all three have passed review.
+EP-5 started from EP-1 rather than waiting for the rest of the initiative. Its first
+three milestones corrected and benchmarked the delivered revision/cutover protocol.
+Its rolling audit consumed each of EP-2, EP-3, and EP-4 after that child's implementation
+completed, and its final integration milestone passed after all three reviews closed.
 
-The feature-delivery critical path remains EP-1 → EP-2 → EP-3, with EP-4 parallel. The
-release critical path ends at EP-5 after both EP-3 and EP-4 are complete and their
-reviews are closed. All external prerequisites are satisfied. EP-2 and EP-5 can proceed
-now; EP-4 may proceed in parallel against EP-1's delivered group-lock and
-serving-revision contract.
+The feature-delivery path EP-1 → EP-2 → EP-3, parallel EP-4 path, and final EP-5 release
+path are all complete. All external prerequisites are satisfied and no child plan or
+integration dependency remains open.
 
 
 ## Integration Points
@@ -304,13 +301,13 @@ Relevant local decisions are:
 - [x] (2026-08-14T07:45:54Z) EP-4 (257) M3-M5: operations wrappers, two-phase CLI,
   concurrency tests, documentation, ADR reconciliation, changelogs, and full
   committed-corpus verification.
-- [ ] EP-5 (259) M1-M2: restore delivery-scoped revision dispatch and implement a true
+- [x] (2026-08-14T08:43:20Z) EP-5 (259) M1-M2: restore delivery-scoped revision dispatch and implement a true
   overall promotion deadline with staged, bounded deduplication preparation and a
   minimal exclusive-lock phase.
-- [ ] EP-5 (259) M3-M4: establish comparative performance budgets and adversarially
+- [x] (2026-08-14T11:06:35Z) EP-5 (259) M3-M4: establish comparative performance budgets and adversarially
   review the delivered EP-2, EP-3, and EP-4 implementations, fixing every critical or
   high-severity finding.
-- [ ] EP-5 (259) M5: cross-plan fault injection, rolling-upgrade evidence, ADR/contract
+- [x] (2026-08-14T11:37:38Z) EP-5 (259) M5: cross-plan fault injection, rolling-upgrade evidence, ADR/contract
   reconciliation, benchmark gates, corpus replay, and full verification make the
   MasterPlan eligible to close.
 
@@ -513,9 +510,9 @@ destruction. Jitsurei proves a genuinely incompatible three-target v1/v2 rebuild
 v1 remains readable and writable, then atomically serves v2 and retains the three v1
 generations. The operator runbook and external runtime patterns are reconciled with the
 implementation. A subsequent adversarial review found that EP-1's delivery routing and
-bounded-cutover implementation do not yet satisfy those intended contracts under mixed
-inline/async delivery, multi-object contention, or large checkpoint lag. EP-5 now owns
-those corrections and the final review gate. Historical EP-1 evidence is 16 focused
+bounded-cutover implementation did not yet satisfy those intended contracts under mixed
+inline/async delivery, multi-object contention, or large checkpoint lag. EP-5 corrected
+those defects and closed the final review gate. Historical EP-1 evidence is 16 focused
 schema-versioned examples, 576 Keiro examples, 44 keiro-ops examples, 705 main DSL
 examples plus every conformance component, 24 Jitsurei examples, 29 migration examples,
 34 strict ADR concepts, a no-drift 39-entry corpus replay, and a passing `just verify`;
@@ -543,11 +540,29 @@ serving code, backfill async deduplication evidence, and expose database-backed 
 and forced execution through the embedded CLI. Its clean acceptance gate passed 595
 core, 58 PGMQ with two documented pending cases, 46 operations, 706 main DSL, 24
 Jitsurei, and 32 migration examples plus every conformance executable, strict OKF and
-repository policy, and the 39-entry no-drift corpus replay. EP-5 is now the sole active
-and final adversarial gate. The EP-5 review subsequently closed an unbounded writer-pause
+repository policy, and the 39-entry no-drift corpus replay. The EP-5 review subsequently
+closed an unbounded writer-pause
 finding: every targeted repair now admits the exact locked stream count against a
 positive reviewed maximum before taking the group-wide fence, with v2 preview/outcome
 evidence and hard-delete/interruption rollback tests.
+
+EP-5 is complete. It restored delivery-scoped revision dispatch, made promotion
+timeouts one overall database-clock deadline, staged and bounded deduplication before
+the exclusive fence, and established calibrated lifecycle/read performance budgets.
+Its rolling reviews fixed bounded all-row reads, crossed-promotion snapshot refusal,
+exact keyed-result and overload handling, and pre-fence targeted-repair admission.
+Commit `a68b2204` adds the final incompatible-v1/v2 fault scenario: relation contention,
+post-rename failure, post-metadata failure, and post-managed-wrapper failure all retain
+one v1 authority and the complete candidate before the same run succeeds on retry.
+
+The final isolated `just verify` gate passed 610 core examples, 58 PGMQ examples with
+two documented environment pendings, 47 operations examples, 706 main DSL examples
+plus every conformance suite, 24 Jitsurei examples, and 34 migration examples. It also
+passed 36 strict ADR concepts, 17 research concepts, 15 capability concepts, diagram
+drift, every repository policy, and the 39-of-39 no-drift corpus replay. M3's direct
+projection/read-model baselines and five-run sampler passed the published 1.25
+p95-latency and 0.90 throughput budgets. No critical or high finding remains; all five
+ExecPlans and MasterPlan 41 are complete.
 
 
 ## Revision Note
@@ -588,3 +603,8 @@ Revised on 2026-08-14 after EP-4 completed. The registry now selects EP-5, the p
 ledger records targeted-repair delivery and the committed-corpus acceptance run, and
 the retrospective captures the stream-first lock order, deduplication backfill, and
 operator surface now subject to the final adversarial gate.
+
+Revised on 2026-08-14 after EP-5 and the final release gate completed. The registry and
+progress ledger now mark every child complete; the retrospective records the integrated
+promotion fault injection, calibrated benchmark evidence, strict documentation checks,
+complete test suites, and 39-entry no-drift corpus replay that close MasterPlan 41.
