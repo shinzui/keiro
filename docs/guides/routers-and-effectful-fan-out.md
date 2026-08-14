@@ -80,7 +80,7 @@ projection SQL slows or fails the dispatch itself.
 
 ## Declarative selection in Language 5
 
-Candidate `language keiro-dsl 5` can generate the common bounded read-model
+Published stable `language keiro-dsl 5` can generate the common bounded read-model
 selection instead of requiring a `RouterHoles` resolver. The complete fixture is
 [`../../keiro-dsl/test/fixtures/declarative-router/valid.keiro`](../../keiro-dsl/test/fixtures/declarative-router/valid.keiro):
 

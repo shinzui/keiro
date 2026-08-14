@@ -98,9 +98,9 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/intake-pf-retry.keiro` | negative previously-failed-as-retry inversion |
 | `test/fixtures/intake-topic-mismatch.keiro` | negative intake event/topic affinity |
 | `test/fixtures/intake.keiro` | valid contract and inbox intake vertical |
-| `test/fixtures/mapped-workqueue.keiro` | candidate mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
-| `test/fixtures/mapped-readmodel.keiro` | candidate typed read-model input/result contract with direct, nested, shared, and unused mapped declarations |
-| `test/fixtures/mapped-readmodel-workspace/service.keiro-workspace` | two-member candidate workspace proving cross-member query-contract type resolution and ownership |
+| `test/fixtures/mapped-workqueue.keiro` | stable Language-5 mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
+| `test/fixtures/mapped-readmodel.keiro` | stable Language-5 typed read-model input/result contract with direct, nested, shared, and unused mapped declarations |
+| `test/fixtures/mapped-readmodel-workspace/service.keiro-workspace` | two-member Language-5 workspace proving cross-member query-contract type resolution and ownership |
 | `test/fixtures/operation-ghost-aggregate.keiro` | negative command operation aggregate reference |
 | `test/fixtures/operation-signal-value.keiro` | negative signal/await value-type mismatch |
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
@@ -199,7 +199,7 @@ the stable Language-5 feature lanes and form the primary product baseline.
 | `test/conformance-scalar-expressions/` (`keiro-dsl-conformance-aggregate-scalar-expressions`) | generated stable scalar terms agree across concrete, symbolic, replay, and snapshot surfaces |
 | `test/conformance-nominal-scalars/` (`keiro-dsl-conformance-nominal-scalars`) | consumer nominal binding laws, ID/enum exact equality, wire rejection, snapshots, and forward/replay parity |
 | `test/conformance-structural/` (`keiro-dsl-conformance-structural`) | structural binding laws, branch coverage, generated codec bytes, projection witnesses, and mapped-register replay |
-| `test/conformance-mapped-queue/` (`keiro-dsl-conformance-mapped-queue`) | candidate mapped queue payloads reuse total structural bindings, recurse through optional/opaque fields, preserve required-key/null semantics, and round-trip the schema-version-1 envelope |
+| `test/conformance-mapped-queue/` (`keiro-dsl-conformance-mapped-queue`) | stable Language-5 mapped queue payloads reuse total structural bindings, recurse through optional/opaque fields, preserve required-key/null semantics, and round-trip the schema-version-1 envelope |
 | `test/conformance-replay/` (`keiro-dsl-conformance-replay`) | generated replay audit targets and seeded/full replay divergence gates compile and execute |
 | `test/conformance-workspace-nominals/` (`keiro-dsl-conformance-workspace-nominals`) | two workspace aggregate domains import one generated ID/enum authority, exchange those exact types, and round-trip both event codecs |
 | `test/conformance-snapshot/` (`keiro-dsl-conformance-snapshot`) | snapshot policy/codec wiring against live stream-construction guards |

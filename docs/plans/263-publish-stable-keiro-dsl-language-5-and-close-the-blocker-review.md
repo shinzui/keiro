@@ -38,9 +38,9 @@ This section must always reflect the actual current state of the work.
 - [x] M1: migrate the conformance baseline to explicit per-suite language ownership and preserve Language 4 as published compatibility
 - [x] M1: migrate the workflow evolution fixture and its three compiled lanes to Language 5 without weakening the Language 4 parser/corpus proofs
 - [x] M2: make Language 5 the sole `Stable`/`PublishedLanguage` registry entry and make Language 4 `CompatibilityOnly`/`PublishedLanguage`
-- [ ] M2: regenerate the affected corpus, update Language 5 documentation and ADR 16, and pass every DSL/repository gate
+- [x] M2: regenerate the affected corpus, update Language 5 documentation and ADR 16, and pass every DSL/repository gate
 - [x] M2: pass ADR validation, all focused Language 5 lanes, and the full 707-example `keiro-dsl-test` suite; prove dirty-tree corpus regeneration is idempotent
-- [ ] M2: commit the intentional corpus transition, then run the clean-tree corpus policy and fresh-database `just verify` gate at the release-candidate SHA
+- [x] M2: commit the intentional corpus transition, pass the clean-tree corpus policy, and pass fresh-database `just verify` at pre-review SHA `5975ee147a3e4c00fb8eff097bd6c4a2b3add36b`
 - [x] M3: stage the release-candidate change with explicit paths; `git diff --cached --name-only` reports exactly:
 
   ```text
@@ -110,7 +110,7 @@ This section must always reflect the actual current state of the work.
   keiro-dsl/test/conformance-workspace-nominals/keiro-dsl-ledger.workspace.workspace-nominal-proof.txt
   keiro-dsl/test/conformance/keiro-dsl-ledger.context.hospital-capacity.txt
   ```
-- [ ] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers
+- [x] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers; retain the pre-review forward-fix candidate at `5975ee147a3e4c00fb8eff097bd6c4a2b3add36b`
 - [ ] M3: run six full adversarial follow-up reviews at that exact commit and allocate new REV handles
 - [ ] M3: validate the review bundle and stop on any `changes-requested` outcome
 - [ ] M4: record closure evidence and mark the MasterPlan release gate ready for EP-5
@@ -150,6 +150,18 @@ implementation. Provide concise evidence.
   `6e2e6de9408098319523b6e356ec7c4c61d14b9cad10696f579e296c31481590`; every generated module
   reported unchanged. The strict clean-tree policy therefore runs immediately after the
   release-candidate commit rather than treating its pre-commit refusal as drift.
+- The first fresh-database repository gate exposed a pre-existing compile-time probe that invoked
+  GHC with the unversioned `-package keiro`. The package environment contained both the current
+  0.11.0.0 build and EP-3's installed 0.11.0.1 metadata probe, so the test observed an ambiguous
+  module instead of the intended `ValidatedEventStream` type error. The forward fix derives the
+  exact package selector from `Paths_keiro.version`; its focused 16-example group and the full
+  611-example Keiro suite pass at the pre-review candidate.
+- The first full follow-up review sweep found current documentation that escaped the publication
+  edit: one worked-guide `runWorkflowWith` signature omitted `Error StoreError`, three corpus
+  inventory rows and one compiled-lane description still said “candidate,” and the durable-
+  execution capability sketch still used the obsolete awakeable/child call shapes. No approval
+  record was written against that state. These are forward-fixed before the reviewed SHA is
+  finalized, and the documentation-acceptance search is repeated with historical records excluded.
 
 
 ## Decision Log
@@ -211,7 +223,12 @@ changes only the maturity row in 36 ledgers; all generated Haskell is unchanged.
 the corpus inventory, capability and guide references, changelogs, and ADR 16 now describe the
 published split. Focused Language 5 suites, the live PostgreSQL workflow proof, strict ADR
 validation, and all 707 DSL examples pass. Clean-tree repository verification and the six
-commit-pinned adversarial reviews remain before closure.
+commit-pinned adversarial reviews remain before closure. At the pre-review code candidate
+`5975ee147a3e4c00fb8eff097bd6c4a2b3add36b`, a fresh database `just verify` run passes the live
+Jitsurei demo, every package build and test suite, all 39 corpus invocations, documentation and
+policy validation, and the 34-example migration suite. Only the six immutable follow-up reviews
+and their validation remain after the review-found documentation corrections are committed and
+the exact final candidate is reverified.
 
 
 ## Context and Orientation

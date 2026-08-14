@@ -505,7 +505,7 @@ data WorkflowRunOptions = WorkflowRunOptions
   , activePatches   :: Set PatchId
   , leaseHeartbeat  :: Maybe LeaseHeartbeat
   }
-runWorkflowWith :: (IOE :> es, Store :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
+runWorkflowWith :: (IOE :> es, Store :> es, Error StoreError :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 ```
 
 Set the policy with the generic-lens label (a bare record update is ambiguous —

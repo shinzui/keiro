@@ -52,13 +52,22 @@ it independently for orchestration work that is awkward to model as an aggregate
 
 ```haskell
 import Keiro.Workflow
+import Keiro.Workflow.Awakeable
+import Keiro.Workflow.Child
+import Keiro.Workflow.Sleep
 
 fulfillment orderId = do
-  reserved <- step "reserve-stock" (reserveStock orderId)
-  sleepNamed "cool-off" (hours 1)
-  ok <- awakeableNamed "await-payment"
-  _ <- spawnChild "ship-order" (shipOrder orderId)
-  pure ()
+  reserved <- step (StepName "reserve-stock") (reserveStock orderId)
+  sleepNamed (StepName "cool-off") (hours 1)
+  (awakeableId, awaitPayment) <- awakeableNamed (StepName "await-payment")
+  _ <- step (StepName "publish-await-payment") (publishAwakeableId awakeableId)
+  payment <- awaitPayment
+  child <-
+    spawnChild
+      (WorkflowName "ship-order")
+      (WorkflowId (orderIdText orderId <> "-ship"))
+      (shipOrder orderId payment reserved)
+  awaitChild child
 ```
 
 ## Limits
