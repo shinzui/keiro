@@ -41,6 +41,7 @@ common shared
 
 library
   import:             warnings, shared
+  autogen-modules:    Paths_keiro
   exposed-modules:
     Keiro
     Keiro.Command
@@ -107,6 +108,7 @@ library
     Keiro.Workflow.Child.Cancel
     Keiro.Workflow.Instance.Schema
     Keiro.Workflow.Journal
+    Paths_keiro
 
   reexported-modules:
     keiro-core:Keiro.Codec,
@@ -160,10 +162,11 @@ library
     , vector                                 >=0.13      && <0.14
 
 test-suite keiro-test
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is:        Main.hs
+  import:          warnings, shared
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:  test
+  main-is:         Main.hs
+  autogen-modules: Paths_keiro
   other-modules:
     CatalogEvolutionSpec
     CatalogOperationsSpec
@@ -171,6 +174,7 @@ test-suite keiro-test
     Compatibility.ReadModel011
     ExternalReadSpec
     GroupRebuildSpec
+    Paths_keiro
     PreCanonicalRecoverySpec
     PreimageSpec
     ProjectionReplaySpec
@@ -178,7 +182,7 @@ test-suite keiro-test
     VersionedRebuildSpec
     VersionedTargetPostgresSpec
 
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:     -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson                                  >=2.2      && <2.3
     , base                                   >=4.21     && <5

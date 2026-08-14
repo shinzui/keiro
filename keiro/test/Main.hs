@@ -16,6 +16,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.ByteString (ByteString)
+import Data.Char (isDigit)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
 import Data.List (isInfixOf)
@@ -25,12 +26,14 @@ import Data.Monoid (mempty)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
+import Data.Text.IO qualified as TextIO
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString, fromWords64)
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
+import Data.Version (showVersion)
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, throwError)
@@ -380,6 +383,7 @@ import OpenTelemetry.Trace.Core
     SpanKind,
     getSpanContext,
   )
+import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
@@ -595,8 +599,17 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       pure ()
 
   describe "Keiro" $ do
-    it "exposes the scaffold version" $
-      KeiroRoot.version `shouldBe` ("0.4.0.0" :: Text)
+    it "exposes the package metadata version" $
+      KeiroRoot.version `shouldBe` Text.pack (showVersion Package.version)
+
+    it "keeps package metadata as the only version authority" $ do
+      source <- TextIO.readFile "src/Keiro.hs"
+      source `shouldSatisfy` Text.isInfixOf "showVersion Package.version"
+      let isNumericVersionAssignment sourceLine =
+            "version =" `Text.isInfixOf` sourceLine
+              && Text.count "." sourceLine >= 3
+              && Text.any isDigit sourceLine
+      Text.lines source `shouldSatisfy` all (not . isNumericVersionAssignment)
 
   describe "Keiro.Telemetry metrics" $ do
     it "records instrument names and values through an SDK meter" $ do

@@ -34,10 +34,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: register Cabal's generated `Paths_keiro` module in the library and test components
-- [ ] M1: render `Keiro.version` from `Paths_keiro.version` and remove the stale literal
-- [ ] M2: make the focused test compare the public value with authoritative package metadata
-- [ ] M2: add a regression guard against reintroducing a hand-maintained version literal
+- [x] M1: register Cabal's generated `Paths_keiro` module in the library and test components
+- [x] M1: render `Keiro.version` from `Paths_keiro.version` and remove the stale literal
+- [x] M2: make the focused test compare the public value with authoritative package metadata
+- [x] M2: add a regression guard against reintroducing a hand-maintained version literal
 - [ ] M3: update the unreleased Keiro changelog and pass focused, package, and full repository gates
 
 
@@ -51,6 +51,11 @@ implementation. Provide concise evidence.
 - The repository already has the correct local pattern: `keiro-dsl` imports
   `Paths_keiro_dsl` and renders `Package.version` with `Data.Version.showVersion` for generated
   banners. This plan reuses that pattern and adds no dependency.
+- Cabal 3.16 rejects an `autogen-modules` entry that is absent from the component's ordinary
+  module inventory. `Paths_keiro` therefore belongs in `other-modules` for both components so
+  it remains internal rather than becoming an exposed Keiro API.
+- The focused post-change test reports two passing examples and renders 0.11.0.0 from Cabal's
+  generated metadata. Neither `keiro/src` nor `keiro/test` retains the stale 0.4.0.0 literal.
 
 
 ## Decision Log

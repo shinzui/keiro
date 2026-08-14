@@ -95,7 +95,7 @@ identified it as local to `mori://shinzui/keiro`.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make fresh awakeables opaque across the runtime and generated workflows | docs/plans/260-make-fresh-awakeables-opaque-across-the-runtime-and-generated-workflows.md | None | None | Complete |
 | 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | Complete |
-| 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | Not Started |
+| 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | In Progress |
 | 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | Not Started |
 | 5 | Release the keiro 0.12.0.0 package set | docs/plans/264-release-the-keiro-0-12-0-0-package-set.md | EP-4 | None | Not Started |
 

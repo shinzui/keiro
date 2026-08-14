@@ -46,6 +46,8 @@ module Keiro
   )
 where
 
+import Data.Text qualified as Text
+import Data.Version (showVersion)
 import Keiro.Codec
 import Keiro.Command
 import Keiro.EventStream
@@ -55,9 +57,8 @@ import Keiro.Projection.Catalog hiding (AllStreams, version)
 import Keiro.Router
 import Keiro.Snapshot
 import Keiro.Stream
+import Paths_keiro qualified as Package
 
--- | The Keiro library version, as a 'Text' for display and telemetry.
--- Keep in lockstep with the @version:@ field in @keiro/keiro.cabal@ when
--- cutting a release.
+-- | The Cabal package version, rendered as 'Text' for display and telemetry.
 version :: Text
-version = "0.4.0.0"
+version = Text.pack (showVersion Package.version)
