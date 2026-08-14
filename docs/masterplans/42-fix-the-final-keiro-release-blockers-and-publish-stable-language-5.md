@@ -169,8 +169,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-5 M0: repair the release runbook and Mori inventory to cover all six publishable packages
 - [x] EP-5 M1: re-derive the PVP bump, dependency graph, Hackage prerequisites, and changelog coverage; obtain user approval
 - [x] EP-5 M2: update the six package versions/internal bounds and seven changelogs, pass every pre-commit release gate, and reserve the clean-tree corpus wrapper for its documented post-commit boundary
-- [ ] EP-5 M3: obtain final approval, commit with plan trailers, create and push annotated package tags
-- [ ] EP-5 M4: publish packages and documentation in dependency order, verify live URLs, and create the GitHub release
+- [x] EP-5 M3: obtain final approval, commit with plan trailers, create and push annotated package tags
+- [x] EP-5 M4: publish packages and documentation in dependency order, verify live URLs, and create the GitHub release
 
 
 ## Surprises & Discoveries
@@ -326,3 +326,12 @@ REV-12 are full commit-pinned approvals of the six original identities, while RE
   Because the exact corpus wrapper requires a Git-clean corpus, it remains a mandatory
   post-release-commit and pre-tag gate. All proposed local/remote tags and Hackage 0.12.0.0 pages
   are absent, and no commit, tag, push, or upload has occurred at the final approval boundary.
+- EP-5 completed publication from release commit
+  `93ada2d42995d559b645d0226af95aafff34d175`. The exact clean-tree corpus gate passed before
+  tagging; six annotated tags were pushed atomically and peel to that commit. All six package and
+  documentation URLs return HTTP 200, including the first public `keiro-ops` release. The
+  non-draft GitHub release is live at
+  <https://github.com/shinzui/keiro/releases/tag/keiro-0.12.0.0>. No partial-publication recovery
+  was needed. ADR distillation found the durable architectural decisions already captured by
+  ADRs 16 and 24 and the mechanical six-package procedure captured by the corrected release
+  skill and Mori inventory, so no new ADR is required.

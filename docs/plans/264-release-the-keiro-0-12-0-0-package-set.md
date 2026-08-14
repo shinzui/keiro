@@ -42,11 +42,11 @@ This section must always reflect the actual current state of the work.
 - [x] M2: update all six package versions, every internal PVP bound, and the root plus six package changelogs
 - [x] M2: build source distributions and inspect package contents without publishing
 - [x] M3: run formatting, full verification, Nix, `cabal check`, package tests, source-distribution, and Haddock gates; defer only the exact clean-tree corpus wrapper under its documented post-commit contract
-- [ ] M3: show the complete release diff and obtain final user approval before commit/tag/push/upload
-- [ ] M4: create the release commit and six annotated tags, then push them
-- [ ] M4: immediately after the approved release commit, run `just conformance-corpus-policy` and stop before tags if it fails
-- [ ] M4: publish source and documentation archives in dependency order and verify every live URL
-- [ ] M4: create and verify the GitHub release, then close the MasterPlan and distill any durable ADR context
+- [x] M3: show the complete release diff and obtain final user approval before commit/tag/push/upload
+- [x] M4: create the release commit and six annotated tags, then push them
+- [x] M4: immediately after the approved release commit, run `just conformance-corpus-policy` and stop before tags if it fails
+- [x] M4: publish source and documentation archives in dependency order and verify every live URL
+- [x] M4: create and verify the GitHub release, then close the MasterPlan and distill any durable ADR context
 
 
 ## Surprises & Discoveries
@@ -203,6 +203,39 @@ tree SHA-256
 The exact wrapper remains a hard post-commit, pre-tag gate. Local tags, remote tags, and exact
 Hackage 0.12.0.0 package pages are absent for all six release names. No publication action has
 been taken.
+
+Milestone 4 published the approved tree without recovery work. Release commit
+`93ada2d42995d559b645d0226af95aafff34d175` passed the exact 39-entry
+`just conformance-corpus-policy` clean-tree gate before any tag was created. Six annotated tags
+were pushed atomically and their remote peeled objects all resolve to that commit. Source and
+documentation archives were then uploaded in the fixed dependency order; every package page and
+documentation directory returned HTTP 200 after its upload:
+
+| Package | Tag | Hackage |
+| --- | --- | --- |
+| `keiro-core` | `keiro-core-0.12.0.0` | <https://hackage.haskell.org/package/keiro-core-0.12.0.0> |
+| `keiro` | `keiro-0.12.0.0` | <https://hackage.haskell.org/package/keiro-0.12.0.0> |
+| `keiro-pgmq` | `keiro-pgmq-0.12.0.0` | <https://hackage.haskell.org/package/keiro-pgmq-0.12.0.0> |
+| `keiro-migrations` | `keiro-migrations-0.12.0.0` | <https://hackage.haskell.org/package/keiro-migrations-0.12.0.0> |
+| `keiro-dsl` | `keiro-dsl-0.12.0.0` | <https://hackage.haskell.org/package/keiro-dsl-0.12.0.0> |
+| `keiro-ops` | `keiro-ops-0.12.0.0` | <https://hackage.haskell.org/package/keiro-ops-0.12.0.0> |
+
+Final uploaded source-archive SHA-256 values are:
+
+| Package | SHA-256 |
+| --- | --- |
+| `keiro-core` | `ff6dd74876ea57a6626b1d4748b5240d50fe4bc3899511791adbfdd1bd0bf76f` |
+| `keiro` | `65891fc139da62b4b2111909a74df887713a5b33397ac6dbd98f7c13cf28ea45` |
+| `keiro-pgmq` | `4467f31a2a4c96594c057e0b1d2e9206b1e73989924bffb98ff67ddffa37b4e1` |
+| `keiro-migrations` | `b3f5f61b5049e9a0b0f69d1fb464171f14e58af5b5239f046aecc748143073cd` |
+| `keiro-dsl` | `1078049c09da447687d279ba2273aa41adad37bf68e0e810326d8102d1775d08` |
+| `keiro-ops` | `42800d647c5deb073712ff47907efac26c4c4f289e8a8216be06cb6fced4f871` |
+
+The required GitHub release is live and non-draft at
+<https://github.com/shinzui/keiro/releases/tag/keiro-0.12.0.0>. The ADR distillation pass found
+no new architectural decision: ADRs 16 and 24 already own the language-publication and opaque-id
+boundaries, while the corrected release skill and Mori inventory own the durable six-package
+operator procedure. No ADR change is required for the mechanical publication record.
 
 
 ## Context and Orientation
