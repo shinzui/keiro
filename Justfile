@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate extension-policy generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate extension-policy generated-name-policy conformance-corpus-policy
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -54,6 +54,13 @@ research-validate:
 capabilities-validate:
     okf validate docs/capabilities --profile docs/capabilities/profile.dhall --profile-enforce --log-enforce
     okf graph docs/capabilities
+
+# Strict OKF enforcement for the assurance.reviews bundle. Every record names
+# one exact subject and immutable reviewed commit; findings remain in the review
+# body until the owning bug-report profile is adopted.
+[group('docs')]
+reviews-validate:
+    okf validate docs/reviews --strict --profile docs/reviews/profile.dhall --profile-enforce --log-enforce
 
 [group('haskell')]
 haskell-build:

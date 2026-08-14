@@ -85,5 +85,13 @@ in  Schema.Project::{
         , description = Some
             "Technical research, surveys, audits, evaluations, and design explorations"
         }
+      , Schema.OkfBundle::{
+        , name = "reviews"
+        , path = "docs/reviews"
+        , profile = Some "docs/reviews/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some
+            "Commit-pinned records of adversarial code, API, and release-blocker reviews"
+        }
       ]
     }
