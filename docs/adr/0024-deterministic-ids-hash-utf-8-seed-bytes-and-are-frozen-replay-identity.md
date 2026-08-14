@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Deterministic ids hash UTF-8 seed bytes and are frozen replay identity
 description: Every Keiro deterministic id hashes the UTF-8 bytes of its seed text, and that derivation may never change again without a versioned migration story.
-timestamp: 2026-08-06T13:53:08Z
+timestamp: 2026-08-14T14:26:07Z
 docId: ADR-24
 status: Accepted
 date: 2026-08-06
@@ -58,7 +58,7 @@ defect.
 A deterministic-id seed is hashed as its UTF-8 bytes. The single definition is
 `Keiro.DeterministicId.identitySeedBytes`, and the four affected derivations —
 `Keiro.Workflow.deterministicJournalId`, `Keiro.Workflow.Sleep.sleepTimerId`,
-`Keiro.Workflow.Awakeable.deterministicAwakeableId`, and
+`Keiro.Workflow.Awakeable.Compatibility.generation0AwakeableId`, and
 `Keiro.ProcessManager.deterministicCommandId` — all route through it. No call
 site may re-derive seed bytes locally.
 
@@ -100,8 +100,18 @@ then the legacy id only when the full seed contains non-ASCII text. ASCII seeds
 produce identical bytes, so they retain one database probe. Every manager-state
 and target-command preflight uses `firstExistingEventId` and reports whichever
 candidate matched, while a miss still appends only under the current id.
-Generation-0 awakeable adoption follows the same order through
-`legacyDeterministicAwakeableId`; fresh allocations remain random and journaled.
+Generation-0 awakeable adoption follows the same order through shared internal
+identity probes, exposed for compatibility inspection as
+`generation0AwakeableId` and `preUtf8Generation0AwakeableId`; fresh allocations
+remain random and journaled.
+
+Those probes are compatibility identities, not allocation recipes. They are exported
+only from `Keiro.Workflow.Awakeable.Compatibility`; the ordinary awakeable module
+exposes only opaque allocated ids. Runtime adoption and the compatibility module share
+`Keiro.Workflow.Awakeable.Internal.Identity`, so there is one frozen implementation
+without placing it on the ordinary application surface. Generated workflow runtimes
+likewise expose abstract declared-await bindings whose allocation delegates to
+`awakeableNamed`; they never reconstruct a fresh id from workflow coordinates.
 
 The router has an additional, older compatibility identity: before 0.2.0.0 it
 used positional process-manager command ids rather than target-keyed router ids.

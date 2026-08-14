@@ -99,6 +99,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Fixed
 
+- Generated await helper names now use the same suffix-aware derivation in
+  validation and emission, so colliding declarations such as `foo-bar` and
+  `foo_bar` are rejected before generation. Compiled workflow-runtime conformance
+  now proves the opaque generated allocation/signalling/resume path against a live
+  migrated PostgreSQL database.
 - `keiro-dsl diff` now classifies read-model query-policy changes across the language
   4-to-5 migration. Weakening legacy `consistency = Strong` to
   `freshness = immediate`, or narrowing the waited head scope, is a breaking
@@ -113,6 +118,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Generated `WorkflowRuntime` modules no longer expose the pure
+  `awaitAwakeableId` coordinate helper. They instead expose an abstract
+  `AwaitBinding`, one value per declared await, and `allocateDeclaredAwait`, which
+  allocates through the runtime and returns the opaque `AwakeableId` together with
+  its await action. Compiled generated-runtime consumers now need the direct
+  dependencies required by that effectful allocation surface.
 - Removes the zero-caller Spec-only `pureRefusals` and `constraintPlan` shims
   from `Keiro.Dsl.ScaffoldRun`. Use `pureRefusalsForService` and
   `constraintPlanForService`; callers that genuinely have only a `Spec` can

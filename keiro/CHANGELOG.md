@@ -140,6 +140,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Fresh workflow awakeables are now opaque allocation results. Generation-0
+  coordinate probes are isolated behind `Keiro.Workflow.Awakeable.Compatibility`,
+  while runtime adoption and the compatibility surface share one internal identity
+  implementation; ordinary workflow and generated-code APIs no longer expose a
+  coordinate-derived candidate for a fresh awakeable.
 - Schema-versioned rebuilds now enforce an absolute database-clock deadline for
   writer-fence and promotion lock attempts, acquire every target relation in one
   cumulative lock statement, and return typed phase-specific deadline failures.
@@ -193,6 +198,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- `Keiro.Workflow.Awakeable` no longer exports
+  `deterministicAwakeableId` or `legacyDeterministicAwakeableId`. Compatibility
+  tooling that must inspect generation-0 rows should import
+  `generation0AwakeableId` or `preUtf8Generation0AwakeableId` from
+  `Keiro.Workflow.Awakeable.Compatibility`; ordinary workflow code must retain and
+  pass the `AwakeableId` returned by allocation.
 - The schema-versioned rebuild resume contract advances to
   `versioned-contract-v3` and its persisted runner to
   `keiro/versioned-rebuild/v3`. The contract adds run-scoped dedup staging and a
