@@ -49,7 +49,10 @@ After this MasterPlan completes:
   separately from candidate-rebuild lifecycle and progress;
 - an operator can transactionally reproject one stream into a row-per-aggregate model,
   including the deduplication evidence that prevents later async redelivery from
-  reapplying the repair.
+  reapplying the repair;
+- a mandatory adversarial release gate proves delivery routing, lock deadlines,
+  bounded-memory promotion, privileges, scale, rolling compatibility, and failure
+  recovery across the complete status/read/rebuild/repair surface.
 
 The architecture is fixed by
 `docs/adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md`.
@@ -73,10 +76,11 @@ retaining the retired table does not make it current.
 
 ## Decomposition Strategy
 
-The work remains four child ExecPlans, but their order changes after architecture
-validation. The generation and cutover protocol must define the durable lifecycle,
-serving-revision, schema-provisioning, and position vocabulary before either public SQL
-contract freezes it.
+The work now has five child ExecPlans. The first four deliver the requested
+capabilities, while the fifth is a fixing and adversarial verification gate added after
+review of the first completed implementation. The generation and cutover protocol must
+define the durable lifecycle, serving-revision, schema-provisioning, and position
+vocabulary before either public SQL contract freezes it.
 
 EP-1, plan 256, establishes schema-versioned projection revisions, target generations,
 application provisioning, revision-aware writers, replay, validation, bounded cutover,
@@ -103,8 +107,18 @@ EP-4, plan 257, adds targeted per-stream repair. It can proceed largely independ
 but it uses the same group lock and read-availability semantics and must backfill the
 affected projection's deduplication keys in the repair transaction.
 
-Durable cross-plan choices belong in ADR-34 and the existing projection ADRs. Task-local
-PostgreSQL evidence and operational transcripts stay in the child plans.
+EP-5, plan 259, begins immediately against EP-1's delivered code. It restores exact
+inline versus subscription delivery authority, makes the cutover deadline genuinely
+overall, stages and admits deduplication work before fencing, and establishes
+comparative performance budgets. As EP-2 through EP-4 complete, EP-5 adversarially
+reviews their actual implementations for concurrency, security, privilege, scale,
+upgrade, and failure-recovery defects. It is the final release gate: findings are fixed
+rather than merely reported, and no critical or high-severity issue may remain when the
+MasterPlan closes.
+
+Durable cross-plan choices belong in ADR-26, ADR-31, ADR-34, and the downstream
+status/read/repair ADRs. Task-local PostgreSQL evidence and operational transcripts stay
+in the child plans.
 
 
 ## Exec-Plan Registry
@@ -112,9 +126,10 @@ PostgreSQL evidence and operational transcripts stay in the child plans.
 | # | Title | Path | Hard Deps | Soft / Integration Deps | Status |
 |---|-------|------|-----------|-------------------------|--------|
 | 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | Complete |
-| 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Not Started |
+| 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Complete |
 | 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Not Started |
 | 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Not Started |
+| 5 | Adversarially review and harden read-model release safety | docs/plans/259-adversarially-review-and-harden-read-model-release-safety.md | EP-1 | Rolling integration with EP-2, EP-3, and EP-4; final gate waits for all three | Not Started |
 
 Status values are Not Started, In Progress, Complete, and Cancelled. Registry numbers
 define the EP labels used in this MasterPlan; filenames keep their existing stable plan
@@ -153,10 +168,17 @@ implementation is reconciled with the final group-lock type. It pauses writers f
 selected group for the duration of one transaction but does not change lifecycle or
 take readers out of service.
 
-The critical path is therefore EP-1 → EP-2 → EP-3. EP-4 is parallel. All external
-prerequisites on that graph are satisfied. EP-1 is complete, so EP-2 is the next child
-on the critical path; EP-4 may begin in parallel against EP-1's delivered group-lock
-and serving-revision contract.
+EP-5 starts from EP-1 now rather than waiting for the rest of the initiative. Its first
+three milestones correct and benchmark the delivered revision/cutover protocol. Its
+rolling audit milestone consumes each of EP-2, EP-3, and EP-4 only after that child's
+implementation is complete. Its final integration milestone therefore cannot complete
+until all three have passed review.
+
+The feature-delivery critical path remains EP-1 → EP-2 → EP-3, with EP-4 parallel. The
+release critical path ends at EP-5 after both EP-3 and EP-4 are complete and their
+reviews are closed. All external prerequisites are satisfied. EP-2 and EP-5 can proceed
+now; EP-4 may proceed in parallel against EP-1's delivered group-lock and
+serving-revision contract.
 
 
 ## Integration Points
@@ -174,11 +196,14 @@ EP-3 owns managed read-contract metadata and generated functions in `keiro_read`
 Public relations are versioned; incompatible evolution creates `v2`, never silently
 repurposes `v1`.
 
-The runtime writer boundary is shared by EP-1 and EP-4. `lockProjectionGroupsTx` must
+The runtime writer boundary is shared by EP-1, EP-4, and EP-5.
+`lockProjectionGroupsTx` must
 return the persisted serving revision as well as availability. Inline and async paths
-select handlers for that revision while holding the group lock and refuse an unknown
-revision before application SQL. EP-4 uses the exclusive group lock and executes the
-same revision's stream-scoped handler.
+select only the exact delivery-scoped handlers for that revision while holding the
+group lock and refuse an unknown revision before application SQL. EP-5 owns the
+correction that keeps command-time inline effects separate from one subscription's
+deduplicated effects. EP-4 uses the exclusive group lock and executes the same serving
+revision's stream-scoped handler.
 
 The promotion transaction is shared by all first three plans. EP-1 owns its order:
 lock group and run; finish tail replay; verify source retention, replay completion,
@@ -188,6 +213,9 @@ bounded deadline; revalidate relation identities, schema fingerprints, and depen
 swap the complete group; update the serving revision and epoch; reconcile managed
 read-contract bindings; and commit. EP-2 observes the committed metadata. EP-3 may add
 object reconciliation steps but may not create an independent cutover transaction.
+EP-5 verifies that the implementation follows this ordering under one overall lock
+deadline, moves arbitrary application work out of the exclusive-relation phase, and
+adds bounded admission for promotion evidence.
 
 The schema-provisioning boundary is application-owned. A provisioner receives allocated
 physical names and creates a complete candidate schema transactionally. The built-in
@@ -215,6 +243,13 @@ EP-3 land. The first URI resolves now; the second is the intended canonical hand
 `runtime-patterns/keiro/projection-catalogs.md` and awaits a registry refresh. Notify
 `mori://tan/notification-render-service` when the versioned read contract is available.
 
+EP-5 owns no competing public surface. It owns the release evidence and may correct an
+artifact delivered by EP-1 through EP-4 only while also updating that artifact's child
+plan, tests, changelog, and owning ADR. Its review matrix covers the status view's query
+plan and owner-rights privileges, external functions' security-definer and index
+behavior, targeted repair's group-wide pause and history admission, cross-plan lock
+ordering, bridge deployments, and relative steady-state performance.
+
 Relevant local decisions are:
 
 - `docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md`;
@@ -222,7 +257,8 @@ Relevant local decisions are:
 - `docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`;
 - `docs/adr/0031-subscription-checkpoint-policy-is-catalog-identity-and-replay-safety.md`;
 - `docs/adr/0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md`;
-- `docs/adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md`.
+- `docs/adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md`;
+- `docs/adr/0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md`.
 
 
 ## Progress
@@ -251,10 +287,10 @@ Relevant local decisions are:
 - [x] (2026-08-13T22:35:58Z) EP-2 (254) M1: Kiroku IR-5's frozen
   `kiroku.subscription_checkpoints_v1` contract verified in released
   `kiroku-store-migrations` 0.3.1.0; no dependency on a private Kiroku table.
-- [ ] EP-2 (254) M2: versioned public status relation reports serving and candidate facts
+- [x] (2026-08-14T03:10:27Z) EP-2 (254) M2: versioned public status relation reports serving and candidate facts
   independently, with schema-gate coverage and grants documentation.
-- [ ] EP-2 (254) M3-M4: typed accessor, lifecycle proofs, docs, ADR, changelogs,
-  out-of-process transcript, and full verification.
+- [x] (2026-08-14T03:22:00Z) EP-2 (254) M3-M4: typed accessor, lifecycle proofs,
+  docs, ADR, changelogs, out-of-process transcript, and full verification.
 - [ ] EP-3 (255) M1: versioned external-read declarations, registry validation,
   fingerprints, and rolling-version compatibility diagnostics.
 - [ ] EP-3 (255) M2: stable guard plus managed per-contract functions, no raw external
@@ -265,6 +301,15 @@ Relevant local decisions are:
   truncation refusal, group writer pause, and transactional deduplication backfill.
 - [ ] EP-4 (257) M3-M5: operations wrappers, two-phase CLI, concurrency tests,
   documentation, ADR reconciliation, changelogs, and full verification.
+- [ ] EP-5 (259) M1-M2: restore delivery-scoped revision dispatch and implement a true
+  overall promotion deadline with staged, bounded deduplication preparation and a
+  minimal exclusive-lock phase.
+- [ ] EP-5 (259) M3-M4: establish comparative performance budgets and adversarially
+  review the delivered EP-2, EP-3, and EP-4 implementations, fixing every critical or
+  high-severity finding.
+- [ ] EP-5 (259) M5: cross-plan fault injection, rolling-upgrade evidence, ADR/contract
+  reconciliation, benchmark gates, corpus replay, and full verification make the
+  MasterPlan eligible to close.
 
 
 ## Surprises & Discoveries
@@ -321,6 +366,30 @@ Relevant local decisions are:
 - Retention renewal failure is itself durable availability state. Committing a failed
   run while leaving v1 readable and fencing writes is safer than rolling the failure
   back with candidate work and accidentally presenting an expired lease as resumable.
+- Kiroku's v1 checkpoint relation exposes durable member rows but not expected member
+  topology. EP-2 therefore proves presence for every catalog-bound subscription and
+  floors all published members; it documents that a future topology contract would be
+  required to detect an absent member within an otherwise present subscription.
+- Upgrade safety requires an explicit `unmanaged` cursor basis. A missing private row
+  cannot be interpreted as inline append authority, so migration 0026 seeds every
+  existing group and catalog registration/adoption reconciles the derived basis.
+- EP-1's revision-wide live handler erased the catalog's delivery boundary. The command
+  path executes every serving-revision handler, and the async path later executes that
+  same list after claiming only one async dedup key. Jitsurei's async audit is therefore
+  updated by a post-promotion command without subscription delivery; idempotent upserts
+  hide the duplicate that a non-idempotent handler would expose.
+- EP-1's configured cutover timeout is installed after the promotion row lock and is a
+  PostgreSQL per-statement timeout. Because serving and staging relations are locked in
+  separate statements, several contended objects can multiply the promised deadline;
+  writer-fence acquisition is not locally bounded either.
+- Promotion-time async deduplication is collected after writers are fenced by scanning
+  from the slowest checkpoint through the captured head into one Haskell list. The
+  already-materialized list is then inserted in batches while all target relations are
+  exclusively locked, so checkpoint lag controls both memory and outage duration.
+- Application schema validation and revision verification currently run after target
+  relation locks, along with deduplication, checkpoint, and lease work. The architecture
+  requires expensive preparation before those locks whenever correctness permits; the
+  locked phase needs a smaller explicit contract.
 
 
 ## Decision Log
@@ -408,6 +477,24 @@ Relevant local decisions are:
   irreversible removal must still revalidate read-contract references, PostgreSQL
   dependencies, relation identity, and retired lifecycle without `CASCADE`.
   Date: 2026-08-13
+- Decision: Freeze status v1 as an owner-rights view over transactional authorities,
+  with ordered signature verification and separate behavioral tests.
+  Rationale: external roles need one grantable contract without private-schema access;
+  signature drift and semantic drift require complementary evidence.
+  Date: 2026-08-13
+- Decision: Add EP-5 as a mandatory fixing and adversarial release gate.
+  Rationale: review of completed EP-1 found a delivery-integrity bug, a non-global
+  timeout, unbounded promotion evidence, and excessive work under exclusive locks.
+  EP-2 through EP-4 are still being built, so their delivered code must receive the same
+  hostile concurrency, scale, privilege, upgrade, and recovery review before 0.12.0.0.
+  Date: 2026-08-13
+- Decision: EP-5 may start from EP-1 now, reviews EP-2 through EP-4 as rolling
+  integration dependencies, and blocks MasterPlan completion until no critical or
+  high-severity finding remains.
+  Rationale: immediate correction avoids building later contracts on a known-invalid
+  writer boundary, while commit-specific reviews avoid mistaking plan prose for
+  implementation evidence.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -422,11 +509,21 @@ renaming, a closed restricted-clone envelope, and dependency-aware retired-gener
 destruction. Jitsurei proves a genuinely incompatible three-target v1/v2 rebuild while
 v1 remains readable and writable, then atomically serves v2 and retains the three v1
 generations. The operator runbook and external runtime patterns are reconciled with the
-implementation. Final EP-1 evidence is 16 focused schema-versioned examples, 576 Keiro
-examples, 44 keiro-ops examples, 705 main DSL examples plus every conformance component,
-24 Jitsurei examples, 29 migration examples, 34 strict ADR concepts, a no-drift 39-entry
-corpus replay, and a passing `just verify`. EP-2 is now the next critical-path child;
-EP-4 remains available in parallel. Outcomes for EP-2 through EP-4 remain to be recorded.
+implementation. A subsequent adversarial review found that EP-1's delivery routing and
+bounded-cutover implementation do not yet satisfy those intended contracts under mixed
+inline/async delivery, multi-object contention, or large checkpoint lag. EP-5 now owns
+those corrections and the final review gate. Historical EP-1 evidence is 16 focused
+schema-versioned examples, 576 Keiro examples, 44 keiro-ops examples, 705 main DSL
+examples plus every conformance component, 24 Jitsurei examples, 29 migration examples,
+34 strict ADR concepts, a no-drift 39-entry corpus replay, and a passing `just verify`;
+those green suites did not cover the adversarial cases now required by plan 259. EP-2
+is also complete: it publishes the frozen 18-column owner-rights status relation,
+transactionally reconciled cursor authority, a typed accessor, and external-client
+lifecycle evidence without private Kiroku access. Its final gate adds 577 Keiro
+examples, 24 Jitsurei examples, 31 migration examples, 35 strict ADR concepts, and a
+passing `just verify`. EP-3 is now dependency-ready on the feature-delivery critical
+path; EP-4 and EP-5 remain independently available. Outcomes for EP-3 through EP-5
+remain to be recorded.
 
 
 ## Revision Note
@@ -452,3 +549,9 @@ Revised on 2026-08-14 after EP-1 completed. The registry and dependency graph no
 plan 256 complete and select EP-2 as the next critical-path child; the retrospective
 records the delivered rebuild/retirement protocol, external runtime-pattern updates,
 and final validation evidence.
+
+Revised on 2026-08-14 after an adversarial review of EP-1 and while EP-2 was in active
+implementation. Added plan 259 as EP-5, recorded the delivery-routing, deadline,
+deduplication-memory, and exclusive-lock findings, made corrective work immediately
+parallel with feature delivery, and made a commit-specific adversarial review of EP-2
+through EP-4 plus zero open critical/high findings mandatory before MasterPlan closure.
