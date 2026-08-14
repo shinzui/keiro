@@ -48,6 +48,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 import Data.UUID (UUID)
@@ -95,6 +96,7 @@ import Keiro.Projection.Catalog
     targetIdText,
   )
 import Keiro.Projection.Catalog qualified as Catalog
+import Keiro.ReadModel.External qualified as External
 import Keiro.ReadModel.Rebuild.Group
   ( RebuildRunId,
     groupPreparationFor,
@@ -200,6 +202,7 @@ data VersionedRebuildError
   | VersionedGenerationNotFound !TargetGenerationId
   | VersionedGenerationNotRetired !TargetGenerationId !VersionedGenerationLifecycle
   | VersionedRetiredDropBlocked !TargetGenerationId ![Text]
+  | VersionedExternalReadReconciliationFailed !RebuildRunId !External.ExternalReadReconciliationError
   deriving stock (Eq, Show, Generic)
 
 data VersionedGenerationLifecycle
@@ -1084,7 +1087,14 @@ promoteVersionedRebuildTx catalog runId contract redeliverySafety = do
                                                               )
                                                               finishVersionedPromotionGroupStmt
                                                           if promotedRun && promotedGroup
-                                                            then pure (Right ())
+                                                            then do
+                                                              externalReads <-
+                                                                External.reconcileExternalReadContractsForGroupsTx
+                                                                  catalog
+                                                                  (Just (Set.singleton (parseGroupId (run ^. #persistedGroupId))))
+                                                              case externalReads of
+                                                                Left err -> condemned (VersionedExternalReadReconciliationFailed runId err)
+                                                                Right () -> pure (Right ())
                                                             else condemned (VersionedPersistedLifecycleInvalid runId "promotion metadata transition lost its locked row")
   where
     insertDedupBatch batch =

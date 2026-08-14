@@ -48,7 +48,7 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
 - [x] (2026-08-14T03:56:13Z) M1: runtime read-contract declarations, version/shape/revision validation,
   canonical fingerprints, managed-object identity, and rolling-definition diagnostics
   are implemented and tested.
-- [ ] M2: migration and registration reconciliation install the stable guard,
+- [x] (2026-08-14T04:30:59Z) M2: migration and registration reconciliation install the stable guard,
   per-contract private bindings, generated all-row/keyed wrappers, explicit SQLSTATEs,
   secure privileges, and race-proof database tests without schema-wide drop/recreate.
 - [ ] M3: candidate language-5 all-row contract syntax, parser/pretty/lowering/diff,
@@ -85,6 +85,10 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   type because PostgreSQL binds that signature to the table OID that promotion retires.
   Both all-row and keyed contracts therefore name a stable result composite type; the
   physical binding remains private and replaceable.
+- PostgreSQL rejects `SELECT ... FOR SHARE` inside a read-only transaction. Because the
+  guard's shared row lock is what closes the authorization/cutover race, callers must
+  use an ordinary read-write transaction even though the public function only returns
+  rows.
 
 
 ## Decision Log
@@ -144,6 +148,10 @@ It hard-depends on plan 256's revision/generation model and plan 254's stable
   identity/version, compatibility set, and surface generation are durable owning-slice
   facts under ADR-32 and cannot be added under the old prefix.
   Date: 2026-08-14
+- Decision: Require external reads to run in a read-write PostgreSQL transaction.
+  Rationale: PostgreSQL forbids the guard's `FOR SHARE` lifecycle lock in a read-only
+  transaction, and removing the lock would reintroduce the authorization/cutover race.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -152,9 +160,15 @@ Architecture review changed the plan from a guard-plus-public-view convention in
 privilege-enforced, versioned function contract. Milestone 1 is complete: the validated
 catalog now owns full all-row/keyed declarations, stable SQL result signatures,
 deterministic diagnostics, evolution inventory, and `catalog-v5`/`slice-v4` identity.
-The focused evidence is 24 catalog examples, 7 canonical-preimage examples, a complete
-workspace build, and strict validation of 35 ADR concepts. Database reconciliation,
-language-5 syntax, cutover integration, and final release evidence remain.
+Milestone 1 evidence was 24 catalog examples, 7 canonical-preimage examples, a complete
+workspace build, and strict validation of 35 ADR concepts. Milestone 2 now adds native
+migration 0027, transactionally reconciled all-row and keyed wrappers, monotonic managed
+object metadata, explicit dependency-previewed retirement, and the fixed shared-lock
+guard. The migration suite passes 32 examples and the focused PostgreSQL suite passes
+three end-to-end scenarios covering lifecycle SQLSTATEs, cutover locking, least
+privilege, injection resistance, rolling downgrade refusal, dependency survival, and a
+selective keyed index plan. Language-5 syntax, final cutover fixtures, documentation,
+ADR reconciliation, and release evidence remain.
 
 
 ## Context and Orientation
@@ -467,3 +481,10 @@ Revised 2026-08-14 after Milestone 1 implementation. The runtime contract now gi
 both access modes a stable qualified result type, replaces EP-1's placeholder revision
 edge with the complete validated declaration, and records the required
 `catalog-v5`/`slice-v4` canonical identity cutover.
+
+Revised 2026-08-14 after Milestone 2 implementation. Native migration 0027 now owns the
+fixed guard and private registries; registration, adoption, and promotion reconcile
+execute-only wrappers transactionally, and focused database evidence covers lifecycle,
+security, rolling-generation, dependency, locking, and keyed-query behavior. The guard's
+shared lock also makes a read-write caller transaction an explicit operational
+requirement.

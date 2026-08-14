@@ -44,8 +44,17 @@ lintViolations config sources =
 
     searchPathViolation file body =
       [ "migration body mentions search_path: " <> Text.pack file
-      | "search_path" `Text.isInfixOf` Text.toCaseFold (stripCommentLines body)
+      | let normalized = Text.toCaseFold (stripCommentLines body),
+        "search_path" `Text.isInfixOf` normalized,
+        not (onlyHardenedSearchPathClauses normalized)
       ]
+
+    onlyHardenedSearchPathClauses body =
+      "search_path" `Text.isInfixOf` body
+        && not
+          ( "search_path"
+              `Text.isInfixOf` Text.replace "set search_path = pg_catalog" "" body
+          )
 
     statementViolations file statement =
       case statementTarget statement of

@@ -18,6 +18,27 @@ column	keiro_dead_letters.error_detail	text not null
 column	keiro_dead_letters.source_event_id	uuid not null
 column	keiro_dead_letters.source_global_position	bigint not null
 column	keiro_dead_letters.target_stream_name	text not null
+column	keiro_external_read_contracts.argument_names	text[] not null default ARRAY[]::text[]
+column	keiro_external_read_contracts.argument_types	text[] not null default ARRAY[]::text[]
+column	keiro_external_read_contracts.compatible_revision_ids	text[] not null
+column	keiro_external_read_contracts.contract_id	text not null
+column	keiro_external_read_contracts.contract_kind	text not null
+column	keiro_external_read_contracts.contract_version	integer not null
+column	keiro_external_read_contracts.created_at	timestamp with time zone not null default now()
+column	keiro_external_read_contracts.definition_hash	text not null
+column	keiro_external_read_contracts.group_id	text not null
+column	keiro_external_read_contracts.immutable_signature_hash	text not null
+column	keiro_external_read_contracts.private_implementation	text
+column	keiro_external_read_contracts.private_implementation_version	integer
+column	keiro_external_read_contracts.public_function_name	text not null
+column	keiro_external_read_contracts.query_model_id	text not null
+column	keiro_external_read_contracts.result_shape_hash	text not null
+column	keiro_external_read_contracts.result_type	text not null
+column	keiro_external_read_contracts.retired_at	timestamp with time zone
+column	keiro_external_read_contracts.serving_shape_hash	text
+column	keiro_external_read_contracts.state	text not null
+column	keiro_external_read_contracts.surface_generation	integer not null
+column	keiro_external_read_contracts.updated_at	timestamp with time zone not null default now()
 column	keiro_inbox.attempt_count	bigint not null default 0
 column	keiro_inbox.attributes	jsonb
 column	keiro_inbox.causation_id	uuid
@@ -48,6 +69,19 @@ column	keiro_inbox.source_global_position	bigint
 column	keiro_inbox.status	text not null default 'processing'::text
 column	keiro_inbox.traceparent	text
 column	keiro_inbox.tracestate	text
+column	keiro_managed_read_objects.contract_id	text
+column	keiro_managed_read_objects.contract_version	integer
+column	keiro_managed_read_objects.created_at	timestamp with time zone not null default now()
+column	keiro_managed_read_objects.definition_hash	text not null
+column	keiro_managed_read_objects.managed_by	text not null
+column	keiro_managed_read_objects.object_kind	text not null
+column	keiro_managed_read_objects.object_name	text not null
+column	keiro_managed_read_objects.object_schema	text not null
+column	keiro_managed_read_objects.object_signature	text not null default ''::text
+column	keiro_managed_read_objects.retired_at	timestamp with time zone
+column	keiro_managed_read_objects.state	text not null
+column	keiro_managed_read_objects.surface_generation	integer not null
+column	keiro_managed_read_objects.updated_at	timestamp with time zone not null default now()
 column	keiro_outbox.attempt_count	bigint not null default 0
 column	keiro_outbox.attributes	jsonb
 column	keiro_outbox.causation_id	uuid
@@ -273,6 +307,31 @@ constraint	keiro_dead_letters.keiro_dead_letters_pkey	PRIMARY KEY (dead_letter_i
 constraint	keiro_dead_letters.keiro_dead_letters_source_event_id_not_null	NOT NULL source_event_id
 constraint	keiro_dead_letters.keiro_dead_letters_source_global_position_not_null	NOT NULL source_global_position
 constraint	keiro_dead_letters.keiro_dead_letters_target_stream_name_not_null	NOT NULL target_stream_name
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_argument_names_not_null	NOT NULL argument_names
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_argument_types_not_null	NOT NULL argument_types
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_compatible_revision_ids_not_null	NOT NULL compatible_revision_ids
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_contract_id_not_null	NOT NULL contract_id
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_contract_kind_not_null	NOT NULL contract_kind
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_contract_version_not_null	NOT NULL contract_version
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_created_at_not_null	NOT NULL created_at
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_definition_hash_not_null	NOT NULL definition_hash
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_group_id_fkey	FOREIGN KEY (group_id) REFERENCES keiro.keiro_projection_rebuild_groups(group_id)
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_group_id_not_null	NOT NULL group_id
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_identity_chk	CHECK (((length(contract_id) > 0) AND (contract_version > 0) AND (length(query_model_id) > 0) AND (length(group_id) > 0) AND (length(public_function_name) > 0) AND (length(result_type) > 0) AND (length(result_shape_hash) > 0) AND (length(immutable_signature_hash) > 0) AND (length(definition_hash) > 0) AND (surface_generation > 0) AND (cardinality(compatible_revision_ids) > 0) AND (array_position(compatible_revision_ids, NULL::text) IS NULL) AND (array_position(argument_names, NULL::text) IS NULL) AND (array_position(argument_types, NULL::text) IS NULL) AND (cardinality(argument_names) = cardinality(argument_types))))
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_immutable_signature_hash_not_null	NOT NULL immutable_signature_hash
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_implementation_chk	CHECK ((((contract_kind = 'all-rows'::text) AND (cardinality(argument_names) = 0) AND (private_implementation IS NULL) AND (private_implementation_version IS NULL)) OR ((contract_kind = 'keyed'::text) AND (cardinality(argument_names) > 0) AND (private_implementation IS NOT NULL) AND (length(private_implementation) > 0) AND (private_implementation_version > 0))))
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_kind_chk	CHECK ((contract_kind = ANY (ARRAY['all-rows'::text, 'keyed'::text])))
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_pkey	PRIMARY KEY (contract_id, contract_version)
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_public_function_name_argument_key	UNIQUE (public_function_name, argument_types)
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_public_function_name_not_null	NOT NULL public_function_name
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_query_model_id_not_null	NOT NULL query_model_id
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_result_shape_hash_not_null	NOT NULL result_shape_hash
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_result_type_not_null	NOT NULL result_type
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_retired_chk	CHECK ((((state = 'retired'::text) AND (retired_at IS NOT NULL)) OR ((state <> 'retired'::text) AND (retired_at IS NULL))))
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_state_chk	CHECK ((state = ANY (ARRAY['candidate'::text, 'active'::text, 'pending-retirement'::text, 'retired'::text])))
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_state_not_null	NOT NULL state
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_surface_generation_not_null	NOT NULL surface_generation
+constraint	keiro_external_read_contracts.keiro_external_read_contracts_updated_at_not_null	NOT NULL updated_at
 constraint	keiro_inbox.keiro_inbox_attempt_count_not_null	NOT NULL attempt_count
 constraint	keiro_inbox.keiro_inbox_content_type_not_null	NOT NULL content_type
 constraint	keiro_inbox.keiro_inbox_dedupe_key_not_null	NOT NULL dedupe_key
@@ -281,6 +340,23 @@ constraint	keiro_inbox.keiro_inbox_pkey	PRIMARY KEY (source, dedupe_key)
 constraint	keiro_inbox.keiro_inbox_received_at_not_null	NOT NULL received_at
 constraint	keiro_inbox.keiro_inbox_source_not_null	NOT NULL source
 constraint	keiro_inbox.keiro_inbox_status_not_null	NOT NULL status
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_contract_id_contract_version_fkey	FOREIGN KEY (contract_id, contract_version) REFERENCES keiro.keiro_external_read_contracts(contract_id, contract_version)
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_created_at_not_null	NOT NULL created_at
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_definition_hash_not_null	NOT NULL definition_hash
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_identity_chk	CHECK (((length(object_schema) > 0) AND (length(object_name) > 0) AND (length(object_kind) > 0) AND (length(managed_by) > 0) AND (length(definition_hash) > 0) AND (surface_generation > 0) AND (((contract_id IS NULL) AND (contract_version IS NULL)) OR ((contract_id IS NOT NULL) AND (contract_version IS NOT NULL)))))
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_kind_chk	CHECK ((object_kind = ANY (ARRAY['guard-function'::text, 'binding-view'::text, 'wrapper-function'::text, 'contract-type'::text])))
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_managed_by_not_null	NOT NULL managed_by
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_object_kind_not_null	NOT NULL object_kind
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_object_name_not_null	NOT NULL object_name
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_object_schema_not_null	NOT NULL object_schema
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_object_signature_not_null	NOT NULL object_signature
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_owner_chk	CHECK ((managed_by = ANY (ARRAY['keiro'::text, 'consumer'::text])))
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_pkey	PRIMARY KEY (object_schema, object_name, object_kind, object_signature)
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_retired_chk	CHECK ((((state = 'retired'::text) AND (retired_at IS NOT NULL)) OR ((state <> 'retired'::text) AND (retired_at IS NULL))))
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_state_chk	CHECK ((state = ANY (ARRAY['active'::text, 'pending-retirement'::text, 'retired'::text])))
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_state_not_null	NOT NULL state
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_surface_generation_not_null	NOT NULL surface_generation
+constraint	keiro_managed_read_objects.keiro_managed_read_objects_updated_at_not_null	NOT NULL updated_at
 constraint	keiro_outbox.keiro_outbox_attempt_count_not_null	NOT NULL attempt_count
 constraint	keiro_outbox.keiro_outbox_content_type_not_null	NOT NULL content_type
 constraint	keiro_outbox.keiro_outbox_created_at_not_null	NOT NULL created_at
@@ -496,9 +572,14 @@ index	keiro_awakeables_pkey	CREATE UNIQUE INDEX keiro_awakeables_pkey ON keiro.k
 index	keiro_dead_letters_dispatcher_created_at_idx	CREATE INDEX keiro_dead_letters_dispatcher_created_at_idx ON keiro.keiro_dead_letters USING btree (dispatcher_name, created_at DESC)
 index	keiro_dead_letters_dispatcher_name_source_event_id_emit_ind_key	CREATE UNIQUE INDEX keiro_dead_letters_dispatcher_name_source_event_id_emit_ind_key ON keiro.keiro_dead_letters USING btree (dispatcher_name, source_event_id, emit_index)
 index	keiro_dead_letters_pkey	CREATE UNIQUE INDEX keiro_dead_letters_pkey ON keiro.keiro_dead_letters USING btree (dead_letter_id)
+index	keiro_external_read_contracts_group_idx	CREATE INDEX keiro_external_read_contracts_group_idx ON keiro.keiro_external_read_contracts USING btree (group_id, state)
+index	keiro_external_read_contracts_pkey	CREATE UNIQUE INDEX keiro_external_read_contracts_pkey ON keiro.keiro_external_read_contracts USING btree (contract_id, contract_version)
+index	keiro_external_read_contracts_public_function_name_argument_key	CREATE UNIQUE INDEX keiro_external_read_contracts_public_function_name_argument_key ON keiro.keiro_external_read_contracts USING btree (public_function_name, argument_types)
 index	keiro_inbox_backlog_idx	CREATE INDEX keiro_inbox_backlog_idx ON keiro.keiro_inbox USING btree (status) WHERE (status = ANY (ARRAY['processing'::text, 'failed'::text]))
 index	keiro_inbox_completed_idx	CREATE INDEX keiro_inbox_completed_idx ON keiro.keiro_inbox USING btree (completed_at) WHERE (status = 'completed'::text)
 index	keiro_inbox_pkey	CREATE UNIQUE INDEX keiro_inbox_pkey ON keiro.keiro_inbox USING btree (source, dedupe_key)
+index	keiro_managed_read_objects_contract_idx	CREATE INDEX keiro_managed_read_objects_contract_idx ON keiro.keiro_managed_read_objects USING btree (contract_id, contract_version)
+index	keiro_managed_read_objects_pkey	CREATE UNIQUE INDEX keiro_managed_read_objects_pkey ON keiro.keiro_managed_read_objects USING btree (object_schema, object_name, object_kind, object_signature)
 index	keiro_outbox_claim_order_idx	CREATE INDEX keiro_outbox_claim_order_idx ON keiro.keiro_outbox USING btree (created_at, outbox_id) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))
 index	keiro_outbox_head_of_line_idx	CREATE INDEX keiro_outbox_head_of_line_idx ON keiro.keiro_outbox USING btree (source, message_key, created_at) WHERE ((status <> ALL (ARRAY['sent'::text, 'dead'::text])) AND (message_key IS NOT NULL))
 index	keiro_outbox_pending_idx	CREATE INDEX keiro_outbox_pending_idx ON keiro.keiro_outbox USING btree (status, next_attempt_at, created_at)
@@ -546,7 +627,9 @@ index	keiro_workflows_gc_idx	CREATE INDEX keiro_workflows_gc_idx ON keiro.keiro_
 index	keiro_workflows_pkey	CREATE UNIQUE INDEX keiro_workflows_pkey ON keiro.keiro_workflows USING btree (workflow_id, workflow_name)
 table	keiro_awakeables	kind=r
 table	keiro_dead_letters	kind=r
+table	keiro_external_read_contracts	kind=r
 table	keiro_inbox	kind=r
+table	keiro_managed_read_objects	kind=r
 table	keiro_outbox	kind=r
 table	keiro_projection_dedup	kind=r
 table	keiro_projection_group_cursors	kind=r

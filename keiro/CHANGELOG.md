@@ -12,6 +12,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   including validated query/shape/revision compatibility, immutable SQL signatures,
   application-owned keyed implementation identity, and monotonic surface generations.
   Canonical identity advances to `catalog-v5:` and `slice-v4:`.
+- `Keiro.ReadModel.External` reconciles those declarations into execute-only,
+  security-definer functions in `keiro_read`, backed by private managed bindings and a
+  lifecycle guard with stable `KR001`/`KR002`/`KR003` SQLSTATEs. Registration,
+  reviewed adoption, and versioned promotion perform the reconciliation in their own
+  transaction; retirement is explicit and dependency/grant previewed.
 - `ProjectionGroupStatusV1`, `ServingPositionBasis`,
   `listProjectionGroupStatuses`, and `lookupProjectionGroupStatus` decode the frozen
   public SQL status contract. Catalog registration and reviewed adoption now reconcile

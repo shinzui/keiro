@@ -660,7 +660,8 @@ runtimeBridgeCatalog =
     { projectionRevisions =
         [ runtimeRevision "v1" bridgeRevisionV1,
           runtimeRevision "v2" bridgeRevisionV2
-        ]
+        ],
+      externalReadContracts = []
     }
 
 runtimeV1OnlyCatalog :: ProjectionCatalog

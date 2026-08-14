@@ -14,6 +14,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Added
 
+- Migration `0027.sql` adds private external-read contract and managed-object
+  registries plus the fixed `keiro_read.guard_external_read_v1` security-definer
+  guard. The guard takes a shared lifecycle lock, consumes persisted
+  `reads_allowed` and serving compatibility, revokes `PUBLIC`, and raises stable
+  `KR001`, `KR002`, or `KR003` SQLSTATEs.
 - Migration `0026.sql` publishes the frozen, owner-rights
   `keiro_read.projection_group_status_v1` relation and private derived cursor authority.
   The PostgreSQL 18 schema verifier now fingerprints ordered public-view column

@@ -54,7 +54,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
   describe "native Keiro migration definition" $ do
-    it "tracks twenty-six native files in manifest order" $ do
+    it "tracks twenty-seven native files in manifest order" $ do
       directory <- findMigrationsDirectory
       manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
       manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -67,7 +67,7 @@ main = hspec $ do
         bytes <- ByteString.readFile (directory </> nativeName)
         lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-    it "builds component keiro with dependency kiroku and twenty-six migrations" $ do
+    it "builds component keiro with dependency kiroku and twenty-seven migrations" $ do
       plan <- requirePlan
       let PlanDescription components = planDescription plan
       case toList components of
@@ -80,7 +80,7 @@ main = hspec $ do
             componentNameText keiroName `shouldBe` "keiro"
             dependencyName <- requireRight (componentName "kiroku")
             keiroDependencies `shouldBe` Set.singleton dependencyName
-            length keiroEntries `shouldBe` 26
+            length keiroEntries `shouldBe` 27
         actual -> expectationFailure ("unexpected plan description: " <> show actual)
       validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -148,6 +148,15 @@ main = hspec $ do
         [("9999-fixture.sql", "SET search_path TO keiro;")]
         `shouldSatisfy` (not . null)
 
+    it "accepts a fixed pg_catalog search path on a security-definer function" $ do
+      lintViolations
+        config
+        [ ( "9999-fixture.sql",
+            "CREATE FUNCTION keiro_read.safe_v1() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT';"
+          )
+        ]
+        `shouldBe` []
+
     it "accepts a versioned view in the public read schema" $ do
       lintViolations
         config
@@ -160,7 +169,7 @@ main = hspec $ do
         [("9999-fixture.sql", "-- Never set search_path in a migration.\nSELECT 1;")]
         `shouldBe` []
 
-    it "passes all 26 embedded native bodies" $ do
+    it "passes all 27 embedded native bodies" $ do
       lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
 
   describe "startup handshake" $ do
@@ -174,7 +183,7 @@ main = hspec $ do
             plan
             >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
-        length (Keiro.pendingMigrations handshake) `shouldBe` 36
+        length (Keiro.pendingMigrations handshake) `shouldBe` 37
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -200,7 +209,7 @@ main = hspec $ do
         handshake <-
           missingMigrations defaultRunOptions provider plan >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` drop 10 (planMigrationIds plan)
-        length (Keiro.pendingMigrations handshake) `shouldBe` 26
+        length (Keiro.pendingMigrations handshake) `shouldBe` 27
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -283,12 +292,12 @@ main = hspec $ do
         assertSchema connection
         let provider = providerFor connection
         rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 36 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 37 AlreadyApplied
         verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
         case verified of
           VerificationReport verificationIssues applied pending unknown -> do
             verificationIssues `shouldBe` []
-            length applied `shouldBe` 36
+            length applied `shouldBe` 37
             pending `shouldBe` []
             unknown `shouldBe` []
       either (expectationFailure . show) pure result
@@ -337,7 +346,7 @@ main = hspec $ do
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
         sort [reportOutcomes first, reportOutcomes second]
-          `shouldBe` sort [replicate 36 AppliedNow, replicate 36 AlreadyApplied]
+          `shouldBe` sort [replicate 37 AppliedNow, replicate 37 AlreadyApplied]
 
     it "upgrades singleton read-model rows into deterministic rebuild groups" $ do
       fullPlan <- requirePlan
@@ -356,7 +365,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script legacyReadModelFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 31 (reportOutcomes report) `shouldBe` replicate 5 AppliedNow
+        Prelude.drop 31 (reportOutcomes report) `shouldBe` replicate 6 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () legacyGroupUpgradeStatement)
           rows
@@ -382,7 +391,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script preCanonicalRebuildFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 33 (reportOutcomes report) `shouldBe` replicate 3 AppliedNow
+        Prelude.drop 33 (reportOutcomes report) `shouldBe` replicate 4 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () preCanonicalRebuildShapeStatement)
           rows
@@ -551,7 +560,7 @@ main = hspec $ do
           `shouldBe` replicate 7 AlreadyApplied
             <> replicate 3 AppliedNow
             <> replicate 16 AlreadyApplied
-            <> replicate 10 AppliedNow
+            <> replicate 11 AppliedNow
 
         verifiedAfterUp <-
           verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
@@ -854,12 +863,12 @@ importFixture sourceSchema = do
       `shouldBe` replicate 7 AlreadyApplied
         <> replicate 3 AppliedNow
         <> replicate 16 AlreadyApplied
-        <> replicate 10 AppliedNow
+        <> replicate 11 AppliedNow
     verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
     case verifiedAfterCanaries of
       VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
     rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-    reportOutcomes rerun `shouldBe` replicate 36 AlreadyApplied
+    reportOutcomes rerun `shouldBe` replicate 37 AlreadyApplied
     second <-
       importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
         >>= requireRight
@@ -869,7 +878,7 @@ importFixture sourceSchema = do
       sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
       sourceRows `shouldBe` 23
       facts <- useSession connection (Session.statement () importFactsStatement)
-      facts `shouldBe` (36, 23, True)
+      facts `shouldBe` (37, 23, True)
 
 postCoddImportPendingIssues :: IO [VerificationIssue]
 postCoddImportPendingIssues =
@@ -891,7 +900,8 @@ postCoddImportPendingIssues =
         ("keiro", "0023"),
         ("keiro", "0024"),
         ("keiro", "0025"),
-        ("keiro", "0026")
+        ("keiro", "0026"),
+        ("keiro", "0027")
       ]
 
 assertPoisonedLedger :: Settings.Settings -> Expectation
@@ -930,7 +940,8 @@ nativeMigrationFiles =
     "0023.sql",
     "0024.sql",
     "0025.sql",
-    "0026.sql"
+    "0026.sql",
+    "0027.sql"
   ]
 
 findMigrationsDirectory :: IO FilePath

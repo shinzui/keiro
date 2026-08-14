@@ -90,6 +90,7 @@ import Keiro.Projection.Catalog
     replayAdapterMetadata,
   )
 import Keiro.Projection.Catalog qualified as Catalog
+import Keiro.ReadModel.External qualified as External
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Subscription.Checkpoint
   ( SubscriptionCheckpointResetReport (..),
@@ -170,6 +171,7 @@ data CatalogRegistrationError
   | RegisteredGroupStaleFingerprint !RebuildGroupId !Text
   | RegisteredQueryModelDrift !Text !Text
   | RegisteredQueryModelNotLive !Text
+  | RegisteredExternalReadContract !External.ExternalReadReconciliationError
   deriving stock (Eq, Show, Generic)
 
 data GroupAdoptionClass
@@ -219,6 +221,7 @@ data CatalogAdoptionError
   = AdoptGroupNotInCatalog !RebuildGroupId
   | AdoptGroupUnregistered !RebuildGroupId
   | AdoptGroupNotLive !RebuildGroupId !GroupLifecycleStatus !(Maybe RebuildRunId)
+  | AdoptExternalReadContract !External.ExternalReadReconciliationError
   deriving stock (Eq, Show, Generic)
 
 data RebuildStartError
@@ -353,8 +356,12 @@ registerProjectionCatalogTx catalog = do
           case queriesResult of
             Left err -> Tx.condemn $> Left err
             Right () -> do
-              Tx.statement () deleteOrphanLegacyGroupsStmt
-              pure (Right (List.sortOn (rebuildGroupIdText . (^. #rebuildGroupId)) groups))
+              externalReads <- External.reconcileExternalReadContractsTx catalog
+              case externalReads of
+                Left err -> Tx.condemn $> Left (RegisteredExternalReadContract err)
+                Right () -> do
+                  Tx.statement () deleteOrphanLegacyGroupsStmt
+                  pure (Right (List.sortOn (rebuildGroupIdText . (^. #rebuildGroupId)) groups))
   where
     groupIds = (^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups)
     revisionRegistrations =
@@ -574,15 +581,22 @@ adoptCatalogGroups catalog requested =
                   ]
           unless (null orphaned)
             $ Tx.statement ((^. #registryName) <$> orphaned) deleteQueryRegistrationsStmt
-          updated <- traverse (\groupId -> Tx.statement (rebuildGroupIdText groupId) lookupGroupStmt) groupIds
-          pure
-            ( Right
-                CatalogAdoptionResult
-                  { adoptedGroups = [metadata | Just metadata <- updated],
-                    registrationOutcomes = registrationResults,
-                    removedOrphans = orphaned
-                  }
-            )
+          externalReads <-
+            External.reconcileExternalReadContractsForGroupsTx
+              catalog
+              (Just namedGroupSet)
+          case externalReads of
+            Left err -> Tx.condemn $> Left (AdoptExternalReadContract err)
+            Right () -> do
+              updated <- traverse (\groupId -> Tx.statement (rebuildGroupIdText groupId) lookupGroupStmt) groupIds
+              pure
+                ( Right
+                    CatalogAdoptionResult
+                      { adoptedGroups = [metadata | Just metadata <- updated],
+                        registrationOutcomes = registrationResults,
+                        removedOrphans = orphaned
+                      }
+                )
 
     reconcileRegistration lockedGroups registration = do
       existing <- Tx.statement (registration ^. #registryName) lookupQueryRegistrationStmt

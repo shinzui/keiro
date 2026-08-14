@@ -63,6 +63,7 @@ library
     Keiro.Projection.Catalog.Operations
     Keiro.Projection.Catalog.Preimage
     Keiro.ReadModel
+    Keiro.ReadModel.External
     Keiro.ReadModel.Rebuild
     Keiro.ReadModel.Schema
     Keiro.ReplayAudit
@@ -165,6 +166,7 @@ test-suite keiro-test
     CatalogOperationsSpec
     CatalogSpec
     Compatibility.ReadModel011
+    ExternalReadSpec
     GroupRebuildSpec
     PreCanonicalRecoverySpec
     PreimageSpec

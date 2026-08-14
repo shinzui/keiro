@@ -35,6 +35,7 @@ import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Exception qualified as EffException
+import ExternalReadSpec qualified
 import GHC.Conc (ThreadStatus (..), threadStatus)
 import GroupRebuildSpec qualified
 import Hasql.Decoders qualified as D
@@ -402,6 +403,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogEvolutionSpec.spec fixture
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
+  ExternalReadSpec.spec fixture
   VersionedTargetPostgresSpec.spec fixture
   VersionedRebuildSpec.spec fixture
   PreCanonicalRecoverySpec.spec fixture
