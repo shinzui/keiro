@@ -54,8 +54,9 @@ This is EP-4 of
   database-backed results without duplicating the runner.
 - [x] (2026-08-14T06:53:09Z) M4: `keiro-ops rebuild reproject-stream` implements read-only preview and
   `--force` execution with human and JSON output.
-- [ ] M5: documentation, ADR reconciliation, changelogs, Jitsurei transcript,
-  `just verify`, and MasterPlan status updates are complete.
+- [x] (2026-08-14T07:45:54Z) M5: documentation, ADR reconciliation, changelogs,
+  Jitsurei transcript, a clean committed-corpus `just verify`, and MasterPlan status
+  updates are complete.
 
 
 ## Surprises & Discoveries
@@ -169,9 +170,12 @@ ordinary async redelivery evidence, and the stream guard precedes the group fenc
 match command writers' append-first order.
 
 Focused catalog, runtime, operations, DSL projection-catalog, and Jitsurei tests pass.
-The complete `just verify` run passed every executable suite and strict OKF validation;
-its final corpus policy correctly required the regenerated projection-catalog fixture to
-be committed before the clean-tree rerun recorded by M5.
+The final committed-corpus acceptance command,
+`JITSUREI_DATABASE=keiro_verify_mp41_ep4c_20260814 just verify`, passed 595 core,
+58 PGMQ with two documented pending environment cases, 46 operations, 706 main DSL,
+24 Jitsurei, and 32 migration examples; every DSL conformance executable, diagram
+check, strict ADR/research/capability validation, repository policy, and the 39-entry
+no-drift conformance-corpus replay also passed.
 
 
 ## Context and Orientation
@@ -474,3 +478,8 @@ Revised again on 2026-08-13 after Kiroku implemented IR-6 and published the pack
 Keiro requires. The exact 0.7.0.0 stream-guard APIs and 0.3.2.0 companion migration are
 recorded, the Kiroku `decodeHook` boundary is explicit, and the external prerequisite is
 marked complete.
+
+Revised on 2026-08-14 after implementation and acceptance. The delivered protocol
+orders the stream guard before the group fence to match append-first writers, keeps
+deduplication preparation page-bounded inside the repair transaction, and passes the
+complete committed-corpus repository verification gate.

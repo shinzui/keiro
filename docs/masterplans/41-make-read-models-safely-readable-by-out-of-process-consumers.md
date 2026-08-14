@@ -128,8 +128,8 @@ in the child plans.
 | 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | Complete |
 | 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Complete |
 | 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Complete |
-| 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | In Progress |
-| 5 | Adversarially review and harden read-model release safety | docs/plans/259-adversarially-review-and-harden-read-model-release-safety.md | EP-1 | Rolling integration with EP-2, EP-3, and EP-4; final gate waits for all three | Not Started |
+| 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Complete |
+| 5 | Adversarially review and harden read-model release safety | docs/plans/259-adversarially-review-and-harden-read-model-release-safety.md | EP-1 | Rolling integration with EP-2, EP-3, and EP-4; final gate waits for all three | In Progress |
 
 Status values are Not Started, In Progress, Complete, and Cancelled. Registry numbers
 define the EP labels used in this MasterPlan; filenames keep their existing stable plan
@@ -297,10 +297,12 @@ Relevant local decisions are:
   view grants, application keyed-function integration, security and concurrency tests.
 - [x] (2026-08-14T06:11:25Z) EP-3 (255) M3-M4: candidate language-5 surface, dependency-aware object
   reconciliation, documentation, ADR, adoption evidence, and full verification.
-- [ ] EP-4 (257) M1-M2: stream-scoped policy and one-transaction repair with explicit
-  truncation refusal, group writer pause, and transactional deduplication backfill.
-- [ ] EP-4 (257) M3-M5: operations wrappers, two-phase CLI, concurrency tests,
-  documentation, ADR reconciliation, changelogs, and full verification.
+- [x] (2026-08-14T06:53:09Z) EP-4 (257) M1-M2: stream-scoped policy and one-transaction
+  repair with explicit truncation refusal, group writer pause, and transactional
+  deduplication backfill.
+- [x] (2026-08-14T07:45:54Z) EP-4 (257) M3-M5: operations wrappers, two-phase CLI,
+  concurrency tests, documentation, ADR reconciliation, changelogs, and full
+  committed-corpus verification.
 - [ ] EP-5 (259) M1-M2: restore delivery-scoped revision dispatch and implement a true
   overall promotion deadline with staged, bounded deduplication preparation and a
   minimal exclusive-lock phase.
@@ -529,8 +531,16 @@ retired versions, and survive rolling registrations without schema-wide replacem
 Candidate Language 5, operations, ADR-36, Jitsurei, user guidance, runtime patterns, and
 the requesting consumer's plan all consume the shipped ABI. Its repeated isolated gate
 passed 586 core, 58 PGMQ, 44 operations, 706 main DSL, 24 Jitsurei, and 32 migration
-examples plus every repository policy check. EP-4 is now active; EP-5 remains the final
-adversarial gate. Outcomes for EP-4 and EP-5 remain to be recorded.
+examples plus every repository policy check.
+
+EP-4 is complete: explicit stream-owned catalog contracts drive a single-transaction
+repair under stream-then-group locking, refuse incomplete history and unavailable
+serving code, backfill async deduplication evidence, and expose database-backed preview
+and forced execution through the embedded CLI. Its clean acceptance gate passed 595
+core, 58 PGMQ with two documented pending cases, 46 operations, 706 main DSL, 24
+Jitsurei, and 32 migration examples plus every conformance executable, strict OKF and
+repository policy, and the 39-entry no-drift corpus replay. EP-5 is now the sole active
+and final adversarial gate.
 
 
 ## Revision Note
@@ -566,3 +576,8 @@ through EP-4 plus zero open critical/high findings mandatory before MasterPlan c
 Revised on 2026-08-14 after EP-3 completed. The registry now selects EP-4, the progress
 ledger records the guarded SQL-contract milestones, and the retrospective captures the
 isolated release gate plus durable runtime-pattern and consumer-plan updates.
+
+Revised on 2026-08-14 after EP-4 completed. The registry now selects EP-5, the progress
+ledger records targeted-repair delivery and the committed-corpus acceptance run, and
+the retrospective captures the stream-first lock order, deduplication backfill, and
+operator surface now subject to the final adversarial gate.
