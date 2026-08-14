@@ -8,12 +8,15 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.6 && <0.7`. The independent
-  `kiroku-store-migrations ^>=0.3.0.0` dependency is unchanged because the
-  explicit checkpoint lifecycle, reset API, and visible-head query add no
-  Kiroku schema migration.
+- Requires `kiroku-store >=0.7 && <0.8` and
+  `kiroku-store-migrations ^>=0.3.2.0`. Kiroku migration `0010` supplies the renewable
+  history-retention lease required by online replay.
 
 ### Added
+
+- Migration `0025.sql` persists projection revisions, target generations, serving
+  epochs and availability, versioned run/cutover policy, relation/schema evidence,
+  promotion-object mappings, replay-source progress, and Kiroku retention handles.
 
 - Migration `0024.sql` renames projection rebuild group
   `catalog_fingerprint` to `slice_fingerprint` and records

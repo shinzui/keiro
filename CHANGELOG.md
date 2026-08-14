@@ -29,11 +29,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   snapshot, and behavior-key identities remain stable.
 - **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
   **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
-  `kiroku-store >=0.6 && <0.7`. Kiroku 0.5 adds explicit missing-checkpoint
-  policy and the public transaction-composable checkpoint reset operation;
-  Kiroku 0.6 adds the public visible-global-head query used by consistency
-  waits. Exhaustive third-party interpreters and direct constructors must adopt
-  both effect-surface changes.
+  `kiroku-store >=0.7 && <0.8`; migration consumers require
+  `kiroku-store-migrations ^>=0.3.2.0`. In addition to the 0.5 checkpoint and
+  0.6 visible-head surfaces, Kiroku 0.7 supplies the renewable history-retention
+  lease used to protect schema-versioned replay and cutover.
 - **keiro-dsl**: candidate language 5 extends the exported semantic graph with
   projection target, rebuild group, and projection owner nodes and adds catalog
   bindings to `ReadModelNode`. `DiagnosticCode` gains the corresponding
@@ -59,6 +58,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   remains.
 
 ### New Features
+
+- **keiro**: add online schema-versioned projection rebuilds. Catalog revisions bind
+  application provisioners, schema evidence, physical-target-parametric live/replay
+  handlers, verification, and canonical promotion-object names. Keiro persists target
+  generations and serving epochs, keeps V1 readable and writable during converging V2
+  replay, protects history with a renewable Kiroku lease, reconciles async dedup and
+  checkpoints, and atomically promotes every target under one bounded lock phase.
+- **keiro**: add restricted exact-shape cloning plus dependency-aware retired-generation
+  preview/drop. Unsupported PostgreSQL features return typed clone findings; destructive
+  drop refuses active runs, compatible read contracts, and ordinary database dependencies.
+- **keiro-ops**: add embedded `rebuild versioned start|status|resume|abandon`, read-only
+  `rebuild retired`, and preview/`--force` `rebuild drop-retired`, with versioned JSON
+  envelopes backed by `ProjectionCatalogOperations`.
+- **jitsurei**: make the order-reporting V1/V2 revision bridge executable. Its database
+  test replays into an incompatible `state`-based schema beside live V1, atomically
+  promotes three targets, writes through V2, and retains three V1 generations.
+- **keiro-dsl**: candidate Language 5 projection revisions generate typed application
+  holes for transaction-local provisioning, validation, revision-aware live/replay SQL,
+  and verification while preserving published Languages 1–4.
 
 - **keiro-ops**: `wf resume-once` reports `advanced`, `paced`, and sorted
   `unregistered_names` in JSON and corresponding human columns, making a

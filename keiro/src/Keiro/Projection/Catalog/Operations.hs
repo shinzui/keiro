@@ -13,6 +13,10 @@ module Keiro.Projection.Catalog.Operations
     CatalogAdoptionReport (..),
     CatalogAdoptionOutcome (..),
     CatalogRunReport (..),
+    CatalogVersionedStartOptions (..),
+    CatalogVersionedRunReport (..),
+    CatalogRetiredGenerationsReport (..),
+    CatalogRetiredDropReport (..),
     CatalogOpsError (..),
     catalogInventoryReport,
     previewGroupRebuild,
@@ -23,14 +27,27 @@ module Keiro.Projection.Catalog.Operations
     inspectGroupRebuild,
     resumeGroupRebuild,
     abandonGroupRebuild,
+    startVersionedGroupRebuild,
+    inspectVersionedGroupRebuild,
+    resumeVersionedGroupRebuild,
+    abandonVersionedGroupRebuild,
+    listRetiredGenerations,
+    previewRetiredGenerationDrop,
+    dropRetiredGeneration,
   )
 where
 
 import Data.Aeson qualified as Aeson
+import Data.Bifunctor (first)
+import Data.Int (Int32)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Set qualified as Set
+import Data.Text qualified as Text
+import Data.Time (DiffTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
@@ -53,16 +70,36 @@ import Keiro.ReadModel.Rebuild
     RebuildVerificationProgress,
     RegistrationAdoption (..),
     RegistrationAdoptionAction (..),
+    VersionedRebuildError,
+    VersionedRebuildReport,
+    VersionedRebuildRequest (..),
+    VersionedRetiredDropResult,
+    VersionedRetiredGenerationPreview,
+    VersionedTargetGeneration,
+    VersionedTargetMode,
     abandonCatalogRebuild,
+    abandonVersionedRebuild,
+    beginVersionedRebuild,
+    dropVersionedRetiredGeneration,
     inspectCatalogRebuild,
+    inspectVersionedRebuild,
+    listVersionedRetiredGenerations,
     lookupProjectionRebuildGroup,
     preCanonicalRunSliceSentinel,
+    previewVersionedRetiredDrop,
     rebuildRunIdText,
     resumeCatalogRebuild,
+    resumeVersionedRebuild,
     startCatalogRebuild,
   )
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.HistoryRetention
+  ( HistoryRetentionLeaseRequest (..),
+    mkHistoryRetentionLeaseDuration,
+    mkHistoryRetentionLeaseOwner,
+    mkHistoryRetentionLeaseReason,
+  )
 import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..))
 
 newtype ProjectionCatalogOperations = ProjectionCatalogOperations ValidatedProjectionCatalog
@@ -163,11 +200,45 @@ data CatalogRunReport = CatalogRunReport
   }
   deriving stock (Eq, Show, Generic)
 
+data CatalogVersionedStartOptions = CatalogVersionedStartOptions
+  { rebuildRunId :: !RebuildRunId,
+    rebuildGroupId :: !RebuildGroupId,
+    servingRevisionId :: !ProjectionRevisionId,
+    candidateRevisionId :: !ProjectionRevisionId,
+    targetMode :: !VersionedTargetMode,
+    replayPageSize :: !Int32,
+    cutoverThreshold :: !Int64,
+    cutoverLockTimeoutMs :: !Int64,
+    retentionDuration :: !DiffTime,
+    requestedBy :: !Text,
+    requestReason :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogVersionedRunReport = CatalogVersionedRunReport
+  { reportSchema :: !Text,
+    run :: !VersionedRebuildReport
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogRetiredGenerationsReport = CatalogRetiredGenerationsReport
+  { reportSchema :: !Text,
+    generations :: ![VersionedTargetGeneration]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogRetiredDropReport
+  = CatalogRetiredDropPreview !VersionedRetiredGenerationPreview
+  | CatalogRetiredDropOutcome !VersionedRetiredDropResult
+  deriving stock (Eq, Show, Generic)
+
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
   | CatalogOpsRunSliceMismatch !RebuildRunId !Text !Text
   | CatalogOpsAdoptionRefused !CatalogAdoptionError
   | CatalogOpsRebuildError !CatalogRebuildError
+  | CatalogOpsVersionedError !VersionedRebuildError
+  | CatalogOpsInvalidVersionedRequest !Text
   deriving stock (Eq, Show, Generic)
 
 catalogInventoryReport :: ProjectionCatalogOperations -> CatalogInventoryReport
@@ -362,6 +433,127 @@ abandonGroupRebuild ::
 abandonGroupRebuild (ProjectionCatalogOperations catalog) runId failure =
   wrapRun <$> abandonCatalogRebuild catalog runId failure
 
+startVersionedGroupRebuild ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  CatalogVersionedStartOptions ->
+  Eff es (Either CatalogOpsError CatalogVersionedRunReport)
+startVersionedGroupRebuild operations@(ProjectionCatalogOperations catalog) options =
+  case versionedRequestFor operations options of
+    Left err -> pure (Left err)
+    Right request ->
+      beginVersionedRebuild catalog request >>= \case
+        Left err -> pure (Left (CatalogOpsVersionedError err))
+        Right _ -> inspectVersionedGroupRebuild operations (options ^. #rebuildRunId)
+
+inspectVersionedGroupRebuild ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  RebuildRunId ->
+  Eff es (Either CatalogOpsError CatalogVersionedRunReport)
+inspectVersionedGroupRebuild (ProjectionCatalogOperations _) runId =
+  inspectVersionedRebuild runId <&> mapVersionedRun
+
+resumeVersionedGroupRebuild ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  RebuildRunId ->
+  Eff es (Either CatalogOpsError CatalogVersionedRunReport)
+resumeVersionedGroupRebuild (ProjectionCatalogOperations catalog) runId =
+  resumeVersionedRebuild catalog runId <&> mapVersionedRun
+
+abandonVersionedGroupRebuild ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  RebuildRunId ->
+  Eff es (Either CatalogOpsError CatalogVersionedRunReport)
+abandonVersionedGroupRebuild operations runId =
+  abandonVersionedRebuild runId >>= \case
+    Left err -> pure (Left (CatalogOpsVersionedError err))
+    Right _ -> inspectVersionedGroupRebuild operations runId
+
+listRetiredGenerations ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  Eff es CatalogRetiredGenerationsReport
+listRetiredGenerations _ =
+  CatalogRetiredGenerationsReport "keiro/catalog-retired-generations/v1"
+    <$> listVersionedRetiredGenerations
+
+previewRetiredGenerationDrop ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  TargetGenerationId ->
+  Eff es (Either CatalogOpsError CatalogRetiredDropReport)
+previewRetiredGenerationDrop (ProjectionCatalogOperations catalog) generationId =
+  previewVersionedRetiredDrop catalog generationId
+    <&> first CatalogOpsVersionedError
+    <&> fmap CatalogRetiredDropPreview
+
+dropRetiredGeneration ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  TargetGenerationId ->
+  Eff es (Either CatalogOpsError CatalogRetiredDropReport)
+dropRetiredGeneration (ProjectionCatalogOperations catalog) generationId =
+  dropVersionedRetiredGeneration catalog generationId
+    <&> first CatalogOpsVersionedError
+    <&> fmap CatalogRetiredDropOutcome
+
+mapVersionedRun ::
+  Either VersionedRebuildError VersionedRebuildReport ->
+  Either CatalogOpsError CatalogVersionedRunReport
+mapVersionedRun =
+  first CatalogOpsVersionedError
+    . fmap (CatalogVersionedRunReport "keiro/catalog-versioned-rebuild-run/v1")
+
+versionedRequestFor ::
+  ProjectionCatalogOperations ->
+  CatalogVersionedStartOptions ->
+  Either CatalogOpsError VersionedRebuildRequest
+versionedRequestFor (ProjectionCatalogOperations catalog) options = do
+  servingRevision <-
+    maybe
+      (Left (CatalogOpsInvalidVersionedRequest "serving revision is absent from the catalog"))
+      Right
+      (catalogProjectionRevision catalog (options ^. #servingRevisionId))
+  let inventoryTargets = catalogInventory catalog ^. #inventoryTargets
+      bindings =
+        Map.fromList
+          [ (target ^. #targetId, target ^. #qualifiedTable)
+          | target <- inventoryTargets
+          ]
+  servingTargets <-
+    first (CatalogOpsInvalidVersionedRequest . Text.pack . show) $
+      mkPhysicalTargets
+        (Map.keys (servingRevision ^. #targetProvisioners))
+        bindings
+  owner <-
+    first (CatalogOpsInvalidVersionedRequest . Text.pack . show) $
+      mkHistoryRetentionLeaseOwner
+        ("keiro-rebuild/" <> rebuildRunIdText (options ^. #rebuildRunId))
+  reason <-
+    first (CatalogOpsInvalidVersionedRequest . Text.pack . show) $
+      mkHistoryRetentionLeaseReason (options ^. #requestReason)
+  duration <-
+    first (CatalogOpsInvalidVersionedRequest . Text.pack . show) $
+      mkHistoryRetentionLeaseDuration (options ^. #retentionDuration)
+  pure
+    VersionedRebuildRequest
+      { rebuildRunId = options ^. #rebuildRunId,
+        rebuildGroupId = options ^. #rebuildGroupId,
+        servingRevisionId = options ^. #servingRevisionId,
+        candidateRevisionId = options ^. #candidateRevisionId,
+        servingTargets,
+        targetMode = options ^. #targetMode,
+        replayPageSize = options ^. #replayPageSize,
+        cutoverThreshold = options ^. #cutoverThreshold,
+        cutoverLockTimeoutMs = options ^. #cutoverLockTimeoutMs,
+        retentionLeaseRequest = HistoryRetentionLeaseRequest owner reason duration,
+        requestedBy = options ^. #requestedBy,
+        requestReason = options ^. #requestReason
+      }
+
 wrapRun :: Either CatalogRebuildError RebuildRunReport -> Either CatalogOpsError CatalogRunReport
 wrapRun = \case
   Left err -> Left (CatalogOpsRebuildError err)
@@ -445,6 +637,38 @@ instance Aeson.ToJSON CatalogRunReport where
       [ "schema" Aeson..= (report ^. #reportSchema),
         "run" Aeson..= runValue (report ^. #run)
       ]
+
+instance Aeson.ToJSON CatalogVersionedRunReport where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "run" Aeson..= versionedRunValue (report ^. #run)
+      ]
+
+instance Aeson.ToJSON CatalogRetiredGenerationsReport where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "generations" Aeson..= map versionedGenerationValue (report ^. #generations)
+      ]
+
+instance Aeson.ToJSON CatalogRetiredDropReport where
+  toJSON = \case
+    CatalogRetiredDropPreview previewReport ->
+      Aeson.object
+        [ "schema" Aeson..= ("keiro/catalog-retired-drop-preview/v1" :: Text),
+          "generation" Aeson..= versionedGenerationValue (previewReport ^. #generation),
+          "activeRunId" Aeson..= fmap rebuildRunIdText (previewReport ^. #activeRunId),
+          "supportedReadContracts" Aeson..= (previewReport ^. #supportedReadContracts),
+          "externalDependencies" Aeson..= (previewReport ^. #externalDependencies),
+          "droppable" Aeson..= (previewReport ^. #droppable)
+        ]
+    CatalogRetiredDropOutcome outcome ->
+      Aeson.object
+        [ "schema" Aeson..= ("keiro/catalog-retired-drop-outcome/v1" :: Text),
+          "generation" Aeson..= versionedGenerationValue (outcome ^. #generation),
+          "alreadyDropped" Aeson..= (outcome ^. #alreadyDropped)
+        ]
 
 inventoryValue :: CatalogInventory -> Aeson.Value
 inventoryValue catalog =
@@ -720,6 +944,56 @@ lifecycleStatusText = \case
   GroupRebuilding -> "rebuilding"
   GroupFailed -> "failed"
   UnknownGroupStatus value -> value
+
+versionedRunValue :: VersionedRebuildReport -> Aeson.Value
+versionedRunValue report =
+  Aeson.object
+    [ "runId" Aeson..= rebuildRunIdText (report ^. #rebuildRunId),
+      "groupId" Aeson..= rebuildGroupIdText (report ^. #rebuildGroupId),
+      "phase" Aeson..= Text.pack (show (report ^. #phase)),
+      "servingRevisionId" Aeson..= projectionRevisionIdText (report ^. #servingRevisionId),
+      "candidateRevisionId" Aeson..= projectionRevisionIdText (report ^. #candidateRevisionId),
+      "servingEpoch" Aeson..= (report ^. #servingEpoch),
+      "capturedHead" Aeson..= globalPositionValue (report ^. #capturedHead),
+      "pageSize" Aeson..= (report ^. #replayPageSize),
+      "cutoverThreshold" Aeson..= (report ^. #cutoverThreshold),
+      "cutoverLockTimeoutMs" Aeson..= (report ^. #cutoverLockTimeoutMs),
+      "sources" Aeson..= map versionedSourceValue (report ^. #sources),
+      "servingGenerations" Aeson..= map versionedGenerationValue (report ^. #servingGenerations),
+      "candidateGenerations" Aeson..= map versionedGenerationValue (report ^. #candidateGenerations)
+    ]
+
+versionedSourceValue :: Rebuild.VersionedSourceProgress -> Aeson.Value
+versionedSourceValue progress =
+  Aeson.object
+    [ "sourceId" Aeson..= sourceIdText (progress ^. #sourceId),
+      "scope" Aeson..= sourceScopeValue (progress ^. #sourceScope),
+      "cursor" Aeson..= globalPositionValue (progress ^. #cursorPosition),
+      "target" Aeson..= globalPositionValue (progress ^. #targetPosition),
+      "exhaustedThrough" Aeson..= fmap globalPositionValue (progress ^. #exhaustedThrough),
+      "eventCount" Aeson..= (progress ^. #eventCount)
+    ]
+
+versionedGenerationValue :: VersionedTargetGeneration -> Aeson.Value
+versionedGenerationValue generation =
+  Aeson.object
+    [ "generationId" Aeson..= generationIdText (generation ^. #generationId),
+      "groupId" Aeson..= rebuildGroupIdText (generation ^. #rebuildGroupId),
+      "targetId" Aeson..= targetIdText (generation ^. #targetId),
+      "revisionId" Aeson..= projectionRevisionIdText (generation ^. #revisionId),
+      "physicalTable" Aeson..= qualifiedTableValue (generation ^. #physicalTable),
+      "relationOid" Aeson..= (generation ^. #relationOid),
+      "schemaVersion" Aeson..= schemaVersionText (generation ^. #schemaVersion),
+      "expectedShapeId" Aeson..= (generation ^. #expectedShapeId),
+      "observedShapeFingerprint" Aeson..= (generation ^. #observedShapeFingerprint),
+      "lifecycle" Aeson..= Text.pack (show (generation ^. #lifecycle))
+    ]
+
+generationIdText :: TargetGenerationId -> Text
+generationIdText (TargetGenerationId value) = UUID.toText value
+
+schemaVersionText :: TargetSchemaVersion -> Text
+schemaVersionText (TargetSchemaVersion value) = value
 
 runValue :: RebuildRunReport -> Aeson.Value
 runValue report =

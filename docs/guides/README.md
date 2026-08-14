@@ -24,6 +24,9 @@ are adopting:
 - [Offline Projection Rebuilds](offline-projection-rebuilds.md) covers catalog
   preview, group fencing, target preparation, fixed-head replay, verification,
   repair/resume, atomic promotion, and the legacy single-model lifecycle.
+- [Online Schema-Versioned Projection Rebuilds](online-projection-rebuilds.md)
+  covers revision bridges, application-provisioned staging schemas, live catch-up,
+  bounded atomic cutover, retention, failure recovery, and retired generations.
 - [Build The Command Side](build-the-command-side.md) walks through commands,
   events, the Keiki transducer, the Keiro `EventStream` /
   `ValidatedEventStream` boundary, and `runCommand`.

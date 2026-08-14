@@ -115,6 +115,8 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["replay-audit", "--full"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "list"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "versioned", "status", "ops-run"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "retired"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
       isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
@@ -122,6 +124,33 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "list"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "versioned", "status", "ops-run"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "versioned", "resume", "ops-run"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "versioned", "abandon", "ops-run"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "retired"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "drop-retired", "65b86cd6-550c-47c3-ae99-4039a85a11ad"]) `shouldBe` True
+
+    it "parses a complete versioned start and rejects malformed generation identities" do
+      let versionedStart =
+            [ "rebuild",
+              "versioned",
+              "start",
+              "ops-group",
+              "--run-id",
+              "ops-versioned-run",
+              "--serving-revision",
+              "revision-v1",
+              "--candidate-revision",
+              "revision-v2",
+              "--target-mode",
+              "clone",
+              "--requested-by",
+              "operator",
+              "--reason",
+              "schema repair"
+            ]
+      isParseSuccess (parseOps embeddedHooks versionedStart) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["rebuild", "drop-retired", "not-a-uuid"]) `shouldBe` True
 
   describe "numeric option rejection" do
     it "rejects non-finite durations on every duration flag" do

@@ -5,10 +5,11 @@ group's writers, takes its query models out of service, rebuilds to one captured
 event-log head, verifies the result, and only then returns the whole group to
 `live`. Other independent catalog groups can continue operating.
 
-Use this lifecycle when projection code or shape changes, derived data is
-damaged, a new target must be populated from retained history, or several
-related targets must be reconstructed and promoted as one unit. Keiro does not
-provide a built-in shadow-table or online cutover mechanism.
+Use this lifecycle when planned downtime is acceptable, derived data is damaged,
+a new target must be populated from retained history, or several related targets
+must be reconstructed in place as one unit. When readers must remain on the old
+schema while a new generation is populated, use an
+[online schema-versioned rebuild](online-projection-rebuilds.md).
 
 The runnable example is the `jitsurei-order-reporting` group declared in
 [`Jitsurei.ReadModels`](../../jitsurei/src/Jitsurei/ReadModels.hs). Its operator

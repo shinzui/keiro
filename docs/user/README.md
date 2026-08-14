@@ -38,7 +38,9 @@ pieces those modules import.
   a hand-owned `FoldVersion` to hand-written folds.
 - [Read Models And Projections](read-models-and-projections.md): one validated
   projection catalog, managed live/async application, strong/eventual reads,
-  coordinated rebuilds, operations reports, and staged migration.
+  offline and online schema-versioned rebuilds, operations reports, and staged
+  migration. The full online runbook is
+  [Online Schema-Versioned Projection Rebuilds](../guides/online-projection-rebuilds.md).
 - [Process Managers And Timers](process-managers-and-timers.md): event-sourced
   coordination, deterministic command ids, and timer workers.
 - [Durable Workflows](durable-workflows.md): named-step workflows, durable sleep,

@@ -95,8 +95,12 @@ provisioner and validator define the desired target schema; the supported Keiro 
 operation supplies allocated physical names and owns the transaction, replay, cutover,
 and retirement protocol. Commands that start, resume, promote, or abandon such a run
 are embedded-only because they require the compiled catalog revisions. Database-only
-inspection and dependency-aware retired-generation drop may remain standalone. A
-command never substitutes inferred DDL or private Kiroku SQL for a missing owner API.
+listing of retired generations needs no compiled code. Versioned run inspection and
+retired-generation preview/drop remain embedded because their supported reports must
+interpret the persisted run and compatible read-contract references through the exact
+validated catalog. Destruction follows the ordinary preview/`--force` pattern and the
+library rechecks relation identity and dependencies under its final lock. A command
+never substitutes inferred DDL or private Kiroku SQL for a missing owner API.
 
 
 ## Consequences
@@ -129,6 +133,9 @@ command never substitutes inferred DDL or private Kiroku SQL for a missing owner
 - Application-provisioned schema generations do not transfer schema authorship to
   Keiro. Keiro owns orchestration evidence and safe destructive previews; the
   application remains responsible for DDL meaning and compatibility validation.
+- `rebuild versioned start|resume|abandon` and `rebuild drop-retired` are mutations;
+  status and retired listing are read-only. The CLI's structured reports are renderings
+  of `ProjectionCatalogOperations`, not a second lifecycle implementation.
 
 
 ## References

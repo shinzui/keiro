@@ -8,6 +8,7 @@ module Keiro.Ops.Rebuild
     ResumeOptions (..),
     AbandonOptions (..),
     AdoptOptions (..),
+    VersionedStartOptions (..),
     commandParser,
     isMutation,
     runCommand,
@@ -15,22 +16,31 @@ module Keiro.Ops.Rebuild
 where
 
 import Data.Aeson qualified as Aeson
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (secondsToDiffTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 import Keiro.Ops.Parse (nonNegativeReader, readBoundedIntegral)
 import Keiro.Ops.Render
+import Keiro.Prelude ((&), (.~))
 import Keiro.Projection.Catalog
   ( CatalogInventory (..),
     InventoryGroup (..),
+    ProjectionRevisionId,
+    QualifiedTable (..),
     RebuildGroupId,
+    TargetGenerationId (..),
+    mkProjectionRevisionId,
     mkRebuildGroupId,
+    projectionRevisionIdText,
     rebuildGroupIdText,
+    targetIdText,
   )
 import Keiro.Projection.Catalog.Operations
 import Keiro.ReadModel.Rebuild
@@ -45,6 +55,11 @@ import Keiro.ReadModel.Rebuild
     RebuildRunReport (..),
     RegistrationAdoption (..),
     RegistrationAdoptionAction (..),
+    VersionedRebuildReport (..),
+    VersionedRetiredDropResult (..),
+    VersionedRetiredGenerationPreview (..),
+    VersionedTargetGeneration (..),
+    VersionedTargetMode (..),
     defaultRebuildOptions,
     mkRebuildRunId,
     rebuildRunIdText,
@@ -63,6 +78,12 @@ data Command
   | Resume !ResumeOptions
   | Abandon !AbandonOptions
   | Adopt !AdoptOptions
+  | VersionedStart !VersionedStartOptions
+  | VersionedStatus !RebuildRunId
+  | VersionedResume !RebuildRunId
+  | VersionedAbandon !RebuildRunId
+  | Retired
+  | DropRetired !TargetGenerationId
   deriving stock (Eq, Show)
 
 data StartOptions = StartOptions
@@ -93,6 +114,21 @@ data AdoptOptions = AdoptOptions
   }
   deriving stock (Eq, Show)
 
+data VersionedStartOptions = VersionedStartOptions
+  { groupId :: !RebuildGroupId,
+    runId :: !RebuildRunId,
+    servingRevisionId :: !ProjectionRevisionId,
+    candidateRevisionId :: !ProjectionRevisionId,
+    targetMode :: !VersionedTargetMode,
+    requestedBy :: !Text,
+    reason :: !Text,
+    pageSize :: !Int32,
+    cutoverThreshold :: !Int64,
+    cutoverLockTimeoutMs :: !Int64,
+    retentionSeconds :: !Int64
+  }
+  deriving stock (Eq, Show)
+
 commandParser :: Parser Command
 commandParser =
   hsubparser
@@ -103,7 +139,34 @@ commandParser =
         <> command "resume" (info (Resume <$> resumeOptionsParser) (progDesc "Preview or resume one catalog rebuild run"))
         <> command "abandon" (info (Abandon <$> abandonOptionsParser) (progDesc "Preview or abandon one catalog rebuild run"))
         <> command "adopt" (info (Adopt <$> adoptOptionsParser) (progDesc "Preview or adopt catalog slice changes for the named groups"))
+        <> command "versioned" (info versionedCommandParser (progDesc "Operate schema-versioned online rebuilds"))
+        <> command "retired" (info (pure Retired) (progDesc "List retired target generations"))
+        <> command "drop-retired" (info (DropRetired <$> generationArgument) (progDesc "Preview or drop one retired target generation"))
     )
+
+versionedCommandParser :: Parser Command
+versionedCommandParser =
+  hsubparser
+    ( command "start" (info (VersionedStart <$> versionedStartOptionsParser) (progDesc "Preview or start an online versioned rebuild"))
+        <> command "status" (info (VersionedStatus <$> runArgument) (progDesc "Inspect an online versioned rebuild"))
+        <> command "resume" (info (VersionedResume <$> runArgument) (progDesc "Preview or advance one durable online rebuild phase"))
+        <> command "abandon" (info (VersionedAbandon <$> runArgument) (progDesc "Preview or abandon an online versioned rebuild"))
+    )
+
+versionedStartOptionsParser :: Parser VersionedStartOptions
+versionedStartOptionsParser =
+  VersionedStartOptions
+    <$> groupArgument
+    <*> runIdOption
+    <*> option revisionReader (long "serving-revision" <> metavar "REVISION")
+    <*> option revisionReader (long "candidate-revision" <> metavar "REVISION")
+    <*> option targetModeReader (long "target-mode" <> metavar "application|clone" <> Optparse.value ApplicationProvisioned <> showDefaultWith (const "application"))
+    <*> textOption "requested-by" "IDENTITY" "Operator or automation identity"
+    <*> textOption "reason" "TEXT" "Reason for this rebuild"
+    <*> option positiveInt32Reader (long "page-size" <> metavar "N" <> Optparse.value 500 <> showDefault)
+    <*> option nonNegativeInt64Reader (long "cutover-threshold" <> metavar "POSITIONS" <> Optparse.value 1000 <> showDefault)
+    <*> option positiveInt64Reader (long "lock-timeout-ms" <> metavar "MILLISECONDS" <> Optparse.value 5000 <> showDefault)
+    <*> option positiveInt64Reader (long "retention-seconds" <> metavar "SECONDS" <> Optparse.value 3600 <> showDefault)
 
 startOptionsParser :: Parser StartOptions
 startOptionsParser =
@@ -140,6 +203,9 @@ runArgument = argument runReader (metavar "RUN_ID")
 runIdOption :: Parser RebuildRunId
 runIdOption = option runReader (long "run-id" <> metavar "RUN_ID" <> help "Stable identity for this rebuild attempt")
 
+generationArgument :: Parser TargetGenerationId
+generationArgument = argument generationReader (metavar "GENERATION_ID")
+
 textOption :: String -> String -> String -> Parser Text
 textOption name metavarText helpText = Text.pack <$> strOption (long name <> metavar metavarText <> help helpText)
 
@@ -148,6 +214,19 @@ groupReader = eitherReader (firstShow . mkRebuildGroupId . Text.pack)
 
 runReader :: ReadM RebuildRunId
 runReader = eitherReader (firstText . mkRebuildRunId . Text.pack)
+
+revisionReader :: ReadM ProjectionRevisionId
+revisionReader = eitherReader (firstShow . mkProjectionRevisionId . Text.pack)
+
+generationReader :: ReadM TargetGenerationId
+generationReader = eitherReader $ \raw ->
+  maybe (Left "expected a UUID target generation id") (Right . TargetGenerationId) (UUID.fromString raw)
+
+targetModeReader :: ReadM VersionedTargetMode
+targetModeReader = eitherReader $ \case
+  "application" -> Right ApplicationProvisioned
+  "clone" -> Right RestrictedClone
+  _ -> Left "expected application or clone"
 
 firstShow :: (Show err) => Either err value -> Either String value
 firstShow = either (Left . show) Right
@@ -161,6 +240,18 @@ positiveInt32Reader = eitherReader $ \raw ->
     Just value | value > 0 -> Right value
     _ -> Left "expected a positive 32-bit integer"
 
+positiveInt64Reader :: ReadM Int64
+positiveInt64Reader = eitherReader $ \raw ->
+  case readBoundedIntegral raw of
+    Just value | value > 0 -> Right value
+    _ -> Left "expected a positive 64-bit integer"
+
+nonNegativeInt64Reader :: ReadM Int64
+nonNegativeInt64Reader = eitherReader $ \raw ->
+  case readBoundedIntegral raw of
+    Just value | value >= 0 -> Right value
+    _ -> Left "expected a non-negative 64-bit integer"
+
 isMutation :: Command -> Bool
 isMutation = \case
   List -> False
@@ -170,6 +261,12 @@ isMutation = \case
   Resume {} -> True
   Abandon {} -> True
   Adopt {} -> True
+  VersionedStart {} -> True
+  VersionedStatus {} -> False
+  VersionedResume {} -> True
+  VersionedAbandon {} -> True
+  Retired -> False
+  DropRetired {} -> True
 
 runCommand :: OpsEnv -> ProjectionCatalogOperations -> Command -> IO OpsOutcome
 runCommand env operations = \case
@@ -205,6 +302,57 @@ runCommand env operations = \case
     | otherwise ->
         runCatalogAction env (previewCatalogAdoption operations options.groups) $ \report ->
           PreviewRequired (adoptionPreviewResult report) (forceInvocation env (adoptArguments options))
+  VersionedStart options
+    | env.force ->
+        runCatalogAction
+          env
+          (startVersionedGroupRebuild operations (catalogVersionedStartOptions options))
+          (Succeeded . versionedRunResult)
+    | otherwise ->
+        runCatalogAction env (previewRegisteredGroupRebuild operations options.groupId) $ \preview ->
+          PreviewRequired
+            (registeredPreviewResult preview)
+            (forceInvocation env (versionedStartArguments options))
+  VersionedStatus runId ->
+    runCatalogAction env (inspectVersionedGroupRebuild operations runId) (Succeeded . versionedRunResult)
+  VersionedResume runId
+    | env.force ->
+        runCatalogAction env (resumeVersionedGroupRebuild operations runId) (Succeeded . versionedRunResult)
+    | otherwise ->
+        runCatalogAction env (inspectVersionedGroupRebuild operations runId) $ \report ->
+          PreviewRequired (versionedRunResult report) (forceInvocation env (versionedResumeArguments runId))
+  VersionedAbandon runId
+    | env.force ->
+        runCatalogAction env (abandonVersionedGroupRebuild operations runId) (Succeeded . versionedRunResult)
+    | otherwise ->
+        runCatalogAction env (inspectVersionedGroupRebuild operations runId) $ \report ->
+          PreviewRequired (versionedRunResult report) (forceInvocation env (versionedAbandonArguments runId))
+  Retired ->
+    runCatalogValue env (listRetiredGenerations operations) (Succeeded . retiredGenerationsResult)
+  DropRetired generationId
+    | env.force ->
+        runCatalogAction env (dropRetiredGeneration operations generationId) (Succeeded . retiredDropResult)
+    | otherwise ->
+        runCatalogAction env (previewRetiredGenerationDrop operations generationId) $ \report ->
+          PreviewRequired
+            (retiredDropResult report)
+            (forceInvocation env (dropRetiredArguments generationId))
+
+catalogVersionedStartOptions :: VersionedStartOptions -> CatalogVersionedStartOptions
+catalogVersionedStartOptions options =
+  CatalogVersionedStartOptions
+    { rebuildRunId = options.runId,
+      rebuildGroupId = options.groupId,
+      servingRevisionId = options.servingRevisionId,
+      candidateRevisionId = options.candidateRevisionId,
+      targetMode = options.targetMode,
+      replayPageSize = options.pageSize,
+      cutoverThreshold = options.cutoverThreshold,
+      cutoverLockTimeoutMs = options.cutoverLockTimeoutMs,
+      retentionDuration = secondsToDiffTime (fromIntegral options.retentionSeconds),
+      requestedBy = options.requestedBy,
+      requestReason = options.reason
+    }
 
 startRebuildOptions :: StartOptions -> RebuildOptions
 startRebuildOptions options =
@@ -216,8 +364,8 @@ startRebuildOptions options =
           replayFrom = options.replayFrom
         }
   )
-    { replayPageSize = options.pageSize
-    }
+    & #replayPageSize
+    .~ options.pageSize
 
 resumeRebuildOptions :: ResumeOptions -> RebuildOptions
 resumeRebuildOptions options =
@@ -229,8 +377,8 @@ resumeRebuildOptions options =
           replayFrom = GlobalPosition 0
         }
   )
-    { replayPageSize = options.pageSize
-    }
+    & #replayPageSize
+    .~ options.pageSize
 
 runCatalogAction ::
   OpsEnv ->
@@ -243,6 +391,15 @@ runCatalogAction env action onSuccess = do
     Left storeError -> Failed (Text.pack (show storeError))
     Right (Left catalogError) -> Failed (Text.pack (show catalogError))
     Right (Right value) -> onSuccess value
+
+runCatalogValue ::
+  OpsEnv ->
+  Eff '[Store, Error StoreError, IOE] value ->
+  (value -> OpsOutcome) ->
+  IO OpsOutcome
+runCatalogValue env action onSuccess = do
+  result <- runStoreIO env.store action
+  pure $ either (Failed . Text.pack . show) onSuccess result
 
 inventoryResult :: CatalogInventoryReport -> OpsResult
 inventoryResult report =
@@ -432,6 +589,77 @@ runResult report =
   where
     run = report.run
 
+versionedRunResult :: CatalogVersionedRunReport -> OpsResult
+versionedRunResult report =
+  OpsResult
+    { headers = ["run", "group", "phase", "serving_revision", "candidate_revision", "epoch", "captured_head", "sources", "serving_generations", "candidate_generations"],
+      rows =
+        [ [ rebuildRunIdText run.rebuildRunId,
+            rebuildGroupIdText run.rebuildGroupId,
+            showText run.phase,
+            projectionRevisionIdText run.servingRevisionId,
+            projectionRevisionIdText run.candidateRevisionId,
+            showText run.servingEpoch,
+            globalPositionText run.capturedHead,
+            showText (length run.sources),
+            showText (length run.servingGenerations),
+            showText (length run.candidateGenerations)
+          ]
+        ],
+      jsonValue = Aeson.toJSON report
+    }
+  where
+    run = report.run
+
+retiredGenerationsResult :: CatalogRetiredGenerationsReport -> OpsResult
+retiredGenerationsResult report =
+  OpsResult
+    { headers = ["generation", "group", "target", "revision", "table", "oid", "lifecycle"],
+      rows = map generationRow report.generations,
+      jsonValue = Aeson.toJSON report
+    }
+
+retiredDropResult :: CatalogRetiredDropReport -> OpsResult
+retiredDropResult report =
+  OpsResult
+    { headers = ["generation", "group", "target", "revision", "table", "droppable", "blockers"],
+      rows =
+        case report of
+          CatalogRetiredDropPreview preview ->
+            [ generationSummaryRow preview.generation
+                <> [ boolText preview.droppable,
+                     Text.intercalate
+                       ","
+                       ( maybe [] (\runId -> ["active-run:" <> rebuildRunIdText runId]) preview.activeRunId
+                           <> map ("read-contract:" <>) preview.supportedReadContracts
+                           <> map ("postgres-dependency:" <>) preview.externalDependencies
+                       )
+                   ]
+            ]
+          CatalogRetiredDropOutcome outcome ->
+            [ generationSummaryRow outcome.generation
+                <> ["yes", if outcome.alreadyDropped then "already-dropped" else "dropped"]
+            ],
+      jsonValue = Aeson.toJSON report
+    }
+
+generationRow :: VersionedTargetGeneration -> [Text]
+generationRow generation =
+  generationSummaryRow generation
+    <> [showText generation.relationOid, showText generation.lifecycle]
+
+generationSummaryRow :: VersionedTargetGeneration -> [Text]
+generationSummaryRow generation =
+  [ generationIdText generation.generationId,
+    rebuildGroupIdText generation.rebuildGroupId,
+    targetIdText generation.targetId,
+    projectionRevisionIdText generation.revisionId,
+    generation.physicalTable.schemaName <> "." <> generation.physicalTable.tableName
+  ]
+
+generationIdText :: TargetGenerationId -> Text
+generationIdText (TargetGenerationId value) = UUID.toText value
+
 startArguments :: StartOptions -> [Text]
 startArguments options =
   [ "rebuild",
@@ -467,6 +695,48 @@ abandonArguments options =
 adoptArguments :: AdoptOptions -> [Text]
 adoptArguments options =
   "rebuild" : "adopt" : map rebuildGroupIdText (NonEmpty.toList options.groups)
+
+versionedStartArguments :: VersionedStartOptions -> [Text]
+versionedStartArguments options =
+  [ "rebuild",
+    "versioned",
+    "start",
+    rebuildGroupIdText options.groupId,
+    "--run-id",
+    rebuildRunIdText options.runId,
+    "--serving-revision",
+    projectionRevisionIdText options.servingRevisionId,
+    "--candidate-revision",
+    projectionRevisionIdText options.candidateRevisionId,
+    "--target-mode",
+    case options.targetMode of
+      ApplicationProvisioned -> "application"
+      RestrictedClone -> "clone",
+    "--requested-by",
+    options.requestedBy,
+    "--reason",
+    options.reason,
+    "--page-size",
+    showText options.pageSize,
+    "--cutover-threshold",
+    showText options.cutoverThreshold,
+    "--lock-timeout-ms",
+    showText options.cutoverLockTimeoutMs,
+    "--retention-seconds",
+    showText options.retentionSeconds
+  ]
+
+versionedResumeArguments :: RebuildRunId -> [Text]
+versionedResumeArguments runId =
+  ["rebuild", "versioned", "resume", rebuildRunIdText runId]
+
+versionedAbandonArguments :: RebuildRunId -> [Text]
+versionedAbandonArguments runId =
+  ["rebuild", "versioned", "abandon", rebuildRunIdText runId]
+
+dropRetiredArguments :: TargetGenerationId -> [Text]
+dropRetiredArguments generationId =
+  ["rebuild", "drop-retired", generationIdText generationId]
 
 forceInvocation :: OpsEnv -> [Text] -> Text
 forceInvocation env arguments = Text.unwords (map shellQuote ("keiro-ops" : arguments <> globalFlags <> ["--force"]))

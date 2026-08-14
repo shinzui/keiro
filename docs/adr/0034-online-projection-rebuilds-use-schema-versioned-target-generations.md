@@ -128,9 +128,11 @@ assumes without enforcement that old history is immutable.
 - Readers continue to observe the old serving generation during catch-up and may wait
   only during the bounded final cutover. They never observe a partially replayed
   staging generation through a sanctioned contract.
-- Retired generations remain explicit rollback and forensic artifacts. Dropping them
-  is a separate previewed destructive operation and is refused while a supported read
-  contract or database dependency still references them.
+- Retired generations remain explicit forensic and drain artifacts, not automatic
+  rollback targets. Dropping them is a separate previewed destructive operation and is
+  refused while an active run, supported read contract, or database dependency still
+  references them. The final drop rechecks relation identity and blockers under an
+  exclusive lock and never uses `CASCADE`.
 - Breaking external-reader migrations require contract versioning or an
   application-provided compatibility layer; physical retention by itself is not a
   dual-write guarantee.

@@ -34,9 +34,10 @@
 --
 -- Normal workers continue to call 'Keiro.Projection.applyAsyncProjection'. Its
 -- registry lock fences them automatically while the model is rebuilding, but they
--- must not checkpoint an 'Keiro.Projection.AsyncFenced' event. Keiro does not yet
--- provide a shadow-table or online cutover mechanism; applications that need
--- zero-downtime rebuilds must build that orchestration above this lifecycle API.
+-- must not checkpoint an 'Keiro.Projection.AsyncFenced' event. For schema-changing
+-- online reconstruction, use the schema-versioned target lifecycle exported below:
+-- it keeps the serving revision live while replay populates application-provisioned
+-- candidate generations and then promotes the complete group atomically.
 module Keiro.ReadModel.Rebuild
   ( -- * Catalog rebuild groups
     preCanonicalRunSliceSentinel,
@@ -88,12 +89,17 @@ module Keiro.ReadModel.Rebuild
     VersionedSourceProgress (..),
     VersionedRebuildReport (..),
     VersionedAbandonResult (..),
+    VersionedRetiredGenerationPreview (..),
+    VersionedRetiredDropResult (..),
     beginVersionedRebuild,
     applyVersionedReplayEvent,
     verifyVersionedCandidate,
     resumeVersionedRebuild,
     inspectVersionedRebuild,
     abandonVersionedRebuild,
+    listVersionedRetiredGenerations,
+    previewVersionedRetiredDrop,
+    dropVersionedRetiredGeneration,
 
     -- * Catalog history runner
     RebuildOptions (..),

@@ -169,6 +169,13 @@ fingerprints remain rebuild-run provenance, not lifecycle fences, under
 [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md).
 No target or query model can return to service independently.
 
+That closed lifecycle describes in-place offline reconstruction. ADR 0034's online
+path persists read and write availability separately: `rebuilding-versioned` keeps the
+old projection revision and its complete generation map serving while a candidate
+revision replays. The group lock returns the persisted serving revision, epoch, and
+physical targets as one closed-world binding. Promotion changes all of them atomically;
+an unknown revision or incomplete map is a typed refusal, not legacy-handler fallback.
+
 Live inline and async paths acquire `FOR SHARE` locks on distinct group rows in
 sorted `RebuildGroupId` order inside the same transaction as the event append,
 dedup insert, and target SQL. Preparation takes `FOR UPDATE` on the group row.
@@ -260,6 +267,8 @@ dedup rows are not completion evidence.
   or register-only mapping change leaves catalog source fingerprints unchanged.
 - Online schema-versioned cutover is governed by ADR 0034: application-supplied
   provisioners create desired schemas while Keiro orchestrates their lifecycle.
+  A retired generation is explicit forensic evidence and no longer receives live
+  writes; catalog identity never implies that it is a current rollback surface.
   Dynamic plugin discovery, inferred or automatic application-schema design,
   replay of external side effects, and static proof of arbitrary SQL writes
   remain outside this decision.

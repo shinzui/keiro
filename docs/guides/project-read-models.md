@@ -9,9 +9,11 @@ If you are still deciding how the view should be delivered, start with
 [Choosing A Projection](choosing-a-projection.md). The focused
 [Inline Projections](inline-projections.md) and
 [Asynchronous Projections](asynchronous-projections.md) guides explain each
-handler path, while [Offline Projection Rebuilds](offline-projection-rebuilds.md)
-explains the full lifecycle; this guide shows all three operating from one
-catalog.
+handler path. [Offline Projection Rebuilds](offline-projection-rebuilds.md)
+explains in-place reconstruction, while
+[Online Schema-Versioned Projection Rebuilds](online-projection-rebuilds.md)
+keeps V1 serving during a schema-changing V2 replay; this guide shows the same
+catalog authority behind those paths.
 
 The code is in
 [`../../jitsurei/src/Jitsurei/ReadModels.hs`](../../jitsurei/src/Jitsurei/ReadModels.hs).

@@ -8,6 +8,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Candidate Language 5 accepts projection-revision bridges and generates catalog
+  provisioner, schema-validator, physical-target live/replay, and verification holes.
+  Revision/provisioner identities and ordered promotion names participate in canonical
+  catalog and group-slice identity; published Languages 1–4 are unchanged.
+
 - Exposes `checkedProjectionSupplies`, the lazily shared projection-supply
   analysis attached to each `CheckedService`.
 - Candidate Language 5 separates projection delivery from query freshness.
@@ -167,7 +172,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   conformance target after reconciling the Cabal fragment. Unrelated aggregate files are now
   byte-stable when a declaration outside their semantic closure changes, and source-only movement
   rewrites the source map rather than behavior contracts or create-once witnesses.
-- Requires `kiroku-store >=0.6 && <0.7`, keeping generated conformance and
+- Requires `kiroku-store >=0.7 && <0.8`, keeping generated conformance and
   runtime fixtures on the same Kiroku effect surface as Keiro 0.12.
 
 ## [0.11.0.0] - 2026-08-05

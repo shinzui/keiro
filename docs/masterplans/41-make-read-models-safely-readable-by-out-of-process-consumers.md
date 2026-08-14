@@ -83,7 +83,7 @@ application provisioning, revision-aware writers, replay, validation, bounded cu
 and retirement. It includes a PostgreSQL proof milestone before public API or schema
 contracts are frozen. Kiroku has now delivered the protected replay-history contract
 requested by `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-6` in
-`kiroku-store` 0.7.0.0 and `kiroku-store-migrations` 0.3.2.0, so EP-1 can start.
+`kiroku-store` 0.7.0.0 and `kiroku-store-migrations` 0.3.2.0. EP-1 is now complete.
 
 EP-2, plan 254, publishes `keiro_read.projection_group_status_v1` after EP-1 has defined
 the stored generation model. Its external prerequisite,
@@ -111,7 +111,7 @@ PostgreSQL evidence and operational transcripts stay in the child plans.
 
 | # | Title | Path | Hard Deps | Soft / Integration Deps | Status |
 |---|-------|------|-----------|-------------------------|--------|
-| 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | In Progress |
+| 1 | Rebuild schema-versioned targets with atomic cutover | docs/plans/256-rebuild-into-versioned-targets-with-atomic-cutover.md | Satisfied external: MP-39 plans 246, 247, 258; Kiroku IR-6 releases | None | Complete |
 | 2 | Publish a versioned serving and rebuild status relation | docs/plans/254-publish-a-documented-projection-status-relation-for-external-readers.md | EP-1; satisfied external: Kiroku IR-5 release | None | Not Started |
 | 3 | Fence external reads behind versioned sanctioned SQL contracts | docs/plans/255-fence-out-of-process-read-model-reads-behind-a-sanctioned-sql-surface.md | EP-1, EP-2 | None | Not Started |
 | 4 | Add targeted per-stream reprojection to catalog operations | docs/plans/257-add-targeted-per-stream-reprojection-to-catalog-operations.md | Satisfied external: Kiroku IR-6 releases | EP-1, EP-3 | Not Started |
@@ -154,8 +154,9 @@ selected group for the duration of one transaction but does not change lifecycle
 take readers out of service.
 
 The critical path is therefore EP-1 → EP-2 → EP-3. EP-4 is parallel. All external
-prerequisites on that graph are satisfied. EP-1 is the next child to implement; EP-4
-may begin in parallel subject to its soft serving-revision integration with EP-1.
+prerequisites on that graph are satisfied. EP-1 is complete, so EP-2 is the next child
+on the critical path; EP-4 may begin in parallel against EP-1's delivered group-lock
+and serving-revision contract.
 
 
 ## Integration Points
@@ -244,9 +245,9 @@ Relevant local decisions are:
 - [x] (2026-08-14T01:22:41Z) EP-1 (256) M5: converging replay, bounded final fence,
   deterministic all-target locks, schema/dependency revalidation, atomic cutover,
   crash-resume, retention failure fencing, and concurrent reader/writer acceptance.
-- [ ] (2026-08-14T01:22:41Z) EP-1 (256) M6 in progress: explicit retirement/drop,
-  operator commands, ADR-26/28/31/32
-  reconciliation, documentation, changelogs, and full verification.
+- [x] (2026-08-14T02:22:44Z) EP-1 (256) M6: restricted clone, explicit
+  retirement/drop, versioned operator commands, incompatible Jitsurei v1/v2 evidence,
+  ADR and runtime-pattern reconciliation, runbooks, changelogs, and `just verify`.
 - [x] (2026-08-13T22:35:58Z) EP-2 (254) M1: Kiroku IR-5's frozen
   `kiroku.subscription_checkpoints_v1` contract verified in released
   `kiroku-store-migrations` 0.3.1.0; no dependency on a private Kiroku table.
@@ -401,27 +402,31 @@ Relevant local decisions are:
   Rationale: either crash boundary resumes deterministically, and an expired retention
   proof becomes a durable failed/fenced run before any further candidate mutation.
   Date: 2026-08-13
+- Decision: Retired-generation inventory remains available from durable database facts,
+  while destruction requires the compiled catalog and a two-phase preview/force check.
+  Rationale: old code may already be gone when operators inspect retained data, but
+  irreversible removal must still revalidate read-contract references, PostgreSQL
+  dependencies, relation identity, and retired lifecycle without `CASCADE`.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
 
-The architecture-validation phase completed before implementation. It replaced a
-same-schema clone-and-swap design with first-class application-provisioned schema
-generations, corrected the status and targeted-repair semantics, and made upstream SQL
-ownership and source-retention requirements explicit. Both upstream package prerequisites
-are now released, so the MasterPlan is unblocked and resumes at EP-1 Milestone 1; EP-4 is
-also externally unblocked and may proceed in parallel. Implementation outcomes and
-runtime evidence remain to be recorded as the child plans complete. EP-1 Milestones
-1-4 now provide PostgreSQL mechanics, the revision/generation contract, durable
-lifecycle state, and revision-aware execution. At the M4 boundary the full Keiro suite
-passes 566 examples, the main DSL suite passes 705 examples with all conformance
-components green, and Jitsurei passes 23 examples. EP-1 Milestone 5 now provides
-multi-round versioned replay, Kiroku retention renewal and failure fencing, durable
-fence/head crash phases, final deduplication/checkpoint reconciliation, and one bounded
-all-target promotion transaction. The complete Keiro suite passes 572 examples, with 12
-schema-versioned lifecycle/concurrency examples covering live v1 traffic, hard-delete
-refusal, lease expiry, DDL races, reader lock timeout/resume, redelivery safety, v1-only
-writer refusal, atomic two-target promotion, epoch advance, and retained v1 generations.
+The architecture-validation phase replaced a same-schema clone-and-swap design with
+first-class application-provisioned schema generations, corrected the status and
+targeted-repair semantics, and made upstream SQL ownership and source retention
+explicit. EP-1 is complete: it delivers durable revision/generation identity,
+revision-aware live and replay dispatch, renewable retention, multi-round convergence,
+separately resumable fence/head phases, bounded all-target promotion, structural object
+renaming, a closed restricted-clone envelope, and dependency-aware retired-generation
+destruction. Jitsurei proves a genuinely incompatible three-target v1/v2 rebuild while
+v1 remains readable and writable, then atomically serves v2 and retains the three v1
+generations. The operator runbook and external runtime patterns are reconciled with the
+implementation. Final EP-1 evidence is 16 focused schema-versioned examples, 576 Keiro
+examples, 44 keiro-ops examples, 705 main DSL examples plus every conformance component,
+24 Jitsurei examples, 29 migration examples, 34 strict ADR concepts, a no-drift 39-entry
+corpus replay, and a passing `just verify`. EP-2 is now the next critical-path child;
+EP-4 remains available in parallel. Outcomes for EP-2 through EP-4 remain to be recorded.
 
 
 ## Revision Note
@@ -442,3 +447,8 @@ IR-5 is available through `kiroku-store-migrations` 0.3.1.0, and IR-6 through
 `kiroku-store` 0.7.0.0 plus `kiroku-store-migrations` 0.3.2.0. The external blockers are
 marked satisfied, the concrete lease/guard ownership split is recorded, and EP-1 is the
 next implementable child plan.
+
+Revised on 2026-08-14 after EP-1 completed. The registry and dependency graph now mark
+plan 256 complete and select EP-2 as the next critical-path child; the retrospective
+records the delivered rebuild/retirement protocol, external runtime-pattern updates,
+and final validation evidence.

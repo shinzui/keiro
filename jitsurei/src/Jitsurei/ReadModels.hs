@@ -9,6 +9,8 @@ module Jitsurei.ReadModels
     orderLiveProjections,
     orderAuditProjectionId,
     orderReportingGroupId,
+    orderReportingRevisionV1,
+    orderReportingRevisionV2,
     jitsureiProjectionCatalog,
     orderCatalogOperations,
     initializeOrderSummaryTable,
@@ -279,10 +281,10 @@ jitsureiProjectionCatalogDefinition =
       projectionSets = [SomeProjectionSet orderProjectionSet]
     }
 
--- | A compile-checked bridge catalog keeps both sides of a schema rollout in
--- one binary. Later versioned lifecycle code invokes these application-owned
--- closures with serving or staging physical targets; the example deliberately
--- keeps their bodies inert until that runner selects a revision.
+-- | A bridge catalog keeps both sides of a schema rollout in one binary. The
+-- versioned lifecycle invokes these application-owned closures with serving or
+-- staging physical targets. V2 deliberately renames @status@ to @state@ and
+-- adds a revision marker, so this is a genuinely incompatible schema.
 orderReportingRevisionV1, orderReportingRevisionV2 :: ProjectionRevision
 orderReportingRevisionV1 = orderReportingRevision "jitsurei-order-reporting-v1" "v1"
 orderReportingRevisionV2 = orderReportingRevision "jitsurei-order-reporting-v2" "v2"
@@ -306,7 +308,7 @@ orderReportingRevision identity schemaVersion =
             { handlerId = identity <> "/live",
               handlerVersion = 1,
               requiredTargets = orderReportingTargetIds,
-              runRevisionLive = \_physicalTargets _recorded -> pure ()
+              runRevisionLive = applyRevisionRecorded schemaVersion
             }
         ],
       replayAdapters =
@@ -314,7 +316,7 @@ orderReportingRevision identity schemaVersion =
             { adapterId = identity <> "/replay",
               adapterVersion = 1,
               requiredTargets = orderReportingTargetIds,
-              runRevisionReplay = \_physicalTargets _recorded -> pure (Right False)
+              runRevisionReplay = replayRevisionRecorded schemaVersion
             }
         ],
       revisionVerifications =
@@ -322,7 +324,7 @@ orderReportingRevision identity schemaVersion =
             { revisionVerificationId = identity <> "/verification",
               revisionVerificationVersion = 1,
               requiredTargets = orderReportingTargetIds,
-              runRevisionVerification = \_physicalTargets -> pure (Right ())
+              runRevisionVerification = verifyRevisionTargets
             }
         ],
       claimSite = claim ("jitsurei:" <> identity)
@@ -334,22 +336,137 @@ orderReportingRevision identity schemaVersion =
           provisionerVersion = 1,
           schemaVersion = TargetSchemaVersion schemaVersion,
           expectedShapeId = identity <> "/" <> targetName <> "/shape",
-          provisionTarget = \_context -> pure (),
+          provisionTarget = provisionRevisionTarget schemaVersion targetName,
           validatorId = identity <> "/" <> targetName <> "/validate",
           validatorVersion = 1,
-          validateTarget =
-            Just $ \_context ->
-              pure
-                ( Right
-                    TargetSchemaEvidence
-                      { relationOid = 1,
-                        observedShapeFingerprint = identity <> "/" <> targetName <> "/shape",
-                        observedPromotionObjects = [],
-                        catalogSnapshot = "jitsurei-bridge-catalog-snapshot-v1"
-                      }
-                ),
-          promotionObjectNames = []
+          validateTarget = Just (validateRevisionTarget identity targetName promotionObjects),
+          promotionObjectNames = promotionObjects
         }
+      where
+        promotionObjects = [primaryKeyPromotion schemaVersion targetName]
+
+primaryKeyPromotion :: Text -> Text -> PromotionObjectName
+primaryKeyPromotion schemaVersion targetName =
+  PromotionObjectName
+    PromotionConstraint
+    (if schemaVersion == "v1" then canonical else canonical <> "__v2")
+    canonical
+  where
+    canonical = case targetName of
+      "order-summary" -> "jitsurei_order_summary_pkey"
+      "order-line" -> "jitsurei_order_line_pkey"
+      "order-audit" -> "jitsurei_order_async_audit_pkey"
+      _ -> error ("unknown Jitsurei promotion target: " <> Text.unpack targetName)
+
+provisionRevisionTarget :: Text -> Text -> TargetProvisioningContext -> Tx.Transaction ()
+provisionRevisionTarget "v1" _ _ = pure ()
+provisionRevisionTarget _ targetName context =
+  Tx.sql (TE.encodeUtf8 ddl)
+  where
+    table = context ^. #stagingTable
+    qualified = qualifyTable (table ^. #schemaName) (table ^. #tableName)
+    constraint = quoteIdentifier (primaryKeyPromotion "v2" targetName ^. #generationName)
+    ddl =
+      case targetName of
+        "order-summary" ->
+          "CREATE TABLE "
+            <> qualified
+            <> " (order_id text NOT NULL, sku text NOT NULL, quantity bigint NOT NULL, state text NOT NULL, last_seen bigint NOT NULL, source_revision smallint NOT NULL DEFAULT 2, CONSTRAINT "
+            <> constraint
+            <> " PRIMARY KEY (order_id))"
+        "order-line" ->
+          "CREATE TABLE "
+            <> qualified
+            <> " (order_id text NOT NULL, line_no integer NOT NULL, sku text NOT NULL, quantity bigint NOT NULL, last_seen bigint NOT NULL, source_revision smallint NOT NULL DEFAULT 2, CONSTRAINT "
+            <> constraint
+            <> " PRIMARY KEY (order_id, line_no))"
+        "order-audit" ->
+          "CREATE TABLE "
+            <> qualified
+            <> " (global_position bigint NOT NULL, state text NOT NULL, source_revision smallint NOT NULL DEFAULT 2, CONSTRAINT "
+            <> constraint
+            <> " PRIMARY KEY (global_position))"
+        _ -> error ("unknown Jitsurei revision target: " <> Text.unpack targetName)
+
+validateRevisionTarget :: Text -> Text -> [PromotionObjectName] -> TargetProvisioningContext -> Tx.Transaction (Either [TargetSchemaViolation] TargetSchemaEvidence)
+validateRevisionTarget identity targetName promotionObjects context = do
+  maybeOid <-
+    Tx.statement
+      (context ^. #stagingTable . #schemaName, context ^. #stagingTable . #tableName)
+      revisionRelationOidStmt
+  pure $ case maybeOid of
+    Nothing -> Left [TargetSchemaViolation "relation.missing" targetName]
+    Just oid ->
+      Right
+        TargetSchemaEvidence
+          { relationOid = oid,
+            observedShapeFingerprint = identity <> "/" <> targetName <> "/shape",
+            observedPromotionObjects = promotionObjects,
+            catalogSnapshot = "jitsurei-schema-bridge/" <> identity <> "/" <> targetName
+          }
+
+verifyRevisionTargets :: PhysicalTargets -> Tx.Transaction (Either Text ())
+verifyRevisionTargets targets = do
+  present <-
+    traverse
+      ( \targetId ->
+          let table = requirePhysicalTarget targetId targets
+           in Tx.statement (table ^. #schemaName, table ^. #tableName) revisionRelationOidStmt
+      )
+      orderReportingTargetIds
+  pure $ if Prelude.all isJust present then Right () else Left "one or more revision targets are missing"
+
+applyRevisionRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRevisionRecorded schemaVersion targets recorded =
+  case decodeRecorded orderCodec recorded of
+    Left _ -> Tx.condemn
+    Right event -> applyRevisionEvent schemaVersion targets event recorded
+
+replayRevisionRecorded :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either ReplayDecodeError Bool)
+replayRevisionRecorded schemaVersion targets recorded =
+  case decodeRecorded orderCodec recorded of
+    Left err -> pure (Left (ReplayDecodeError (Text.pack (show err))))
+    Right event -> applyRevisionEvent schemaVersion targets event recorded >> pure (Right True)
+
+applyRevisionEvent :: Text -> PhysicalTargets -> OrderEvent -> RecordedEvent -> Tx.Transaction ()
+applyRevisionEvent schemaVersion targets event recorded = do
+  case event of
+    OrderPlaced payload -> do
+      Tx.statement
+        ( orderIdText payload.orderId,
+          skuText payload.sku,
+          Prelude.fromIntegral (quantityInt payload.quantity),
+          "placed",
+          position
+        )
+        (revisionUpsertSummaryStmt schemaVersion summary)
+      Tx.statement
+        ( orderIdText payload.orderId,
+          skuText payload.sku,
+          Prelude.fromIntegral (quantityInt payload.quantity),
+          position
+        )
+        (revisionUpsertLineStmt schemaVersion line)
+    PaymentApproved payload -> updateRevisionStatus payload.orderId "paid"
+    OrderPacked payload -> updateRevisionStatus payload.orderId "packed"
+    OrderShipped payload -> updateRevisionStatus payload.orderId "shipped"
+    OrderCancelled payload -> updateRevisionStatus payload.orderId "cancelled"
+  Tx.statement (position, eventStatus event) (revisionUpsertAuditStmt schemaVersion audit)
+  where
+    summary = requirePhysicalTarget orderSummaryTargetId targets
+    line = requirePhysicalTarget orderLineTargetId targets
+    audit = requirePhysicalTarget orderAuditTargetId targets
+    position = globalPositionToInt (recorded ^. #globalPosition)
+    updateRevisionStatus orderId status =
+      Tx.statement
+        (orderIdText orderId, status, position)
+        (revisionUpdateSummaryStmt schemaVersion summary)
+
+requirePhysicalTarget :: TargetId -> PhysicalTargets -> QualifiedTable
+requirePhysicalTarget targetId targets =
+  fromMaybe
+    (error ("missing Jitsurei revision target: " <> show targetId))
+    (resolvePhysicalTarget targetId targets)
 
 orderReportingTargetIds :: [TargetId]
 orderReportingTargetIds = [orderSummaryTargetId, orderLineTargetId, orderAuditTargetId]
@@ -446,6 +563,98 @@ initializeOrderSummaryTable =
     <> "  global_position BIGINT PRIMARY KEY,\n"
     <> "  effect TEXT NOT NULL\n"
     <> ")"
+
+revisionRelationOidStmt :: Statement (Text, Text) (Maybe Int64)
+revisionRelationOidStmt =
+  preparable
+    """
+    SELECT classes.oid::bigint
+    FROM pg_catalog.pg_class AS classes
+    JOIN pg_catalog.pg_namespace AS namespaces
+      ON namespaces.oid = classes.relnamespace
+    WHERE namespaces.nspname = $1 AND classes.relname = $2
+    """
+    (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)))
+    (D.rowMaybe (D.column (D.nonNullable D.int8)))
+
+revisionUpsertSummaryStmt :: Text -> QualifiedTable -> Statement (Text, Text, Int64, Text, Int64) ()
+revisionUpsertSummaryStmt schemaVersion table =
+  preparable
+    ( "INSERT INTO "
+        <> qualifiedPhysical table
+        <> " (order_id, sku, quantity, "
+        <> statusColumn
+        <> ", last_seen) VALUES ($1, $2, $3, $4, $5) "
+        <> "ON CONFLICT (order_id) DO UPDATE SET sku = EXCLUDED.sku, quantity = EXCLUDED.quantity, "
+        <> statusColumn
+        <> " = EXCLUDED."
+        <> statusColumn
+        <> ", last_seen = EXCLUDED.last_seen"
+    )
+    ( contrazip5
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+  where
+    statusColumn = if schemaVersion == "v1" then "status" else "state"
+
+revisionUpsertLineStmt :: Text -> QualifiedTable -> Statement (Text, Text, Int64, Int64) ()
+revisionUpsertLineStmt _ table =
+  preparable
+    ( "INSERT INTO "
+        <> qualifiedPhysical table
+        <> " (order_id, line_no, sku, quantity, last_seen) VALUES ($1, 1, $2, $3, $4) "
+        <> "ON CONFLICT (order_id, line_no) DO UPDATE SET sku = EXCLUDED.sku, quantity = EXCLUDED.quantity, last_seen = EXCLUDED.last_seen"
+    )
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+
+revisionUpsertAuditStmt :: Text -> QualifiedTable -> Statement (Int64, Text) ()
+revisionUpsertAuditStmt schemaVersion table =
+  preparable
+    ( "INSERT INTO "
+        <> qualifiedPhysical table
+        <> " (global_position, "
+        <> statusColumn
+        <> ") VALUES ($1, $2) ON CONFLICT (global_position) DO UPDATE SET "
+        <> statusColumn
+        <> " = EXCLUDED."
+        <> statusColumn
+    )
+    (contrazip2 (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.text)))
+    D.noResult
+  where
+    statusColumn = if schemaVersion == "v1" then "status" else "state"
+
+revisionUpdateSummaryStmt :: Text -> QualifiedTable -> Statement (Text, Text, Int64) ()
+revisionUpdateSummaryStmt schemaVersion table =
+  preparable
+    ( "UPDATE "
+        <> qualifiedPhysical table
+        <> " SET "
+        <> statusColumn
+        <> " = $2, last_seen = $3 WHERE order_id = $1"
+    )
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+  where
+    statusColumn = if schemaVersion == "v1" then "status" else "state"
+
+qualifiedPhysical :: QualifiedTable -> Text
+qualifiedPhysical table = qualifyTable (table ^. #schemaName) (table ^. #tableName)
 
 upsertOrderSummaryStmt :: Statement (Text, Text, Int64, Text, Int64) ()
 upsertOrderSummaryStmt =

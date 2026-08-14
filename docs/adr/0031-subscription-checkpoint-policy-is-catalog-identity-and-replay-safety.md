@@ -72,6 +72,15 @@ and group transition to live commit in one transaction. A missing declared row c
 with typed evidence and leaves the run resumable; Keiro still never invents checkpoint topology.
 Inline-only groups skip this work.
 
+An online schema-versioned rebuild applies the same rule at its captured final head.
+Candidate replay does not rewind the live subscription while V1 continues serving.
+After the writer fence captures the final head, Keiro derives the retained redelivery
+window under the run's renewable Kiroku history lease, backfills the ordinary async
+dedup keys, and advances every declared member in the same transaction that promotes
+all candidate generations and the serving revision. A missing member, expired lease,
+or failed reconciliation rolls the transaction back and leaves promotion resumable or
+explicitly abandonable; it never exposes V2 with skipped delivery evidence.
+
 Targeted per-stream reprojection uses the same deduplication rule with a different
 checkpoint consequence. While holding the group exclusively, it replays one complete
 retained stream into the persisted serving projection revision and inserts that

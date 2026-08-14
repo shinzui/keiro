@@ -399,6 +399,99 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             orderProjectionSet
       pure ()
 
+    it "rebuilds an incompatible schema beside live V1 and atomically serves V2" $ \(_store, StoreRunner runner) -> do
+      Right () <- runner initializeJitsureiTables
+      Right (Right _) <-
+        runner $
+          Store.initializeSubscriptionCheckpoint
+            (Store.SubscriptionName "jitsurei-order-audit-subscription")
+            0
+            Store.FromBeginning
+      Right (Right (ProjectionCommandApplied _)) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream (OrderId "versioned-before"))
+            ( PlaceOrder
+                PlaceOrderData
+                  { orderId = OrderId "versioned-before",
+                    sku = sampleSku,
+                    quantity = sampleQuantity
+                  }
+            )
+            jitsureiProjectionCatalog
+            orderProjectionSet
+
+      let runId = parseRebuildRunId "jitsurei-versioned-schema-change"
+          options =
+            CatalogOperations.CatalogVersionedStartOptions
+              { rebuildRunId = runId,
+                rebuildGroupId = orderReportingGroupId,
+                servingRevisionId = orderReportingRevisionV1 ^. #revisionId,
+                candidateRevisionId = orderReportingRevisionV2 ^. #revisionId,
+                targetMode = ApplicationProvisioned,
+                replayPageSize = 1,
+                cutoverThreshold = 10,
+                cutoverLockTimeoutMs = 2_000,
+                retentionDuration = secondsToDiffTime 600,
+                requestedBy = "jitsurei-test",
+                requestReason = "capture the schema-changing online rebuild transcript"
+              }
+      Right (Right started) <-
+        runner $ CatalogOperations.startVersionedGroupRebuild orderCatalogOperations options
+      started ^. #run . #phase `shouldBe` VersionedReplayRunning
+
+      Right (Right (ProjectionCommandApplied _)) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream (OrderId "versioned-during"))
+            ( PlaceOrder
+                PlaceOrderData
+                  { orderId = OrderId "versioned-during",
+                    sku = sampleSku,
+                    quantity = sampleQuantity
+                  }
+            )
+            jitsureiProjectionCatalog
+            orderProjectionSet
+
+      let drive 0 = expectationFailure "versioned Jitsurei rebuild did not promote" >> error "unreachable"
+          drive remaining = do
+            outcome <- runner $ CatalogOperations.resumeVersionedGroupRebuild orderCatalogOperations runId
+            report <- case outcome of
+              Right (Right value) -> pure value
+              other -> expectationFailure ("versioned resume failed: " <> show other) >> error "unreachable"
+            if report ^. #run . #phase == VersionedPromoted
+              then pure report
+              else drive (remaining - 1)
+      promoted <- drive (20 :: Int)
+      promoted ^. #run . #servingRevisionId
+        `shouldBe` orderReportingRevisionV2 ^. #revisionId
+
+      Right (Right (ProjectionCommandApplied _)) <-
+        runner $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            orderEventStream
+            (orderStream (OrderId "versioned-after"))
+            ( PlaceOrder
+                PlaceOrderData
+                  { orderId = OrderId "versioned-after",
+                    sku = sampleSku,
+                    quantity = sampleQuantity
+                  }
+            )
+            jitsureiProjectionCatalog
+            orderProjectionSet
+
+      Right facts <- runner $ Store.runTransaction (Tx.statement () orderVersionedFactsStmt)
+      facts `shouldBe` (3, 3, 3, True)
+      Right retired <- runner $ CatalogOperations.listRetiredGenerations orderCatalogOperations
+      length (retired ^. #generations) `shouldBe` 3
+
   describe "Jitsurei snapshots" $ around (withFreshResourceStore fixture) $ do
     it "writes a snapshot after the configured threshold" $ \(_store, StoreRunner runner) -> do
       let target = orderStream (OrderId "snapshot-100")
@@ -1160,5 +1253,37 @@ orderCatalogFactsStmt =
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.int8)
+        )
+    )
+
+orderVersionedFactsStmt :: Statement () (Int64, Int64, Int64, Bool)
+orderVersionedFactsStmt =
+  preparable
+    """
+    SELECT
+      (SELECT count(*) FROM jitsurei.jitsurei_order_summary),
+      (SELECT count(*) FROM jitsurei.jitsurei_order_line),
+      (SELECT count(*) FROM jitsurei.jitsurei_order_async_audit),
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'jitsurei'
+          AND table_name = 'jitsurei_order_summary'
+          AND column_name = 'state'
+      ) AND NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'jitsurei'
+          AND table_name = 'jitsurei_order_summary'
+          AND column_name = 'status'
+      )
+    """
+    E.noParams
+    ( D.singleRow
+        ( (,,,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.bool)
         )
     )

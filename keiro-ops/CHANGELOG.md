@@ -8,6 +8,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Added
 
+- Embedded `rebuild versioned start|status|resume|abandon`, database-backed
+  `rebuild retired`, and preview/`--force` `rebuild drop-retired`. Commands render the
+  supported catalog operations reports, derive the physical fleet from the mounted
+  validated catalog, and expose stable versioned JSON for runs and retirement blockers.
+
 - `Keiro.Ops.Parse.nonNegativeReader`, a message-parameterized bounded reader
   now shared by global-position, stream-version, and generation options without
   changing their accepted values or domain-specific errors.
@@ -58,6 +63,7 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Breaking Changes
 
-- Requires `kiroku-store >=0.6 && <0.7` for explicit checkpoint lifecycle, the
+- Requires `kiroku-store >=0.7 && <0.8` for explicit checkpoint lifecycle, the
   public transaction-composable reset API, and the visible-head query used by
-  the operator position commands.
+  the operator position commands, plus the renewable retention evidence required by
+  schema-versioned rebuilds.

@@ -13,6 +13,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   ordered promotion names. Canonical identity advances to `catalog-v4:` and
   `slice-v3:`. Candidate Language 5 accepts `projection-revision` blocks and scaffolds
   transaction-local provision, validation, live, replay, and verification holes.
+- `Keiro.ReadModel.Rebuild` now implements durable schema-versioned target generations,
+  converging candidate replay beside a live serving revision, renewable Kiroku history
+  retention, resumable writer-fence/final-head phases, bounded atomic multi-target
+  promotion, async dedup/checkpoint reconciliation, restricted exact-shape cloning, and
+  dependency-aware retired-generation preview/drop. `ProjectionCatalogOperations`
+  exposes dedicated versioned run and retirement reports without widening the legacy
+  offline rebuild protocol.
 - `Keiro.DeterministicId.deterministicIdProbes` centralizes the unchanged
   current-first, legacy-only-for-moved-seeds compatibility order shared by
   process-manager preflights and generation-0 awakeable adoption.
@@ -182,13 +189,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   Use the truthful freshness/cursor façade; legacy `PositionWait` with no target retains
   its historical immediate behavior during the migration window.
 
-- Requires `kiroku-store >=0.6 && <0.7`. Direct constructors of
+- Requires `kiroku-store >=0.7 && <0.8`. Direct constructors of
   `SubscriptionDeclaration` and exhaustive matches on grouped
   `RebuildStartError` must adopt the explicit checkpoint lifecycle surface.
   `KeiroMetrics` gains the
   `projectionGlobalPositionDistance` gauge field; code constructing that record
   directly must initialize it. Exhaustive custom Kiroku interpreters must also
-  implement the 0.5 checkpoint lifecycle and 0.6 visible-head effect surface.
+  implement the 0.5 checkpoint lifecycle, 0.6 visible-head effect surface, and
+  0.7 renewable history-retention lease surface.
 - `Keiro.Workflow.JournalAppendOutcome` gains a `JournalRefusedTerminal !Text`
   constructor. The journal-append transaction now declines an ordinary
   `StepRecorded` append into a workflow generation that already carries a

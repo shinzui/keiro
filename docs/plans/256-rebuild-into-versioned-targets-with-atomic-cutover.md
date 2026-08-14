@@ -69,9 +69,10 @@ durable ownership decision is
 - [x] (2026-08-14T01:22:41Z) M5: converging replay, retention protection, bounded
   cutover, dedup/checkpoint reconciliation, DDL revalidation, atomic promotion, and
   crash-resume pass concurrent schema-v1/schema-v2 acceptance tests.
-- [ ] (2026-08-14T01:22:41Z) M6 in progress: retirement/drop operations, CLI,
-  documentation, ADR reconciliation,
-  changelogs, Jitsurei evidence, and `just verify` are complete.
+- [x] (2026-08-14T02:22:44Z) M6: restricted same-schema cloning, dependency-aware
+  retirement/drop, versioned operator commands, the incompatible Jitsurei v1/v2
+  acceptance path, ADR and runtime-pattern reconciliation, runbooks, changelogs, and
+  the complete `just verify` gate are implemented and passing.
 
 
 ## Surprises & Discoveries
@@ -139,6 +140,11 @@ durable ownership decision is
   condemned with the replay transaction. The failed run keeps v1 readable, fences all
   writers, and requires abandonment; rolling the failure transition back would invite a
   later resume to treat an expired retention proof as active.
+- The conformance-corpus driver reconstructs invocations from tracked scaffold ledgers.
+  Regenerating the projection-catalog fixture from the package directory had persisted
+  a package-relative source path, which the repository-root replay could not resolve.
+  Restoring the repository-relative path and refreshing generated source provenance made
+  all 39 corpus invocations byte-stable again.
 
   Evidence:
 
@@ -249,6 +255,17 @@ durable ownership decision is
   one replaying to a durable head, while an expired lease must fail closed before any
   candidate or promotion mutation.
   Date: 2026-08-13
+- Decision: Keep restricted cloning inside a closed PostgreSQL catalog envelope and
+  resolve every allowed promotion object structurally before renaming it.
+  Rationale: textual name copying cannot prove ownership or dependency safety; any
+  unrepresented table feature must refuse the clone transaction without a candidate.
+  Date: 2026-08-13
+- Decision: Make retired-generation discovery database-only, but require the compiled
+  catalog plus a two-phase preview/force protocol for destruction.
+  Rationale: operators must be able to inventory old generations after code retirement,
+  while a drop must recheck read-contract references, PostgreSQL dependencies, relation
+  OID, and retired lifecycle under lock and must never use `CASCADE`.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -279,7 +296,18 @@ traffic during two replay rounds, hard-delete refusal, expired-lease fencing, DD
 rollback and repair, async redelivery safety, v1-only writer refusal, atomic two-target
 promotion, a blocked-reader timeout followed by successful resume, and retained v1
 generations. The complete Keiro suite passes 572 examples; the 12 versioned lifecycle
-and concurrency examples pass independently. Milestone 6 is next.
+and concurrency examples pass independently. Milestone 6 completed the closed-world
+restricted clone, structural promotion-object remapping, dependency-aware retired
+generation inventory and two-phase destruction, application-mounted versioned rebuild
+commands, and an executable Jitsurei v1/v2 bridge that changes `status` to `state`,
+continues v1 writes during replay, promotes three targets atomically, and retains all
+three v1 generations. The operator runbook, ADRs, changelogs, and the external runtime
+patterns at `mori://shinzui/keiro-runtime-patterns/docs/keiro-read-models-and-projections`
+and `mori://shinzui/keiro-runtime-patterns/docs/keiro-projection-catalogs` now describe
+the delivered protocol. Final evidence is 16 focused schema-versioned rebuild examples,
+576 Keiro examples, 44 keiro-ops examples, 705 main DSL examples plus every conformance
+component, 24 Jitsurei examples, 29 migration examples, 34 strict ADR concepts, a
+no-drift 39-entry conformance corpus, and a passing `just verify`. EP-1 is complete.
 
 
 ## Context and Orientation
@@ -735,3 +763,8 @@ Revised again on 2026-08-13 after Kiroku implemented IR-6 and published the pack
 Keiro requires. The upstream blocker is complete, the exact 0.7.0.0/0.3.2.0 package
 adoption and lease APIs are now specified, the long-rebuild lease is separated from
 plan 257's one-stream guard, and Milestone 1 is ready to begin.
+
+Revised on 2026-08-14 after implementation completed all six milestones. The final
+revision records the restricted-clone envelope, retirement/drop protocol, operator and
+Jitsurei evidence, external runtime-pattern updates, full validation counts, and EP-1's
+completed status.

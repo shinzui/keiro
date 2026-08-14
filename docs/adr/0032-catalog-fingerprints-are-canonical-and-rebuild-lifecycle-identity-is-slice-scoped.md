@@ -161,6 +161,13 @@ relation identity, ordered adapters, and runner format in its resume contract. T
 a clean pre-0.12 break: stored `slice-v2:` rows require reviewed adoption and an active
 run must be completed by the old runtime or abandoned before upgrade.
 
+Allocated generation UUIDs and physical relation names remain outside catalog identity,
+but they are durable run identity once begin commits. The schema-versioned runner stores
+its own `keiro/versioned-rebuild/v2` contract beside the offline replay contract and
+refuses resume if the catalog slice, ordered candidate adapters, revision identities, or
+persisted promotion-object map changes. Page size and a newly captured physical name
+can never be used to reinterpret an existing run.
+
 
 ## Consequences
 

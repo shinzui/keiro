@@ -13,6 +13,8 @@ module Keiro.ReadModel.Rebuild.Versioned
     VersionedSourceProgress (..),
     VersionedRebuildReport (..),
     VersionedAbandonResult (..),
+    VersionedRetiredGenerationPreview (..),
+    VersionedRetiredDropResult (..),
     beginVersionedRebuild,
     beginVersionedRebuildTx,
     applyVersionedReplayEvent,
@@ -23,6 +25,9 @@ module Keiro.ReadModel.Rebuild.Versioned
     inspectVersionedRebuild,
     abandonVersionedRebuild,
     abandonVersionedRebuildTx,
+    listVersionedRetiredGenerations,
+    previewVersionedRetiredDrop,
+    dropVersionedRetiredGeneration,
   )
 where
 
@@ -34,11 +39,12 @@ import Contravariant.Extras
     contrazip6,
     contrazip7,
   )
-import Control.Monad (foldM)
+import Control.Monad (foldM, join)
 import Data.ByteString qualified as ByteString
 import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
@@ -91,6 +97,7 @@ import Keiro.ReadModel.Rebuild.Group
   ( RebuildRunId,
     groupPreparationFor,
     insertProjectionDedupBatchStmt,
+    mkRebuildRunId,
     rebuildRunIdText,
     resetDeclaredSubscriptions,
   )
@@ -167,7 +174,9 @@ data VersionedRebuildError
   | VersionedInvalidCutoverThreshold !Int64
   | VersionedInvalidCutoverLockTimeout !Int64
   | VersionedInvalidReplayPageSize !Int32
-  | VersionedCloneProvisioningUnavailable
+  | VersionedCloneContractMismatch !TargetId !Text
+  | VersionedCloneRefused !TargetId !QualifiedTable ![Text]
+  | VersionedClonePromotionObjectMissing !TargetId !PromotionObjectName
   | VersionedRunIdentityConflict !RebuildRunId !Text
   | VersionedStagingNameCollision !TargetId !QualifiedTable !Int64
   | VersionedPhysicalRelationMissing !TargetId !QualifiedTable
@@ -186,6 +195,9 @@ data VersionedRebuildError
   | VersionedPromotionCheckpointsMissing !RebuildRunId ![SubscriptionName]
   | VersionedObservedShapeMismatch !TargetId !Text !Text
   | VersionedRetiredNameCollision !TargetId !QualifiedTable !Int64
+  | VersionedGenerationNotFound !TargetGenerationId
+  | VersionedGenerationNotRetired !TargetGenerationId !VersionedGenerationLifecycle
+  | VersionedRetiredDropBlocked !TargetGenerationId ![Text]
   deriving stock (Eq, Show, Generic)
 
 data VersionedGenerationLifecycle
@@ -198,6 +210,7 @@ data VersionedGenerationLifecycle
 
 data VersionedTargetGeneration = VersionedTargetGeneration
   { generationId :: !TargetGenerationId,
+    rebuildGroupId :: !RebuildGroupId,
     targetId :: !TargetId,
     revisionId :: !ProjectionRevisionId,
     physicalTable :: !QualifiedTable,
@@ -275,6 +288,21 @@ data VersionedAbandonResult = VersionedAbandonResult
     rebuildGroupId :: !RebuildGroupId,
     alreadyAbandoned :: !Bool,
     droppedGenerations :: ![VersionedTargetGeneration]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data VersionedRetiredGenerationPreview = VersionedRetiredGenerationPreview
+  { generation :: !VersionedTargetGeneration,
+    activeRunId :: !(Maybe RebuildRunId),
+    supportedReadContracts :: ![Text],
+    externalDependencies :: ![Text],
+    droppable :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+
+data VersionedRetiredDropResult = VersionedRetiredDropResult
+  { generation :: !VersionedTargetGeneration,
+    alreadyDropped :: !Bool
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1451,6 +1479,135 @@ abandonVersionedRebuildTx runId = do
                                   }
                             )
 
+listVersionedRetiredGenerations ::
+  (Store :> es) =>
+  Eff es [VersionedTargetGeneration]
+listVersionedRetiredGenerations =
+  runTransaction (Tx.statement () loadRetiredGenerationsStmt)
+
+previewVersionedRetiredDrop ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  TargetGenerationId ->
+  Eff es (Either VersionedRebuildError VersionedRetiredGenerationPreview)
+previewVersionedRetiredDrop catalog generationId =
+  runTransaction $ do
+    loadGeneration generationId >>= \case
+      Nothing -> pure (Left (VersionedGenerationNotFound generationId))
+      Just generation -> previewRetiredGenerationTx catalog generation
+
+dropVersionedRetiredGeneration ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  TargetGenerationId ->
+  Eff es (Either VersionedRebuildError VersionedRetiredDropResult)
+dropVersionedRetiredGeneration catalog generationId = runTransaction $ do
+  loadGeneration generationId >>= \case
+    Nothing -> pure (Left (VersionedGenerationNotFound generationId))
+    Just generation
+      | generation ^. #lifecycle == GenerationDropped ->
+          pure (Right (VersionedRetiredDropResult generation True))
+      | generation ^. #lifecycle /= GenerationRetired ->
+          pure (Left (VersionedGenerationNotRetired generationId (generation ^. #lifecycle)))
+      | otherwise -> do
+          Tx.sql
+            ( Text.Encoding.encodeUtf8
+                ( "LOCK TABLE "
+                    <> qualifyTable
+                      (generation ^. #physicalTable . #schemaName)
+                      (generation ^. #physicalTable . #tableName)
+                    <> " IN ACCESS EXCLUSIVE MODE"
+                )
+            )
+          verifyGenerationIdentities [generation] >>= \case
+            Left err -> pure (Left err)
+            Right () ->
+              previewRetiredGenerationTx catalog generation >>= \case
+                Left err -> pure (Left err)
+                Right dropPreview
+                  | not (dropPreview ^. #droppable) ->
+                      pure
+                        ( Left
+                            ( VersionedRetiredDropBlocked
+                                generationId
+                                (retiredDropBlockers dropPreview)
+                            )
+                        )
+                  | otherwise -> do
+                      Tx.sql
+                        ( Text.Encoding.encodeUtf8
+                            ( "DROP TABLE "
+                                <> qualifyTable
+                                  (generation ^. #physicalTable . #schemaName)
+                                  (generation ^. #physicalTable . #tableName)
+                            )
+                        )
+                      dropped <- Tx.statement (generationUuidValue generationId) markRetiredGenerationDroppedStmt
+                      if dropped
+                        then
+                          pure
+                            ( Right
+                                ( VersionedRetiredDropResult
+                                    (generation & #lifecycle .~ GenerationDropped)
+                                    False
+                                )
+                            )
+                        else pure (Left (VersionedGenerationNotRetired generationId GenerationRetired))
+
+previewRetiredGenerationTx ::
+  ValidatedProjectionCatalog ->
+  VersionedTargetGeneration ->
+  Tx.Transaction (Either VersionedRebuildError VersionedRetiredGenerationPreview)
+previewRetiredGenerationTx catalog generation
+  | generation ^. #lifecycle /= GenerationRetired =
+      pure
+        ( Left
+            ( VersionedGenerationNotRetired
+                (generation ^. #generationId)
+                (generation ^. #lifecycle)
+            )
+        )
+  | otherwise = do
+      activeRunText <-
+        Tx.statement
+          (rebuildGroupIdText (generation ^. #rebuildGroupId))
+          activeVersionedGroupRunStmt
+      dependencies <-
+        Tx.statement
+          (generation ^. #relationOid)
+          retiredGenerationDependenciesStmt
+      let activeRun = activeRunText >>= either (const Nothing) Just . mkRebuildRunId
+          readContracts = generationReadContracts catalog (generation ^. #revisionId)
+      pure
+        ( Right
+            VersionedRetiredGenerationPreview
+              { generation,
+                activeRunId = activeRun,
+                supportedReadContracts = readContracts,
+                externalDependencies = dependencies,
+                droppable = isNothing activeRun && null readContracts && null dependencies
+              }
+        )
+
+generationReadContracts :: ValidatedProjectionCatalog -> ProjectionRevisionId -> [Text]
+generationReadContracts catalog revisionId =
+  [ reference ^. #readContractId
+  | reference <- catalogInventory catalog ^. #inventoryReadContractRevisionReferences,
+    revisionId `elem` NonEmpty.toList (reference ^. #compatibleRevisions)
+  ]
+
+retiredDropBlockers :: VersionedRetiredGenerationPreview -> [Text]
+retiredDropBlockers dropPreview =
+  maybe [] (\runId -> ["active-run:" <> rebuildRunIdText runId]) (dropPreview ^. #activeRunId)
+    <> ["read-contract:" <> contract | contract <- dropPreview ^. #supportedReadContracts]
+    <> ["postgres-dependency:" <> dependency | dependency <- dropPreview ^. #externalDependencies]
+
+loadGeneration ::
+  TargetGenerationId ->
+  Tx.Transaction (Maybe VersionedTargetGeneration)
+loadGeneration generationId =
+  Tx.statement (generationUuidValue generationId) loadGenerationStmt
+
 validateRequest ::
   ValidatedProjectionCatalog ->
   VersionedRebuildRequest ->
@@ -1464,12 +1621,12 @@ validateRequest catalog request
       Left (VersionedInvalidCutoverThreshold (request ^. #cutoverThreshold))
   | request ^. #cutoverLockTimeoutMs <= 0 =
       Left (VersionedInvalidCutoverLockTimeout (request ^. #cutoverLockTimeoutMs))
-  | request ^. #targetMode == RestrictedClone = Left VersionedCloneProvisioningUnavailable
   | otherwise = do
       serving <- findRevision (request ^. #servingRevisionId)
       candidate <- findRevision (request ^. #candidateRevisionId)
       ensureGroup serving
       ensureGroup candidate
+      when (request ^. #targetMode == RestrictedClone) $ validateCloneContracts serving candidate
       expected <-
         maybe
           (Left (VersionedGroupNotInCatalog (request ^. #rebuildGroupId)))
@@ -1506,6 +1663,16 @@ validateRequest catalog request
                 (request ^. #rebuildGroupId)
             )
         )
+    validateCloneContracts serving candidate =
+      for_ (Map.toAscList (serving ^. #targetProvisioners)) $ \(targetId, servingProvisioner) ->
+        case Map.lookup targetId (candidate ^. #targetProvisioners) of
+          Nothing -> Left (VersionedCloneContractMismatch targetId "candidate target is absent")
+          Just candidateProvisioner ->
+            unless
+              ( servingProvisioner ^. #schemaVersion == candidateProvisioner ^. #schemaVersion
+                  && servingProvisioner ^. #expectedShapeId == candidateProvisioner ^. #expectedShapeId
+              )
+              (Left (VersionedCloneContractMismatch targetId "schema version or expected shape differs"))
 
 beginFresh ::
   ValidatedProjectionCatalog ->
@@ -1702,43 +1869,108 @@ provisionCandidateGenerations request revision servingTables =
       case existing of
         Just oid -> pure (Left (VersionedStagingNameCollision targetId staging oid))
         Nothing -> do
-          provisioner ^. #provisionTarget $ context
-          resolved <- resolveRelationOid staging
-          case resolved of
-            Nothing -> pure (Left (VersionedPhysicalRelationMissing targetId staging))
-            Just oid -> do
-              validated <- validateProvisionedTarget targetId provisioner context oid
-              case validated of
-                Left err -> pure (Left err)
-                Right evidence -> do
-                  insertGeneration
-                    request
-                    targetId
-                    (revision ^. #revisionId)
-                    generationId
-                    staging
-                    provisioner
-                    evidence
-                    (Just (request ^. #rebuildRunId))
-                    "staging"
-                  Tx.statement
-                    ( rebuildRunIdText (request ^. #rebuildRunId),
-                      targetIdText targetId,
-                      targetModeText (request ^. #targetMode),
-                      generationUuidValue generationId
-                    )
-                    insertRunTargetStmt
-                  for_ (List.zip [0 :: Int32 ..] (provisioner ^. #promotionObjectNames)) $ \(objectOrder, object) ->
-                    Tx.statement
-                      ( rebuildRunIdText (request ^. #rebuildRunId),
-                        targetIdText targetId,
-                        objectOrder,
-                        promotionKindText (object ^. #objectKind),
-                        object ^. #generationName,
-                        object ^. #canonicalName
-                      )
-                      insertPromotionObjectStmt
-                  pure (Right ())
+          provisioned <-
+            case request ^. #targetMode of
+              ApplicationProvisioned -> (provisioner ^. #provisionTarget $ context) $> Right ()
+              RestrictedClone -> provisionRestrictedClone targetId provisioner context
+          case provisioned of
+            Left err -> pure (Left err)
+            Right () -> finishProvision targetId provisioner generationId staging context
+    finishProvision targetId provisioner generationId staging context = do
+      resolved <- resolveRelationOid staging
+      case resolved of
+        Nothing -> pure (Left (VersionedPhysicalRelationMissing targetId staging))
+        Just oid -> do
+          validated <- validateProvisionedTarget targetId provisioner context oid
+          case validated of
+            Left err -> pure (Left err)
+            Right evidence -> do
+              insertGeneration
+                request
+                targetId
+                (revision ^. #revisionId)
+                generationId
+                staging
+                provisioner
+                evidence
+                (Just (request ^. #rebuildRunId))
+                "staging"
+              Tx.statement
+                ( rebuildRunIdText (request ^. #rebuildRunId),
+                  targetIdText targetId,
+                  targetModeText (request ^. #targetMode),
+                  generationUuidValue generationId
+                )
+                insertRunTargetStmt
+              for_ (List.zip [0 :: Int32 ..] (provisioner ^. #promotionObjectNames)) $ \(objectOrder, object) ->
+                Tx.statement
+                  ( rebuildRunIdText (request ^. #rebuildRunId),
+                    targetIdText targetId,
+                    objectOrder,
+                    promotionKindText (object ^. #objectKind),
+                    object ^. #generationName,
+                    object ^. #canonicalName
+                  )
+                  insertPromotionObjectStmt
+              pure (Right ())
+
+provisionRestrictedClone ::
+  TargetId ->
+  TargetProvisioner ->
+  TargetProvisioningContext ->
+  Tx.Transaction (Either VersionedRebuildError ())
+provisionRestrictedClone targetId provisioner context = do
+  findings <- Tx.statement (context ^. #servingTable) restrictedCloneFindingsStmt
+  if not (null findings)
+    then pure (Left (VersionedCloneRefused targetId (context ^. #servingTable) findings))
+    else do
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "CREATE TABLE "
+                <> qualifyTable
+                  (context ^. #stagingTable . #schemaName)
+                  (context ^. #stagingTable . #tableName)
+                <> " (LIKE "
+                <> qualifyTable
+                  (context ^. #servingTable . #schemaName)
+                  (context ^. #servingTable . #tableName)
+                <> " INCLUDING ALL)"
+            )
+        )
+      renameClonePromotionObjects targetId context (provisioner ^. #promotionObjectNames)
+
+renameClonePromotionObjects ::
+  TargetId ->
+  TargetProvisioningContext ->
+  [PromotionObjectName] ->
+  Tx.Transaction (Either VersionedRebuildError ())
+renameClonePromotionObjects targetId context = go
+  where
+    go [] = pure (Right ())
+    go (promotionObject : rest) = do
+      copiedName <-
+        Tx.statement
+          ( context ^. #servingTable,
+            context ^. #stagingTable,
+            promotionKindText (promotionObject ^. #objectKind),
+            promotionObject ^. #canonicalName
+          )
+          resolveClonedPromotionObjectStmt
+      case copiedName of
+        Nothing -> pure (Left (VersionedClonePromotionObjectMissing targetId promotionObject))
+        Just currentName -> do
+          renameClonedObject (context ^. #stagingTable) promotionObject currentName
+          go rest
+
+renameClonedObject :: QualifiedTable -> PromotionObjectName -> Text -> Tx.Transaction ()
+renameClonedObject table promotionObject currentName =
+  case promotionObject ^. #objectKind of
+    PromotionIndex ->
+      renameSchemaObject "INDEX" (table ^. #schemaName) currentName (promotionObject ^. #generationName)
+    PromotionOwnedSequence ->
+      renameSchemaObject "SEQUENCE" (table ^. #schemaName) currentName (promotionObject ^. #generationName)
+    PromotionConstraint ->
+      renameConstraint table currentName (promotionObject ^. #generationName)
 
 validateProvisionedTarget ::
   TargetId ->
@@ -2597,6 +2829,212 @@ resolveRelationOidStmt =
     (contrazip2 textParam textParam)
     (D.rowMaybe (D.column (D.nonNullable D.int8)))
 
+restrictedCloneFindingsStmt :: Statement QualifiedTable [Text]
+restrictedCloneFindingsStmt =
+  preparable
+    """
+    WITH target AS (
+      SELECT classes.*
+      FROM pg_catalog.pg_class AS classes
+      JOIN pg_catalog.pg_namespace AS namespaces
+        ON namespaces.oid = classes.relnamespace
+      WHERE namespaces.nspname = $1 AND classes.relname = $2
+    ), findings(feature) AS (
+      SELECT 'not-permanent-ordinary-heap'
+      FROM target
+      WHERE relkind <> 'r' OR relpersistence <> 'p'
+      UNION ALL
+      SELECT 'non-default-access-method'
+      FROM target JOIN pg_catalog.pg_am ON pg_am.oid = target.relam
+      WHERE pg_am.amname <> current_setting('default_table_access_method')
+      UNION ALL
+      SELECT 'storage-options' FROM target WHERE reloptions IS NOT NULL
+      UNION ALL
+      SELECT 'external-nextval'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_attribute AS attributes
+        JOIN pg_catalog.pg_attrdef AS defaults
+          ON defaults.adrelid = attributes.attrelid
+         AND defaults.adnum = attributes.attnum
+        WHERE attributes.attrelid = target.oid
+          AND attributes.attidentity = ''
+          AND pg_get_expr(defaults.adbin, defaults.adrelid) LIKE '%nextval(%'
+      )
+      UNION ALL
+      SELECT 'foreign-keys'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1 FROM pg_catalog.pg_constraint
+        WHERE contype = 'f'
+          AND (conrelid = target.oid OR confrelid = target.oid)
+      )
+      UNION ALL
+      SELECT 'triggers'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1 FROM pg_catalog.pg_trigger
+        WHERE tgrelid = target.oid AND NOT tgisinternal
+      )
+      UNION ALL
+      SELECT 'rules'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1 FROM pg_catalog.pg_rewrite
+        WHERE ev_class = target.oid AND rulename <> '_RETURN'
+      )
+      UNION ALL
+      SELECT 'row-level-security'
+      FROM target
+      WHERE relrowsecurity OR relforcerowsecurity
+         OR EXISTS (SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = target.oid)
+      UNION ALL
+      SELECT 'partitioning'
+      FROM target
+      WHERE relkind = 'p'
+         OR EXISTS (
+              SELECT 1 FROM pg_catalog.pg_inherits
+              WHERE inhrelid = target.oid OR inhparent = target.oid
+            )
+      UNION ALL
+      SELECT 'publication'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1 FROM pg_catalog.pg_publication_rel WHERE prrelid = target.oid
+      )
+      UNION ALL
+      SELECT 'non-default-owner-or-acl'
+      FROM target
+      WHERE relowner <> (SELECT usesysid FROM pg_catalog.pg_user WHERE usename = current_user)
+         OR relacl IS NOT NULL
+         OR EXISTS (
+              SELECT 1 FROM pg_catalog.pg_attribute
+              WHERE attrelid = target.oid AND attacl IS NOT NULL
+            )
+      UNION ALL
+      SELECT 'non-default-replica-identity'
+      FROM target WHERE relreplident <> 'd'
+      UNION ALL
+      SELECT 'dependent-view'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1
+        FROM information_schema.view_table_usage
+        WHERE table_schema = $1 AND table_name = $2
+      )
+      UNION ALL
+      SELECT 'dependent-function'
+      FROM target
+      WHERE EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_depend
+        WHERE refclassid = 'pg_class'::regclass
+          AND refobjid = target.oid
+          AND classid = 'pg_proc'::regclass
+      )
+    )
+    SELECT DISTINCT feature FROM findings ORDER BY feature
+    """
+    ( contramap
+        (\table -> (table ^. #schemaName, table ^. #tableName))
+        (contrazip2 textParam textParam)
+    )
+    (D.rowList (D.column (D.nonNullable D.text)))
+
+resolveClonedPromotionObjectStmt ::
+  Statement (QualifiedTable, QualifiedTable, Text, Text) (Maybe Text)
+resolveClonedPromotionObjectStmt =
+  preparable
+    """
+    WITH source_table AS (
+      SELECT to_regclass(format('%I.%I', $1, $2)) AS oid
+    ), staging_table AS (
+      SELECT to_regclass(format('%I.%I', $3, $4)) AS oid
+    ), source_index AS (
+      SELECT indexes.*
+      FROM pg_catalog.pg_index AS indexes
+      JOIN pg_catalog.pg_class AS index_classes ON index_classes.oid = indexes.indexrelid
+      JOIN pg_catalog.pg_namespace AS index_namespaces ON index_namespaces.oid = index_classes.relnamespace
+      WHERE indexes.indrelid = (SELECT oid FROM source_table)
+        AND index_namespaces.nspname = $1 AND index_classes.relname = $6
+    ), index_match(name) AS (
+      SELECT candidate_classes.relname
+      FROM source_index
+      JOIN pg_catalog.pg_index AS candidate
+        ON candidate.indrelid = (SELECT oid FROM staging_table)
+       AND candidate.indisunique = source_index.indisunique
+       AND candidate.indisprimary = source_index.indisprimary
+       AND candidate.indisexclusion = source_index.indisexclusion
+       AND candidate.indkey = source_index.indkey
+       AND candidate.indcollation = source_index.indcollation
+       AND candidate.indclass = source_index.indclass
+       AND candidate.indoption = source_index.indoption
+       AND pg_get_expr(candidate.indexprs, candidate.indrelid)
+             IS NOT DISTINCT FROM pg_get_expr(source_index.indexprs, source_index.indrelid)
+       AND pg_get_expr(candidate.indpred, candidate.indrelid)
+             IS NOT DISTINCT FROM pg_get_expr(source_index.indpred, source_index.indrelid)
+      JOIN pg_catalog.pg_class AS candidate_classes
+        ON candidate_classes.oid = candidate.indexrelid
+      WHERE $5 = 'index'
+    ), source_constraint AS (
+      SELECT constraints.*
+      FROM pg_catalog.pg_constraint AS constraints
+      WHERE constraints.conrelid = (SELECT oid FROM source_table)
+        AND constraints.conname = $6
+    ), constraint_match(name) AS (
+      SELECT candidate.conname
+      FROM source_constraint
+      JOIN pg_catalog.pg_constraint AS candidate
+        ON candidate.conrelid = (SELECT oid FROM staging_table)
+       AND candidate.contype = source_constraint.contype
+       AND candidate.conkey IS NOT DISTINCT FROM source_constraint.conkey
+       AND pg_get_constraintdef(candidate.oid, FALSE)
+             IS NOT DISTINCT FROM pg_get_constraintdef(source_constraint.oid, FALSE)
+      WHERE $5 = 'constraint'
+    ), source_sequence_column AS (
+      SELECT dependencies.refobjsubid
+      FROM pg_catalog.pg_class AS sequences
+      JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = sequences.relnamespace
+      JOIN pg_catalog.pg_depend AS dependencies
+        ON dependencies.classid = 'pg_class'::regclass
+       AND dependencies.objid = sequences.oid
+       AND dependencies.refclassid = 'pg_class'::regclass
+       AND dependencies.refobjid = (SELECT oid FROM source_table)
+       AND dependencies.deptype IN ('a', 'i')
+      WHERE namespaces.nspname = $1 AND sequences.relname = $6
+    ), sequence_match(name) AS (
+      SELECT sequences.relname
+      FROM source_sequence_column
+      JOIN pg_catalog.pg_depend AS dependencies
+        ON dependencies.refclassid = 'pg_class'::regclass
+       AND dependencies.refobjid = (SELECT oid FROM staging_table)
+       AND dependencies.refobjsubid = source_sequence_column.refobjsubid
+       AND dependencies.classid = 'pg_class'::regclass
+       AND dependencies.deptype IN ('a', 'i')
+      JOIN pg_catalog.pg_class AS sequences ON sequences.oid = dependencies.objid
+      WHERE $5 = 'owned-sequence' AND sequences.relkind = 'S'
+    ), matches AS (
+      SELECT name FROM index_match
+      UNION ALL SELECT name FROM constraint_match
+      UNION ALL SELECT name FROM sequence_match
+    )
+    SELECT CASE WHEN count(*) = 1 THEN min(name) END FROM matches
+    """
+    ( contramap
+        ( \(serving, staging, kind, canonicalName) ->
+            ( serving ^. #schemaName,
+              serving ^. #tableName,
+              staging ^. #schemaName,
+              staging ^. #tableName,
+              kind,
+              canonicalName
+            )
+        )
+        (contrazip6 textParam textParam textParam textParam textParam textParam)
+    )
+    (D.singleRow (D.column (D.nullable D.text)))
+
 insertGenerationStmt :: Statement InsertGeneration ()
 insertGenerationStmt =
   preparable
@@ -2665,7 +3103,7 @@ loadCandidateGenerationsStmt :: Statement Text [VersionedTargetGeneration]
 loadCandidateGenerationsStmt =
   preparable
     """
-    SELECT generations.generation_id, generations.target_id,
+    SELECT generations.generation_id, generations.group_id, generations.target_id,
            generations.revision_id, generations.schema_name,
            generations.relation_name, generations.relation_oid,
            generations.schema_version, generations.expected_shape_id,
@@ -2683,7 +3121,7 @@ loadServingGenerationsStmt :: Statement Text [VersionedTargetGeneration]
 loadServingGenerationsStmt =
   preparable
     """
-    SELECT generation_id, target_id, revision_id, schema_name, relation_name,
+    SELECT generation_id, group_id, target_id, revision_id, schema_name, relation_name,
            relation_oid, schema_version, expected_shape_id,
            observed_shape_fingerprint, lifecycle
     FROM keiro.keiro_projection_target_generations
@@ -2692,6 +3130,72 @@ loadServingGenerationsStmt =
     """
     textParam
     (D.rowList generationDecoder)
+
+loadRetiredGenerationsStmt :: Statement () [VersionedTargetGeneration]
+loadRetiredGenerationsStmt =
+  preparable
+    """
+    SELECT generation_id, group_id, target_id, revision_id, schema_name,
+           relation_name, relation_oid, schema_version, expected_shape_id,
+           observed_shape_fingerprint, lifecycle
+    FROM keiro.keiro_projection_target_generations
+    WHERE lifecycle = 'retired'
+    ORDER BY group_id, target_id, generation_id
+    """
+    E.noParams
+    (D.rowList generationDecoder)
+
+loadGenerationStmt :: Statement UUID (Maybe VersionedTargetGeneration)
+loadGenerationStmt =
+  preparable
+    """
+    SELECT generation_id, group_id, target_id, revision_id, schema_name,
+           relation_name, relation_oid, schema_version, expected_shape_id,
+           observed_shape_fingerprint, lifecycle
+    FROM keiro.keiro_projection_target_generations
+    WHERE generation_id = $1
+    """
+    uuidParam
+    (D.rowMaybe generationDecoder)
+
+activeVersionedGroupRunStmt :: Statement Text (Maybe Text)
+activeVersionedGroupRunStmt =
+  preparable
+    """
+    SELECT active_run_id
+    FROM keiro.keiro_projection_rebuild_groups
+    WHERE group_id = $1
+    """
+    textParam
+    (join <$> D.rowMaybe (D.column (D.nullable D.text)))
+
+retiredGenerationDependenciesStmt :: Statement Int64 [Text]
+retiredGenerationDependenciesStmt =
+  preparable
+    """
+    SELECT DISTINCT pg_describe_object(dependencies.classid,
+                                       dependencies.objid,
+                                       dependencies.objsubid)
+    FROM pg_catalog.pg_depend AS dependencies
+    WHERE dependencies.refclassid = 'pg_class'::regclass
+      AND dependencies.refobjid = ($1::bigint)::oid
+      AND dependencies.deptype = 'n'
+    ORDER BY 1
+    """
+    int8Param
+    (D.rowList (D.column (D.nonNullable D.text)))
+
+markRetiredGenerationDroppedStmt :: Statement UUID Bool
+markRetiredGenerationDroppedStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_projection_target_generations
+    SET lifecycle = 'dropped', dropped_at = now()
+    WHERE generation_id = $1 AND lifecycle = 'retired'
+    RETURNING TRUE
+    """
+    uuidParam
+    (fromMaybe False <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
 
 loadVersionedSourcesStmt :: Statement Text [VersionedSourceProgress]
 loadVersionedSourcesStmt =
@@ -2739,6 +3243,7 @@ generationDecoder :: D.Row VersionedTargetGeneration
 generationDecoder =
   build
     <$> (TargetGenerationId <$> D.column (D.nonNullable D.uuid))
+    <*> (parseGroupId <$> D.column (D.nonNullable D.text))
     <*> (parseTargetId <$> D.column (D.nonNullable D.text))
     <*> (parseRevisionId <$> D.column (D.nonNullable D.text))
     <*> D.column (D.nonNullable D.text)
@@ -2749,9 +3254,10 @@ generationDecoder =
     <*> D.column (D.nonNullable D.text)
     <*> (parseGenerationLifecycle <$> D.column (D.nonNullable D.text))
   where
-    build generationId targetId revisionId schemaName tableName relationOid schemaVersion expectedShapeId observedShapeFingerprint lifecycle =
+    build generationId rebuildGroupId targetId revisionId schemaName tableName relationOid schemaVersion expectedShapeId observedShapeFingerprint lifecycle =
       VersionedTargetGeneration
         { generationId,
+          rebuildGroupId,
           targetId,
           revisionId,
           physicalTable = QualifiedTable schemaName tableName,

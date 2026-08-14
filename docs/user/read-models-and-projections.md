@@ -423,6 +423,32 @@ resumes, committed pages/events, failures, promotions, and page duration. Durabl
 also expose captured head, per-source cursor/target, evaluation/apply counts, and
 verification evidence; neither surface contains raw event payloads.
 
+## Rebuild Into A Schema-Versioned Generation
+
+Use the versioned lifecycle when the serving table must remain readable while a new
+schema is provisioned and replayed. Deploy one catalog containing both executable
+`ProjectionRevision` values. The application owns transaction-local DDL and schema
+validation; Keiro owns generation names, retention, replay convergence, the bounded
+writer/table-lock phase, dedup/checkpoint reconciliation, atomic group promotion, and
+retirement.
+
+Start through `startVersionedGroupRebuild`, inspect with
+`inspectVersionedGroupRebuild`, and advance one durable phase at a time with
+`resumeVersionedGroupRebuild`. Live writers use the persisted serving revision and
+complete serving-generation map while the candidate is replayed. A binary missing that
+revision refuses before application SQL. Restricted clone mode is available only for
+an exact-shape repair and refuses unsupported PostgreSQL DDL or dependencies.
+
+Promotion retains V1 as explicit retired generations. Those tables stop receiving
+ordinary writes and are not automatic rollback or compatibility surfaces. Preview
+their destruction through `previewRetiredGenerationDrop`; active runs, compatible read
+contracts, and PostgreSQL dependencies block `dropRetiredGeneration`.
+
+See [Online Schema-Versioned Projection Rebuilds](../guides/online-projection-rebuilds.md)
+for bridge deployment, provisioner and validator contracts, compatible versus breaking
+consumers, cutover waits, retention failure recovery, embedded CLI commands, and the
+executable Jitsurei V1-to-V2 transcript.
+
 ## Inspect And Operate A Catalog
 
 `Keiro.Projection.Catalog.Operations` is the operator-neutral boundary over the
@@ -447,7 +473,11 @@ versioned JSON envelopes:
 - `keiro/catalog-registered-rebuild-preview/v2`; and
 - `keiro/catalog-adoption-preview/v2`;
 - `keiro/catalog-adoption-outcome/v2`; and
-- `keiro/catalog-rebuild-run/v1`.
+- `keiro/catalog-rebuild-run/v1`;
+- `keiro/catalog-versioned-rebuild-run/v1`;
+- `keiro/catalog-retired-generations/v1`;
+- `keiro/catalog-retired-drop-preview/v1`; and
+- `keiro/catalog-retired-drop-outcome/v1`.
 
 Every subscription in inventory and rebuild JSON includes
 `checkpointOnMissing` with one of the stable values `FromBeginning`,
@@ -456,8 +486,10 @@ Every subscription in inventory and rebuild JSON includes
 The adapter intentionally has no parser, text renderer, confirmation policy, or
 database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
-`rebuild list|preview|start|status|resume|abandon|adopt` renders the same reports and
-requires preview plus `--force` for mutations. Applications therefore do not
+`rebuild list|preview|start|status|resume|abandon|adopt`, nested
+`rebuild versioned start|status|resume|abandon`, `rebuild retired`, and
+`rebuild drop-retired` render the same reports and require preview plus `--force`
+for mutations. Applications therefore do not
 maintain a second rebuild map. An adoption preview shows the complete catalog but marks
 each group, registration, and orphan as `adopt` or `skip` for the requested groups. It
 warns by name when skipped drift will still block startup, and refuses a requested group

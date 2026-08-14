@@ -156,6 +156,64 @@ spec fixture = do
         runStatement store () rolledBackLifecycleFactsStmt
           `shouldReturn` ("live", 0, 0, 0, 0)
 
+      it "uses the restricted clone path only for an exact-shape repair" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridgeFrom cloneBridgeCatalog
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-clone" 3
+        let request =
+              versionedRequest "versioned-clone" physicalTargets
+                & #targetMode
+                .~ RestrictedClone
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        final <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 12
+
+        final ^. #phase `shouldBe` VersionedPromoted
+        final ^. #servingRevisionId `shouldBe` identity mkProjectionRevisionId "counter-v2"
+        runStatement store () servingCountsStmt `shouldReturn` (3, 3)
+        runStatement store () cloneShapeStmt `shouldReturn` True
+
+      it "remaps cloned primary-key and identity-sequence names during promotion" $ \store -> do
+        runScript store identityBridgeSql
+        (catalog, physicalTargets) <- validatedBridgeFrom identityCloneBridgeCatalog
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-identity-clone" 2
+        let request =
+              versionedRequest "versioned-identity-clone" physicalTargets
+                & #targetMode
+                .~ RestrictedClone
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        final <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 12
+
+        final ^. #phase `shouldBe` VersionedPromoted
+        runStatement store () identityCloneObjectsStmt `shouldReturn` True
+
+      it "returns typed restricted-clone findings without leaving a candidate" $ \store -> do
+        setupBridge store
+        runScript store cloneTriggerSql
+        (catalog, physicalTargets) <- validatedBridgeFrom cloneBridgeCatalog
+        registerBridge store catalog
+        let request =
+              versionedRequest "versioned-clone-refused" physicalTargets
+                & #targetMode
+                .~ RestrictedClone
+
+        refused <- expectStore store (beginVersionedRebuild catalog request)
+
+        refused
+          `shouldSatisfy` \case
+            Left (VersionedCloneRefused targetId table findings) ->
+              targetId == counterTargetId
+                && table == QualifiedTable "app" "counter"
+                && findings == ["triggers"]
+            _ -> False
+        runStatement store () rolledBackLifecycleFactsStmt
+          `shouldReturn` ("live", 0, 0, 0, 0)
+
       it "refuses a deterministic staging-name collision and rolls earlier target work back" $ \store -> do
         setupBridge store
         (catalog, physicalTargets) <- validatedBridge
@@ -435,6 +493,69 @@ spec fixture = do
         repaired <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
         repaired ^. #phase `shouldBe` VersionedPromoted
 
+      it "previews retired blockers and drops only an unreferenced generation" $ \store -> do
+        setupBridge store
+        runScript store retiredReaderSql
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        let request = versionedRequest "versioned-retired-drop" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        _ <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
+        retired <- expectStore store listVersionedRetiredGenerations
+        length retired `shouldBe` 2
+        let counterRetired =
+              fromMaybe
+                (error "retired counter generation missing")
+                (List.find ((== counterTargetId) . (^. #targetId)) retired)
+
+        contractBlocked <-
+          expectStore store (previewVersionedRetiredDrop catalog (counterRetired ^. #generationId))
+            >>= requireRight
+        contractBlocked ^. #supportedReadContracts `shouldBe` ["counter-reader"]
+        contractBlocked ^. #droppable `shouldBe` False
+
+        noContractCatalog <-
+          fst <$> validatedBridgeFrom (runtimeBridgeCatalog {readContractRevisionReferences = []})
+        dependencyBlocked <-
+          expectStore
+            store
+            (previewVersionedRetiredDrop noContractCatalog (counterRetired ^. #generationId))
+            >>= requireRight
+        dependencyBlocked ^. #supportedReadContracts `shouldBe` []
+        dependencyBlocked ^. #externalDependencies `shouldSatisfy` (not . null)
+        refused <-
+          expectStore
+            store
+            (dropVersionedRetiredGeneration noContractCatalog (counterRetired ^. #generationId))
+        refused
+          `shouldSatisfy` \case
+            Left (VersionedRetiredDropBlocked generationId blockers) ->
+              generationId == counterRetired ^. #generationId
+                && any ("postgres-dependency:" `Text.isPrefixOf`) blockers
+            _ -> False
+
+        runScript store "DROP VIEW app.retired_counter_reader"
+        clear <-
+          expectStore
+            store
+            (previewVersionedRetiredDrop noContractCatalog (counterRetired ^. #generationId))
+            >>= requireRight
+        clear ^. #droppable `shouldBe` True
+        dropped <-
+          expectStore
+            store
+            (dropVersionedRetiredGeneration noContractCatalog (counterRetired ^. #generationId))
+            >>= requireRight
+        dropped ^. #alreadyDropped `shouldBe` False
+        runStatement store (counterRetired ^. #physicalTable) relationExistsStmt `shouldReturn` False
+        secondDrop <-
+          expectStore
+            store
+            (dropVersionedRetiredGeneration noContractCatalog (counterRetired ^. #generationId))
+            >>= requireRight
+        secondDrop ^. #alreadyDropped `shouldBe` True
+
   describe "schema-versioned cutover concurrency" $
     around (withFreshDatabase fixture) $ do
       it "bounds the whole lock phase, keeps readers on v1, and resumes promotion" $ \connectionString ->
@@ -520,6 +641,39 @@ runtimeV1OnlyCatalog =
     { projectionRevisions = [runtimeRevision "v1" bridgeRevisionV1],
       readContractRevisionReferences = []
     }
+
+cloneBridgeCatalog :: ProjectionCatalog
+cloneBridgeCatalog =
+  bridgeCatalog
+    { projectionRevisions =
+        [ runtimeRevision "v1" bridgeRevisionV1,
+          runtimeRevision "v1" bridgeRevisionV2
+        ]
+    }
+
+identityCloneBridgeCatalog :: ProjectionCatalog
+identityCloneBridgeCatalog =
+  cloneBridgeCatalog
+    { projectionRevisions =
+        [ revision
+            & #targetProvisioners
+            %~ Map.adjust identityCloneProvisioner counterTargetId
+        | revision <- cloneBridgeCatalog ^. #projectionRevisions
+        ]
+    }
+
+identityCloneProvisioner :: TargetProvisioner -> TargetProvisioner
+identityCloneProvisioner provisioner =
+  provisioner
+    { validateTarget = Just (validateRuntimeTarget counterTargetId "v1" identityCloneObjects),
+      promotionObjectNames = identityCloneObjects
+    }
+
+identityCloneObjects :: [PromotionObjectName]
+identityCloneObjects =
+  [ PromotionObjectName PromotionConstraint "counter_pkey__clone" "counter_pkey",
+    PromotionObjectName PromotionOwnedSequence "counter_id_seq__clone" "counter_id_seq"
+  ]
 
 raceBridgeCatalog :: ProjectionCatalog
 raceBridgeCatalog =
@@ -814,6 +968,35 @@ bridgeSql =
     detail text NOT NULL
   );
   """
+
+identityBridgeSql :: ByteString
+identityBridgeSql =
+  """
+  CREATE SCHEMA app;
+  CREATE TABLE app.counter (
+    id bigint GENERATED BY DEFAULT AS IDENTITY,
+    total bigint NOT NULL,
+    CONSTRAINT counter_pkey PRIMARY KEY (id)
+  );
+  CREATE TABLE app.counter_audit (
+    id bigint PRIMARY KEY,
+    detail text NOT NULL
+  );
+  """
+
+cloneTriggerSql :: ByteString
+cloneTriggerSql =
+  """
+  CREATE FUNCTION app.clone_refusal_trigger() RETURNS trigger
+  LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+  CREATE TRIGGER clone_refusal
+    BEFORE INSERT ON app.counter
+    FOR EACH ROW EXECUTE FUNCTION app.clone_refusal_trigger();
+  """
+
+retiredReaderSql :: ByteString
+retiredReaderSql =
+  "CREATE VIEW app.retired_counter_reader AS SELECT id, total FROM app.counter"
 
 servingOnlyRowsSql :: ByteString
 servingOnlyRowsSql =
@@ -1149,6 +1332,44 @@ promotedCounterShapeStmt =
       WHERE table_schema = 'app' AND table_name = 'counter'
         AND column_name = 'subtotal'
     )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+cloneShapeStmt :: Statement () Bool
+cloneShapeStmt =
+  preparable
+    """
+    SELECT
+      (SELECT count(*) FROM information_schema.columns
+       WHERE table_schema = 'app' AND table_name = 'counter') = 2
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'app' AND table_name = 'counter'
+          AND column_name = 'total'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'app' AND table_name = 'counter'
+          AND column_name = 'subtotal'
+      )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+identityCloneObjectsStmt :: Statement () Bool
+identityCloneObjectsStmt =
+  preparable
+    """
+    SELECT
+      pg_catalog.pg_get_serial_sequence('app.counter', 'id') = 'app.counter_id_seq'
+      AND EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint
+        WHERE conrelid = 'app.counter'::regclass
+          AND conname = 'counter_pkey'
+          AND contype = 'p'
+      )
     """
     E.noParams
     (D.singleRow (D.column (D.nonNullable D.bool)))
