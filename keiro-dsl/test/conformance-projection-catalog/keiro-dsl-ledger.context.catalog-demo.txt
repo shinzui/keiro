@@ -1,5 +1,5 @@
 keiro-dsl scaffold record v1
-spec: test/fixtures/projection-catalog.keiro
+spec: keiro-dsl/test/fixtures/projection-catalog.keiro
 module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
