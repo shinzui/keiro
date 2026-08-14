@@ -1061,6 +1061,86 @@ spec fixture = do
             promotedRows `shouldBe` []
             runStatement store () servingCountsStmt `shouldReturn` (0, 0)
 
+  describe "schema-versioned release fault injection" $
+    around (withFreshDatabase fixture) $ do
+      it "rolls every cutover boundary back to one v1 authority and resumes the same incompatible v2 promotion" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupExternalBridge store
+            (catalog, physicalTargets) <- validatedBridgeFrom breakingExternalReadCatalog
+            registerBridge store catalog
+            runScript store servingOnlyRowsSql
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            appendVersionedEvents store "counter-release-faults" 2
+            let request =
+                  versionedRequest "versioned-release-faults" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 100
+            handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            expectStore store (reconcileExternalReadContracts catalog) >>= requireRight
+            captured <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+            captured ^. #phase `shouldBe` VersionedCutoverReplaying
+            captured ^. #capturedHead `shouldBe` GlobalPosition 2
+            assertPreparedV1Authority store (request ^. #rebuildRunId) False
+
+            prepared <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            prepared ^. #promotionPrepared `shouldBe` True
+            assertPreparedV1Authority store (request ^. #rebuildRunId) True
+            assertCandidateCounts store handle 2
+
+            relationHolderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Read
+                      ( do
+                          count <- Tx.statement () counterCountStmt
+                          Tx.sql "SELECT pg_sleep(1)"
+                          pure count
+                      )
+                  )
+                  >>= putMVar relationHolderDone
+            waitForCounterReader pool 50
+            relationRefusal <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            relationRefusal
+              `shouldBe` Right
+                (Left (VersionedCutoverDeadlineExceeded (request ^. #rebuildRunId) "target-relations"))
+            _ <- expectPoolUsage =<< takeMVar relationHolderDone
+            assertPreparedV1Authority store (request ^. #rebuildRunId) True
+            assertCandidateCounts store handle 2
+
+            runScript store failAfterFirstPromotionRenameSql
+            renameFailure <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            renameFailure `shouldSatisfy` isLeft
+            runScript store dropPromotionRenameFaultSql
+            assertPreparedV1Authority store (request ^. #rebuildRunId) True
+            assertCandidateCounts store handle 2
+
+            runScript store failAfterPromotionMetadataSql
+            metadataFailure <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            metadataFailure `shouldSatisfy` isLeft
+            runScript store dropPromotionMetadataFaultSql
+            assertPreparedV1Authority store (request ^. #rebuildRunId) True
+            assertCandidateCounts store handle 2
+
+            runScript store failAfterManagedWrapperSql
+            wrapperFailure <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            wrapperFailure `shouldSatisfy` isLeft
+            runScript store dropManagedWrapperFaultSql
+            assertPreparedV1Authority store (request ^. #rebuildRunId) True
+            assertCandidateCounts store handle 2
+
+            promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            promoted ^. #phase `shouldBe` VersionedPromoted
+            oldRead <- Store.runStoreIO store (Store.runTransaction (Tx.statement () externalV1RowsStmt))
+            oldRead `shouldSatisfy` hasSqlState "KR003"
+            runStatement store () servingCountsStmt `shouldReturn` (2, 2)
+            newRows <- runStatement store () externalV2RowsStmt
+            newRows `shouldSatisfy` (not . null)
+
   describe "targeted stream reprojection" $
     around (withFreshStore fixture) $ do
       it "repairs only the selected stream and transactionally backfills redelivery evidence" $ \store -> do
@@ -2077,6 +2157,82 @@ servingOnlyRowsSql =
   INSERT INTO app.counter_audit (id, detail) VALUES (100, 'serving-v1');
   """
 
+failAfterFirstPromotionRenameSql :: ByteString
+failAfterFirstPromotionRenameSql =
+  """
+  CREATE FUNCTION public.keiro_test_fail_after_promotion_rename()
+  RETURNS event_trigger
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+    RAISE EXCEPTION 'injected failure after a promotion rename';
+  END
+  $$;
+  CREATE EVENT TRIGGER keiro_test_fail_after_promotion_rename
+    ON ddl_command_end
+    WHEN TAG IN ('ALTER TABLE')
+    EXECUTE FUNCTION public.keiro_test_fail_after_promotion_rename();
+  """
+
+dropPromotionRenameFaultSql :: ByteString
+dropPromotionRenameFaultSql =
+  """
+  DROP EVENT TRIGGER keiro_test_fail_after_promotion_rename;
+  DROP FUNCTION public.keiro_test_fail_after_promotion_rename();
+  """
+
+failAfterPromotionMetadataSql :: ByteString
+failAfterPromotionMetadataSql =
+  """
+  CREATE FUNCTION public.keiro_test_fail_after_promotion_metadata()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+    RAISE EXCEPTION 'injected failure after the promotion metadata transition';
+  END
+  $$;
+  CREATE TRIGGER keiro_test_fail_after_promotion_metadata
+    AFTER UPDATE ON keiro.keiro_projection_rebuild_groups
+    FOR EACH ROW
+    WHEN (OLD.status = 'cutover-versioned' AND NEW.status = 'serving-versioned')
+    EXECUTE FUNCTION public.keiro_test_fail_after_promotion_metadata();
+  """
+
+dropPromotionMetadataFaultSql :: ByteString
+dropPromotionMetadataFaultSql =
+  """
+  DROP TRIGGER keiro_test_fail_after_promotion_metadata
+    ON keiro.keiro_projection_rebuild_groups;
+  DROP FUNCTION public.keiro_test_fail_after_promotion_metadata();
+  """
+
+failAfterManagedWrapperSql :: ByteString
+failAfterManagedWrapperSql =
+  """
+  CREATE FUNCTION public.keiro_test_fail_after_managed_wrapper()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+    RAISE EXCEPTION 'injected failure after managed wrapper reconciliation';
+  END
+  $$;
+  CREATE TRIGGER keiro_test_fail_after_managed_wrapper
+    AFTER INSERT OR UPDATE ON keiro.keiro_managed_read_objects
+    FOR EACH ROW
+    WHEN (NEW.object_kind = 'wrapper-function')
+    EXECUTE FUNCTION public.keiro_test_fail_after_managed_wrapper();
+  """
+
+dropManagedWrapperFaultSql :: ByteString
+dropManagedWrapperFaultSql =
+  """
+  DROP TRIGGER keiro_test_fail_after_managed_wrapper
+    ON keiro.keiro_managed_read_objects;
+  DROP FUNCTION public.keiro_test_fail_after_managed_wrapper();
+  """
+
 promoteDispatchMetadataSql :: ByteString
 promoteDispatchMetadataSql =
   """
@@ -2255,6 +2411,25 @@ driveVersionedReplayComplete store catalog runId attempts
       if report ^. #phase == VersionedReplayRunning && allVersionedComplete (report ^. #sources)
         then pure report
         else driveVersionedReplayComplete store catalog runId (attempts - 1)
+
+assertPreparedV1Authority :: Store.KirokuStore -> RebuildRunId -> Bool -> IO ()
+assertPreparedV1Authority store runId expectedPrepared = do
+  report <- expectStore store (inspectVersionedRebuild runId) >>= requireRight
+  report ^. #servingRevisionId `shouldBe` identity mkProjectionRevisionId "counter-v1"
+  report ^. #servingEpoch `shouldBe` 0
+  report ^. #promotionPrepared `shouldBe` expectedPrepared
+  status <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+  status ^? _Just . #lifecyclePhase `shouldBe` Just "cutover-versioned"
+  status ^? _Just . #servingRevisionId
+    `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v1"))
+  status ^? _Just . #servingEpoch `shouldBe` Just 0
+  runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
+  runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+
+assertCandidateCounts :: Store.KirokuStore -> VersionedRebuildHandle -> Int64 -> IO ()
+assertCandidateCounts store handle expected =
+  for_ (handle ^. #candidateGenerations) $ \generation ->
+    rowCount store (generation ^. #physicalTable) `shouldReturn` expected
 
 allVersionedComplete :: [VersionedSourceProgress] -> Bool
 allVersionedComplete =
