@@ -2,8 +2,8 @@ keiro-dsl scaffold record v1
 spec: keiro-dsl/test/fixtures/workflow-evolution.keiro
 module-root: (none)
 layout: prefixed
-source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"sourceForm":"declared"}
-semantic-contract {"languageSupport":"stable","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+source-language {"declaredLanguageVersion":5,"effectiveLanguageVersion":5,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":5,"runtimeSemantics":"keiro-dsl/runtime-semantics/4"}
 naming-edition idiomatic-v1
 module-role {"family":"WorkflowFacts","kind":"generated","ownerKind":"workflow","ownerName":"workflow HospitalTransferReservation (line 4)","path":"Generated/HospitalCapacity/HospitalTransferReservation/WorkflowFacts.hs"}
 module-role {"family":"WorkflowRuntime","kind":"generated","ownerKind":"workflow","ownerName":"workflow HospitalTransferReservation (line 4)","path":"Generated/HospitalCapacity/HospitalTransferReservation/WorkflowRuntime.hs"}

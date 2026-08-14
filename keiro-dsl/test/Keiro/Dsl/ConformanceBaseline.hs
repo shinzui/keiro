@@ -50,6 +50,7 @@ data CompiledSuite = CompiledSuite
     suiteSource :: !(Maybe FilePath),
     suiteGeneration :: !Text,
     suiteRole :: !Text,
+    suiteLanguageVersion :: !(Maybe Natural),
     suiteReason :: !Text
   }
   deriving stock (Eq, Show)
@@ -62,6 +63,7 @@ instance FromJSON CompiledSuite where
       <*> fields .:? "source"
       <*> fields .: "generation"
       <*> fields .: "role"
+      <*> fields .:? "languageVersion"
       <*> fields .: "reason"
 
 data ConformanceBaseline = ConformanceBaseline
@@ -88,7 +90,7 @@ conformanceBaselineSpec :: SpecWith ()
 conformanceBaselineSpec = describe "conformance baseline" $ do
   it "uses the registered stable and authoring languages plus explicit compatibility rows" $ do
     baseline <- readBaseline
-    baselineSchema baseline `shouldBe` "keiro-dsl/conformance-baseline/1"
+    baselineSchema baseline `shouldBe` "keiro-dsl/conformance-baseline/2"
     baselineStableLanguageVersion baseline
       `shouldBe` languageVersionNumber currentStableLanguageVersion
     baselineAuthoringLanguageVersion baseline
@@ -130,10 +132,12 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
     forM_ (baselineCompiledSuites baseline) $ \suite -> do
       suiteRole suite
         `shouldSatisfy` (`elem` ["stable-primary", "candidate-primary", "compatibility-proof", "version-independent"])
+      suiteLanguageVersion suite
+        `shouldBe` primaryVersionForRole baseline (suiteRole suite)
       suiteReason suite `shouldSatisfy` (not . T.null . T.strip)
       directory <- resolveRepoDirectory ("keiro-dsl" </> suiteDirectory suite)
       doesDirectoryExist directory `shouldReturn` True
-      case primaryVersionForRole baseline (suiteRole suite) of
+      case suiteLanguageVersion suite of
         Just primaryVersion -> do
           unless (suiteGeneration suite `elem` ["workspace", "skeletons"]) $ do
             source <- requiredSuiteSource suite

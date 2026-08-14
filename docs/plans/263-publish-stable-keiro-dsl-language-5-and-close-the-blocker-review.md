@@ -35,8 +35,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: migrate the conformance baseline to explicit per-suite language ownership and preserve Language 4 as published compatibility
-- [ ] M1: migrate the workflow evolution fixture and its three compiled lanes to Language 5 without weakening the Language 4 parser/corpus proofs
+- [x] M1: migrate the conformance baseline to explicit per-suite language ownership and preserve Language 4 as published compatibility
+- [x] M1: migrate the workflow evolution fixture and its three compiled lanes to Language 5 without weakening the Language 4 parser/corpus proofs
 - [ ] M2: make Language 5 the sole `Stable`/`PublishedLanguage` registry entry and make Language 4 `CompatibilityOnly`/`PublishedLanguage`
 - [ ] M2: regenerate the affected corpus, update Language 5 documentation and ADR 16, and pass every DSL/repository gate
 - [ ] M3: commit the release-candidate code and documentation with MasterPlan, ExecPlan, and Intention trailers
@@ -63,6 +63,10 @@ implementation. Provide concise evidence.
 - A review record requires a full 40-character commit SHA. Code and registry changes therefore
   need a local release-candidate commit before the closure review is authored; the review
   records themselves land in a later documentation commit.
+- Schema 2 and corpus regeneration changed only the intentionally migrated workflow fixture and
+  its three pairs of generated workflow modules plus provenance ledgers. The focused baseline
+  passed 2 examples, and all three workflow lanes passed, including the live PostgreSQL proof
+  that allocates, signals, resumes, and completes with the opaque id.
 
 
 ## Decision Log
