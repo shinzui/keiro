@@ -16,10 +16,14 @@ import CatalogSpec
     mainGroupId,
   )
 import Contravariant.Extras (contrazip2)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (bracket)
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Functor.Contravariant ((>$<))
+import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
@@ -27,39 +31,49 @@ import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
+import Hasql.Connection.Settings qualified as ConnectionSettings
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
+import Hasql.Transaction.Sessions qualified as TxSessions
 import Keiro.Connection (qualifyTable)
 import Keiro.Prelude
 import Keiro.Projection (CatalogAsyncApplyOutcome (..), applyAsyncProjectionFromCatalog)
 import Keiro.Projection.Catalog
 import Keiro.ReadModel.Rebuild
-import Keiro.Test.Postgres (Fixture, withFreshStore)
+import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.HistoryRetention
   ( HistoryRetentionLeaseRequest (..),
+    HistoryRetentionRenewalError (..),
     mkHistoryRetentionLeaseDuration,
     mkHistoryRetentionLeaseOwner,
     mkHistoryRetentionLeaseReason,
   )
 import Kiroku.Store.Types
-  ( EventId (..),
+  ( CategoryName (..),
+    EventData (..),
+    EventId (..),
     EventType (..),
+    ExpectedVersion (..),
     GlobalPosition (..),
     RecordedEvent (..),
     StreamId (..),
+    StreamName (..),
     StreamVersion (..),
   )
 import Test.Hspec
 
 spec :: Fixture -> Spec
-spec fixture =
+spec fixture = do
   describe "schema-versioned rebuild lifecycle" $
     around (withFreshStore fixture) $ do
       it "persists serving and candidate generations and resumes the same run without reprovisioning" $ \store -> do
@@ -245,6 +259,231 @@ spec fixture =
         for_ (handle ^. #candidateGenerations) $ \generation ->
           rowCount store (generation ^. #physicalTable) `shouldReturn` 2
 
+      it "captures a durable final head and atomically promotes every target" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        let request = versionedRequest "versioned-promote" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        final <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
+
+        final ^. #phase `shouldBe` VersionedPromoted
+        final ^. #servingRevisionId `shouldBe` identity mkProjectionRevisionId "counter-v2"
+        final ^. #servingEpoch `shouldBe` 1
+        map (^. #lifecycle) (final ^. #servingGenerations)
+          `shouldBe` [GenerationServing, GenerationServing]
+        runStatement store () promotedLifecycleFactsStmt
+          `shouldReturn` ("serving-versioned", True, True, "counter-v2", 1, "promoted", 2, 2, 1)
+        runStatement store () promotedCounterShapeStmt `shouldReturn` True
+
+      it "converges across two replay rounds while live v1 stays serving and backfills async dedup" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-live" 4
+        originalEvents <-
+          expectStore store (Store.readCategory (CategoryName "counter") (GlobalPosition 0) 10)
+        let request =
+              versionedRequest "versioned-converge" physicalTargets
+                & #cutoverThreshold
+                .~ 0
+        handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        first <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        first ^. #phase `shouldBe` VersionedReplayRunning
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+
+        live <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 101))
+            )
+        live `shouldBe` CatalogAsyncApplied
+        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+
+        appendVersionedEvents store "counter-later" 2
+        second <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        allVersionedComplete (second ^. #sources) `shouldBe` True
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 4
+
+        extended <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        extended ^. #capturedHead `shouldBe` GlobalPosition 6
+        allVersionedComplete (extended ^. #sources) `shouldBe` False
+        replayedAgain <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        allVersionedComplete (replayedAgain ^. #sources) `shouldBe` True
+
+        final <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
+        final ^. #phase `shouldBe` VersionedPromoted
+        runStatement store () servingCountsStmt `shouldReturn` (6, 6)
+        runStatement store () convergeDedupCountStmt `shouldReturn` 7
+
+        redelivered <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (Vector.head originalEvents))
+            )
+        redelivered `shouldBe` CatalogAsyncDuplicate
+        runStatement store () servingCountsStmt `shouldReturn` (6, 6)
+
+        (v1Only, _) <- validatedBridgeFrom runtimeV1OnlyCatalog
+        refused <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog v1Only asyncProjectionId catalogAsyncProjection (recorded 102))
+            )
+        refused
+          `shouldBe` CatalogAsyncServingRevisionUnavailable
+            mainGroupId
+            (identity mkProjectionRevisionId "counter-v2")
+        runStatement store () servingCountsStmt `shouldReturn` (6, 6)
+
+      it "uses the Kiroku lease to refuse hard deletion for the full active run" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        appendVersionedEvents store "counter-retained" 1
+        let request = versionedRequest "versioned-retention" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        blocked <- Store.runStoreIO store (Store.hardDeleteStream (StreamName "counter-retained"))
+        blocked
+          `shouldSatisfy` \case
+            Left HistoryRetentionActive {} -> True
+            _ -> False
+
+        _ <- expectStore store (abandonVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+        deleted <- Store.runStoreIO store (Store.hardDeleteStream (StreamName "counter-retained"))
+        deleted `shouldSatisfy` isRight
+
+      it "fails closed when the original retention lease expires" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        let request =
+              versionedRequest "versioned-expired-retention" physicalTargets
+                & #retentionLeaseRequest
+                . #duration
+                .~ requireIdentity (mkHistoryRetentionLeaseDuration (secondsToDiffTime 1))
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        threadDelay 1_200_000
+
+        renewal <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+        renewal
+          `shouldSatisfy` \case
+            Left (VersionedRetentionRenewalFailed runId HistoryRetentionRenewalExpired) ->
+              runId == request ^. #rebuildRunId
+            _ -> False
+        failed <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+        failed ^. #phase `shouldBe` VersionedFailed
+        runStatement store () expiredRetentionFactsStmt
+          `shouldReturn` ("failed-versioned", True, False, "failed", "retention.renewal-failed")
+
+      it "revalidates candidate DDL under the cutover locks and resumes after repair" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridgeFrom raceBridgeCatalog
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        let request = versionedRequest "versioned-ddl-race" physicalTargets
+        handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        ready <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+        ready ^. #phase `shouldBe` VersionedCutoverReplaying
+        let counterCandidate =
+              fromMaybe
+                (error "counter candidate missing")
+                (List.find ((== counterTargetId) . (^. #targetId)) (handle ^. #candidateGenerations))
+        runScript
+          store
+          ( Text.Encoding.encodeUtf8
+              ( "ALTER TABLE "
+                  <> qualifyTable
+                    (counterCandidate ^. #physicalTable . #schemaName)
+                    (counterCandidate ^. #physicalTable . #tableName)
+                  <> " ADD COLUMN rogue bigint"
+              )
+          )
+
+        raced <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+        raced
+          `shouldSatisfy` \case
+            Left (VersionedObservedShapeMismatch targetId _ actual) ->
+              targetId == counterTargetId && "rogue" `Text.isSuffixOf` actual
+            _ -> False
+        stillReady <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+        stillReady ^. #phase `shouldBe` VersionedCutoverReplaying
+        runStatement store () servingCountsStmt `shouldReturn` (0, 0)
+
+        runScript
+          store
+          ( Text.Encoding.encodeUtf8
+              ( "ALTER TABLE "
+                  <> qualifyTable
+                    (counterCandidate ^. #physicalTable . #schemaName)
+                    (counterCandidate ^. #physicalTable . #tableName)
+                  <> " DROP COLUMN rogue"
+              )
+          )
+        repaired <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        repaired ^. #phase `shouldBe` VersionedPromoted
+
+  describe "schema-versioned cutover concurrency" $
+    around (withFreshDatabase fixture) $ do
+      it "bounds the whole lock phase, keeps readers on v1, and resumes promotion" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupBridge store
+            runScript store servingOnlyRowsSql
+            (catalog, physicalTargets) <- validatedBridge
+            registerBridge store catalog
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            let request =
+                  versionedRequest "versioned-lock-timeout" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 100
+            handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            ready <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+            ready ^. #phase `shouldBe` VersionedCutoverReplaying
+
+            readerDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          counts <- Tx.statement () servingCountsStmt
+                          Tx.sql "SELECT pg_sleep(1)"
+                          pure counts
+                      )
+                  )
+                  >>= putMVar readerDone
+            waitForCounterReader pool 50
+
+            timedOut <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            timedOut `shouldSatisfy` isLeft
+            stillReady <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+            stillReady ^. #phase `shouldBe` VersionedCutoverReplaying
+            runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+            for_ (handle ^. #candidateGenerations) $ \generation ->
+              rowCount store (generation ^. #physicalTable) `shouldReturn` 0
+
+            readerCounts <- expectPoolUsage =<< takeMVar readerDone
+            readerCounts `shouldBe` (1, 1)
+            promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            promoted ^. #phase `shouldBe` VersionedPromoted
+            runStatement store () servingCountsStmt `shouldReturn` (0, 0)
+
 validatedBridge :: IO (ValidatedProjectionCatalog, PhysicalTargets)
 validatedBridge = validatedBridgeFrom runtimeBridgeCatalog
 
@@ -282,32 +521,53 @@ runtimeV1OnlyCatalog =
       readContractRevisionReferences = []
     }
 
+raceBridgeCatalog :: ProjectionCatalog
+raceBridgeCatalog =
+  replaceCandidateProvisionerInCatalog
+    counterTargetId
+    (\provisioner -> provisioner {validateTarget = Just validateRaceCounter})
+    runtimeBridgeCatalog
+
+validateRaceCounter ::
+  TargetProvisioningContext ->
+  Tx.Transaction (Either [TargetSchemaViolation] TargetSchemaEvidence)
+validateRaceCounter targetContext = do
+  baseline <- validateRuntimeTarget counterTargetId "v2" promotionObjects targetContext
+  rogue <- Tx.statement (targetContext ^. #stagingTable) rogueColumnStmt
+  pure $
+    baseline <&> \evidence ->
+      if rogue
+        then evidence & #observedShapeFingerprint %~ (<> ":rogue")
+        else evidence
+  where
+    promotionObjects =
+      [PromotionObjectName PromotionIndex "counter_total_idx__v2" "counter_total_idx"]
+
 runtimeRevision :: Text -> ProjectionRevision -> ProjectionRevision
 runtimeRevision schema revision =
   revision
-    { targetProvisioners =
-        Map.fromList
-          [ (counterTargetId, counterProvisioner schema),
-            (auditTargetId, auditProvisioner schema)
-          ],
-      liveHandlers =
-        [ RevisionLiveHandler
-            ("runtime-live-" <> schema)
-            1
-            [counterTargetId, auditTargetId]
-            (applyRuntimeLive schema)
-        ],
-      replayAdapters =
-        [ RevisionReplayAdapter
-            ("runtime-replay-" <> schema)
-            1
-            [counterTargetId, auditTargetId]
-            ( \physicalTargets event -> do
-                applyRuntimeLive schema physicalTargets event
-                pure (Right True)
-            )
-        ]
-    }
+    & #targetProvisioners
+    .~ Map.fromList
+      [ (counterTargetId, counterProvisioner schema),
+        (auditTargetId, auditProvisioner schema)
+      ]
+    & #liveHandlers
+    .~ [ RevisionLiveHandler
+           ("runtime-live-" <> schema)
+           1
+           [counterTargetId, auditTargetId]
+           (applyRuntimeLive schema)
+       ]
+    & #replayAdapters
+    .~ [ RevisionReplayAdapter
+           ("runtime-replay-" <> schema)
+           1
+           [counterTargetId, auditTargetId]
+           ( \physicalTargets event -> do
+               applyRuntimeLive schema physicalTargets event
+               pure (Right True)
+           )
+       ]
 
 applyRuntimeLive :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
 applyRuntimeLive schema physicalTargets event = do
@@ -502,6 +762,7 @@ rebuildRequestFor runId physicalTargets =
       candidateRevisionId = identity mkProjectionRevisionId "counter-v2",
       servingTargets = physicalTargets,
       targetMode = ApplicationProvisioned,
+      replayPageSize = 2,
       cutoverThreshold = 10,
       cutoverLockTimeoutMs = 2_000,
       retentionLeaseRequest = retentionRequest runId,
@@ -554,6 +815,13 @@ bridgeSql =
   );
   """
 
+servingOnlyRowsSql :: ByteString
+servingOnlyRowsSql =
+  """
+  INSERT INTO app.counter (id, total) VALUES (100, 42);
+  INSERT INTO app.counter_audit (id, detail) VALUES (100, 'serving-v1');
+  """
+
 promoteDispatchMetadataSql :: ByteString
 promoteDispatchMetadataSql =
   """
@@ -591,6 +859,32 @@ runStatement :: Store.KirokuStore -> params -> Statement params result -> IO res
 runStatement store params statement =
   expectStore store (Store.runTransaction (Tx.statement params statement))
 
+withPool :: Text -> (Pool.Pool -> IO a) -> IO a
+withPool connectionString =
+  bracket
+    ( Pool.acquire $
+        PoolConfig.settings
+          [ PoolConfig.staticConnectionSettings (ConnectionSettings.connectionString connectionString),
+            PoolConfig.size 4
+          ]
+    )
+    Pool.release
+
+expectPoolUsage :: (Show error) => Either error value -> IO value
+expectPoolUsage = \case
+  Left err -> expectationFailure ("database action failed: " <> show err) >> error "unreachable"
+  Right value -> pure value
+
+waitForCounterReader :: Pool.Pool -> Int -> IO ()
+waitForCounterReader _ 0 = expectationFailure "reader did not acquire ACCESS SHARE in time"
+waitForCounterReader pool remaining = do
+  locked <-
+    expectPoolUsage
+      =<< Pool.use pool (TxSessions.transactionNoRetry TxSessions.ReadCommitted TxSessions.Read (Tx.statement () counterAccessShareStmt))
+  if locked
+    then pure ()
+    else threadDelay 20_000 >> waitForCounterReader pool (remaining - 1)
+
 expectStore ::
   Store.KirokuStore ->
   Eff '[Store, Error StoreError, IOE] value ->
@@ -613,6 +907,57 @@ identity constructor = either (error . const "invalid test identity") id . const
 
 run :: Text -> RebuildRunId
 run = either (error . Text.unpack) id . mkRebuildRunId
+
+driveVersionedToPromotion ::
+  Store.KirokuStore ->
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Int ->
+  IO VersionedRebuildReport
+driveVersionedToPromotion store catalog runId attempts
+  | attempts <= 0 = expectationFailure "versioned rebuild did not promote" >> error "unreachable"
+  | otherwise = do
+      report <- expectStore store (resumeVersionedRebuild catalog runId) >>= requireRight
+      if report ^. #phase == VersionedPromoted
+        then pure report
+        else driveVersionedToPromotion store catalog runId (attempts - 1)
+
+driveVersionedToCutoverReady ::
+  Store.KirokuStore ->
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Int ->
+  IO VersionedRebuildReport
+driveVersionedToCutoverReady store catalog runId attempts
+  | attempts <= 0 = expectationFailure "versioned rebuild did not reach cutover" >> error "unreachable"
+  | otherwise = do
+      report <- expectStore store (resumeVersionedRebuild catalog runId) >>= requireRight
+      if report ^. #phase == VersionedCutoverReplaying && allVersionedComplete (report ^. #sources)
+        then pure report
+        else driveVersionedToCutoverReady store catalog runId (attempts - 1)
+
+allVersionedComplete :: [VersionedSourceProgress] -> Bool
+allVersionedComplete =
+  all (\source -> source ^. #exhaustedThrough == Just (source ^. #targetPosition))
+
+appendVersionedEvents :: Store.KirokuStore -> Text -> Int -> IO ()
+appendVersionedEvents store streamName count = do
+  appended <-
+    Store.runStoreIO store $
+      Store.appendToStream
+        (StreamName streamName)
+        NoStream
+        [ EventData
+            { eventId = Nothing,
+              eventType = EventType "VersionedDispatch",
+              payload = Aeson.Null,
+              metadata = Nothing,
+              causationId = Nothing,
+              correlationId = Nothing
+            }
+        | _ <- [1 .. count]
+        ]
+  appended `shouldSatisfy` isRight
 
 relationOidFor :: Store.KirokuStore -> QualifiedTable -> IO Int64
 relationOidFor store table = do
@@ -655,6 +1000,23 @@ relationExistsStmt =
     )
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
+rogueColumnStmt :: Statement QualifiedTable Bool
+rogueColumnStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2 AND column_name = 'rogue'
+    )
+    """
+    ( (\table -> (table ^. #schemaName, table ^. #tableName))
+        >$< contrazip2
+          (E.param (E.nonNullable E.text))
+          (E.param (E.nonNullable E.text))
+    )
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
 rowCount :: Store.KirokuStore -> QualifiedTable -> IO Int64
 rowCount store table =
   runStatement store () $
@@ -680,6 +1042,22 @@ servingCountsStmt =
         )
     )
 
+counterAccessShareStmt :: Statement () Bool
+counterAccessShareStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_locks
+      WHERE relation = 'app.counter'::regclass
+        AND mode = 'AccessShareLock'
+        AND granted
+        AND pid <> pg_backend_pid()
+    )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
 dispatchDedupCountStmt :: Statement () Int64
 dispatchDedupCountStmt =
   preparable
@@ -690,6 +1068,90 @@ dispatchDedupCountStmt =
     """
     E.noParams
     (D.singleRow (D.column (D.nonNullable D.int8)))
+
+convergeDedupCountStmt :: Statement () Int64
+convergeDedupCountStmt = dispatchDedupCountStmt
+
+expiredRetentionFactsStmt :: Statement () (Text, Bool, Bool, Text, Text)
+expiredRetentionFactsStmt =
+  preparable
+    """
+    SELECT groups.status, groups.reads_allowed, groups.writes_allowed,
+           runs.status, runs.failure_code
+    FROM keiro.keiro_projection_rebuild_groups AS groups
+    JOIN keiro.keiro_projection_rebuild_runs AS runs
+      ON runs.group_id = groups.group_id
+    WHERE runs.run_id = 'versioned-expired-retention'
+    """
+    E.noParams
+    ( D.singleRow
+        ( (,,,,)
+            <$> column D.text
+            <*> column D.bool
+            <*> column D.bool
+            <*> column D.text
+            <*> column D.text
+        )
+    )
+  where
+    column = D.column . D.nonNullable
+
+upsertSubscriptionCursorStmt :: Statement (Text, Int64) ()
+upsertSubscriptionCursorStmt =
+  preparable
+    """
+    INSERT INTO subscriptions (subscription_name, stream_name, last_seen)
+    VALUES ($1, '$all', $2)
+    ON CONFLICT (subscription_name, consumer_group_member) DO UPDATE
+      SET last_seen = EXCLUDED.last_seen,
+          updated_at = now()
+    """
+    (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int8)))
+    D.noResult
+
+promotedLifecycleFactsStmt :: Statement () (Text, Bool, Bool, Text, Int64, Text, Int64, Int64, Int64)
+promotedLifecycleFactsStmt =
+  preparable
+    """
+    SELECT groups.status, groups.reads_allowed, groups.writes_allowed,
+           groups.serving_revision_id, groups.serving_epoch, runs.status,
+           (SELECT count(*) FROM keiro.keiro_projection_target_generations WHERE lifecycle = 'serving'),
+           (SELECT count(*) FROM keiro.keiro_projection_target_generations WHERE lifecycle = 'retired'),
+           (SELECT count(*) FROM kiroku.history_retention_leases WHERE released_at IS NOT NULL)
+    FROM keiro.keiro_projection_rebuild_groups AS groups
+    JOIN keiro.keiro_projection_rebuild_runs AS runs ON runs.group_id = groups.group_id
+    WHERE runs.run_id = 'versioned-promote'
+    """
+    E.noParams
+    ( D.singleRow
+        ( (,,,,,,,,)
+            <$> column D.text
+            <*> column D.bool
+            <*> column D.bool
+            <*> column D.text
+            <*> column D.int8
+            <*> column D.text
+            <*> column D.int8
+            <*> column D.int8
+            <*> column D.int8
+        )
+    )
+  where
+    column = D.column . D.nonNullable
+
+promotedCounterShapeStmt :: Statement () Bool
+promotedCounterShapeStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'app' AND table_name = 'counter'
+        AND column_name = 'subtotal'
+    )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
 
 activeLifecycleFactsStmt :: Statement () (Text, Bool, Bool, Text, Int64, Int64, Int64, Int64, Int64)
 activeLifecycleFactsStmt =
@@ -781,3 +1243,6 @@ isLeft :: Either a b -> Bool
 isLeft = \case
   Left _ -> True
   Right _ -> False
+
+isRight :: Either a b -> Bool
+isRight = not . isLeft

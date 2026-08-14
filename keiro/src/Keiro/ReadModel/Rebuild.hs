@@ -84,10 +84,15 @@ module Keiro.ReadModel.Rebuild
     VersionedTargetGeneration (..),
     VersionedLeaseEvidence (..),
     VersionedRebuildHandle (..),
+    VersionedRebuildPhase (..),
+    VersionedSourceProgress (..),
+    VersionedRebuildReport (..),
     VersionedAbandonResult (..),
     beginVersionedRebuild,
     applyVersionedReplayEvent,
     verifyVersionedCandidate,
+    resumeVersionedRebuild,
+    inspectVersionedRebuild,
     abandonVersionedRebuild,
 
     -- * Catalog history runner

@@ -241,10 +241,11 @@ Relevant local decisions are:
 - [x] (2026-08-14T00:41:07Z) EP-1 (256) M4: revision-aware inline and async live writers,
   physical-target-parametric replay and verification, closed-world serving bindings,
   and unknown-revision fail-closed bridge-deployment tests.
-- [ ] (2026-08-14T00:41:07Z) EP-1 (256) M5 in progress: converging replay, bounded final
-  fence, deterministic all-target locks, schema/dependency revalidation, atomic cutover,
-  crash-resume, and concurrent reader/writer acceptance.
-- [ ] EP-1 (256) M6: explicit retirement/drop, operator commands, ADR-26/28/31/32
+- [x] (2026-08-14T01:22:41Z) EP-1 (256) M5: converging replay, bounded final fence,
+  deterministic all-target locks, schema/dependency revalidation, atomic cutover,
+  crash-resume, retention failure fencing, and concurrent reader/writer acceptance.
+- [ ] (2026-08-14T01:22:41Z) EP-1 (256) M6 in progress: explicit retirement/drop,
+  operator commands, ADR-26/28/31/32
   reconciliation, documentation, changelogs, and full verification.
 - [x] (2026-08-13T22:35:58Z) EP-2 (254) M1: Kiroku IR-5's frozen
   `kiroku.subscription_checkpoints_v1` contract verified in released
@@ -312,6 +313,13 @@ Relevant local decisions are:
   live-writer lock must return the persisted serving revision and its complete physical
   generation binding along with permission. Status-only dispatch would still permit a
   routing race at promotion.
+- Versioned crash recovery needs two persisted cutover boundaries: a durable writer
+  fence before final-head capture, and a durable final head before the last replay.
+  Treating both as one status would force recovery to guess whether it may recapture a
+  head or has already promised a specific frontier.
+- Retention renewal failure is itself durable availability state. Committing a failed
+  run while leaving v1 readable and fencing writes is safer than rolling the failure
+  back with candidate work and accidentally presenting an expired lease as resumable.
 
 
 ## Decision Log
@@ -382,6 +390,17 @@ Relevant local decisions are:
   deduplication, or executing SQL whenever they cannot prove the serving code/schema
   pair under the group lock.
   Date: 2026-08-13
+- Decision: Represent schema-versioned rebuilds with their own total request and report
+  types, then expose them beside legacy offline rebuilds through the operator facade.
+  Rationale: revision, generation, epoch, lease, source-progress, and cutover-phase facts
+  are mandatory for versioned safety but undefined for unmanaged offline runs; a widened
+  legacy record would be a partial protocol.
+  Date: 2026-08-13
+- Decision: Persist the cutover writer fence before separately capturing the final head,
+  and renew the original Kiroku lease before every replay/cutover mutation.
+  Rationale: either crash boundary resumes deterministically, and an expired retention
+  proof becomes a durable failed/fenced run before any further candidate mutation.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -396,7 +415,13 @@ runtime evidence remain to be recorded as the child plans complete. EP-1 Milesto
 1-4 now provide PostgreSQL mechanics, the revision/generation contract, durable
 lifecycle state, and revision-aware execution. At the M4 boundary the full Keiro suite
 passes 566 examples, the main DSL suite passes 705 examples with all conformance
-components green, and Jitsurei passes 23 examples.
+components green, and Jitsurei passes 23 examples. EP-1 Milestone 5 now provides
+multi-round versioned replay, Kiroku retention renewal and failure fencing, durable
+fence/head crash phases, final deduplication/checkpoint reconciliation, and one bounded
+all-target promotion transaction. The complete Keiro suite passes 572 examples, with 12
+schema-versioned lifecycle/concurrency examples covering live v1 traffic, hard-delete
+refusal, lease expiry, DDL races, reader lock timeout/resume, redelivery safety, v1-only
+writer refusal, atomic two-target promotion, epoch advance, and retained v1 generations.
 
 
 ## Revision Note

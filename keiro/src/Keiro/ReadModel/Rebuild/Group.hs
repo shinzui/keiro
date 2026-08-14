@@ -26,6 +26,7 @@ module Keiro.ReadModel.Rebuild.Group
     ProjectionWriteBinding (..),
     ProjectionWriteFence (..),
     GroupPreparation (..),
+    groupPreparationFor,
     GroupRebuildHandle,
     groupRebuildHandleGroup,
     groupRebuildHandleRun,
@@ -259,6 +260,12 @@ data GroupPreparation = GroupPreparation
     resetSubscriptionNames :: ![Text]
   }
   deriving stock (Eq, Show, Generic)
+
+-- | Resolve the closed-world target, deduplication, and subscription preparation
+-- declared for one group. Versioned promotion reuses this catalog authority
+-- without constructing an offline rebuild handle.
+groupPreparationFor :: ValidatedProjectionCatalog -> RebuildGroupId -> Maybe GroupPreparation
+groupPreparationFor = preparationFor
 
 data GroupRebuildHandle = GroupRebuildHandle
   { handleGroup :: !RebuildGroupId,

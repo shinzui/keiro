@@ -66,10 +66,11 @@ durable ownership decision is
   persisted serving revision; replay and verification are physical-target-parametric;
   unknown revisions, incomplete generation bindings, and old runtime lifecycle states
   fail closed before event or target mutation.
-- [ ] (2026-08-14T00:41:07Z) M5 in progress: converging replay, retention protection,
-  bounded cutover, dedup/checkpoint reconciliation, DDL revalidation, atomic promotion,
-  and crash-resume pass concurrent schema-v1/schema-v2 acceptance tests.
-- [ ] M6: retirement/drop operations, CLI, documentation, ADR reconciliation,
+- [x] (2026-08-14T01:22:41Z) M5: converging replay, retention protection, bounded
+  cutover, dedup/checkpoint reconciliation, DDL revalidation, atomic promotion, and
+  crash-resume pass concurrent schema-v1/schema-v2 acceptance tests.
+- [ ] (2026-08-14T01:22:41Z) M6 in progress: retirement/drop operations, CLI,
+  documentation, ADR reconciliation,
   changelogs, Jitsurei evidence, and `just verify` are complete.
 
 
@@ -129,6 +130,15 @@ durable ownership decision is
   A revision-aware writer therefore cannot decide from a closed status list alone: its
   group-row lock must bind the persisted serving revision and the complete serving
   generation map while observing the write flag in the same transaction.
+- The safe crash boundary is not merely “before or after cutover.” Persisting the writer
+  fence separately from final-head capture leaves three distinguishable resumable facts:
+  ordinary replay, fenced but awaiting a final head, and replaying toward that captured
+  final head. A process can die between any two without reopening v1 writes or guessing
+  whether the head was durable.
+- A Kiroku lease renewal failure must be committed as lifecycle evidence rather than
+  condemned with the replay transaction. The failed run keeps v1 readable, fences all
+  writers, and requires abandonment; rolling the failure transition back would invite a
+  later resume to treat an expired retention proof as active.
 
   Evidence:
 
@@ -225,6 +235,20 @@ durable ownership decision is
   Rationale: permission and routing are one atomic fact at the live-write boundary;
   looking up either after releasing the group lock would admit a cutover race.
   Date: 2026-08-13
+- Decision: Keep schema-versioned start/resume/status/abandon as a dedicated typed
+  protocol instead of widening the legacy offline `RebuildOptions` and reports into a
+  partial tagged union.
+  Rationale: versioned runs require revision, generation, epoch, lease, replay-source,
+  and cutover-phase facts that do not exist for unmanaged offline rebuilds. The M6
+  operations facade can expose both workflows without making either library contract
+  lie about unavailable fields.
+  Date: 2026-08-13
+- Decision: Persist writer fencing and final-head capture as separate cutover phases,
+  and renew the original Kiroku lease before every replay or cutover mutation.
+  Rationale: crash recovery must distinguish a fenced run that still needs a head from
+  one replaying to a durable head, while an expired lease must fail closed before any
+  candidate or promotion mutation.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -247,7 +271,15 @@ bridge deployment behavior across a persisted v1-to-v2 promotion. The complete K
 suite passes with 566 examples; the six-example schema-versioned lifecycle and
 three-example catalog-fenced inline suites pass independently. All DSL tests and
 conformance components pass, including the 705-example main DSL suite, and Jitsurei
-passes 23 examples. Milestone 5 is next.
+passes 23 examples. Milestone 5 added a durable versioned replay contract and per-source
+progress, renewal of the original Kiroku lease, multi-round convergence, separately
+resumable fence/head phases, final deduplication and checkpoint reconciliation, and one
+bounded all-target promotion transaction. The schema-v1/schema-v2 suite proves live v1
+traffic during two replay rounds, hard-delete refusal, expired-lease fencing, DDL-race
+rollback and repair, async redelivery safety, v1-only writer refusal, atomic two-target
+promotion, a blocked-reader timeout followed by successful resume, and retained v1
+generations. The complete Keiro suite passes 572 examples; the 12 versioned lifecycle
+and concurrency examples pass independently. Milestone 6 is next.
 
 
 ## Context and Orientation
