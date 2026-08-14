@@ -23,6 +23,7 @@ module Keiro.ReadModel.Rebuild.Group
     CatalogAdoptionError (..),
     RebuildStartError (..),
     GroupTransitionError (..),
+    ProjectionWriteBinding (..),
     ProjectionWriteFence (..),
     GroupPreparation (..),
     GroupRebuildHandle,
@@ -69,6 +70,8 @@ import Keiro.Prelude
 import Keiro.Projection.Catalog
   ( CatalogRegistration (..),
     GroupSliceFingerprint,
+    PhysicalTargets,
+    ProjectionRevisionId,
     QualifiedTable (..),
     RebuildGroupId,
     TargetResetPolicy (..),
@@ -78,11 +81,14 @@ import Keiro.Projection.Catalog
     catalogRegistrations,
     groupSliceFingerprint,
     groupSliceFingerprintText,
+    mkPhysicalTargets,
     mkRebuildGroupId,
+    mkTargetId,
     projectionRevisionIdText,
     rebuildGroupIdText,
     replayAdapterMetadata,
   )
+import Keiro.Projection.Catalog qualified as Catalog
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Subscription.Checkpoint
   ( SubscriptionCheckpointResetReport (..),
@@ -228,10 +234,22 @@ data GroupTransitionError
   | RebuildCompletionTokenMismatch !RebuildGroupId !RebuildRunId
   deriving stock (Eq, Show, Generic)
 
+-- | Revision and closed-world physical target binding selected while the
+-- corresponding group row remains locked. Legacy groups have no revision but
+-- still carry their catalog-declared physical targets.
+data ProjectionWriteBinding = ProjectionWriteBinding
+  { writeGroupId :: !RebuildGroupId,
+    writeRevisionId :: !(Maybe ProjectionRevisionId),
+    writePhysicalTargets :: !PhysicalTargets
+  }
+  deriving stock (Eq, Show, Generic)
+
 data ProjectionWriteFence
-  = ProjectionWritesAllowed
+  = ProjectionWritesAllowed ![ProjectionWriteBinding]
   | ProjectionWriteFenced !RebuildGroupId !RebuildRunId
   | ProjectionWriteGroupUnregistered !RebuildGroupId
+  | ProjectionServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
+  | ProjectionServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   deriving stock (Eq, Show, Generic)
 
 data GroupPreparation = GroupPreparation
@@ -809,11 +827,14 @@ abandonPreCanonicalGroupRebuild groupId runId failure =
       Tx.condemn
         $> Left (RebuildHandleNoLongerActive groupId runId)
 
-lockProjectionGroupsTx :: [RebuildGroupId] -> Tx.Transaction ProjectionWriteFence
-lockProjectionGroupsTx = go . List.sort . Set.toList . Set.fromList
+lockProjectionGroupsTx ::
+  ValidatedProjectionCatalog ->
+  [RebuildGroupId] ->
+  Tx.Transaction ProjectionWriteFence
+lockProjectionGroupsTx catalog = go [] . List.sort . Set.toList . Set.fromList
   where
-    go = \case
-      [] -> pure ProjectionWritesAllowed
+    go bindings = \case
+      [] -> pure (ProjectionWritesAllowed (Prelude.reverse bindings))
       groupId : rest -> do
         row <-
           Tx.statement
@@ -821,9 +842,103 @@ lockProjectionGroupsTx = go . List.sort . Set.toList . Set.fromList
             lockGroupForShareStmt
         case row of
           Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
-          Just ("live", _) -> go rest
-          Just (_, Just runId) -> pure (ProjectionWriteFenced groupId (RebuildRunId runId))
+          Just (_, activeRunId, _, False) ->
+            case activeRunId of
+              Just runId -> pure (ProjectionWriteFenced groupId (RebuildRunId runId))
+              Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
+          Just ("live", Nothing, Nothing, True) ->
+            case declaredPhysicalTargets catalog groupId of
+              Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
+              Just targets ->
+                go
+                  (ProjectionWriteBinding groupId Nothing targets : bindings)
+                  rest
+          Just (status, _, Just revisionIdText, True)
+            | status `Prelude.elem` ["serving-versioned", "rebuilding-versioned"] ->
+                case findRevision revisionIdText of
+                  Nothing ->
+                    case Catalog.mkProjectionRevisionId revisionIdText of
+                      Left _ -> pure (ProjectionWriteGroupUnregistered groupId)
+                      Right revisionId ->
+                        pure (ProjectionServingRevisionUnavailable groupId revisionId)
+                  Just revision -> do
+                    rows <-
+                      Tx.statement
+                        (rebuildGroupIdText groupId)
+                        servingTargetBindingsStmt
+                    case servingPhysicalTargets revision rows of
+                      Left detail ->
+                        pure
+                          ( ProjectionServingBindingInvalid
+                              groupId
+                              (revision ^. #revisionId)
+                              detail
+                          )
+                      Right targets ->
+                        go
+                          ( ProjectionWriteBinding
+                              groupId
+                              (Just (revision ^. #revisionId))
+                              targets
+                              : bindings
+                          )
+                          rest
           Just _ -> pure (ProjectionWriteGroupUnregistered groupId)
+
+    findRevision revisionIdText =
+      List.find
+        (\revision -> projectionRevisionIdText (revision ^. #revisionId) == revisionIdText)
+        (Catalog.catalogProjectionRevisions catalog)
+
+declaredPhysicalTargets ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  Maybe PhysicalTargets
+declaredPhysicalTargets catalog groupId = do
+  group <-
+    List.find
+      ((== groupId) . (^. #rebuildGroupId))
+      (inventory ^. #inventoryGroups)
+  targetRows <- traverse targetFor (group ^. #orderedTargets)
+  either (Prelude.const Nothing) Just
+    $ mkPhysicalTargets
+      (group ^. #orderedTargets)
+      ( Map.fromList
+          [ (target ^. #targetId, target ^. #qualifiedTable)
+          | target <- targetRows
+          ]
+      )
+  where
+    inventory = catalogInventory catalog
+    targetFor targetId =
+      List.find ((== targetId) . (^. #targetId)) (inventory ^. #inventoryTargets)
+
+servingPhysicalTargets ::
+  Catalog.ProjectionRevision ->
+  [(Text, Text, Text, Text)] ->
+  Either Text PhysicalTargets
+servingPhysicalTargets revision rows = do
+  parsedRows <- traverse parseRow rows
+  let expected = Map.keys (revision ^. #targetProvisioners)
+      supplied = Map.fromList [(targetId, table) | (targetId, table) <- parsedRows]
+  case mkPhysicalTargets expected supplied of
+    Left errors -> Left (Text.pack (show errors))
+    Right targets -> Right targets
+  where
+    parseRow (targetIdTextValue, revisionIdTextValue, schemaName, tableName)
+      | revisionIdTextValue /= projectionRevisionIdText (revision ^. #revisionId) =
+          Left
+            ( "serving target "
+                <> targetIdTextValue
+                <> " belongs to revision "
+                <> revisionIdTextValue
+            )
+      | otherwise = do
+          targetId <-
+            case mkTargetId targetIdTextValue of
+              Left err -> Left (Text.pack (show err))
+              Right value -> Right value
+          pure (targetId, QualifiedTable schemaName tableName)
 
 data RegisteredQueryRow = RegisteredQueryRow
   { rowVersion :: !Int,
@@ -1104,20 +1219,41 @@ abandonPreCanonicalGroupStmt =
     )
     (D.rowMaybe groupMetadataDecoder)
 
-lockGroupForShareStmt :: Statement Text (Maybe (Text, Maybe Text))
+lockGroupForShareStmt :: Statement Text (Maybe (Text, Maybe Text, Maybe Text, Bool))
 lockGroupForShareStmt =
   preparable
     """
-    SELECT status, active_run_id
+    SELECT status, active_run_id, serving_revision_id, writes_allowed
     FROM keiro.keiro_projection_rebuild_groups
     WHERE group_id = $1
     FOR SHARE
     """
     (E.param (E.nonNullable E.text))
     ( D.rowMaybe
-        ( (,)
+        ( (,,,)
             <$> D.column (D.nonNullable D.text)
             <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nonNullable D.bool)
+        )
+    )
+
+servingTargetBindingsStmt :: Statement Text [(Text, Text, Text, Text)]
+servingTargetBindingsStmt =
+  preparable
+    """
+    SELECT target_id, revision_id, schema_name, relation_name
+    FROM keiro.keiro_projection_target_generations
+    WHERE group_id = $1 AND lifecycle = 'serving'
+    ORDER BY target_id
+    """
+    (E.param (E.nonNullable E.text))
+    ( D.rowList
+        ( (,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
         )
     )
 

@@ -529,6 +529,67 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right 0 <- runStore $ Store.runTransaction (Tx.statement () catalogInlineCountStmt)
       pure ()
 
+    it "dispatches inline writes through the persisted serving revision before appending" $ \(_storeHandle, StoreRunner runStore) -> do
+      validated <- expectValidatedCatalog catalogInlineProjectionCatalog
+      v1Only <- expectValidatedCatalog catalogInlineV1Catalog
+      Right () <- runStore $ Store.runTransaction (Tx.sql catalogInlineFixtureSql)
+      Right (Right _) <- runStore $ Rebuild.registerProjectionCatalog validated
+      Right () <- runStore $ Store.runTransaction (Tx.sql seedCatalogInlineVersionedV1Sql)
+
+      let targetStream = stream "counter-versioned-inline" :: Stream CounterEventStream
+      first <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            targetStream
+            (Add 4)
+            validated
+            catalogInlineProjectionSet
+      first `shouldSatisfy` \case
+        Right (Right (ProjectionCommandApplied result)) -> result ^. #eventsAppended == 1
+        _ -> False
+      Right [101] <- runStore $ Store.runTransaction (Tx.statement () catalogInlineAmountsStmt)
+
+      Right () <- runStore $ Store.runTransaction (Tx.sql promoteCatalogInlineV2Sql)
+      second <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            targetStream
+            (Add 5)
+            validated
+            catalogInlineProjectionSet
+      second `shouldSatisfy` \case
+        Right (Right (ProjectionCommandApplied result)) -> result ^. #eventsAppended == 1
+        _ -> False
+      Right [202] <- runStore $ Store.runTransaction (Tx.statement () catalogInlineAmountsStmt)
+
+      missing <-
+        runStore $
+          runCommandWithCatalogProjections
+            defaultRunCommandOptions
+            counterEventStream
+            targetStream
+            (Add 6)
+            v1Only
+            catalogInlineProjectionSet
+      missing
+        `shouldBe` Right
+          ( Right
+              ( ProjectionCommandServingRevisionUnavailable
+                  catalogInlineGroupId
+                  catalogInlineRevisionV2Id
+              )
+          )
+      Right recorded <-
+        runStore $
+          Store.readStreamForward (StreamName "counter-versioned-inline") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 2
+      Right [202] <- runStore $ Store.runTransaction (Tx.statement () catalogInlineAmountsStmt)
+      pure ()
+
   describe "Keiro" $ do
     it "exposes the scaffold version" $
       KeiroRoot.version `shouldBe` ("0.4.0.0" :: Text)
@@ -14561,13 +14622,87 @@ catalogInlineProjectionCatalog =
               claimSite = catalogClaimSite "test:catalog-inline-group"
             }
         ],
-      projectionRevisions = [],
+      projectionRevisions =
+        [ catalogInlineProjectionRevision catalogInlineRevisionV1Id 101,
+          catalogInlineProjectionRevision catalogInlineRevisionV2Id 202
+        ],
       readContractRevisionReferences = [],
       subscriptions = [],
       dedupKeys = [],
       queryModels = [],
       projectionSets = [SomeProjectionSet catalogInlineProjectionSet]
     }
+
+catalogInlineV1Catalog :: ProjectionCatalog
+catalogInlineV1Catalog =
+  catalogInlineProjectionCatalog
+    { projectionRevisions =
+        [catalogInlineProjectionRevision catalogInlineRevisionV1Id 101]
+    }
+
+catalogInlineProjectionRevision :: ProjectionRevisionId -> Int64 -> ProjectionRevision
+catalogInlineProjectionRevision revisionId marker =
+  ProjectionRevision
+    { revisionId,
+      rebuildGroup = catalogInlineGroupId,
+      targetProvisioners =
+        Map.singleton
+          catalogInlineTargetId
+          TargetProvisioner
+            { provisionerId = "catalog-inline-provisioner-" <> projectionRevisionIdText revisionId,
+              provisionerVersion = 1,
+              schemaVersion = TargetSchemaVersion (projectionRevisionIdText revisionId),
+              expectedShapeId = "catalog-inline-shape-" <> projectionRevisionIdText revisionId,
+              provisionTarget = \_ -> pure (),
+              validatorId = "catalog-inline-validator-" <> projectionRevisionIdText revisionId,
+              validatorVersion = 1,
+              validateTarget =
+                Just
+                  ( \_ ->
+                      pure
+                        ( Right
+                            TargetSchemaEvidence
+                              { relationOid = 1,
+                                observedShapeFingerprint = "catalog-inline-observed",
+                                observedPromotionObjects = [],
+                                catalogSnapshot = "catalog-inline-snapshot"
+                              }
+                        )
+                  ),
+              promotionObjectNames = []
+            },
+      liveHandlers =
+        [ RevisionLiveHandler
+            ("catalog-inline-live-" <> projectionRevisionIdText revisionId)
+            1
+            [catalogInlineTargetId]
+            (\physicalTargets _recorded -> insertCatalogInlineRevisionMarker physicalTargets marker)
+        ],
+      replayAdapters =
+        [ RevisionReplayAdapter
+            ("catalog-inline-replay-" <> projectionRevisionIdText revisionId)
+            1
+            [catalogInlineTargetId]
+            (\_ _ -> pure (Right False))
+        ],
+      revisionVerifications = [],
+      claimSite = catalogClaimSite ("test:catalog-inline-revision:" <> projectionRevisionIdText revisionId)
+    }
+
+insertCatalogInlineRevisionMarker :: PhysicalTargets -> Int64 -> Tx.Transaction ()
+insertCatalogInlineRevisionMarker physicalTargets marker =
+  case resolvePhysicalTarget catalogInlineTargetId physicalTargets of
+    Nothing -> error "catalog inline revision target was not resolved"
+    Just table ->
+      Tx.sql
+        ( TE.encodeUtf8
+            ( "INSERT INTO "
+                <> qualifyTable (table ^. #schemaName) (table ^. #tableName)
+                <> " (amount) VALUES ("
+                <> Text.pack (show marker)
+                <> ")"
+            )
+        )
 
 catalogInlineProjectionSet :: ProjectionSet CounterEvent
 catalogInlineProjectionSet = catalogInlineProjectionSetWith applyCatalogInlineCounter
@@ -14622,6 +14757,12 @@ catalogInlineGroupId = catalogIdentity mkRebuildGroupId "catalog-inline-group"
 catalogInlineProjectionId :: ProjectionId
 catalogInlineProjectionId = catalogIdentity mkProjectionId "catalog-inline-projection"
 
+catalogInlineRevisionV1Id :: ProjectionRevisionId
+catalogInlineRevisionV1Id = catalogIdentity mkProjectionRevisionId "catalog-inline-v1"
+
+catalogInlineRevisionV2Id :: ProjectionRevisionId
+catalogInlineRevisionV2Id = catalogIdentity mkProjectionRevisionId "catalog-inline-v2"
+
 catalogInlineRunId :: Rebuild.RebuildRunId
 catalogInlineRunId =
   case Rebuild.mkRebuildRunId "catalog-inline-run" of
@@ -14637,9 +14778,78 @@ catalogIdentity constructor raw =
     Left err -> error (show err)
     Right value -> value
 
+expectValidatedCatalog :: ProjectionCatalog -> IO ValidatedProjectionCatalog
+expectValidatedCatalog catalog =
+  case validateProjectionCatalog catalog of
+    Failure diagnostics ->
+      expectationFailure ("catalog fixture failed validation: " <> show diagnostics)
+        >> error "unreachable"
+    Success validated -> pure validated
+
 catalogInlineFixtureSql :: ByteString
 catalogInlineFixtureSql =
   "CREATE SCHEMA app; CREATE TABLE app.catalog_inline_counter (amount bigint NOT NULL);"
+
+seedCatalogInlineVersionedV1Sql :: ByteString
+seedCatalogInlineVersionedV1Sql =
+  """
+  INSERT INTO keiro.keiro_projection_target_generations
+    (generation_id, group_id, target_id, revision_id, schema_name, relation_name,
+     relation_oid, schema_version, expected_shape_id, observed_shape_fingerprint,
+     observed_catalog_snapshot, lifecycle, served_at)
+  SELECT '10000000-0000-0000-0000-000000000001'::uuid,
+         'catalog-inline-group', 'catalog-inline-target', 'catalog-inline-v1',
+         'app', 'catalog_inline_counter', classes.oid::bigint, 'v1',
+         'catalog-inline-shape-v1', 'catalog-inline-observed-v1',
+         'catalog-inline-snapshot-v1', 'serving', now()
+  FROM pg_catalog.pg_class AS classes
+  JOIN pg_catalog.pg_namespace AS namespaces
+    ON namespaces.oid = classes.relnamespace
+  WHERE namespaces.nspname = 'app' AND classes.relname = 'catalog_inline_counter';
+
+  UPDATE keiro.keiro_projection_rebuild_groups
+  SET status = 'serving-versioned',
+      serving_revision_id = 'catalog-inline-v1',
+      reads_allowed = TRUE,
+      writes_allowed = TRUE,
+      updated_at = now()
+  WHERE group_id = 'catalog-inline-group';
+
+  CREATE TABLE app.catalog_inline_counter_v2 (amount bigint NOT NULL);
+  """
+
+promoteCatalogInlineV2Sql :: ByteString
+promoteCatalogInlineV2Sql =
+  """
+  ALTER TABLE app.catalog_inline_counter RENAME TO catalog_inline_counter_retired_v1;
+  ALTER TABLE app.catalog_inline_counter_v2 RENAME TO catalog_inline_counter;
+
+  UPDATE keiro.keiro_projection_target_generations
+  SET relation_name = 'catalog_inline_counter_retired_v1',
+      lifecycle = 'retired',
+      retired_at = now()
+  WHERE generation_id = '10000000-0000-0000-0000-000000000001'::uuid;
+
+  INSERT INTO keiro.keiro_projection_target_generations
+    (generation_id, group_id, target_id, revision_id, schema_name, relation_name,
+     relation_oid, schema_version, expected_shape_id, observed_shape_fingerprint,
+     observed_catalog_snapshot, lifecycle, served_at)
+  SELECT '20000000-0000-0000-0000-000000000002'::uuid,
+         'catalog-inline-group', 'catalog-inline-target', 'catalog-inline-v2',
+         'app', 'catalog_inline_counter', classes.oid::bigint, 'v2',
+         'catalog-inline-shape-v2', 'catalog-inline-observed-v2',
+         'catalog-inline-snapshot-v2', 'serving', now()
+  FROM pg_catalog.pg_class AS classes
+  JOIN pg_catalog.pg_namespace AS namespaces
+    ON namespaces.oid = classes.relnamespace
+  WHERE namespaces.nspname = 'app' AND classes.relname = 'catalog_inline_counter';
+
+  UPDATE keiro.keiro_projection_rebuild_groups
+  SET serving_revision_id = 'catalog-inline-v2',
+      serving_epoch = serving_epoch + 1,
+      updated_at = now()
+  WHERE group_id = 'catalog-inline-group';
+  """
 
 catalogInlineInsertStmt :: Statement Int64 ()
 catalogInlineInsertStmt =
@@ -14654,6 +14864,13 @@ catalogInlineCountStmt =
     "SELECT count(*) FROM app.catalog_inline_counter"
     E.noParams
     (D.singleRow (D.column (D.nonNullable D.int8)))
+
+catalogInlineAmountsStmt :: Statement () [Int64]
+catalogInlineAmountsStmt =
+  preparable
+    "SELECT amount FROM app.catalog_inline_counter ORDER BY amount"
+    E.noParams
+    (D.rowList (D.column (D.nonNullable D.int8)))
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event =

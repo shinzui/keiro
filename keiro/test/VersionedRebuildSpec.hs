@@ -6,21 +6,25 @@ module VersionedRebuildSpec
 where
 
 import CatalogSpec
-  ( auditTargetId,
+  ( asyncProjectionId,
+    auditTargetId,
     bridgeCatalog,
     bridgeRevisionV1,
     bridgeRevisionV2,
+    catalogAsyncProjection,
     counterTargetId,
     mainGroupId,
   )
 import Contravariant.Extras (contrazip2)
+import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Functor.Contravariant ((>$<))
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
-import Data.Time (secondsToDiffTime)
+import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE)
@@ -31,6 +35,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Connection (qualifyTable)
 import Keiro.Prelude
+import Keiro.Projection (CatalogAsyncApplyOutcome (..), applyAsyncProjectionFromCatalog)
 import Keiro.Projection.Catalog
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
@@ -42,6 +47,14 @@ import Kiroku.Store.HistoryRetention
     mkHistoryRetentionLeaseDuration,
     mkHistoryRetentionLeaseOwner,
     mkHistoryRetentionLeaseReason,
+  )
+import Kiroku.Store.Types
+  ( EventId (..),
+    EventType (..),
+    GlobalPosition (..),
+    RecordedEvent (..),
+    StreamId (..),
+    StreamVersion (..),
   )
 import Test.Hspec
 
@@ -171,6 +184,67 @@ spec fixture =
         runStatement store () abandonedLifecycleFactsStmt
           `shouldReturn` ("serving-versioned", True, True, "abandoned", 2, 1, 2)
 
+      it "dispatches async writes through the persisted serving revision and fails closed when code is absent" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        let request = versionedRequest "versioned-dispatch" physicalTargets
+        handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+        legacyView <- expectStore store (lookupProjectionRebuildGroup mainGroupId)
+        legacyView ^? _Just . #status
+          `shouldBe` Just (UnknownGroupStatus "rebuilding-versioned")
+
+        replayed <-
+          expectStore
+            store
+            (applyVersionedReplayEvent catalog (request ^. #rebuildRunId) (recorded 99))
+        replayed `shouldBe` Right 1
+        verified <-
+          expectStore
+            store
+            (verifyVersionedCandidate catalog (request ^. #rebuildRunId))
+        verified `shouldBe` Right ()
+
+        first <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 1))
+            )
+        first `shouldBe` CatalogAsyncApplied
+        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 1
+
+        runScript store promoteDispatchMetadataSql
+        second <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 2))
+            )
+        second `shouldBe` CatalogAsyncApplied
+        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+
+        (v1Only, _) <- validatedBridgeFrom runtimeV1OnlyCatalog
+        missing <-
+          expectStore
+            store
+            ( Store.runTransaction
+                (applyAsyncProjectionFromCatalog v1Only asyncProjectionId catalogAsyncProjection (recorded 3))
+            )
+        missing
+          `shouldBe` CatalogAsyncServingRevisionUnavailable
+            mainGroupId
+            (identity mkProjectionRevisionId "counter-v2")
+        runStatement store () dispatchDedupCountStmt `shouldReturn` 2
+        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        for_ (handle ^. #candidateGenerations) $ \generation ->
+          rowCount store (generation ^. #physicalTable) `shouldReturn` 2
+
 validatedBridge :: IO (ValidatedProjectionCatalog, PhysicalTargets)
 validatedBridge = validatedBridgeFrom runtimeBridgeCatalog
 
@@ -201,6 +275,13 @@ runtimeBridgeCatalog =
         ]
     }
 
+runtimeV1OnlyCatalog :: ProjectionCatalog
+runtimeV1OnlyCatalog =
+  runtimeBridgeCatalog
+    { projectionRevisions = [runtimeRevision "v1" bridgeRevisionV1],
+      readContractRevisionReferences = []
+    }
+
 runtimeRevision :: Text -> ProjectionRevision -> ProjectionRevision
 runtimeRevision schema revision =
   revision
@@ -208,7 +289,97 @@ runtimeRevision schema revision =
         Map.fromList
           [ (counterTargetId, counterProvisioner schema),
             (auditTargetId, auditProvisioner schema)
-          ]
+          ],
+      liveHandlers =
+        [ RevisionLiveHandler
+            ("runtime-live-" <> schema)
+            1
+            [counterTargetId, auditTargetId]
+            (applyRuntimeLive schema)
+        ],
+      replayAdapters =
+        [ RevisionReplayAdapter
+            ("runtime-replay-" <> schema)
+            1
+            [counterTargetId, auditTargetId]
+            ( \physicalTargets event -> do
+                applyRuntimeLive schema physicalTargets event
+                pure (Right True)
+            )
+        ]
+    }
+
+applyRuntimeLive :: Text -> PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+applyRuntimeLive schema physicalTargets event = do
+  let counterTable = requireTarget counterTargetId
+      auditTable = requireTarget auditTargetId
+      eventPosition = positionValue (event ^. #globalPosition)
+      counterQualified = qualifyTable (counterTable ^. #schemaName) (counterTable ^. #tableName)
+      auditQualified = qualifyTable (auditTable ^. #schemaName) (auditTable ^. #tableName)
+  if schema == "v1"
+    then do
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "INSERT INTO "
+                <> counterQualified
+                <> " (id, total) VALUES ("
+                <> Text.pack (show eventPosition)
+                <> ", 10)"
+            )
+        )
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "INSERT INTO "
+                <> auditQualified
+                <> " (id, detail) VALUES ("
+                <> Text.pack (show eventPosition)
+                <> ", 'v1')"
+            )
+        )
+    else do
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "INSERT INTO "
+                <> counterQualified
+                <> " (id, subtotal, tax) VALUES ("
+                <> Text.pack (show eventPosition)
+                <> ", 8, 2)"
+            )
+        )
+      Tx.sql
+        ( Text.Encoding.encodeUtf8
+            ( "INSERT INTO "
+                <> auditQualified
+                <> " (id, detail, source_position) VALUES ("
+                <> Text.pack (show eventPosition)
+                <> ", 'v2', "
+                <> Text.pack (show eventPosition)
+                <> ")"
+            )
+        )
+  where
+    requireTarget targetId =
+      fromMaybe
+        (error ("runtime live handler missing target " <> show targetId))
+        (resolvePhysicalTarget targetId physicalTargets)
+
+positionValue :: GlobalPosition -> Int64
+positionValue (GlobalPosition value) = value
+
+recorded :: Int64 -> RecordedEvent
+recorded value =
+  RecordedEvent
+    { eventId = EventId (UUID.fromWords64 7 (fromIntegral value)),
+      eventType = EventType "VersionedDispatch",
+      streamVersion = StreamVersion value,
+      globalPosition = GlobalPosition value,
+      originalStreamId = StreamId value,
+      originalVersion = StreamVersion value,
+      payload = Aeson.Null,
+      metadata = Just (Aeson.object []),
+      causationId = Nothing,
+      correlationId = Nothing,
+      createdAt = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
     }
 
 counterProvisioner :: Text -> TargetProvisioner
@@ -383,6 +554,36 @@ bridgeSql =
   );
   """
 
+promoteDispatchMetadataSql :: ByteString
+promoteDispatchMetadataSql =
+  """
+  UPDATE keiro.keiro_projection_target_generations
+  SET lifecycle = 'retired', retired_at = now()
+  WHERE group_id = 'counter-group' AND lifecycle = 'serving';
+
+  UPDATE keiro.keiro_projection_target_generations AS generations
+  SET lifecycle = 'serving', served_at = now()
+  FROM keiro.keiro_projection_rebuild_run_targets AS targets
+  WHERE targets.run_id = 'versioned-dispatch'
+    AND targets.candidate_generation_id = generations.generation_id
+    AND generations.lifecycle = 'staging';
+
+  UPDATE keiro.keiro_projection_rebuild_runs
+  SET status = 'promoted', history_retention_released_at = now(), updated_at = now()
+  WHERE run_id = 'versioned-dispatch';
+
+  UPDATE keiro.keiro_projection_rebuild_groups
+  SET status = 'serving-versioned',
+      active_run_id = NULL,
+      serving_revision_id = 'counter-v2',
+      serving_epoch = serving_epoch + 1,
+      reads_allowed = TRUE,
+      writes_allowed = TRUE,
+      completed_at = now(),
+      updated_at = now()
+  WHERE group_id = 'counter-group';
+  """
+
 runScript :: Store.KirokuStore -> ByteString -> IO ()
 runScript store sql = expectStore store (Store.runTransaction (Tx.sql sql))
 
@@ -453,6 +654,42 @@ relationExistsStmt =
           (E.param (E.nonNullable E.text))
     )
     (D.singleRow (D.column (D.nonNullable D.bool)))
+
+rowCount :: Store.KirokuStore -> QualifiedTable -> IO Int64
+rowCount store table =
+  runStatement store () $
+    preparable
+      ( "SELECT count(*) FROM "
+          <> qualifyTable (table ^. #schemaName) (table ^. #tableName)
+      )
+      E.noParams
+      (D.singleRow (D.column (D.nonNullable D.int8)))
+
+servingCountsStmt :: Statement () (Int64, Int64)
+servingCountsStmt =
+  preparable
+    """
+    SELECT (SELECT count(*) FROM app.counter),
+           (SELECT count(*) FROM app.counter_audit)
+    """
+    E.noParams
+    ( D.singleRow
+        ( (,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+        )
+    )
+
+dispatchDedupCountStmt :: Statement () Int64
+dispatchDedupCountStmt =
+  preparable
+    """
+    SELECT count(*)
+    FROM keiro.keiro_projection_dedup
+    WHERE projection_name = 'catalog-async'
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
 
 activeLifecycleFactsStmt :: Statement () (Text, Bool, Bool, Text, Int64, Int64, Int64, Int64, Int64)
 activeLifecycleFactsStmt =

@@ -62,12 +62,13 @@ durable ownership decision is
   generations, relation identities, observed schema fingerprints, canonical
   object-name maps, run policy, and retention evidence; transactional begin/abandon,
   retry, rollback, and legacy lifecycle compatibility are database-tested.
-- [ ] (2026-08-14T00:09:28Z) M4 in progress: live inline and async writers dispatch through the persisted serving revision;
-  replay and verification are physical-target-parametric; unknown revisions and old
-  runtime lifecycle states fail closed.
-- [ ] M5: converging replay, retention protection, bounded cutover, dedup/checkpoint
-  reconciliation, DDL revalidation, atomic promotion, and crash-resume pass concurrent
-  schema-v1/schema-v2 acceptance tests.
+- [x] (2026-08-14T00:41:07Z) M4: live inline and async writers dispatch through the
+  persisted serving revision; replay and verification are physical-target-parametric;
+  unknown revisions, incomplete generation bindings, and old runtime lifecycle states
+  fail closed before event or target mutation.
+- [ ] (2026-08-14T00:41:07Z) M5 in progress: converging replay, retention protection,
+  bounded cutover, dedup/checkpoint reconciliation, DDL revalidation, atomic promotion,
+  and crash-resume pass concurrent schema-v1/schema-v2 acceptance tests.
 - [ ] M6: retirement/drop operations, CLI, documentation, ADR reconciliation,
   changelogs, Jitsurei evidence, and `just verify` are complete.
 
@@ -124,6 +125,10 @@ durable ownership decision is
   merely updating `status` violates the new consistency constraint. Both catalog-group
   and unmanaged single-read-model transitions now write status and availability as one
   atomic fact, preserving the old offline fence while versioned rebuilds remain live.
+- The persisted `writes_allowed` bit is deliberately orthogonal to the lifecycle value.
+  A revision-aware writer therefore cannot decide from a closed status list alone: its
+  group-row lock must bind the persisted serving revision and the complete serving
+  generation map while observing the write flag in the same transaction.
 
   Evidence:
 
@@ -214,6 +219,12 @@ durable ownership decision is
   Rationale: declarations must invalidate resume identity deterministically without
   making deployment-specific runtime values part of catalog identity.
   Date: 2026-08-13
+- Decision: Make the projection write lock return a closed-world serving binding rather
+  than only a permission bit, and reject absent compiled revisions or incomplete
+  generation maps as typed outcomes before invoking application handlers.
+  Rationale: permission and routing are one atomic fact at the live-write boundary;
+  looking up either after releasing the group lock would admit a cutover race.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -230,8 +241,13 @@ boundary. Milestone 3 added native migration 0025, normalized
 revision/generation/run-target and promotion-object identity, Kiroku retention evidence,
 deterministic generation naming, transactional provisioning and validation, same-run
 resume, and idempotent abandonment. The 29-example migration suite, five-example
-versioned lifecycle suite, and 33-example legacy read-model suite pass. Milestone 4 is
-next.
+versioned lifecycle suite, and 33-example legacy read-model suite pass. Milestone 4
+made inline, async, replay, and verification execution revision-aware and proved
+bridge deployment behavior across a persisted v1-to-v2 promotion. The complete Keiro
+suite passes with 566 examples; the six-example schema-versioned lifecycle and
+three-example catalog-fenced inline suites pass independently. All DSL tests and
+conformance components pass, including the 705-example main DSL suite, and Jitsurei
+passes 23 examples. Milestone 5 is next.
 
 
 ## Context and Orientation

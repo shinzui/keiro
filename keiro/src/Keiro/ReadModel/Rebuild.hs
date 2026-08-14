@@ -86,6 +86,8 @@ module Keiro.ReadModel.Rebuild
     VersionedRebuildHandle (..),
     VersionedAbandonResult (..),
     beginVersionedRebuild,
+    applyVersionedReplayEvent,
+    verifyVersionedCandidate,
     abandonVersionedRebuild,
 
     -- * Catalog history runner

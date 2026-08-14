@@ -132,6 +132,7 @@ module Keiro.Projection.Catalog
     catalogReplayAdapterOrder,
     runCatalogReplayAdapter,
     typedInlineProjections,
+    typedInlineProjectionsForGroup,
     typedProjectionRebuildGroups,
     asyncProjectionRebuildGroup,
     resolvedQuerySupplies,
@@ -1156,6 +1157,24 @@ typedInlineProjections validated projectionSet
   | projectionSetBelongs validated projectionSet =
       [ projection
       | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+        handler <- NonEmpty.toList (definition ^. #handlers),
+        InlineHandler projection _ <- [handler]
+      ]
+  | otherwise = []
+
+-- | Typed compatibility handlers owned by one rebuild group. Revision-aware
+-- writers use this only for a legacy group; version-managed groups dispatch
+-- through the selected 'RevisionLiveHandler' instead.
+typedInlineProjectionsForGroup ::
+  ValidatedProjectionCatalog ->
+  ProjectionSet event ->
+  RebuildGroupId ->
+  [InlineProjection event]
+typedInlineProjectionsForGroup validated projectionSet wantedGroup
+  | projectionSetBelongs validated projectionSet =
+      [ projection
+      | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+        definition ^. #rebuildGroup == wantedGroup,
         handler <- NonEmpty.toList (definition ^. #handlers),
         InlineHandler projection _ <- [handler]
       ]

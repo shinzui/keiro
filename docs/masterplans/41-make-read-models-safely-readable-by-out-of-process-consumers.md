@@ -238,11 +238,12 @@ Relevant local decisions are:
 - [x] (2026-08-14T00:09:28Z) EP-1 (256) M3: private generation/revision lifecycle
   schema, OID and shape evidence, persisted cutover options, Kiroku IR-6 retention
   lease, idempotent provisioning/abandonment, and legacy availability transitions.
-- [ ] (2026-08-14T00:09:28Z) EP-1 (256) M4 in progress: revision-aware live writers and physical-target-parametric replay and
-  verification paths, with unknown-revision fail-closed tests.
-- [ ] EP-1 (256) M5: converging replay, bounded final fence, deterministic all-target
-  locks, schema/dependency revalidation, atomic cutover, crash-resume, and concurrent
-  reader/writer acceptance.
+- [x] (2026-08-14T00:41:07Z) EP-1 (256) M4: revision-aware inline and async live writers,
+  physical-target-parametric replay and verification, closed-world serving bindings,
+  and unknown-revision fail-closed bridge-deployment tests.
+- [ ] (2026-08-14T00:41:07Z) EP-1 (256) M5 in progress: converging replay, bounded final
+  fence, deterministic all-target locks, schema/dependency revalidation, atomic cutover,
+  crash-resume, and concurrent reader/writer acceptance.
 - [ ] EP-1 (256) M6: explicit retirement/drop, operator commands, ADR-26/28/31/32
   reconciliation, documentation, changelogs, and full verification.
 - [x] (2026-08-13T22:35:58Z) EP-2 (254) M1: Kiroku IR-5's frozen
@@ -307,6 +308,10 @@ Relevant local decisions are:
   Kiroku's in-progress release cohort: `kiroku-store` 0.7.0.0 and
   `kiroku-store-migrations` 0.3.2.0. Uploads of unrelated adapter/observability packages
   can finish independently of this MasterPlan.
+- The existing `writes_allowed` fact is independent of lifecycle status, so a safe
+  live-writer lock must return the persisted serving revision and its complete physical
+  generation binding along with permission. Status-only dispatch would still permit a
+  routing race at promotion.
 
 
 ## Decision Log
@@ -370,6 +375,13 @@ Relevant local decisions are:
   required releases. The remaining uploads in Kiroku's wider package cohort are not
   dependencies of Keiro's status, rebuild, or targeted-repair implementations.
   Date: 2026-08-13
+- Decision: Treat revision selection and write permission as one closed-world locked
+  binding, with a typed refusal when the running catalog lacks the persisted revision
+  or any serving target generation.
+  Rationale: bridge deployments must fail before appending events, inserting async
+  deduplication, or executing SQL whenever they cannot prove the serving code/schema
+  pair under the group lock.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
@@ -380,7 +392,11 @@ generations, corrected the status and targeted-repair semantics, and made upstre
 ownership and source-retention requirements explicit. Both upstream package prerequisites
 are now released, so the MasterPlan is unblocked and resumes at EP-1 Milestone 1; EP-4 is
 also externally unblocked and may proceed in parallel. Implementation outcomes and
-runtime evidence remain to be recorded as the child plans complete.
+runtime evidence remain to be recorded as the child plans complete. EP-1 Milestones
+1-4 now provide PostgreSQL mechanics, the revision/generation contract, durable
+lifecycle state, and revision-aware execution. At the M4 boundary the full Keiro suite
+passes 566 examples, the main DSL suite passes 705 examples with all conformance
+components green, and Jitsurei passes 23 examples.
 
 
 ## Revision Note

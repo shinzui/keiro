@@ -68,13 +68,17 @@ import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream)
 import Keiro.Prelude
 import Keiro.Projection.Catalog
-  ( ProjectionId,
+  ( PhysicalTargets,
+    ProjectionId,
+    ProjectionRevisionId,
     ProjectionSet,
     RebuildGroupId,
+    RevisionLiveHandler,
     SourceId,
     ValidatedProjectionCatalog,
     asyncProjectionRebuildGroup,
-    typedInlineProjections,
+    catalogProjectionRevision,
+    typedInlineProjectionsForGroup,
     typedProjectionRebuildGroups,
   )
 import Keiro.Projection.Types
@@ -113,6 +117,8 @@ data ProjectionCommandOutcome target
   = ProjectionCommandApplied !(CommandResult target)
   | ProjectionCommandFenced !RebuildGroupId !RebuildRunId
   | ProjectionCommandGroupUnregistered !RebuildGroupId
+  | ProjectionCommandServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
+  | ProjectionCommandServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   | ProjectionCommandCatalogMismatch !SourceId
   deriving stock (Generic, Eq, Show)
 
@@ -123,6 +129,8 @@ data DomainProjectionCommandOutcome target co rejection noOp
   = DomainProjectionCommandApplied !(DomainCommandOutcome target co rejection noOp)
   | DomainProjectionCommandFenced !RebuildGroupId !RebuildRunId
   | DomainProjectionCommandGroupUnregistered !RebuildGroupId
+  | DomainProjectionCommandServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
+  | DomainProjectionCommandServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   | DomainProjectionCommandCatalogMismatch !SourceId
   deriving stock (Generic, Eq, Show)
 
@@ -132,6 +140,8 @@ data CatalogAsyncApplyOutcome
   | CatalogAsyncDuplicate
   | CatalogAsyncFenced !RebuildGroupId !RebuildRunId
   | CatalogAsyncGroupUnregistered !RebuildGroupId
+  | CatalogAsyncServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
+  | CatalogAsyncServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   | CatalogAsyncProjectionUnknown !ProjectionId
   deriving stock (Generic, Eq, Show)
 
@@ -223,10 +233,9 @@ runCommandWithCatalogProjections options eventStream targetStream command catalo
           eventStream
           targetStream
           command
-          (\pairs _appendResult -> applyCatalogProjectionsTx projections groups pairs)
+          (\pairs _appendResult -> applyCatalogProjectionsTx catalog projectionSet groups pairs)
       pure (fmap toProjectionOutcome outcome)
   where
-    projections = typedInlineProjections catalog projectionSet
     groups = typedProjectionRebuildGroups catalog projectionSet
 
     toProjectionOutcome = \case
@@ -235,10 +244,14 @@ runCommandWithCatalogProjections options eventStream targetStream command catalo
       SqlCommandRolledBack fence -> fenceOutcome fence
 
     fenceOutcome = \case
-      ProjectionWritesAllowed ->
+      ProjectionWritesAllowed _ ->
         error "runCommandWithCatalogProjections: rolled back with writes allowed"
       ProjectionWriteFenced groupId runId -> ProjectionCommandFenced groupId runId
       ProjectionWriteGroupUnregistered groupId -> ProjectionCommandGroupUnregistered groupId
+      ProjectionServingRevisionUnavailable groupId revisionId ->
+        ProjectionCommandServingRevisionUnavailable groupId revisionId
+      ProjectionServingBindingInvalid groupId revisionId detail ->
+        ProjectionCommandServingBindingInvalid groupId revisionId detail
 
 -- | Domain-aware catalog projection runner. Accepted commands retain existing
 -- catalog fence semantics. Typed rejection/no-op decisions invoke neither the
@@ -264,10 +277,9 @@ runDomainCommandWithCatalogProjections options handler targetStream command cata
           handler
           targetStream
           command
-          (\pairs _appendResult -> applyCatalogProjectionsTx projections groups pairs)
+          (\pairs _appendResult -> applyCatalogProjectionsTx catalog projectionSet groups pairs)
       pure (fmap toProjectionOutcome outcome)
   where
-    projections = typedInlineProjections catalog projectionSet
     groups = typedProjectionRebuildGroups catalog projectionSet
 
     toProjectionOutcome = \case
@@ -276,29 +288,50 @@ runDomainCommandWithCatalogProjections options handler targetStream command cata
       DomainSqlCommandRolledBack fence -> fenceOutcome fence
 
     fenceOutcome = \case
-      ProjectionWritesAllowed ->
+      ProjectionWritesAllowed _ ->
         error "runDomainCommandWithCatalogProjections: rolled back with writes allowed"
       ProjectionWriteFenced groupId runId -> DomainProjectionCommandFenced groupId runId
       ProjectionWriteGroupUnregistered groupId -> DomainProjectionCommandGroupUnregistered groupId
+      ProjectionServingRevisionUnavailable groupId revisionId ->
+        DomainProjectionCommandServingRevisionUnavailable groupId revisionId
+      ProjectionServingBindingInvalid groupId revisionId detail ->
+        DomainProjectionCommandServingBindingInvalid groupId revisionId detail
 
 applyCatalogProjectionsTx ::
-  [InlineProjection co] ->
+  ValidatedProjectionCatalog ->
+  ProjectionSet co ->
   [RebuildGroupId] ->
   [(co, RecordedEvent)] ->
   Tx.Transaction (SqlTransactionDecision ProjectionWriteFence)
-applyCatalogProjectionsTx projections groups pairs = do
-  fence <- lockProjectionGroupsTx groups
+applyCatalogProjectionsTx catalog projectionSet groups pairs = do
+  fence <- lockProjectionGroupsTx catalog groups
   case fence of
-    ProjectionWritesAllowed -> do
-      traverse_
-        ( \projection ->
-            traverse_
-              (\(event, recorded) -> (projection ^. #apply) event recorded)
-              pairs
-        )
-        projections
+    ProjectionWritesAllowed bindings -> do
+      traverse_ applyBinding bindings
       pure (CommitSqlTransaction fence)
     _ -> pure (RollbackSqlTransaction fence)
+  where
+    applyBinding binding =
+      case binding ^. #writeRevisionId of
+        Nothing ->
+          traverse_
+            ( \projection ->
+                traverse_
+                  (\(event, recorded) -> (projection ^. #apply) event recorded)
+                  pairs
+            )
+            (typedInlineProjectionsForGroup catalog projectionSet (binding ^. #writeGroupId))
+        Just revisionId ->
+          case catalogProjectionRevision catalog revisionId of
+            Nothing -> error "applyCatalogProjectionsTx: locked revision disappeared from validated catalog"
+            Just revision ->
+              traverse_
+                ( \handler ->
+                    traverse_
+                      (\(_, recorded) -> (handler ^. #runRevisionLive) (binding ^. #writePhysicalTargets) recorded)
+                      pairs
+                )
+                (revision ^. #liveHandlers)
 
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
@@ -343,19 +376,53 @@ applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
   case asyncProjectionRebuildGroup catalog projectionId (projection ^. #name) of
     Nothing -> pure (CatalogAsyncProjectionUnknown projectionId)
     Just groupId -> do
-      fence <- lockProjectionGroupsTx [groupId]
+      fence <- lockProjectionGroupsTx catalog [groupId]
       case fence of
-        ProjectionWritesAllowed -> do
-          outcome <- applyAsyncProjectionUnfenced projection recorded
+        ProjectionWritesAllowed [binding] -> do
+          outcome <-
+            case binding ^. #writeRevisionId of
+              Nothing -> applyAsyncProjectionUnfenced projection recorded
+              Just revisionId ->
+                case catalogProjectionRevision catalog revisionId of
+                  Nothing -> error "applyAsyncProjectionFromCatalog: locked revision disappeared from validated catalog"
+                  Just revision ->
+                    applyRevisionAsyncProjectionUnfenced
+                      projection
+                      (binding ^. #writePhysicalTargets)
+                      (revision ^. #liveHandlers)
+                      recorded
           pure $ case outcome of
             AsyncApplied -> CatalogAsyncApplied
             AsyncDuplicate -> CatalogAsyncDuplicate
             AsyncFenced ->
               error "applyAsyncProjectionUnfenced returned a fenced outcome"
+        ProjectionWritesAllowed _ ->
+          error "applyAsyncProjectionFromCatalog: one group lock returned an unexpected binding set"
         ProjectionWriteFenced fencedGroup runId ->
           pure (CatalogAsyncFenced fencedGroup runId)
         ProjectionWriteGroupUnregistered missingGroup ->
           pure (CatalogAsyncGroupUnregistered missingGroup)
+        ProjectionServingRevisionUnavailable missingGroup revisionId ->
+          pure (CatalogAsyncServingRevisionUnavailable missingGroup revisionId)
+        ProjectionServingBindingInvalid invalidGroup revisionId detail ->
+          pure (CatalogAsyncServingBindingInvalid invalidGroup revisionId detail)
+
+applyRevisionAsyncProjectionUnfenced ::
+  AsyncProjection ->
+  PhysicalTargets ->
+  [RevisionLiveHandler] ->
+  RecordedEvent ->
+  Tx.Transaction AsyncApplyOutcome
+applyRevisionAsyncProjectionUnfenced projection physicalTargets handlers recorded = do
+  inserted <-
+    Tx.statement
+      (projection ^. #name, eventIdToUuid ((projection ^. #idempotencyKey) recorded))
+      insertProjectionDedupStmt
+  if inserted
+    then do
+      traverse_ (\handler -> (handler ^. #runRevisionLive) physicalTargets recorded) handlers
+      pure AsyncApplied
+    else pure AsyncDuplicate
 
 -- | Apply one event without consulting the read-model registry fence.
 --

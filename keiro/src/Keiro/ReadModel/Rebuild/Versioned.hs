@@ -12,6 +12,10 @@ module Keiro.ReadModel.Rebuild.Versioned
     VersionedAbandonResult (..),
     beginVersionedRebuild,
     beginVersionedRebuildTx,
+    applyVersionedReplayEvent,
+    applyVersionedReplayEventTx,
+    verifyVersionedCandidate,
+    verifyVersionedCandidateTx,
     abandonVersionedRebuild,
     abandonVersionedRebuildTx,
   )
@@ -52,6 +56,7 @@ import Keiro.Projection.Catalog
     PromotionObjectName (..),
     QualifiedTable (..),
     RebuildGroupId,
+    ReplayDecodeError,
     TargetGenerationId (..),
     TargetId,
     TargetProvisioner (..),
@@ -66,6 +71,7 @@ import Keiro.Projection.Catalog
     catalogProjectionRevision,
     groupSliceFingerprint,
     groupSliceFingerprintText,
+    mkPhysicalTargets,
     physicalTargetMap,
     projectionRevisionIdText,
     rebuildGroupIdText,
@@ -89,7 +95,7 @@ import Kiroku.Store.HistoryRetention
     releaseHistoryRetentionLeaseTx,
   )
 import Kiroku.Store.Transaction (runTransaction)
-import Kiroku.Store.Types (GlobalPosition (..))
+import Kiroku.Store.Types (GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 data VersionedTargetMode
@@ -135,6 +141,8 @@ data VersionedRebuildError
   | VersionedPersistedLifecycleInvalid !RebuildRunId !Text
   | VersionedRetentionOwnerInvalid !RebuildRunId
   | VersionedRetentionReleaseFailed !RebuildRunId !Text
+  | VersionedReplayDecodeFailed !RebuildRunId !Text !ReplayDecodeError
+  | VersionedCandidateVerificationFailed !RebuildRunId !Text !Text
   deriving stock (Eq, Show, Generic)
 
 data VersionedGenerationLifecycle
@@ -293,6 +301,133 @@ beginVersionedRebuildTx catalog request =
                     candidateRevision
                     expectedServingTargets
                     slice
+
+-- | Apply one durable event through every adapter of the persisted candidate
+-- revision, with the run's staging generations as its closed-world physical
+-- target map. A stale or absent compiled revision fails before application SQL.
+applyVersionedReplayEvent ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  RecordedEvent ->
+  Eff es (Either VersionedRebuildError Int)
+applyVersionedReplayEvent catalog runId recorded =
+  runTransaction (applyVersionedReplayEventTx catalog runId recorded)
+
+applyVersionedReplayEventTx ::
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  RecordedEvent ->
+  Tx.Transaction (Either VersionedRebuildError Int)
+applyVersionedReplayEventTx catalog runId recorded = do
+  execution <- candidateExecutionContext catalog runId
+  case execution of
+    Left err -> condemned err
+    Right (revision, targets) -> go 0 (revision ^. #replayAdapters)
+      where
+        go applied = \case
+          [] -> pure (Right applied)
+          adapter : rest -> do
+            outcome <- (adapter ^. #runRevisionReplay) targets recorded
+            case outcome of
+              Left decodeError ->
+                condemned
+                  ( VersionedReplayDecodeFailed
+                      runId
+                      (adapter ^. #adapterId)
+                      decodeError
+                  )
+              Right didApply -> go (if didApply then applied + 1 else applied) rest
+
+-- | Run every application verification for the persisted candidate revision
+-- against the staging generation map. This is independently callable so the
+-- converging runner can execute it before the M5 cutover transaction.
+verifyVersionedCandidate ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Eff es (Either VersionedRebuildError ())
+verifyVersionedCandidate catalog runId =
+  runTransaction (verifyVersionedCandidateTx catalog runId)
+
+verifyVersionedCandidateTx ::
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Tx.Transaction (Either VersionedRebuildError ())
+verifyVersionedCandidateTx catalog runId = do
+  execution <- candidateExecutionContext catalog runId
+  case execution of
+    Left err -> condemned err
+    Right (revision, targets) -> go (revision ^. #revisionVerifications)
+      where
+        go = \case
+          [] -> pure (Right ())
+          verification : rest -> do
+            outcome <- (verification ^. #runRevisionVerification) targets
+            case outcome of
+              Left detail ->
+                condemned
+                  ( VersionedCandidateVerificationFailed
+                      runId
+                      (verification ^. #revisionVerificationId)
+                      detail
+                  )
+              Right () -> go rest
+
+candidateExecutionContext ::
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Tx.Transaction (Either VersionedRebuildError (ProjectionRevision, PhysicalTargets))
+candidateExecutionContext catalog runId = do
+  persisted <- Tx.statement (rebuildRunIdText runId) lookupVersionedRunStmt
+  case persisted of
+    Nothing -> pure (Left (VersionedRunIdentityConflict runId "versioned run does not exist"))
+    Just run
+      | run ^. #persistedRunStatus /= "running" ->
+          pure
+            ( Left
+                ( VersionedPersistedLifecycleInvalid
+                    runId
+                    ("candidate execution requires running, found " <> run ^. #persistedRunStatus)
+                )
+            )
+      | otherwise ->
+          case catalogRevisionByText catalog (run ^. #persistedCandidateRevision) of
+            Nothing ->
+              pure
+                ( Left
+                    ( VersionedRevisionNotInCatalog
+                        (parseRevisionId (run ^. #persistedCandidateRevision))
+                    )
+                )
+            Just revision -> do
+              generations <- loadCandidateGenerations runId
+              if any ((/= GenerationStaging) . (^. #lifecycle)) generations
+                then
+                  pure
+                    ( Left
+                        ( VersionedPersistedLifecycleInvalid
+                            runId
+                            "candidate execution requires only staging generations"
+                        )
+                    )
+                else pure $
+                  case mkPhysicalTargets
+                    (Map.keys (revision ^. #targetProvisioners))
+                    ( Map.fromList
+                        [ (generation ^. #targetId, generation ^. #physicalTable)
+                        | generation <- generations
+                        ]
+                    ) of
+                    Left errors ->
+                      Left (VersionedPersistedLifecycleInvalid runId (Text.pack (show errors)))
+                    Right targets -> Right (revision, targets)
+
+catalogRevisionByText :: ValidatedProjectionCatalog -> Text -> Maybe ProjectionRevision
+catalogRevisionByText catalog wanted =
+  List.find
+    (\revision -> projectionRevisionIdText (revision ^. #revisionId) == wanted)
+    (Catalog.catalogProjectionRevisions catalog)
 
 abandonVersionedRebuild ::
   (Store :> es) =>
