@@ -38,8 +38,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-14T14:52:11Z) M1: parameterize the order-fulfillment workflow and resume registry with an application-owned awakeable-id publisher
 - [x] (2026-08-14T14:52:11Z) M1: journal an idempotent publication step using the real id returned by `awakeableNamed`
-- [ ] M2: drive the demo with a captured published id and make every signal/completion/restart invariant fail closed
-- [ ] M2: add a focused PostgreSQL Jitsurei regression that proves publication, successful signal, terminal completion, and no repeat publication after replay
+- [x] (2026-08-14T15:00:00Z) M2: drive the demo with a captured published id and make every signal/completion/restart invariant fail closed
+- [x] (2026-08-14T15:00:00Z) M2: add a focused PostgreSQL Jitsurei regression that proves publication, successful signal, terminal completion, and no repeat publication after replay
 - [ ] M3: correct `docs/user/durable-workflows.md`, `docs/guides/durable-workflows.md`, API reference, and Jitsurei Haddocks
 - [ ] M3: add compile-owned guide signatures and complete a repository-wide stale-claim sweep
 - [ ] M4: update the unreleased changelog and pass Jitsurei, documentation-adjacent, and full repository gates
@@ -59,6 +59,15 @@ implementation. Provide concise evidence.
 - The allocation step precedes any publication step and journals the opaque id. If publication
   repeats after a crash, it receives the same id. That makes the id itself the natural
   application idempotency key and gives the guide a concrete honest pattern.
+- The shared `jitsurei` development database had an unrelated stale projection-catalog
+  fingerprint, so the first live-demo validation stopped before entering the workflow. A fresh
+  migrated `jitsurei_plan261_fixed` database produced the required `True`, `Completed`, parent
+  and child `WorkflowCompleted`, and clean-restart transcript; that temporary database was then
+  dropped.
+- The focused regression can exercise the action-to-journal window without a runtime test hook:
+  its publisher performs the idempotent external upsert and then throws once, before `step` can
+  append. Exact discovery retries the workflow and the callback receives the same journaled
+  opaque id a second time; after the publication record commits, replay does not call it again.
 
 
 ## Decision Log

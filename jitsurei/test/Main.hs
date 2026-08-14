@@ -3,9 +3,12 @@ module Main
   )
 where
 
+import Control.Exception (SomeException, try)
 import Control.Lens ((^.))
+import Control.Monad (replicateM_, when)
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
+import Data.IORef (atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Int (Int32, Int64)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
@@ -13,11 +16,11 @@ import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text.IO qualified as TIO
-import Data.Time (UTCTime (..), addUTCTime, secondsToDiffTime)
+import Data.Time (UTCTime (..), addUTCTime, getCurrentTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString)
 import Data.Vector qualified as Vector
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, IOE, liftIO, raise, (:>))
 import Effectful.Error.Static (Error)
 import Effectful.Reader.Static (Reader)
 import Hasql.Decoders qualified as D
@@ -38,7 +41,21 @@ import Keiro.ReadModel.Rebuild
 import Keiro.ReplayAudit
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshDatabase, withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuiteWith)
 import Keiro.Timer
+import Keiro.Workflow
+  ( WorkflowJournalEvent (StepRecorded, WorkflowCompleted),
+    WorkflowOutcome (Completed, Suspended),
+    findUnfinishedWorkflowIds,
+    runWorkflow,
+    workflowJournalCodec,
+    workflowStreamName,
+  )
+import Keiro.Workflow.Awakeable (AwakeableId, signalAwakeable)
+import Keiro.Workflow.Resume (defaultWorkflowResumeOptions, resumeWorkflowsOnce)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kiroku.Store qualified as Store
+import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types
   ( EventId (..),
     GlobalPosition (..),
@@ -58,6 +75,11 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- | The effect stack 'runJobEff' interprets for the shipment-notice queue.
 type QueueStack = '[Reader PgmqAdapterEnv, Pgmq, Tracing, Error PgmqRuntimeError, IOE]
+
+-- | The resource-aware stack supplied by 'StoreRunner'. Keeping it named lets
+-- the durable-workflow regression pass one publisher to both direct runs and
+-- the resume registry without inventing a second callback shape.
+type JitsureiTestEffects = '[Store, Error StoreError, KirokuStoreResource, IOE]
 
 -- | The work-queue examples need PGMQ's schema, so its native pg-migrate
 -- component joins the framework plan applied to the suite's template database —
@@ -185,6 +207,114 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       map targetCategory fullReports `shouldBe` ["order", "esc"]
       map streamsSelected fullReports `shouldBe` [1, 1]
       auditExitCode fullReports `shouldBe` 0
+
+  describe "Jitsurei durable workflow" $ around (withFreshResourceStore fixture) $ do
+    it "publishes and signals the allocated awakeable, then completes without replaying publication" $ \(_store, StoreRunner runner) -> do
+      publicationCalls <- newIORef []
+      publishedIds <- newIORef []
+      crashBeforeFirstPublicationAppend <- newIORef True
+      let orderId = OrderId "workflow-regression"
+          parentId = workflowIdFor orderId
+          childId = shipChildId orderId
+          parentStream = workflowStreamName orderFulfillmentWorkflowName parentId
+          childStream = workflowStreamName shipOrderWorkflowName childId
+          expectedTracking = "TRK-workflow-regression-ship"
+          publishAwakeable :: PublishPaymentAwakeable JitsureiTestEffects
+          publishAwakeable awakeableId = do
+            liftIO $ modifyIORef' publicationCalls (<> [awakeableId])
+            liftIO $
+              atomicModifyIORef' publishedIds $ \published ->
+                if awakeableId `elem` published
+                  then (published, ())
+                  else (published <> [awakeableId], ())
+            shouldCrash <-
+              liftIO $
+                atomicModifyIORef' crashBeforeFirstPublicationAppend $ \armed ->
+                  (False, armed)
+            when shouldCrash $
+              liftIO (ioError (userError "simulated crash after awakeable publication"))
+          workflow = orderFulfillmentWorkflow (raise . publishAwakeable) orderId
+          registry = jitsureiWorkflowRegistryWith publishAwakeable
+
+      Right Suspended <-
+        runner $
+          runWorkflow orderFulfillmentWorkflowName parentId workflow
+
+      fireTime <- addUTCTime 3600 <$> getCurrentTime
+      Right (Just _) <-
+        runner $
+          runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing)
+
+      -- The callback's external upsert succeeds, then the simulated process
+      -- crash prevents the publication step from reaching its journal append.
+      crashed <-
+        try @SomeException $
+          runner $
+            runWorkflow orderFulfillmentWorkflowName parentId workflow
+      crashed `shouldSatisfy` \case
+        Left _ -> True
+        Right _ -> False
+
+      [allocatedId] <- readIORef publicationCalls
+      Right afterCrash <-
+        runner $
+          Store.readStreamForward parentStream (StreamVersion 0) 100
+      let journaledAllocationIds =
+            [ awakeableId
+            | recorded <- Vector.toList afterCrash,
+              Right (StepRecorded stepName payload _) <- [decodeRecorded workflowJournalCodec recorded],
+              stepName == "awkid:payment-webhook",
+              Aeson.Success awakeableId <- [Aeson.fromJSON payload :: Aeson.Result AwakeableId]
+            ]
+      journaledAllocationIds `shouldBe` [allocatedId]
+
+      -- Exact discovery retries the workflow. Allocation replays the same
+      -- opaque id, so the callback's idempotent upsert remains one entry even
+      -- though the callback itself has now been invoked twice.
+      Right _ <-
+        runner $
+          resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      readIORef publicationCalls >>= (`shouldBe` [allocatedId, allocatedId])
+      readIORef publishedIds >>= (`shouldBe` [allocatedId])
+
+      Right signalled <-
+        runner $
+          signalAwakeable allocatedId (PaymentConfirmation "pay_regression" 4200)
+      signalled `shouldBe` True
+
+      replicateM_ 3 $ do
+        Right _ <-
+          runner $
+            resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+        pure ()
+
+      Right finalOutcome <-
+        runner $
+          runWorkflow orderFulfillmentWorkflowName parentId workflow
+      finalOutcome `shouldBe` Completed expectedTracking
+
+      -- Once publish-payment-webhook-id is durable, neither resumed execution
+      -- nor direct replay invokes the publisher again.
+      readIORef publicationCalls >>= (`shouldBe` [allocatedId, allocatedId])
+      readIORef publishedIds >>= (`shouldBe` [allocatedId])
+
+      Right parentJournal <-
+        runner $
+          Store.readStreamForward parentStream (StreamVersion 0) 100
+      Right childJournal <-
+        runner $
+          Store.readStreamForward childStream (StreamVersion 0) 100
+      let hasCompletion = any $ \recorded ->
+            case decodeRecorded workflowJournalCodec recorded of
+              Right (WorkflowCompleted _) -> True
+              _ -> False
+      Vector.toList parentJournal `shouldSatisfy` hasCompletion
+      Vector.toList childJournal `shouldSatisfy` hasCompletion
+
+      now <- getCurrentTime
+      Right unfinished <- runner (findUnfinishedWorkflowIds now)
+      let ourIds = ["workflow-regression", "workflow-regression-ship"]
+      [wid | (wid, _) <- unfinished, wid `elem` ourIds] `shouldBe` []
 
   describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
     it "updates and queries the inline order summary in the append transaction" $ \(_store, StoreRunner runner) -> do

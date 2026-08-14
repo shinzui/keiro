@@ -5,10 +5,11 @@ where
 
 import Control.Exception (bracket)
 import Control.Lens ((&), (.~))
-import Control.Monad (void)
+import Control.Monad (void, when)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime, addUTCTime)
@@ -17,7 +18,7 @@ import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.UUID (UUID)
 import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
-import Effectful (Eff, IOE, UnliftStrategy (..), runEff, withEffToIO)
+import Effectful (Eff, IOE, UnliftStrategy (..), liftIO, raise, runEff, withEffToIO)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -32,8 +33,9 @@ import Keiro.ReadModel (runQuery)
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Workflow
   ( WorkflowId (..),
-    WorkflowJournalEvent (StepRecorded),
+    WorkflowJournalEvent (StepRecorded, WorkflowCompleted),
     WorkflowName,
+    WorkflowOutcome (Completed, Suspended),
     WorkflowRunOptions,
     defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
@@ -41,8 +43,8 @@ import Keiro.Workflow
     workflowJournalCodec,
     workflowStreamName,
   )
-import Keiro.Workflow.Awakeable (signalAwakeable)
-import Keiro.Workflow.Resume (WorkflowResumeOptions, defaultWorkflowResumeOptions, resumeWorkflowsOnce)
+import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, signalAwakeable)
+import Keiro.Workflow.Resume (WorkflowRegistry, WorkflowResumeOptions, defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, workflowSleepFireAction)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect qualified as StoreEffect
@@ -473,14 +475,19 @@ runAgentQualDemo metrics = withJitsureiStore $ \store -> do
 runDurableWorkflowDemo :: Maybe Telemetry.KeiroMetrics -> IO ()
 runDurableWorkflowDemo metrics = do
   orderId <- freshOrderId "workflow"
+  publishedAwakeables <- newIORef []
   let runOptions = workflowRunOptions metrics
       resumeOptions = workflowResumeOptions metrics
+      publishAwakeable = capturePaymentAwakeable publishedAwakeables
+      registry = jitsureiWorkflowRegistryWith publishAwakeable
+      workflow = orderFulfillmentWorkflow (raise . publishAwakeable) orderId
       wfId = workflowIdFor orderId
       childWfId = shipChildId orderId
       idText = unWorkflowId wfId
       childIdText = unWorkflowId childWfId
       parentStream = workflowStreamNameText orderFulfillmentWorkflowName wfId
       childStream = workflowStreamNameText shipOrderWorkflowName childWfId
+      expectedTracking = "TRK-" <> childIdText
 
   withJitsureiStore $ \store -> do
     putStrLn ("[jitsurei:workflow] running durable order-fulfillment workflow for " <> Text.unpack idText)
@@ -491,8 +498,10 @@ runDurableWorkflowDemo metrics = do
     putStrLn "[jitsurei:workflow] first run: invoking the workflow"
     outcome1 <-
       requireEither
-        =<< runJitsureiStore store (runWorkflowWith runOptions orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+        =<< runJitsureiStore store (runWorkflowWith runOptions orderFulfillmentWorkflowName wfId workflow)
     putStrLn ("[jitsurei:workflow] first run outcome: " <> show outcome1 <> " (armed the cooling-off sleep)")
+    when (outcome1 /= Suspended) $
+      fail ("expected first workflow run to suspend, got " <> show outcome1)
 
     -- 2) Fire the durable sleep timer (advance the clock well past the delay).
     putStrLn "[jitsurei:workflow] firing the cooling-off sleep timer"
@@ -502,9 +511,11 @@ runDurableWorkflowDemo metrics = do
     --    the payment-webhook awakeable, and parks again.
     summary1 <-
       requireEither
-        =<< runJitsureiStore store (resumeWorkflowsOnce resumeOptions jitsureiWorkflowRegistry)
+        =<< runJitsureiStore store (resumeWorkflowsOnce resumeOptions registry)
     putStrLn ("[jitsurei:workflow] resume pass 1: " <> show summary1)
     putStrLn "  (replayed reserve-inventory + sleep:cooling-off, parked on the payment-webhook awakeable)"
+
+    awakeableId <- requireSinglePublishedAwakeable publishedAwakeables
 
     -- 4) Signal the awakeable (simulate the payment webhook callback).
     putStrLn "[jitsurei:workflow] signalling the payment-webhook awakeable (simulated webhook)"
@@ -512,17 +523,32 @@ runDurableWorkflowDemo metrics = do
       requireEither
         =<< runJitsureiStore
           store
-          (signalAwakeable (paymentWebhookAwakeableId orderId) (PaymentConfirmation "pay_demo" 4200))
+          (signalAwakeable awakeableId (PaymentConfirmation "pay_demo" 4200))
     putStrLn ("  signalAwakeable payment-webhook -> " <> show signalled)
+    when (not signalled) $
+      fail "signalAwakeable returned False for the published payment-webhook id"
 
     -- 5) Drive the resume worker until both the parent and its child finish.
-    driveResumeUntilDone resumeOptions store [idText, childIdText] 2
+    driveResumeUntilDone resumeOptions registry store [idText, childIdText] 2
 
     -- 6) Read the final outcome by replaying the now-complete journal.
     finalOutcome <-
       requireEither
-        =<< runJitsureiStore store (runWorkflowWith runOptions orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+        =<< runJitsureiStore store (runWorkflowWith runOptions orderFulfillmentWorkflowName wfId workflow)
     putStrLn ("[jitsurei:workflow] final outcome: " <> show finalOutcome)
+    case finalOutcome of
+      Completed tracking | tracking == expectedTracking -> pure ()
+      _ ->
+        fail
+          ( "expected completed workflow with tracking "
+              <> Text.unpack expectedTracking
+              <> ", got "
+              <> show finalOutcome
+          )
+
+    publishedAfterReplay <- readIORef publishedAwakeables
+    when (publishedAfterReplay /= [awakeableId]) $
+      fail ("payment awakeable publication changed after replay: " <> show publishedAfterReplay)
 
     -- 7) Dump both journals.
     parentJournal <- readEvents store parentStream
@@ -531,6 +557,10 @@ runDurableWorkflowDemo metrics = do
     childJournal <- readEvents store childStream
     putStrLn ("[jitsurei:workflow] ship-order child journal (" <> Text.unpack childStream <> ")")
     printDecoded workflowJournalCodec childJournal
+    when (not (journalEventsHaveCompletion parentJournal)) $
+      fail "order-fulfillment journal has no WorkflowCompleted event"
+    when (not (journalEventsHaveCompletion childJournal)) $
+      fail "ship-order child journal has no WorkflowCompleted event"
 
   -- 8) Simulated restart: a fresh store connection (a new "process") re-runs
   --    the resume worker's discovery and finds nothing to do for our workflow,
@@ -538,12 +568,43 @@ runDurableWorkflowDemo metrics = do
   putStrLn "[jitsurei:workflow] --- simulated restart: re-opening the store ---"
   withJitsureiStore $ \store -> do
     remaining <- ourUnfinishedWorkflows store [idText, childIdText]
-    if null remaining
-      then do
-        putStrLn ("  restart: resume worker discovery found no unfinished work for order-fulfillment-" <> Text.unpack idText)
-        putStrLn "[jitsurei:workflow] durability proven: the completed workflow was NOT re-executed from scratch"
-      else
-        putStrLn ("  restart: UNEXPECTED — workflow still unfinished: " <> show remaining)
+    when (not (null remaining)) $
+      fail ("restart found unfinished parent/child workflows: " <> show remaining)
+    parentJournal <- readEvents store parentStream
+    when (not (journalEventsHaveCompletion parentJournal)) $
+      fail "restart found no WorkflowCompleted event in the parent journal"
+    putStrLn ("  restart: resume worker discovery found no unfinished work for order-fulfillment-" <> Text.unpack idText)
+    putStrLn "[jitsurei:workflow] durability proven: completed workflow journal survived restart"
+
+-- | Capture ids handed to an external callback system. Insertion is an
+-- idempotent upsert keyed by the opaque id: a retry of the publication action
+-- leaves one entry, while publication of a different allocation stays visible
+-- and makes 'requireSinglePublishedAwakeable' fail closed.
+capturePaymentAwakeable :: IORef [AwakeableId] -> PublishPaymentAwakeable JitsureiEffects
+capturePaymentAwakeable sink awakeableId = do
+  inserted <-
+    liftIO $
+      atomicModifyIORef' sink $ \published ->
+        if awakeableId `elem` published
+          then (published, False)
+          else (published <> [awakeableId], True)
+  when inserted $
+    liftIO $
+      putStrLn
+        ( "  published payment-webhook awakeable id: "
+            <> Text.unpack (awakeableIdText awakeableId)
+        )
+
+requireSinglePublishedAwakeable :: IORef [AwakeableId] -> IO AwakeableId
+requireSinglePublishedAwakeable sink =
+  readIORef sink >>= \case
+    [awakeableId] -> pure awakeableId
+    [] -> fail "resume pass did not publish a payment-webhook awakeable id"
+    awakeableIds ->
+      fail
+        ( "resume pass published more than one payment-webhook awakeable id: "
+            <> show awakeableIds
+        )
 
 -- | The journal stream name for a workflow instance, as the 'Text' 'readEvents'
 -- expects (unwrapping the 'StreamName' 'workflowStreamName' returns).
@@ -567,7 +628,7 @@ fireSleepTimerUntilJournaled metrics store parentStream = do
   fireTime <- addUTCTime 3600 <$> getCurrentTime
   let loop :: Int -> IO ()
       loop n
-        | n > 10 = putStrLn "  WARNING: sleep:cooling-off was not journaled after 10 timer passes"
+        | n > 10 = fail "sleep:cooling-off was not journaled after 10 timer passes"
         | otherwise = do
             done <- journalHasStep store parentStream "sleep:cooling-off"
             if done
@@ -581,12 +642,12 @@ fireSleepTimerUntilJournaled metrics store parentStream = do
 
 -- | Run the resume worker until no workflow of ours remains unfinished, bounded
 -- so a non-converging journal cannot hang the demo. Prints each pass's summary.
-driveResumeUntilDone :: WorkflowResumeOptions -> JitsureiStore -> [Text] -> Int -> IO ()
-driveResumeUntilDone options store ourIds = go
+driveResumeUntilDone :: WorkflowResumeOptions -> WorkflowRegistry JitsureiEffects -> JitsureiStore -> [Text] -> Int -> IO ()
+driveResumeUntilDone options registry store ourIds = go
   where
     go :: Int -> IO ()
     go passNo
-      | passNo > 7 = putStrLn "  reached the resume-pass bound (7) without completing"
+      | passNo > 7 = fail "reached the resume-pass bound (7) without completing"
       | otherwise = do
           remaining <- ourUnfinishedWorkflows store ourIds
           if null remaining
@@ -594,7 +655,7 @@ driveResumeUntilDone options store ourIds = go
             else do
               summary <-
                 requireEither
-                  =<< runJitsureiStore store (resumeWorkflowsOnce options jitsureiWorkflowRegistry)
+                  =<< runJitsureiStore store (resumeWorkflowsOnce options registry)
               putStrLn ("[jitsurei:workflow] resume pass " <> show passNo <> ": " <> show summary)
               go (passNo + 1)
 
@@ -609,13 +670,25 @@ journalHasStep store journalStream target = do
       StepRecorded name _ _ -> name == target
       _ -> False
 
+-- | Whether decoded workflow journal events contain the terminal marker.
+journalEventsHaveCompletion :: [RecordedEvent] -> Bool
+journalEventsHaveCompletion events =
+  any isCompleted [event | Right event <- decodeRecorded workflowJournalCodec <$> events]
+  where
+    isCompleted = \case
+      WorkflowCompleted _ -> True
+      _ -> False
+
+type JitsureiEffects =
+  '[StoreEffect.Store, Error StoreError, StoreResource.KirokuStoreResource, IOE]
+
 newtype JitsureiStore
   = JitsureiStore
-      (forall a. Eff '[StoreEffect.Store, Error StoreError, StoreResource.KirokuStoreResource, IOE] a -> IO (Either StoreError a))
+      (forall a. Eff JitsureiEffects a -> IO (Either StoreError a))
 
 runJitsureiStore ::
   JitsureiStore ->
-  Eff '[StoreEffect.Store, Error StoreError, StoreResource.KirokuStoreResource, IOE] a ->
+  Eff JitsureiEffects a ->
   IO (Either StoreError a)
 runJitsureiStore (JitsureiStore runner) = runner
 
