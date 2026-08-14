@@ -399,6 +399,28 @@ main = hspec $ do
                          ("upgrade-rebuilding", Text.replicate 64 "a", "upgrade-run-live", "$pre-canonical")
                        ]
 
+    it "0026 gives pre-existing groups explicit fail-safe cursor authority" $ do
+      fullPlan <- requirePlan
+      kiroku <- requireRight Kiroku.kirokuMigrations
+      priorKeiro <-
+        requireRight
+          ( migrationComponentFromEmbeddedSql
+              "keiro"
+              (Set.singleton "kiroku")
+              (NonEmpty.fromList (take 25 (toList embeddedMigrationEntries)))
+          )
+      priorPlan <- requireRight (frameworkMigrationPlan kiroku priorKeiro)
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+        _ <- runMigrationPlan defaultRunOptions settings priorPlan >>= requireRight
+        withConnection settings $ \connection ->
+          useSession connection (Session.script preStatusContractFixtureSql)
+        report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
+        Prelude.drop 35 (reportOutcomes report) `shouldBe` replicate 4 AppliedNow
+        withConnection settings $ \connection -> do
+          facts <- useSession connection (Session.statement () preStatusContractFactsStatement)
+          facts `shouldBe` ("unmanaged", 0, "unmanaged", True, True)
+
     it "enforces replay source, adapter, and verification membership constraints" $ do
       plan <- requirePlan
       result <- withMigratedDatabase plan $ \connection -> do
@@ -759,6 +781,40 @@ preCanonicalRebuildFixtureSql =
   VALUES
     ('upgrade-run-failed', 'upgrade-failed', repeat('b', 64), 'contract-v2:' || repeat('d', 64), 'keiro/projection-replay/v2', 6, 100, 'failed', now(), 'operator.abandoned', 'abandoned with the old binary');
   """
+
+preStatusContractFixtureSql :: Text
+preStatusContractFixtureSql =
+  """
+  INSERT INTO keiro.keiro_projection_rebuild_groups
+    (group_id, slice_fingerprint, status, reads_allowed, writes_allowed)
+  VALUES
+    ('upgrade-status-group', 'slice-v6:upgrade-status', 'live', true, true);
+  """
+
+preStatusContractFactsStatement :: Statement () (Text, Int32, Text, Bool, Bool)
+preStatusContractFactsStatement =
+  Statement.preparable
+    """
+    SELECT cursors.position_basis,
+           cardinality(cursors.subscription_names)::integer,
+           status.serving_position_basis,
+           status.serving_applied_position IS NULL,
+           status.reads_allowed
+    FROM keiro.keiro_projection_group_cursors AS cursors
+    JOIN keiro_read.projection_group_status_v1 AS status
+      ON status.group_id = cursors.group_id
+    WHERE cursors.group_id = 'upgrade-status-group'
+    """
+    Encoders.noParams
+    ( Decoders.singleRow
+        ( (,,,,)
+            <$> Decoders.column (Decoders.nonNullable Decoders.text)
+            <*> Decoders.column (Decoders.nonNullable Decoders.int4)
+            <*> Decoders.column (Decoders.nonNullable Decoders.text)
+            <*> Decoders.column (Decoders.nonNullable Decoders.bool)
+            <*> Decoders.column (Decoders.nonNullable Decoders.bool)
+        )
+    )
 
 preCanonicalRebuildShapeStatement :: Statement () [(Text, Text, Text, Text)]
 preCanonicalRebuildShapeStatement =

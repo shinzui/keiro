@@ -886,6 +886,51 @@ spec fixture = do
             promoted ^. #phase `shouldBe` VersionedPromoted
             runStatement store () servingCountsStmt `shouldReturn` (0, 0)
 
+      it "exposes only the old or new status tuple during a promotion transaction" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupBridge store
+            (catalog, physicalTargets) <- validatedBridge
+            registerBridge store catalog
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            let request = versionedRequest "versioned-status-atomicity" physicalTargets
+            _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+
+            beforePromotion <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+            beforePromotion ^? _Just . #lifecyclePhase `shouldBe` Just "rebuilding-versioned"
+            beforePromotion ^? _Just . #servingRevisionId
+              `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v1"))
+            beforePromotion ^? _Just . #servingEpoch `shouldBe` Just 0
+            beforePromotion ^? _Just . #activeRunId
+              `shouldBe` Just (Just (request ^. #rebuildRunId))
+            beforePromotion ^? _Just . #candidateRevisionId
+              `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v2"))
+
+            promoterDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      (Tx.sql statusPromotionUpdateAndSleepSql)
+                  )
+                  >>= putMVar promoterDone
+            waitForGroupRowLock pool 50
+
+            during <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+            during `shouldBe` beforePromotion
+
+            _ <- expectPoolUsage =<< takeMVar promoterDone
+            afterPromotion <- expectStore store (lookupProjectionGroupStatus mainGroupId)
+            afterPromotion ^? _Just . #lifecyclePhase `shouldBe` Just "serving-versioned"
+            afterPromotion ^? _Just . #servingRevisionId
+              `shouldBe` Just (Just (identity mkProjectionRevisionId "counter-v2"))
+            afterPromotion ^? _Just . #servingEpoch `shouldBe` Just 1
+            afterPromotion ^? _Just . #activeRunId `shouldBe` Just Nothing
+            afterPromotion ^? _Just . #candidateRevisionId `shouldBe` Just Nothing
+
   describe "targeted stream reprojection" $
     around (withFreshStore fixture) $ do
       it "repairs only the selected stream and transactionally backfills redelivery evidence" $ \store -> do
@@ -2247,6 +2292,20 @@ groupRowShareLockStmt =
     """
     E.noParams
     (D.singleRow (D.column (D.nonNullable D.bool)))
+
+statusPromotionUpdateAndSleepSql :: ByteString
+statusPromotionUpdateAndSleepSql =
+  """
+  UPDATE keiro.keiro_projection_rebuild_groups
+  SET status = 'serving-versioned',
+      active_run_id = NULL,
+      serving_revision_id = 'counter-v2',
+      serving_epoch = 1,
+      completed_at = now(),
+      updated_at = now()
+  WHERE group_id = 'counter-group';
+  SELECT pg_sleep(1);
+  """
 
 dispatchDedupCountStmt :: Statement () Int64
 dispatchDedupCountStmt =

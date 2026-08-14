@@ -135,6 +135,60 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     statuses <- expectStore store listProjectionGroupStatuses
     map (^. #groupId) statuses `shouldBe` [Catalog.mainGroupId]
 
+  it "keeps adversarial checkpoint inventory and large status listings fail-safe" $ \store -> do
+    validated <- expectValid Catalog.validCatalog
+    _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
+    expectStore store (Store.runTransaction (Tx.sql statusAdversarialFixtureSql))
+
+    complete <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    complete ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionCheckpoint
+    complete ^? _Just . #servingAppliedPosition
+      `shouldBe` Just (Just (GlobalPosition 7))
+
+    duplicateMember <-
+      Store.runStoreIO
+        store
+        ( Store.runTransaction
+            ( Tx.sql
+                "INSERT INTO subscriptions (subscription_name, consumer_group_member, consumer_group_size, last_seen) VALUES ('status-a', 0, 2, 100)"
+            )
+        )
+    duplicateMember `shouldSatisfy` isLeft
+    afterDuplicate <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    afterDuplicate ^? _Just . #servingAppliedPosition
+      `shouldBe` Just (Just (GlobalPosition 7))
+
+    expectStore
+      store
+      (Store.runTransaction (Tx.sql "DELETE FROM subscriptions WHERE subscription_name = 'status-b'"))
+    missingSubscription <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    missingSubscription ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+
+    expectStore
+      store
+      ( Store.runTransaction
+          ( Tx.sql
+              "UPDATE keiro.keiro_projection_group_cursors SET subscription_names = ARRAY['status-a', 'status-a']::text[] WHERE group_id = 'counter-group'"
+          )
+      )
+    duplicateAuthority <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    duplicateAuthority ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+
+    expectStore
+      store
+      ( Store.runTransaction
+          (Tx.sql "DELETE FROM keiro.keiro_projection_group_cursors WHERE group_id = 'counter-group'")
+      )
+    unknownAuthority <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
+    unknownAuthority ^? _Just . #servingPositionBasis
+      `shouldBe` Just ServingPositionUnmanaged
+    unknownAuthority ^? _Just . #servingAppliedPosition `shouldBe` Just Nothing
+
+    statuses <- expectStore store listProjectionGroupStatuses
+    length statuses `shouldBe` 251
+    map (^. #groupId) statuses `shouldSatisfy` strictlyAscending
+
   it "registers an additive catalog without disturbing the existing group slice" $ \store -> do
     current <- expectValid Catalog.validCatalog
     additive <- expectValid Catalog.additiveCatalog
@@ -419,6 +473,35 @@ mixedFixtureSql =
     ('catalog-async-subscription', 1, 2, 60);
   """
 
+statusAdversarialFixtureSql :: ByteString
+statusAdversarialFixtureSql =
+  """
+  UPDATE keiro.keiro_projection_group_cursors
+  SET position_basis = 'checkpoint',
+      subscription_names = ARRAY['status-a', 'status-b', 'status-c']::text[]
+  WHERE group_id = 'counter-group';
+
+  INSERT INTO subscriptions
+    (subscription_name, consumer_group_member, consumer_group_size, last_seen)
+  VALUES
+    ('status-a', 0, 2, 99),
+    ('status-a', 1, 2, 7),
+    ('status-b', 0, 1, 12),
+    ('status-c', 0, 2, 20),
+    ('status-c', 1, 2, 11);
+
+  INSERT INTO keiro.keiro_projection_rebuild_groups
+    (group_id, slice_fingerprint, status)
+  SELECT 'status-scale-' || ordinal::text, 'slice-v6:status-scale', 'live'
+  FROM generate_series(1, 250) AS ordinals(ordinal);
+
+  INSERT INTO keiro.keiro_projection_group_cursors
+    (group_id, position_basis, subscription_names)
+  SELECT group_id, 'append', ARRAY[]::text[]
+  FROM keiro.keiro_projection_rebuild_groups
+  WHERE group_id LIKE 'status-scale-%';
+  """
+
 clearFixtureSql :: ByteString
 clearFixtureSql =
   """
@@ -507,3 +590,6 @@ blockedFactsStmt =
 
 int8Column :: D.Row Int64
 int8Column = D.column (D.nonNullable D.int8)
+
+strictlyAscending :: (Ord value) => [value] -> Bool
+strictlyAscending values = and (zipWith (<) values (drop 1 values))

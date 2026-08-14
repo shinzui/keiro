@@ -55,6 +55,12 @@ cross-plan release gate.
 - [ ] M4: the delivered implementations of plans 254, 255, and 257 have each passed a
   recorded adversarial correctness, concurrency, security, performance, and
   compatibility review; every critical/high finding is resolved.
+  - [x] (2026-08-14T10:11:50Z) EP-2 status contract reviewed at `18eaf279`,
+    `7b57e639`, and `1b71f0d6`, integrated through `353e8d3c` and `9f985f76`;
+    checkpoint/cardinality, promotion atomicity, restricted-role, query-plan, and
+    pre-0026 rolling-upgrade evidence pass with no critical or high finding.
+  - [ ] EP-3 guarded external-read contract review.
+  - [ ] EP-4 targeted stream-repair review.
 - [ ] M5: cross-plan fault injection, bridge/rolling-upgrade evidence, ADR and contract
   reconciliation, changelogs, corpus replay, and `just verify` pass; MasterPlan 41 is
   eligible to close.
@@ -96,6 +102,16 @@ cross-plan release gate.
   database contaminated unrelated command fan-out measurements with 25,000 extra
   events. Giving the new fixture its own fresh migrated database preserves the existing
   benchmark families' cardinalities and makes resource isolation part of the harness.
+- Kiroku's frozen `subscription_checkpoints_v1` contract publishes durable member rows
+  but not expected consumer-group size. The EP-2 implementation can reject a missing
+  bound subscription and floor every published member, but even an adversarial review
+  cannot make it detect a missing highest-numbered member within an otherwise present
+  subscription without crossing Kiroku's private-schema boundary.
+- The status relation needs no explicit coordination protocol for a promotion reader:
+  PostgreSQL statement snapshots plus the transactional group/run metadata transition
+  expose the complete old tuple until commit and the complete new tuple after commit.
+  A separate-session test that holds the transition open for one second observed no
+  mixed serving/candidate state.
 
 
 ## Decision Log
@@ -170,6 +186,16 @@ cross-plan release gate.
   absolute shapes. Separate CSV artifacts make both regressions reviewable through the
   existing tasty-bench baseline convention.
   Date: 2026-08-14
+- Decision: Keep `keiro_read.projection_group_status_v1` unchanged after the EP-2
+  adversarial review and classify missing expected member topology as a medium residual
+  owned by `mori://shinzui/kiroku`.
+  Rationale: v1 truthfully reports the floor of all owner-published rows and fails closed
+  when a required subscription is absent, while neither Keiro nor an external reader
+  can infer unpublished group size. The bounded follow-up is an owner-published Kiroku
+  topology/checkpoint v2 carrying expected member cardinality, followed by a Keiro v2
+  status contract if complete-member detection is required; Keiro v1 will not read the
+  private `kiroku.subscriptions` table or silently change its frozen meaning.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -230,6 +256,68 @@ cross-plan release gate.
   recipe still exhausts tasty-bench's 100-second adaptive sampler for
   `domain.accepted-large` on this machine; its baseline and timeout policy are unchanged.
   Both new baseline commands pass from the isolated final tree.
+
+### M4 EP-2 adversarial review — projection-group status
+
+The reviewed delivery commits are `18eaf279` (migration and owner-rights view),
+`7b57e639` (typed library lookup/list surface), and `1b71f0d6` (frozen contract and
+documentation). The review used the current integrated tree through `353e8d3c` and
+`9f985f76`, because cutover timing and scale work can change the facts observed by the
+view.
+
+The review attacked four hypotheses. First, malformed or partial checkpoint inventory
+might publish an optimistic serving floor or multiply group rows. Second, a promotion
+transaction might expose a mixed serving/candidate tuple. Third, a view grant might
+leak private Keiro/Kiroku objects or depend on invoker privileges. Fourth, migration
+0026 might silently assign append authority to pre-existing groups. The focused
+reproduction commands and results were:
+
+    cabal test keiro:keiro-test --test-options='--match "adversarial checkpoint inventory"'
+    # 1 example, 0 failures
+    cabal test keiro:keiro-test --test-options='--match "old or new status tuple"'
+    # 1 example, 0 failures
+    cabal test keiro-migrations:keiro-migrations-test --test-options='--match "0026 gives pre-existing groups"'
+    # 1 example, 0 failures
+    cabal test keiro:keiro-test --test-options='--match "catalog rebuild groups"'
+    # 9 examples, 0 failures
+    cabal test keiro:keiro-test --test-options='--match "schema-versioned cutover concurrency"'
+    # 4 examples, 0 failures
+    cabal test keiro-migrations:keiro-migrations-test
+    # 33 examples, 0 failures
+
+The checkpoint regression creates three required subscriptions with several members,
+proves the published floor is 7, proves Kiroku rejects an exact duplicate member row,
+removes one required subscription, injects duplicate cursor authority, and removes the
+cursor row. Each malformed case remains one row per group and reports unknown progress;
+missing authority reports `unmanaged`. Listing 251 groups remains unique and sorted.
+The rolling-upgrade regression applies migrations only through 0025, inserts a live
+group, then applies 0026 through 0029 and proves migration 0026 creates explicit
+`unmanaged` authority with a null serving position rather than guessing append or
+checkpoint semantics.
+
+The concurrent regression holds a promotion-shaped group update open in another
+transaction. A status statement during the transaction returns the complete committed
+`rebuilding-versioned`/v1/epoch-0 tuple; after commit it returns the complete
+`serving-versioned`/v2/epoch-1 tuple with no active run or candidate. Existing real-role
+migration coverage grants only `USAGE` on `keiro_read` and `SELECT` on the view, proves
+the role lacks private-schema access, and exercises the owner-rights result. Migration
+snapshot evidence freezes all 18 columns in order and type, plus public revocations and
+the security-barrier/owner-rights definition.
+
+The M3 query-plan fixture supplies the performance review: 1,017 status rows return in
+2.363 ms, the group/cursor/read-model joins use their keyed relations, and the plan has
+no subscription/member cross product across unrelated groups. Lifecycle coverage also
+includes live, offline, failed, rebuilding-versioned, serving-versioned, unknown cursor
+authority, and reads-disabled states.
+
+There are no critical or high EP-2 findings. The one medium residual is Kiroku v1's
+absence of expected consumer-group cardinality: if a required subscription has at
+least one published row but its highest member is missing, Keiro cannot distinguish
+that partial topology from a smaller complete group. Owner: `mori://shinzui/kiroku`.
+Bounded follow-up: publish expected member topology in a Kiroku v2 public relation and
+consume it only through a future Keiro v2 status contract. Until then, Keiro continues
+to require every bound subscription, floor every published member, fail closed for
+missing whole subscriptions or cursor authority, and avoid private Kiroku storage.
 
 
 ## Context and Orientation
