@@ -14688,6 +14688,7 @@ catalogInlineProjectionRevision revisionId marker =
             (\_ _ -> pure (Right False))
         ],
       revisionVerifications = [],
+      streamScopedReplays = [],
       claimSite = catalogClaimSite ("test:catalog-inline-revision:" <> projectionRevisionIdText revisionId)
     }
 

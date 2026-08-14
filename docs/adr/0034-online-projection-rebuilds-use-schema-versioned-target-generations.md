@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-08-14T02:59:54Z
+timestamp: 2026-08-14T06:53:09Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -69,6 +69,14 @@ binary cannot supply that revision it fails closed before executing application 
 The rebuild runner always applies the candidate revision to staging generations.
 Promotion changes the persisted serving revision and physical generations in the same
 transaction, so subsequent writers can execute only the candidate handlers.
+
+Targeted per-stream repair is revision-aware but is not another generation lifecycle.
+It is admitted only while the group is `serving-versioned` with no active rebuild,
+takes the group row exclusively, and resolves the persisted serving revision plus its
+complete serving physical-target map before application SQL runs. It never chooses the
+first compiled revision, a candidate revision, or a retired generation. The repair
+changes no serving epoch, revision, generation lifecycle, or public availability field;
+it atomically replaces only rows owned by one declared stream.
 
 The serving table name remains a compatibility alias for existing application SQL.
 Promotion may implement that alias with a transactional rename swap, but names alone
@@ -140,6 +148,9 @@ assumes without enforcement that old history is immutable.
   dual-write guarantee.
 - Online rebuild status retains serving revision, epoch, and progress beside the
   separate active candidate fields; promotion clears the candidate fields atomically.
+- Targeted repair always executes the persisted serving revision against serving
+  generations. An active rebuild, missing revision, incomplete binding, or slice drift
+  is a typed refusal before application target mutation.
 
 
 ## Alternatives considered

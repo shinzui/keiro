@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Subscription checkpoint policy is catalog identity and replay safety
 description: Keiro fingerprints every explicit missing-checkpoint policy, rejects unsafe head seeding, and brackets catalog replay with atomic dedup and checkpoint restoration.
-timestamp: 2026-08-13T17:46:56Z
+timestamp: 2026-08-14T06:53:09Z
 docId: ADR-31
 status: Accepted
 date: 2026-08-11

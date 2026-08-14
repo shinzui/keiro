@@ -64,6 +64,7 @@ import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.HistoryRetention (StreamHistoryUnavailable (..))
 import Kiroku.Store.Lifecycle (hardDeleteStream)
 import Kiroku.Store.Read (getStream, readStreamForward)
 import Kiroku.Store.Subscription.Types (SubscriptionName (..))
@@ -118,6 +119,7 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "versioned", "status", "ops-run"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "retired"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "external-read", "counter_reader", "1"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
       isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
@@ -132,7 +134,9 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["rebuild", "drop-retired", "65b86cd6-550c-47c3-ae99-4039a85a11ad"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "external-read", "counter_reader", "1"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "1"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1"]) `shouldBe` True
       isParseFailure (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "0"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1", "--page-size", "0"]) `shouldBe` True
 
     it "parses a complete versioned start and rejects malformed generation identities" do
       let versionedStart =
@@ -181,6 +185,81 @@ spec fixture = do
       mapM_ (\args -> isParseFailure (parseOps embeddedHooks args) `shouldBe` True) [rebuild "-1", snapshot "-1", stream "-1", workflow "-1"]
       mapM_ (\args -> isParseSuccess (parseOps embeddedHooks args) `shouldBe` True) [rebuild "0", snapshot "0", stream "0", workflow "0"]
 
+  describe "targeted stream repair command" $
+    around (withFreshStore fixture) $ do
+      it "classifies the command as mutating and renders a stable typed refusal" $ \store -> do
+        let command =
+              OpsRebuild.ReprojectStream
+                OpsRebuild.ReprojectStreamOptions
+                  { groupId = either (error . show) Function.id (Catalog.mkRebuildGroupId "ops-group"),
+                    projectionId = either (error . show) Function.id (Catalog.mkProjectionId "ops-projection"),
+                    streamName = StreamName "orders-1",
+                    pageSize = 500
+                  }
+        OpsRebuild.isMutation command `shouldBe` True
+        outcome <- OpsRebuild.runCommand (opsEnv False store) emptyCatalogOperations command
+        case outcome of
+          Failed detail ->
+            detail `shouldSatisfy` Text.isPrefixOf "stream-reprojection-group-unregistered:"
+          other -> expectationFailure ("expected a typed targeted-repair refusal, got " <> show other)
+
+      it "keeps every typed refusal code distinct and stable" $ \_ -> do
+        let group = opsGroupId
+            otherGroup = opsGroupBId
+            projection = catalogIdentity Catalog.mkProjectionId "ops-projection"
+            revision = catalogIdentity Catalog.mkProjectionRevisionId "ops-revision"
+            source = catalogIdentity Catalog.mkSourceId "ops-source"
+            target = catalogIdentity Catalog.mkTargetId "ops-target"
+            dedup = catalogIdentity Catalog.mkDedupKeyId "ops-dedup"
+            stream = StreamName "ops-1"
+            version = StreamVersion 1
+            errors =
+              [ Rebuild.StreamReprojectionInvalidPageSize 0,
+                Rebuild.StreamReprojectionGroupUnregistered group,
+                Rebuild.StreamReprojectionActiveRebuild group (opsRebuildRunId "ops-active"),
+                Rebuild.StreamReprojectionGroupUnavailable group "failed" False False,
+                Rebuild.StreamReprojectionSliceDrift group "expected" "actual",
+                Rebuild.StreamReprojectionServingRevisionUnavailable group revision,
+                Rebuild.StreamReprojectionServingBindingInvalid group revision "invalid binding",
+                Rebuild.StreamReprojectionUnknownProjection projection,
+                Rebuild.StreamReprojectionProjectionGroupMismatch projection group otherGroup,
+                Rebuild.StreamReprojectionPolicyUnavailable revision projection,
+                Rebuild.StreamReprojectionSourceMismatch source stream,
+                Rebuild.StreamReprojectionHistoryUnavailable (StreamHistoryNotFound stream),
+                Rebuild.StreamReprojectionSoftDeleted stream,
+                Rebuild.StreamReprojectionTruncated stream version,
+                Rebuild.StreamReprojectionForeignEvent stream version,
+                Rebuild.StreamReprojectionClearFailed "clear failed",
+                Rebuild.StreamReprojectionClearEvidenceInvalid [target] [],
+                Rebuild.StreamReprojectionDecodeFailed version (Catalog.ReplayDecodeError "decode failed"),
+                Rebuild.StreamReprojectionVerificationFailed "verification failed",
+                Rebuild.StreamReprojectionDedupIdentityUnavailable dedup,
+                Rebuild.StreamReprojectionHistoryIncomplete version (StreamVersion 0)
+              ]
+        map OpsRebuild.streamReprojectionErrorCode errors
+          `shouldBe` [ "stream-reprojection-invalid-page-size",
+                       "stream-reprojection-group-unregistered",
+                       "stream-reprojection-active-rebuild",
+                       "stream-reprojection-group-unavailable",
+                       "stream-reprojection-slice-drift",
+                       "stream-reprojection-serving-revision-unavailable",
+                       "stream-reprojection-serving-binding-invalid",
+                       "stream-reprojection-unknown-projection",
+                       "stream-reprojection-projection-group-mismatch",
+                       "stream-reprojection-policy-unavailable",
+                       "stream-reprojection-source-mismatch",
+                       "stream-reprojection-history-unavailable",
+                       "stream-reprojection-soft-deleted",
+                       "stream-reprojection-truncated",
+                       "stream-reprojection-foreign-event",
+                       "stream-reprojection-clear-failed",
+                       "stream-reprojection-clear-evidence-invalid",
+                       "stream-reprojection-decode-failed",
+                       "stream-reprojection-verification-failed",
+                       "stream-reprojection-dedup-identity-unavailable",
+                       "stream-reprojection-history-incomplete"
+                     ]
+
   describe "catalog rebuild adoption" $ around (withFreshStore fixture) do
     it "previews exact slice changes and adopts them only with force" $ \store -> do
       expectStore store $ runTransaction $ Tx.sql (ByteString.pack "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)")
@@ -208,8 +287,8 @@ spec fixture = do
               group `shouldBe` "ops-group"
               state `shouldBe` "slice-changed"
               scope `shouldBe` "adopt"
-              stored `shouldSatisfy` Text.isPrefixOf "slice-v4:"
-              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v4:"
+              stored `shouldSatisfy` Text.isPrefixOf "slice-v5:"
+              currentSlice `shouldSatisfy` Text.isPrefixOf "slice-v5:"
               stored `shouldNotBe` currentSlice
             otherRows -> expectationFailure ("unexpected adoption preview rows: " <> show otherRows)
           renderHuman result
@@ -386,7 +465,7 @@ spec fixture = do
       case adopted of
         Succeeded result ->
           result.rows `shouldSatisfy` \case
-            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v4:" (row !! 3)
+            row : _ -> row !! 1 == "group" && row !! 2 == "failed" && Text.isPrefixOf "slice-v5:" (row !! 3)
             _ -> False
         other -> expectationFailure ("expected forced adoption, got " <> show other)
 

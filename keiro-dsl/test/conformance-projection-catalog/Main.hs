@@ -102,7 +102,7 @@ perturbSubscriptionName (Catalog.AsyncProjectionRegistration projectionId projec
   Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId "catalog-demo-audit-WRONG" checkpointOnMissing dedupKeyId dedupName
 
 inventoryRevisionId :: Catalog.InventoryProjectionRevision -> Catalog.ProjectionRevisionId
-inventoryRevisionId (Catalog.InventoryProjectionRevision revisionId _ _ _ _ _) = revisionId
+inventoryRevisionId (Catalog.InventoryProjectionRevision revisionId _ _ _ _ _ _) = revisionId
 
 exerciseQualificationQueue :: IO ()
 exerciseQualificationQueue = do

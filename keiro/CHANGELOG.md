@@ -8,6 +8,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Added
 
+- Projection revisions may declare explicit `StreamScopedReplay` policies. The targeted
+  runner repairs one complete retained stream against the persisted serving revision in
+  one group-fenced transaction, verifies exact target evidence, backfills ordinary async
+  dedup keys, leaves subscription checkpoints unchanged, and refuses truncated/deleted
+  history, active rebuilds, slice drift, or incomplete serving bindings. Catalog identity
+  advances to `catalog-v6:` and `slice-v5:`.
+- `ProjectionCatalogOperations` adds database-backed targeted-reprojection preview and
+  outcome reports with stable v1 JSON envelopes. Jitsurei demonstrates a V2 serving-row
+  repair that leaves unrelated streams unchanged.
+
 - Projection catalogs now declare versioned all-row and keyed external read contracts,
   including validated query/shape/revision compatibility, immutable SQL signatures,
   application-owned keyed implementation identity, and monotonic surface generations.

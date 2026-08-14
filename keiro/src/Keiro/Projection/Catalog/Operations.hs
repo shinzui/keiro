@@ -18,6 +18,8 @@ module Keiro.Projection.Catalog.Operations
     CatalogRetiredGenerationsReport (..),
     CatalogRetiredDropReport (..),
     CatalogExternalReadRetirementReport (..),
+    CatalogStreamReprojectionPreview (..),
+    CatalogStreamReprojectionReport (..),
     CatalogOpsError (..),
     catalogInventoryReport,
     previewGroupRebuild,
@@ -37,6 +39,8 @@ module Keiro.Projection.Catalog.Operations
     dropRetiredGeneration,
     inspectExternalReadContract,
     retireExternalReadContract,
+    previewStreamReprojection,
+    reprojectCatalogStream,
   )
 where
 
@@ -74,6 +78,9 @@ import Keiro.ReadModel.Rebuild
     RebuildVerificationProgress,
     RegistrationAdoption (..),
     RegistrationAdoptionAction (..),
+    StreamReprojectionError (..),
+    StreamReprojectionReport,
+    StreamReprojectionRequest (..),
     VersionedRebuildError,
     VersionedRebuildReport,
     VersionedRebuildRequest (..),
@@ -88,15 +95,19 @@ import Keiro.ReadModel.Rebuild
     inspectCatalogRebuild,
     inspectVersionedRebuild,
     listVersionedRetiredGenerations,
+    lookupProjectionGroupStatus,
     lookupProjectionRebuildGroup,
     preCanonicalRunSliceSentinel,
     previewVersionedRetiredDrop,
     rebuildRunIdText,
+    reprojectStream,
     resumeCatalogRebuild,
     resumeVersionedRebuild,
     startCatalogRebuild,
   )
 import Keiro.ReadModel.Rebuild qualified as Rebuild
+import Keiro.ReadModel.Rebuild.Stream (validateStreamReprojectionAdmission)
+import Kiroku.Store qualified as Kiroku
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.HistoryRetention
   ( HistoryRetentionLeaseRequest (..),
@@ -104,7 +115,7 @@ import Kiroku.Store.HistoryRetention
     mkHistoryRetentionLeaseOwner,
     mkHistoryRetentionLeaseReason,
   )
-import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..))
+import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), StreamName (..), StreamVersion (..))
 
 newtype ProjectionCatalogOperations = ProjectionCatalogOperations ValidatedProjectionCatalog
   deriving stock (Generic)
@@ -248,6 +259,29 @@ data CatalogExternalReadRetirementReport = CatalogExternalReadRetirementReport
   }
   deriving stock (Eq, Show, Generic)
 
+data CatalogStreamReprojectionPreview = CatalogStreamReprojectionPreview
+  { reportSchema :: !Text,
+    rebuildGroupId :: !RebuildGroupId,
+    projectionId :: !ProjectionId,
+    streamName :: !StreamName,
+    servingRevisionId :: !ProjectionRevisionId,
+    targets :: ![InventoryTarget],
+    affectedDedup :: ![InventoryDedupKey],
+    streamVersion :: !(Maybe StreamVersion),
+    softDeleted :: !Bool,
+    truncateBefore :: !(Maybe StreamVersion),
+    eligible :: !Bool,
+    refusal :: !(Maybe Text),
+    forceOperation :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+data CatalogStreamReprojectionReport = CatalogStreamReprojectionReport
+  { reportSchema :: !Text,
+    repair :: !StreamReprojectionReport
+  }
+  deriving stock (Eq, Show, Generic)
+
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
   | CatalogOpsRunSliceMismatch !RebuildRunId !Text !Text
@@ -255,6 +289,7 @@ data CatalogOpsError
   | CatalogOpsRebuildError !CatalogRebuildError
   | CatalogOpsVersionedError !VersionedRebuildError
   | CatalogOpsExternalReadRetirementError !External.ExternalReadRetirementError
+  | CatalogOpsStreamReprojectionError !StreamReprojectionError
   | CatalogOpsInvalidVersionedRequest !Text
   deriving stock (Eq, Show, Generic)
 
@@ -539,6 +574,134 @@ retireExternalReadContract _ contractId contractVersion =
     <&> first CatalogOpsExternalReadRetirementError
     <&> fmap (externalReadRetirementReport "keiro/catalog-external-read-retirement/v1")
 
+previewStreamReprojection ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  StreamReprojectionRequest ->
+  Eff es (Either CatalogOpsError CatalogStreamReprojectionPreview)
+previewStreamReprojection (ProjectionCatalogOperations catalog) request =
+  if request ^. #pageSize <= 0
+    then
+      pure
+        ( Left
+            ( CatalogOpsStreamReprojectionError
+                (StreamReprojectionInvalidPageSize (request ^. #pageSize))
+            )
+        )
+    else do
+      metadata <- lookupProjectionRebuildGroup (request ^. #rebuildGroupId)
+      status <- lookupProjectionGroupStatus (request ^. #rebuildGroupId)
+      case status >>= (^. #servingRevisionId) of
+        Nothing ->
+          pure
+            ( Left
+                ( CatalogOpsStreamReprojectionError
+                    ( case status of
+                        Nothing -> StreamReprojectionGroupUnregistered (request ^. #rebuildGroupId)
+                        Just observed ->
+                          StreamReprojectionGroupUnavailable
+                            (request ^. #rebuildGroupId)
+                            (observed ^. #lifecyclePhase)
+                            (observed ^. #readsAllowed)
+                            (observed ^. #writesAllowed)
+                    )
+                )
+            )
+        Just revisionId ->
+          case catalogProjectionRevision catalog revisionId of
+            Nothing ->
+              pure
+                ( Left
+                    ( CatalogOpsStreamReprojectionError
+                        (StreamReprojectionServingRevisionUnavailable (request ^. #rebuildGroupId) revisionId)
+                    )
+                )
+            Just _ ->
+              case validateStreamReprojectionAdmission catalog request of
+                Left err -> pure (Left (CatalogOpsStreamReprojectionError err))
+                Right () ->
+                  case catalogStreamScopedReplay catalog revisionId (request ^. #projectionId) of
+                    Nothing ->
+                      pure
+                        ( Left
+                            ( CatalogOpsStreamReprojectionError
+                                (StreamReprojectionPolicyUnavailable revisionId (request ^. #projectionId))
+                            )
+                        )
+                    Just policy -> do
+                      streamInfo <- Kiroku.getStream (request ^. #streamName)
+                      let inventory = catalogInventory catalog
+                          wantedTargets = Set.fromList (NonEmpty.toList (policy ^. #streamOwnedTargets))
+                          wantedDedup = Set.fromList (policy ^. #affectedAsyncDedup)
+                          targets =
+                            filter
+                              ((`Set.member` wantedTargets) . (^. #targetId))
+                              (inventory ^. #inventoryTargets)
+                          dedup =
+                            filter
+                              ((`Set.member` wantedDedup) . (^. #dedupKeyId))
+                              (inventory ^. #inventoryDedupKeys)
+                          refusal = previewRefusal metadata status streamInfo
+                      pure
+                        ( Right
+                            CatalogStreamReprojectionPreview
+                              { reportSchema = "keiro/catalog-stream-reprojection-preview/v1",
+                                rebuildGroupId = request ^. #rebuildGroupId,
+                                projectionId = request ^. #projectionId,
+                                streamName = request ^. #streamName,
+                                servingRevisionId = revisionId,
+                                targets,
+                                affectedDedup = dedup,
+                                streamVersion = (^. #version) <$> streamInfo,
+                                softDeleted = maybe False (isJust . (^. #deletedAt)) streamInfo,
+                                truncateBefore = (^. #truncateBefore) <$> streamInfo,
+                                eligible = isNothing refusal,
+                                refusal,
+                                forceOperation =
+                                  "rebuild reproject-stream "
+                                    <> rebuildGroupIdText (request ^. #rebuildGroupId)
+                                    <> " "
+                                    <> projectionIdText (request ^. #projectionId)
+                                    <> " "
+                                    <> streamNameText (request ^. #streamName)
+                                    <> " --force"
+                              }
+                        )
+  where
+    previewRefusal maybeMetadata maybeStatus streamInfo =
+      case maybeStatus of
+        Just observed
+          | isJust (observed ^. #activeRunId) -> Just "active-rebuild"
+          | not (sliceMatches maybeMetadata) -> Just "slice-drift"
+          | observed ^. #lifecyclePhase /= "serving-versioned"
+              || not (observed ^. #readsAllowed)
+              || not (observed ^. #writesAllowed) ->
+              Just "group-unavailable"
+        _ -> case streamInfo of
+          Nothing -> Just "stream-missing"
+          Just info
+            | isJust (info ^. #deletedAt) -> Just "stream-soft-deleted"
+            | info ^. #truncateBefore > StreamVersion 0 -> Just "stream-truncated"
+            | otherwise -> Nothing
+
+    sliceMatches maybeMetadata =
+      case (maybeMetadata, groupSliceFingerprint catalog (request ^. #rebuildGroupId)) of
+        (Just registered, Just current) ->
+          registered ^. #sliceFingerprint == groupSliceFingerprintText current
+        _ -> False
+
+    streamNameText (StreamName value) = value
+
+reprojectCatalogStream ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  StreamReprojectionRequest ->
+  Eff es (Either CatalogOpsError CatalogStreamReprojectionReport)
+reprojectCatalogStream (ProjectionCatalogOperations catalog) request =
+  reprojectStream catalog request
+    <&> first CatalogOpsStreamReprojectionError
+    <&> fmap (CatalogStreamReprojectionReport "keiro/catalog-stream-reprojection-outcome/v1")
+
 externalReadRetirementReport :: Text -> External.ExternalReadRetirementPreview -> CatalogExternalReadRetirementReport
 externalReadRetirementReport reportSchema retirement =
   CatalogExternalReadRetirementReport
@@ -735,6 +898,59 @@ instance Aeson.ToJSON CatalogExternalReadRetirementReport where
         "executeGrants" Aeson..= (report ^. #executeGrants)
       ]
 
+instance Aeson.ToJSON CatalogStreamReprojectionPreview where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "groupId" Aeson..= rebuildGroupIdText (report ^. #rebuildGroupId),
+        "projectionId" Aeson..= projectionIdText (report ^. #projectionId),
+        "streamName" Aeson..= streamNameValue (report ^. #streamName),
+        "servingRevisionId" Aeson..= projectionRevisionIdText (report ^. #servingRevisionId),
+        "targets" Aeson..= map targetValue (report ^. #targets),
+        "affectedDedup" Aeson..= map dedupValue (report ^. #affectedDedup),
+        "streamVersion" Aeson..= fmap streamVersionValue (report ^. #streamVersion),
+        "softDeleted" Aeson..= (report ^. #softDeleted),
+        "truncateBefore" Aeson..= fmap streamVersionValue (report ^. #truncateBefore),
+        "eligible" Aeson..= (report ^. #eligible),
+        "refusal" Aeson..= (report ^. #refusal),
+        "forceOperation" Aeson..= (report ^. #forceOperation)
+      ]
+
+instance Aeson.ToJSON CatalogStreamReprojectionReport where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "repair" Aeson..= streamReprojectionValue (report ^. #repair)
+      ]
+
+streamReprojectionValue :: StreamReprojectionReport -> Aeson.Value
+streamReprojectionValue report =
+  Aeson.object
+    [ "groupId" Aeson..= rebuildGroupIdText (report ^. #rebuildGroupId),
+      "projectionId" Aeson..= projectionIdText (report ^. #projectionId),
+      "streamName" Aeson..= streamNameValue (report ^. #streamName),
+      "servingRevisionId" Aeson..= projectionRevisionIdText (report ^. #servingRevisionId),
+      "streamVersion" Aeson..= streamVersionValue (report ^. #streamVersion),
+      "clearedRows"
+        Aeson..= [ Aeson.object
+                     [ "targetId" Aeson..= targetIdText (count ^. #targetId),
+                       "rows" Aeson..= (count ^. #clearedRows)
+                     ]
+                 | count <- report ^. #clearedRows
+                 ],
+      "replayedEvents" Aeson..= (report ^. #replayedEvents),
+      "appliedEvents" Aeson..= (report ^. #appliedEvents),
+      "dedupInserted" Aeson..= (report ^. #dedupInserted),
+      "dedupExisting" Aeson..= (report ^. #dedupExisting),
+      "verified" Aeson..= (report ^. #verified)
+    ]
+
+streamNameValue :: StreamName -> Text
+streamNameValue (StreamName value) = value
+
+streamVersionValue :: StreamVersion -> Int64
+streamVersionValue (StreamVersion value) = value
+
 inventoryValue :: CatalogInventory -> Aeson.Value
 inventoryValue catalog =
   Aeson.object
@@ -742,10 +958,68 @@ inventoryValue catalog =
       "targets" Aeson..= map targetValue (catalog ^. #inventoryTargets),
       "groups" Aeson..= map groupValue (catalog ^. #inventoryGroups),
       "projections" Aeson..= map projectionValue (catalog ^. #inventoryProjections),
+      "projectionRevisions" Aeson..= map projectionRevisionValue (catalog ^. #inventoryProjectionRevisions),
       "queryModels" Aeson..= map queryModelValue (catalog ^. #inventoryQueryModels),
       "subscriptions" Aeson..= map subscriptionValue (catalog ^. #inventorySubscriptions),
       "dedupKeys" Aeson..= map dedupValue (catalog ^. #inventoryDedupKeys)
     ]
+
+projectionRevisionValue :: InventoryProjectionRevision -> Aeson.Value
+projectionRevisionValue revision =
+  Aeson.object
+    [ "revisionId" Aeson..= projectionRevisionIdText (revision ^. #revisionId),
+      "groupId" Aeson..= rebuildGroupIdText (revision ^. #rebuildGroupId),
+      "targetProvisioners" Aeson..= map targetProvisionerValue (revision ^. #targetProvisioners),
+      "liveHandlers" Aeson..= map revisionHandlerValue (revision ^. #liveHandlers),
+      "replayAdapters" Aeson..= map revisionHandlerValue (revision ^. #replayAdapters),
+      "verifications" Aeson..= map revisionHandlerValue (revision ^. #verifications),
+      "streamScopedReplays" Aeson..= map streamScopedReplayValue (revision ^. #streamScopedReplays)
+    ]
+
+targetProvisionerValue :: InventoryTargetProvisioner -> Aeson.Value
+targetProvisionerValue provisioner =
+  Aeson.object
+    [ "targetId" Aeson..= targetIdText (provisioner ^. #targetId),
+      "provisionerId" Aeson..= (provisioner ^. #provisionerId),
+      "provisionerVersion" Aeson..= (provisioner ^. #provisionerVersion),
+      "schemaVersion" Aeson..= schemaVersionText (provisioner ^. #schemaVersion),
+      "expectedShapeId" Aeson..= (provisioner ^. #expectedShapeId),
+      "validatorId" Aeson..= (provisioner ^. #validatorId),
+      "validatorVersion" Aeson..= (provisioner ^. #validatorVersion),
+      "promotionObjects"
+        Aeson..= [ Aeson.object
+                     [ "kind" Aeson..= Text.pack (show (object ^. #objectKind)),
+                       "generationName" Aeson..= (object ^. #generationName),
+                       "canonicalName" Aeson..= (object ^. #canonicalName)
+                     ]
+                 | object <- provisioner ^. #promotionObjectNames
+                 ]
+    ]
+
+revisionHandlerValue :: InventoryRevisionHandler -> Aeson.Value
+revisionHandlerValue handler =
+  Aeson.object
+    [ "id" Aeson..= (handler ^. #handlerId),
+      "version" Aeson..= (handler ^. #handlerVersion),
+      "requiredTargets" Aeson..= map targetIdText (handler ^. #requiredTargets)
+    ]
+
+streamScopedReplayValue :: InventoryStreamScopedReplay -> Aeson.Value
+streamScopedReplayValue replay =
+  Aeson.object
+    [ "projectionId" Aeson..= projectionIdText (replay ^. #projectionId),
+      "ownedTargets" Aeson..= map targetIdText (replay ^. #ownedTargets),
+      "clearer" Aeson..= identityValue (replay ^. #clearerId) (replay ^. #clearerVersion),
+      "replay" Aeson..= identityValue (replay ^. #replayId) (replay ^. #replayVersion),
+      "verification" Aeson..= identityValue (replay ^. #verificationId) (replay ^. #verificationVersion),
+      "affectedAsyncDedup" Aeson..= map dedupKeyIdText (replay ^. #affectedAsyncDedup)
+    ]
+  where
+    identityValue identityText identityVersion =
+      Aeson.object
+        [ "id" Aeson..= identityText,
+          "version" Aeson..= identityVersion
+        ]
 
 sourceValue :: InventorySource -> Aeson.Value
 sourceValue source =

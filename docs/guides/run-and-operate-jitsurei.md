@@ -112,6 +112,23 @@ restoring cleared data. The `Jitsurei read model` acceptance test in
 `jitsurei/test/Main.hs` is the safe automated proof of verification failure,
 repair, exact-run resume, brownfield preservation, and live-writer fencing.
 
+That same acceptance suite carries the targeted-repair transcript after its V1-to-V2
+schema-versioned promotion. It corrupts one order's serving summary and line, previews
+the exact `jitsurei-order-summary` policy, runs one-stream reprojection, and proves the
+other orders are byte-for-byte unchanged. In an embedded application binary the matching
+operator shape is:
+
+```bash
+cabal run jitsurei-demo -- ops rebuild reproject-stream \
+  jitsurei-order-reporting jitsurei-order-summary order-versioned-before
+# Review the database-backed preview, then repeat with --force.
+```
+
+The disposable database must already be in `serving-versioned` state; a fresh
+unversioned registration correctly refuses this command. Truncated, soft-deleted, or
+non-stream-scoped projections also fail closed. The operation does not reset the shared
+audit subscription checkpoint.
+
 For command handlers, keep these operational rules:
 
 - Validate every command-side `EventStream` before startup and pass only

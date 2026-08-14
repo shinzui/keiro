@@ -99,6 +99,7 @@ library
     Keiro.ReadModel.Rebuild.Group
     Keiro.ReadModel.Rebuild.Runner
     Keiro.ReadModel.Rebuild.Status
+    Keiro.ReadModel.Rebuild.Stream
     Keiro.ReadModel.Rebuild.Versioned
     Keiro.ReplayDigest
     Keiro.Workflow.Child.Cancel

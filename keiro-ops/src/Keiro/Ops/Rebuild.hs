@@ -9,9 +9,11 @@ module Keiro.Ops.Rebuild
     AbandonOptions (..),
     AdoptOptions (..),
     VersionedStartOptions (..),
+    ReprojectStreamOptions (..),
     commandParser,
     isMutation,
     runCommand,
+    streamReprojectionErrorCode,
   )
 where
 
@@ -33,16 +35,23 @@ import Keiro.Projection.Catalog
   ( CatalogInventory (..),
     ExternalReadContractId,
     ExternalReadContractVersion (..),
+    InventoryDedupKey (..),
     InventoryGroup (..),
+    InventoryTarget (..),
+    ProjectionId,
     ProjectionRevisionId,
     QualifiedTable (..),
     RebuildGroupId,
+    StreamClearCount (..),
     TargetGenerationId (..),
+    dedupKeyIdText,
     externalReadContractIdText,
     externalReadContractVersionValue,
     mkExternalReadContractId,
+    mkProjectionId,
     mkProjectionRevisionId,
     mkRebuildGroupId,
+    projectionIdText,
     projectionRevisionIdText,
     rebuildGroupIdText,
     targetIdText,
@@ -60,6 +69,9 @@ import Keiro.ReadModel.Rebuild
     RebuildRunReport (..),
     RegistrationAdoption (..),
     RegistrationAdoptionAction (..),
+    StreamReprojectionError (..),
+    StreamReprojectionReport (..),
+    StreamReprojectionRequest (..),
     VersionedRebuildReport (..),
     VersionedRetiredDropResult (..),
     VersionedRetiredGenerationPreview (..),
@@ -71,7 +83,7 @@ import Keiro.ReadModel.Rebuild
   )
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (GlobalPosition (..))
+import Kiroku.Store.Types (GlobalPosition (..), StreamName (..), StreamVersion (..))
 import Options.Applicative hiding (action, value)
 import Options.Applicative qualified as Optparse
 
@@ -91,6 +103,7 @@ data Command
   | DropRetired !TargetGenerationId
   | ExternalReadStatus !ExternalReadContractId !ExternalReadContractVersion
   | RetireExternalRead !ExternalReadContractId !ExternalReadContractVersion
+  | ReprojectStream !ReprojectStreamOptions
   deriving stock (Eq, Show)
 
 data StartOptions = StartOptions
@@ -136,6 +149,14 @@ data VersionedStartOptions = VersionedStartOptions
   }
   deriving stock (Eq, Show)
 
+data ReprojectStreamOptions = ReprojectStreamOptions
+  { groupId :: !RebuildGroupId,
+    projectionId :: !ProjectionId,
+    streamName :: !StreamName,
+    pageSize :: !Int32
+  }
+  deriving stock (Eq, Show)
+
 commandParser :: Parser Command
 commandParser =
   hsubparser
@@ -151,6 +172,7 @@ commandParser =
         <> command "drop-retired" (info (DropRetired <$> generationArgument) (progDesc "Preview or drop one retired target generation"))
         <> command "external-read" (info externalReadStatusParser (progDesc "Inspect one managed external read contract"))
         <> command "retire-external-read" (info retireExternalReadParser (progDesc "Preview or retire one managed external read contract"))
+        <> command "reproject-stream" (info (ReprojectStream <$> reprojectStreamOptionsParser) (progDesc "Preview or repair one stream-scoped projection"))
     )
 
 externalReadStatusParser :: Parser Command
@@ -158,6 +180,14 @@ externalReadStatusParser = ExternalReadStatus <$> externalReadContractArgument <
 
 retireExternalReadParser :: Parser Command
 retireExternalReadParser = RetireExternalRead <$> externalReadContractArgument <*> externalReadVersionArgument
+
+reprojectStreamOptionsParser :: Parser ReprojectStreamOptions
+reprojectStreamOptionsParser =
+  ReprojectStreamOptions
+    <$> groupArgument
+    <*> argument projectionReader (metavar "PROJECTION")
+    <*> (StreamName . Text.pack <$> strArgument (metavar "STREAM"))
+    <*> option positiveInt32Reader (long "page-size" <> metavar "N" <> Optparse.value 500 <> showDefault <> help "Events fetched per stream page")
 
 versionedCommandParser :: Parser Command
 versionedCommandParser =
@@ -239,6 +269,9 @@ runReader = eitherReader (firstText . mkRebuildRunId . Text.pack)
 revisionReader :: ReadM ProjectionRevisionId
 revisionReader = eitherReader (firstShow . mkProjectionRevisionId . Text.pack)
 
+projectionReader :: ReadM ProjectionId
+projectionReader = eitherReader (firstShow . mkProjectionId . Text.pack)
+
 generationReader :: ReadM TargetGenerationId
 generationReader = eitherReader $ \raw ->
   maybe (Left "expected a UUID target generation id") (Right . TargetGenerationId) (UUID.fromString raw)
@@ -299,6 +332,7 @@ isMutation = \case
   DropRetired {} -> True
   ExternalReadStatus {} -> False
   RetireExternalRead {} -> True
+  ReprojectStream {} -> True
 
 runCommand :: OpsEnv -> ProjectionCatalogOperations -> Command -> IO OpsOutcome
 runCommand env operations = \case
@@ -385,6 +419,26 @@ runCommand env operations = \case
           PreviewRequired
             (externalReadRetirementResult report)
             (forceInvocation env (retireExternalReadArguments contractId contractVersion))
+  ReprojectStream options
+    | env.force ->
+        runCatalogAction
+          env
+          (reprojectCatalogStream operations (streamReprojectionRequest options))
+          (Succeeded . streamReprojectionResult)
+    | otherwise ->
+        runCatalogAction env (previewStreamReprojection operations (streamReprojectionRequest options)) $ \report ->
+          PreviewRequired
+            (streamReprojectionPreviewResult report)
+            (forceInvocation env (reprojectStreamArguments options))
+
+streamReprojectionRequest :: ReprojectStreamOptions -> StreamReprojectionRequest
+streamReprojectionRequest options =
+  StreamReprojectionRequest
+    { rebuildGroupId = options.groupId,
+      projectionId = options.projectionId,
+      streamName = options.streamName,
+      pageSize = options.pageSize
+    }
 
 catalogVersionedStartOptions :: VersionedStartOptions -> CatalogVersionedStartOptions
 catalogVersionedStartOptions options =
@@ -437,7 +491,7 @@ runCatalogAction env action onSuccess = do
   result <- runStoreIO env.store action
   pure $ case result of
     Left storeError -> Failed (Text.pack (show storeError))
-    Right (Left catalogError) -> Failed (Text.pack (show catalogError))
+    Right (Left catalogError) -> Failed (catalogOpsErrorText catalogError)
     Right (Right value) -> onSuccess value
 
 runCatalogValue ::
@@ -708,6 +762,50 @@ externalReadRetirementResult report =
       jsonValue = Aeson.toJSON report
     }
 
+streamReprojectionPreviewResult :: CatalogStreamReprojectionPreview -> OpsResult
+streamReprojectionPreviewResult report =
+  OpsResult
+    { headers = ["group", "projection", "stream", "serving_revision", "targets", "dedup_keys", "stream_version", "soft_deleted", "truncate_before", "eligible", "refusal"],
+      rows =
+        [ [ rebuildGroupIdText report.rebuildGroupId,
+            projectionIdText report.projectionId,
+            streamNameText report.streamName,
+            projectionRevisionIdText report.servingRevisionId,
+            Text.intercalate "," (map (\target -> targetIdText target.targetId) report.targets),
+            Text.intercalate "," (map (\dedup -> dedupKeyIdText dedup.dedupKeyId) report.affectedDedup),
+            maybe "" streamVersionText report.streamVersion,
+            boolText report.softDeleted,
+            maybe "" streamVersionText report.truncateBefore,
+            boolText report.eligible,
+            maybe "" id report.refusal
+          ]
+        ],
+      jsonValue = Aeson.toJSON report
+    }
+
+streamReprojectionResult :: CatalogStreamReprojectionReport -> OpsResult
+streamReprojectionResult report =
+  OpsResult
+    { headers = ["group", "projection", "stream", "serving_revision", "stream_version", "cleared_rows", "replayed", "applied", "dedup_inserted", "dedup_existing", "verified"],
+      rows =
+        [ [ rebuildGroupIdText repair.rebuildGroupId,
+            projectionIdText repair.projectionId,
+            streamNameText repair.streamName,
+            projectionRevisionIdText repair.servingRevisionId,
+            streamVersionText repair.streamVersion,
+            Text.intercalate "," [targetIdText count.targetId <> ":" <> showText count.clearedRows | count <- repair.clearedRows],
+            showText repair.replayedEvents,
+            showText repair.appliedEvents,
+            showText repair.dedupInserted,
+            showText repair.dedupExisting,
+            boolText repair.verified
+          ]
+        ],
+      jsonValue = Aeson.toJSON report
+    }
+  where
+    repair = report.repair
+
 generationRow :: VersionedTargetGeneration -> [Text]
 generationRow generation =
   generationSummaryRow generation
@@ -811,6 +909,17 @@ retireExternalReadArguments contractId contractVersion =
     showText (externalReadContractVersionValue contractVersion)
   ]
 
+reprojectStreamArguments :: ReprojectStreamOptions -> [Text]
+reprojectStreamArguments options =
+  [ "rebuild",
+    "reproject-stream",
+    rebuildGroupIdText options.groupId,
+    projectionIdText options.projectionId,
+    streamNameText options.streamName,
+    "--page-size",
+    showText options.pageSize
+  ]
+
 forceInvocation :: OpsEnv -> [Text] -> Text
 forceInvocation env arguments = Text.unwords (map shellQuote ("keiro-ops" : arguments <> globalFlags <> ["--force"]))
   where
@@ -821,6 +930,43 @@ shellQuote value = "'" <> Text.replace "'" "'\"'\"'" value <> "'"
 
 globalPositionText :: GlobalPosition -> Text
 globalPositionText (GlobalPosition value) = showText value
+
+streamNameText :: StreamName -> Text
+streamNameText (StreamName value) = value
+
+streamVersionText :: StreamVersion -> Text
+streamVersionText (StreamVersion value) = showText value
+
+catalogOpsErrorText :: CatalogOpsError -> Text
+catalogOpsErrorText errorValue =
+  case errorValue of
+    CatalogOpsStreamReprojectionError streamError ->
+      streamReprojectionErrorCode streamError <> ": " <> Text.pack (show streamError)
+    _ -> Text.pack (show errorValue)
+
+streamReprojectionErrorCode :: StreamReprojectionError -> Text
+streamReprojectionErrorCode = \case
+  StreamReprojectionInvalidPageSize {} -> "stream-reprojection-invalid-page-size"
+  StreamReprojectionGroupUnregistered {} -> "stream-reprojection-group-unregistered"
+  StreamReprojectionActiveRebuild {} -> "stream-reprojection-active-rebuild"
+  StreamReprojectionGroupUnavailable {} -> "stream-reprojection-group-unavailable"
+  StreamReprojectionSliceDrift {} -> "stream-reprojection-slice-drift"
+  StreamReprojectionServingRevisionUnavailable {} -> "stream-reprojection-serving-revision-unavailable"
+  StreamReprojectionServingBindingInvalid {} -> "stream-reprojection-serving-binding-invalid"
+  StreamReprojectionUnknownProjection {} -> "stream-reprojection-unknown-projection"
+  StreamReprojectionProjectionGroupMismatch {} -> "stream-reprojection-projection-group-mismatch"
+  StreamReprojectionPolicyUnavailable {} -> "stream-reprojection-policy-unavailable"
+  StreamReprojectionSourceMismatch {} -> "stream-reprojection-source-mismatch"
+  StreamReprojectionHistoryUnavailable {} -> "stream-reprojection-history-unavailable"
+  StreamReprojectionSoftDeleted {} -> "stream-reprojection-soft-deleted"
+  StreamReprojectionTruncated {} -> "stream-reprojection-truncated"
+  StreamReprojectionForeignEvent {} -> "stream-reprojection-foreign-event"
+  StreamReprojectionClearFailed {} -> "stream-reprojection-clear-failed"
+  StreamReprojectionClearEvidenceInvalid {} -> "stream-reprojection-clear-evidence-invalid"
+  StreamReprojectionDecodeFailed {} -> "stream-reprojection-decode-failed"
+  StreamReprojectionVerificationFailed {} -> "stream-reprojection-verification-failed"
+  StreamReprojectionDedupIdentityUnavailable {} -> "stream-reprojection-dedup-identity-unavailable"
+  StreamReprojectionHistoryIncomplete {} -> "stream-reprojection-history-incomplete"
 
 boolText :: Bool -> Text
 boolText True = "yes"

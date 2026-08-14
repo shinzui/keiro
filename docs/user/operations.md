@@ -228,6 +228,7 @@ yourapp ops rebuild retired
 yourapp ops rebuild drop-retired GENERATION_UUID
 yourapp ops rebuild external-read CONTRACT VERSION
 yourapp ops rebuild retire-external-read CONTRACT VERSION
+yourapp ops rebuild reproject-stream GROUP PROJECTION STREAM --page-size 500
 ```
 
 For a runnable local mount with the real `jitsurei-order-reporting` group, see
@@ -238,7 +239,7 @@ execution scoped to the disposable example database.
 
 `list`, `preview`, `status`, `versioned status`, `retired`, and `external-read`
 are read-only. `start`, `resume`, `abandon`, their versioned counterparts,
-`drop-retired`, and `retire-external-read` return a preview unless `--force` is
+`drop-retired`, `retire-external-read`, and `reproject-stream` return a preview unless `--force` is
 supplied. The preview comes directly from
 the mounted validated catalog and reports its fingerprint, qualified targets,
 clear/preserve policy, sources, subscription and dedup resets, verification
@@ -247,6 +248,14 @@ group, captures one fixed head, prepares every declared target atomically,
 replays with durable progress, verifies, and promotes. A failed run stays
 fenced; repair the application-owned cause and resume the same run. Abandonment
 records explicit failure evidence and does not expose partial data.
+
+`reproject-stream` is the narrow repair path for an explicitly stream-scoped
+projection in the persisted serving revision. Its preview reports the exact targets,
+dedup identities, stream version, deletion/truncation state, and force invocation. The
+forced operation holds the group writer fence for one transaction, refuses incomplete
+history or an active rebuild, replaces only that stream's rows, verifies them, and
+backfills dedup evidence without moving a subscription checkpoint. Use a full versioned
+rebuild for schema changes or projections whose rows combine several streams.
 
 To recover a rebuild stranded by the 0.12 identity migration, first run each
 mutation without `--force` and review its preview. The run table's `group_slice`
@@ -270,6 +279,8 @@ These commands wrap `catalogInventoryReport`, `previewRegisteredGroupRebuild`,
 `startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and
 `abandonGroupRebuild`, plus the supported versioned-generation and external-read
 inspection/retirement APIs. There is no parallel name-to-action rebuild map.
+The same boundary exposes `previewStreamReprojection` and
+`reprojectCatalogStream`; the CLI does not duplicate their protocol.
 
 `ClearBeforeReplay` uses a single foreign-key-compatible multi-table truncate
 without `CASCADE`; undeclared references fail and roll the preparation back.

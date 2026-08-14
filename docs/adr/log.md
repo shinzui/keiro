@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-14
+* **Update**: Define stream-scoped projection ownership, serving-revision repair, transactional dedup backfill, and catalog/slice v6/v5 identity for targeted per-stream reprojection (ADR-26, ADR-31, ADR-32, ADR-34; plan 257).
 * **Add**: Require versioned execute-only guarded SQL contracts for out-of-process projection reads (ADR-36, plan 255).
 * **Update**: Reconcile catalog, slice, online generation, and frozen-status decisions with the guarded external-read contract (ADR-26, ADR-32, ADR-34, ADR-35; plan 255).
 * **Update**: Candidate Language 5 now owns located `external-read` syntax while lowering derives its result shape from the checked query graph (ADR-16, plan 255).

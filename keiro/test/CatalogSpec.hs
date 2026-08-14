@@ -5,6 +5,7 @@ module CatalogSpec
     bridgeCatalog,
     bridgeRevisionV1,
     bridgeRevisionV2,
+    streamScopedCounterRepair,
     additiveCatalog,
     validProjectionSet,
     catalogWithMissingSubscription,
@@ -463,6 +464,74 @@ spec = describe "Keiro.Projection.Catalog" $ do
         when (groupSliceFingerprint changed mainGroupId == groupSliceFingerprint baseline mainGroupId) $
           expectationFailure ("group slice fingerprint ignored revision " <> label <> " identity")
 
+    it "validates and fingerprints stream-scoped repair policy in the owning revision" $ do
+      baseline <- expectValid bridgeCatalog
+      let withPolicy =
+            bridgeCatalog
+              { projectionRevisions =
+                  [ bridgeRevisionV1 & #streamScopedReplays .~ [streamScopedCounterRepair],
+                    bridgeRevisionV2
+                  ]
+              }
+      validated <- expectValid withPolicy
+      when
+        ( isNothing
+            ( catalogStreamScopedReplay
+                validated
+                (revision "counter-v1")
+                asyncProjectionId
+            )
+        )
+        (expectationFailure "validated stream-scoped policy was not resolvable")
+      case catalogInventory validated ^. #inventoryProjectionRevisions of
+        firstRevision : _ -> do
+          map (^. #projectionId) (firstRevision ^. #streamScopedReplays)
+            `shouldBe` [asyncProjectionId]
+          firstRevision ^. #streamScopedReplays . folded . #affectedAsyncDedup
+            `shouldBe` [asyncDedupId]
+        [] -> expectationFailure "stream-scoped revision inventory was empty"
+      catalogFingerprint validated `shouldNotBe` catalogFingerprint baseline
+      groupSliceFingerprint validated mainGroupId
+        `shouldNotBe` groupSliceFingerprint baseline mainGroupId
+
+    it "rejects unknown, duplicate, cross-group, target, dedup, and identity stream policies" $ do
+      let invalidPolicy =
+            streamScopedCounterRepair
+              & #clearerId
+              .~ " bad-clearer"
+              & #clearerVersion
+              .~ 0
+              & #streamOwnedTargets
+              .~ (counterTargetId :| [])
+              & #affectedAsyncDedup
+              .~ []
+          invalid =
+            bridgeCatalog
+              { projectionRevisions =
+                  [ bridgeRevisionV1
+                      & #streamScopedReplays
+                      .~ [ invalidPolicy,
+                           invalidPolicy,
+                           streamScopedCounterRepair & #streamProjectionId .~ projection "unknown-projection"
+                         ],
+                    bridgeRevisionV2
+                      & #rebuildGroup
+                      .~ otherGroupId
+                      & #streamScopedReplays
+                      .~ [streamScopedCounterRepair]
+                  ]
+              }
+          codes = map (^. #diagnosticCode) (diagnosticsFor invalid)
+      for_
+        [ DuplicateStreamScopedReplayProjection,
+          UnknownStreamScopedReplayProjection,
+          StreamScopedReplayGroupMismatch,
+          StreamScopedReplayTargetSetMismatch,
+          StreamScopedReplayDedupMismatch,
+          InvalidStreamScopedReplayIdentity
+        ]
+        (\code -> codes `shouldSatisfy` List.elem code)
+
   describe "external read contracts" $ do
     it "validates and inventories a versioned all-row contract canonically" $ do
       validated <- expectValid bridgeCatalog
@@ -710,6 +779,24 @@ bridgeRevisionV1 = bridgeRevision "counter-v1" "v1" 1
 bridgeRevisionV2 :: ProjectionRevision
 bridgeRevisionV2 = bridgeRevision "counter-v2" "v2" 2
 
+streamScopedCounterRepair :: StreamScopedReplay
+streamScopedCounterRepair =
+  StreamScopedReplay
+    { streamProjectionId = asyncProjectionId,
+      streamOwnedTargets = auditTargetId :| [],
+      clearerId = "audit-owner/clear-stream",
+      clearerVersion = 1,
+      clearStreamRows = \_ _ -> pure (Right [StreamClearCount auditTargetId 0]),
+      streamReplayId = "audit-owner/replay-stream",
+      streamReplayVersion = 1,
+      replayStreamEvent = \_ _ -> pure (Right False),
+      streamVerificationId = "audit-owner/verify-stream",
+      streamVerificationVersion = 1,
+      verifyStreamRows = \_ _ -> pure (Right ()),
+      affectedAsyncDedup = [asyncDedupId],
+      claimSite = site "catalog:audit-owner-stream-repair"
+    }
+
 bridgeRevision :: Text -> Text -> Int -> ProjectionRevision
 bridgeRevision identity schema version =
   ProjectionRevision
@@ -753,6 +840,7 @@ bridgeRevision identity schema version =
             [counterTargetId, auditTargetId]
             (\_ -> pure (Right ()))
         ],
+      streamScopedReplays = [],
       claimSite = site ("catalog:" <> identity)
     }
 

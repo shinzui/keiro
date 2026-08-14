@@ -7,6 +7,7 @@ module Jitsurei.ReadModels
     orderAuditAsyncProjection,
     orderProjectionSet,
     orderLiveProjections,
+    orderSummaryProjectionId,
     orderAuditProjectionId,
     orderReportingGroupId,
     orderReportingRevisionV1,
@@ -35,7 +36,7 @@ import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog.Operations (ProjectionCatalogOperations, projectionCatalogOperations)
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (FromBeginning))
-import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), RecordedEvent)
+import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), RecordedEvent, StreamName (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -370,6 +371,7 @@ orderReportingRevision identity schemaVersion =
               runRevisionVerification = verifyRevisionTargets
             }
         ],
+      streamScopedReplays = [orderSummaryStreamReplay identity schemaVersion],
       claimSite = claim ("jitsurei:" <> identity)
     }
   where
@@ -471,8 +473,60 @@ replayRevisionRecorded schemaVersion targets recorded =
     Left err -> pure (Left (ReplayDecodeError (Text.pack (show err))))
     Right event -> applyRevisionEvent schemaVersion targets event recorded >> pure (Right True)
 
+orderSummaryStreamReplay :: Text -> Text -> StreamScopedReplay
+orderSummaryStreamReplay identity schemaVersion =
+  StreamScopedReplay
+    { streamProjectionId = orderSummaryProjectionId,
+      streamOwnedTargets = orderSummaryTargetId :| [orderLineTargetId],
+      clearerId = identity <> "/order-summary/clear-stream",
+      clearerVersion = 1,
+      clearStreamRows = \targets stream ->
+        case orderIdFromStream stream of
+          Nothing -> pure (Left "expected an order-<id> stream")
+          Just orderId -> do
+            lineRows <- Tx.statement orderId (deleteRevisionOrderRowsStmt (requirePhysicalTarget orderLineTargetId targets))
+            summaryRows <- Tx.statement orderId (deleteRevisionOrderRowsStmt (requirePhysicalTarget orderSummaryTargetId targets))
+            pure
+              ( Right
+                  [ StreamClearCount orderSummaryTargetId summaryRows,
+                    StreamClearCount orderLineTargetId lineRows
+                  ]
+              ),
+      streamReplayId = identity <> "/order-summary/replay-stream",
+      streamReplayVersion = 1,
+      replayStreamEvent = \targets recorded ->
+        case decodeRecorded orderCodec recorded of
+          Left err -> pure (Left (ReplayDecodeError (Text.pack (show err))))
+          Right event -> applyRevisionOrderRows schemaVersion targets event recorded >> pure (Right True),
+      streamVerificationId = identity <> "/order-summary/verify-stream",
+      streamVerificationVersion = 1,
+      verifyStreamRows = \targets stream ->
+        case orderIdFromStream stream of
+          Nothing -> pure (Left "expected an order-<id> stream")
+          Just orderId -> do
+            summaries <- Tx.statement orderId (countRevisionOrderRowsStmt (requirePhysicalTarget orderSummaryTargetId targets))
+            lines <- Tx.statement orderId (countRevisionOrderRowsStmt (requirePhysicalTarget orderLineTargetId targets))
+            pure
+              ( if summaries == 1 Prelude.&& lines == 1
+                  then Right ()
+                  else Left "targeted order repair must leave one summary and one line"
+              ),
+      affectedAsyncDedup = [],
+      claimSite = claim ("jitsurei:" <> identity <> "/order-summary-stream-replay")
+    }
+
+orderIdFromStream :: StreamName -> Maybe Text
+orderIdFromStream (StreamName name) = Text.stripPrefix "order-" name
+
 applyRevisionEvent :: Text -> PhysicalTargets -> OrderEvent -> RecordedEvent -> Tx.Transaction ()
 applyRevisionEvent schemaVersion targets event recorded = do
+  applyRevisionOrderRows schemaVersion targets event recorded
+  let audit = requirePhysicalTarget orderAuditTargetId targets
+      position = globalPositionToInt (recorded ^. #globalPosition)
+  Tx.statement (position, eventStatus event) (revisionUpsertAuditStmt schemaVersion audit)
+
+applyRevisionOrderRows :: Text -> PhysicalTargets -> OrderEvent -> RecordedEvent -> Tx.Transaction ()
+applyRevisionOrderRows schemaVersion targets event recorded =
   case event of
     OrderPlaced payload -> do
       Tx.statement
@@ -494,11 +548,9 @@ applyRevisionEvent schemaVersion targets event recorded = do
     OrderPacked payload -> updateRevisionStatus payload.orderId "packed"
     OrderShipped payload -> updateRevisionStatus payload.orderId "shipped"
     OrderCancelled payload -> updateRevisionStatus payload.orderId "cancelled"
-  Tx.statement (position, eventStatus event) (revisionUpsertAuditStmt schemaVersion audit)
   where
     summary = requirePhysicalTarget orderSummaryTargetId targets
     line = requirePhysicalTarget orderLineTargetId targets
-    audit = requirePhysicalTarget orderAuditTargetId targets
     position = globalPositionToInt (recorded ^. #globalPosition)
     updateRevisionStatus orderId status =
       Tx.statement
@@ -695,6 +747,20 @@ revisionUpsertAuditStmt schemaVersion table =
     D.noResult
   where
     statusColumn = if schemaVersion == "v1" then "status" else "state"
+
+deleteRevisionOrderRowsStmt :: QualifiedTable -> Statement Text Int64
+deleteRevisionOrderRowsStmt table =
+  preparable
+    ("DELETE FROM " <> qualifiedPhysical table <> " WHERE order_id = $1")
+    (E.param (E.nonNullable E.text))
+    D.rowsAffected
+
+countRevisionOrderRowsStmt :: QualifiedTable -> Statement Text Int64
+countRevisionOrderRowsStmt table =
+  preparable
+    ("SELECT count(*) FROM " <> qualifiedPhysical table <> " WHERE order_id = $1")
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.int8)))
 
 revisionUpdateSummaryStmt :: Text -> QualifiedTable -> Statement (Text, Text, Int64) ()
 revisionUpdateSummaryStmt schemaVersion table =

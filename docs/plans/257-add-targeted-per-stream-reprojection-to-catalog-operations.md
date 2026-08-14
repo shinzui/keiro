@@ -18,9 +18,9 @@ change when implementation changes a durable architectural boundary.
 ## Purpose / Big Picture
 
 After this change an operator can repair one aggregate stream in a row-per-aggregate
-projection without rebuilding the complete table. Keiro takes the rebuild group's
-exclusive row lock for one PostgreSQL transaction, reads the complete retained stream
-inside that transaction, removes only rows owned by that stream, replays the current
+projection without rebuilding the complete table. Keiro guards the stream and then takes
+the rebuild group's exclusive row lock in one PostgreSQL transaction, reads the complete
+retained stream inside that transaction, removes only rows owned by that stream, replays the current
 serving projection revision, and backfills that projection's deduplication keys before
 commit.
 
@@ -46,13 +46,13 @@ This is EP-4 of
   `lockStreamHistoryForReplayTx` and `readStreamForwardTx` in released
   `kiroku-store` 0.7.0.0 and the companion retention schema in released
   `kiroku-store-migrations` 0.3.2.0.
-- [ ] M1: stream-scoped catalog policy, clearing/replay contracts, validation,
+- [x] (2026-08-14T06:53:09Z) M1: stream-scoped catalog policy, clearing/replay contracts, validation,
   fingerprints, DSL/combinator surfaces, and serving-revision integration are complete.
-- [ ] M2: one-transaction runner, explicit stream-retention checks, deduplication
+- [x] (2026-08-14T06:53:09Z) M2: one-transaction runner, explicit stream-retention checks, deduplication
   backfill, revision-aware group lock, concurrency tests, and typed refusals pass.
-- [ ] M3: `ProjectionCatalogOperations` preview and mutation wrappers expose structured
+- [x] (2026-08-14T06:53:09Z) M3: `ProjectionCatalogOperations` preview and mutation wrappers expose structured
   database-backed results without duplicating the runner.
-- [ ] M4: `keiro-ops rebuild reproject-stream` implements read-only preview and
+- [x] (2026-08-14T06:53:09Z) M4: `keiro-ops rebuild reproject-stream` implements read-only preview and
   `--force` execution with human and JSON output.
 - [ ] M5: documentation, ADR reconciliation, changelogs, Jitsurei transcript,
   `just verify`, and MasterPlan status updates are complete.
@@ -60,9 +60,10 @@ This is EP-4 of
 
 ## Surprises & Discoveries
 
-- Reading a stream before taking the group lock is unsound. A concurrent projection
-  write could commit between the read and the repair transaction and then be erased by
-  the clear step. The stream read and target changes must share the transaction.
+- An unguarded stream read before taking the group lock is unsound. A concurrent
+  projection write could commit between the read and the repair transaction and then be
+  erased by the clear step. The Kiroku stream guard, group fence, read, and target changes
+  must share the transaction.
 - Kiroku's current `StreamInfo` exposes `truncateBefore` directly. A count-based guess
   about completeness is both unnecessary and unable to distinguish retained suffixes
   from complete history.
@@ -77,6 +78,19 @@ This is EP-4 of
   `readStreamForwardTx` returns production-ordered `RecordedEvent` values without
   running Kiroku's IO-only `decodeHook`. Keiro must perform its own catalog codec decode
   before target mutation and must not assume the connection hook ran.
+- Bounded deduplication backfill is most naturally performed page-by-page during replay,
+  before final stream verification. Because every later refusal condemns the enclosing
+  transaction, a verifier failure still rolls back clear, replay, and dedup together;
+  retaining every event ID until verification would add unbounded memory without a
+  stronger atomicity guarantee.
+- Candidate Language 5 cannot represent an application-owned row clearer and verifier.
+  Generating a declaration would falsely imply that the DSL can infer row ownership
+  from opaque SQL, so the initial stream-scoped surface remains hand-written Haskell.
+- Catalog command writers append to Kiroku before their projection continuation takes
+  the group's shared lock. Taking the group exclusively before the stream guard creates
+  the inverse order and can deadlock an already-appended writer. Targeted repair must
+  take the stream guard first, then the group fence; the guard blocks new target-stream
+  appends while unrelated-stream writers are ordered by the later group fence.
 
 
 ## Decision Log
@@ -127,13 +141,37 @@ This is EP-4 of
   renewable lease is for plan 256's long fan-in replay and would add durable lifecycle
   state without strengthening this one-transaction protocol.
   Date: 2026-08-13
+- Decision: Keep stream-scoped repair out of candidate Language 5 for this iteration.
+  Rationale: the checked language has no truthful representation for application-owned
+  row selection and verification closures; empty generated holes would present an
+  unsafe ownership claim as ordinary scaffold authority.
+  Date: 2026-08-14
+- Decision: Insert affected dedup keys in bounded replay pages before final verification.
+  Rationale: final verification and every subsequent error condemn the same transaction,
+  so the persisted outcome is identical while memory remains bounded by page size.
+  Date: 2026-08-14
+- Decision: Acquire the Kiroku stream-history guard before the group-exclusive repair
+  fence.
+  Rationale: catalog command transactions append first and take the group shared lock in
+  their continuation. Matching that order prevents a stream-row/group-row cycle, while
+  holding the stream guard until commit prevents a selected-stream append from entering
+  between history capture and target replacement.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
 
-Architecture review corrected deduplication and concurrency semantics before
-implementation. The external stream-guard prerequisite is now released and verified.
-No Keiro runtime behavior has been delivered yet.
+The implementation now delivers the catalog policy, one-transaction runner,
+database-backed operation preview/outcome, embedded CLI command, stable JSON and refusal
+codes, Jitsurei repair transcript, documentation, changelogs, and reconciled ADRs.
+Architecture review corrected both deduplication and lock-order semantics: repair inserts
+ordinary async redelivery evidence, and the stream guard precedes the group fence to
+match command writers' append-first order.
+
+Focused catalog, runtime, operations, DSL projection-catalog, and Jitsurei tests pass.
+The complete `just verify` run passed every executable suite and strict OKF validation;
+its final corpus policy correctly required the regenerated projection-catalog fixture to
+be committed before the clean-tree rerun recorded by M5.
 
 
 ## Context and Orientation
@@ -194,18 +232,23 @@ application functions receive the serving physical target map:
 
 ```haskell
 data StreamScopedReplay = StreamScopedReplay
-  { clearStreamRows ::
-      PhysicalTargets -> StreamName -> Tx.Transaction ClearStreamRowsResult
+  { streamProjectionId :: ProjectionId
+  , streamOwnedTargets :: NonEmpty TargetId
+  , clearerId :: Text
+  , clearerVersion :: Int
+  , clearStreamRows ::
+      PhysicalTargets -> StreamName -> Tx.Transaction (Either Text [StreamClearCount])
+  , streamReplayId :: Text
+  , streamReplayVersion :: Int
   , replayStreamEvent ::
-      PhysicalTargets -> RecordedEvent -> Tx.Transaction ()
+      PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either ReplayDecodeError Bool)
+  , streamVerificationId :: Text
+  , streamVerificationVersion :: Int
   , verifyStreamRows ::
       PhysicalTargets -> StreamName -> Tx.Transaction (Either Text ())
-  , affectedAsyncDedup :: [AsyncProjectionDedupIdentity]
+  , affectedAsyncDedup :: [DedupKeyId]
+  , claimSite :: ClaimSite
   }
-
-data ProjectionReplayScope
-  = WholeHistoryOnly
-  | ReplayableStreamScoped StreamScopedReplay
 ```
 
 The policy belongs to one projection revision. Validation requires its projection to
@@ -225,23 +268,25 @@ the only possible row key.
 
 The mutation executes these steps in one `runTxOnPool` transaction:
 
-1. Lock the group row `FOR UPDATE` and require a readable/writable serving state, no
+1. Call `lockStreamHistoryForReplayTx`. Refuse its typed missing/reserved result or a
+   returned `StreamInfo` that is soft-deleted or has `truncateBefore > 0`. Keep this
+   guard through commit.
+2. Lock the group row `FOR UPDATE` and require a readable/writable serving state, no
    active rebuild, matching registered slice, and a serving revision present in the
    compiled catalog.
-2. Resolve the requested projection under that revision and require
+3. Resolve the requested projection under that revision and require
    `ReplayableStreamScoped`.
-3. Call `lockStreamHistoryForReplayTx`. Refuse its typed missing/reserved result or a
-   returned `StreamInfo` that is soft-deleted or has `truncateBefore > 0`.
-4. Page through the locked stream with `readStreamForwardTx` from `StreamVersion 0`
-   through the locked current version, then decode through the catalog codec. The
-   Kiroku transaction read does not run `decodeHook`; any catalog codec failure condemns
-   the transaction before target mutation.
-5. Execute `clearStreamRows` against serving physical targets.
-6. Replay every decoded event through the stream-scoped handler in order.
-7. Run the stream verification hook.
-8. Insert the same deduplication keys ordinary async delivery would own for every
-   replayed event, using `ON CONFLICT DO NOTHING`.
-9. Return counts, versions, target IDs, and dedup inserted/existing counts; commit.
+4. Execute `clearStreamRows` against serving physical targets and validate its exact
+   per-target count evidence.
+5. Page through the locked stream with `readStreamForwardTx` from `StreamVersion 0`
+   through the locked current version, decode through the application replay closure,
+   and apply every event in order. The Kiroku transaction read does not run `decodeHook`;
+   any decode failure condemns the complete repair transaction.
+6. Insert, page by page, the same deduplication keys ordinary async delivery would own
+   for every replayed event, using `ON CONFLICT DO NOTHING`.
+7. Run the stream verification hook. Failure condemns the transaction, including all
+   preceding clear, replay, and dedup work.
+8. Return counts, versions, target IDs, and dedup inserted/existing counts; commit.
 
 The subscription checkpoint is neither reset nor advanced. The group lifecycle phase,
 serving revision, serving epoch, and read/write availability columns are unchanged.

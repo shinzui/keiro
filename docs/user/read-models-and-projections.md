@@ -70,12 +70,17 @@ The `ValidatedProjectionCatalog` constructor is hidden. Use
 `useProjectionCatalogM` when registration is effectful; it does not invoke the
 callback after failed validation. Inventory rendering and SHA-256 fingerprints normalize
 top-level declarations, query observed targets, and each projection's set-valued owned
-targets. Current `catalog-v5`/`slice-v4` identity includes normalized query freshness,
+targets. Current `catalog-v6`/`slice-v5` identity includes normalized query freshness,
 the optional subscription cursor resolved from the validated owner, and projection
 revision schema/provisioner/validator/handler/promotion identities. It also includes
 each external read contract's version, query/result shape, public SQL signature,
 compatible revision set, keyed implementation identity, and surface generation. Handler and
 provisioning closures are excluded from the fingerprint.
+
+The v6/v5 identity also includes each revision's optional stream-scoped repair
+declaration: projection and exact target set, clearer/replay/verifier identities and
+versions, and affected async-dedup identities. The executable closures and observed
+stream/row facts remain outside canonical identity.
 
 Every validated query binding also resolves to exactly one supplying projection
 through target ownership. `resolvedQuerySupplies` returns query model, projection,
@@ -196,6 +201,12 @@ future events, or `fail` to require an operator-provisioned row. A replayable
 owner of a `reset = clear` target cannot use `from-current-head`: clearing the
 target and skipping history cannot reconstruct it.
 
+Language 5 deliberately has no stream-scoped repair syntax yet. A truthful declaration
+must include application-owned row-selection, replay, and verification transactions;
+the current DSL cannot represent those functions without pretending to infer ownership
+from SQL. Declare `StreamScopedReplay` in the hand-written Haskell revision until a
+future language surface can preserve that boundary.
+
 Changing only the preamble does not invent ownership and will fail checking:
 the author or a future upgrade tool must add the target, group, owner, source,
 reset/replay policies, handler order, and query binding. Target declarations do
@@ -264,7 +275,7 @@ Success validated -> do
 ```
 
 Registration persists one row per rebuild group and binds each query model to
-that group in one transaction. Each group stores its canonical `slice-v4:`
+that group in one transaction. Each group stores its canonical `slice-v5:`
 fingerprint, so an unrelated additive group leaves existing registrations
 unchanged. Repeating the same slice is idempotent; a changed or pre-canonical
 stored slice is a typed startup error. Existing
@@ -417,8 +428,8 @@ missing participation evidence.
 The default page size is 500 and the persisted format is
 `keiro/projection-replay/v4` with a `contract-v4:` fingerprint. The contract covers the
 group slice plus replay-adapter source and projection identities in application order. A
-run retains the whole `catalog-v5:` fingerprint as provenance and separately stores the
-`slice-v4:` fingerprint used by its lifecycle fences. An unrelated catalog addition
+run retains the whole `catalog-v6:` fingerprint as provenance and separately stores the
+`slice-v5:` fingerprint used by its lifecycle fences. An unrelated catalog addition
 therefore does not strand an active run, while a genuine change to that group or its
 adapter application order still refuses resume. Optional metrics expose rebuild starts,
 resumes, committed pages/events, failures, promotions, and page duration. Durable reports
@@ -450,6 +461,27 @@ See [Online Schema-Versioned Projection Rebuilds](../guides/online-projection-re
 for bridge deployment, provisioner and validator contracts, compatible versus breaking
 consumers, cutover waits, retention failure recovery, embedded CLI commands, and the
 executable Jitsurei V1-to-V2 transcript.
+
+## Repair One Stream In The Serving Revision
+
+Use targeted reprojection only for a revision whose projection declares a truthful
+`StreamScopedReplay`. The policy must name the projection's exact owned-target set and
+provide transaction-local clear, replay, and verification functions. Keiro cannot infer
+that rows belong to one stream from opaque SQL, so projections that combine streams are
+not eligible.
+
+Call `previewStreamReprojection operations request` for advisory database-backed facts,
+then `reprojectCatalogStream operations request` to execute. The forced path first locks
+the Kiroku stream history, then takes the group row `FOR UPDATE`, requires an idle
+`serving-versioned` group with a matching slice, and resolves the persisted serving
+revision and physical targets. This matches catalog writers' append-then-group order.
+Soft-deleted streams and any `truncateBefore > 0` are refused.
+
+Clear, ordered replay, verification, and affected async-dedup backfill commit in one
+transaction. The subscription checkpoint, group phase, serving revision, serving epoch,
+and unrelated streams do not change. Group writers and guarded external readers wait;
+ordinary PostgreSQL readers observe a complete before or after snapshot. A failure after
+clear condemns the transaction and restores target rows and dedup evidence together.
 
 ## Observe Projection Group Status From PostgreSQL
 
@@ -715,7 +747,9 @@ versioned JSON envelopes:
 - `keiro/catalog-retired-drop-preview/v1`; and
 - `keiro/catalog-retired-drop-outcome/v1`;
 - `keiro/catalog-external-read-inspection/v1`; and
-- `keiro/catalog-external-read-retirement/v1`.
+- `keiro/catalog-external-read-retirement/v1`;
+- `keiro/catalog-stream-reprojection-preview/v1`; and
+- `keiro/catalog-stream-reprojection-outcome/v1`.
 
 Every subscription in inventory and rebuild JSON includes
 `checkpointOnMissing` with one of the stable values `FromBeginning`,
@@ -727,7 +761,7 @@ through `AppHooks.projectionCatalog`. In a candidate application binary,
 `rebuild list|preview|start|status|resume|abandon|adopt`, nested
 `rebuild versioned start|status|resume|abandon`, `rebuild retired`, and
 `rebuild drop-retired`, `rebuild external-read`, and
-`rebuild retire-external-read` render the same reports and require preview plus
+`rebuild retire-external-read`, and `rebuild reproject-stream` render the same reports and require preview plus
 `--force` for mutations. Applications therefore do not
 maintain a second rebuild map. An adoption preview shows the complete catalog but marks
 each group, registration, and orphan as `adopt` or `skip` for the requested groups. It

@@ -4361,7 +4361,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         <> revisionRequiredTargets revision
         <> " Holes."
         <> revisionVerificationName revision
-        <> "] "
+        <> "] [] "
         <> claim ("projection-revision " <> prvName revision)
     revisionTargetExpr revision target =
       "("

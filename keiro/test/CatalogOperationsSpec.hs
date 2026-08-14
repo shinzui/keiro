@@ -61,6 +61,24 @@ spec fixture = do
       Operations.previewGroupRebuild operations (identityOrError mkRebuildGroupId "missing")
         `shouldSatisfy` isLeft
 
+    it "renders stream-scoped repair policy in the stable catalog inventory JSON" $ do
+      validated <-
+        expectValid
+          ( Catalog.bridgeCatalog
+              { projectionRevisions =
+                  [ Catalog.bridgeRevisionV1 & #streamScopedReplays .~ [Catalog.streamScopedCounterRepair],
+                    Catalog.bridgeRevisionV2
+                  ]
+              }
+          )
+      case Aeson.toJSON (Operations.catalogInventoryReport (Operations.projectionCatalogOperations validated)) of
+        Aeson.Object fields ->
+          KeyMap.lookup "inventory" fields
+            `shouldSatisfy` \case
+              Just (Aeson.Object inventoryFields) -> inventoryExposesStreamPolicy inventoryFields
+              _ -> False
+        other -> expectationFailure ("expected inventory object, got " <> show other)
+
     it "does not construct operations or invoke a callback for an invalid catalog" $ do
       effects <- newIORef (0 :: Int)
       result <-
@@ -192,6 +210,29 @@ queriesExposeFreshnessAndCursor inventoryFields =
             && KeyMap.member "cursor" queryFields
         _ -> False
     _ -> False
+
+inventoryExposesStreamPolicy :: Aeson.Object -> Bool
+inventoryExposesStreamPolicy inventoryFields =
+  case KeyMap.lookup "projectionRevisions" inventoryFields of
+    Just (Aeson.Array revisions) -> any revisionHasPolicy (Vector.toList revisions)
+    _ -> False
+  where
+    revisionHasPolicy = \case
+      Aeson.Object revisionFields ->
+        case KeyMap.lookup "streamScopedReplays" revisionFields of
+          Just (Aeson.Array policies) -> any policyIsStable (Vector.toList policies)
+          _ -> False
+      _ -> False
+
+    policyIsStable = \case
+      Aeson.Object policyFields ->
+        KeyMap.lookup "projectionId" policyFields == Just (Aeson.String "audit-owner")
+          && KeyMap.lookup "ownedTargets" policyFields
+            == Just (Aeson.Array (Vector.singleton (Aeson.String "audit-target")))
+          && KeyMap.lookup "affectedAsyncDedup" policyFields
+            == Just (Aeson.Array (Vector.singleton (Aeson.String "counter-dedup")))
+          && all (`KeyMap.member` policyFields) ["clearer", "replay", "verification"]
+      _ -> False
 
 passingVerification :: RebuildVerification
 passingVerification = verification (pure (Right ()))

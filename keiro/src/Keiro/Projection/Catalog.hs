@@ -67,6 +67,8 @@ module Keiro.Projection.Catalog
     RevisionLiveHandler (..),
     RevisionReplayAdapter (..),
     RevisionVerification (..),
+    StreamClearCount (..),
+    StreamScopedReplay (..),
     ProjectionRevision (..),
     QualifiedFunction (..),
     QualifiedSqlType (..),
@@ -121,6 +123,7 @@ module Keiro.Projection.Catalog
     InventoryHandler (..),
     InventoryTargetProvisioner (..),
     InventoryRevisionHandler (..),
+    InventoryStreamScopedReplay (..),
     InventoryProjectionRevision (..),
     ExternalReadContractKind (..),
     InventoryExternalReadContract (..),
@@ -152,6 +155,7 @@ module Keiro.Projection.Catalog
     catalogRegistrations,
     catalogProjectionRevisions,
     catalogProjectionRevision,
+    catalogStreamScopedReplay,
     catalogExternalReadContracts,
     asyncProjectionRegistrations,
     catalogAsyncIdempotencyKeys,
@@ -195,7 +199,7 @@ import Keiro.ReadModel
     readModelDefaultFreshness,
   )
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (..))
-import Kiroku.Store.Types (CategoryName (..), EventId, RecordedEvent)
+import Kiroku.Store.Types (CategoryName (..), EventId, RecordedEvent, StreamName)
 
 newtype ProjectionId = ProjectionId Text
   deriving stock (Eq, Ord, Show, Generic)
@@ -432,6 +436,36 @@ data RevisionVerification = RevisionVerification
   }
   deriving stock (Generic)
 
+-- | One target row-count observation returned by a stream-scoped clearer.
+-- The runner requires exactly the targets declared by the policy so previews
+-- and outcomes cannot silently omit a physical target.
+data StreamClearCount = StreamClearCount
+  { targetId :: !TargetId,
+    clearedRows :: !Int64
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | Application-owned row-per-stream repair policy for one projection under a
+-- projection revision. Keiro owns the transaction, locks, history admission,
+-- ordering, and deduplication backfill; the application owns row selection,
+-- event decoding/application, and semantic verification.
+data StreamScopedReplay = StreamScopedReplay
+  { streamProjectionId :: !ProjectionId,
+    streamOwnedTargets :: !(NonEmpty TargetId),
+    clearerId :: !Text,
+    clearerVersion :: !Int,
+    clearStreamRows :: !(PhysicalTargets -> StreamName -> Tx.Transaction (Either Text [StreamClearCount])),
+    streamReplayId :: !Text,
+    streamReplayVersion :: !Int,
+    replayStreamEvent :: !(PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either ReplayDecodeError Bool)),
+    streamVerificationId :: !Text,
+    streamVerificationVersion :: !Int,
+    verifyStreamRows :: !(PhysicalTargets -> StreamName -> Tx.Transaction (Either Text ())),
+    affectedAsyncDedup :: ![DedupKeyId],
+    claimSite :: !ClaimSite
+  }
+  deriving stock (Generic)
+
 data ProjectionRevision = ProjectionRevision
   { revisionId :: !ProjectionRevisionId,
     rebuildGroup :: !RebuildGroupId,
@@ -439,6 +473,7 @@ data ProjectionRevision = ProjectionRevision
     liveHandlers :: ![RevisionLiveHandler],
     replayAdapters :: ![RevisionReplayAdapter],
     revisionVerifications :: ![RevisionVerification],
+    streamScopedReplays :: ![StreamScopedReplay],
     claimSite :: !ClaimSite
   }
   deriving stock (Generic)
@@ -780,6 +815,12 @@ data CatalogDiagnosticCode
   | ExternalReadImplementationCollision
   | ExternalReadSurfaceGenerationRegression
   | ExternalReadImmutableSignatureDrift
+  | DuplicateStreamScopedReplayProjection
+  | UnknownStreamScopedReplayProjection
+  | StreamScopedReplayGroupMismatch
+  | StreamScopedReplayTargetSetMismatch
+  | StreamScopedReplayDedupMismatch
+  | InvalidStreamScopedReplayIdentity
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 diagnosticCodeText :: CatalogDiagnosticCode -> Text
@@ -843,6 +884,12 @@ diagnosticCodeText = \case
   ExternalReadImplementationCollision -> "catalog.external-read-implementation-collision"
   ExternalReadSurfaceGenerationRegression -> "catalog.external-read-surface-generation-regression"
   ExternalReadImmutableSignatureDrift -> "catalog.external-read-immutable-signature-drift"
+  DuplicateStreamScopedReplayProjection -> "catalog.stream-replay-duplicate-projection"
+  UnknownStreamScopedReplayProjection -> "catalog.stream-replay-unknown-projection"
+  StreamScopedReplayGroupMismatch -> "catalog.stream-replay-group-mismatch"
+  StreamScopedReplayTargetSetMismatch -> "catalog.stream-replay-target-set-mismatch"
+  StreamScopedReplayDedupMismatch -> "catalog.stream-replay-dedup-mismatch"
+  InvalidStreamScopedReplayIdentity -> "catalog.stream-replay-invalid-identity"
 
 data CatalogDiagnostic = CatalogDiagnostic
   { diagnosticCode :: !CatalogDiagnosticCode,
@@ -909,13 +956,27 @@ data InventoryRevisionHandler = InventoryRevisionHandler
   }
   deriving stock (Eq, Ord, Show, Generic)
 
+data InventoryStreamScopedReplay = InventoryStreamScopedReplay
+  { projectionId :: !ProjectionId,
+    ownedTargets :: ![TargetId],
+    clearerId :: !Text,
+    clearerVersion :: !Int,
+    replayId :: !Text,
+    replayVersion :: !Int,
+    verificationId :: !Text,
+    verificationVersion :: !Int,
+    affectedAsyncDedup :: ![DedupKeyId]
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
 data InventoryProjectionRevision = InventoryProjectionRevision
   { revisionId :: !ProjectionRevisionId,
     rebuildGroupId :: !RebuildGroupId,
     targetProvisioners :: ![InventoryTargetProvisioner],
     liveHandlers :: ![InventoryRevisionHandler],
     replayAdapters :: ![InventoryRevisionHandler],
-    verifications :: ![InventoryRevisionHandler]
+    verifications :: ![InventoryRevisionHandler],
+    streamScopedReplays :: ![InventoryStreamScopedReplay]
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -1127,7 +1188,8 @@ instance Ord AsyncProjectionRegistration where
 -- in the group, independent of target reset policy. Plan 256 consumes this
 -- same view for versioned cutover.
 data CatalogAsyncDedupSpec = CatalogAsyncDedupSpec
-  { specSubscriptionName :: !Text,
+  { specDedupKeyId :: !DedupKeyId,
+    specSubscriptionName :: !Text,
     specDedupName :: !Text,
     specSourceId :: !SourceId,
     specSourceScope :: !SourceScope,
@@ -1238,6 +1300,7 @@ validateProjectionCatalog catalog =
             <> sourceOrderingDiagnostics catalog facts
             <> verificationDiagnostics catalog
             <> projectionRevisionDiagnostics catalog
+            <> streamScopedReplayDiagnostics catalog facts
             <> externalReadContractDiagnostics catalog queryFacts
         )
 
@@ -1379,9 +1442,9 @@ groupSliceFingerprint validated wantedGroup = do
   group <- List.find ((== wantedGroup) . (^. #rebuildGroupId)) (inventory ^. #inventoryGroups)
   pure
     . GroupSliceFingerprint
-    . hashPreimage "slice-v4"
+    . hashPreimage "slice-v5"
     $ PRecord
-      "keiro/catalog-group-slice/v4"
+      "keiro/catalog-group-slice/v5"
       [ PText (rebuildGroupIdText wantedGroup),
         groupPreimage group,
         PList (targetPreimage <$> targets),
@@ -1460,6 +1523,19 @@ catalogProjectionRevision ::
 catalogProjectionRevision validated wanted =
   List.find ((== wanted) . (^. #revisionId)) (catalogProjectionRevisions validated)
 
+-- | Resolve one validated stream-scoped policy from the exact projection
+-- revision that currently serves a group.
+catalogStreamScopedReplay ::
+  ValidatedProjectionCatalog ->
+  ProjectionRevisionId ->
+  ProjectionId ->
+  Maybe StreamScopedReplay
+catalogStreamScopedReplay validated revisionId wantedProjection = do
+  revision <- catalogProjectionRevision validated revisionId
+  List.find
+    ((== wantedProjection) . (^. #streamProjectionId))
+    (revision ^. #streamScopedReplays)
+
 -- | Runtime declarations retained behind the validated boundary. Results are
 -- sorted so registration is independent of source declaration order.
 catalogExternalReadContracts :: ValidatedProjectionCatalog -> [ExternalReadContract]
@@ -1511,7 +1587,8 @@ catalogAsyncIdempotencyKeys validated wantedGroup =
 
     specsForSet (SomeProjectionSet projectionSet) =
       [ CatalogAsyncDedupSpec
-          { specSubscriptionName = subscriptionNameFor subscriptionId,
+          { specDedupKeyId = dedupKeyId,
+            specSubscriptionName = subscriptionNameFor subscriptionId,
             specDedupName = dedupNameFor dedupKeyId,
             specSourceId = sourceId,
             specSourceScope = sourceScopeFor sourceId,
@@ -2387,6 +2464,99 @@ projectionRevisionDiagnostics catalog =
     invalid value = Text.null value || Text.strip value /= value
     renderTargetSet = Text.intercalate "," . map targetIdText . Set.toAscList
 
+streamScopedReplayDiagnostics :: ProjectionCatalog -> [ProjectionFacts] -> [CatalogDiagnostic]
+streamScopedReplayDiagnostics catalog facts =
+  concatMap revisionDiagnostics (catalog ^. #projectionRevisions)
+  where
+    factsById = Map.fromList [(factProjectionId fact, fact) | fact <- facts]
+
+    revisionDiagnostics revision =
+      duplicatePolicies <> concatMap (policyDiagnostics revision) policies
+      where
+        policies = revision ^. #streamScopedReplays
+        duplicatePolicies =
+          [ diagnostic
+              DuplicateStreamScopedReplayProjection
+              ( projectionRevisionIdText (revision ^. #revisionId)
+                  <> "/"
+                  <> projectionIdText projectionId
+              )
+              (List.sort [policy ^. #claimSite | policy <- policies, policy ^. #streamProjectionId == projectionId])
+              "a projection revision may declare at most one stream-scoped repair policy per projection"
+          | projectionId <- duplicates (map (^. #streamProjectionId) policies)
+          ]
+
+    policyDiagnostics revision policy =
+      case Map.lookup (policy ^. #streamProjectionId) factsById of
+        Nothing ->
+          [ diagnostic
+              UnknownStreamScopedReplayProjection
+              identity
+              [policy ^. #claimSite, revision ^. #claimSite]
+              "stream-scoped repair policy references a projection absent from the catalog"
+          ]
+            <> invalidIdentityDiagnostics
+        Just fact ->
+          policyGroupDiagnostics fact
+            <> targetDiagnostics fact
+            <> dedupDiagnostics fact
+            <> invalidIdentityDiagnostics
+      where
+        identity =
+          projectionRevisionIdText (revision ^. #revisionId)
+            <> "/"
+            <> projectionIdText (policy ^. #streamProjectionId)
+        invalidIdentityDiagnostics =
+          [ diagnostic
+              InvalidStreamScopedReplayIdentity
+              (identity <> "/" <> stableIdentity)
+              [policy ^. #claimSite]
+              "stream clearer, replay, and verification identities must be non-empty without surrounding whitespace and versions must be positive"
+          | (stableIdentity, version) <-
+              [ (policy ^. #clearerId, policy ^. #clearerVersion),
+                (policy ^. #streamReplayId, policy ^. #streamReplayVersion),
+                (policy ^. #streamVerificationId, policy ^. #streamVerificationVersion)
+              ],
+            Text.null stableIdentity || Text.strip stableIdentity /= stableIdentity || version < 1
+          ]
+        policyGroupDiagnostics fact =
+          [ diagnostic
+              StreamScopedReplayGroupMismatch
+              identity
+              [policy ^. #claimSite, factSite fact, revision ^. #claimSite]
+              "stream-scoped repair projection and projection revision must own the same rebuild group"
+          | factGroupId fact /= revision ^. #rebuildGroup
+          ]
+        targetDiagnostics fact =
+          [ diagnostic
+              StreamScopedReplayTargetSetMismatch
+              identity
+              [policy ^. #claimSite, factSite fact, revision ^. #claimSite]
+              "stream-scoped repair targets must exactly match the projection-owned targets and be unique"
+          | let supplied = NonEmpty.toList (policy ^. #streamOwnedTargets)
+                suppliedSet = Set.fromList supplied
+                expectedSet = Set.fromList (factTargets fact)
+                revisionTargets = Map.keysSet (revision ^. #targetProvisioners),
+            suppliedSet /= expectedSet
+              || List.length supplied /= Set.size suppliedSet
+              || not (suppliedSet `Set.isSubsetOf` revisionTargets)
+          ]
+        dedupDiagnostics fact =
+          [ diagnostic
+              StreamScopedReplayDedupMismatch
+              identity
+              [policy ^. #claimSite, factSite fact]
+              "affected async dedup identities must exactly match the projection's async handlers and be unique"
+          | let supplied = policy ^. #affectedAsyncDedup
+                suppliedSet = Set.fromList supplied
+                expectedSet =
+                  Set.fromList
+                    [ dedupId
+                    | AsyncFacts _ _ _ _ dedupId _ <- factHandlers fact
+                    ],
+            suppliedSet /= expectedSet || List.length supplied /= Set.size suppliedSet
+          ]
+
 externalReadContractDiagnostics :: ProjectionCatalog -> [QueryFacts] -> [CatalogDiagnostic]
 externalReadContractDiagnostics catalog queryFacts =
   concatMap contractDiagnostics contracts
@@ -2955,16 +3125,31 @@ inventoryProjectionRevision revision =
             (verification ^. #revisionVerificationVersion)
             (List.sort (verification ^. #requiredTargets))
         | verification <- revision ^. #revisionVerifications
-        ]
+        ],
+      streamScopedReplays =
+        List.sort
+          [ InventoryStreamScopedReplay
+              { projectionId = policy ^. #streamProjectionId,
+                ownedTargets = List.sort (NonEmpty.toList (policy ^. #streamOwnedTargets)),
+                clearerId = policy ^. #clearerId,
+                clearerVersion = policy ^. #clearerVersion,
+                replayId = policy ^. #streamReplayId,
+                replayVersion = policy ^. #streamReplayVersion,
+                verificationId = policy ^. #streamVerificationId,
+                verificationVersion = policy ^. #streamVerificationVersion,
+                affectedAsyncDedup = List.sort (policy ^. #affectedAsyncDedup)
+              }
+          | policy <- revision ^. #streamScopedReplays
+          ]
     }
 
 fingerprintInventory :: CatalogInventory -> CatalogFingerprint
-fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v5" . inventoryPreimage
+fingerprintInventory = CatalogFingerprint . hashPreimage "catalog-v6" . inventoryPreimage
 
 inventoryPreimage :: CatalogInventory -> Preimage
 inventoryPreimage inventory =
   PRecord
-    "keiro/catalog-inventory/v5"
+    "keiro/catalog-inventory/v6"
     [ PList (sourcePreimage <$> inventory ^. #inventorySources),
       PList (targetPreimage <$> inventory ^. #inventoryTargets),
       PList (groupPreimage <$> inventory ^. #inventoryGroups),
@@ -3030,7 +3215,23 @@ projectionRevisionPreimage revision =
       PList (targetProvisionerPreimage <$> revision ^. #targetProvisioners),
       PList (revisionHandlerPreimage "live-handler" <$> revision ^. #liveHandlers),
       PList (revisionHandlerPreimage "replay-adapter" <$> revision ^. #replayAdapters),
-      PList (revisionHandlerPreimage "revision-verification" <$> revision ^. #verifications)
+      PList (revisionHandlerPreimage "revision-verification" <$> revision ^. #verifications),
+      PList (streamScopedReplayPreimage <$> revision ^. #streamScopedReplays)
+    ]
+
+streamScopedReplayPreimage :: InventoryStreamScopedReplay -> Preimage
+streamScopedReplayPreimage policy =
+  PRecord
+    "stream-scoped-replay"
+    [ PText (projectionIdText (policy ^. #projectionId)),
+      PList (PText . targetIdText <$> policy ^. #ownedTargets),
+      PText (policy ^. #clearerId),
+      PText (Text.pack (show (policy ^. #clearerVersion))),
+      PText (policy ^. #replayId),
+      PText (Text.pack (show (policy ^. #replayVersion))),
+      PText (policy ^. #verificationId),
+      PText (Text.pack (show (policy ^. #verificationVersion))),
+      PList (PText . dedupKeyIdText <$> policy ^. #affectedAsyncDedup)
     ]
 
 targetProvisionerPreimage :: InventoryTargetProvisioner -> Preimage

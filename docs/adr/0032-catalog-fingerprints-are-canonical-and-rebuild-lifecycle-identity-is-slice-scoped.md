@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Catalog fingerprints are canonical and rebuild lifecycle identity is slice-scoped
 description: Keiro hashes injective canonical preimages, uses group slices for rebuild lifecycle compatibility, pins adapter application order in replay contracts, retains whole-catalog provenance, requires scoped registry-complete transactional adoption, and gives pre-canonical runs a fenced recovery path.
-timestamp: 2026-08-14T03:50:00Z
+timestamp: 2026-08-14T06:53:09Z
 docId: ADR-32
 status: Accepted
 date: 2026-08-12
@@ -43,7 +43,7 @@ Keiro hashes a typed canonical preimage tree. Text nodes encode their UTF-8 byte
 length before their bytes; list and record nodes encode a distinguishing tag,
 child count, and recursively encoded children. Every structural boundary is
 therefore recoverable without delimiter escaping. Whole-catalog fingerprints
-use the `catalog-v5:` prefix and group-slice fingerprints use `slice-v4:`.
+use the `catalog-v6:` prefix and group-slice fingerprints use `slice-v5:`.
 Prefix changes are mandatory when the canonical identity contract changes.
 
 A group slice contains only the normalized catalog facts that can affect that
@@ -89,7 +89,7 @@ registered non-legacy groups absent from the new catalog. Adoption accepts a
 non-empty set of reviewed group IDs, sorts and deduplicates them, locks and
 validates the entire set before updating anything, requires every row to be
 registered and `live`, except that a `failed` group whose stored fingerprint
-lacks the canonical `slice-v4:` prefix is also adoptable while remaining
+lacks the canonical `slice-v5:` prefix is also adoptable while remaining
 fenced. Every other non-live group, including a canonical `failed` group, is
 refused. Adoption then updates group slices and reconciles every in-scope query
 registration in the same transaction: an existing row is updated, a missing row
@@ -163,6 +163,14 @@ relation identity, ordered adapters, and runner format in its resume contract. T
 a clean pre-0.12 break: stored `slice-v2:` rows require reviewed adoption and an active
 run must be completed by the old runtime or abandoned before upgrade.
 
+Targeted per-stream repair advances the canonical format to v6/v5. Each
+revision's normalized stream-scoped policy contributes the owning projection,
+exact target set, clearer/replay/verifier identity and numeric version, and the
+complete async-dedup identity set. Declaration order is identity-neutral.
+Executable closures, stream names, observed row counts, and event-specific dedup
+UUIDs remain runtime data and are excluded. Changing one policy changes only its
+owning group slice and the whole-catalog provenance.
+
 Allocated generation UUIDs and physical relation names remain outside catalog identity,
 but they are durable run identity once begin commits. The schema-versioned runner stores
 its own `keiro/versioned-rebuild/v2` contract beside the offline replay contract and
@@ -201,10 +209,11 @@ can never be used to reinterpret an existing run.
   owning group slices and whole-catalog provenance, while run-specific relation OIDs and
   observed schema evidence belong to resume/cutover identity rather than catalog
   identity.
-- The v5/v4 pre-0.12 catalog cutover makes every stored `slice-v3:` registration stale;
+- The v6/v5 pre-0.12 catalog cutover makes every stored `slice-v4:` registration stale;
   operators use the existing preview-and-adopt workflow after ensuring no old-format run
-  remains active. The bump is required because the earlier placeholder stored only contract
-  ID and compatible revisions, not the public SQL signature or deployment generation.
+  remains active. The bump is required because v5/v4 did not include the stream-scoped
+  clearer, replay, verifier, target, and deduplication policy now owned by a projection
+  revision.
 
 
 ## Alternatives considered

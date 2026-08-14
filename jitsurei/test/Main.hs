@@ -527,6 +527,33 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
         runner $ Store.runTransaction (Tx.statement () orderSummaryExternalV2Stmt)
       currentV2Rows
         `shouldSatisfy` any (\(orderId, _, _, state, _, revision) -> orderId == "versioned-after" && state == "placed" && revision == 2)
+
+      Right beforeRepair <- runner $ Store.runTransaction (Tx.statement () orderTargetedRepairFactsStmt)
+      Right () <- runner $ Store.runTransaction (Tx.statement () corruptOneOrderStmt)
+      let repairRequest =
+            StreamReprojectionRequest
+              { rebuildGroupId = orderReportingGroupId,
+                projectionId = orderSummaryProjectionId,
+                streamName = StreamName "order-versioned-before",
+                pageSize = 1
+              }
+      Right (Right repairPreview) <-
+        runner $ CatalogOperations.previewStreamReprojection orderCatalogOperations repairRequest
+      repairPreview ^. #servingRevisionId `shouldBe` orderReportingRevisionV2 ^. #revisionId
+      repairPreview ^. #eligible `shouldBe` True
+      map (targetIdText . (^. #targetId)) (repairPreview ^. #targets)
+        `shouldBe` ["jitsurei-order-line", "jitsurei-order-summary"]
+      Right (Right repaired) <-
+        runner $ CatalogOperations.reprojectCatalogStream orderCatalogOperations repairRequest
+      repaired ^. #repair . #streamVersion `shouldBe` StreamVersion 1
+      repaired ^. #repair . #replayedEvents `shouldBe` 1
+      repaired ^. #repair . #verified `shouldBe` True
+      Right afterRepair <- runner $ Store.runTransaction (Tx.statement () orderTargetedRepairFactsStmt)
+      List.filter (\(orderId, _, _, _, _) -> orderId /= "versioned-before") afterRepair
+        `shouldBe` List.filter (\(orderId, _, _, _, _) -> orderId /= "versioned-before") beforeRepair
+      List.find (\(orderId, _, _, _, _) -> orderId == "versioned-before") afterRepair
+        `shouldBe` Just ("versioned-before", "placed", skuText sampleSku, 2, 2)
+
       Right retired <- runner $ CatalogOperations.listRetiredGenerations orderCatalogOperations
       length (retired ^. #generations) `shouldBe` 3
 
@@ -1363,6 +1390,28 @@ orderVersionedFactsStmt =
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.bool)
+        )
+    )
+
+corruptOneOrderStmt :: Statement () ()
+corruptOneOrderStmt =
+  preparable
+    "WITH corrupt_summary AS (UPDATE jitsurei.jitsurei_order_summary SET state = 'corrupt', source_revision = 99 WHERE order_id = 'versioned-before' RETURNING order_id) UPDATE jitsurei.jitsurei_order_line SET sku = 'CORRUPT', source_revision = 99 WHERE order_id IN (SELECT order_id FROM corrupt_summary)"
+    E.noParams
+    D.noResult
+
+orderTargetedRepairFactsStmt :: Statement () [(Text, Text, Text, Int32, Int32)]
+orderTargetedRepairFactsStmt =
+  preparable
+    "SELECT summaries.order_id, summaries.state, lines.sku, summaries.source_revision::integer, lines.source_revision::integer FROM jitsurei.jitsurei_order_summary AS summaries JOIN jitsurei.jitsurei_order_line AS lines USING (order_id) ORDER BY summaries.order_id"
+    E.noParams
+    ( D.rowList
+        ( (,,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.int4)
+            <*> D.column (D.nonNullable D.int4)
         )
     )
 

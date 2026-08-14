@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-14T02:59:54Z
+timestamp: 2026-08-14T06:53:09Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -176,6 +176,24 @@ revision replays. The group lock returns the persisted serving revision, epoch, 
 physical targets as one closed-world binding. Promotion changes all of them atomically;
 an unknown revision or incomplete map is a typed refusal, not legacy-handler fallback.
 
+A projection revision may additionally declare one explicit `StreamScopedReplay`
+policy for a row-per-stream owner. The declaration names the exact complete target set
+owned by that projection, stable clearer/replay/verifier identities and versions, and
+the complete affected async-dedup set. Keiro does not infer row ownership from SQL:
+the application-owned clearer and verifier are the evidence that every selected row is
+derived solely from the requested stream. A projection without that declaration is not
+eligible for targeted repair.
+
+Targeted repair first locks one complete retained Kiroku stream, then takes the same
+group row `FOR UPDATE` and resolves the persisted serving revision and its serving
+physical targets. It reads the guarded stream, clears only that stream's rows, replays
+it in order, verifies it, and backfills
+deduplication evidence in one transaction. It neither changes group lifecycle nor
+subscription checkpoints. An already-appended writer finishes before the fence, while
+new group writers wait on it;
+guarded external readers take the compatible shared lock, and ordinary PostgreSQL
+snapshots can observe only the complete before or after state.
+
 Live inline and async paths acquire `FOR SHARE` locks on distinct group rows in
 sorted `RebuildGroupId` order inside the same transaction as the event append,
 dedup insert, and target SQL. Preparation takes `FOR UPDATE` on the group row.
@@ -278,6 +296,10 @@ dedup rows are not completion evidence.
   or register-only mapping change leaves catalog source fingerprints unchanged.
 - Online schema-versioned cutover is governed by ADR 0034: application-supplied
   provisioners create desired schemas while Keiro orchestrates their lifecycle.
+- Targeted repair is opt-in per projection revision. Opaque application SQL remains
+  trusted at the same boundary as ordinary projection handlers, while Keiro owns the
+  stream-history guard, serving-revision resolution, transaction, fencing, ordering,
+  rollback, verification, and deduplication protocol.
   A retired generation is explicit forensic evidence and no longer receives live
   writes; catalog identity never implies that it is a current rollback surface.
   Dynamic plugin discovery, inferred or automatic application-schema design,

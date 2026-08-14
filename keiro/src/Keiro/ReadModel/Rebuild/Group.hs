@@ -25,6 +25,7 @@ module Keiro.ReadModel.Rebuild.Group
     GroupTransitionError (..),
     ProjectionWriteBinding (..),
     ProjectionWriteFence (..),
+    ProjectionRepairFence (..),
     GroupPreparation (..),
     groupPreparationFor,
     GroupRebuildHandle,
@@ -48,6 +49,7 @@ module Keiro.ReadModel.Rebuild.Group
     abandonGroupRebuild,
     abandonPreCanonicalGroupRebuild,
     lockProjectionGroupsTx,
+    lockProjectionGroupForRepairTx,
   )
 where
 
@@ -115,7 +117,7 @@ preCanonicalRunSliceSentinel = "$pre-canonical"
 
 -- | Prefix of the current canonical group-slice format (ADR-32).
 canonicalSlicePrefix :: Text
-canonicalSlicePrefix = "slice-v4:"
+canonicalSlicePrefix = "slice-v5:"
 
 -- | Stable operator-supplied identity for one rebuild attempt.
 newtype RebuildRunId = RebuildRunId Text
@@ -254,6 +256,19 @@ data ProjectionWriteFence
   | ProjectionWriteGroupUnregistered !RebuildGroupId
   | ProjectionServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
   | ProjectionServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
+  deriving stock (Eq, Show, Generic)
+
+-- | Exclusive group lock and exact serving binding used by one targeted
+-- stream repair. Unlike the ordinary writer fence this requires both reads
+-- and writes to be available and refuses every active rebuild.
+data ProjectionRepairFence
+  = ProjectionRepairAllowed !ProjectionWriteBinding
+  | ProjectionRepairGroupUnregistered !RebuildGroupId
+  | ProjectionRepairActiveRebuild !RebuildGroupId !RebuildRunId
+  | ProjectionRepairGroupUnavailable !RebuildGroupId !Text !Bool !Bool
+  | ProjectionRepairSliceDrift !RebuildGroupId !Text !Text
+  | ProjectionRepairServingRevisionUnavailable !RebuildGroupId !ProjectionRevisionId
+  | ProjectionRepairServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   deriving stock (Eq, Show, Generic)
 
 data GroupPreparation = GroupPreparation
@@ -953,6 +968,74 @@ lockProjectionGroupsTx catalog = go [] . List.sort . Set.toList . Set.fromList
         (\revision -> projectionRevisionIdText (revision ^. #revisionId) == revisionIdText)
         (Catalog.catalogProjectionRevisions catalog)
 
+-- | Take the group's writer-conflicting lock and resolve the exact persisted
+-- serving revision/physical generations without changing lifecycle state.
+-- Sanctioned external readers take the compatible shared lock and therefore
+-- wait for this transaction to finish.
+lockProjectionGroupForRepairTx ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  Tx.Transaction ProjectionRepairFence
+lockProjectionGroupForRepairTx catalog groupId = do
+  row <-
+    Tx.statement
+      (rebuildGroupIdText groupId)
+      lockGroupForRepairStmt
+  case row of
+    Nothing -> pure (ProjectionRepairGroupUnregistered groupId)
+    Just (_, Just activeRunId, _, _, _, _) ->
+      pure (ProjectionRepairActiveRebuild groupId (RebuildRunId activeRunId))
+    Just (status, Nothing, maybeRevisionId, readsAllowed, writesAllowed, storedSlice) ->
+      case groupSliceFingerprint catalog groupId of
+        Nothing -> pure (ProjectionRepairGroupUnregistered groupId)
+        Just currentSlice
+          | storedSlice /= groupSliceFingerprintText currentSlice ->
+              pure
+                ( ProjectionRepairSliceDrift
+                    groupId
+                    (groupSliceFingerprintText currentSlice)
+                    storedSlice
+                )
+          | not readsAllowed || not writesAllowed || status /= "serving-versioned" ->
+              pure (ProjectionRepairGroupUnavailable groupId status readsAllowed writesAllowed)
+          | otherwise ->
+              case maybeRevisionId >>= findRevision of
+                Nothing ->
+                  case maybeRevisionId >>= eitherToMaybe . Catalog.mkProjectionRevisionId of
+                    Just revisionId -> pure (ProjectionRepairServingRevisionUnavailable groupId revisionId)
+                    Nothing -> pure (ProjectionRepairGroupUnavailable groupId status readsAllowed writesAllowed)
+                Just revision -> do
+                  rows <-
+                    Tx.statement
+                      (rebuildGroupIdText groupId)
+                      servingTargetBindingsStmt
+                  case servingPhysicalTargets revision rows of
+                    Left detail ->
+                      pure
+                        ( ProjectionRepairServingBindingInvalid
+                            groupId
+                            (revision ^. #revisionId)
+                            detail
+                        )
+                    Right targets ->
+                      pure
+                        ( ProjectionRepairAllowed
+                            ( ProjectionWriteBinding
+                                groupId
+                                (Just (revision ^. #revisionId))
+                                targets
+                            )
+                        )
+  where
+    findRevision revisionIdText =
+      List.find
+        (\revision -> projectionRevisionIdText (revision ^. #revisionId) == revisionIdText)
+        (Catalog.catalogProjectionRevisions catalog)
+
+    eitherToMaybe = \case
+      Left _ -> Nothing
+      Right value -> Just value
+
 declaredPhysicalTargets ::
   ValidatedProjectionCatalog ->
   RebuildGroupId ->
@@ -1317,6 +1400,28 @@ lockGroupForShareStmt =
             <*> D.column (D.nullable D.text)
             <*> D.column (D.nullable D.text)
             <*> D.column (D.nonNullable D.bool)
+        )
+    )
+
+lockGroupForRepairStmt :: Statement Text (Maybe (Text, Maybe Text, Maybe Text, Bool, Bool, Text))
+lockGroupForRepairStmt =
+  preparable
+    """
+    SELECT status, active_run_id, serving_revision_id,
+           reads_allowed, writes_allowed, slice_fingerprint
+    FROM keiro.keiro_projection_rebuild_groups
+    WHERE group_id = $1
+    FOR UPDATE
+    """
+    (E.param (E.nonNullable E.text))
+    ( D.rowMaybe
+        ( (,,,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nonNullable D.bool)
+            <*> D.column (D.nonNullable D.bool)
+            <*> D.column (D.nonNullable D.text)
         )
     )
 

@@ -105,6 +105,12 @@ module Keiro.ReadModel.Rebuild
     previewVersionedRetiredDrop,
     dropVersionedRetiredGeneration,
 
+    -- * Targeted stream reprojection
+    StreamReprojectionRequest (..),
+    StreamReprojectionError (..),
+    StreamReprojectionReport (..),
+    reprojectStream,
+
     -- * Catalog history runner
     RebuildOptions (..),
     defaultRebuildOptions,
@@ -143,6 +149,7 @@ import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
 import Keiro.ReadModel.Rebuild.Runner
 import Keiro.ReadModel.Rebuild.Status
+import Keiro.ReadModel.Rebuild.Stream
 import Keiro.ReadModel.Rebuild.Versioned
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.SQL (visibleGlobalHeadPositionStmt)

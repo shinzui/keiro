@@ -8,6 +8,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Added
 
+- Embedded `rebuild reproject-stream GROUP PROJECTION STREAM` previews exact serving
+  revision, target, dedup, and stream-history facts and executes only with `--force`.
+  Human and v1 JSON outcomes report cleared rows, replay/application counts, dedup
+  inserted/existing counts, and verification; typed refusals have stable operator codes.
+
 - Embedded read-only `rebuild external-read CONTRACT VERSION` inspection and
   preview/`--force` `rebuild retire-external-read CONTRACT VERSION`. Both render the
   supported catalog report with contract state, surface generation, PostgreSQL
