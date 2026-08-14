@@ -45,6 +45,10 @@ owner-rights PostgreSQL view. Deployments grant an external role only `USAGE` on
 or `kiroku` schemas. The view owner resolves its dependencies, including Kiroku's
 supported `kiroku.subscription_checkpoints_v1` relation.
 
+This relation is observability, not a two-statement authorization protocol for raw
+projection tables. Projection data reads use ADR 0036's guarded functions so the
+availability check and target access share one lifecycle lock and transaction.
+
 The v1 relation is frozen in name, column order, PostgreSQL types, null semantics, and
 value meanings. Compatible implementation changes may replace its body. Any
 incompatible column or vocabulary change creates `projection_group_status_v2`; v1 is
@@ -125,6 +129,8 @@ drift and crash-recovery problem.
   defines the catalog and rebuild-group authority that derives cursor bindings.
 - [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
   defines the orthogonal online serving and candidate lifecycle.
+- [ADR 0036](0036-external-readers-use-versioned-guarded-sql-contracts.md)
+  defines the sanctioned projection-data surface that consumes these availability facts.
 - [ExecPlan 254](../plans/254-publish-a-documented-projection-status-relation-for-external-readers.md)
   records the frozen row contract, implementation, and PostgreSQL evidence.
 - `mori://shinzui/kiroku/okf/adrs/concepts/ADR-6` owns the upstream versioned

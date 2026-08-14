@@ -107,7 +107,7 @@ snapshotSchema :: Text -> Session Text
 snapshotSchema schema =
   Text.unlines <$> Session.statement schema schemaSnapshotStatement
 
--- | PostgreSQL 18 snapshot generated from the complete embedded migration plan.
+-- | PostgreSQL 18 snapshot regenerated through migration 0028.
 expectedSchemaSnapshot :: Text
 expectedSchemaSnapshot =
   $(embedTextFile "expected-schema/native/keiro-v18.txt")

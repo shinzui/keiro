@@ -17,6 +17,7 @@ module Keiro.Projection.Catalog.Operations
     CatalogVersionedRunReport (..),
     CatalogRetiredGenerationsReport (..),
     CatalogRetiredDropReport (..),
+    CatalogExternalReadRetirementReport (..),
     CatalogOpsError (..),
     catalogInventoryReport,
     previewGroupRebuild,
@@ -34,6 +35,8 @@ module Keiro.Projection.Catalog.Operations
     listRetiredGenerations,
     previewRetiredGenerationDrop,
     dropRetiredGeneration,
+    inspectExternalReadContract,
+    retireExternalReadContract,
   )
 where
 
@@ -52,6 +55,7 @@ import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.ReadModel (HeadScope (..))
+import Keiro.ReadModel.External qualified as External
 import Keiro.ReadModel.Rebuild
   ( CatalogAdoptionError (..),
     CatalogRebuildError,
@@ -232,12 +236,25 @@ data CatalogRetiredDropReport
   | CatalogRetiredDropOutcome !VersionedRetiredDropResult
   deriving stock (Eq, Show, Generic)
 
+data CatalogExternalReadRetirementReport = CatalogExternalReadRetirementReport
+  { reportSchema :: !Text,
+    contractId :: !ExternalReadContractId,
+    contractVersion :: !ExternalReadContractVersion,
+    publicFunction :: !Text,
+    currentState :: !Text,
+    surfaceGeneration :: !Int,
+    dependentObjects :: ![Text],
+    executeGrants :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+
 data CatalogOpsError
   = CatalogOpsUnknownGroup !RebuildGroupId
   | CatalogOpsRunSliceMismatch !RebuildRunId !Text !Text
   | CatalogOpsAdoptionRefused !CatalogAdoptionError
   | CatalogOpsRebuildError !CatalogRebuildError
   | CatalogOpsVersionedError !VersionedRebuildError
+  | CatalogOpsExternalReadRetirementError !External.ExternalReadRetirementError
   | CatalogOpsInvalidVersionedRequest !Text
   deriving stock (Eq, Show, Generic)
 
@@ -500,6 +517,41 @@ dropRetiredGeneration (ProjectionCatalogOperations catalog) generationId =
     <&> first CatalogOpsVersionedError
     <&> fmap CatalogRetiredDropOutcome
 
+inspectExternalReadContract ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  ExternalReadContractId ->
+  ExternalReadContractVersion ->
+  Eff es (Either CatalogOpsError CatalogExternalReadRetirementReport)
+inspectExternalReadContract _ contractId contractVersion =
+  External.previewExternalReadContractRetirement contractId contractVersion
+    <&> first CatalogOpsExternalReadRetirementError
+    <&> fmap (externalReadRetirementReport "keiro/catalog-external-read-inspection/v1")
+
+retireExternalReadContract ::
+  (Store :> es) =>
+  ProjectionCatalogOperations ->
+  ExternalReadContractId ->
+  ExternalReadContractVersion ->
+  Eff es (Either CatalogOpsError CatalogExternalReadRetirementReport)
+retireExternalReadContract _ contractId contractVersion =
+  External.retireExternalReadContract contractId contractVersion
+    <&> first CatalogOpsExternalReadRetirementError
+    <&> fmap (externalReadRetirementReport "keiro/catalog-external-read-retirement/v1")
+
+externalReadRetirementReport :: Text -> External.ExternalReadRetirementPreview -> CatalogExternalReadRetirementReport
+externalReadRetirementReport reportSchema retirement =
+  CatalogExternalReadRetirementReport
+    { reportSchema,
+      contractId = retirement ^. #contractId,
+      contractVersion = retirement ^. #contractVersion,
+      publicFunction = retirement ^. #publicFunction,
+      currentState = retirement ^. #currentState,
+      surfaceGeneration = retirement ^. #surfaceGeneration,
+      dependentObjects = retirement ^. #dependentObjects,
+      executeGrants = retirement ^. #executeGrants
+    }
+
 mapVersionedRun ::
   Either VersionedRebuildError VersionedRebuildReport ->
   Either CatalogOpsError CatalogVersionedRunReport
@@ -669,6 +721,19 @@ instance Aeson.ToJSON CatalogRetiredDropReport where
           "generation" Aeson..= versionedGenerationValue (outcome ^. #generation),
           "alreadyDropped" Aeson..= (outcome ^. #alreadyDropped)
         ]
+
+instance Aeson.ToJSON CatalogExternalReadRetirementReport where
+  toJSON report =
+    Aeson.object
+      [ "schema" Aeson..= (report ^. #reportSchema),
+        "contractId" Aeson..= externalReadContractIdText (report ^. #contractId),
+        "contractVersion" Aeson..= externalReadContractVersionValue (report ^. #contractVersion),
+        "publicFunction" Aeson..= (report ^. #publicFunction),
+        "currentState" Aeson..= (report ^. #currentState),
+        "surfaceGeneration" Aeson..= (report ^. #surfaceGeneration),
+        "dependentObjects" Aeson..= (report ^. #dependentObjects),
+        "executeGrants" Aeson..= (report ^. #executeGrants)
+      ]
 
 inventoryValue :: CatalogInventory -> Aeson.Value
 inventoryValue catalog =

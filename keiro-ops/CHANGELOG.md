@@ -8,6 +8,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### Added
 
+- Embedded read-only `rebuild external-read CONTRACT VERSION` inspection and
+  preview/`--force` `rebuild retire-external-read CONTRACT VERSION`. Both render the
+  supported catalog report with contract state, surface generation, PostgreSQL
+  dependents, and execute grants; forced retirement uses the library lifecycle API.
 - Embedded `rebuild versioned start|status|resume|abandon`, database-backed
   `rebuild retired`, and preview/`--force` `rebuild drop-retired`. Commands render the
   supported catalog operations reports, derive the physical fleet from the mounted

@@ -117,6 +117,7 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "adopt", "ops-group"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "versioned", "status", "ops-run"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "retired"]) `shouldBe` True
+      isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "external-read", "counter_reader", "1"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
       isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
@@ -129,6 +130,9 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["rebuild", "versioned", "abandon", "ops-run"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "retired"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "drop-retired", "65b86cd6-550c-47c3-ae99-4039a85a11ad"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "external-read", "counter_reader", "1"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "1"]) `shouldBe` True
+      isParseFailure (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "0"]) `shouldBe` True
 
     it "parses a complete versioned start and rejects malformed generation identities" do
       let versionedStart =

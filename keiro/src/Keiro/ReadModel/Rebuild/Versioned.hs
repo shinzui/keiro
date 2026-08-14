@@ -1732,7 +1732,19 @@ beginFresh catalog request group servingRevision candidateRevision expectedServi
                   provisioned <- provisionCandidateGenerations request candidateRevision expectedServingTargets
                   case provisioned of
                     Left err -> condemned err
-                    Right () -> loadHandle request
+                    Right () -> do
+                      externalReads <-
+                        External.reconcileExternalReadContractsForGroupsTx
+                          catalog
+                          (Just (Set.singleton (request ^. #rebuildGroupId)))
+                      case externalReads of
+                        Left err ->
+                          condemned
+                            ( VersionedExternalReadReconciliationFailed
+                                (request ^. #rebuildRunId)
+                                err
+                            )
+                        Right () -> loadHandle request
 
 ensureFreshGroupReady ::
   VersionedRebuildRequest ->

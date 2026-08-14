@@ -89,6 +89,14 @@ orderSummaryReadModel =
         Tx.statement (orderIdText orderId) selectOrderSummaryStmt
     }
 
+orderSummaryReadModelV2 :: ReadModel OrderSummaryQuery (Maybe OrderSummary)
+orderSummaryReadModelV2 =
+  orderSummaryReadModel
+    { name = "jitsurei-order-summary-v2",
+      version = 2,
+      shapeHash = "jitsurei-order-summary-v2"
+    }
+
 orderSummaryInlineProjection :: InlineProjection OrderEvent
 orderSummaryInlineProjection =
   InlineProjection
@@ -251,7 +259,10 @@ jitsureiProjectionCatalogDefinition =
             }
         ],
       projectionRevisions = [orderReportingRevisionV1, orderReportingRevisionV2],
-      externalReadContracts = [],
+      externalReadContracts =
+        [ orderSummaryExternalReadV1,
+          orderSummaryExternalReadV2
+        ],
       subscriptions =
         [ SubscriptionDeclaration
             { subscriptionId = orderAuditSubscriptionId,
@@ -276,6 +287,14 @@ jitsureiProjectionCatalogDefinition =
                 rebuildGroup = orderReportingGroupId,
                 observedTargets = [orderSummaryTargetId],
                 claimSite = claim "jitsurei:order-summary-query"
+              },
+          SomeQueryModelBinding
+            QueryModelBinding
+              { queryModelId = orderSummaryQueryModelV2Id,
+                readModel = orderSummaryReadModelV2,
+                rebuildGroup = orderReportingGroupId,
+                observedTargets = [orderSummaryTargetId],
+                claimSite = claim "jitsurei:order-summary-query-v2"
               }
         ],
       projectionSets = [SomeProjectionSet orderProjectionSet]
@@ -288,6 +307,30 @@ jitsureiProjectionCatalogDefinition =
 orderReportingRevisionV1, orderReportingRevisionV2 :: ProjectionRevision
 orderReportingRevisionV1 = orderReportingRevision "jitsurei-order-reporting-v1" "v1"
 orderReportingRevisionV2 = orderReportingRevision "jitsurei-order-reporting-v2" "v2"
+
+orderSummaryExternalReadV1, orderSummaryExternalReadV2 :: ExternalReadContract
+orderSummaryExternalReadV1 =
+  AllRowsExternalRead
+    { readContractId = orderSummaryExternalReadContractId,
+      contractVersion = ExternalReadContractVersion 1,
+      queryModelId = orderSummaryQueryModelId,
+      resultContractType = QualifiedSqlType "jitsurei_contract" "order_summary_v1",
+      resultShapeHash = "jitsurei-order-summary-v1",
+      compatibleRevisions = orderReportingRevisionV1 ^. #revisionId :| [],
+      surfaceGeneration = 1,
+      claimSite = claim "jitsurei:order-summary-external-v1"
+    }
+orderSummaryExternalReadV2 =
+  AllRowsExternalRead
+    { readContractId = orderSummaryExternalReadContractId,
+      contractVersion = ExternalReadContractVersion 2,
+      queryModelId = orderSummaryQueryModelV2Id,
+      resultContractType = QualifiedSqlType "jitsurei_contract" "order_summary_v2",
+      resultShapeHash = "jitsurei-order-summary-v2",
+      compatibleRevisions = orderReportingRevisionV2 ^. #revisionId :| [],
+      surfaceGeneration = 2,
+      claimSite = claim "jitsurei:order-summary-external-v2"
+    }
 
 orderReportingRevision :: Text -> Text -> ProjectionRevision
 orderReportingRevision identity schemaVersion =
@@ -495,6 +538,13 @@ orderSourceId = identityOrError mkSourceId "jitsurei-order-events"
 orderSummaryQueryModelId :: QueryModelId
 orderSummaryQueryModelId = identityOrError mkQueryModelId "jitsurei-order-summary-query"
 
+orderSummaryQueryModelV2Id :: QueryModelId
+orderSummaryQueryModelV2Id = identityOrError mkQueryModelId "jitsurei-order-summary-query-v2"
+
+orderSummaryExternalReadContractId :: ExternalReadContractId
+orderSummaryExternalReadContractId =
+  identityOrError mkExternalReadContractId "jitsurei_order_summary_reader"
+
 orderAuditSubscriptionId :: SubscriptionId
 orderAuditSubscriptionId = identityOrError mkSubscriptionId "jitsurei-order-audit-subscription"
 
@@ -530,6 +580,17 @@ initializeOrderSummaryTable =
     $ "CREATE SCHEMA IF NOT EXISTS "
     <> quoteIdentifier jitsureiProjectionSchema
     <> ";\n"
+    <> "CREATE SCHEMA IF NOT EXISTS jitsurei_contract;\n"
+    <> "DO $jitsurei_contracts$\n"
+    <> "BEGIN\n"
+    <> "  IF pg_catalog.to_regtype('jitsurei_contract.order_summary_v1') IS NULL THEN\n"
+    <> "    CREATE TYPE jitsurei_contract.order_summary_v1 AS (order_id text, sku text, quantity bigint, status text, last_seen bigint);\n"
+    <> "  END IF;\n"
+    <> "  IF pg_catalog.to_regtype('jitsurei_contract.order_summary_v2') IS NULL THEN\n"
+    <> "    CREATE TYPE jitsurei_contract.order_summary_v2 AS (order_id text, sku text, quantity bigint, state text, last_seen bigint, source_revision smallint);\n"
+    <> "  END IF;\n"
+    <> "END\n"
+    <> "$jitsurei_contracts$;\n"
     <> "CREATE TABLE IF NOT EXISTS "
     <> orderSummaryTable
     <> " (\n"

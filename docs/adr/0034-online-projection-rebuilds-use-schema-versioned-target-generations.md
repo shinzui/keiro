@@ -179,3 +179,5 @@ dual-write protocol exists; presenting it as current would silently serve stale 
   coordinates the status, external read, online rebuild, and targeted-repair work.
 - [ADR 0035](0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md)
   freezes the owner-rights SQL status vocabulary built on this lifecycle.
+- [ADR 0036](0036-external-readers-use-versioned-guarded-sql-contracts.md)
+  defines the guarded reader lock and promotion-time contract reconciliation.

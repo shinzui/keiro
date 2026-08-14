@@ -153,6 +153,9 @@ column to `state`, adds `source_revision`, provisions three staging tables, and 
 revision-aware live/replay SQL. The database-backed test writes before and during
 replay, promotes all three targets, writes through V2 afterward, observes three retired
 V1 generations, and verifies that the serving summary has `state` but no `status`.
+It also publishes `jitsurei_order_summary_reader_v1()` and v2 contracts. The test
+executes the v1 function while V2 is replaying, then proves that promotion activates v2
+and makes the incompatible v1 fail with `KR003` rather than read the retained table.
 
 ```text
 Jitsurei read model
@@ -168,5 +171,55 @@ Run the proof with:
 cabal test jitsurei-test
 ```
 
+### External client cutover transcript
+
+The database-backed test executes the same statements as this `psql` session. These
+calls deliberately use ordinary read-write transactions because the guard takes a
+shared lifecycle lock:
+
+```text
+-- V2 is replaying; V1 is still the serving revision.
+keiro=> BEGIN;
+BEGIN
+keiro=*> SELECT order_id, status
+         FROM keiro_read.jitsurei_order_summary_reader_v1()
+         ORDER BY order_id;
+      order_id       | status
+---------------------+--------
+ versioned-before    | placed
+(1 row)
+keiro=*> COMMIT;
+COMMIT
+
+-- The atomic promotion has committed.
+keiro=> \set VERBOSITY verbose
+keiro=> BEGIN;
+BEGIN
+keiro=*> SELECT order_id, status
+         FROM keiro_read.jitsurei_order_summary_reader_v1();
+ERROR:  KR003: external read contract is incompatible with the serving revision
+keiro=!> ROLLBACK;
+ROLLBACK
+
+keiro=> BEGIN;
+BEGIN
+keiro=*> SELECT order_id, state, source_revision
+         FROM keiro_read.jitsurei_order_summary_reader_v2()
+         ORDER BY order_id;
+      order_id       | state  | source_revision
+---------------------+--------+-----------------
+ versioned-after     | placed |               2
+ versioned-before    | placed |               2
+ versioned-during    | placed |               2
+(3 rows)
+keiro=*> COMMIT;
+COMMIT
+```
+
+The corresponding assertions live in `jitsurei/test/Main.hs`; they use the real
+catalog bridge, migration-owned guard, candidate replay, promotion transaction, and
+generated public functions rather than a mocked client surface.
+
 For the full protocol, ownership, and recovery rationale, see
-[ADR 0034](../adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md).
+[ADR 0034](../adr/0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
+and [ADR 0036](../adr/0036-external-readers-use-versioned-guarded-sql-contracts.md).

@@ -231,6 +231,9 @@ can never be used to reinterpret an existing run.
 - [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
   defines the projection revision, target generation, provisioning, and serving epoch
   facts whose canonical identity this decision scopes.
+- [ADR 0036](0036-external-readers-use-versioned-guarded-sql-contracts.md)
+  defines the complete immutable signature, compatibility set, and surface generation
+  included in the v5/v4 owning slice.
 - [ExecPlan 237](../plans/237-canonicalize-catalog-fingerprint-preimages-and-support-catalog-evolution.md)
   implements and verifies this decision.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)

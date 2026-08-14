@@ -297,6 +297,9 @@ registration or rebuild work. The public boundary includes:
   groups, sources, query models, subscriptions, dedup keys, and claim sites;
 - `ProjectionCatalog`, `ProjectionSet event`, `SomeProjectionSet`, target,
   group, source, subscription, dedup, and query-model declarations;
+- `ExternalReadContract`, `ExternalReadContractId`,
+  `ExternalReadContractVersion`, `SqlFunctionArgument`, `QualifiedSqlType`, and
+  `QualifiedFunction` for versioned all-row or keyed public SQL contracts;
 - independent `TargetResetPolicy` and `ProjectionReplayPolicy event` values;
 - `ReplayAdapter`, `ReplayDecodeResult`, and `replayAdapterFromCodec`;
 - `RebuildVerification`, whose identity/version are fingerprinted while its
@@ -346,6 +349,8 @@ Types and functions:
   `CatalogAdoptionOutcome`, `previewCatalogAdoption`, and
   `adoptCatalogGroups`;
 - `CatalogRunReport` and `CatalogOpsError`;
+- `CatalogExternalReadRetirementReport`, `inspectExternalReadContract`, and
+  `retireExternalReadContract`;
 - `startGroupRebuild`;
 - `inspectGroupRebuild`;
 - `resumeGroupRebuild`; and
@@ -360,6 +365,24 @@ resume, abandon, and adoption are explicit mutations over
 the catalog replay runner. The module exposes versioned JSON values but
 deliberately contains no CLI parser, renderer, confirmation rule, or connection
 configuration.
+
+## `Keiro.ReadModel.External`
+
+Types and functions:
+
+- `ExternalReadReconciliationError`;
+- `ExternalReadRetirementError` and `ExternalReadRetirementPreview`;
+- `reconcileExternalReadContracts` and `reconcileExternalReadContractsTx`;
+- `previewExternalReadContractRetirement`; and
+- `retireExternalReadContract`.
+
+Reconciliation verifies stable composite result types and private keyed function
+signatures, persists monotonic contract metadata, and installs only contracts compatible
+with the persisted serving revision. The transaction-composable form is used by catalog
+registration, reviewed adoption, versioned-rebuild start, and atomic promotion. Public
+wrappers hold the group lifecycle lock, enforce `KR001`/`KR002`/`KR003`, and expose no
+raw target privilege. Retirement is explicit and reports execute grants plus ordinary
+PostgreSQL dependencies before changing contract state.
 
 ## `Keiro.Connection`
 

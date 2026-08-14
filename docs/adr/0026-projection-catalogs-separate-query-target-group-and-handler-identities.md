@@ -304,6 +304,8 @@ dedup rows are not completion evidence.
   while preserving application ownership of desired DDL and SQL.
 - [ADR 0035](0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md)
   publishes catalog-derived cursor authority without exposing the private metadata.
+- [ADR 0036](0036-external-readers-use-versioned-guarded-sql-contracts.md)
+  extends each owning group slice with versioned external SQL contract identity.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
   implements truthful query freshness, derived cursor authority, and the 0.12
   compatibility window.

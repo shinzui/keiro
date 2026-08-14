@@ -220,6 +220,14 @@ yourapp ops rebuild status RUN
 yourapp ops rebuild resume RUN
 yourapp ops rebuild abandon RUN --code CODE --detail TEXT
 yourapp ops rebuild adopt GROUP
+yourapp ops rebuild versioned start GROUP --run-id RUN --serving-revision V1 --candidate-revision V2 --page-size 100 --cutover-threshold 10 --cutover-lock-timeout-ms 2000 --retention-seconds 600 --requested-by OPERATOR --reason TEXT
+yourapp ops rebuild versioned status RUN
+yourapp ops rebuild versioned resume RUN
+yourapp ops rebuild versioned abandon RUN
+yourapp ops rebuild retired
+yourapp ops rebuild drop-retired GENERATION_UUID
+yourapp ops rebuild external-read CONTRACT VERSION
+yourapp ops rebuild retire-external-read CONTRACT VERSION
 ```
 
 For a runnable local mount with the real `jitsurei-order-reporting` group, see
@@ -228,8 +236,10 @@ That walkthrough distinguishes the standalone binary from an application
 binary, shows read-only text/JSON inventory and preview, and keeps forced
 execution scoped to the disposable example database.
 
-`list`, `preview`, and `status` are read-only. `start`, `resume`, and `abandon`
-return a preview unless `--force` is supplied. The preview comes directly from
+`list`, `preview`, `status`, `versioned status`, `retired`, and `external-read`
+are read-only. `start`, `resume`, `abandon`, their versioned counterparts,
+`drop-retired`, and `retire-external-read` return a preview unless `--force` is
+supplied. The preview comes directly from
 the mounted validated catalog and reports its fingerprint, qualified targets,
 clear/preserve policy, sources, subscription and dedup resets, verification
 hooks, lock scope, and destructive disposition. The runtime then fences the
@@ -258,14 +268,16 @@ Use a new run id when retrying a start whose id was already persisted.
 
 These commands wrap `catalogInventoryReport`, `previewRegisteredGroupRebuild`,
 `startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and
-`abandonGroupRebuild`. There is no parallel name-to-action rebuild map.
+`abandonGroupRebuild`, plus the supported versioned-generation and external-read
+inspection/retirement APIs. There is no parallel name-to-action rebuild map.
 
 `ClearBeforeReplay` uses a single foreign-key-compatible multi-table truncate
 without `CASCADE`; undeclared references fail and roll the preparation back.
 `PreserveAndReconcile` retains brownfield rows and therefore needs idempotent
-replay adapters plus application verification. Keiro never creates, migrates,
-or swaps application tables. Online/shadow-table cutover remains
-application-owned.
+replay adapters plus application verification. Application code owns desired DDL;
+Keiro owns the schema-versioned staging, replay, validation, atomic promotion, and
+retirement protocol described in
+[Online Schema-Versioned Projection Rebuilds](../guides/online-projection-rebuilds.md).
 
 ## Snapshots
 

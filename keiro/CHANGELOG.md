@@ -15,8 +15,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - `Keiro.ReadModel.External` reconciles those declarations into execute-only,
   security-definer functions in `keiro_read`, backed by private managed bindings and a
   lifecycle guard with stable `KR001`/`KR002`/`KR003` SQLSTATEs. Registration,
-  reviewed adoption, and versioned promotion perform the reconciliation in their own
-  transaction; retirement is explicit and dependency/grant previewed.
+  reviewed adoption, versioned-rebuild start, and promotion perform reconciliation in
+  their own transaction; retirement is explicit and dependency/grant previewed.
+  All-row bindings project only the stable composite type's attributes, candidate
+  versions remain metadata-only until promotion, and an explicit implementation-backed
+  compatibility wrapper may retain an old zero-argument signature after a breaking
+  cutover.
+- `ProjectionCatalogOperations` exposes external-read inspection and retirement reports
+  with stable JSON envelopes over the same dependency/grant preview used by the runtime.
 - `ProjectionGroupStatusV1`, `ServingPositionBasis`,
   `listProjectionGroupStatuses`, and `lookupProjectionGroupStatus` decode the frozen
   public SQL status contract. Catalog registration and reviewed adoption now reconcile

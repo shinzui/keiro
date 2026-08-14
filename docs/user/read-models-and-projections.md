@@ -535,6 +535,156 @@ Haskell callers can decode the same contract through
 `ProjectionGroupStatusV1` type preserves all 18 fields, and
 `ServingPositionBasis` deliberately rejects a value outside the frozen v1 vocabulary.
 
+## Publish A Sanctioned External Read Contract
+
+Do not give an out-of-process reader `SELECT` on a projection table, a serving-name
+alias, or Keiro's private binding view. A direct table read can authorize before an
+offline fence or resolve a different relation during online promotion. It can therefore
+return empty, partial, or retired data even when a separate status query looked safe.
+
+Declare a versioned `ExternalReadContract` in the validated projection catalog instead.
+Keiro publishes one security-definer function in `keiro_read`, for example
+`keiro_read.order_summary_reader_v1()`. The wrapper takes a shared lock on the rebuild
+group, checks the persisted availability and serving revision, and executes the private
+binding before releasing that lock. The same promotion transaction that changes the
+serving generation rebinds compatible wrappers and activates new contract versions.
+
+Every contract declares:
+
+- a lower-case SQL contract identity and positive version, which form the public
+  function name `<contract>_v<version>`;
+- one query-model binding and its result-shape hash;
+- a stable application-owned composite result type;
+- the non-empty set of compatible projection revisions;
+- a monotonic surface generation; and
+- for keyed contracts, typed arguments plus a named and versioned private
+  implementation function.
+
+The composite type is the public row ABI. Keiro verifies that it exists and is
+composite, and the generated all-row binding selects exactly its ordered attributes.
+An additive physical column therefore does not silently widen a v1 result. Renaming,
+removing, retyping, or otherwise changing the public row shape requires a new composite
+type and contract version.
+
+The built-in all-row form is for bounded, small projections:
+
+```haskell
+AllRowsExternalRead
+  { readContractId = orderSummaryReader
+  , contractVersion = ExternalReadContractVersion 1
+  , queryModelId = orderSummaryQueryModel
+  , resultContractType = QualifiedSqlType "app_contract" "order_summary_v1"
+  , resultShapeHash = "order-summary-v1"
+  , compatibleRevisions = orderReportingV1 :| []
+  , surfaceGeneration = 1
+  , claimSite = orderSummaryReaderClaim
+  }
+```
+
+Its procedural wrapper materializes the complete function result; a caller predicate
+cannot be pushed into the physical table. Use an application-owned keyed implementation
+for high-cardinality access. Keiro's outer wrapper still performs the guard and forwards
+the declared arguments, while the private SQL function can use an index:
+
+```haskell
+KeyedExternalRead
+  { readContractId = orderByIdReader
+  , contractVersion = ExternalReadContractVersion 1
+  , queryModelId = orderSummaryQueryModel
+  , arguments =
+      [ SqlFunctionArgument "requested_order_id"
+          (QualifiedSqlType "pg_catalog" "text")
+      ]
+  , resultContractType = QualifiedSqlType "app_contract" "order_summary_v1"
+  , privateImplementation = QualifiedFunction "app_private" "order_by_id_v1"
+  , privateImplementationVersion = 1
+  , resultShapeHash = "order-summary-v1"
+  , compatibleRevisions = orderReportingV1 :| []
+  , surfaceGeneration = 1
+  , claimSite = orderByIdReaderClaim
+  }
+```
+
+The private implementation must already exist with the declared argument signature.
+Registration revokes `PUBLIC` execution from it. Keiro never grants the external role
+access to that function or its relation.
+
+Deploy result types and the application-owned projection schema before catalog
+registration. Then grant the client only the public wrapper and the type visibility it
+needs:
+
+```sql
+REVOKE ALL ON SCHEMA app_contract FROM PUBLIC;
+REVOKE ALL ON TYPE app_contract.order_summary_v1 FROM PUBLIC;
+
+GRANT USAGE ON SCHEMA keiro_read TO order_reader;
+GRANT USAGE ON SCHEMA app_contract TO order_reader;
+GRANT USAGE ON TYPE app_contract.order_summary_v1 TO order_reader;
+GRANT EXECUTE ON FUNCTION keiro_read.order_summary_reader_v1() TO order_reader;
+```
+
+Do not grant `order_reader` access to `keiro`, `kiroku`, the application projection
+schema, `app_private`, the shared guard, or a generated binding view. Deployment owns
+roles and grants; Keiro owns only its function definitions and revokes `PUBLIC` by
+default.
+
+Call the wrapper inside an ordinary read-write PostgreSQL transaction, even when the
+transaction executes no application writes:
+
+```sql
+BEGIN;
+SELECT order_id, status
+FROM keiro_read.order_summary_reader_v1()
+ORDER BY order_id;
+COMMIT;
+```
+
+PostgreSQL rejects the guard's `SELECT ... FOR SHARE` in a read-only transaction.
+Removing the lock would reopen the authorization/cutover race, so a client configured
+globally as read-only must use a separate read-write pool or transaction mode for these
+calls.
+
+Handle the stable SQLSTATEs by code, not message text:
+
+| SQLSTATE | Meaning | Client action |
+|---|---|---|
+| `KR001` | The group is temporarily unavailable, normally during an offline rebuild or failure fence. | Retry with bounded backoff according to the application's availability policy. |
+| `KR002` | The contract is unknown, pending retirement, or retired. | Stop retrying; check deployment version, grants, and contract retirement. |
+| `KR003` | The serving revision or result shape is incompatible with this contract version. | Migrate to the compatible function version or deploy an explicit compatibility implementation. |
+
+During candidate replay the old serving revision and its compatible function remain
+active. An additive physical change may keep v1 and atomically rebind it at promotion.
+A breaking change deploys v1 and v2 declarations together; v2 remains metadata-only
+until its compatible revision is promoted, then its wrapper appears in that promotion
+transaction. The old v1 wrapper fails with `KR003` after cutover. It remains current
+only when the application deliberately changes v1 to an implementation-backed
+compatibility wrapper that reads the new serving data while retaining the old signature.
+Keeping the retired v1 table is never sufficient.
+
+Surface definitions are rolling-deployment state. Re-registering the same immutable
+signature and definition is idempotent. A lower `surfaceGeneration` cannot overwrite a
+higher generation, and changing a definition without advancing the generation is
+rejected. Managed objects are reconciled individually; Keiro does not drop and recreate
+`keiro_read`, so unrelated consumer-owned objects and grants survive.
+
+Inspect a contract and its PostgreSQL dependents before retirement:
+
+```console
+my-service ops rebuild external-read order_summary_reader 1 --json
+my-service ops rebuild retire-external-read order_summary_reader 1
+my-service ops rebuild retire-external-read order_summary_reader 1 --force
+```
+
+The first two commands are read-only. The retirement preview reports current state,
+surface generation, dependent objects, and execute grants. Forced retirement marks the
+contract and its managed objects retired; subsequent calls fail `KR002`. Remove grants
+and consumer dependencies deliberately before retiring a version. Retirement does not
+drop a retained physical generation; use the separate dependency-checked
+`rebuild drop-retired` flow for that.
+
+See [Online Schema-Versioned Projection Rebuilds](../guides/online-projection-rebuilds.md#external-client-cutover-transcript)
+for the database-backed Jitsurei v1/v2 client transcript.
+
 ## Inspect And Operate A Catalog
 
 `Keiro.Projection.Catalog.Operations` is the operator-neutral boundary over the
@@ -563,7 +713,9 @@ versioned JSON envelopes:
 - `keiro/catalog-versioned-rebuild-run/v1`;
 - `keiro/catalog-retired-generations/v1`;
 - `keiro/catalog-retired-drop-preview/v1`; and
-- `keiro/catalog-retired-drop-outcome/v1`.
+- `keiro/catalog-retired-drop-outcome/v1`;
+- `keiro/catalog-external-read-inspection/v1`; and
+- `keiro/catalog-external-read-retirement/v1`.
 
 Every subscription in inventory and rebuild JSON includes
 `checkpointOnMissing` with one of the stable values `FromBeginning`,
@@ -574,8 +726,9 @@ database credentials. `keiro-ops` owns those concerns and mounts the adapter
 through `AppHooks.projectionCatalog`. In a candidate application binary,
 `rebuild list|preview|start|status|resume|abandon|adopt`, nested
 `rebuild versioned start|status|resume|abandon`, `rebuild retired`, and
-`rebuild drop-retired` render the same reports and require preview plus `--force`
-for mutations. Applications therefore do not
+`rebuild drop-retired`, `rebuild external-read`, and
+`rebuild retire-external-read` render the same reports and require preview plus
+`--force` for mutations. Applications therefore do not
 maintain a second rebuild map. An adoption preview shows the complete catalog but marks
 each group, registration, and orphan as `adopt` or `skip` for the requested groups. It
 warns by name when skipped drift will still block startup, and refuses a requested group

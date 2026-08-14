@@ -14,6 +14,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Added
 
+- Migration `0028.sql` permits an implementation-backed compatibility wrapper
+  to retain a zero-argument public signature while a breaking projection shape
+  is promoted. Keyed contracts still require a named, versioned private
+  implementation; all-row contracts remain Keiro-backed.
 - Migration `0027.sql` adds private external-read contract and managed-object
   registries plus the fixed `keiro_read.guard_external_read_v1` security-definer
   guard. The guard takes a shared lifecycle lock, consumes persisted

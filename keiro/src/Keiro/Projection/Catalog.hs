@@ -2414,7 +2414,7 @@ externalReadContractDiagnostics catalog queryFacts =
           InvalidExternalReadContractIdentity
           (renderExternalReadContractKey (externalReadContractKey contract))
           [contract ^. #claimSite]
-          "contract identity, version, surface generation, result shape, and keyed implementation version must be valid positive immutable facts"
+          "contract identity, version, surface generation, result shape, and implementation version must be valid positive immutable facts"
       | invalidIdentity contract
       ]
 
@@ -2425,8 +2425,8 @@ externalReadContractDiagnostics catalog queryFacts =
         || invalidText (contract ^. #resultShapeHash)
         || case contract of
           AllRowsExternalRead {} -> False
-          KeyedExternalRead {arguments = keyedArguments, privateImplementationVersion = implementationVersion} ->
-            null keyedArguments || implementationVersion < 1
+          KeyedExternalRead {privateImplementationVersion = implementationVersion} ->
+            implementationVersion < 1
 
     sqlIdentifierDiagnostics contract =
       [ diagnostic

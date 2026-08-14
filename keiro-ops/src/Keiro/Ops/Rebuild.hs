@@ -31,11 +31,16 @@ import Keiro.Ops.Render
 import Keiro.Prelude ((&), (.~))
 import Keiro.Projection.Catalog
   ( CatalogInventory (..),
+    ExternalReadContractId,
+    ExternalReadContractVersion (..),
     InventoryGroup (..),
     ProjectionRevisionId,
     QualifiedTable (..),
     RebuildGroupId,
     TargetGenerationId (..),
+    externalReadContractIdText,
+    externalReadContractVersionValue,
+    mkExternalReadContractId,
     mkProjectionRevisionId,
     mkRebuildGroupId,
     projectionRevisionIdText,
@@ -84,6 +89,8 @@ data Command
   | VersionedAbandon !RebuildRunId
   | Retired
   | DropRetired !TargetGenerationId
+  | ExternalReadStatus !ExternalReadContractId !ExternalReadContractVersion
+  | RetireExternalRead !ExternalReadContractId !ExternalReadContractVersion
   deriving stock (Eq, Show)
 
 data StartOptions = StartOptions
@@ -142,7 +149,15 @@ commandParser =
         <> command "versioned" (info versionedCommandParser (progDesc "Operate schema-versioned online rebuilds"))
         <> command "retired" (info (pure Retired) (progDesc "List retired target generations"))
         <> command "drop-retired" (info (DropRetired <$> generationArgument) (progDesc "Preview or drop one retired target generation"))
+        <> command "external-read" (info externalReadStatusParser (progDesc "Inspect one managed external read contract"))
+        <> command "retire-external-read" (info retireExternalReadParser (progDesc "Preview or retire one managed external read contract"))
     )
+
+externalReadStatusParser :: Parser Command
+externalReadStatusParser = ExternalReadStatus <$> externalReadContractArgument <*> externalReadVersionArgument
+
+retireExternalReadParser :: Parser Command
+retireExternalReadParser = RetireExternalRead <$> externalReadContractArgument <*> externalReadVersionArgument
 
 versionedCommandParser :: Parser Command
 versionedCommandParser =
@@ -206,6 +221,12 @@ runIdOption = option runReader (long "run-id" <> metavar "RUN_ID" <> help "Stabl
 generationArgument :: Parser TargetGenerationId
 generationArgument = argument generationReader (metavar "GENERATION_ID")
 
+externalReadContractArgument :: Parser ExternalReadContractId
+externalReadContractArgument = argument externalReadContractReader (metavar "CONTRACT")
+
+externalReadVersionArgument :: Parser ExternalReadContractVersion
+externalReadVersionArgument = argument externalReadVersionReader (metavar "VERSION")
+
 textOption :: String -> String -> String -> Parser Text
 textOption name metavarText helpText = Text.pack <$> strOption (long name <> metavar metavarText <> help helpText)
 
@@ -221,6 +242,15 @@ revisionReader = eitherReader (firstShow . mkProjectionRevisionId . Text.pack)
 generationReader :: ReadM TargetGenerationId
 generationReader = eitherReader $ \raw ->
   maybe (Left "expected a UUID target generation id") (Right . TargetGenerationId) (UUID.fromString raw)
+
+externalReadContractReader :: ReadM ExternalReadContractId
+externalReadContractReader = eitherReader (firstShow . mkExternalReadContractId . Text.pack)
+
+externalReadVersionReader :: ReadM ExternalReadContractVersion
+externalReadVersionReader = eitherReader $ \raw ->
+  case readBoundedIntegral raw of
+    Just value | value > 0 -> Right (ExternalReadContractVersion value)
+    _ -> Left "expected a positive external read contract version"
 
 targetModeReader :: ReadM VersionedTargetMode
 targetModeReader = eitherReader $ \case
@@ -267,6 +297,8 @@ isMutation = \case
   VersionedAbandon {} -> True
   Retired -> False
   DropRetired {} -> True
+  ExternalReadStatus {} -> False
+  RetireExternalRead {} -> True
 
 runCommand :: OpsEnv -> ProjectionCatalogOperations -> Command -> IO OpsOutcome
 runCommand env operations = \case
@@ -337,6 +369,22 @@ runCommand env operations = \case
           PreviewRequired
             (retiredDropResult report)
             (forceInvocation env (dropRetiredArguments generationId))
+  ExternalReadStatus contractId contractVersion ->
+    runCatalogAction
+      env
+      (inspectExternalReadContract operations contractId contractVersion)
+      (Succeeded . externalReadRetirementResult)
+  RetireExternalRead contractId contractVersion
+    | env.force ->
+        runCatalogAction
+          env
+          (retireExternalReadContract operations contractId contractVersion)
+          (Succeeded . externalReadRetirementResult)
+    | otherwise ->
+        runCatalogAction env (inspectExternalReadContract operations contractId contractVersion) $ \report ->
+          PreviewRequired
+            (externalReadRetirementResult report)
+            (forceInvocation env (retireExternalReadArguments contractId contractVersion))
 
 catalogVersionedStartOptions :: VersionedStartOptions -> CatalogVersionedStartOptions
 catalogVersionedStartOptions options =
@@ -643,6 +691,23 @@ retiredDropResult report =
       jsonValue = Aeson.toJSON report
     }
 
+externalReadRetirementResult :: CatalogExternalReadRetirementReport -> OpsResult
+externalReadRetirementResult report =
+  OpsResult
+    { headers = ["contract", "version", "function", "state", "surface_generation", "dependents", "execute_grants"],
+      rows =
+        [ [ externalReadContractIdText report.contractId,
+            showText (externalReadContractVersionValue report.contractVersion),
+            report.publicFunction,
+            report.currentState,
+            showText report.surfaceGeneration,
+            Text.intercalate "," report.dependentObjects,
+            Text.intercalate "," report.executeGrants
+          ]
+        ],
+      jsonValue = Aeson.toJSON report
+    }
+
 generationRow :: VersionedTargetGeneration -> [Text]
 generationRow generation =
   generationSummaryRow generation
@@ -737,6 +802,14 @@ versionedAbandonArguments runId =
 dropRetiredArguments :: TargetGenerationId -> [Text]
 dropRetiredArguments generationId =
   ["rebuild", "drop-retired", generationIdText generationId]
+
+retireExternalReadArguments :: ExternalReadContractId -> ExternalReadContractVersion -> [Text]
+retireExternalReadArguments contractId contractVersion =
+  [ "rebuild",
+    "retire-external-read",
+    externalReadContractIdText contractId,
+    showText (externalReadContractVersionValue contractVersion)
+  ]
 
 forceInvocation :: OpsEnv -> [Text] -> Text
 forceInvocation env arguments = Text.unwords (map shellQuote ("keiro-ops" : arguments <> globalFlags <> ["--force"]))

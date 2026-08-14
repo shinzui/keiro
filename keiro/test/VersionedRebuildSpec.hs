@@ -12,6 +12,8 @@ import CatalogSpec
     bridgeRevisionV1,
     bridgeRevisionV2,
     catalogAsyncProjection,
+    counterBinding,
+    counterReadContract,
     counterTargetId,
     mainGroupId,
   )
@@ -46,6 +48,8 @@ import Keiro.Connection (qualifyTable)
 import Keiro.Prelude
 import Keiro.Projection (CatalogAsyncApplyOutcome (..), applyAsyncProjectionFromCatalog)
 import Keiro.Projection.Catalog
+import Keiro.ReadModel (ReadModel (..))
+import Keiro.ReadModel.External (reconcileExternalReadContracts)
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore)
 import Kiroku.Store qualified as Store
@@ -364,6 +368,72 @@ spec fixture = do
         promotedStatus ^? _Just . #candidateRebuildHead `shouldBe` Just Nothing
         promotedStatus ^? _Just . #lastPromotedAt `shouldSatisfy` maybe False isJust
 
+      it "keeps an additive all-row v1 contract on the old generation during replay and projects the promoted table to its stable result type" $ \store -> do
+        setupExternalBridge store
+        (catalog, physicalTargets) <- validatedBridgeFrom compatibleExternalReadCatalog
+        registerBridge store catalog
+        runScript store servingOnlyRowsSql
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-external-compatible" 2
+
+        let request = versionedRequest "versioned-external-compatible" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        expectStore store (reconcileExternalReadContracts catalog) >>= requireRight
+        runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
+        ready <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+        ready ^. #phase `shouldBe` VersionedCutoverReplaying
+        runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
+
+        promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        promoted ^. #phase `shouldBe` VersionedPromoted
+        promotedRows <- runStatement store () externalV1RowsStmt
+        promotedRows `shouldSatisfy` (not . null)
+        promotedRows `shouldSatisfy` (all ((== 10) . snd))
+        promotedRows `shouldSatisfy` (all ((/= 100) . fst))
+
+      it "activates a breaking v2 contract atomically and fails the old contract with KR003" $ \store -> do
+        setupExternalBridge store
+        (catalog, physicalTargets) <- validatedBridgeFrom breakingExternalReadCatalog
+        registerBridge store catalog
+        runScript store servingOnlyRowsSql
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-external-breaking" 2
+
+        let request = versionedRequest "versioned-external-breaking" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        expectStore store (reconcileExternalReadContracts catalog) >>= requireRight
+        runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
+        _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+        runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
+
+        promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        promoted ^. #phase `shouldBe` VersionedPromoted
+        oldRead <- Store.runStoreIO store (Store.runTransaction (Tx.statement () externalV1RowsStmt))
+        oldRead `shouldSatisfy` hasSqlState "KR003"
+        newRows <- runStatement store () externalV2RowsStmt
+        newRows `shouldSatisfy` (not . null)
+        newRows `shouldSatisfy` (all (\(_, subtotal, tax, total) -> subtotal == 8 && tax == 2 && total == 10))
+
+      it "keeps v1 current after a breaking promotion only through an explicit compatibility implementation" $ \store -> do
+        setupExternalBridge store
+        (catalog, physicalTargets) <- validatedBridgeFrom compatibilityImplementationCatalog
+        registerBridge store catalog
+        runScript store servingOnlyRowsSql
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-external-compatibility-implementation" 2
+
+        let request = versionedRequest "versioned-external-compatibility-implementation" physicalTargets
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        expectStore store (reconcileExternalReadContracts catalog) >>= requireRight
+        _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+        _ <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+
+        compatibleRows <- runStatement store () externalV1RowsStmt
+        compatibleRows `shouldSatisfy` (not . null)
+        compatibleRows `shouldSatisfy` (all ((== 10) . snd))
+        v2Rows <- runStatement store () externalV2RowsStmt
+        v2Rows `shouldSatisfy` (all (\(_, subtotal, tax, total) -> subtotal == 8 && tax == 2 && total == 10))
+
       it "converges across two replay rounds while live v1 stays serving and backfills async dedup" $ \store -> do
         setupBridge store
         (catalog, physicalTargets) <- validatedBridge
@@ -522,9 +592,9 @@ spec fixture = do
         repaired ^. #phase `shouldBe` VersionedPromoted
 
       it "previews retired blockers and drops only an unreferenced generation" $ \store -> do
-        setupBridge store
+        setupExternalBridge store
         runScript store retiredReaderSql
-        (catalog, physicalTargets) <- validatedBridge
+        (catalog, physicalTargets) <- validatedBridgeFrom compatibleExternalReadCatalog
         registerBridge store catalog
         runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
         let request = versionedRequest "versioned-retired-drop" physicalTargets
@@ -540,7 +610,7 @@ spec fixture = do
         contractBlocked <-
           expectStore store (previewVersionedRetiredDrop catalog (counterRetired ^. #generationId))
             >>= requireRight
-        contractBlocked ^. #supportedReadContracts `shouldBe` ["counter-reader"]
+        contractBlocked ^. #supportedReadContracts `shouldBe` ["counter_reader/v1"]
         contractBlocked ^. #droppable `shouldBe` False
 
         noContractCatalog <-
@@ -664,6 +734,74 @@ runtimeBridgeCatalog =
       externalReadContracts = []
     }
 
+compatibleExternalReadCatalog :: ProjectionCatalog
+compatibleExternalReadCatalog =
+  runtimeBridgeCatalog
+    { externalReadContracts = [counterReadContract]
+    }
+
+breakingExternalReadCatalog :: ProjectionCatalog
+breakingExternalReadCatalog = externalReadCatalogWith counterV1BreakingContract
+
+compatibilityImplementationCatalog :: ProjectionCatalog
+compatibilityImplementationCatalog = externalReadCatalogWith counterV1CompatibilityContract
+
+externalReadCatalogWith :: ExternalReadContract -> ProjectionCatalog
+externalReadCatalogWith v1Contract =
+  runtimeBridgeCatalog
+    { queryModels = runtimeBridgeCatalog ^. #queryModels <> [SomeQueryModelBinding counterV2Binding],
+      externalReadContracts = [v1Contract, counterV2Contract]
+    }
+
+counterV2Binding :: QueryModelBinding Text ()
+counterV2Binding =
+  counterBinding
+    { queryModelId = identity mkQueryModelId "catalog-counter-query-v2",
+      readModel =
+        (counterBinding ^. #readModel)
+          { name = "catalog-counter-query-v2",
+            version = 2,
+            shapeHash = "catalog-counter-query-v2"
+          }
+    }
+
+counterV1BreakingContract :: ExternalReadContract
+counterV1BreakingContract =
+  counterReadContract
+    & #compatibleRevisions
+    .~ (identity mkProjectionRevisionId "counter-v1" :| [])
+
+counterV1CompatibilityContract :: ExternalReadContract
+counterV1CompatibilityContract =
+  KeyedExternalRead
+    { readContractId = counterReadContract ^. #readContractId,
+      contractVersion = counterReadContract ^. #contractVersion,
+      queryModelId = counterReadContract ^. #queryModelId,
+      arguments = [],
+      resultContractType = counterReadContract ^. #resultContractType,
+      privateImplementation = QualifiedFunction "app_private" "counter_v1_compat",
+      privateImplementationVersion = 1,
+      resultShapeHash = counterReadContract ^. #resultShapeHash,
+      compatibleRevisions =
+        identity mkProjectionRevisionId "counter-v1"
+          :| [identity mkProjectionRevisionId "counter-v2"],
+      surfaceGeneration = 1,
+      claimSite = identity mkClaimSite "versioned:counter-v1-compatibility"
+    }
+
+counterV2Contract :: ExternalReadContract
+counterV2Contract =
+  AllRowsExternalRead
+    { readContractId = counterReadContract ^. #readContractId,
+      contractVersion = ExternalReadContractVersion 2,
+      queryModelId = identity mkQueryModelId "catalog-counter-query-v2",
+      resultContractType = QualifiedSqlType "app_contract" "counter_row_v2",
+      resultShapeHash = "catalog-counter-query-v2",
+      compatibleRevisions = identity mkProjectionRevisionId "counter-v2" :| [],
+      surfaceGeneration = 2,
+      claimSite = identity mkClaimSite "versioned:counter-reader-v2"
+    }
+
 runtimeV1OnlyCatalog :: ProjectionCatalog
 runtimeV1OnlyCatalog =
   runtimeBridgeCatalog
@@ -673,7 +811,7 @@ runtimeV1OnlyCatalog =
 
 cloneBridgeCatalog :: ProjectionCatalog
 cloneBridgeCatalog =
-  bridgeCatalog
+  runtimeBridgeCatalog
     { projectionRevisions =
         [ runtimeRevision "v1" bridgeRevisionV1,
           runtimeRevision "v1" bridgeRevisionV2
@@ -984,6 +1122,9 @@ candidateTable runId targetId =
 setupBridge :: Store.KirokuStore -> IO ()
 setupBridge store = runScript store bridgeSql
 
+setupExternalBridge :: Store.KirokuStore -> IO ()
+setupExternalBridge store = runScript store externalBridgeSql
+
 bridgeSql :: ByteString
 bridgeSql =
   """
@@ -997,6 +1138,27 @@ bridgeSql =
     detail text NOT NULL
   );
   """
+
+externalBridgeSql :: ByteString
+externalBridgeSql =
+  bridgeSql
+    <> """
+       CREATE SCHEMA app_contract;
+       CREATE TYPE app_contract.counter_row_v1 AS (id bigint, total bigint);
+       CREATE TYPE app_contract.counter_row_v2 AS
+         (id bigint, subtotal bigint, tax bigint, total bigint);
+       CREATE SCHEMA app_private;
+       CREATE FUNCTION app_private.counter_v1_compat()
+       RETURNS SETOF app_contract.counter_row_v1
+       LANGUAGE plpgsql
+       STABLE
+       AS $compatibility$
+       BEGIN
+         RETURN QUERY EXECUTE
+           'SELECT counter.id, counter.total FROM app.counter AS counter ORDER BY counter.id';
+       END
+       $compatibility$;
+       """
 
 identityBridgeSql :: ByteString
 identityBridgeSql =
@@ -1110,6 +1272,11 @@ requireRight :: (Show error) => Either error value -> IO value
 requireRight = \case
   Left err -> expectationFailure (show err) >> error "unreachable"
   Right value -> pure value
+
+hasSqlState :: (Show error) => String -> Either error value -> Bool
+hasSqlState wanted = \case
+  Left err -> wanted `List.isInfixOf` show err
+  Right _ -> False
 
 requireIdentity :: (Show error) => Either error value -> value
 requireIdentity = either (error . show) id
@@ -1250,6 +1417,32 @@ servingCountsStmt =
     ( D.singleRow
         ( (,)
             <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+        )
+    )
+
+externalV1RowsStmt :: Statement () [(Int64, Int64)]
+externalV1RowsStmt =
+  preparable
+    "SELECT id, total FROM keiro_read.counter_reader_v1() ORDER BY id"
+    E.noParams
+    ( D.rowList
+        ( (,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+        )
+    )
+
+externalV2RowsStmt :: Statement () [(Int64, Int64, Int64, Int64)]
+externalV2RowsStmt =
+  preparable
+    "SELECT id, subtotal, tax, total FROM keiro_read.counter_reader_v2() ORDER BY id"
+    E.noParams
+    ( D.rowList
+        ( (,,,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.int8)
         )
     )

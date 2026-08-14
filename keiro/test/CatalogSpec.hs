@@ -16,6 +16,7 @@ module CatalogSpec
     mainGroupId,
     additiveGroupId,
     counterBinding,
+    counterReadContract,
   )
 where
 

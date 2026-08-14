@@ -6,7 +6,8 @@ where
 import Control.Lens ((^.))
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
+import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (isJust)
 import Data.Set qualified as Set
@@ -453,6 +454,10 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             && candidateRevision == Just (projectionRevisionIdText (orderReportingRevisionV2 ^. #revisionId))
             && isJust candidatePosition
             && isJust candidateHead
+      Right candidateV1Rows <-
+        runner $ Store.runTransaction (Tx.statement () orderSummaryExternalV1Stmt)
+      candidateV1Rows
+        `shouldSatisfy` any (\(orderId, _, _, status, _) -> orderId == "versioned-before" && status == "placed")
 
       Right (Right (ProjectionCommandApplied _)) <-
         runner $
@@ -513,6 +518,15 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
 
       Right facts <- runner $ Store.runTransaction (Tx.statement () orderVersionedFactsStmt)
       facts `shouldBe` (3, 3, 3, True)
+      oldContract <- runner $ Store.runTransaction (Tx.statement () orderSummaryExternalV1Stmt)
+      oldContract
+        `shouldSatisfy` \case
+          Left err -> "KR003" `List.isInfixOf` show err
+          Right _ -> False
+      Right currentV2Rows <-
+        runner $ Store.runTransaction (Tx.statement () orderSummaryExternalV2Stmt)
+      currentV2Rows
+        `shouldSatisfy` any (\(orderId, _, _, state, _, revision) -> orderId == "versioned-after" && state == "placed" && revision == 2)
       Right retired <- runner $ CatalogOperations.listRetiredGenerations orderCatalogOperations
       length (retired ^. #generations) `shouldBe` 3
 
@@ -1349,5 +1363,36 @@ orderVersionedFactsStmt =
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.int8)
             <*> D.column (D.nonNullable D.bool)
+        )
+    )
+
+orderSummaryExternalV1Stmt :: Statement () [(Text, Text, Int64, Text, Int64)]
+orderSummaryExternalV1Stmt =
+  preparable
+    "SELECT order_id, sku, quantity, status, last_seen FROM keiro_read.jitsurei_order_summary_reader_v1() ORDER BY order_id"
+    E.noParams
+    ( D.rowList
+        ( (,,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.int8)
+        )
+    )
+
+orderSummaryExternalV2Stmt :: Statement () [(Text, Text, Int64, Text, Int64, Int32)]
+orderSummaryExternalV2Stmt =
+  preparable
+    "SELECT order_id, sku, quantity, state, last_seen, source_revision::integer FROM keiro_read.jitsurei_order_summary_reader_v2() ORDER BY order_id"
+    E.noParams
+    ( D.rowList
+        ( (,,,,,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int4)
         )
     )

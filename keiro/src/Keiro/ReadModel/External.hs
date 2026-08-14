@@ -58,6 +58,7 @@ import Prelude qualified
 data ExternalReadReconciliationError
   = ExternalReadAllRowsRequiresSingleTarget !ExternalReadContractId !ExternalReadContractVersion
   | ExternalReadResultTypeMissing !QualifiedSqlType
+  | ExternalReadResultTypeNotComposite !QualifiedSqlType
   | ExternalReadPrivateImplementationMissing !QualifiedFunction
   | ExternalReadImmutableSignatureConflict !ExternalReadContractId !ExternalReadContractVersion
   | ExternalReadDefinitionGenerationConflict !ExternalReadContractId !ExternalReadContractVersion !Int
@@ -212,28 +213,33 @@ reconcileExternalReadContractsForGroupsTx catalog selectedGroups =
           if not typeExists
             then pure (Left (ExternalReadResultTypeMissing (spec ^. #resultType)))
             else do
-              implementationResult <- verifyPrivateImplementation spec
-              case implementationResult of
-                Left err -> pure (Left err)
-                Right () -> do
-                  contractState <- resolveContractState spec
-                  persisted <-
-                    Tx.statement
-                      (contractParams spec signatureHash requestedDefinitionHash contractState)
-                      upsertContractStmt
-                  if not persisted
-                    then
-                      pure
-                        ( Left
-                            ( ExternalReadDefinitionGenerationConflict
-                                (spec ^. #contractId)
-                                (spec ^. #contractVersion)
-                                requestedGeneration
+              resultColumns <- Tx.statement (renderSqlType (spec ^. #resultType)) compositeTypeColumnsStmt
+              if Prelude.null resultColumns
+                then pure (Left (ExternalReadResultTypeNotComposite (spec ^. #resultType)))
+                else do
+                  implementationResult <- verifyPrivateImplementation spec
+                  case implementationResult of
+                    Left err -> pure (Left err)
+                    Right () -> do
+                      contractState <- resolveContractState spec
+                      persisted <-
+                        Tx.statement
+                          (contractParams spec signatureHash requestedDefinitionHash contractState)
+                          upsertContractStmt
+                      if not persisted
+                        then
+                          pure
+                            ( Left
+                                ( ExternalReadDefinitionGenerationConflict
+                                    (spec ^. #contractId)
+                                    (spec ^. #contractVersion)
+                                    requestedGeneration
+                                )
                             )
-                        )
-                    else do
-                      objectsResult <- reconcileObjects spec requestedDefinitionHash
-                      pure objectsResult
+                        else do
+                          if contractState ^. #stateName == "active"
+                            then reconcileObjects spec resultColumns requestedDefinitionHash
+                            else pure (Right ())
 
     verifyPrivateImplementation spec =
       case spec ^. #privateImplementation of
@@ -254,7 +260,7 @@ reconcileExternalReadContractsForGroupsTx catalog selectedGroups =
               pure (Right ())
             else pure (Left (ExternalReadPrivateImplementationMissing implementation))
 
-    reconcileObjects spec requestedDefinitionHash = do
+    reconcileObjects spec resultColumns requestedDefinitionHash = do
       typeRecorded <-
         upsertManagedObject
           spec
@@ -267,13 +273,13 @@ reconcileExternalReadContractsForGroupsTx catalog selectedGroups =
       if not typeRecorded
         then pure (Left (ExternalReadManagedObjectOwnershipConflict (spec ^. #resultType . #typeSchema) (spec ^. #resultType . #typeName) "contract-type"))
         else do
-          bindingResult <- reconcileBinding spec requestedDefinitionHash
+          bindingResult <- reconcileBinding spec resultColumns requestedDefinitionHash
           case bindingResult of
             Left err -> pure (Left err)
             Right () -> reconcileWrapper spec requestedDefinitionHash
 
-    reconcileBinding spec requestedDefinitionHash =
-      case bindingViewSql spec of
+    reconcileBinding spec resultColumns requestedDefinitionHash =
+      case bindingViewSql spec resultColumns of
         Nothing -> pure (Right ())
         Just sql -> do
           let objectName = bindingViewName spec
@@ -456,15 +462,21 @@ definitionIdentity spec =
 bindingViewName :: ExternalReadSpec -> Text
 bindingViewName spec = "external_read_" <> spec ^. #functionName <> "_binding"
 
-bindingViewSql :: ExternalReadSpec -> Maybe Text
-bindingViewSql spec = do
+bindingViewSql :: ExternalReadSpec -> [Text] -> Maybe Text
+bindingViewSql spec resultColumns = do
   table <- spec ^. #bindingTable
   pure
     ( "CREATE OR REPLACE VIEW "
         <> qualifyTable "keiro" (bindingViewName spec)
-        <> " WITH (security_barrier = true, security_invoker = false) AS SELECT * FROM "
+        <> " WITH (security_barrier = true, security_invoker = false) AS SELECT "
+        <> Text.intercalate ", " (map (qualifyColumn "source") resultColumns)
+        <> " FROM "
         <> qualifyTable (table ^. #schemaName) (table ^. #tableName)
+        <> " AS "
+        <> quoteIdentifier "source"
     )
+  where
+    qualifyColumn alias column = quoteIdentifier alias <> "." <> quoteIdentifier column
 
 wrapperSql :: ExternalReadSpec -> Text
 wrapperSql spec =
@@ -816,6 +828,23 @@ typeExistsStmt =
     "SELECT pg_catalog.to_regtype($1) IS NOT NULL"
     (E.param (E.nonNullable E.text))
     (D.singleRow (D.column (D.nonNullable D.bool)))
+
+compositeTypeColumnsStmt :: Statement Text [Text]
+compositeTypeColumnsStmt =
+  preparable
+    """
+    SELECT attributes.attname::text
+    FROM pg_catalog.pg_type AS types
+    JOIN pg_catalog.pg_attribute AS attributes
+      ON attributes.attrelid = types.typrelid
+    WHERE types.oid = pg_catalog.to_regtype($1)
+      AND types.typtype = 'c'
+      AND attributes.attnum > 0
+      AND NOT attributes.attisdropped
+    ORDER BY attributes.attnum
+    """
+    (E.param (E.nonNullable E.text))
+    (D.rowList (D.column (D.nonNullable D.text)))
 
 relationExistsStmt :: Statement Text Bool
 relationExistsStmt =
