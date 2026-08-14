@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-13T17:46:56Z
+timestamp: 2026-08-14T02:59:54Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -207,6 +207,14 @@ combines the group slice with normalized sources, codec fingerprints,
 adapter identities and order, verification identity/version, and runner format.
 Function closures and page size are excluded.
 
+Registration and reviewed adoption also reconcile one derived cursor-authority row per
+group in the same transaction as slices, revisions, and query registrations. A group
+with any async handler stores its sorted, distinct subscription names and has
+`checkpoint` position basis. An inline-only group stores an empty set with `append`
+basis. Migration-seeded legacy metadata stays `unmanaged` until one of those catalog
+paths proves its authority. These rows feed ADR 0035's public status contract but do
+not add another catalog fingerprint identity.
+
 Promotion is proof-driven. Every source must record exhaustion through the
 captured head, the persisted adapter/source set must exactly match the catalog
 and be complete, and every catalog-supplied verification hook must pass.
@@ -227,6 +235,9 @@ dedup rows are not completion evidence.
   single-read-model rows migrate to deterministic singleton legacy groups so
   compatibility calls keep their old behavior without inventing fake catalog
   targets.
+- Registration and adoption publish cursor authority atomically with the catalog rows
+  it describes. External status never infers `append` or `checkpoint` from lifecycle
+  phase or query-model shape.
 - A failed rebuild is an offline state, not an automatic rollback. Operators
   repair or resume the active run, or explicitly start a fresh run after catalog
   identity is reconciled; they cannot bypass completion evidence by promoting
@@ -291,6 +302,8 @@ dedup rows are not completion evidence.
 - [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
   extends physical targets with schema-versioned generations and projection revisions
   while preserving application ownership of desired DDL and SQL.
+- [ADR 0035](0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md)
+  publishes catalog-derived cursor authority without exposing the private metadata.
 - [ExecPlan 244](../plans/244-introduce-truthful-query-freshness-runtime-apis-with-compatibility.md)
   implements truthful query freshness, derived cursor authority, and the 0.12
   compatibility window.

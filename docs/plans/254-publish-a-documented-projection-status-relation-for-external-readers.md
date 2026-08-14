@@ -52,13 +52,15 @@ other private Kiroku table directly.
   `kiroku.subscription_checkpoints_v1` relation and upstream contract tests through
   Mori, released `kiroku-store-migrations` 0.3.1.0, its Hackage metadata, and its
   annotated upstream tag.
-- [ ] M2: private cursor bindings and public
+- [x] (2026-08-14T03:10:27Z) M2: private cursor bindings and public
   `keiro_read.projection_group_status_v1` migration, comments, grants guidance,
   expected-schema view coverage, and SQL semantics tests are complete.
-- [ ] M3: registration/adoption reconciliation, typed Haskell accessor, and offline plus
-  schema-versioned lifecycle tests pass against a real database.
-- [ ] M4: user documentation, ADR creation/amendments, changelogs, out-of-process
-  transcript, full verification, and MasterPlan status updates are complete.
+- [x] (2026-08-14T03:10:27Z) M3: registration/adoption reconciliation, typed Haskell
+  accessor, and offline plus schema-versioned lifecycle tests pass against a real
+  database.
+- [x] (2026-08-14T03:22:00Z) M4: user documentation, ADR creation/amendments,
+  changelogs, out-of-process transcript, full verification, and MasterPlan status
+  updates are complete.
 
 
 ## Surprises & Discoveries
@@ -80,6 +82,18 @@ other private Kiroku table directly.
   four values are semantically non-null even though PostgreSQL reports ordinary-view
   columns as nullable in generic catalog introspection. Keiro must preserve those source
   semantics without claiming catalog-level `NOT NULL` metadata for the upstream view.
+- Kiroku's public relation publishes every durable member checkpoint but not the
+  expected consumer-group size. Keiro can prove that every catalog-bound subscription
+  has at least one row and take the floor over all published members, but it cannot infer
+  that a subscription has no missing member without a future owner-published topology
+  contract.
+- A nullable cursor row would conflate an inline group with an unreconciled legacy
+  group. Seeding one private row per existing group as `unmanaged`, then reconciling
+  catalog registration and adoption to `append` or `checkpoint`, makes uncertainty
+  explicit and fail-safe.
+- Ordered view columns are useful live-schema evidence, but a signature snapshot cannot
+  prove the view body's availability and cursor semantics. Restricted-role and
+  lifecycle database tests remain the semantic authority.
 
 
 ## Decision Log
@@ -128,13 +142,40 @@ other private Kiroku table directly.
   it unchanged and adds the separately required replay-retention migration. Both
   authoritative Hackage metadata and upstream tags identify the shipped contracts.
   Date: 2026-08-13
+- Decision: Persist exactly one cursor-authority row per rebuild group, seeded as
+  `unmanaged` on upgrade and transactionally reconciled from the validated catalog.
+  Rationale: absence must not silently mean inline append authority, and both initial
+  registration and reviewed adoption must publish the same derived status atomically.
+  Date: 2026-08-13
+- Decision: Treat checkpoint completeness as every catalog-bound subscription being
+  represented, then floor all member rows published by Kiroku.
+  Rationale: this is the strongest conservative fact the frozen Kiroku v1 relation can
+  establish without reading private topology; the remaining member-topology limitation
+  is documented rather than guessed.
+  Date: 2026-08-13
+- Decision: Extend expected-schema evidence with ordered public-view signatures and
+  prove view semantics separately through real-database tests.
+  Rationale: column drift must block deployment, while body-equivalent rewrites should
+  remain possible and behavioral regressions need executable evidence.
+  Date: 2026-08-13
 
 
 ## Outcomes & Retrospective
 
-Architecture review corrected the public vocabulary before it became a stable contract.
-The external SQL prerequisite is complete. Keiro implementation remains Not Started and
-begins after plan 256 supplies the generation metadata.
+EP-2 is complete. Migration 0026 publishes the frozen 18-column owner-rights view,
+seeds explicit fail-safe cursor authority for upgrades, and lets restricted SQL roles
+observe serving and candidate state without private-schema privileges. Catalog
+registration and adoption reconcile that authority transactionally, while the typed
+Haskell accessor decodes the same versioned contract. Offline, schema-versioned,
+restricted-role, incomplete-checkpoint, adoption, promotion, and raw external-client
+transcripts all pass against PostgreSQL.
+
+Final evidence is 577 Keiro examples, 705 main DSL examples plus every conformance
+component, 24 Jitsurei examples, 31 migration examples, 35 strict ADR concepts, a clean
+39-entry corpus replay, and a passing `just verify`. The remaining limitation is
+explicit: Kiroku v1 does not publish expected member topology, so Keiro can require
+every bound subscription and floor every published member but cannot detect a missing
+member within an otherwise present subscription.
 
 
 ## Context and Orientation

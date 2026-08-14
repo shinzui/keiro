@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-08-13T17:46:56Z
+timestamp: 2026-08-14T02:59:54Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -96,7 +96,9 @@ Public status reports the serving generation's applied position separately from 
 candidate rebuild position and head. It never represents staging replay progress as
 the serving position and never uses checkpoint regression as a generation-change
 signal. Consumers use a monotonically changing serving-generation epoch for cache
-invalidation.
+invalidation. ADR 0035 freezes those facts in
+`keiro_read.projection_group_status_v1`; `reads_allowed`, rather than lifecycle phase,
+is its read-safety authority.
 
 External SQL contracts are versioned independently from physical generations. A
 compatible contract can be repointed to a promoted generation atomically. A breaking
@@ -136,6 +138,8 @@ assumes without enforcement that old history is immutable.
 - Breaking external-reader migrations require contract versioning or an
   application-provided compatibility layer; physical retention by itself is not a
   dual-write guarantee.
+- Online rebuild status retains serving revision, epoch, and progress beside the
+  separate active candidate fields; promotion clears the candidate fields atomically.
 
 
 ## Alternatives considered
@@ -173,3 +177,5 @@ dual-write protocol exists; presenting it as current would silently serve stale 
   by revision and generation identity.
 - [MasterPlan 41](../masterplans/41-make-read-models-safely-readable-by-out-of-process-consumers.md)
   coordinates the status, external read, online rebuild, and targeted-repair work.
+- [ADR 0035](0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md)
+  freezes the owner-rights SQL status vocabulary built on this lifecycle.

@@ -59,6 +59,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro**, **keiro-migrations**: publish the frozen owner-rights
+  `keiro_read.projection_group_status_v1` contract with typed Haskell accessors. It
+  separates read/write availability and serving revision/epoch/checkpoint progress from
+  active candidate revision/progress, while catalog registration and adoption reconcile
+  cursor authority without granting readers private-schema access.
 - **keiro**: add online schema-versioned projection rebuilds. Catalog revisions bind
   application provisioners, schema evidence, physical-target-parametric live/replay
   handlers, verification, and canonical promotion-object names. Keiro persists target

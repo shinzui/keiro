@@ -449,6 +449,90 @@ for bridge deployment, provisioner and validator contracts, compatible versus br
 consumers, cutover waits, retention failure recovery, embedded CLI commands, and the
 executable Jitsurei V1-to-V2 transcript.
 
+## Observe Projection Group Status From PostgreSQL
+
+Migration `0026` publishes the frozen, owner-rights relation
+`keiro_read.projection_group_status_v1`. It is the supported status surface for a
+PostgreSQL client that does not run Keiro's Haskell effects. Grant only the public
+schema and relation:
+
+```sql
+GRANT USAGE ON SCHEMA keiro_read TO projection_reader;
+GRANT SELECT ON keiro_read.projection_group_status_v1 TO projection_reader;
+```
+
+Do not grant that role access to the private `keiro` or `kiroku` schemas. The view owner
+reads those implementation relations, including Kiroku's supported
+`kiroku.subscription_checkpoints_v1` contract, on the caller's behalf.
+
+The v1 columns below are frozen in this exact order. Their PostgreSQL types, null cases,
+and value meanings do not change. An incompatible contract is published as a new view
+such as `projection_group_status_v2`; v1 is not extended in place.
+
+| Column | Type | Nullable | Meaning |
+|---|---|---:|---|
+| `group_id` | `text` | no | Stable rebuild-group identity and row key. |
+| `lifecycle_phase` | `text` | no | Diagnostic lifecycle; do not derive read safety from its value. |
+| `reads_allowed` | `boolean` | no | Authoritative statement that the serving generation may be read. |
+| `writes_allowed` | `boolean` | no | Whether live projection writers may update the serving generation. |
+| `serving_revision_id` | `text` | yes | Served schema revision; null for legacy/offline groups without versioned metadata. |
+| `serving_epoch` | `bigint` | no | Monotonic generation-change value for cache invalidation. |
+| `serving_position_basis` | `text` | no | Exactly `append`, `checkpoint`, or `unmanaged`. |
+| `serving_applied_position` | `bigint` | yes | Conservative serving checkpoint floor; null for append/unmanaged, unavailable groups, or incomplete checkpoint inventory. |
+| `active_run_id` | `text` | yes | Active or retained failed rebuild run. |
+| `candidate_revision_id` | `text` | yes | Versioned candidate revision; null for offline or inactive groups. |
+| `candidate_rebuild_position` | `bigint` | yes | Conservative minimum persisted source cursor for the active run. |
+| `candidate_rebuild_head` | `bigint` | yes | Inclusive head captured by the active run. |
+| `query_models` | `text[]` | no | Sorted logical query-model names; empty when none are registered. |
+| `rebuild_started_at` | `timestamptz` | yes | Start time of the active run. |
+| `last_promoted_at` | `timestamptz` | yes | Most recent promotion completion time. |
+| `failed_at` | `timestamptz` | yes | Group failure time. |
+| `failure_code` | `text` | yes | Stable machine-readable group failure code. |
+| `failure_detail` | `text` | yes | Operator-facing failure detail. |
+
+A reader normally selects the explicit fields it understands:
+
+```sql
+SELECT reads_allowed,
+       serving_revision_id,
+       serving_epoch,
+       serving_position_basis,
+       serving_applied_position,
+       active_run_id,
+       candidate_revision_id,
+       candidate_rebuild_position,
+       candidate_rebuild_head,
+       failure_code
+FROM keiro_read.projection_group_status_v1
+WHERE group_id = $1;
+```
+
+Treat no row as an unknown group. When `reads_allowed` is false, do not serve projection
+data. A `rebuilding-versioned` row can still have `reads_allowed = true`: the old
+revision remains serving while the candidate starts behind it. Candidate position must
+therefore never replace or be compared as though it were serving position. When
+`serving_epoch` changes, discard cached generation bindings even if the serving
+checkpoint remained monotonic through promotion.
+
+For `append`, projection effects commit with the source append and no independent
+numeric cursor exists. For `checkpoint`, the numeric value is the minimum across every
+persisted member row for every catalog-bound subscription. It remains null until every
+bound subscription has at least one checkpoint row. For `unmanaged`, Keiro makes no
+position promise. Migration-seeded legacy groups use `unmanaged` until catalog
+registration or reviewed adoption reconciles their cursor authority.
+
+The status row is observability, not a two-statement authorization protocol. Reading
+status and then selecting a raw application table on another statement has a race with
+cutover or an offline fence. External applications should use sanctioned same-statement
+read contracts once those contracts are deployed rather than granting raw target-table
+access. Polling status remains appropriate for readiness, operations, rebuild progress,
+and choosing which versioned read contract a client can invoke.
+
+Haskell callers can decode the same contract through
+`listProjectionGroupStatuses` or `lookupProjectionGroupStatus`. The
+`ProjectionGroupStatusV1` type preserves all 18 fields, and
+`ServingPositionBasis` deliberately rejects a value outside the frozen v1 vocabulary.
+
 ## Inspect And Operate A Catalog
 
 `Keiro.Projection.Catalog.Operations` is the operator-neutral boundary over the

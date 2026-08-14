@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Keiro owns live schema verification under pg-migrate
 description: Keiro owns live-schema verification as a separate keiro-migrate verify-schema gate, distinct from pg-migrate's ledger-integrity verify.
-timestamp: 2026-07-23T23:28:34Z
+timestamp: 2026-08-14T02:59:54Z
 docId: ADR-9
 status: Accepted
 date: 2026-07-23
@@ -49,11 +49,13 @@ explicitly unsupported API.
 Keep pg-migrate's `verify` command as the ledger-integrity gate, and make live-schema
 verification a separate Keiro-owned gate named `keiro-migrate verify-schema`.
 
-The expected live schema is a checked-in, sorted text snapshot of the `keiro` schema's
-tables, columns, constraints, and indexes. It targets PostgreSQL 18, matching Keiro's
-supported native expected-schema baseline. Roles, grants, database settings, and standalone
-sequence properties are outside this gate. Sequence-backed column defaults remain covered
-as column definitions.
+The expected live schema is a checked-in, sorted text snapshot of the private `keiro`
+schema's tables, columns, constraints, and indexes plus the ordered name/type signature
+of versioned views in the public `keiro_read` schema. It targets PostgreSQL 18, matching
+Keiro's supported native expected-schema baseline. View bodies, roles, grants, database
+settings, and standalone sequence properties are outside this gate. Sequence-backed
+column defaults remain covered as column definitions. Public-view meanings and
+privileges are covered by dedicated contract tests.
 
 `Keiro.Migrations.SchemaCheck` exposes two layers:
 
@@ -71,8 +73,8 @@ qualification depending on whether the role's `$user` schema is visible.
 
 The other restored checks remain separate and run in the default build:
 
-- A pure body lint rejects unqualified DDL targets and any migration that manipulates
-  `search_path`.
+- A pure body lint rejects DDL targets outside its explicit `keiro.` and `keiro_read.`
+  qualifiers and any migration that manipulates `search_path`.
 - `missingMigrations` uses pg-migrate's public status report to power a strict application
   startup handshake.
 - The embedding module loads pg-migrate-embed's `RecompilePlugin`, forcing manifest
@@ -97,6 +99,11 @@ The snapshot is readable and reviewable, but it is a Keiro-maintained representa
 than a general PostgreSQL schema-diff engine. Adding an object class or supporting another
 PostgreSQL major version requires an explicit format and snapshot change.
 
+For a public view, the snapshot detects removal and ordered column name/type changes but
+deliberately ignores a body replacement that preserves the frozen signature. Semantic,
+null-case, and owner-rights privilege tests remain required; a catalog signature is not a
+substitute for those behaviors.
+
 Callers with only a pg-migrate `ConnectionProvider` cannot reuse the high-level verifier.
 They must retain `Settings`, own a Hasql session and call `snapshotSchema`, or wait for a
 future public pg-migrate extension point. That constraint is preferable to depending on an
@@ -120,5 +127,7 @@ backstop.
   — build- and review-time integrity implementation and incremental-build reproduction.
 - [docs/masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md](../masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md)
   — initiative scope and the remaining build-integrity and cutover gates.
+- [ADR 0035](0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md)
+  — first public view whose ordered signature is part of the expected-schema gate.
 - [docs/user/migrations.md](../user/migrations.md)
   — operator commands and the application-startup handshake.
