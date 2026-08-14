@@ -917,21 +917,21 @@ lockProjectionGroupsTx catalog = go [] . List.sort . Set.toList . Set.fromList
         row <-
           Tx.statement
             (rebuildGroupIdText groupId)
-            lockGroupForShareStmt
+            lockGroupWithServingBindingsStmt
         case row of
           Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
-          Just (_, activeRunId, _, False) ->
+          Just (_, activeRunId, _, False, _) ->
             case activeRunId of
               Just runId -> pure (ProjectionWriteFenced groupId (RebuildRunId runId))
               Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
-          Just ("live", Nothing, Nothing, True) ->
+          Just ("live", Nothing, Nothing, True, _) ->
             case declaredPhysicalTargets catalog groupId of
               Nothing -> pure (ProjectionWriteGroupUnregistered groupId)
               Just targets ->
                 go
                   (ProjectionWriteBinding groupId Nothing targets : bindings)
                   rest
-          Just (status, _, Just revisionIdText, True)
+          Just (status, _, Just revisionIdText, True, rows)
             | status `Prelude.elem` ["serving-versioned", "rebuilding-versioned"] ->
                 case findRevision revisionIdText of
                   Nothing ->
@@ -939,11 +939,7 @@ lockProjectionGroupsTx catalog = go [] . List.sort . Set.toList . Set.fromList
                       Left _ -> pure (ProjectionWriteGroupUnregistered groupId)
                       Right revisionId ->
                         pure (ProjectionServingRevisionUnavailable groupId revisionId)
-                  Just revision -> do
-                    rows <-
-                      Tx.statement
-                        (rebuildGroupIdText groupId)
-                        servingTargetBindingsStmt
+                  Just revision ->
                     case servingPhysicalTargets revision rows of
                       Left detail ->
                         pure
@@ -961,12 +957,12 @@ lockProjectionGroupsTx catalog = go [] . List.sort . Set.toList . Set.fromList
                               : bindings
                           )
                           rest
-          Just _ -> pure (ProjectionWriteGroupUnregistered groupId)
+          _ -> pure (ProjectionWriteGroupUnregistered groupId)
 
     findRevision revisionIdText =
-      List.find
-        (\revision -> projectionRevisionIdText (revision ^. #revisionId) == revisionIdText)
-        (Catalog.catalogProjectionRevisions catalog)
+      case Catalog.mkProjectionRevisionId revisionIdText of
+        Left _ -> Nothing
+        Right revisionId -> Catalog.catalogProjectionRevision catalog revisionId
 
 -- | Take the group's writer-conflicting lock and resolve the exact persisted
 -- serving revision/physical generations without changing lifecycle state.
@@ -1028,9 +1024,9 @@ lockProjectionGroupForRepairTx catalog groupId = do
                         )
   where
     findRevision revisionIdText =
-      List.find
-        (\revision -> projectionRevisionIdText (revision ^. #revisionId) == revisionIdText)
-        (Catalog.catalogProjectionRevisions catalog)
+      case Catalog.mkProjectionRevisionId revisionIdText of
+        Left _ -> Nothing
+        Right revisionId -> Catalog.catalogProjectionRevision catalog revisionId
 
     eitherToMaybe = \case
       Left _ -> Nothing
@@ -1384,22 +1380,51 @@ abandonPreCanonicalGroupStmt =
     )
     (D.rowMaybe groupMetadataDecoder)
 
-lockGroupForShareStmt :: Statement Text (Maybe (Text, Maybe Text, Maybe Text, Bool))
-lockGroupForShareStmt =
+lockGroupWithServingBindingsStmt :: Statement Text (Maybe (Text, Maybe Text, Maybe Text, Bool, [(Text, Text, Text, Text)]))
+lockGroupWithServingBindingsStmt =
   preparable
     """
-    SELECT status, active_run_id, serving_revision_id, writes_allowed
-    FROM keiro.keiro_projection_rebuild_groups
-    WHERE group_id = $1
-    FOR SHARE
+    SELECT locked_group.status,
+           locked_group.active_run_id,
+           locked_group.serving_revision_id,
+           locked_group.writes_allowed,
+           COALESCE(array_agg(generations.target_id ORDER BY generations.target_id)
+             FILTER (WHERE generations.target_id IS NOT NULL), ARRAY[]::text[]),
+           COALESCE(array_agg(generations.revision_id ORDER BY generations.target_id)
+             FILTER (WHERE generations.target_id IS NOT NULL), ARRAY[]::text[]),
+           COALESCE(array_agg(generations.schema_name ORDER BY generations.target_id)
+             FILTER (WHERE generations.target_id IS NOT NULL), ARRAY[]::text[]),
+           COALESCE(array_agg(generations.relation_name ORDER BY generations.target_id)
+             FILTER (WHERE generations.target_id IS NOT NULL), ARRAY[]::text[])
+    FROM (
+      SELECT status, active_run_id, serving_revision_id, writes_allowed
+      FROM keiro.keiro_projection_rebuild_groups
+      WHERE group_id = $1
+      FOR SHARE
+    ) AS locked_group
+    LEFT JOIN LATERAL (
+      SELECT target_id, revision_id, schema_name, relation_name
+      FROM keiro.keiro_projection_target_generations
+      WHERE group_id = $1 AND lifecycle = 'serving'
+    ) AS generations ON TRUE
+    GROUP BY locked_group.status,
+             locked_group.active_run_id,
+             locked_group.serving_revision_id,
+             locked_group.writes_allowed
     """
     (E.param (E.nonNullable E.text))
     ( D.rowMaybe
-        ( (,,,)
+        ( (,,,,)
             <$> D.column (D.nonNullable D.text)
             <*> D.column (D.nullable D.text)
             <*> D.column (D.nullable D.text)
             <*> D.column (D.nonNullable D.bool)
+            <*> ( List.zip4
+                    <$> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
+                    <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
+                    <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
+                    <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
+                )
         )
     )
 

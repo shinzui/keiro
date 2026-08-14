@@ -82,7 +82,7 @@ import Keiro.Projection.Catalog
     ValidatedProjectionCatalog,
     asyncProjectionRebuildGroup,
     asyncProjectionRegistrations,
-    catalogProjectionRevision,
+    catalogRevisionLiveHandler,
     typedInlineProjectionsForGroup,
     typedProjectionRebuildGroups,
   )
@@ -327,23 +327,21 @@ applyCatalogProjectionsTx catalog projectionSet groups pairs = do
             )
             (typedInlineProjectionsForGroup catalog projectionSet (binding ^. #writeGroupId))
         Just revisionId ->
-          case catalogProjectionRevision catalog revisionId of
-            Nothing -> error "applyCatalogProjectionsTx: locked revision disappeared from validated catalog"
-            Just revision ->
-              let wantedDeliveries =
-                    [ RevisionInlineDelivery (definition ^. #projectionId) (projection ^. #name)
-                    | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
-                      definition ^. #rebuildGroup == binding ^. #writeGroupId,
-                      handler <- NonEmpty.toList (definition ^. #handlers),
-                      InlineHandler projection _ <- [handler]
-                    ]
-               in traverse_
-                    ( \handler ->
-                        traverse_
-                          (\(_, recorded) -> (handler ^. #runRevisionLive) (binding ^. #writePhysicalTargets) recorded)
-                          pairs
-                    )
-                    (Prelude.filter ((`Prelude.elem` wantedDeliveries) . (^. #delivery)) (revision ^. #liveHandlers))
+          traverse_
+            ( \wantedDelivery ->
+                case catalogRevisionLiveHandler catalog revisionId wantedDelivery of
+                  Nothing -> error "applyCatalogProjectionsTx: validated revision delivery disappeared"
+                  Just handler ->
+                    traverse_
+                      (\(_, recorded) -> (handler ^. #runRevisionLive) (binding ^. #writePhysicalTargets) recorded)
+                      pairs
+            )
+            [ RevisionInlineDelivery (definition ^. #projectionId) (projection ^. #name)
+            | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions),
+              definition ^. #rebuildGroup == binding ^. #writeGroupId,
+              handler <- NonEmpty.toList (definition ^. #handlers),
+              InlineHandler projection _ <- [handler]
+            ]
 
 -- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
 -- for a successful application, a retained dedup key, or a rebuild fence.
@@ -399,27 +397,22 @@ applyAsyncProjectionFromCatalog catalog projectionId projection recorded =
             case binding ^. #writeRevisionId of
               Nothing -> applyAsyncProjectionUnfenced projection recorded
               Just revisionId ->
-                case catalogProjectionRevision catalog revisionId of
-                  Nothing -> error "applyAsyncProjectionFromCatalog: locked revision disappeared from validated catalog"
-                  Just revision ->
-                    case List.find
-                      ( ( ==
-                            RevisionSubscriptionDelivery
-                              projectionId
-                              (registration ^. #subscriptionId)
-                              (registration ^. #dedupKeyId)
-                        )
-                          . (^. #delivery)
-                      )
-                      (revision ^. #liveHandlers) of
-                      Nothing ->
-                        error "applyAsyncProjectionFromCatalog: validated revision delivery disappeared"
-                      Just handler ->
-                        applyRevisionAsyncProjectionUnfenced
-                          projection
-                          (binding ^. #writePhysicalTargets)
-                          handler
-                          recorded
+                case catalogRevisionLiveHandler
+                  catalog
+                  revisionId
+                  ( RevisionSubscriptionDelivery
+                      projectionId
+                      (registration ^. #subscriptionId)
+                      (registration ^. #dedupKeyId)
+                  ) of
+                  Nothing ->
+                    error "applyAsyncProjectionFromCatalog: validated revision delivery disappeared"
+                  Just handler ->
+                    applyRevisionAsyncProjectionUnfenced
+                      projection
+                      (binding ^. #writePhysicalTargets)
+                      handler
+                      recorded
           pure $ case outcome of
             AsyncApplied -> CatalogAsyncApplied
             AsyncDuplicate -> CatalogAsyncDuplicate

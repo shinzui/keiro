@@ -156,6 +156,7 @@ module Keiro.Projection.Catalog
     catalogRegistrations,
     catalogProjectionRevisions,
     catalogProjectionRevision,
+    catalogRevisionLiveHandler,
     catalogStreamScopedReplay,
     catalogExternalReadContracts,
     asyncProjectionRegistrations,
@@ -1138,7 +1139,11 @@ data ValidatedProjectionCatalog = ValidatedProjectionCatalog
     validatedInventory :: !CatalogInventory,
     validatedFingerprint :: !CatalogFingerprint,
     projectionFacts :: ![ProjectionFacts],
-    validatedQuerySupplies :: ![ResolvedQuerySupply]
+    validatedQuerySupplies :: ![ResolvedQuerySupply],
+    validatedProjectionIdsBySource :: !(Map SourceId (Set.Set ProjectionId)),
+    validatedRevisionIndex :: !(Map ProjectionRevisionId ProjectionRevision),
+    validatedRevisionLiveHandlerIndex :: !(Map (ProjectionRevisionId, RevisionLiveDelivery) RevisionLiveHandler),
+    validatedAsyncRegistrations :: ![AsyncProjectionRegistration]
   }
   deriving stock (Generic)
 
@@ -1292,13 +1297,32 @@ validateProjectionCatalog catalog =
     Nothing ->
       let inventory = buildInventory catalog facts queryFacts
           querySupplies = buildResolvedQuerySupplies inventory
+          projectionIdsBySource =
+            Map.fromListWith
+              Set.union
+              [ (factSourceId fact, Set.singleton (factProjectionId fact))
+              | fact <- facts
+              ]
        in Success
             ValidatedProjectionCatalog
               { originalCatalog = catalog,
                 validatedInventory = inventory,
                 validatedFingerprint = fingerprintInventory inventory,
                 projectionFacts = facts,
-                validatedQuerySupplies = querySupplies
+                validatedQuerySupplies = querySupplies,
+                validatedProjectionIdsBySource = projectionIdsBySource,
+                validatedRevisionIndex =
+                  Map.fromList
+                    [ (revision ^. #revisionId, revision)
+                    | revision <- catalog ^. #projectionRevisions
+                    ],
+                validatedRevisionLiveHandlerIndex =
+                  Map.fromList
+                    [ ((revision ^. #revisionId, handler ^. #delivery), handler)
+                    | revision <- catalog ^. #projectionRevisions,
+                      handler <- revision ^. #liveHandlers
+                    ],
+                validatedAsyncRegistrations = deriveAsyncProjectionRegistrations facts inventory
               }
   where
     facts = collectProjectionFacts (catalog ^. #projectionSets)
@@ -1434,11 +1458,10 @@ projectionSetBelongs validated projectionSet =
         | definition <- NonEmpty.toList (projectionSet ^. #projectionDefinitions)
         ]
     validatedIds =
-      Set.fromList
-        [ factProjectionId fact
-        | fact <- validated ^. #projectionFacts,
-          factSourceId fact == projectionSet ^. #projectionSource
-        ]
+      Map.findWithDefault
+        Set.empty
+        (projectionSet ^. #projectionSource)
+        (validated ^. #validatedProjectionIdsBySource)
 
 catalogInventory :: ValidatedProjectionCatalog -> CatalogInventory
 catalogInventory = validatedInventory
@@ -1536,7 +1559,17 @@ catalogProjectionRevision ::
   ProjectionRevisionId ->
   Maybe ProjectionRevision
 catalogProjectionRevision validated wanted =
-  List.find ((== wanted) . (^. #revisionId)) (catalogProjectionRevisions validated)
+  Map.lookup wanted (validated ^. #validatedRevisionIndex)
+
+catalogRevisionLiveHandler ::
+  ValidatedProjectionCatalog ->
+  ProjectionRevisionId ->
+  RevisionLiveDelivery ->
+  Maybe RevisionLiveHandler
+catalogRevisionLiveHandler validated revisionId delivery =
+  Map.lookup
+    (revisionId, delivery)
+    (validated ^. #validatedRevisionLiveHandlerIndex)
 
 -- | Resolve one validated stream-scoped policy from the exact projection
 -- revision that currently serves a group.
@@ -1560,7 +1593,13 @@ catalogExternalReadContracts validated =
 asyncProjectionRegistrations ::
   ValidatedProjectionCatalog ->
   [AsyncProjectionRegistration]
-asyncProjectionRegistrations validated =
+asyncProjectionRegistrations = validatedAsyncRegistrations
+
+deriveAsyncProjectionRegistrations ::
+  [ProjectionFacts] ->
+  CatalogInventory ->
+  [AsyncProjectionRegistration]
+deriveAsyncProjectionRegistrations facts inventory =
   List.sort
     [ AsyncProjectionRegistration
         { projectionId = factProjectionId projection,
@@ -1571,12 +1610,11 @@ asyncProjectionRegistrations validated =
           dedupKeyId = dedupKeyId,
           dedupName = dedupNameFor dedupKeyId
         }
-    | projection <- validated ^. #projectionFacts,
+    | projection <- facts,
       AsyncFacts projectionName _ _ subscriptionId dedupKeyId _ <- factHandlers projection,
       Just subscription <- [subscriptionFor subscriptionId]
     ]
   where
-    inventory = validated ^. #validatedInventory
     subscriptionFor ref =
       List.find ((== ref) . (^. #subscriptionId)) (inventory ^. #inventorySubscriptions)
     dedupNameFor ref =

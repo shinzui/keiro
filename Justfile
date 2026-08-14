@@ -83,6 +83,8 @@ bench-regression:
     cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --baseline bench/baseline-outbox.csv --fail-if-slower 25"
     cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
     cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --baseline bench/baseline-command.csv --fail-if-slower 25"
+    KEIRO_READ_MODEL_P95=1 cabal bench keiro-bench --benchmark-options="-p projection --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-projection.csv --fail-if-slower 25"
+    cabal bench keiro-bench --benchmark-options="-p read-model --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-read-model.csv --fail-if-slower 25"
 
 [group('haskell')]
 haskell-verify: haskell-build haskell-test

@@ -49,8 +49,9 @@ cross-plan release gate.
 - [x] (2026-08-14T08:43:20Z) M2: writer-fence acquisition and promotion use a true overall deadline, expensive
   verification and deduplication preparation leave the exclusive-lock phase, and large
   dedup histories are staged and admitted before fencing.
-- [ ] M3: steady-state versioned inline/async writes, status reads, guarded reads, and
-  cutover/repair scale have comparative benchmarks with explicit regression budgets.
+- [x] (2026-08-14T09:42:24Z) M3: steady-state versioned inline/async writes, status
+  reads, guarded reads, and cutover/repair scale have comparative benchmarks with
+  explicit regression budgets.
 - [ ] M4: the delivered implementations of plans 254, 255, and 257 have each passed a
   recorded adversarial correctness, concurrency, security, performance, and
   compatibility review; every critical/high finding is resolved.
@@ -75,6 +76,26 @@ cross-plan release gate.
   a durable prepared boundary. A target-lock timeout must preserve that earlier committed
   safety evidence and keep the writer fence, rather than pretending the whole cutover
   attempt began from an unfenced state.
+- A sequential benchmark over one shared event store biased later scenarios through a
+  continually growing event index. Seeding 25,000 irrelevant events before measurement
+  stabilized that index, while an alternating legacy/versioned sampler removed ordering
+  bias from the release gate.
+- PostgreSQL showed that the indexed serving-generation lookup itself was inexpensive;
+  the avoidable cost was its separate round trip after group locking. Returning group,
+  revision, epoch, and serving target bindings from one locked query removed that round
+  trip without retaining mutable database bindings in process memory.
+- Returning one result row per serving target still duplicated the group metadata and
+  left the throughput gate at roughly 89.5 percent. Ordered PostgreSQL arrays reduce the
+  same locked result to one row; the final alternating samples retain roughly 98 percent
+  of legacy throughput without changing the epoch or lock boundary.
+- A validated catalog is immutable, but live revision dispatch still searched its
+  revision and handler lists for every write. Derived `Map` indexes preserve catalog
+  validation and fingerprint semantics while making source, revision, delivery-handler,
+  and async-registration lookup independent of non-serving revision count.
+- Creating the read-model scale fixture in the benchmark executable's existing shared
+  database contaminated unrelated command fan-out measurements with 25,000 extra
+  events. Giving the new fixture its own fresh migrated database preserves the existing
+  benchmark families' cardinalities and makes resource isolation part of the harness.
 
 
 ## Decision Log
@@ -127,6 +148,28 @@ cross-plan release gate.
   group-row wait. A shared deadline and one relation statement bound cumulative lock
   acquisition while phase-specific typed errors preserve resumability.
   Date: 2026-08-14
+- Decision: Lock a projection group and return its persisted serving revision, epoch,
+  and complete serving-target binding in one statement.
+  Rationale: a `FOR SHARE` group subquery plus an indexed lateral generation lookup
+  observes one epoch under the same group lock and removes the version-managed write's
+  extra network round trip. Four ordered target/revision/schema/relation arrays return
+  that binding in one result row rather than duplicating group metadata per target.
+  Only immutable validated-catalog facts are indexed in memory; persisted revision and
+  generation bindings are never cached across an unobserved epoch.
+  Date: 2026-08-14
+- Decision: Gate ordinary write overhead with five warmed, alternating runs of 500
+  complete legacy/versioned transactions and compare the median run ratios.
+  Rationale: one tasty-bench mean is useful diagnostic evidence but cannot establish a
+  percentile budget and is vulnerable to run-order noise. The repeated sampler enforces
+  p95 at most 1.25 times legacy and throughput at least 90 percent of legacy.
+  Date: 2026-08-14
+- Decision: Keep lifecycle and read scale baselines separate from the paired projection
+  baseline.
+  Rationale: the projection file expresses like-for-like overhead and owns the hard
+  relative gate, while lifecycle/read measurements have different cardinalities and
+  absolute shapes. Separate CSV artifacts make both regressions reviewable through the
+  existing tasty-bench baseline convention.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
@@ -141,6 +184,52 @@ cross-plan release gate.
   durable prepared-state retry, and a 20-row lag refusal before fencing. The operator
   suite passes 46 examples and the migration suite passes 32 examples with 29 embedded
   native migrations and an exact PostgreSQL 18 schema snapshot.
+- M3 added paired whole-transaction benchmarks for legacy and version-managed inline
+  delivery across one target, three targets, three groups, 30 non-serving revisions,
+  and mixed delivery, plus paired mixed async delivery. It also added serving-binding,
+  three-target promotion, 10/100/1,000-event repair, status list/lookup, bounded all-row,
+  and indexed keyed-read scale scenarios. The reproducible release commands are:
+
+      KEIRO_READ_MODEL_P95=1 cabal bench keiro:keiro-bench --benchmark-options="-p projection --time-mode wall --hide-progress --timeout 1 --csv bench/baseline-projection.csv"
+      cabal bench keiro:keiro-bench --benchmark-options="-p read-model --time-mode wall --hide-progress --timeout 1 --csv bench/baseline-read-model.csv"
+      KEIRO_READ_MODEL_P95=1 cabal bench keiro-bench --benchmark-options="-p projection --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-projection.csv --fail-if-slower 25"
+      cabal bench keiro-bench --benchmark-options="-p read-model --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-read-model.csv --fail-if-slower 25"
+
+  The recorded machine is an Apple M1 Max (`arm64`, Darwin 25.6.0) running GHC 9.12.4,
+  cabal-install 3.16.1.0, and PostgreSQL 18.4 through the local ephemeral Unix-socket
+  test harness. Raw tasty-bench results are
+  `keiro/bench/baseline-projection.csv` and
+  `keiro/bench/baseline-read-model.csv`.
+- The final five comparable three-target sampler runs produced `(p95 ratio, throughput
+  ratio)` values `(1.0153, 0.9743)`, `(1.0252, 0.9671)`, `(1.0262, 1.1283)`,
+  `(1.0104, 0.9741)`, and `(1.0387, 0.9704)`. Their medians are `1.0252` and
+  `0.9741`, passing the `1.25` and `0.90` release budgets. The direct projection
+  regression passed all 12 comparisons; the direct lifecycle/read regression passed
+  all 10 comparisons.
+- The recorded lifecycle/read means are 71.0/80.2 microseconds for legacy/versioned
+  three-target serving binding, 13.3 milliseconds for three-target promotion,
+  4.44/11.1/102 milliseconds for 10/100/1,000-event repair, 12.0 milliseconds for
+  status listing and 95.6 microseconds for lookup among 1,000 synthetic groups,
+  218 microseconds for exactly 100 all-row results, and 67.8 microseconds for a keyed
+  result among 10,000 rows.
+- With `KEIRO_READ_MODEL_EXPLAIN=1`, the benchmark captured
+  `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for serving binding, status list/lookup,
+  public all-row/keyed wrappers, and the private keyed implementation. The status list
+  returned 1,017 total rows (1,000 synthetic plus 17 catalog groups) in 2.363 ms of
+  database execution; the public all-row wrapper returned its enforced 100-row fixture
+  in 0.566 ms; and the public keyed wrapper returned one row in 0.763 ms. The private
+  keyed statement used `Index Scan` on `bench_versioned_keyed_g1_t1_pkey` and executed
+  in 0.008 ms. The benchmark asserts the all-row result is exactly 100 so its sequential
+  scan cannot be reported as a selective-query result; whether the stable contract also
+  needs a runtime cardinality admission limit remains an explicit EP-3 adversarial
+  review question in M4.
+- `cabal test keiro:keiro-test` passes all 598 examples after the performance changes.
+  An initial `just bench-regression` run exposed and led to correction of benchmark
+  database contamination: the read-model fixture now uses a separate fresh migrated
+  store from the older outbox, inbox, command, and rebuild fixtures. The older command
+  recipe still exhausts tasty-bench's 100-second adaptive sampler for
+  `domain.accepted-large` on this machine; its baseline and timeout policy are unchanged.
+  Both new baseline commands pass from the isolated final tree.
 
 
 ## Context and Orientation

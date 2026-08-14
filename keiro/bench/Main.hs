@@ -92,6 +92,12 @@ import Kiroku.Store.Types
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
+import ReadModelBench
+  ( readModelBenchmarks,
+    runReadModelExplainEvidenceIfRequested,
+    runReadModelLatencyEvidenceIfRequested,
+    setupReadModelBench,
+  )
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
@@ -140,15 +146,19 @@ main :: IO ()
 main =
   withMigratedSuite \fixture ->
     withFreshResourceStore fixture \(store, runner) -> do
-      (provider, _env) <-
-        createMeterProvider
-          emptyMaterializedResources
-          defaultSdkMeterProviderOptions
-      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
-      metrics <- Telemetry.newKeiroMetrics meter
-      rebuildRunCounter <- newIORef 0
-      runStoreChecked store (Store.runTransaction (Tx.sql rebuildBenchSql))
-      defaultMain (benchmarks store runner metrics rebuildRunCounter)
+      withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
+        (provider, _env) <-
+          createMeterProvider
+            emptyMaterializedResources
+            defaultSdkMeterProviderOptions
+        meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+        metrics <- Telemetry.newKeiroMetrics meter
+        rebuildRunCounter <- newIORef 0
+        runStoreChecked store (Store.runTransaction (Tx.sql rebuildBenchSql))
+        readModelFixture <- setupReadModelBench readModelStore readModelRunner
+        runReadModelExplainEvidenceIfRequested readModelFixture
+        runReadModelLatencyEvidenceIfRequested readModelFixture
+        defaultMain (benchmarks store runner metrics rebuildRunCounter <> readModelBenchmarks readModelFixture)
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark]
 benchmarks store runner metrics rebuildRunCounter =
