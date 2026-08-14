@@ -76,6 +76,18 @@ module Keiro.ReadModel.Rebuild
     finishGroupRebuild,
     abandonGroupRebuild,
 
+    -- * Schema-versioned target lifecycle
+    VersionedTargetMode (..),
+    VersionedRebuildRequest (..),
+    VersionedRebuildError (..),
+    VersionedGenerationLifecycle (..),
+    VersionedTargetGeneration (..),
+    VersionedLeaseEvidence (..),
+    VersionedRebuildHandle (..),
+    VersionedAbandonResult (..),
+    beginVersionedRebuild,
+    abandonVersionedRebuild,
+
     -- * Catalog history runner
     RebuildOptions (..),
     defaultRebuildOptions,
@@ -113,6 +125,7 @@ import Keiro.Prelude
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild.Group
 import Keiro.ReadModel.Rebuild.Runner
+import Keiro.ReadModel.Rebuild.Versioned
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.SQL (visibleGlobalHeadPositionStmt)
 import Kiroku.Store.Subscription.Checkpoint (resetSubscriptionCheckpointsTx)

@@ -391,6 +391,7 @@ import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import System.Timeout (timeout)
 import Test.Hspec
+import VersionedRebuildSpec qualified
 import VersionedTargetPostgresSpec qualified
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
@@ -402,6 +403,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   VersionedTargetPostgresSpec.spec fixture
+  VersionedRebuildSpec.spec fixture
   PreCanonicalRecoverySpec.spec fixture
   ProjectionReplaySpec.spec fixture
   ReadModelSpec.spec

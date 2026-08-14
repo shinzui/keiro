@@ -212,18 +212,23 @@ transitionLegacyGroupStmt =
   preparable
     """
     INSERT INTO keiro.keiro_projection_rebuild_groups
-      (group_id, slice_fingerprint, status, active_run_id, failure_code, failure_detail)
+      (group_id, slice_fingerprint, status, active_run_id, failure_code, failure_detail,
+       reads_allowed, writes_allowed)
     VALUES (
       $1,
       '$legacy-unmanaged',
       $2,
       $3,
       CASE WHEN $2 = 'failed' THEN 'legacy-read-model-state' ELSE NULL END,
-      $4
+      $4,
+      $2 = 'live',
+      $2 = 'live'
     )
     ON CONFLICT (group_id) DO UPDATE
       SET status = EXCLUDED.status,
           active_run_id = EXCLUDED.active_run_id,
+          reads_allowed = EXCLUDED.reads_allowed,
+          writes_allowed = EXCLUDED.writes_allowed,
           started_at = CASE WHEN EXCLUDED.status = 'rebuilding' THEN now() ELSE NULL END,
           completed_at = CASE WHEN EXCLUDED.status = 'live' THEN now() ELSE NULL END,
           failed_at = CASE WHEN EXCLUDED.status = 'failed' THEN now() ELSE NULL END,

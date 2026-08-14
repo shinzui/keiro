@@ -356,6 +356,7 @@ isTransientStoreError = \case
   StreamAlreadyExists {} -> True
   EmptyAppendBatch {} -> False
   StreamNotFound {} -> False
+  HistoryRetentionActive {} -> True
   ReservedStreamName {} -> False
   StreamNameTooLong {} -> False
   DuplicateEvent {} -> False

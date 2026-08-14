@@ -48,8 +48,8 @@ library
     , hasql                    >=1.10
     , hasql-pool               >=1.2
     , keiro-migrations
-    , kiroku-store             >=0.6      && <0.7
-    , kiroku-store-migrations  ^>=0.3.0.0
+    , kiroku-store             >=0.7      && <0.8
+    , kiroku-store-migrations  ^>=0.3.2.0
     , pg-migrate               ^>=1.1.0.0
     , stm                      >=2.5
     , text                     >=2.1

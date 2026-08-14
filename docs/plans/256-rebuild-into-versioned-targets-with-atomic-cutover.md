@@ -58,10 +58,11 @@ durable ownership decision is
 - [x] (2026-08-13T23:32:54Z) M2: projection revisions, target generation contracts,
   provisioners, validation, canonical fingerprints, and language-5/code-generation
   surfaces are implemented and validated across Keiro, the DSL, Jitsurei, and ops.
-- [ ] M3: migration persists serving revisions, epochs, target generations, relation
-  identities, observed schema fingerprints, canonical object-name maps, run policy,
-  and retention evidence; begin/abandon are idempotent and tested.
-- [ ] M4: live inline and async writers dispatch through the persisted serving revision;
+- [x] (2026-08-14T00:09:28Z) M3: migration persists serving revisions, epochs, target
+  generations, relation identities, observed schema fingerprints, canonical
+  object-name maps, run policy, and retention evidence; transactional begin/abandon,
+  retry, rollback, and legacy lifecycle compatibility are database-tested.
+- [ ] (2026-08-14T00:09:28Z) M4 in progress: live inline and async writers dispatch through the persisted serving revision;
   replay and verification are physical-target-parametric; unknown revisions and old
   runtime lifecycle states fail closed.
 - [ ] M5: converging replay, retention protection, bounded cutover, dedup/checkpoint
@@ -119,6 +120,10 @@ durable ownership decision is
   map and failing later inside application SQL. Construction now requires the exact
   expected target set and returns typed missing/unexpected-target evidence before any
   revision handler runs.
+- Adding orthogonal availability columns also changes every legacy lifecycle transition:
+  merely updating `status` violates the new consistency constraint. Both catalog-group
+  and unmanaged single-read-model transitions now write status and availability as one
+  atomic fact, preserving the old offline fence while versioned rebuilds remain live.
 
   Evidence:
 
@@ -220,8 +225,13 @@ from observed catalog behavior. Milestone 2 added the runtime and language-5 rev
 contract, total physical-target maps, deterministic diagnostics, `catalog-v4` and
 `slice-v3` identity, generated application holes, and a compile-checked Jitsurei v1/v2
 bridge. The complete Keiro (559 examples), DSL (705 examples plus all conformance
-components), Jitsurei (23 examples), and keiro-ops (43 examples) suites pass. Milestone
-3 is next.
+components), Jitsurei (23 examples), and keiro-ops (43 examples) suites passed at that
+boundary. Milestone 3 added native migration 0025, normalized
+revision/generation/run-target and promotion-object identity, Kiroku retention evidence,
+deterministic generation naming, transactional provisioning and validation, same-run
+resume, and idempotent abandonment. The 29-example migration suite, five-example
+versioned lifecycle suite, and 33-example legacy read-model suite pass. Milestone 4 is
+next.
 
 
 ## Context and Orientation

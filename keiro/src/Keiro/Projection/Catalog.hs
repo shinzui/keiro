@@ -139,6 +139,8 @@ module Keiro.Projection.Catalog
     catalogFingerprint,
     groupSliceFingerprint,
     catalogRegistrations,
+    catalogProjectionRevisions,
+    catalogProjectionRevision,
     asyncProjectionRegistrations,
     catalogAsyncIdempotencyKeys,
     replayAdapterMetadata,
@@ -1311,6 +1313,20 @@ catalogRegistrations validated =
       }
   | binding <- validated ^. #validatedInventory . #inventoryQueryModels
   ]
+
+-- | Executable revision contracts from the validated catalog. Declaration
+-- order is preserved; callers that need one identity should use
+-- 'catalogProjectionRevision'.
+catalogProjectionRevisions :: ValidatedProjectionCatalog -> [ProjectionRevision]
+catalogProjectionRevisions validated =
+  validated ^. #originalCatalog . #projectionRevisions
+
+catalogProjectionRevision ::
+  ValidatedProjectionCatalog ->
+  ProjectionRevisionId ->
+  Maybe ProjectionRevision
+catalogProjectionRevision validated wanted =
+  List.find ((== wanted) . (^. #revisionId)) (catalogProjectionRevisions validated)
 
 asyncProjectionRegistrations ::
   ValidatedProjectionCatalog ->

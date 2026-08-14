@@ -79,6 +79,7 @@ import Keiro.Projection.Catalog
     groupSliceFingerprint,
     groupSliceFingerprintText,
     mkRebuildGroupId,
+    projectionRevisionIdText,
     rebuildGroupIdText,
     replayAdapterMetadata,
   )
@@ -318,14 +319,25 @@ registerProjectionCatalogTx catalog = do
   case groupsResult of
     Left err -> Tx.condemn $> Left err
     Right groups -> do
-      queriesResult <- registerQueries queryRegistrations
-      case queriesResult of
+      revisionsResult <- registerRevisions revisionRegistrations
+      case revisionsResult of
         Left err -> Tx.condemn $> Left err
         Right () -> do
-          Tx.statement () deleteOrphanLegacyGroupsStmt
-          pure (Right (List.sortOn (rebuildGroupIdText . (^. #rebuildGroupId)) groups))
+          queriesResult <- registerQueries queryRegistrations
+          case queriesResult of
+            Left err -> Tx.condemn $> Left err
+            Right () -> do
+              Tx.statement () deleteOrphanLegacyGroupsStmt
+              pure (Right (List.sortOn (rebuildGroupIdText . (^. #rebuildGroupId)) groups))
   where
     groupIds = (^. #rebuildGroupId) <$> (catalogInventory catalog ^. #inventoryGroups)
+    revisionRegistrations =
+      [ ( revision ^. #rebuildGroupId,
+          revision ^. #revisionId,
+          sliceTextFor catalog (revision ^. #rebuildGroupId)
+        )
+      | revision <- catalogInventory catalog ^. #inventoryProjectionRevisions
+      ]
     queryRegistrations = catalogRegistrations catalog
 
     registerGroups accumulated = \case
@@ -349,6 +361,17 @@ registerProjectionCatalogTx catalog = do
       fromMaybe
         (error "registerProjectionCatalogTx: inventory group has no slice")
         (groupSliceFingerprint catalog groupId)
+
+    registerRevisions = \case
+      [] -> pure (Right ())
+      (groupId, revisionId, slice) : rest -> do
+        stored <-
+          Tx.statement
+            (rebuildGroupIdText groupId, projectionRevisionIdText revisionId, slice)
+            registerProjectionRevisionStmt
+        if stored == slice
+          then registerRevisions rest
+          else pure (Left (RegisteredGroupSliceDrift groupId stored slice))
 
     registerQueries = \case
       [] -> pure (Right ())
@@ -478,6 +501,14 @@ adoptCatalogGroups catalog requested =
           (registration ^. #rebuildGroupId) `Set.member` namedGroupSet
         ]
     allRegistrationNames = Set.fromList ((^. #registryName) <$> catalogRegistrations catalog)
+    revisionRegistrations =
+      [ ( revision ^. #rebuildGroupId,
+          revision ^. #revisionId,
+          sliceTextFor catalog (revision ^. #rebuildGroupId)
+        )
+      | revision <- catalogInventory catalog ^. #inventoryProjectionRevisions,
+        (revision ^. #rebuildGroupId) `Set.member` namedGroupSet
+      ]
 
     adoptTx = do
       locked <- lockAll [] groupIds
@@ -488,6 +519,12 @@ adoptCatalogGroups catalog requested =
             Tx.statement
               (rebuildGroupIdText groupId, sliceTextFor catalog groupId)
               adoptGroupSliceStmt
+          for_ revisionRegistrations $ \(groupId, revisionId, slice) ->
+            void
+              ( Tx.statement
+                  (rebuildGroupIdText groupId, projectionRevisionIdText revisionId, slice)
+                  adoptProjectionRevisionStmt
+              )
           registrationResults <- traverse (reconcileRegistration lockedGroups) registrations
           boundRows <- Tx.statement (rebuildGroupIdText <$> groupIds) lockGroupRegistrationsStmt
           let groupByText = Map.fromList [(rebuildGroupIdText groupId, groupId) | groupId <- groupIds]
@@ -879,6 +916,42 @@ registerGroupStmt =
     )
     groupMetadataSingle
 
+registerProjectionRevisionStmt :: Statement (Text, Text, Text) Text
+registerProjectionRevisionStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_revisions
+      (group_id, revision_id, group_slice_fingerprint)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (group_id, revision_id) DO UPDATE
+      SET revision_id = EXCLUDED.revision_id
+    RETURNING group_slice_fingerprint
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.singleRow (D.column (D.nonNullable D.text)))
+
+adoptProjectionRevisionStmt :: Statement (Text, Text, Text) ()
+adoptProjectionRevisionStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_revisions
+      (group_id, revision_id, group_slice_fingerprint)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (group_id, revision_id) DO UPDATE
+      SET group_slice_fingerprint = EXCLUDED.group_slice_fingerprint,
+          updated_at = now()
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
 lookupGroupStmt :: Statement Text (Maybe GroupRebuildMetadata)
 lookupGroupStmt =
   preparable
@@ -925,6 +998,8 @@ beginGroupStmt =
     """
     UPDATE keiro.keiro_projection_rebuild_groups
     SET status = 'rebuilding',
+        reads_allowed = FALSE,
+        writes_allowed = FALSE,
         active_run_id = $2,
         requested_by = $3,
         request_reason = $4,
@@ -950,6 +1025,8 @@ finishGroupStmt =
     """
     UPDATE keiro.keiro_projection_rebuild_groups
     SET status = 'live',
+        reads_allowed = TRUE,
+        writes_allowed = TRUE,
         active_run_id = NULL,
         completed_at = now(),
         failed_at = NULL,
@@ -977,6 +1054,8 @@ abandonGroupStmt =
     """
     UPDATE keiro.keiro_projection_rebuild_groups
     SET status = 'failed',
+        reads_allowed = FALSE,
+        writes_allowed = FALSE,
         failed_at = now(),
         failure_code = $4,
         failure_detail = $5,
@@ -1004,6 +1083,8 @@ abandonPreCanonicalGroupStmt =
     """
     UPDATE keiro.keiro_projection_rebuild_groups
     SET status = 'failed',
+        reads_allowed = FALSE,
+        writes_allowed = FALSE,
         failed_at = now(),
         failure_code = $3,
         failure_detail = $4,

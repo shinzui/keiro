@@ -332,7 +332,7 @@ library
     , bytestring               >=0.11     && <0.13
     , containers               >=0.6      && <0.8
     , hasql                    >=1.10     && <1.11
-    , kiroku-store-migrations  ^>=0.3.0.0
+    , kiroku-store-migrations  ^>=0.3.2.0
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-embed         ^>=1.1.0.0
     , pg-migrate-import-codd   ^>=1.1.0.0
@@ -364,7 +364,7 @@ executable keiro-migrate
     , bytestring               >=0.11     && <0.13
     , hasql                    >=1.10     && <1.11
     , keiro-migrations
-    , kiroku-store-migrations  ^>=0.3.0.0
+    , kiroku-store-migrations  ^>=0.3.2.0
     , optparse-applicative     >=0.17     && <0.20
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-cli           ^>=1.1.0.0
@@ -404,7 +404,7 @@ test-suite keiro-migrations-test
     , hasql                    >=1.10     && <1.11
     , hspec                    >=2.10     && <2.12
     , keiro-migrations
-    , kiroku-store-migrations  ^>=0.3.0.0
+    , kiroku-store-migrations  ^>=0.3.2.0
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-import-codd   ^>=1.1.0.0
     , pg-migrate-test-support  ^>=1.1.0.0
@@ -437,8 +437,8 @@ test-suite keiro-migrations-legacy-test
     , hasql-pool               >=1.2      && <1.5
     , hspec                    >=2.10
     , keiro-migrations
-    , kiroku-store             >=0.6      && <0.7
-    , kiroku-store-migrations  ^>=0.3.0.0
+    , kiroku-store             >=0.7      && <0.8
+    , kiroku-store-migrations  ^>=0.3.2.0
     , lens                     >=5.2      && <5.4
     , temporary
     , text                     >=2.0      && <2.2

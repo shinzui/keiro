@@ -62,7 +62,7 @@ library
     , deepseq       >=1.5  && <1.6
     , generic-lens  >=2.2  && <2.4
     , keiki         >=0.9  && <0.10
-    , kiroku-store  >=0.6  && <0.7
+    , kiroku-store  >=0.7  && <0.8
     , lens          >=5.2  && <5.4
     , mmzk-typeid   >=0.7  && <0.8
     , scientific    >=0.3  && <0.4
