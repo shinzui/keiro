@@ -1566,7 +1566,7 @@ validateNames languageContract typeGraphResult spec =
       NProjectionRevision revision -> pascalizedNodeName "projection revision" (prvName revision) (prvLoc revision)
       NExternalRead externalRead -> pascalizedNodeName "external read" (externalReadNodeIdentity externalRead) (erLoc externalRead)
       NProjectionOwner owner -> pascalizedNodeName "projection owner" (poName owner) (poLoc owner)
-      NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
+      NWorkflow workflow -> workflowNames workflow
       NOperation _ -> []
 
     aggregateNames aggregate =
@@ -1641,6 +1641,16 @@ validateNames languageContract typeGraphResult spec =
 
     constructorName category name anchor = checkedLogicalName HaskellName.GeneratedTypeSite category name anchor
 
+    workflowNames workflow =
+      constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
+        <> concat
+          [ case HaskellName.deriveLowerHelperName HaskellName.LogicalWireWord "Await" site of
+              Right _ -> []
+              Left nameError -> [nameErrorDiagnostic "workflow await binding" nameError]
+          | (label, loc) <- workflowAwaits (wfBody workflow),
+            let site = workflowAwaitBindingSite workflow label loc
+          ]
+
     pascalizedNodeName category name anchor = checkedLogicalName HaskellName.NodeModuleSite (category <> " name") name anchor
 
     fieldNameRule category name anchor = checkedLogicalName HaskellName.GeneratedFieldSite category name anchor
@@ -1684,9 +1694,11 @@ validateNames languageContract typeGraphResult spec =
         <> concatMap aggregateFieldOccurrences aggregates
         <> concatMap aggregateHarnessOccurrences aggregates
         <> concatMap contractFieldOccurrences contracts
+        <> concatMap workflowRuntimeOccurrences workflows
 
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
     contracts = [contract | NContract contract <- specNodes spec]
+    workflows = [workflow | NWorkflow workflow <- specNodes spec]
 
     contextSegment =
       case deriveAt HaskellName.LogicalWireWord HaskellName.ContextModuleSite "context" (specContext spec) (Loc 1) of
@@ -1823,6 +1835,35 @@ validateNames languageContract typeGraphResult spec =
                   HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":sample-time",
                   HaskellName.siteLine = locLine (aggregateFieldLoc field)
                 }
+
+    workflowRuntimeOccurrences workflow =
+      [ HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
+      | (label, loc) <- workflowAwaits (wfBody workflow),
+        let site = workflowAwaitBindingSite workflow label loc,
+        Right awaitName <- [HaskellName.deriveLowerHelperName HaskellName.LogicalWireWord "Await" site],
+        let rendered = HaskellName.renderLowerCamelName awaitName
+      ]
+      where
+        targetModule =
+          "Generated."
+            <> contextSegment
+            <> "."
+            <> normalizedUpper "workflow" (wfId workflow) (workflowNodeLoc workflow)
+            <> ".WorkflowRuntime"
+
+    workflowAwaitBindingSite workflow label loc =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedValueSite,
+          HaskellName.siteLogicalName = label,
+          HaskellName.siteOwner = "workflow:" <> wfId workflow <> ":await:" <> label,
+          HaskellName.siteLine = locLine loc
+        }
+
+    workflowAwaits = concatMap go
+      where
+        go (WfAwait label _ loc) = [(label, loc)]
+        go (WfPatch _ items _) = workflowAwaits items
+        go _ = []
 
     harnessFields aggregate =
       [(CommandFieldUse, field) | command <- aggCommands aggregate, field <- cmdFields command]

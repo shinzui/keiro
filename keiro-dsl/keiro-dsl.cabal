@@ -1109,22 +1109,27 @@ test-suite keiro-dsl-conformance-workflow
 
   build-depends:  base >=4.21 && <5
 
--- EP-6 workflow runtime conformance: the scaffolded WorkflowRuntime
--- (WorkflowName + awakeable-id derivation) compiled against the LIVE
--- Keiro.Workflow; pins the await<->signal id match over deterministicAwakeableId.
+-- Workflow runtime conformance: the scaffolded WorkflowRuntime allocates its
+-- declared await through the live Keiro.Workflow effect and exercises the
+-- returned opaque id against PostgreSQL.
 test-suite keiro-dsl-conformance-workflow-runtime
   import:         warnings, generated-output
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow-runtime
   main-is:        Main.hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   other-modules:
     Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
 
   build-depends:
-    , base        >=4.21 && <5
+    , aeson               >=2.2  && <2.3
+    , base                >=4.21 && <5
     , containers
+    , effectful-core
     , keiro
-    , text        >=2.1  && <2.2
+    , keiro-test-support
+    , kiroku-store
+    , text                >=2.1  && <2.2
 
 -- EP-3 M5 full-service conformance: a complete process service — the scaffolded
 -- Surge (saga) + Hospital (target) aggregates with filled transducers, plus a
@@ -1182,6 +1187,7 @@ test-suite keiro-dsl-conformance-workflow-full
     , containers
     , effectful-core
     , keiro
+    , kiroku-store
     , text            >=2.1  && <2.2
 
 -- EP-3 process runtime conformance: the scaffolded Process module's

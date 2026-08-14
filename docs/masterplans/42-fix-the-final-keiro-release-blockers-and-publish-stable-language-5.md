@@ -199,6 +199,11 @@ interactions between child plans. Provide concise evidence.
   predate its creation and list only five publishable packages. EP-5 must repair both inventories
   and publish `keiro-ops` last; omitting it would leave the newly documented operator surface
   unavailable to consumers.
+- EP-1 found that the frozen Language 4 skeleton corpus compiles its generated
+  `WorkflowRuntime`, so removing the ordinary deterministic awakeable export required an explicit
+  runtime-support update in that otherwise frozen corpus. EP-4 must keep the file in the Language
+  4 compatibility lane and describe the change as the blocker repair, not as a Language 5 source
+  migration or permission for unrelated predecessor rewrites.
 
 
 ## Decision Log

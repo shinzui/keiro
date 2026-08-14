@@ -53,6 +53,7 @@ import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
+import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.ProjectionSupply
@@ -617,54 +618,95 @@ renderFactValues facts =
   ]
     <> ["  ]"]
 
--- | Emit the workflow's deterministic id derivation compiled against the LIVE
--- @Keiro.Workflow@: the 'WorkflowName' and the awakeable-id function (the actual
--- 'deterministicAwakeableId'). A signal operation deriving the SAME (name, id,
--- label) lands on the same 'AwakeableId' — so this module compiling + the
--- conformance comparing the two sides proves the await↔signal coupling holds over
--- the real runtime function, not just by label-string equality.
+-- | Emit the workflow's live runtime support. Each declared await becomes an
+-- opaque binding whose allocation delegates to @awakeableNamed@ and therefore
+-- returns the only id that can signal the fresh row.
 emitWorkflowRuntime :: Text -> WorkflowNode -> Text
 emitWorkflowRuntime genPrefix w =
   nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".WorkflowRuntime",
       "  ( workflowName",
-      "  , awaitAwakeableId",
-      "  , awaitLabels",
-      "  , declaredPatches",
-      "  , declaredPatchStepNames",
-      "  , withDeclaredPatches",
-      "  ) where",
-      "",
-      "import Data.Set (Set)",
-      "import Data.Set qualified as Set",
-      "import Data.Text (Text)",
-      "import Keiro.Workflow (WorkflowRunOptions (..))",
-      "import Keiro.Workflow.Awakeable (AwakeableId, deterministicAwakeableId)",
-      "import Keiro.Workflow.Types (PatchId (..), WorkflowId, WorkflowName (..), patchStepName)",
-      "",
-      "workflowName :: WorkflowName",
-      "workflowName = WorkflowName " <> tshow (wfStable w),
-      "",
-      "-- The awakeable id an await allocates — the real deterministicAwakeableId.",
-      "-- A signal op deriving the same (name, id, label) gets the same id.",
-      "awaitAwakeableId :: WorkflowId -> Text -> AwakeableId",
-      "awaitAwakeableId wid label = deterministicAwakeableId workflowName wid label",
-      "",
-      "awaitLabels :: [Text]",
-      "awaitLabels = [" <> T.intercalate ", " (map tshow (workflowAwaitLabels (wfBody w))) <> "]",
-      "",
-      "declaredPatches :: Set PatchId",
-      "declaredPatches = Set.fromList [" <> T.intercalate ", " ["PatchId " <> tshow patchId | patchId <- workflowPatchIds (wfBody w)] <> "]",
-      "",
-      "-- The journal keys the runtime records patch decisions under.",
-      "declaredPatchStepNames :: [Text]",
-      "declaredPatchStepNames = map patchStepName (Set.toList declaredPatches)",
-      "",
-      "-- Activate exactly the patches declared by this spec for a workflow run.",
-      "withDeclaredPatches :: WorkflowRunOptions -> WorkflowRunOptions",
-      "withDeclaredPatches opts = opts{activePatches = declaredPatches}"
+      "  , AwaitBinding",
+      "  , allocateDeclaredAwait"
     ]
+      ++ ["  , " <> bindingName | (bindingName, _) <- awaitBindings]
+      ++ [ "  , awaitLabels",
+           "  , declaredPatches",
+           "  , declaredPatchStepNames",
+           "  , withDeclaredPatches",
+           "  ) where",
+           "",
+           "import Data.Aeson (FromJSON)",
+           "import Data.Set (Set)",
+           "import Data.Set qualified as Set",
+           "import Data.Text (Text)",
+           "import Effectful (Eff, IOE, (:>))",
+           "import Keiro.Workflow (StepName (..), Workflow, WorkflowRunOptions (..))",
+           "import Keiro.Workflow.Awakeable (AwakeableId, awakeableNamed)",
+           "import Keiro.Workflow.Types (PatchId (..), WorkflowName (..), patchStepName)",
+           "import Kiroku.Store.Effect (Store)",
+           "",
+           "workflowName :: WorkflowName",
+           "workflowName = WorkflowName " <> tshow (wfStable w),
+           "",
+           "-- | A declared await label. The constructor stays private so consumers",
+           "-- can allocate only labels that exist in the source workflow.",
+           "data AwaitBinding = AwaitBinding StepName",
+           "",
+           "allocateDeclaredAwait",
+           "  :: (Workflow :> es, Store :> es, IOE :> es, FromJSON a)",
+           "  => AwaitBinding",
+           "  -> Eff es (AwakeableId, Eff es a)",
+           "allocateDeclaredAwait (AwaitBinding label) = awakeableNamed label",
+           ""
+         ]
+      ++ concatMap emitBinding awaitBindings
+      ++ [ "awaitLabels :: [Text]",
+           "awaitLabels = [" <> T.intercalate ", " (map tshow (workflowAwaitLabels (wfBody w))) <> "]",
+           "",
+           "declaredPatches :: Set PatchId",
+           "declaredPatches = Set.fromList [" <> T.intercalate ", " ["PatchId " <> tshow patchId | patchId <- workflowPatchIds (wfBody w)] <> "]",
+           "",
+           "-- The journal keys the runtime records patch decisions under.",
+           "declaredPatchStepNames :: [Text]",
+           "declaredPatchStepNames = map patchStepName (Set.toList declaredPatches)",
+           "",
+           "-- Activate exactly the patches declared by this spec for a workflow run.",
+           "withDeclaredPatches :: WorkflowRunOptions -> WorkflowRunOptions",
+           "withDeclaredPatches opts = opts{activePatches = declaredPatches}"
+         ]
+  where
+    awaitBindings =
+      [ (workflowAwaitBindingName w label loc, label)
+      | (label, loc) <- workflowAwaits (wfBody w)
+      ]
+    emitBinding (bindingName, label) =
+      [ bindingName <> " :: AwaitBinding",
+        bindingName <> " = AwaitBinding (StepName " <> tshow label <> ")",
+        ""
+      ]
+
+workflowAwaitBindingName :: WorkflowNode -> Name -> Loc -> Text
+workflowAwaitBindingName workflow label loc =
+  case HaskellName.deriveLowerHelperName HaskellName.LogicalWireWord "Await" site of
+    Right name -> HaskellName.renderLowerCamelName name
+    Left nameError -> error ("keiro-dsl workflow await binding invariant failed: " <> show nameError)
+  where
+    site =
+      HaskellName.NameSite
+        { HaskellName.siteKind = HaskellName.GeneratedValueSite,
+          HaskellName.siteLogicalName = label,
+          HaskellName.siteOwner = "workflow:" <> wfId workflow <> ":await:" <> label,
+          HaskellName.siteLine = unLoc loc
+        }
+
+workflowAwaits :: [WfBodyItem] -> [(Name, Loc)]
+workflowAwaits = concatMap go
+  where
+    go (WfAwait label _ loc) = [(label, loc)]
+    go (WfPatch _ items _) = workflowAwaits items
+    go _ = []
 
 workflowAwaitLabels :: [WfBodyItem] -> [Name]
 workflowAwaitLabels = concatMap go

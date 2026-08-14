@@ -6922,9 +6922,37 @@ main = hspec $ do
           facts `shouldSatisfy` T.isInfixOf "workflowFactBody = [\"step:create-transfer-hold\", \"patch:fraud-check-v2(step:fraud-check)\""
           facts `shouldSatisfy` T.isInfixOf "workflowFactAwaitLabels = [\"reservation-confirmation\"]"
           facts `shouldSatisfy` T.isInfixOf "workflowFactPatchIds = [\"fraud-check-v2\"]"
+          runtime `shouldSatisfy` T.isInfixOf "data AwaitBinding = AwaitBinding StepName"
+          runtime `shouldSatisfy` T.isInfixOf "reservationConfirmationAwait :: AwaitBinding"
+          runtime `shouldSatisfy` T.isInfixOf "reservationConfirmationAwait = AwaitBinding (StepName \"reservation-confirmation\")"
+          runtime `shouldSatisfy` T.isInfixOf "allocateDeclaredAwait (AwaitBinding label) = awakeableNamed label"
+          runtime `shouldSatisfy` (not . T.isInfixOf "awaitAwakeableId")
+          runtime `shouldSatisfy` (not . T.isInfixOf "generation0AwakeableId")
+          runtime `shouldSatisfy` (not . T.isInfixOf "Awakeable.Compatibility")
           runtime `shouldSatisfy` T.isInfixOf "declaredPatches = Set.fromList [PatchId \"fraud-check-v2\"]"
           runtime `shouldSatisfy` T.isInfixOf "opts{activePatches = declaredPatches}"
         workflows -> expectationFailure ("expected one workflow, got " <> show (length workflows))
+    it "rejects colliding await binding names, including an await nested under a patch" $ do
+      spec <-
+        parseInlineSpec "<workflow-await-binding-collision>" $
+          T.unlines
+            [ "language keiro-dsl 4",
+              "context await-binding-collision",
+              "workflow CollisionWorkflow",
+              "  name \"collision-workflow\"",
+              "  in Input",
+              "  out Output",
+              "  id from input via idText",
+              "  body",
+              "    patch nested-proof {",
+              "      await foo-bar -> Text",
+              "    }",
+              "    await foo_bar -> Text"
+            ]
+      let collisions = [diagnostic | diagnostic <- validateSpec spec, code diagnostic == GeneratedOccurrenceCollision]
+      length collisions `shouldBe` 1
+      map message collisions `shouldSatisfy` any (T.isInfixOf "fooBarAwait")
+      collisions `shouldSatisfy` all (not . null . relatedLocations)
 
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do

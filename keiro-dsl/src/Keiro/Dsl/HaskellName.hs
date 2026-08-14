@@ -21,6 +21,7 @@ module Keiro.Dsl.HaskellName
     renderGeneratedHaskellNamingEdition,
     parseGeneratedHaskellNamingEdition,
     deriveHaskellName,
+    deriveLowerHelperName,
     checkedModuleSegment,
     checkedModuleName,
     checkedUpperOccurrence,
@@ -172,6 +173,15 @@ deriveHaskellName source site
           upperName <- checkedUpperOccurrence site upper
           lowerName <- checkedLowerOccurrence site lower
           pure DerivedHaskellName {upperCamel = upperName, lowerCamel = lowerName}
+
+-- | Derive a lower-camel helper name from a logical name and append one checked
+-- UpperCamel suffix. Generator emission and collision planning use this same
+-- function so the occurrence registered before a scaffold write is exactly the
+-- occurrence later emitted.
+deriveLowerHelperName :: NameSourceKind -> Text -> NameSite -> Either HaskellNameError LowerCamelName
+deriveLowerHelperName source suffix site = do
+  derived <- deriveHaskellName source site
+  checkedLowerOccurrence site (renderLowerCamelName (lowerCamel derived) <> suffix)
 
 checkedModuleSegment :: NameSite -> Text -> Either HaskellNameError HaskellModuleSegment
 checkedModuleSegment site candidate

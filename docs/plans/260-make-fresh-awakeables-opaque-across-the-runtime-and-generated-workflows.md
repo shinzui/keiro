@@ -38,10 +38,10 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-14T14:09:29Z) M1: isolate frozen generation-0 derivations in `Keiro.Workflow.Awakeable.Compatibility` and remove the misleading exports from the ordinary authoring module
 - [x] (2026-08-14T14:09:29Z) M1: update runtime compatibility/golden tests while retaining the fresh forged-id refusal proof
-- [ ] M2: generate an opaque `AwaitBinding`, one binding value per declared await, and `allocateDeclaredAwait` over `awakeableNamed`
-- [ ] M2: add collision and generated-surface tests for binding names and remove `awaitAwakeableId`
-- [ ] M3: replace the tautological workflow-runtime executable with a PostgreSQL allocate/signal/resume/completion proof
-- [ ] M3: regenerate every committed `WorkflowRuntime` output and reconcile the conformance corpus
+- [x] (2026-08-14T14:23:53Z) M2: generate an opaque `AwaitBinding`, one binding value per declared await, and `allocateDeclaredAwait` over `awakeableNamed`
+- [x] (2026-08-14T14:23:53Z) M2: add collision and generated-surface tests for binding names and remove `awaitAwakeableId`
+- [x] (2026-08-14T14:23:53Z) M3: replace the tautological workflow-runtime executable with a PostgreSQL allocate/signal/resume/completion proof
+- [x] (2026-08-14T14:23:53Z) M3: regenerate every committed `WorkflowRuntime` output and reconcile the conformance corpus
 - [ ] M4: update the Keiro and keiro-dsl unreleased changelogs and amend ADR 24
 - [ ] M4: pass focused runtime, DSL, compiled conformance, corpus, and full repository gates
 
@@ -65,6 +65,15 @@ implementation. Provide concise evidence.
   path. EP-1 therefore moved its transitional coordinate probe to the explicitly named
   compatibility module and documented that it is not a fresh signalling target; EP-2 remains
   responsible for deleting the helper and publishing the allocated id.
+- The Language 4 skeleton corpus is intentionally frozen and `just corpus-regen` does not rewrite
+  it, but its `WorkflowRuntime` module is compiled by `keiro-dsl-conformance-skeletons`. Removing
+  the ordinary deterministic export therefore required one explicit, reviewed runtime-support
+  update to that generated file. EP-4 must preserve this evidence as an acknowledged blocker fix,
+  not misclassify it as a silent Language 5 migration.
+- The generated allocation signature makes `aeson`, `effectful-core`, and `kiroku-store` direct
+  dependencies of every component that compiles `WorkflowRuntime`. The affected conformance
+  components already had those workspace libraries available; their Cabal stanzas now declare
+  the direct uses instead of relying on transitive exposure.
 
 
 ## Decision Log
@@ -87,6 +96,16 @@ Record every decision made while working on the plan.
   Rationale: Equality between pure functions cannot prove allocation, durable row registration,
   signalling, journal delivery, or completion; the release blocker exists at exactly that live
   boundary.
+  Date: 2026-08-14
+- Decision: Derive await binding occurrences through one suffix-aware Haskell-name planner used
+  by both validation and emission.
+  Rationale: Registering a collision under any spelling other than the emitted spelling would
+  recreate the class of planner/generator disagreement this repository already guards against.
+  Date: 2026-08-14
+- Decision: Update only the compiled workflow runtime inside the otherwise frozen Language 4
+  skeleton corpus.
+  Rationale: Leaving it byte-frozen makes the repository uncompilable after the ordinary helper
+  removal; regenerating the whole corpus would silently migrate unrelated predecessor evidence.
   Date: 2026-08-14
 
 
