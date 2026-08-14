@@ -54,8 +54,6 @@ module Keiro.Workflow.Awakeable
     AwakeableId (..),
     awakeableIdToUuid,
     awakeableIdText,
-    deterministicAwakeableId,
-    legacyDeterministicAwakeableId,
 
     -- * Authoring surface (inside a workflow)
     awakeableNamed,
@@ -77,10 +75,8 @@ import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID.V4
-import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
-import Keiro.DeterministicId (deterministicIdProbes, identitySeedBytes, legacySeedBytes)
 import Keiro.Prelude
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -101,6 +97,7 @@ import Keiro.Workflow
     prepareJournalAppend,
     step,
   )
+import Keiro.Workflow.Awakeable.Internal.Identity (generation0AwakeableUuidProbes)
 import Keiro.Workflow.Awakeable.Schema
   ( AwakeableRow,
     AwakeableStatus (..),
@@ -121,8 +118,9 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 -- ---------------------------------------------------------------------------
 
 -- | The opaque id of an awakeable. New allocations are random and journaled by
--- 'awakeableNamed'; 'deterministicAwakeableId' is retained only as a legacy
--- generation-0 adoption helper. The @ToJSON@\/@FromJSON@ instances are over the
+-- 'awakeableNamed'. Frozen generation-0 probes live in the explicitly named
+-- "Keiro.Workflow.Awakeable.Compatibility" module. The @ToJSON@\/@FromJSON@
+-- instances are over the
 -- inner UUID, so the workflow journal can replay the id and webhook payloads may
 -- carry it.
 newtype AwakeableId = AwakeableId UUID
@@ -137,41 +135,6 @@ awakeableIdToUuid (AwakeableId u) = u
 -- journal step name an awakeable's completion is recorded under.
 awakeableIdText :: AwakeableId -> Text
 awakeableIdText = UUID.toText . awakeableIdToUuid
-
--- | The legacy deterministic 'AwakeableId' for a @(workflow name, workflow id,
--- label)@: a v5 UUID over @(\"keiro\":\"awakeable\":name:id:label)@.
---
--- This is predictable from public coordinates, so new code must not hand-derive
--- ids with it. It remains exported for operators and for generation-0 adoption:
--- if a pre-change workflow already registered a row under this id, the first
--- post-change allocation adopts that row so the in-flight promise keeps working.
---
--- The seed is hashed as UTF-8 bytes ('identitySeedBytes'), which is
--- byte-identical to the original codepoint encoding for ASCII seeds and
--- collision-free for the rest; see
--- @docs\/adr\/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md@.
--- Generation-0 adoption probes this id first, then the frozen pre-UTF-8 id for
--- non-ASCII seeds, so in-flight rows survive the encoding upgrade.
-deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
-deterministicAwakeableId name wid label =
-  AwakeableId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      identitySeedBytes $
-        awakeableSeed name wid label
-
--- | Reproduce the deterministic awakeable id written before Keiro switched
--- its seed encoding to UTF-8. Generation-0 adoption uses this as a fallback;
--- new allocations remain random and journaled.
-legacyDeterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
-legacyDeterministicAwakeableId name wid label =
-  AwakeableId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      legacySeedBytes $
-        awakeableSeed name wid label
-
-awakeableSeed :: WorkflowName -> WorkflowId -> Text -> Text
-awakeableSeed (WorkflowName name) (WorkflowId wid) label =
-  Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
 
 -- ---------------------------------------------------------------------------
 -- Errors
@@ -242,7 +205,7 @@ allocateAwakeableId name wid gen label
   | gen <= 0 = adopt (NonEmpty.toList probes)
   | otherwise = freshAwakeableId
   where
-    probes = fmap AwakeableId (deterministicIdProbes (awakeableSeed name wid label))
+    probes = fmap AwakeableId (generation0AwakeableUuidProbes name wid label)
     freshAwakeableId = AwakeableId <$> liftIO UUID.V4.nextRandom
     adopt [] = freshAwakeableId
     adopt (candidate : rest) = do

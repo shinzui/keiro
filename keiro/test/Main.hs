@@ -270,10 +270,12 @@ import Keiro.Workflow.Awakeable
     awakeableIdToUuid,
     awakeableNamed,
     cancelAwakeable,
-    deterministicAwakeableId,
-    legacyDeterministicAwakeableId,
     signalAwakeable,
     signalAwakeableFrom,
+  )
+import Keiro.Workflow.Awakeable.Compatibility
+  ( generation0AwakeableId,
+    preUtf8Generation0AwakeableId,
   )
 import Keiro.Workflow.Awakeable.Schema qualified as Awk
 import Keiro.Workflow.Child
@@ -9931,7 +9933,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           appendJournalEntry name wid (StepRecorded "awk:first" (toJSON ()) gateAt)
       -- Register one pending awakeable (independent of the suspended workflow's
       -- own await) so the pending gauge has something to count.
-      let aid = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "ext") (WorkflowId "1") "cb")
+      let aid = awakeableIdToUuid (generation0AwakeableId (WorkflowName "ext") (WorkflowId "1") "cb")
       Right () <-
         Store.runStoreIO storeHandle $ Store.runTransaction $ Awk.registerAwakeableTx aid "ext" "1"
       -- One resume pass with metrics threaded through the run options.
@@ -10045,7 +10047,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` TimerId (uuidLiteral "e9696450-3993-59da-902e-4e5ebcfd1ab0")
       sleepTimerId name wid 2 "sleep:cool"
         `shouldBe` TimerId (uuidLiteral "6affc998-5cf2-51d0-9bbb-22e792581433")
-      deterministicAwakeableId name wid "approval"
+      generation0AwakeableId name wid "approval"
         `shouldBe` AwakeableId (uuidLiteral "f677231c-8a27-51b6-9a5e-69015262b26f")
       deterministicCommandId "counter-pm" "order-1" sourceEventId 0
         `shouldBe` EventId (uuidLiteral "ff20892c-6665-5e92-8c99-d1569d2ce629")
@@ -10061,8 +10063,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldNotBe` deterministicJournalId name wid 0 "\x2E2D\x2587"
       sleepTimerId name wid 0 "\x0101"
         `shouldNotBe` sleepTimerId name wid 0 "\SOH"
-      deterministicAwakeableId name wid "\x0101"
-        `shouldNotBe` deterministicAwakeableId name wid "\SOH"
+      generation0AwakeableId name wid "\x0101"
+        `shouldNotBe` generation0AwakeableId name wid "\SOH"
       deterministicCommandId "counter-pm" "\x0101" sourceEventId 0
         `shouldNotBe` deterministicCommandId "counter-pm" "\SOH" sourceEventId 0
 
@@ -10122,13 +10124,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` EventId (uuidLiteral "379ebaad-62e1-5265-9605-340789ae6af7")
 
     it "reproduces every captured deterministic awakeable id" $ do
-      legacyDeterministicAwakeableId name wid "\x627F\x8A8D"
+      preUtf8Generation0AwakeableId name wid "\x627F\x8A8D"
         `shouldBe` AwakeableId (uuidLiteral "c4eb4dfa-4108-577d-8e92-84edb337a48b")
-      legacyDeterministicAwakeableId name wid "caf\x00E9"
+      preUtf8Generation0AwakeableId name wid "caf\x00E9"
         `shouldBe` AwakeableId (uuidLiteral "446e5258-0697-525d-af06-0c2c3911ded7")
-      legacyDeterministicAwakeableId name wid "\x4E2D"
+      preUtf8Generation0AwakeableId name wid "\x4E2D"
         `shouldBe` AwakeableId (uuidLiteral "7b252ef4-c7c0-579e-8f15-8f26c73196de")
-      legacyDeterministicAwakeableId name wid "-"
+      preUtf8Generation0AwakeableId name wid "-"
         `shouldBe` AwakeableId (uuidLiteral "7b252ef4-c7c0-579e-8f15-8f26c73196de")
 
     it "keeps ASCII identity stable and moves every non-ASCII capture" $ do
@@ -10143,13 +10145,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           `shouldNotBe` deterministicCommandId "counter-pm" correlation sourceEventId 0
       legacyDeterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId (-1)
         `shouldNotBe` deterministicCommandId "counter-pm" "\x4E2D\x6587" sourceEventId (-1)
-      legacyDeterministicAwakeableId name wid "legacy"
-        `shouldBe` deterministicAwakeableId name wid "legacy"
-      legacyDeterministicAwakeableId name wid "-"
-        `shouldBe` deterministicAwakeableId name wid "-"
+      preUtf8Generation0AwakeableId name wid "legacy"
+        `shouldBe` generation0AwakeableId name wid "legacy"
+      preUtf8Generation0AwakeableId name wid "-"
+        `shouldBe` generation0AwakeableId name wid "-"
       for_ ["\x627F\x8A8D", "caf\x00E9", "\x4E2D"] $ \label ->
-        legacyDeterministicAwakeableId name wid label
-          `shouldNotBe` deterministicAwakeableId name wid label
+        preUtf8Generation0AwakeableId name wid label
+          `shouldNotBe` generation0AwakeableId name wid label
 
     it "documents the historical truncation collisions and their UTF-8 separation" $ do
       legacyDeterministicCommandId "counter-pm" "\x0101" sourceEventId 0
@@ -10160,10 +10162,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` legacyDeterministicCommandId "counter-pm" "iser" sourceEventId 0
       deterministicCommandId "counter-pm" "\x0169ser" sourceEventId 0
         `shouldNotBe` deterministicCommandId "counter-pm" "iser" sourceEventId 0
-      legacyDeterministicAwakeableId name wid "\x4E2D"
-        `shouldBe` legacyDeterministicAwakeableId name wid "-"
-      deterministicAwakeableId name wid "\x4E2D"
-        `shouldNotBe` deterministicAwakeableId name wid "-"
+      preUtf8Generation0AwakeableId name wid "\x4E2D"
+        `shouldBe` preUtf8Generation0AwakeableId name wid "-"
+      generation0AwakeableId name wid "\x4E2D"
+        `shouldNotBe` generation0AwakeableId name wid "-"
 
     it "adds a legacy command probe only when the seed moved" $ do
       NonEmpty.toList (deterministicCommandIdProbes "counter-pm" "order-1" sourceEventId 0)
@@ -11103,11 +11105,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       delivered `shouldBe` False
 
   describe "Keiro.Workflow.Awakeable" $ do
-    -- Pure (no-DB) check of the deterministic id derivation.
-    it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
-      let aid1 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
-          aid2 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
-          aidOther = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "other"
+    -- Pure (no-DB) check of the frozen generation-0 compatibility derivation.
+    it "reproduces a stable, label-sensitive generation-0 AwakeableId" $ do
+      let aid1 = generation0AwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
+          aid2 = generation0AwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
+          aidOther = generation0AwakeableId (WorkflowName "w") (WorkflowId "1") "other"
           awakeableGolden = uuidLiteral "ccaeaf74-3ffe-5ea5-a118-a3441a95c279"
       aid1 `shouldBe` aid2
       (aid1 == aidOther) `shouldBe` False
@@ -11115,8 +11117,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
     around (withFreshStore fixture) $ do
       it "schema: registers, completes once (idempotent), cancels, and counts pending rows" $ \storeHandle -> do
-        let aidA = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "sch") (WorkflowId "1") "a")
-            aidB = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "sch") (WorkflowId "1") "b")
+        let aidA = awakeableIdToUuid (generation0AwakeableId (WorkflowName "sch") (WorkflowId "1") "a")
+            aidB = awakeableIdToUuid (generation0AwakeableId (WorkflowName "sch") (WorkflowId "1") "b")
         now <- getCurrentTime
         Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
           Awk.registerAwakeableTx aidA "sch" "1"
@@ -11300,7 +11302,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         aidRef <- newIORef Nothing
         let name = WorkflowName "fresh-awake"
             wid = WorkflowId "fa-1"
-            forged = deterministicAwakeableId name wid "approval"
+            forged = generation0AwakeableId name wid "approval"
         Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
         real <- readRequiredAwakeableId aidRef
         real `shouldNotBe` forged
@@ -11317,7 +11319,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         aidRef <- newIORef Nothing
         let name = WorkflowName "legacy-awake"
             wid = WorkflowId "la-1"
-            legacy = deterministicAwakeableId name wid "approval"
+            legacy = generation0AwakeableId name wid "approval"
         Right () <-
           Store.runStoreIO storeHandle $
             Store.runTransaction $
@@ -11334,7 +11336,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         let name = WorkflowName "legacy-awake"
             wid = WorkflowId "la-1"
             legacy = AwakeableId (uuidLiteral "c4eb4dfa-4108-577d-8e92-84edb337a48b")
-        legacyDeterministicAwakeableId name wid "\x627F\x8A8D" `shouldBe` legacy
+        preUtf8Generation0AwakeableId name wid "\x627F\x8A8D" `shouldBe` legacy
         Right () <-
           Store.runStoreIO storeHandle $
             Store.runTransaction $

@@ -36,8 +36,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: isolate frozen generation-0 derivations in `Keiro.Workflow.Awakeable.Compatibility` and remove the misleading exports from the ordinary authoring module
-- [ ] M1: update runtime compatibility/golden tests while retaining the fresh forged-id refusal proof
+- [x] (2026-08-14T14:09:29Z) M1: isolate frozen generation-0 derivations in `Keiro.Workflow.Awakeable.Compatibility` and remove the misleading exports from the ordinary authoring module
+- [x] (2026-08-14T14:09:29Z) M1: update runtime compatibility/golden tests while retaining the fresh forged-id refusal proof
 - [ ] M2: generate an opaque `AwaitBinding`, one binding value per declared await, and `allocateDeclaredAwait` over `awakeableNamed`
 - [ ] M2: add collision and generated-surface tests for binding names and remove `awaitAwakeableId`
 - [ ] M3: replace the tautological workflow-runtime executable with a PostgreSQL allocate/signal/resume/completion proof
@@ -61,6 +61,10 @@ implementation. Provide concise evidence.
   not the hand-owned workflow body. An opaque binding plus a polymorphic allocation wrapper
   preserves result-type inference without generating application behavior or a second payload
   type authority.
+- The repository-wide build includes Jitsurei before EP-2 can replace its broken signalling
+  path. EP-1 therefore moved its transitional coordinate probe to the explicitly named
+  compatibility module and documented that it is not a fresh signalling target; EP-2 remains
+  responsible for deleting the helper and publishing the allocated id.
 
 
 ## Decision Log

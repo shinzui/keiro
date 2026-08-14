@@ -51,8 +51,8 @@ import Keiro.Workflow
 import Keiro.Workflow.Awakeable
   ( AwakeableId,
     awakeableNamed,
-    deterministicAwakeableId,
   )
+import Keiro.Workflow.Awakeable.Compatibility (generation0AwakeableId)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Keiro.Workflow.Sleep (sleepNamed)
@@ -121,14 +121,13 @@ data PaymentConfirmation = PaymentConfirmation
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | The deterministic 'AwakeableId' the demo's external @signalAwakeable@ must
--- target. It is exactly the id 'awakeableNamed' allocates inside the workflow
--- for the @payment-webhook@ label (the idempotent-arming contract: the external
--- signaller computes the same id the workflow registered, without reading the
--- journal back).
+-- | The generation-0 compatibility candidate for the demo's payment await.
+-- Fresh 'awakeableNamed' allocations are opaque and may differ from this value;
+-- callers must not use this compatibility probe as a signalling target. EP-2
+-- replaces this transitional helper with publication of the allocated id.
 paymentWebhookAwakeableId :: OrderId -> AwakeableId
 paymentWebhookAwakeableId orderId =
-  deterministicAwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
+  generation0AwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
 
 -- ---------------------------------------------------------------------------
 -- The workflows

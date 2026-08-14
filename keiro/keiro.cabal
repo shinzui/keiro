@@ -82,6 +82,7 @@ library
     Keiro.Wake
     Keiro.Workflow
     Keiro.Workflow.Awakeable
+    Keiro.Workflow.Awakeable.Compatibility
     Keiro.Workflow.Awakeable.Schema
     Keiro.Workflow.Child
     Keiro.Workflow.Child.Schema
@@ -102,6 +103,7 @@ library
     Keiro.ReadModel.Rebuild.Stream
     Keiro.ReadModel.Rebuild.Versioned
     Keiro.ReplayDigest
+    Keiro.Workflow.Awakeable.Internal.Identity
     Keiro.Workflow.Child.Cancel
     Keiro.Workflow.Instance.Schema
     Keiro.Workflow.Journal
