@@ -11,21 +11,24 @@
 -- out a short cooling-off period, wait for a payment webhook, charge the card,
 -- then ship via a child workflow and return the tracking number. Every checkpoint
 -- is journaled to @wf:order-fulfillment-\<id\>@, so a re-invocation short-circuits
--- the work already done and never repeats a side effect.
+-- work whose result is already durable. A step action can run again when a
+-- process crashes after performing the action but before its result is
+-- journaled, so externally visible actions must be idempotent.
 module Jitsurei.DurableWorkflow
   ( -- * Workflow names
     orderFulfillmentWorkflowName,
     shipOrderWorkflowName,
 
     -- * The workflows
+    PublishPaymentAwakeable,
     orderFulfillmentWorkflow,
     shipOrderWorkflow,
 
     -- * Payload type
     PaymentConfirmation (..),
 
-    -- * Deterministic ids and the resume registry
-    paymentWebhookAwakeableId,
+    -- * Publication and the resume registry
+    jitsureiWorkflowRegistryWith,
     jitsureiWorkflowRegistry,
     coolingOffDelay,
     workflowIdFor,
@@ -39,7 +42,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
-import Effectful (Eff, IOE, liftIO, (:>))
+import Effectful (Eff, IOE, liftIO, raise, (:>))
 import GHC.Generics (Generic)
 import Jitsurei.Domain (OrderId (..), orderIdText)
 import Keiro.Workflow
@@ -50,9 +53,9 @@ import Keiro.Workflow
   )
 import Keiro.Workflow.Awakeable
   ( AwakeableId,
+    awakeableIdText,
     awakeableNamed,
   )
-import Keiro.Workflow.Awakeable.Compatibility (generation0AwakeableId)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Keiro.Workflow.Sleep (sleepNamed)
@@ -121,40 +124,51 @@ data PaymentConfirmation = PaymentConfirmation
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | The generation-0 compatibility candidate for the demo's payment await.
--- Fresh 'awakeableNamed' allocations are opaque and may differ from this value;
--- callers must not use this compatibility probe as a signalling target. EP-2
--- replaces this transitional helper with publication of the allocated id.
-paymentWebhookAwakeableId :: OrderId -> AwakeableId
-paymentWebhookAwakeableId orderId =
-  generation0AwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
-
 -- ---------------------------------------------------------------------------
 -- The workflows
 -- ---------------------------------------------------------------------------
 
--- | The parent order-fulfillment workflow. It runs five durable checkpoints in
+-- | Publish the opaque id allocated for the payment webhook.
+--
+-- The publisher must be idempotent on 'AwakeableId'. A workflow step records
+-- its result only after its action returns, so a crash in that window can make
+-- publication run again on replay. A real publisher should therefore upsert or
+-- deduplicate using the id itself as its key.
+type PublishPaymentAwakeable es = AwakeableId -> Eff es ()
+
+-- | The parent order-fulfillment workflow. It runs six durable checkpoints in
 -- order so the demo narrative and the journal line up:
 --
--- 1. @reserve-inventory@ — a named 'step' (runs once, journaled).
+-- 1. @reserve-inventory@ — a named 'step' whose result is journaled.
 -- 2. @cooling-off@ — a durable 'sleepNamed' (a 'keiro_timers' row; the timer
 --    worker wakes the workflow).
--- 3. @payment-webhook@ — an 'awakeableNamed' (suspends until an external
+-- 3. @payment-webhook@ — an 'awakeableNamed' that allocates an opaque id.
+-- 4. @publish-payment-webhook-id@ — publishes that actual id through the
+--    application callback before the workflow waits. The callback must be
+--    idempotent because its action has at-least-once execution across the
+--    action-to-journal crash window.
+-- 5. The awakeable suspends until an external
 --    'Keiro.Workflow.Awakeable.signalAwakeable' delivers a 'PaymentConfirmation').
--- 4. @charge@ — a second named 'step'.
--- 5. @ship-order@ — a child workflow ('spawnChild' then 'awaitChild'); its
+-- 6. @charge@ and @ship-order@ — a second named 'step', then a child workflow
+--    ('spawnChild' followed by 'awaitChild'); its
 --    tracking number is the parent's result.
 --
--- On a replay, every completed checkpoint short-circuits, so no side effect runs
--- twice.
+-- On replay, a completed checkpoint short-circuits only after its result is
+-- durable in the journal. This protects replay from re-running committed work;
+-- it does not make an uncommitted external action at-most-once.
 orderFulfillmentWorkflow ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  PublishPaymentAwakeable es ->
   OrderId ->
   Eff es Text
-orderFulfillmentWorkflow orderId = do
+orderFulfillmentWorkflow publishPaymentAwakeable orderId = do
   _reservation <- step (StepName "reserve-inventory") (reserveInventory orderId)
   sleepNamed (StepName "cooling-off") coolingOffDelay
-  (_awkId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+  (awakeableId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+  _publication <-
+    step
+      (StepName "publish-payment-webhook-id")
+      (publishPaymentAwakeable awakeableId)
   payment <- awaitPayment
   _charge <- step (StepName "charge") (chargeCard orderId payment)
   childHandle <- spawnChild shipOrderWorkflowName (shipChildId orderId) (shipOrderWorkflow orderId)
@@ -212,15 +226,34 @@ say msg = liftIO (putStrLn ("  " <> Text.unpack msg) >> hFlush stdout)
 -- The resume registry
 -- ---------------------------------------------------------------------------
 
--- | The application-supplied registry the resume worker
+-- | Build the application-supplied registry the resume worker
 -- ('Keiro.Workflow.Resume.resumeWorkflowsOnce') re-invokes through. It maps each
 -- workflow /name/ to a 'WorkflowDef' that rebuilds the workflow body from its id
 -- alone, using 'orderIdFromWf' to recover the 'OrderId'. Both the parent and the
 -- @ship-order@ child must be registered: the worker discovers the freshly-spawned
 -- zero-step child and drives it to completion, which wakes the awaiting parent.
-jitsureiWorkflowRegistry :: (Store :> es, IOE :> es) => WorkflowRegistry es
-jitsureiWorkflowRegistry =
+jitsureiWorkflowRegistryWith ::
+  (Store :> es, IOE :> es) =>
+  PublishPaymentAwakeable es ->
+  WorkflowRegistry es
+jitsureiWorkflowRegistryWith publishPaymentAwakeable =
   Map.fromList
-    [ (orderFulfillmentWorkflowName, WorkflowDef (\wid -> orderFulfillmentWorkflow (orderIdFromWf wid))),
+    [ ( orderFulfillmentWorkflowName,
+        WorkflowDef
+          ( \wid ->
+              orderFulfillmentWorkflow
+                (raise . publishPaymentAwakeable)
+                (orderIdFromWf wid)
+          )
+      ),
       (shipOrderWorkflowName, WorkflowDef (\wid -> shipOrderWorkflow (orderIdFromWf wid)))
     ]
+
+-- | A convenience registry for demos that do not install an application
+-- publisher. It visibly logs the real allocated id; production applications
+-- should use 'jitsureiWorkflowRegistryWith' and durably hand the id to the
+-- external system that will later signal it.
+jitsureiWorkflowRegistry :: (Store :> es, IOE :> es) => WorkflowRegistry es
+jitsureiWorkflowRegistry =
+  jitsureiWorkflowRegistryWith $ \awakeableId ->
+    say ("published payment-webhook awakeable id: " <> awakeableIdText awakeableId)

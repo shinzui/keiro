@@ -36,8 +36,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: parameterize the order-fulfillment workflow and resume registry with an application-owned awakeable-id publisher
-- [ ] M1: journal an idempotent publication step using the real id returned by `awakeableNamed`
+- [x] (2026-08-14T14:52:11Z) M1: parameterize the order-fulfillment workflow and resume registry with an application-owned awakeable-id publisher
+- [x] (2026-08-14T14:52:11Z) M1: journal an idempotent publication step using the real id returned by `awakeableNamed`
 - [ ] M2: drive the demo with a captured published id and make every signal/completion/restart invariant fail closed
 - [ ] M2: add a focused PostgreSQL Jitsurei regression that proves publication, successful signal, terminal completion, and no repeat publication after replay
 - [ ] M3: correct `docs/user/durable-workflows.md`, `docs/guides/durable-workflows.md`, API reference, and Jitsurei Haddocks
