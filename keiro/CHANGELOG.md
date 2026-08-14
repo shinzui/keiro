@@ -140,6 +140,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- The durable-workflow reference and worked guide now document at-least-once
+  step actions, opaque awakeable-id publication, fresh publication after
+  `continueAsNew`, and the real `IOE` constraints. Compile-owned forwarding
+  signatures keep the displayed workflow API aligned with the public modules.
 - Fresh workflow awakeables are now opaque allocation results. Generation-0
   coordinate probes are isolated behind `Keiro.Workflow.Awakeable.Compatibility`,
   while runtime adoption and the compatibility surface share one internal identity

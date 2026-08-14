@@ -42,7 +42,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-14T15:00:00Z) M2: add a focused PostgreSQL Jitsurei regression that proves publication, successful signal, terminal completion, and no repeat publication after replay
 - [x] (2026-08-14T15:05:21Z) M3: correct `docs/user/durable-workflows.md`, `docs/guides/durable-workflows.md`, API reference, and Jitsurei Haddocks
 - [x] (2026-08-14T15:05:21Z) M3: add compile-owned guide signatures and complete a repository-wide stale-claim sweep
-- [ ] M4: update the unreleased changelog and pass Jitsurei, documentation-adjacent, and full repository gates
+- [x] (2026-08-14T15:16:23Z) M4: update the unreleased changelog and pass Jitsurei, documentation-adjacent, and full repository gates
 
 
 ## Surprises & Discoveries
@@ -104,7 +104,36 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The worked workflow now publishes the actual opaque `AwakeableId` through an explicit,
+idempotent application callback and journals that publication before awaiting. The demo uses one
+callback-aware registry for every pass and prints success only after a `True` signal, the expected
+`Completed` result, terminal parent and child journals, and empty restart discovery. The focused
+PostgreSQL regression additionally proves the callback receives the same journaled allocation
+when its external upsert succeeds but the publication record does not commit, and that replay
+stops calling it once the record is durable.
+
+The user reference, worked guide, API map, and Jitsurei Haddocks now describe the same boundary:
+step effects are at-least-once across the action-to-journal window, fresh awakeable ids are opaque
+and must be handed out from the returned value, publishers deduplicate on that id, and a rotated
+generation publishes a fresh id. `WorkflowGuideContract` compile-owns the displayed primitive,
+example, and registry constraints. No new ADR was needed: ADR 24 already owns the durable
+fresh-allocation versus generation-0-compatibility distinction, while this plan applies that
+decision at the example boundary.
+
+Validation completed on fresh migrated databases:
+
+- the focused `Jitsurei durable workflow` test passed;
+- the documentation-adjacent Jitsurei library, test, and executable build passed;
+- all 25 `jitsurei-test` examples passed;
+- `just jitsurei` completed every demo, including a `True` awakeable signal, expected
+  `Completed "TRK-…-ship"`, both terminal journals, and clean restart;
+- `JITSUREI_DATABASE=jitsurei_plan261_verify just verify` passed the full build, 610 Keiro tests,
+  all DSL suites and the 39-entry conformance corpus, Jitsurei, PGMQ, ops, migrations, diagrams,
+  policy scripts, and OKF checks. Two existing PGMQ cases remained explicitly pending as before.
+
+The ordinary shared `jitsurei` database retains an unrelated stale projection-catalog fingerprint,
+so an unqualified demo or verification run stops during application catalog registration. The
+fresh-database gates prove the repository state without rewriting that historical local database.
 
 
 ## Context and Orientation

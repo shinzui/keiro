@@ -94,7 +94,7 @@ identified it as local to `mori://shinzui/keiro`.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make fresh awakeables opaque across the runtime and generated workflows | docs/plans/260-make-fresh-awakeables-opaque-across-the-runtime-and-generated-workflows.md | None | None | Complete |
-| 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | In Progress |
+| 2 | Make the durable workflow example and guides prove the live contract | docs/plans/261-make-the-durable-workflow-example-and-guides-prove-the-live-contract.md | EP-1 | None | Complete |
 | 3 | Derive the Keiro version API from package metadata | docs/plans/262-derive-the-keiro-version-api-from-package-metadata.md | None | None | Not Started |
 | 4 | Publish stable keiro-dsl Language 5 and close the blocker review | docs/plans/263-publish-stable-keiro-dsl-language-5-and-close-the-blocker-review.md | EP-1, EP-2, EP-3 | None | Not Started |
 | 5 | Release the keiro 0.12.0.0 package set | docs/plans/264-release-the-keiro-0-12-0-0-package-set.md | EP-4 | None | Not Started |
@@ -158,9 +158,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 M2: replace generated coordinate derivation with opaque declared await bindings that return the live allocation id
 - [x] EP-1 M3: make workflow-runtime conformance allocate, signal, resume, and complete against PostgreSQL; regenerate all affected outputs
 - [x] EP-1 M4: run focused runtime/DSL gates, update changelogs, and amend ADR 24
-- [ ] EP-2 M1: publish the actual allocated id from the Jitsurei workflow through an idempotent application callback
-- [ ] EP-2 M2: make the demo and a focused database test fail unless signal succeeds, completion is terminal, and restart discovery is empty
-- [ ] EP-2 M3: correct both workflow guides, API reference, signatures, and at-least-once crash-window guidance
+- [x] EP-2 M1: publish the actual allocated id from the Jitsurei workflow through an idempotent application callback
+- [x] EP-2 M2: make the demo and a focused database test fail unless signal succeeds, completion is terminal, and restart discovery is empty
+- [x] EP-2 M3: correct both workflow guides, API reference, signatures, and at-least-once crash-window guidance
 - [ ] EP-3 M1: replace the stale `Keiro.version` literal with Cabal-generated package metadata
 - [ ] EP-3 M2: make the focused test compare the public value with the authoritative package version and run the Keiro suite
 - [ ] EP-4 M1: restructure conformance roles to preserve published Language 4 while making Language 5 the sole stable contract
@@ -208,6 +208,10 @@ interactions between child plans. Provide concise evidence.
   signal and a suspended final outcome while exiting successfully. EP-2 must turn those observations
   into failing assertions and publish the real allocation id; a green repository gate is not yet
   evidence that the teaching application satisfies the repaired runtime contract.
+- EP-2 proved the publication crash window directly in the Jitsurei regression: after the
+  idempotent external upsert succeeds and a simulated crash prevents the step append, exact
+  discovery retries the callback with the same journaled opaque id. Once the publication step is
+  durable, later resume and direct replay do not invoke it again.
 
 
 ## Decision Log
@@ -257,5 +261,12 @@ EP-1 completed the runtime/generated identity repair at
 public API and generated workflow surface, the full allocation-to-completion lifecycle is proven
 against PostgreSQL, the 39-entry corpus is current, and ADR 24 now owns the compatibility-only
 generation-0 boundary. Its focused and repository-wide validation evidence is recorded in
-ExecPlan 260. The initiative remains open; EP-2 is now the first registry-ordered eligible child,
-while independent EP-3 is also eligible.
+ExecPlan 260.
+
+EP-2 completed the teaching/application repair at the post-implementation repository state: the
+Jitsurei workflow publishes and signals the real opaque allocation, its demo fails closed on every
+claimed completion invariant, and a focused PostgreSQL test covers both publication retry and
+committed replay. Both workflow documents and the API map now teach the at-least-once action
+boundary and compatibility-only derivation surface, with compile-owned signature witnesses. The
+fresh-database `just jitsurei` and full `just verify` gates passed. The initiative remains open;
+EP-3 is the next registry-ordered eligible child.

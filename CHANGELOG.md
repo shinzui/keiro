@@ -42,6 +42,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Bug Fixes
 
+- **jitsurei**: the durable order-fulfillment example now publishes the opaque
+  `AwakeableId` returned by allocation through an idempotent application
+  callback, signals that exact id, and fails closed unless the parent and child
+  complete and remain terminal after restart. Its PostgreSQL regression covers
+  retry in the publication action-to-journal crash window.
 - **keiro**: awakeable cancellation and suspension now arbitrate under the same
   awaited-step advisory lock. A stale suspend write observes a terminal
   awakeable row and leaves its owner running, so cancellation can no longer
